@@ -241,7 +241,7 @@ Pal::Result CreateClearRegions (
 // Returns Pal::Result::Success if completed successfully.
 template<typename PalSubresRangeVector>
 Pal::Result CreateClearSubresRanges(
-    const vk::ImageView*            pColorImageView,
+    const vk::ImageView*            pImageView,
     const VkClearAttachment&        clearInfo,
     const uint32_t                  rectCount,
     const VkClearRect* const        pRects,
@@ -254,15 +254,30 @@ Pal::Result CreateClearSubresRanges(
     Pal::Result palResult = Pal::Result::Success;
 
     Pal::SubresRange subresRange = {};
-    pColorImageView->GetFrameBufferAttachmentSubresRange(&subresRange);
+    pImageView->GetFrameBufferAttachmentSubresRange(&subresRange);
 
     pOutClearSubresRanges->Clear();
+
+    bool hasPlaneDepthAndStencil = false;
+
+    if (pImageView->GetImage()->HasStencil() && pImageView->GetImage()->HasDepth())
+    {
+        if (clearInfo.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT)
+        {
+            subresRange.startSubres.plane = 1;
+        }
+        else
+        {
+            hasPlaneDepthAndStencil = (clearInfo.aspectMask ==
+                                      (VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT));
+        }
+    }
 
     if (viewMask > 0)
     {
         const auto layerRanges = RangesOfOnesInBitMask(viewMask);
 
-        palResult = pOutClearSubresRanges->Reserve(layerRanges.NumElements());
+        palResult = pOutClearSubresRanges->Reserve(layerRanges.NumElements() *(hasPlaneDepthAndStencil ? 2 : 1));
 
         if (palResult == Pal::Result::Success)
         {
@@ -271,12 +286,20 @@ Pal::Result CreateClearSubresRanges(
                 pOutClearSubresRanges->PushBack(subresRange);
                 pOutClearSubresRanges->Back().startSubres.arraySlice += layerRangeIt.Get().offset;
                 pOutClearSubresRanges->Back().numSlices = layerRangeIt.Get().extent;
+
+                if (hasPlaneDepthAndStencil)
+                {
+                    subresRange.startSubres.plane = 1;
+                    pOutClearSubresRanges->PushBack(subresRange);
+                    pOutClearSubresRanges->Back().startSubres.arraySlice += layerRangeIt.Get().offset;
+                    pOutClearSubresRanges->Back().numSlices = layerRangeIt.Get().extent;
+                }
             }
         }
     }
     else
     {
-         palResult = pOutClearSubresRanges->Reserve(rectCount);
+         palResult = pOutClearSubresRanges->Reserve(rectCount *(hasPlaneDepthAndStencil ? 2 : 1));
 
          if (palResult == Pal::Result::Success)
          {
@@ -285,6 +308,14 @@ Pal::Result CreateClearSubresRanges(
                 pOutClearSubresRanges->PushBack(subresRange);
                 pOutClearSubresRanges->Back().startSubres.arraySlice += pRects[rectIndex].baseArrayLayer;
                 pOutClearSubresRanges->Back().numSlices = pRects[rectIndex].layerCount;
+
+                if (hasPlaneDepthAndStencil)
+                {
+                    subresRange.startSubres.plane = 1;
+                    pOutClearSubresRanges->PushBack(subresRange);
+                    pOutClearSubresRanges->Back().startSubres.arraySlice += pRects[rectIndex].baseArrayLayer;
+                    pOutClearSubresRanges->Back().numSlices = pRects[rectIndex].layerCount;
+                }
             }
          }
     }
@@ -438,6 +469,7 @@ CmdBuffer::CmdBuffer(
     m_curDeviceMask(0),
     m_rpDeviceMask(0),
     m_cbBeginDeviceMask(0),
+    m_numPalDevices(pDevice->NumPalDevices()),
     m_validShaderStageFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetValidShaderStages(queueFamilyIndex)),
     m_pStackAllocator(nullptr),
     m_flags(),
@@ -575,7 +607,7 @@ VkResult CmdBuffer::Initialize(
     size_t       palMemOffset = 0;
     const size_t palSize      = m_pDevice->PalDevice(DefaultDeviceIndex)->GetCmdBufferSize(groupCreateInfo, &result);
 
-    const uint32_t numGroupedCmdBuffers = m_pDevice->NumPalDevices();
+    const uint32_t numGroupedCmdBuffers = m_numPalDevices;
 
     for (uint32_t groupedIdx = 0; (groupedIdx < numGroupedCmdBuffers) && (result == Pal::Result::Success); groupedIdx++)
     {
@@ -709,7 +741,10 @@ Pal::Result CmdBuffer::PalCmdBufferReset(Pal::ICmdAllocator* pCmdAllocator, bool
         }
         while (deviceGroup.IterateNext());
 
-        m_cbBeginDeviceMask = 0;
+        if (returnGpuMemory)
+        {
+            m_cbBeginDeviceMask = 0;
+        }
     }
 
     return result;
@@ -1320,7 +1355,7 @@ VkResult CmdBuffer::Begin(
 
     // Dirty all the dynamic states, the bit should be cleared with 0 when the corresponding state is
     // static.
-    m_allGpuState.dirty.u32All = 0xFFFFFFFF;
+    m_allGpuState.dirtyGraphics.u32All = 0xFFFFFFFF;
 
     if ((m_palQueueType == Pal::QueueTypeUniversal) && m_flags.preBindDefaultState)
     {
@@ -1340,7 +1375,7 @@ VkResult CmdBuffer::Begin(
             while (deviceGroupVrs.IterateNext());
         }
 
-        m_allGpuState.dirty.vrs = 0;
+        m_allGpuState.dirtyGraphics.vrs = 0;
     }
 
     DbgBarrierPostCmd(DbgBarrierCmdBufStart);
@@ -1405,7 +1440,7 @@ void CmdBuffer::ResetPipelineState()
     m_allGpuState.palToApiPipeline[uint32_t(Pal::PipelineBindPoint::Compute)]  = PipelineBindCompute;
     m_allGpuState.palToApiPipeline[uint32_t(Pal::PipelineBindPoint::Graphics)] = PipelineBindGraphics;
 
-    const uint32_t numPalDevices = m_pDevice->NumPalDevices();
+    const uint32_t numPalDevices = m_numPalDevices;
     uint32_t deviceIdx           = 0;
 
     do
@@ -1462,16 +1497,15 @@ void CmdBuffer::ResetState()
 VkResult CmdBuffer::Reset(VkCommandBufferResetFlags flags)
 {
     VkResult result = VK_SUCCESS;
+    bool releaseResources = ((flags & VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT) != 0);
 
-    if (m_flags.wasBegun)
+    if (m_flags.disableResetReleaseResources)
     {
-        bool releaseResources = ((flags & VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT) != 0);
+        releaseResources = false;
+    }
 
-        if (m_flags.disableResetReleaseResources)
-        {
-            releaseResources = false;
-        }
-
+    if (m_flags.wasBegun || releaseResources)
+    {
         // If the command buffer is being recorded, the stack allocator will still be around.
         // Make sure to free it.
         if (m_flags.isRecording)
@@ -1637,15 +1671,15 @@ void CmdBuffer::BindPipeline(
 {
     DbgBarrierPreCmd(DbgBarrierBindPipeline);
 
+    const Pipeline* pPipeline = Pipeline::BaseObjectFromHandle(pipeline);
+
     switch (pipelineBindPoint)
     {
     case VK_PIPELINE_BIND_POINT_COMPUTE:
     {
-        const ComputePipeline* pPipeline = ComputePipeline::ObjectFromHandle(pipeline);
-
-        if (pPipeline != m_allGpuState.pComputePipeline)
+        if (m_allGpuState.pComputePipeline != pPipeline)
         {
-            m_allGpuState.pComputePipeline = pPipeline;
+            m_allGpuState.pComputePipeline = static_cast<const ComputePipeline*>(pPipeline);
 
             if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute))
             {
@@ -1660,11 +1694,9 @@ void CmdBuffer::BindPipeline(
 
     case VK_PIPELINE_BIND_POINT_GRAPHICS:
     {
-        const GraphicsPipeline* pPipeline = GraphicsPipeline::ObjectFromHandle(pipeline);
-
         if (m_allGpuState.pGraphicsPipeline != pPipeline)
         {
-            m_allGpuState.pGraphicsPipeline = pPipeline;
+            m_allGpuState.pGraphicsPipeline = static_cast<const GraphicsPipeline*>(pPipeline);
 
             // Can bind the graphics pipeline immediately since only API graphics pipelines use the PAL
             // graphics pipeline.  Note that wave limits may still defer the bind inside RebindPipeline().
@@ -2114,7 +2146,7 @@ void CmdBuffer::BindIndexBuffer(
 // Initializes VB binding manager state.  Should be called when the command buffer is being initialized.
 void CmdBuffer::InitializeVertexBuffer()
 {
-    for (uint32 deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+    for (uint32 deviceIdx = 0; deviceIdx < m_numPalDevices; deviceIdx++)
     {
         Pal::BufferViewInfo* pBindings = &PerGpuState(deviceIdx)->vbBindings[0];
 
@@ -2136,7 +2168,7 @@ void CmdBuffer::InitializeVertexBuffer()
 // Called to reset the state of the VB manager because the parent command buffer is being reset.
 void CmdBuffer::ResetVertexBuffer()
 {
-    for (uint32 deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+    for (uint32 deviceIdx = 0; deviceIdx < m_numPalDevices; deviceIdx++)
     {
         Pal::BufferViewInfo* pBindings = &PerGpuState(deviceIdx)->vbBindings[0];
 
@@ -3017,15 +3049,16 @@ void CmdBuffer::ClearAttachments(
     uint32_t                 rectCount,
     const VkClearRect*       pRects)
 {
-    if ((m_flags.is2ndLvl == false) && (m_allGpuState.pFramebuffer != nullptr))
     {
-        ClearImageAttachments(attachmentCount, pAttachments, rectCount, pRects);
+        if ((m_flags.is2ndLvl == false) && (m_allGpuState.pFramebuffer != nullptr))
+        {
+            ClearImageAttachments(attachmentCount, pAttachments, rectCount, pRects);
+        }
+        else
+        {
+            ClearBoundAttachments(attachmentCount, pAttachments, rectCount, pRects);
+        }
     }
-    else
-    {
-        ClearBoundAttachments(attachmentCount, pAttachments, rectCount, pRects);
-    }
-
 }
 
 // =====================================================================================================================
@@ -3700,7 +3733,7 @@ void CmdBuffer::ExecuteBarriers(
         return;
     }
 
-    const Image** pTransitionImages = (m_pDevice->NumPalDevices() > 1) && (imageMemoryBarrierCount > 0) ?
+    const Image** pTransitionImages = (m_numPalDevices > 1) && (imageMemoryBarrierCount > 0) ?
         virtStackFrame.AllocArray<const Image*>(MaxTransitionCount) : nullptr;
 
     for (uint32_t i = 0; i < memBarrierCount; ++i)
@@ -5420,7 +5453,7 @@ void CmdBuffer::BeginRenderPass(
         {
             utils::IterateMask deviceGroup(pDeviceGroupRenderPassBeginInfo->deviceMask);
 
-            VK_ASSERT(m_pDevice->NumPalDevices() == pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount);
+            VK_ASSERT(m_numPalDevices == pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount);
 
             do
             {
@@ -5442,11 +5475,11 @@ void CmdBuffer::BeginRenderPass(
 
     if (replicateRenderArea)
     {
-        m_renderPassInstance.renderAreaCount = m_pDevice->NumPalDevices();
+        m_renderPassInstance.renderAreaCount = m_numPalDevices;
 
         const auto& srcRect = pRenderPassBeginInfo->renderArea;
 
-        for (uint32_t deviceIdx = 0; deviceIdx <  m_pDevice->NumPalDevices(); deviceIdx++)
+        for (uint32_t deviceIdx = 0; deviceIdx <  m_numPalDevices; deviceIdx++)
         {
             auto* pDstRect          = &m_renderPassInstance.renderArea[deviceIdx];
 
@@ -6609,7 +6642,7 @@ void CmdBuffer::SetViewport(
     }
     while (deviceGroup.IterateNext());
 
-    m_allGpuState.dirty.viewport         = 1;
+    m_allGpuState.dirtyGraphics.viewport         = 1;
     m_allGpuState.staticTokens.viewports = DynamicRenderStateToken;
 }
 
@@ -6648,7 +6681,7 @@ void CmdBuffer::SetAllViewports(
     }
     while (deviceGroup.IterateNext());
 
-    m_allGpuState.dirty.viewport         = 1;
+    m_allGpuState.dirtyGraphics.viewport         = 1;
     m_allGpuState.staticTokens.viewports = staticToken;
 }
 
@@ -6670,7 +6703,7 @@ void CmdBuffer::SetScissor(
     }
     while (deviceGroup.IterateNext());
 
-    m_allGpuState.dirty.scissor            = 1;
+    m_allGpuState.dirtyGraphics.scissor            = 1;
     m_allGpuState.staticTokens.scissorRect = DynamicRenderStateToken;
 }
 
@@ -6710,7 +6743,7 @@ void CmdBuffer::SetAllScissors(
     }
     while (deviceGroup.IterateNext());
 
-    m_allGpuState.dirty.scissor            = 1;
+    m_allGpuState.dirtyGraphics.scissor            = 1;
     m_allGpuState.staticTokens.scissorRect = staticToken;
 }
 
@@ -6821,7 +6854,7 @@ void CmdBuffer::SetStencilCompareMask(
         m_allGpuState.stencilRefMasks.backReadMask = static_cast<uint8_t>(stencilCompareMask);
     }
 
-    m_allGpuState.dirty.stencilRef = 1;
+    m_allGpuState.dirtyGraphics.stencilRef = 1;
 }
 
 // =====================================================================================================================
@@ -6838,7 +6871,7 @@ void CmdBuffer::SetStencilWriteMask(
         m_allGpuState.stencilRefMasks.backWriteMask = static_cast<uint8_t>(stencilWriteMask);
     }
 
-    m_allGpuState.dirty.stencilRef = 1;
+    m_allGpuState.dirtyGraphics.stencilRef = 1;
 }
 
 // =====================================================================================================================
@@ -6855,7 +6888,7 @@ void CmdBuffer::SetStencilReference(
         m_allGpuState.stencilRefMasks.backRef = static_cast<uint8_t>(stencilReference);
     }
 
-    m_allGpuState.dirty.stencilRef = 1;
+    m_allGpuState.dirtyGraphics.stencilRef = 1;
 }
 
 #if VK_ENABLE_DEBUG_BARRIERS
@@ -7201,7 +7234,7 @@ void CmdBuffer::CmdSetPerDrawVrsRate(
     // Don't call CmdSetPerDrawVrsRate here since we have to observe the
     // currently bound pipeline to see if we should clamp the rate.
     // Calling Pal->CmdSetPerDrawVrsRate will happen in ValidateStates
-    m_allGpuState.dirty.vrs                        = 1;
+    m_allGpuState.dirtyGraphics.vrs                        = 1;
     m_allGpuState.staticTokens.fragmentShadingRate = DynamicRenderStateToken;
 }
 
@@ -7263,7 +7296,7 @@ void CmdBuffer::CmdEndConditionalRendering()
 // =====================================================================================================================
 void CmdBuffer::ValidateStates()
 {
-    if (m_allGpuState.dirty.u32All != 0)
+    if (m_allGpuState.dirtyGraphics.u32All != 0)
     {
         Pal::IDepthStencilState* pPalDepthStencil[MaxPalDevices] = {};
 
@@ -7272,7 +7305,7 @@ void CmdBuffer::ValidateStates()
         {
             const uint32_t deviceIdx = deviceGroup.Index();
 
-            if (m_allGpuState.dirty.viewport)
+            if (m_allGpuState.dirtyGraphics.viewport)
             {
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
@@ -7281,7 +7314,7 @@ void CmdBuffer::ValidateStates()
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
             }
 
-            if (m_allGpuState.dirty.scissor)
+            if (m_allGpuState.dirtyGraphics.scissor)
             {
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
@@ -7290,7 +7323,7 @@ void CmdBuffer::ValidateStates()
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
             }
 
-            if (m_allGpuState.dirty.rasterState)
+            if (m_allGpuState.dirtyGraphics.rasterState)
             {
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
@@ -7299,7 +7332,7 @@ void CmdBuffer::ValidateStates()
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
             }
 
-            if (m_allGpuState.dirty.stencilRef)
+            if (m_allGpuState.dirtyGraphics.stencilRef)
             {
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
@@ -7308,7 +7341,7 @@ void CmdBuffer::ValidateStates()
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
             }
 
-            if (m_allGpuState.dirty.inputAssembly)
+            if (m_allGpuState.dirtyGraphics.inputAssembly)
             {
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
@@ -7317,7 +7350,7 @@ void CmdBuffer::ValidateStates()
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
             }
 
-            if (m_allGpuState.dirty.vrs)
+            if (m_allGpuState.dirtyGraphics.vrs)
             {
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
@@ -7339,7 +7372,7 @@ void CmdBuffer::ValidateStates()
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
             }
 
-            if (m_allGpuState.dirty.depthStencil)
+            if (m_allGpuState.dirtyGraphics.depthStencil)
             {
                 RenderStateCache* pRSCache = m_pDevice->GetRenderStateCache();
 
@@ -7398,7 +7431,7 @@ void CmdBuffer::ValidateStates()
                         pPalDepthStencil[deviceIdx]);
             }
 
-            if (m_allGpuState.dirty.colorWriteEnable)
+            if (m_allGpuState.dirtyGraphics.colorWriteEnable)
             {
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
@@ -7408,7 +7441,7 @@ void CmdBuffer::ValidateStates()
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
             }
 
-            if (m_allGpuState.dirty.rasterizerDiscardEnable)
+            if (m_allGpuState.dirtyGraphics.rasterizerDiscardEnable)
             {
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
@@ -7420,7 +7453,7 @@ void CmdBuffer::ValidateStates()
         while (deviceGroup.IterateNext());
 
         // Clear the dirty bits
-        m_allGpuState.dirty.u32All = 0;
+        m_allGpuState.dirtyGraphics.u32All = 0;
     }
 }
 
@@ -7433,7 +7466,7 @@ void CmdBuffer::SetCullModeEXT(
     if (m_allGpuState.triangleRasterState.cullMode != palCullMode)
     {
         m_allGpuState.triangleRasterState.cullMode = palCullMode;
-        m_allGpuState.dirty.rasterState            = 1;
+        m_allGpuState.dirtyGraphics.rasterState            = 1;
     }
 
     m_allGpuState.staticTokens.triangleRasterState = DynamicRenderStateToken;
@@ -7448,7 +7481,7 @@ void CmdBuffer::SetFrontFaceEXT(
     if (m_allGpuState.triangleRasterState.frontFace != palFrontFace)
     {
         m_allGpuState.triangleRasterState.frontFace = palFrontFace;
-        m_allGpuState.dirty.rasterState             = 1;
+        m_allGpuState.dirtyGraphics.rasterState             = 1;
     }
 
     m_allGpuState.staticTokens.triangleRasterState = DynamicRenderStateToken;
@@ -7463,7 +7496,7 @@ void CmdBuffer::SetPrimitiveTopologyEXT(
     if (m_allGpuState.inputAssemblyState.topology != palTopology)
     {
         m_allGpuState.inputAssemblyState.topology = palTopology;
-        m_allGpuState.dirty.inputAssembly         = 1;
+        m_allGpuState.dirtyGraphics.inputAssembly         = 1;
     }
 
     m_allGpuState.staticTokens.inputAssemblyState = DynamicRenderStateToken;
@@ -7476,7 +7509,7 @@ void CmdBuffer::SetDepthTestEnableEXT(
     if (m_allGpuState.depthStencilCreateInfo.depthEnable != static_cast<bool>(depthTestEnable))
     {
         m_allGpuState.depthStencilCreateInfo.depthEnable = depthTestEnable;
-        m_allGpuState.dirty.depthStencil                 = 1;
+        m_allGpuState.dirtyGraphics.depthStencil                 = 1;
     }
 }
 
@@ -7487,7 +7520,7 @@ void CmdBuffer::SetDepthWriteEnableEXT(
     if (m_allGpuState.depthStencilCreateInfo.depthWriteEnable != static_cast<bool>(depthWriteEnable))
     {
         m_allGpuState.depthStencilCreateInfo.depthWriteEnable = depthWriteEnable;
-        m_allGpuState.dirty.depthStencil                      = 1;
+        m_allGpuState.dirtyGraphics.depthStencil                      = 1;
     }
 }
 
@@ -7500,7 +7533,7 @@ void CmdBuffer::SetDepthCompareOpEXT(
     if (m_allGpuState.depthStencilCreateInfo.depthFunc != compareOp)
     {
         m_allGpuState.depthStencilCreateInfo.depthFunc = compareOp;
-        m_allGpuState.dirty.depthStencil               = 1;
+        m_allGpuState.dirtyGraphics.depthStencil               = 1;
     }
 }
 
@@ -7511,7 +7544,7 @@ void CmdBuffer::SetDepthBoundsTestEnableEXT(
     if (m_allGpuState.depthStencilCreateInfo.depthBoundsEnable != static_cast<bool>(depthBoundsTestEnable))
     {
         m_allGpuState.depthStencilCreateInfo.depthBoundsEnable = depthBoundsTestEnable;
-        m_allGpuState.dirty.depthStencil                       = 1;
+        m_allGpuState.dirtyGraphics.depthStencil                       = 1;
     }
 }
 
@@ -7522,7 +7555,7 @@ void CmdBuffer::SetStencilTestEnableEXT(
     if (m_allGpuState.depthStencilCreateInfo.stencilEnable != static_cast<bool>(stencilTestEnable))
     {
         m_allGpuState.depthStencilCreateInfo.stencilEnable = stencilTestEnable;
-        m_allGpuState.dirty.depthStencil                   = 1;
+        m_allGpuState.dirtyGraphics.depthStencil                   = 1;
     }
 }
 
@@ -7553,7 +7586,7 @@ void CmdBuffer::SetStencilOpEXT(
             pCreateInfo->front.stencilDepthFailOp = palDepthFailOp;
             pCreateInfo->front.stencilFunc        = palCompareOp;
 
-            m_allGpuState.dirty.depthStencil = 1;
+            m_allGpuState.dirtyGraphics.depthStencil = 1;
         }
     }
 
@@ -7569,7 +7602,7 @@ void CmdBuffer::SetStencilOpEXT(
             pCreateInfo->back.stencilDepthFailOp = palDepthFailOp;
             pCreateInfo->back.stencilFunc        = palCompareOp;
 
-            m_allGpuState.dirty.depthStencil = 1;
+            m_allGpuState.dirtyGraphics.depthStencil = 1;
         }
     }
 }
@@ -7595,7 +7628,7 @@ void CmdBuffer::SetColorWriteEnableEXT(
             }
         }
 
-        m_allGpuState.dirty.colorWriteEnable = 1;
+        m_allGpuState.dirtyGraphics.colorWriteEnable = 1;
     }
 }
 
@@ -7604,7 +7637,7 @@ void CmdBuffer::SetRasterizerDiscardEnableEXT(
     VkBool32                                   rasterizerDiscardEnable)
 {
     m_allGpuState.rasterizerDiscardEnable       = rasterizerDiscardEnable;
-    m_allGpuState.dirty.rasterizerDiscardEnable = 1;
+    m_allGpuState.dirtyGraphics.rasterizerDiscardEnable = 1;
 }
 
 // =====================================================================================================================
@@ -7614,7 +7647,7 @@ void CmdBuffer::SetPrimitiveRestartEnableEXT(
     if (m_allGpuState.inputAssemblyState.primitiveRestartEnable != static_cast<bool>(primitiveRestartEnable))
     {
         m_allGpuState.inputAssemblyState.primitiveRestartEnable = primitiveRestartEnable;
-        m_allGpuState.dirty.inputAssembly                       = 1;
+        m_allGpuState.dirtyGraphics.inputAssembly                       = 1;
     }
 
     m_allGpuState.staticTokens.inputAssemblyState = DynamicRenderStateToken;
@@ -7627,7 +7660,7 @@ void CmdBuffer::SetDepthBiasEnableEXT(
     if (m_allGpuState.triangleRasterState.flags.depthBiasEnable != depthBiasEnable)
     {
         m_allGpuState.triangleRasterState.flags.depthBiasEnable = depthBiasEnable;
-        m_allGpuState.dirty.rasterState                         = 1;
+        m_allGpuState.dirtyGraphics.rasterState                         = 1;
     }
 
     m_allGpuState.staticTokens.triangleRasterState = DynamicRenderStateToken;

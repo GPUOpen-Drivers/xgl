@@ -89,7 +89,6 @@ struct ImportMemoryInfo
 {
     Pal::OsExternalHandle   handle;         // A handle on Windows, or a fd on Linux.
     bool                    isNtHandle;     // It's a Windows-specific flag indicates the handle is shared via NT.
-    bool                    isAhbHandle;    // Android-specific flgs indicates handle is Android Hardware Buffer
 };
 
 // =====================================================================================================================

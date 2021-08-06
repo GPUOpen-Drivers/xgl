@@ -84,7 +84,6 @@ public:
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         size_t*                           pPipelineBinarySize,
         const void**                      ppPipelineBinary,
-        uint32_t                          rasterizationStream,
         Vkgc::PipelineShaderInfo**        ppShadersInfo,
         void*                             pPipelineDumpHandle,
         uint64_t                          pipelineHash,

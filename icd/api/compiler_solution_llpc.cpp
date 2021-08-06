@@ -298,14 +298,12 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
     size_t*                           pPipelineBinarySize,
     const void**                      ppPipelineBinary,
-    uint32_t                          rasterizationStream,
     Vkgc::PipelineShaderInfo**        ppShadersInfo,
     void*                             pPipelineDumpHandle,
     uint64_t                          pipelineHash,
     int64_t*                          pCompileTime)
 {
     VK_IGNORE(pDevice);
-    VK_IGNORE(rasterizationStream);
     VK_IGNORE(pipelineHash);
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();

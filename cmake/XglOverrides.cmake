@@ -94,6 +94,12 @@ macro(xgl_get_path)
         set(XGL_PAL_PATH ${PROJECT_SOURCE_DIR}/../pal CACHE PATH "Specify the path to the PAL project.")
     endif()
 
+#if VKI_GPU_DECOMPRESS
+    if(VKI_GPU_DECOMPRESS)
+        set(XGL_GPUTEXDECODER_PATH ${PROJECT_SOURCE_DIR}/icd/imported/gputexdecoder CACHE PATH "Specify the path to the gpu texture decoe project.")
+    endif()
+#endif
+
     # VKGC path
     if (EXISTS ${PROJECT_SOURCE_DIR}/../llpc/CMakeLists.txt)
         # On github, the default repo name is llpc instead of compiler
@@ -161,10 +167,6 @@ macro(xgl_overrides_pal)
 
     # Dri3
     set(PAL_BUILD_DRI3 ${BUILD_DRI3_SUPPORT} CACHE BOOL "PAL build with Dri3 enabled" FORCE)
-
-#if VKI_3RD_PARTY_IP_PROPERTY_ID
-    set(PAL_3RD_PARTY_IP_PROPERTY_ID ${VKI_3RD_PARTY_IP_PROPERTY_ID})
-#endif
 
     if(EXISTS ${XGL_METROHASH_PATH})
         set(PAL_METROHASH_PATH ${XGL_METROHASH_PATH} CACHE PATH "${PROJECT_NAME} override." FORCE)

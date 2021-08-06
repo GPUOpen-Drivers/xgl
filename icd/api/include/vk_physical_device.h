@@ -244,7 +244,7 @@ public:
         uint32_t*                 pCount,
         VkQueueFamilyProperties2* pQueueProperties) const;
 
-    VkResult GetFeatures(VkPhysicalDeviceFeatures* pFeatures) const;
+    size_t GetFeatures(VkPhysicalDeviceFeatures* pFeatures) const;
 
     VK_INLINE VkResult GetFormatProperties(
         VkFormat            format,
@@ -323,11 +323,6 @@ public:
         bool                               isImageUsage,
         VkExternalMemoryHandleTypeFlagBits handleType,
         VkExternalMemoryProperties*        pExternalMemoryProperties) const;
-
-    VkResult GetAndroidHarewareBufferUsage(
-        VkImageUsageFlags        usage,
-        VkImageCreateFlags       createFlags,
-        uint64_t*                pAHBUsage) const;
 
     VkResult GetImageFormatProperties(
         VkFormat                 format,
@@ -431,8 +426,9 @@ public:
         uint32_t*                                       pPropertyCount,
         VkSparseImageFormatProperties2*                 pProperties);
 
-    void GetFeatures2(
-        VkStructHeaderNonConst*                     pFeatures) const;
+    size_t GetFeatures2(
+        VkStructHeaderNonConst*                     pFeatures,
+        bool                                        updateFeatures) const;
 
     void GetMemoryProperties2(
         VkPhysicalDeviceMemoryProperties2*          pMemoryProperties);

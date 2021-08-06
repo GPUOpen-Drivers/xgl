@@ -36,6 +36,10 @@
 namespace vk
 {
 
+struct PipelineOptimizerKey;
+struct GraphicsPipelineBinaryCreateInfo;
+struct GraphicsPipelineShaderStageInfo;
+
 // =====================================================================================================================
 // Sample pattern structure containing pal format sample locations and sample counts
 // ToDo: Move this struct to different header once render_graph implementation is removed.
@@ -112,7 +116,6 @@ struct GraphicsPipelineObjectCreateInfo
     const PipelineLayout*                       pLayout;
     uint32_t                                    sampleCoverage;
     VkShaderStageFlagBits                       activeStages;
-    uint32_t                                    rasterizationStream;
     VkFormat                                    dbFormat;
 
     union
@@ -124,44 +127,76 @@ struct GraphicsPipelineObjectCreateInfo
             uint32_t   bindTriangleRasterState : 1;
             uint32_t   bindStencilRefMasks     : 1;
             uint32_t   bindInputAssemblyState  : 1;
+            uint32_t   customMultiSampleState  : 1;
             uint32_t   customSampleLocations   : 1;
             uint32_t   force1x1ShaderRate      : 1;
-            uint32_t   reserved                : 25;
+            uint32_t   sampleShadingEnable     : 1;
+            uint32_t   reserved                : 23;
         };
         uint32_t value;
-    }flags;
+    } flags;
 };
 
 // =====================================================================================================================
-// Returns true if Dual Source Blending is to be enabled based on the given ColorBlendAttachmentState
-bool GetDualSourceBlendEnableState(const VkPipelineColorBlendAttachmentState& pColorBlendAttachmentState);
-
-// =====================================================================================================================
-// Returns true if src alpha is used in blending
-bool IsSrcAlphaUsedInBlend(VkBlendFactor blend);
+// Include pipeline binary information from compiler which affects information info of pipeline object
+struct GraphicsPipelineBinaryInfo
+{
+    const PipelineOptimizerKey* pOptimizerKey;
+};
 
 // =====================================================================================================================
 // The common part used by both executable graphics pipelines and graphics pipeline libraries
 class GraphicsPipelineCommon : public Pipeline
 {
+public:
+    // Get the active shader stages through API info
+    static VkShaderStageFlagBits GetActiveShaderStages(
+        const VkGraphicsPipelineCreateInfo*             pGraphicsPipelineCreateInfo
+        );
+
+    // Returns true if Dual Source Blending is to be enabled based on the given ColorBlendAttachmentState
+    static bool GetDualSourceBlendEnableState(
+        const Device*                              pDevice,
+        const VkPipelineColorBlendStateCreateInfo* pColorBlendState,
+        const Pal::ColorBlendStateCreateInfo*      pPalInfo = nullptr);
+
+    // Returns true if src alpha is used in blending
+    static bool IsSrcAlphaUsedInBlend(VkBlendFactor blend);
+
+    // Get the dynamics states specified by API info
+    static uint32_t GetDynamicStateFlags(
+        const VkPipelineDynamicStateCreateInfo*   pDy
+        );
+
 protected:
-    // Convert API infomation into internal pipeline create info
+    // Convert API information into internal create info used to create internal pipeline binary
+    static VkResult BuildPipelineBinaryCreateInfo(
+        const Device*                       pDevice,
+        const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        GraphicsPipelineBinaryCreateInfo*   pBinInfo,
+        GraphicsPipelineShaderStageInfo*    pShaderInfo,
+        VbBindingInfo*                      pVbInfo,
+        ShaderModuleHandle*                 pTempModules);
+
+    // Convert API information into internal create info used to create internal pipeline object
     static void BuildPipelineObjectCreateInfo(
         const Device*                       pDevice,
         const VkGraphicsPipelineCreateInfo* pIn,
         const VbBindingInfo*                pVbInfo,
-        GraphicsPipelineObjectCreateInfo*   pInfo);
+        const GraphicsPipelineBinaryInfo*   pBinInfo,
+        GraphicsPipelineObjectCreateInfo*   pObjInfo);
 
     // Generates the API PSO hash using the contents of the VkGraphicsPipelineCreateInfo struct
     static uint64_t BuildApiHash(
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,
-        const GraphicsPipelineObjectCreateInfo* pInfo,
-        Util::MetroHash::Hash*                  pBaseHash);
+        const GraphicsPipelineObjectCreateInfo* pInfo);
 
-    GraphicsPipelineCommon(Device* const pDevice)
-        : Pipeline(pDevice, VK_PIPELINE_BIND_POINT_GRAPHICS)
+    GraphicsPipelineCommon(
+        Device* const pDevice)
+        : Pipeline(
+            pDevice,
+            VK_PIPELINE_BIND_POINT_GRAPHICS)
     { }
-
 };
 
 }

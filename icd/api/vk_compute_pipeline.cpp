@@ -45,9 +45,10 @@ namespace vk
 //     - pCreateInfo->pStage
 //     - pCreateInfo->layout
 uint64_t ComputePipeline::BuildApiHash(
-    const VkComputePipelineCreateInfo* pCreateInfo,
-    Util::MetroHash::Hash*             pBaseHash)
+    const VkComputePipelineCreateInfo* pCreateInfo)
 {
+    Util::MetroHash::Hash bashHash;
+
     Util::MetroHash128 baseHasher;
     Util::MetroHash128 apiHasher;
 
@@ -64,11 +65,11 @@ uint64_t ComputePipeline::BuildApiHash(
 
     apiHasher.Update(pCreateInfo->basePipelineIndex);
 
-    baseHasher.Finalize(reinterpret_cast<uint8_t* const>(pBaseHash));
+    baseHasher.Finalize(reinterpret_cast<uint8_t* const>(&bashHash));
 
     uint64_t              apiHash;
     Util::MetroHash::Hash apiHashFull;
-    apiHasher.Update(*pBaseHash);
+    apiHasher.Update(bashHash);
     apiHasher.Finalize(reinterpret_cast<uint8_t* const>(&apiHashFull));
     apiHash = Util::MetroHash::Compact64(&apiHashFull);
 
@@ -103,7 +104,9 @@ ComputePipeline::ComputePipeline(
     uint32_t                             staticStateMask,
     uint64_t                             apiHash)
     :
-    Pipeline(pDevice, VK_PIPELINE_BIND_POINT_COMPUTE),
+    Pipeline(
+        pDevice,
+        VK_PIPELINE_BIND_POINT_COMPUTE),
     m_info(immedInfo)
 {
     Pipeline::Init(pPalPipeline, pPipelineLayout, pPipelineBinary, staticStateMask, apiHash);
@@ -134,13 +137,28 @@ VkResult ComputePipeline::Create(
     Util::MetroHash::Hash           cacheId[MaxPalDevices]             = {};
     PipelineCompiler*               pDefaultCompiler                   = pDevice->GetCompiler(DefaultDeviceIndex);
     ComputePipelineBinaryCreateInfo binaryCreateInfo                   = {};
-    uint64_t                        apiPsoHash                         = BuildApiHash(
-                                                                            pCreateInfo,
-                                                                            &binaryCreateInfo.basePipelineHash);
+    uint64_t                        apiPsoHash                         = BuildApiHash(pCreateInfo);
 
-    const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo = nullptr;
-    VkResult result = pDefaultCompiler->ConvertComputePipelineInfo(
-        pDevice, pCreateInfo, &binaryCreateInfo, &pPipelineCreationFeadbackCreateInfo);
+    const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfo = nullptr;
+    pDefaultCompiler->GetPipelineCreationFeedback(static_cast<const VkStructHeader*>(pCreateInfo->pNext),
+                                                  &pPipelineCreationFeedbackCreateInfo);
+
+    ComputePipelineShaderStageInfo shaderInfo = {};
+    ShaderModuleHandle             tempModule  = {};
+    VkResult result = BuildShaderStageInfo(pDevice,
+                                           1,
+                                           &pCreateInfo->stage,
+                                           [](const uint32_t inputIdx, const uint32_t stageIdx)
+                                           {
+                                               return 0u;
+                                           },
+                                           &shaderInfo.stage,
+                                           &tempModule);
+
+    if (result == VK_SUCCESS)
+    {
+        result = pDefaultCompiler->ConvertComputePipelineInfo(pDevice, pCreateInfo, &shaderInfo, &binaryCreateInfo);
+    }
 
     uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&binaryCreateInfo.pipelineInfo);
     for (uint32_t deviceIdx = 0;
@@ -278,6 +296,7 @@ VkResult ComputePipeline::Create(
 
     if (result == VK_SUCCESS)
     {
+
         // On success, wrap it up in a Vulkan object and return.
         VK_PLACEMENT_NEW(pSystemMem) ComputePipeline(pDevice,
                                                      pPalPipeline,
@@ -300,6 +319,9 @@ VkResult ComputePipeline::Create(
             }
         }
     }
+
+    // Free the temporary newly-built shader modules
+    FreeTempModules(pDevice, 1, &tempModule);
 
     // Free the created pipeline binaries now that the PAL Pipelines/PipelineBinaryInfo have read them.
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
@@ -332,7 +354,7 @@ VkResult ComputePipeline::Create(
         binaryCreateInfo.pipelineFeedback.feedbackValid = true;
         binaryCreateInfo.pipelineFeedback.duration = duration;
         pDefaultCompiler->SetPipelineCreationFeedbackInfo(
-                pPipelineCreationFeadbackCreateInfo,
+                pPipelineCreationFeedbackCreateInfo,
                 0,
                 nullptr,
                 &binaryCreateInfo.pipelineFeedback,

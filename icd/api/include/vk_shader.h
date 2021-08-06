@@ -67,16 +67,22 @@ public:
     const void* GetCode() const { return m_pCode; }
     const ShaderModuleHandle* GetShaderModuleHandle() const { return &m_handle; }
 
-    Pal::ShaderHash GetCodeHash(const char* pEntryPoint) const;
+    Pal::ShaderHash GetCodeHash(const char* pEntryPoint) const
+        { return GetCodeHash(m_codeHash, pEntryPoint); }
 
     void* GetShaderData(PipelineCompilerType compilerType) const
-    {
-        return GetShaderData(compilerType, &m_handle);
-    }
+        { return GetShaderData(compilerType, &m_handle); }
 
-    void* GetFirstValidShaderData() const;
+    void* GetFirstValidShaderData() const
+        { return GetFirstValidShaderData(&m_handle); }
+
+    static Pal::ShaderHash BuildCodeHash(const void* pCode, const size_t codeSize);
+
+    static Pal::ShaderHash GetCodeHash(Pal::ShaderHash codeHash, const char* pEntryPoint);
 
     static void* GetShaderData(PipelineCompilerType compilerType, const ShaderModuleHandle* pHandle);
+
+    static void* GetFirstValidShaderData(const ShaderModuleHandle* pHandle);
 
 protected:
     ShaderModule(size_t codeSize, const void* pCode);

@@ -78,7 +78,7 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
     const PipelineProfile&           profile,
     const PipelineOptimizerKey&      pipelineKey,
     ShaderStage                      shaderStage,
-    PipelineShaderOptionsPtr         options)
+    PipelineShaderOptionsPtr         options) const
 {
     for (uint32_t entry = 0; entry < profile.entryCount; ++entry)
     {
@@ -220,7 +220,7 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
 void ShaderOptimizer::OverrideShaderCreateInfo(
     const PipelineOptimizerKey&        pipelineKey,
     ShaderStage                        shaderStage,
-    PipelineShaderOptionsPtr           options)
+    PipelineShaderOptionsPtr           options) const
 {
 
     ApplyProfileToShaderCreateInfo(m_appProfile, pipelineKey, shaderStage, options);
@@ -237,7 +237,7 @@ void ShaderOptimizer::OverrideGraphicsPipelineCreateInfo(
     const PipelineOptimizerKey&       pipelineKey,
     VkShaderStageFlagBits             shaderStages,
     Pal::GraphicsPipelineCreateInfo*  pPalCreateInfo,
-    Pal::DynamicGraphicsShaderInfos*  pGraphicsShaderInfos)
+    Pal::DynamicGraphicsShaderInfos*  pGraphicsShaderInfos) const
 {
     ApplyProfileToGraphicsPipelineCreateInfo(
         m_appProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsShaderInfos);
@@ -254,7 +254,7 @@ void ShaderOptimizer::OverrideGraphicsPipelineCreateInfo(
 // =====================================================================================================================
 void ShaderOptimizer::OverrideComputePipelineCreateInfo(
     const PipelineOptimizerKey&      pipelineKey,
-    Pal::DynamicComputeShaderInfo*   pDynamicCompueShaderInfo)
+    Pal::DynamicComputeShaderInfo*   pDynamicCompueShaderInfo) const
 {
     ApplyProfileToComputePipelineCreateInfo(m_appProfile, pipelineKey, pDynamicCompueShaderInfo);
 
@@ -289,14 +289,14 @@ ShaderOptimizer::~ShaderOptimizer()
 // =====================================================================================================================
 void ShaderOptimizer::ApplyProfileToDynamicComputeShaderInfo(
     const ShaderProfileAction&     action,
-    Pal::DynamicComputeShaderInfo* pComputeShaderInfo)
+    Pal::DynamicComputeShaderInfo* pComputeShaderInfo) const
 {
 }
 
 // =====================================================================================================================
 void ShaderOptimizer::ApplyProfileToDynamicGraphicsShaderInfo(
     const ShaderProfileAction&      action,
-    Pal::DynamicGraphicsShaderInfo* pGraphicsShaderInfo)
+    Pal::DynamicGraphicsShaderInfo* pGraphicsShaderInfo) const
 {
 
     if (action.dynamicShaderInfo.apply.cuEnableMask)
@@ -311,7 +311,7 @@ void ShaderOptimizer::ApplyProfileToGraphicsPipelineCreateInfo(
     const PipelineOptimizerKey&       pipelineKey,
     VkShaderStageFlagBits             shaderStages,
     Pal::GraphicsPipelineCreateInfo*  pPalCreateInfo,
-    Pal::DynamicGraphicsShaderInfos*  pGraphicsShaderInfos)
+    Pal::DynamicGraphicsShaderInfos*  pGraphicsShaderInfos) const
 {
     for (uint32_t entry = 0; entry < profile.entryCount; ++entry)
     {
@@ -375,7 +375,7 @@ void ShaderOptimizer::ApplyProfileToGraphicsPipelineCreateInfo(
 void ShaderOptimizer::ApplyProfileToComputePipelineCreateInfo(
     const PipelineProfile&           profile,
     const PipelineOptimizerKey&      pipelineKey,
-    Pal::DynamicComputeShaderInfo*   pDynamicComputeShaderInfo)
+    Pal::DynamicComputeShaderInfo*   pDynamicComputeShaderInfo) const
 {
     for (uint32_t entry = 0; entry < profile.entryCount; ++entry)
     {
@@ -400,7 +400,7 @@ void ShaderOptimizer::ApplyProfileToComputePipelineCreateInfo(
 // =====================================================================================================================
 Pal::ShaderHash ShaderOptimizer::GetFirstMatchingShaderHash(
     const PipelineProfilePattern& pattern,
-    const PipelineOptimizerKey&   pipelineKey)
+    const PipelineOptimizerKey&   pipelineKey) const
 {
     for (uint32_t stage = 0; stage < ShaderStageCount; ++stage)
     {
@@ -427,7 +427,7 @@ Pal::ShaderHash ShaderOptimizer::GetFirstMatchingShaderHash(
 // =====================================================================================================================
 bool ShaderOptimizer::ProfilePatternMatchesPipeline(
     const PipelineProfilePattern& pattern,
-    const PipelineOptimizerKey&   pipelineKey)
+    const PipelineOptimizerKey&   pipelineKey) const
 {
     if (pattern.match.always)
     {
@@ -733,7 +733,7 @@ void ShaderOptimizer::BuildAppProfileLlpc()
 void ShaderOptimizer::PrintProfileEntryMatch(
     const PipelineProfile&      profile,
     uint32_t                    index,
-    const PipelineOptimizerKey& key)
+    const PipelineOptimizerKey& key) const
 {
     Util::MutexAuto lock(&m_printMutex);
 

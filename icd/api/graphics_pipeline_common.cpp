@@ -23,6 +23,7 @@
  *
  **********************************************************************************************************************/
 
+#include "include/app_shader_optimizer.h"
 #include "include/graphics_pipeline_common.h"
 #include "include/vk_cmdbuffer.h"
 #include "include/vk_device.h"
@@ -115,16 +116,134 @@ constexpr uint32_t FoiDynamicStatesMask = 0
     | (1 << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt));
 
 // =====================================================================================================================
-static VK_INLINE bool IsDynamicStateEnabled(
-    const uint32_t              dynamicStateFlags,
-    const DynamicStatesInternal internalState)
+// Helper function used to check whether a specific dynamic state is set
+static bool IsDynamicStateEnabled(const uint32_t dynamicStateFlags, const DynamicStatesInternal internalState)
 {
     return dynamicStateFlags & (1 << static_cast<uint32_t>(internalState));
 }
 
 // =====================================================================================================================
-static VkShaderStageFlagBits GetActiveShaderStages(
-    const VkGraphicsPipelineCreateInfo*           pGraphicsPipelineCreateInfo
+// Returns true if the given VkBlendFactor factor is a dual source blend factor
+static VK_INLINE bool IsDualSourceBlend(VkBlendFactor blend)
+{
+    switch (blend)
+    {
+    case VK_BLEND_FACTOR_SRC1_COLOR:
+    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR:
+    case VK_BLEND_FACTOR_SRC1_ALPHA:
+    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// =====================================================================================================================
+static VK_INLINE void BuildPalColorBlendStateCreateInfo(
+    const VkPipelineColorBlendStateCreateInfo* pColorBlendState,
+    Pal::ColorBlendStateCreateInfo*            pInfo)
+{
+    const uint32_t numColorTargets = Min(pColorBlendState->attachmentCount, Pal::MaxColorTargets);
+
+    for (uint32_t i = 0; i < numColorTargets; ++i)
+    {
+        const VkPipelineColorBlendAttachmentState& attachmentState = pColorBlendState->pAttachments[i];
+        auto pBlendDst = &pInfo->targets[i];
+
+        pBlendDst->blendEnable    = (attachmentState.blendEnable == VK_TRUE);
+        pBlendDst->srcBlendColor  = VkToPalBlend(attachmentState.srcColorBlendFactor);
+        pBlendDst->dstBlendColor  = VkToPalBlend(attachmentState.dstColorBlendFactor);
+        pBlendDst->blendFuncColor = VkToPalBlendFunc(attachmentState.colorBlendOp);
+        pBlendDst->srcBlendAlpha  = VkToPalBlend(attachmentState.srcAlphaBlendFactor);
+        pBlendDst->dstBlendAlpha  = VkToPalBlend(attachmentState.dstAlphaBlendFactor);
+        pBlendDst->blendFuncAlpha = VkToPalBlendFunc(attachmentState.alphaBlendOp);
+    }
+}
+
+// =====================================================================================================================
+bool GraphicsPipelineCommon::GetDualSourceBlendEnableState(
+    const Device*                              pDevice,
+    const VkPipelineColorBlendStateCreateInfo* pColorBlendState,
+    const Pal::ColorBlendStateCreateInfo*      pPalInfo)
+{
+    bool dualSourceBlend = false;
+
+    bool canEnableDualSourceBlend;
+    if (pPalInfo != nullptr)
+    {
+        canEnableDualSourceBlend = pDevice->PalDevice(DefaultDeviceIndex)->CanEnableDualSourceBlend(*pPalInfo);
+    }
+    else
+    {
+        Pal::ColorBlendStateCreateInfo palInfo = {};
+        BuildPalColorBlendStateCreateInfo(pColorBlendState, &palInfo);
+        canEnableDualSourceBlend = pDevice->PalDevice(DefaultDeviceIndex)->CanEnableDualSourceBlend(palInfo);
+    }
+
+    if (canEnableDualSourceBlend)
+    {
+        const uint32_t numColorTargets = Min(pColorBlendState->attachmentCount, Pal::MaxColorTargets);
+        for (uint32_t i = 0; (i < numColorTargets) && (dualSourceBlend == false); ++i)
+        {
+            const VkPipelineColorBlendAttachmentState& attachmentState = pColorBlendState->pAttachments[i];
+
+            bool attachmentEnabled = false;
+
+            if (attachmentState.blendEnable == VK_TRUE)
+            {
+                attachmentEnabled |= IsDualSourceBlend(attachmentState.srcAlphaBlendFactor);
+                attachmentEnabled |= IsDualSourceBlend(attachmentState.dstAlphaBlendFactor);
+                attachmentEnabled |= IsDualSourceBlend(attachmentState.srcColorBlendFactor);
+                attachmentEnabled |= IsDualSourceBlend(attachmentState.dstColorBlendFactor);
+            }
+
+            dualSourceBlend |= attachmentEnabled;
+        }
+    }
+
+    return dualSourceBlend;
+}
+
+// =====================================================================================================================
+bool GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(VkBlendFactor blend)
+{
+    switch (blend)
+    {
+    case VK_BLEND_FACTOR_SRC_ALPHA:
+    case VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA:
+    case VK_BLEND_FACTOR_SRC_ALPHA_SATURATE:
+    case VK_BLEND_FACTOR_SRC1_ALPHA:
+    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// =====================================================================================================================
+static VK_INLINE VkFormat GetDepthFormat(
+    const RenderPass*                       pRenderPass,
+    const uint32_t                          subpassIndex
+    )
+{
+    return (pRenderPass != nullptr) ?
+        pRenderPass->GetDepthStencilAttachmentFormat(subpassIndex) :
+        VK_FORMAT_UNDEFINED;
+}
+
+// =====================================================================================================================
+static VK_INLINE uint32_t GetColorAttachmentCount(
+    const RenderPass*                       pRenderPass,
+    const uint32_t                          subpassIndex
+)
+{
+    return (pRenderPass != nullptr) ? pRenderPass->GetSubpassColorReferenceCount(subpassIndex) :
+           0u;
+}
+
+// =====================================================================================================================
+VkShaderStageFlagBits GraphicsPipelineCommon::GetActiveShaderStages(
+    const VkGraphicsPipelineCreateInfo*             pGraphicsPipelineCreateInfo
     )
 {
     VK_ASSERT(pGraphicsPipelineCreateInfo != nullptr);
@@ -141,8 +260,8 @@ static VkShaderStageFlagBits GetActiveShaderStages(
 }
 
 // =====================================================================================================================
-static uint32_t GetDynamicStateFlags(
-    const VkPipelineDynamicStateCreateInfo* pDy
+uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
+    const VkPipelineDynamicStateCreateInfo*   pDy
     )
 {
     uint32_t dynamicState = 0;
@@ -385,13 +504,6 @@ static void BuildRasterizationState(
 
                 }
                 break;
-            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT:
-                {
-                    const auto* pRsStream = static_cast<const VkPipelineRasterizationStateStreamCreateInfoEXT*>(pNext);
-
-                    pInfo->rasterizationStream = pRsStream->rasterizationStream;
-                }
-                break;
             case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT:
                 {
                     const auto* pRsLine =
@@ -584,16 +696,16 @@ static void BuildMultisampleState(
 {
     if (pMs != nullptr)
     {
+        pInfo->flags.customMultiSampleState = true;
         pInfo->flags.force1x1ShaderRate =
             (pMs->sampleShadingEnable || (pMs->rasterizationSamples == VK_SAMPLE_COUNT_8_BIT));
+        pInfo->flags.sampleShadingEnable = pMs->sampleShadingEnable;
 
         // Sample Locations
-        EXTRACT_VK_STRUCTURES_1(
+        EXTRACT_VK_STRUCTURES_0(
             SampleLocations,
-            PipelineMultisampleStateCreateInfo,
             PipelineSampleLocationsStateCreateInfoEXT,
-            pMs,
-            PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            static_cast<const VkPipelineSampleLocationsStateCreateInfoEXT*>(pMs->pNext),
             PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT)
 
         pInfo->flags.customSampleLocations = ((pPipelineSampleLocationsStateCreateInfoEXT != nullptr) &&
@@ -685,6 +797,7 @@ static void BuildMultisampleState(
     }
 }
 
+// =====================================================================================================================
 static void BuildDepthStencilState(
     const VkPipelineDepthStencilStateCreateInfo* pDs,
     const uint32_t                               dynamicStateFlags,
@@ -747,73 +860,6 @@ static void BuildDepthStencilState(
 }
 
 // =====================================================================================================================
-// Returns true if the given VkBlendFactor factor is a dual source blend factor
-static VK_INLINE bool IsDualSourceBlend(VkBlendFactor blend)
-{
-    switch (blend)
-    {
-    case VK_BLEND_FACTOR_SRC1_COLOR:
-    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR:
-    case VK_BLEND_FACTOR_SRC1_ALPHA:
-    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
-        return true;
-    default:
-        return false;
-    }
-}
-
-// =====================================================================================================================
-static VK_INLINE VkFormat GetDepthFormat(
-    const RenderPass*                       pRenderPass,
-    const uint32_t                          subpassIndex
-    )
-{
-    return (pRenderPass != nullptr) ?
-        pRenderPass->GetDepthStencilAttachmentFormat(subpassIndex) :
-        VK_FORMAT_UNDEFINED;
-}
-
-// =====================================================================================================================
-static VK_INLINE uint32_t GetColorAttachmentCount(
-    const RenderPass*                       pRenderPass,
-    const uint32_t                          subpassIndex
-)
-{
-    return (pRenderPass != nullptr) ? pRenderPass->GetSubpassColorReferenceCount(subpassIndex) :
-           0u;
-}
-
-// =====================================================================================================================
-bool GetDualSourceBlendEnableState(const VkPipelineColorBlendAttachmentState& pColorBlendAttachmentState)
-{
-    bool dualSourceBlend = false;
-
-    dualSourceBlend |= IsDualSourceBlend(pColorBlendAttachmentState.srcAlphaBlendFactor);
-    dualSourceBlend |= IsDualSourceBlend(pColorBlendAttachmentState.dstAlphaBlendFactor);
-    dualSourceBlend |= IsDualSourceBlend(pColorBlendAttachmentState.srcColorBlendFactor);
-    dualSourceBlend |= IsDualSourceBlend(pColorBlendAttachmentState.dstColorBlendFactor);
-    dualSourceBlend &= (pColorBlendAttachmentState.blendEnable == VK_TRUE);
-
-    return dualSourceBlend;
-}
-
-// =====================================================================================================================
-bool IsSrcAlphaUsedInBlend(VkBlendFactor blend)
-{
-    switch (blend)
-    {
-    case VK_BLEND_FACTOR_SRC_ALPHA:
-    case VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA:
-    case VK_BLEND_FACTOR_SRC_ALPHA_SATURATE:
-    case VK_BLEND_FACTOR_SRC1_ALPHA:
-    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
-        return true;
-    default:
-        return false;
-    }
-}
-
-// =====================================================================================================================
 static void BuildColorBlendState(
     const Device*                              pDevice,
     const VkPipelineColorBlendStateCreateInfo* pCb,
@@ -866,7 +912,6 @@ static void BuildColorBlendState(
             const VkPipelineColorBlendAttachmentState& src = pCb->pAttachments[i];
 
             auto pCbDst     = &pInfo->pipeline.cbState.target[i];
-            auto pBlendDst  = &pInfo->blend.targets[i];
 
             if (pRenderPass != nullptr)
             {
@@ -897,17 +942,10 @@ static void BuildColorBlendState(
 
                 blendingEnabled |= (src.blendEnable == VK_TRUE);
             }
-
-            pBlendDst->blendEnable    = (src.blendEnable == VK_TRUE);
-            pBlendDst->srcBlendColor  = VkToPalBlend(src.srcColorBlendFactor);
-            pBlendDst->dstBlendColor  = VkToPalBlend(src.dstColorBlendFactor);
-            pBlendDst->blendFuncColor = VkToPalBlendFunc(src.colorBlendOp);
-            pBlendDst->srcBlendAlpha  = VkToPalBlend(src.srcAlphaBlendFactor);
-            pBlendDst->dstBlendAlpha  = VkToPalBlend(src.dstAlphaBlendFactor);
-            pBlendDst->blendFuncAlpha = VkToPalBlendFunc(src.alphaBlendOp);
-
-            dualSourceBlend |= GetDualSourceBlendEnableState(src);
         }
+
+        BuildPalColorBlendStateCreateInfo(pCb, &pInfo->blend);
+        dualSourceBlend = GraphicsPipelineCommon::GetDualSourceBlendEnableState(pDevice, pCb, &pInfo->blend);
     }
 
     pInfo->pipeline.cbState.dualSourceBlendEnable = dualSourceBlend;
@@ -1042,17 +1080,13 @@ static void BuildFragmentShaderState(
 
     pInfo->pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
 
-    if ((pIn->pRasterizationState->rasterizerDiscardEnable == VK_FALSE) ||
-        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizerDiscardEnableExt))
-    {
-        // Build states via VkPipelineMultisampleStateCreateInfo
-        BuildMultisampleState(pIn->pMultisampleState, pRenderPass, subpass, dynamicStateFlags, pInfo);
+    // Build states via VkPipelineMultisampleStateCreateInfo
+    BuildMultisampleState(pIn->pMultisampleState, pRenderPass, subpass, dynamicStateFlags, pInfo);
 
-        if (GetDepthFormat(pRenderPass, subpass) != VK_FORMAT_UNDEFINED)
-        {
-            // Build states via VkPipelineDepthStencilStateCreateInfo
-            BuildDepthStencilState(pIn->pDepthStencilState, dynamicStateFlags, pInfo);
-        }
+    if (GetDepthFormat(pRenderPass, subpass) != VK_FORMAT_UNDEFINED)
+    {
+        // Build states via VkPipelineDepthStencilStateCreateInfo
+        BuildDepthStencilState(pIn->pDepthStencilState, dynamicStateFlags, pInfo);
     }
 
     if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthTestEnableExt) == false)
@@ -1086,41 +1120,37 @@ static void BuildFragmentOutputInterfaceState(
 {
     const RenderPass* pRenderPass      = RenderPass::ObjectFromHandle(pIn->renderPass);
     const uint32_t    subpass          = pIn->subpass;
-    const bool        rasterizerEnable = ((pIn->pRasterizationState->rasterizerDiscardEnable == VK_FALSE) ||
-                                         IsDynamicStateEnabled(dynamicStateFlags,
-                                                               DynamicStatesInternal::RasterizerDiscardEnableExt));
 
-    if (rasterizerEnable &&
-        (GetColorAttachmentCount(pRenderPass, subpass) != 0))
+    pInfo->dbFormat = GetDepthFormat(pRenderPass, subpass);
+
+    if (GetColorAttachmentCount(pRenderPass, subpass) != 0)
     {
         // Build states via VkPipelineColorBlendStateCreateInfo
         BuildColorBlendState(
             pDevice,
-            pIn->pColorBlendState,
-            pRenderPass,
-            subpass,
-            dynamicStateFlags,
-            pInfo);
+        pIn->pColorBlendState,
+        pRenderPass,
+        subpass,
+        dynamicStateFlags,
+        pInfo);
     }
 
     // According to the spec, VkPipelineMultisampleStateCreateInfo::alphaToCoverageEnable and alphaToOneEnable
     // belongs to fragment output interface section
     // The alpha component of the fragment's first color output is replaced with one if alphaToOneEnable is set.
-    if (rasterizerEnable && (pIn->pMultisampleState != nullptr))
+    if (pIn->pMultisampleState != nullptr)
     {
         pInfo->pipeline.cbState.target[0].forceAlphaToOne = (pIn->pMultisampleState->alphaToOneEnable == VK_TRUE);
         pInfo->pipeline.cbState.alphaToCoverageEnable = (pIn->pMultisampleState->alphaToCoverageEnable == VK_TRUE);
     }
 
-    pInfo->dbFormat = GetDepthFormat(pRenderPass, subpass);
-
     // According to the spec, VkPipelineDepthStencilStateCreateInfo::depthWriteEnable belongs to fragment output
     // interface section
     if ((pInfo->dbFormat != VK_FORMAT_UNDEFINED) &&
-        rasterizerEnable                         &&
         (pIn->pDepthStencilState != nullptr))
     {
-        pInfo->immedInfo.depthStencilCreateInfo.depthWriteEnable = (pIn->pDepthStencilState->depthWriteEnable == VK_TRUE);
+        pInfo->immedInfo.depthStencilCreateInfo.depthWriteEnable =
+            (pIn->pDepthStencilState->depthWriteEnable == VK_TRUE);
     }
 
     BuildRenderingState(pDevice,
@@ -1208,7 +1238,7 @@ static void BuildExecutablePipelineState(
     }
 
     if ((pInfo->immedInfo.rasterizerDiscardEnable == true) ||
-        (pIn->pMultisampleState == nullptr) ||
+        (pInfo->flags.customMultiSampleState == false) ||
         ((pInfo->flags.bresenhamEnable == true) && (pInfo->flags.customSampleLocations == false)))
     {
         pInfo->msaa.coverageSamples         = 1;
@@ -1225,9 +1255,22 @@ static void BuildExecutablePipelineState(
 
         pInfo->immedInfo.samplePattern = {};
 
+        pInfo->flags.sampleShadingEnable = false;
+
         pInfo->staticStateMask &=
             ~(1 << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt));
     }
+
+#if PAL_BUILD_GFX103
+    // Both MSAA and VRS would utilize the value of PS_ITER_SAMPLES
+    // Thus, choose the min combiner (i.e. choose the higher quality rate) when both features are enabled
+    if ((pInfo->msaa.pixelShaderSamples > 1) &&
+        (pInfo->immedInfo.vrsRateParams.flags.exposeVrsPixelsMask == 1))
+    {
+        pInfo->immedInfo.vrsRateParams.combinerState[
+            static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] = Pal::VrsCombiner::Min;
+    }
+#endif
 
     pInfo->flags.bindDepthStencilObject =
         !(IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilOpExt) ||
@@ -1257,6 +1300,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     const Device*                       pDevice,
     const VkGraphicsPipelineCreateInfo* pIn,
     const VbBindingInfo*                pVbInfo,
+    const GraphicsPipelineBinaryInfo*   pBinInfo,
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
     const VkGraphicsPipelineCreateInfo* pGraphicsPipelineCreateInfo = pIn;
@@ -1264,20 +1308,73 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     pInfo->activeStages = GetActiveShaderStages(pGraphicsPipelineCreateInfo
                                                 );
 
-    uint32_t dynamicStateFlags = GetDynamicStateFlags(pGraphicsPipelineCreateInfo->pDynamicState
+    uint32_t dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(
+                                     pGraphicsPipelineCreateInfo->pDynamicState
                                                       );
 
     BuildVertexInputInterfaceState(pDevice, pIn, pVbInfo, dynamicStateFlags, false, pInfo);
 
-    BuildPreRasterizationShaderState(pDevice, pIn, dynamicStateFlags, pInfo);
+    BuildPreRasterizationShaderState(pDevice,
+                                     pIn,
+                                     dynamicStateFlags,
+                                     pInfo);
 
-    BuildFragmentShaderState(pDevice, pIn, dynamicStateFlags, pInfo);
+    const bool enableRasterization =
+        (pInfo->immedInfo.rasterizerDiscardEnable == false) ||
+        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizerDiscardEnableExt);
 
-    BuildFragmentOutputInterfaceState(pDevice, pIn, dynamicStateFlags, pInfo);
+    if (enableRasterization)
+    {
+        BuildFragmentShaderState(pDevice,
+                                 pIn,
+                                 dynamicStateFlags,
+                                 pInfo);
+
+        BuildFragmentOutputInterfaceState(pDevice, pIn, dynamicStateFlags, pInfo);
+    }
 
     {
         BuildExecutablePipelineState(pDevice, pIn, dynamicStateFlags, pInfo);
+
+        if ((pBinInfo != nullptr) && (pBinInfo->pOptimizerKey != nullptr))
+        {
+            pDevice->GetShaderOptimizer()->OverrideGraphicsPipelineCreateInfo(
+                *pBinInfo->pOptimizerKey,
+                pInfo->activeStages,
+                &pInfo->pipeline,
+                &pInfo->immedInfo.graphicsShaderInfos);
+        }
     }
+}
+
+// =====================================================================================================================
+// Build the input information for pipeline compiler to create the graphics pipeline binaries
+VkResult GraphicsPipelineCommon::BuildPipelineBinaryCreateInfo(
+    const Device*                       pDevice,
+    const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    GraphicsPipelineBinaryCreateInfo*   pBinInfo,
+    GraphicsPipelineShaderStageInfo*    pShaderInfo,
+    VbBindingInfo*                      pVbInfo,
+    ShaderModuleHandle*                 pTempModules)
+{
+    PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
+
+    VkResult result = BuildShaderStageInfo(pDevice,
+                                           pCreateInfo->stageCount,
+                                           pCreateInfo->pStages,
+                                           [](const uint32_t inputIdx, const uint32_t stageIdx)
+                                           {
+                                               return stageIdx;
+                                           },
+                                           pShaderInfo->stages,
+                                           pTempModules);
+
+    if (result == VK_SUCCESS)
+    {
+        result = pCompiler->ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, pShaderInfo, pBinInfo, pVbInfo);
+    }
+
+    return result;
 }
 
 // =====================================================================================================================
@@ -1685,9 +1782,10 @@ static void GenerateHashFromColorBlendStateCreateInfo(
 //     - pCreateInfo->subpass
 uint64_t GraphicsPipelineCommon::BuildApiHash(
     const VkGraphicsPipelineCreateInfo*     pCreateInfo,
-    const GraphicsPipelineObjectCreateInfo* pInfo,
-    Util::MetroHash::Hash*                  pBaseHash)
+    const GraphicsPipelineObjectCreateInfo* pInfo)
 {
+    Util::MetroHash::Hash baseHash;
+
     Util::MetroHash128 baseHasher;
     Util::MetroHash128 apiHasher;
 
@@ -1810,11 +1908,11 @@ uint64_t GraphicsPipelineCommon::BuildApiHash(
         }
     }
 
-    baseHasher.Finalize(reinterpret_cast<uint8_t* const>(pBaseHash));
+    baseHasher.Finalize(reinterpret_cast<uint8_t* const>(&baseHash));
 
     uint64_t              apiHash;
     Util::MetroHash::Hash apiHashFull;
-    apiHasher.Update(*pBaseHash);
+    apiHasher.Update(baseHash);
     apiHasher.Finalize(reinterpret_cast<uint8_t* const>(&apiHashFull));
     apiHash = Util::MetroHash::Compact64(&apiHashFull);
 

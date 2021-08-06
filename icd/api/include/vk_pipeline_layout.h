@@ -116,11 +116,10 @@ public:
     typedef VkPipelineLayout ApiType;
 
     VkResult BuildLlpcPipelineMapping(
-        uint32_t                                    stageMask,
-        void*                                       pBuffer,
-        Vkgc::ResourceMappingData*                  pResourceMapping,
-        const VkPipelineVertexInputStateCreateInfo* pVertexInput,
-        VbBindingInfo*                              pVbInfo) const;
+        const uint32_t             stageMask,
+        const VbBindingInfo*       pVbInfo,
+        void*                      pBuffer,
+        Vkgc::ResourceMappingData* pResourceMapping) const;
 
     static VkResult Create(
         Device*                             pDevice,
@@ -187,10 +186,6 @@ protected:
         Vkgc::StaticDescriptorValue*   pDescriptorRangeValue,
         uint32_t*                      pDescriptorRangeCount,
         uint32_t                       userDataRegBase) const;
-
-    int32_t BuildLlpcVertexInputDescriptors(
-        const VkPipelineVertexInputStateCreateInfo* pInput,
-        VbBindingInfo*                              pVbInfo) const;
 
     static uint64_t BuildApiHash(
         const VkPipelineLayoutCreateInfo* pCreateInfo);

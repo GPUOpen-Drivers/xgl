@@ -195,7 +195,7 @@ VkResult InternalMemMgr::Init()
             &m_pCommonPools[InternalPoolCpuCacheableGpuUncached]);
     }
 
-    // Set-up GPU- and CPU-only pools for internal debugging code (e.g. raytracing dumping).  These pools
+    // Set-up GPU- and CPU-only pools for internal debugging code.  These pools
     // have the debug flag so that their allocations are never mixed into other internal allocations.
     if (result == VK_SUCCESS)
     {

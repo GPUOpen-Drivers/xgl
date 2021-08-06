@@ -125,7 +125,6 @@ SetArrayDefault = "    memset(m_settings.%SettingVarName%, 0, %SettingSize%);\n\
 
 WinIfDef = "defined(_WIN32)\n"
 LnxIfDef = "(__unix__)\n"
-AndroidIfDef = "defined(__ANDROID__)\n"
 
 ReadSettingsFunc = "\n\
 // =====================================================================================================================\n\

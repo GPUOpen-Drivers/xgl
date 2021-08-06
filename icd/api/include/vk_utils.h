@@ -139,7 +139,7 @@ VK_INLINE uint64_t TicksToNano(uint64_t ticks)
 
 // =====================================================================================================================
 // Get driver build time hash
-VK_INLINE const uint32_t GetBuildTimeHash()
+VK_INLINE uint32_t GetBuildTimeHash()
 {
     return Util::HashLiteralString(__DATE__ __TIME__);
 }

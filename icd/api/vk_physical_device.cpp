@@ -956,6 +956,10 @@ VkResult PhysicalDevice::Initialize()
                         (1UL << memoryTypeIndex);
 
                     m_memoryTypeMask |= 1 << m_memoryProperties.memoryTypeCount;
+
+                    m_memoryVkIndexAddRemoteBackupHeap[m_memoryProperties.memoryTypeCount] =
+                        m_memoryVkIndexAddRemoteBackupHeap[memoryTypeIndex];
+
                     ++m_memoryProperties.memoryTypeCount;
                 }
             }
@@ -1339,122 +1343,134 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
 
 // =====================================================================================================================
 // Retrieve device feature support. Called in response to vkGetPhysicalDeviceFeatures
-VkResult PhysicalDevice::GetFeatures(
+size_t PhysicalDevice::GetFeatures(
     VkPhysicalDeviceFeatures* pFeatures
     ) const
 {
-    const RuntimeSettings& settings = GetRuntimeSettings();
-
-    pFeatures->robustBufferAccess                       = VK_TRUE;
-    pFeatures->fullDrawIndexUint32                      = VK_TRUE;
-    pFeatures->imageCubeArray                           = VK_TRUE;
-    pFeatures->independentBlend                         = VK_TRUE;
-    pFeatures->geometryShader                           = VK_TRUE;
-    pFeatures->tessellationShader                       = VK_TRUE;
-    pFeatures->sampleRateShading                        = VK_TRUE;
-    pFeatures->dualSrcBlend                             = VK_TRUE;
-    pFeatures->logicOp                                  = VK_TRUE;
-
-    pFeatures->multiDrawIndirect                        = VK_TRUE;
-    pFeatures->drawIndirectFirstInstance                = VK_TRUE;
-
-    pFeatures->depthClamp                               = VK_TRUE;
-    pFeatures->depthBiasClamp                           = VK_TRUE;
-    pFeatures->fillModeNonSolid                         = VK_TRUE;
-    pFeatures->depthBounds                              = VK_TRUE;
-    pFeatures->wideLines                                = VK_TRUE;
-    pFeatures->largePoints                              = VK_TRUE;
-    pFeatures->alphaToOne                               =
-        (PalProperties().gfxipProperties.flags.supportAlphaToOne ? VK_TRUE : VK_FALSE);
-    pFeatures->multiViewport                            = VK_TRUE;
-    pFeatures->samplerAnisotropy                        = VK_TRUE;
-    pFeatures->textureCompressionETC2                   = VerifyEtc2FormatSupport(*this);
-    pFeatures->textureCompressionASTC_LDR               = VerifyAstcLdrFormatSupport(*this);
-    pFeatures->textureCompressionBC                     = VerifyBCFormatSupport(*this);
-    pFeatures->occlusionQueryPrecise                    = VK_TRUE;
-    pFeatures->pipelineStatisticsQuery                  = VK_TRUE;
-    pFeatures->vertexPipelineStoresAndAtomics           = VK_TRUE;
-    pFeatures->fragmentStoresAndAtomics                 = VK_TRUE;
-
-    pFeatures->shaderTessellationAndGeometryPointSize   = VK_TRUE;
-    pFeatures->shaderImageGatherExtended                = VK_TRUE;
-
-    pFeatures->shaderStorageImageExtendedFormats        = VK_TRUE;
-    pFeatures->shaderStorageImageMultisample            = VK_TRUE;
-    pFeatures->shaderStorageImageReadWithoutFormat      = VK_TRUE;
-    pFeatures->shaderStorageImageWriteWithoutFormat     = VK_TRUE;
-    pFeatures->shaderUniformBufferArrayDynamicIndexing  = VK_TRUE;
-    pFeatures->shaderSampledImageArrayDynamicIndexing   = VK_TRUE;
-    pFeatures->shaderStorageBufferArrayDynamicIndexing  = VK_TRUE;
-    pFeatures->shaderStorageImageArrayDynamicIndexing   = VK_TRUE;
-    pFeatures->shaderClipDistance                       = VK_TRUE;
-    pFeatures->shaderCullDistance                       = VK_TRUE;
-    pFeatures->shaderFloat64                            =
-        (PalProperties().gfxipProperties.flags.support64BitInstructions ? VK_TRUE : VK_FALSE);
-    pFeatures->shaderInt64                              =
-        (PalProperties().gfxipProperties.flags.support64BitInstructions ? VK_TRUE : VK_FALSE);
-
-    if ((PalProperties().gfxipProperties.flags.support16BitInstructions) &&
-        ((settings.optOnlyEnableFP16ForGfx9Plus == false)      ||
-         (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)))
+    if (pFeatures != nullptr)
     {
-        pFeatures->shaderInt16 = VK_TRUE;
+
+        const RuntimeSettings& settings = GetRuntimeSettings();
+
+        pFeatures->robustBufferAccess                       = VK_TRUE;
+        pFeatures->fullDrawIndexUint32                      = VK_TRUE;
+        pFeatures->imageCubeArray                           = VK_TRUE;
+        pFeatures->independentBlend                         = VK_TRUE;
+        pFeatures->geometryShader                           = VK_TRUE;
+        pFeatures->tessellationShader                       = VK_TRUE;
+        pFeatures->sampleRateShading                        = VK_TRUE;
+        pFeatures->dualSrcBlend                             = VK_TRUE;
+        pFeatures->logicOp                                  = VK_TRUE;
+
+        pFeatures->multiDrawIndirect                        = VK_TRUE;
+        pFeatures->drawIndirectFirstInstance                = VK_TRUE;
+
+        pFeatures->depthClamp                               = VK_TRUE;
+        pFeatures->depthBiasClamp                           = VK_TRUE;
+        pFeatures->fillModeNonSolid                         = VK_TRUE;
+        pFeatures->depthBounds                              = VK_TRUE;
+        pFeatures->wideLines                                = VK_TRUE;
+        pFeatures->largePoints                              = VK_TRUE;
+        pFeatures->alphaToOne                               =
+            (PalProperties().gfxipProperties.flags.supportAlphaToOne ? VK_TRUE : VK_FALSE);
+        pFeatures->multiViewport                            = VK_TRUE;
+        pFeatures->samplerAnisotropy                        = VK_TRUE;
+        pFeatures->textureCompressionETC2                   = VerifyEtc2FormatSupport(*this);
+        pFeatures->textureCompressionASTC_LDR               = VerifyAstcLdrFormatSupport(*this);
+
+    #if VKI_GPU_DECOMPRESS
+        if (settings.enableShaderDecode)
+        {
+            pFeatures->textureCompressionETC2               = VK_TRUE;
+            pFeatures->textureCompressionASTC_LDR           = VK_TRUE;
+        }
+    #endif
+        pFeatures->textureCompressionBC                     = VerifyBCFormatSupport(*this);
+        pFeatures->occlusionQueryPrecise                    = VK_TRUE;
+        pFeatures->pipelineStatisticsQuery                  = VK_TRUE;
+        pFeatures->vertexPipelineStoresAndAtomics           = VK_TRUE;
+        pFeatures->fragmentStoresAndAtomics                 = VK_TRUE;
+
+        pFeatures->shaderTessellationAndGeometryPointSize   = VK_TRUE;
+        pFeatures->shaderImageGatherExtended                = VK_TRUE;
+
+        pFeatures->shaderStorageImageExtendedFormats        = VK_TRUE;
+        pFeatures->shaderStorageImageMultisample            = VK_TRUE;
+        pFeatures->shaderStorageImageReadWithoutFormat      = VK_TRUE;
+        pFeatures->shaderStorageImageWriteWithoutFormat     = VK_TRUE;
+        pFeatures->shaderUniformBufferArrayDynamicIndexing  = VK_TRUE;
+        pFeatures->shaderSampledImageArrayDynamicIndexing   = VK_TRUE;
+        pFeatures->shaderStorageBufferArrayDynamicIndexing  = VK_TRUE;
+        pFeatures->shaderStorageImageArrayDynamicIndexing   = VK_TRUE;
+        pFeatures->shaderClipDistance                       = VK_TRUE;
+        pFeatures->shaderCullDistance                       = VK_TRUE;
+        pFeatures->shaderFloat64                            =
+            (PalProperties().gfxipProperties.flags.support64BitInstructions ? VK_TRUE : VK_FALSE);
+        pFeatures->shaderInt64                              =
+            (PalProperties().gfxipProperties.flags.support64BitInstructions ? VK_TRUE : VK_FALSE);
+
+        if ((PalProperties().gfxipProperties.flags.support16BitInstructions) &&
+            ((settings.optOnlyEnableFP16ForGfx9Plus == false)      ||
+            (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)))
+        {
+            pFeatures->shaderInt16 = VK_TRUE;
+        }
+        else
+        {
+            pFeatures->shaderInt16 = VK_FALSE;
+        }
+
+        if (settings.optEnablePrt)
+        {
+            pFeatures->shaderResourceResidency =
+                GetPrtFeatures() & Pal::PrtFeatureShaderStatus ? VK_TRUE : VK_FALSE;
+
+            pFeatures->shaderResourceMinLod =
+                GetPrtFeatures() & Pal::PrtFeatureShaderLodClamp ? VK_TRUE : VK_FALSE;
+
+            pFeatures->sparseBinding =
+                m_properties.gpuMemoryProperties.flags.virtualRemappingSupport ? VK_TRUE : VK_FALSE;
+
+            pFeatures->sparseResidencyBuffer =
+                GetPrtFeatures() & Pal::PrtFeatureBuffer ? VK_TRUE : VK_FALSE;
+
+            pFeatures->sparseResidencyImage2D =
+                GetPrtFeatures() & Pal::PrtFeatureImage2D ? VK_TRUE : VK_FALSE;
+
+            pFeatures->sparseResidencyImage3D =
+                (GetPrtFeatures() & (Pal::PrtFeatureImage3D | Pal::PrtFeatureNonStandardImage3D)) != 0 ? VK_TRUE : VK_FALSE;
+
+            const VkBool32 sparseMultisampled =
+                GetPrtFeatures() & Pal::PrtFeatureImageMultisampled ? VK_TRUE : VK_FALSE;
+
+            pFeatures->sparseResidency2Samples  = sparseMultisampled;
+            pFeatures->sparseResidency4Samples  = sparseMultisampled;
+            pFeatures->sparseResidency8Samples  = sparseMultisampled;
+            pFeatures->sparseResidency16Samples = VK_FALSE;
+
+            pFeatures->sparseResidencyAliased =
+                GetPrtFeatures() & Pal::PrtFeatureTileAliasing ? VK_TRUE : VK_FALSE;
+        }
+        else
+        {
+            pFeatures->shaderResourceResidency  = VK_FALSE;
+            pFeatures->shaderResourceMinLod     = VK_FALSE;
+            pFeatures->sparseBinding            = VK_FALSE;
+            pFeatures->sparseResidencyBuffer    = VK_FALSE;
+            pFeatures->sparseResidencyImage2D   = VK_FALSE;
+            pFeatures->sparseResidencyImage3D   = VK_FALSE;
+            pFeatures->sparseResidency2Samples  = VK_FALSE;
+            pFeatures->sparseResidency4Samples  = VK_FALSE;
+            pFeatures->sparseResidency8Samples  = VK_FALSE;
+            pFeatures->sparseResidency16Samples = VK_FALSE;
+            pFeatures->sparseResidencyAliased   = VK_FALSE;
+        }
+
+        pFeatures->variableMultisampleRate = VK_TRUE;
+        pFeatures->inheritedQueries        = VK_TRUE;
     }
-    else
-    {
-        pFeatures->shaderInt16 = VK_FALSE;
-    }
 
-    if (settings.optEnablePrt)
-    {
-        pFeatures->shaderResourceResidency =
-            GetPrtFeatures() & Pal::PrtFeatureShaderStatus ? VK_TRUE : VK_FALSE;
-
-        pFeatures->shaderResourceMinLod =
-            GetPrtFeatures() & Pal::PrtFeatureShaderLodClamp ? VK_TRUE : VK_FALSE;
-
-        pFeatures->sparseBinding =
-            m_properties.gpuMemoryProperties.flags.virtualRemappingSupport ? VK_TRUE : VK_FALSE;
-
-        pFeatures->sparseResidencyBuffer =
-            GetPrtFeatures() & Pal::PrtFeatureBuffer ? VK_TRUE : VK_FALSE;
-
-        pFeatures->sparseResidencyImage2D =
-            GetPrtFeatures() & Pal::PrtFeatureImage2D ? VK_TRUE : VK_FALSE;
-
-        pFeatures->sparseResidencyImage3D =
-            (GetPrtFeatures() & (Pal::PrtFeatureImage3D | Pal::PrtFeatureNonStandardImage3D)) != 0 ? VK_TRUE : VK_FALSE;
-
-        const VkBool32 sparseMultisampled =
-            GetPrtFeatures() & Pal::PrtFeatureImageMultisampled ? VK_TRUE : VK_FALSE;
-
-        pFeatures->sparseResidency2Samples  = sparseMultisampled;
-        pFeatures->sparseResidency4Samples  = sparseMultisampled;
-        pFeatures->sparseResidency8Samples  = sparseMultisampled;
-        pFeatures->sparseResidency16Samples = VK_FALSE;
-
-        pFeatures->sparseResidencyAliased =
-            GetPrtFeatures() & Pal::PrtFeatureTileAliasing ? VK_TRUE : VK_FALSE;
-    }
-    else
-    {
-        pFeatures->shaderResourceResidency  = VK_FALSE;
-        pFeatures->shaderResourceMinLod     = VK_FALSE;
-        pFeatures->sparseBinding            = VK_FALSE;
-        pFeatures->sparseResidencyBuffer    = VK_FALSE;
-        pFeatures->sparseResidencyImage2D   = VK_FALSE;
-        pFeatures->sparseResidencyImage3D   = VK_FALSE;
-        pFeatures->sparseResidency2Samples  = VK_FALSE;
-        pFeatures->sparseResidency4Samples  = VK_FALSE;
-        pFeatures->sparseResidency8Samples  = VK_FALSE;
-        pFeatures->sparseResidency16Samples = VK_FALSE;
-        pFeatures->sparseResidencyAliased   = VK_FALSE;
-    }
-
-    pFeatures->variableMultisampleRate = VK_TRUE;
-    pFeatures->inheritedQueries        = VK_TRUE;
-
-    return VK_SUCCESS;
+    return sizeof(VkPhysicalDeviceFeatures);
 }
 
 // =====================================================================================================================
@@ -1689,6 +1705,11 @@ VkResult PhysicalDevice::GetImageFormatProperties(
         break;
 
     case VK_IMAGE_TYPE_3D:
+        if (flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT)
+        {
+            pImageFormatProperties->maxExtent.depth = Util::Min(pImageFormatProperties->maxExtent.depth,
+                                                                m_limits.maxFramebufferLayers);
+        }
         break;
 
     default:
@@ -2135,11 +2156,10 @@ void PhysicalDevice::PopulateLimits()
     // of a limit's description that may not have been reflected in the comments.  You should double check with the
     // spec for the true language always if suspecting a particular limit is incorrect.
 
-    constexpr uint32_t MaxFramebufferLayers = 2048;
-
     const Pal::DeviceProperties& palProps = PalProperties();
     const auto& imageProps = palProps.imageProperties;
     const RuntimeSettings& settings = GetRuntimeSettings();
+    const uint32_t MaxFramebufferLayers = imageProps.maxArraySlices;
 
     // Maximum dimension (width) of an image created with an imageType of VK_IMAGE_TYPE_1D.
     m_limits.maxImageDimension1D = imageProps.maxDimensions.width;
@@ -4666,11 +4686,14 @@ void PhysicalDevice::GetPhysicalDeviceVulkanMemoryModelFeatures(
 // =====================================================================================================================
 // Retrieve device feature support. Called in response to vkGetPhysicalDeviceFeatures2
 // NOTE: Don't memset here.  Otherwise, VerifyRequestedPhysicalDeviceFeatures needs to compare member by member
-void PhysicalDevice::GetFeatures2(
-    VkStructHeaderNonConst* pFeatures
+size_t PhysicalDevice::GetFeatures2(
+    VkStructHeaderNonConst* pFeatures,
+    bool                    updateFeatures
     ) const
 {
     VkStructHeaderNonConst* pHeader = pFeatures;
+
+    size_t structSize = 0;
 
     while (pHeader)
     {
@@ -4679,30 +4702,45 @@ void PhysicalDevice::GetFeatures2(
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceFeatures2*>(pHeader);
-                GetFeatures(&pExtInfo->features);
+
+                if (updateFeatures)
+                {
+                    GetFeatures(&pExtInfo->features);
+                }
+
+                structSize = sizeof(*pExtInfo);
+
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDevice16BitStorageFeatures*>(pHeader);
 
-                GetPhysicalDevice16BitStorageFeatures(
-                    &pExtInfo->storageBuffer16BitAccess,
-                    &pExtInfo->uniformAndStorageBuffer16BitAccess,
-                    &pExtInfo->storagePushConstant16,
-                    &pExtInfo->storageInputOutput16);
+                if (updateFeatures)
+                {
+                    GetPhysicalDevice16BitStorageFeatures(
+                        &pExtInfo->storageBuffer16BitAccess,
+                        &pExtInfo->uniformAndStorageBuffer16BitAccess,
+                        &pExtInfo->storagePushConstant16,
+                        &pExtInfo->storageInputOutput16);
+                }
 
+                structSize = sizeof(*pExtInfo);
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDevice8BitStorageFeatures*>(pHeader);
 
-                GetPhysicalDevice8BitStorageFeatures(
-                    &pExtInfo->storageBuffer8BitAccess,
-                    &pExtInfo->uniformAndStorageBuffer8BitAccess,
-                    &pExtInfo->storagePushConstant8);
+                if (updateFeatures)
+                {
+                    GetPhysicalDevice8BitStorageFeatures(
+                        &pExtInfo->storageBuffer8BitAccess,
+                        &pExtInfo->uniformAndStorageBuffer8BitAccess,
+                        &pExtInfo->storagePushConstant8);
+                }
 
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
@@ -4710,10 +4748,14 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderAtomicInt64Features*>(pHeader);
 
-                GetPhysicalDeviceShaderAtomicInt64Features(
-                    &pExtInfo->shaderBufferInt64Atomics,
-                    &pExtInfo->shaderSharedInt64Atomics);
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceShaderAtomicInt64Features(
+                        &pExtInfo->shaderBufferInt64Atomics,
+                        &pExtInfo->shaderSharedInt64Atomics);
+                }
 
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
@@ -4721,27 +4763,40 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceGpaFeaturesAMD*>(pHeader);
 
-                pExtInfo->clockModes            = m_gpaProps.features.clockModes;
-                pExtInfo->perfCounters          = m_gpaProps.features.perfCounters;
-                pExtInfo->sqThreadTracing       = m_gpaProps.features.sqThreadTracing;
-                pExtInfo->streamingPerfCounters = m_gpaProps.features.streamingPerfCounters;
+                if (updateFeatures)
+                {
+                    pExtInfo->clockModes            = m_gpaProps.features.clockModes;
+                    pExtInfo->perfCounters          = m_gpaProps.features.perfCounters;
+                    pExtInfo->sqThreadTracing       = m_gpaProps.features.sqThreadTracing;
+                    pExtInfo->streamingPerfCounters = m_gpaProps.features.streamingPerfCounters;
+                }
 
+                structSize = sizeof(*pExtInfo);
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceTimelineSemaphoreFeatures*>(pHeader);
-                GetPhysicalDeviceTimelineSemaphoreFeatures(&pExtInfo->timelineSemaphore);
 
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceTimelineSemaphoreFeatures(&pExtInfo->timelineSemaphore);
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceSamplerYcbcrConversionFeatures*>(pHeader);
 
-                GetPhysicalDeviceSamplerYcbcrConversionFeatures(
-                    &pExtInfo->samplerYcbcrConversion);
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceSamplerYcbcrConversionFeatures(
+                        &pExtInfo->samplerYcbcrConversion);
+                }
 
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
@@ -4749,17 +4804,26 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceVariablePointerFeatures*>(pHeader);
 
-                GetPhysicalDeviceVariablePointerFeatures(
-                    &pExtInfo->variablePointersStorageBuffer,
-                    &pExtInfo->variablePointers);
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceVariablePointerFeatures(
+                        &pExtInfo->variablePointersStorageBuffer,
+                        &pExtInfo->variablePointers);
+                }
 
+                structSize = sizeof(*pExtInfo);
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceProtectedMemoryFeatures*>(pHeader);
-                GetPhysicalDeviceProtectedMemoryFeatures(&pExtInfo->protectedMemory);
 
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceProtectedMemoryFeatures(&pExtInfo->protectedMemory);
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
@@ -4767,11 +4831,15 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceMultiviewFeatures*>(pHeader);
 
-                GetPhysicalDeviceMultiviewFeatures(
-                    &pExtInfo->multiview,
-                    &pExtInfo->multiviewGeometryShader,
-                    &pExtInfo->multiviewTessellationShader);
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceMultiviewFeatures(
+                        &pExtInfo->multiview,
+                        &pExtInfo->multiviewGeometryShader,
+                        &pExtInfo->multiviewTessellationShader);
+                }
 
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
@@ -4779,17 +4847,26 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderDrawParameterFeatures*>(pHeader);
 
-                GetPhysicalDeviceShaderDrawParameterFeatures(
-                    &pExtInfo->shaderDrawParameters);
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceShaderDrawParameterFeatures(
+                        &pExtInfo->shaderDrawParameters);
+                }
 
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDescriptorIndexingFeatures*>(pHeader);
-                GetPhysicalDeviceDescriptorIndexingFeatures(pExtInfo);
 
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceDescriptorIndexingFeatures(pExtInfo);
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
@@ -4797,10 +4874,14 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceFloat16Int8FeaturesKHR*>(pHeader);
 
-                GetPhysicalDeviceFloat16Int8Features(
-                    &pExtInfo->shaderFloat16,
-                    &pExtInfo->shaderInt8);
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceFloat16Int8Features(
+                        &pExtInfo->shaderFloat16,
+                        &pExtInfo->shaderInt8);
+                }
 
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
@@ -4808,25 +4889,39 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceInlineUniformBlockFeaturesEXT*>(pHeader);
 
-                pExtInfo->inlineUniformBlock                                 = VK_TRUE;
-                pExtInfo->descriptorBindingInlineUniformBlockUpdateAfterBind = VK_TRUE;
+                if (updateFeatures)
+                {
+                    pExtInfo->inlineUniformBlock                                 = VK_TRUE;
+                    pExtInfo->descriptorBindingInlineUniformBlockUpdateAfterBind = VK_TRUE;
+                }
 
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceScalarBlockLayoutFeatures*>(pHeader);
-                GetPhysicalDeviceScalarBlockLayoutFeatures(&pExtInfo->scalarBlockLayout);
 
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceScalarBlockLayoutFeatures(&pExtInfo->scalarBlockLayout);
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceTransformFeedbackFeaturesEXT*>(pHeader);
 
-                pExtInfo->geometryStreams   = VK_TRUE;
-                pExtInfo->transformFeedback = VK_TRUE;
+                if (updateFeatures)
+                {
+                    pExtInfo->geometryStreams   = VK_TRUE;
+                    pExtInfo->transformFeedback = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -4835,10 +4930,15 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceVulkanMemoryModelFeatures*>(pHeader);
 
-                GetPhysicalDeviceVulkanMemoryModelFeatures(
-                    &pExtInfo->vulkanMemoryModel,
-                    &pExtInfo->vulkanMemoryModelDeviceScope,
-                    &pExtInfo->vulkanMemoryModelAvailabilityVisibilityChains);
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceVulkanMemoryModelFeatures(
+                        &pExtInfo->vulkanMemoryModel,
+                        &pExtInfo->vulkanMemoryModelDeviceScope,
+                        &pExtInfo->vulkanMemoryModelAvailabilityVisibilityChains);
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -4846,49 +4946,92 @@ void PhysicalDevice::GetFeatures2(
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT*>(pHeader);
-                pExtInfo->shaderDemoteToHelperInvocation = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderDemoteToHelperInvocation = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT*>(pHeader);
-                pExtInfo->shaderImageInt64Atomics = VK_TRUE;
-                pExtInfo->sparseImageInt64Atomics = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderImageInt64Atomics = VK_TRUE;
+                    pExtInfo->sparseImageInt64Atomics = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES_KHR:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderTerminateInvocationFeaturesKHR*>(pHeader);
-                pExtInfo->shaderTerminateInvocation = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderTerminateInvocation = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT*>(pHeader);
-                pExtInfo->pipelineCreationCacheControl = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->pipelineCreationCacheControl = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceMemoryPriorityFeaturesEXT *>(pHeader);
-                pExtInfo->memoryPriority = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->memoryPriority = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDepthClipEnableFeaturesEXT *>(pHeader);
-                pExtInfo->depthClipEnable = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->depthClipEnable = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceHostQueryResetFeatures*>(pHeader);
-                GetPhysicalDeviceHostQueryResetFeatures(&pExtInfo->hostQueryReset);
+
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceHostQueryResetFeatures(&pExtInfo->hostQueryReset);
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -4897,8 +5040,13 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT*>(pHeader);
 
-                pExtInfo->vertexAttributeInstanceRateDivisor     = VK_TRUE;
-                pExtInfo->vertexAttributeInstanceRateZeroDivisor = VK_TRUE;
+                if (updateFeatures)
+                {
+                    pExtInfo->vertexAttributeInstanceRateDivisor     = VK_TRUE;
+                    pExtInfo->vertexAttributeInstanceRateZeroDivisor = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -4907,34 +5055,50 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceCoherentMemoryFeaturesAMD *>(pHeader);
 
-                bool deviceCoherentMemoryEnabled = false;
+                if (updateFeatures)
+                {
+                    bool deviceCoherentMemoryEnabled = false;
 
-                deviceCoherentMemoryEnabled = PalProperties().gfxipProperties.flags.supportGl2Uncached;
+                    deviceCoherentMemoryEnabled = PalProperties().gfxipProperties.flags.supportGl2Uncached;
 
-                pExtInfo->deviceCoherentMemory = deviceCoherentMemoryEnabled;
+                    pExtInfo->deviceCoherentMemory = deviceCoherentMemoryEnabled;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceBufferDeviceAddressFeatures*>(pHeader);
 
-                GetPhysicalDeviceBufferAddressFeatures(
-                    &pExtInfo->bufferDeviceAddress,
-                    &pExtInfo->bufferDeviceAddressCaptureReplay,
-                    &pExtInfo->bufferDeviceAddressMultiDevice);
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceBufferAddressFeatures(
+                        &pExtInfo->bufferDeviceAddress,
+                        &pExtInfo->bufferDeviceAddressCaptureReplay,
+                        &pExtInfo->bufferDeviceAddressMultiDevice);
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceLineRasterizationFeaturesEXT*>(pHeader);
-                pExtInfo->rectangularLines = VK_FALSE;
-                pExtInfo->bresenhamLines   = VK_TRUE;
-                pExtInfo->smoothLines      = VK_FALSE;
 
-                pExtInfo->stippledRectangularLines = VK_FALSE;
-                pExtInfo->stippledBresenhamLines   = VK_TRUE;
-                pExtInfo->stippledSmoothLines      = VK_FALSE;
+                if (updateFeatures)
+                {
+                    pExtInfo->rectangularLines = VK_FALSE;
+                    pExtInfo->bresenhamLines   = VK_TRUE;
+                    pExtInfo->smoothLines      = VK_FALSE;
+
+                    pExtInfo->stippledRectangularLines = VK_FALSE;
+                    pExtInfo->stippledBresenhamLines   = VK_TRUE;
+                    pExtInfo->stippledSmoothLines      = VK_FALSE;
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -4942,7 +5106,13 @@ void PhysicalDevice::GetFeatures2(
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceUniformBufferStandardLayoutFeatures*>(pHeader);
-                GetPhysicalDeviceUniformBufferStandardLayoutFeatures(&pExtInfo->uniformBufferStandardLayout);
+
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceUniformBufferStandardLayoutFeatures(&pExtInfo->uniformBufferStandardLayout);
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -4950,7 +5120,13 @@ void PhysicalDevice::GetFeatures2(
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures*>(pHeader);
-                GetPhysicalDeviceSeparateDepthStencilLayoutsFeatures(&pExtInfo->separateDepthStencilLayouts);
+
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceSeparateDepthStencilLayoutsFeatures(&pExtInfo->separateDepthStencilLayouts);
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -4959,8 +5135,13 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderClockFeaturesKHR*>(pHeader);
 
-                pExtInfo->shaderSubgroupClock = PalProperties().gfxipProperties.flags.supportShaderSubgroupClock;
-                pExtInfo->shaderDeviceClock   = PalProperties().gfxipProperties.flags.supportShaderDeviceClock;
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderSubgroupClock = PalProperties().gfxipProperties.flags.supportShaderSubgroupClock;
+                    pExtInfo->shaderDeviceClock   = PalProperties().gfxipProperties.flags.supportShaderDeviceClock;
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -4968,7 +5149,13 @@ void PhysicalDevice::GetFeatures2(
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures*>(pHeader);
-                GetPhysicalDeviceSubgroupExtendedTypesFeatures(&pExtInfo->shaderSubgroupExtendedTypes);
+
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceSubgroupExtendedTypesFeatures(&pExtInfo->shaderSubgroupExtendedTypes);
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -4976,15 +5163,27 @@ void PhysicalDevice::GetFeatures2(
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceSubgroupSizeControlFeaturesEXT *>(pHeader);
-                pExtInfo->subgroupSizeControl  = VK_TRUE;
-                pExtInfo->computeFullSubgroups = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->subgroupSizeControl  = VK_TRUE;
+                    pExtInfo->computeFullSubgroups = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceImagelessFramebufferFeatures*>(pHeader);
-                GetPhysicalDeviceImagelessFramebufferFeatures(&pExtInfo->imagelessFramebuffer);
+
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceImagelessFramebufferFeatures(&pExtInfo->imagelessFramebuffer);
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -4992,7 +5191,14 @@ void PhysicalDevice::GetFeatures2(
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR*>(pHeader);
-                pExtInfo->pipelineExecutableInfo = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->pipelineExecutableInfo = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+
                 break;
             }
 
@@ -5000,26 +5206,31 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceVulkan11Features*>(pHeader);
 
-                GetPhysicalDevice16BitStorageFeatures(
-                    &pExtInfo->storageBuffer16BitAccess,
-                    &pExtInfo->uniformAndStorageBuffer16BitAccess,
-                    &pExtInfo->storagePushConstant16,
-                    &pExtInfo->storageInputOutput16);
+                if (updateFeatures)
+                {
+                    GetPhysicalDevice16BitStorageFeatures(
+                        &pExtInfo->storageBuffer16BitAccess,
+                        &pExtInfo->uniformAndStorageBuffer16BitAccess,
+                        &pExtInfo->storagePushConstant16,
+                        &pExtInfo->storageInputOutput16);
 
-                GetPhysicalDeviceMultiviewFeatures(
-                    &pExtInfo->multiview,
-                    &pExtInfo->multiviewGeometryShader,
-                    &pExtInfo->multiviewTessellationShader);
+                    GetPhysicalDeviceMultiviewFeatures(
+                        &pExtInfo->multiview,
+                        &pExtInfo->multiviewGeometryShader,
+                        &pExtInfo->multiviewTessellationShader);
 
-                GetPhysicalDeviceVariablePointerFeatures(
-                    &pExtInfo->variablePointersStorageBuffer,
-                    &pExtInfo->variablePointers);
+                    GetPhysicalDeviceVariablePointerFeatures(
+                        &pExtInfo->variablePointersStorageBuffer,
+                        &pExtInfo->variablePointers);
 
-                GetPhysicalDeviceProtectedMemoryFeatures(&pExtInfo->protectedMemory);
+                    GetPhysicalDeviceProtectedMemoryFeatures(&pExtInfo->protectedMemory);
 
-                GetPhysicalDeviceSamplerYcbcrConversionFeatures(&pExtInfo->samplerYcbcrConversion);
+                    GetPhysicalDeviceSamplerYcbcrConversionFeatures(&pExtInfo->samplerYcbcrConversion);
 
-                GetPhysicalDeviceShaderDrawParameterFeatures(&pExtInfo->shaderDrawParameters);
+                    GetPhysicalDeviceShaderDrawParameterFeatures(&pExtInfo->shaderDrawParameters);
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -5028,52 +5239,57 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceVulkan12Features*>(pHeader);
 
-                GetPhysicalDevice8BitStorageFeatures(
-                    &pExtInfo->storageBuffer8BitAccess,
-                    &pExtInfo->uniformAndStorageBuffer8BitAccess,
-                    &pExtInfo->storagePushConstant8);
+                if (updateFeatures)
+                {
+                    GetPhysicalDevice8BitStorageFeatures(
+                        &pExtInfo->storageBuffer8BitAccess,
+                        &pExtInfo->uniformAndStorageBuffer8BitAccess,
+                        &pExtInfo->storagePushConstant8);
 
-                GetPhysicalDeviceShaderAtomicInt64Features(
-                    &pExtInfo->shaderBufferInt64Atomics,
-                    &pExtInfo->shaderSharedInt64Atomics);
+                    GetPhysicalDeviceShaderAtomicInt64Features(
+                        &pExtInfo->shaderBufferInt64Atomics,
+                        &pExtInfo->shaderSharedInt64Atomics);
 
-                GetPhysicalDeviceFloat16Int8Features(&pExtInfo->shaderFloat16, &pExtInfo->shaderInt8);
+                    GetPhysicalDeviceFloat16Int8Features(&pExtInfo->shaderFloat16, &pExtInfo->shaderInt8);
 
-                GetPhysicalDeviceDescriptorIndexingFeatures(pExtInfo);
+                    GetPhysicalDeviceDescriptorIndexingFeatures(pExtInfo);
 
-                GetPhysicalDeviceScalarBlockLayoutFeatures(&pExtInfo->scalarBlockLayout);
+                    GetPhysicalDeviceScalarBlockLayoutFeatures(&pExtInfo->scalarBlockLayout);
 
-                GetPhysicalDeviceImagelessFramebufferFeatures(&pExtInfo->imagelessFramebuffer);
+                    GetPhysicalDeviceImagelessFramebufferFeatures(&pExtInfo->imagelessFramebuffer);
 
-                GetPhysicalDeviceUniformBufferStandardLayoutFeatures(&pExtInfo->uniformBufferStandardLayout);
+                    GetPhysicalDeviceUniformBufferStandardLayoutFeatures(&pExtInfo->uniformBufferStandardLayout);
 
-                GetPhysicalDeviceSubgroupExtendedTypesFeatures(&pExtInfo->shaderSubgroupExtendedTypes);
+                    GetPhysicalDeviceSubgroupExtendedTypesFeatures(&pExtInfo->shaderSubgroupExtendedTypes);
 
-                GetPhysicalDeviceSeparateDepthStencilLayoutsFeatures(&pExtInfo->separateDepthStencilLayouts);
+                    GetPhysicalDeviceSeparateDepthStencilLayoutsFeatures(&pExtInfo->separateDepthStencilLayouts);
 
-                GetPhysicalDeviceHostQueryResetFeatures(&pExtInfo->hostQueryReset);
+                    GetPhysicalDeviceHostQueryResetFeatures(&pExtInfo->hostQueryReset);
 
-                GetPhysicalDeviceTimelineSemaphoreFeatures(&pExtInfo->timelineSemaphore);
+                    GetPhysicalDeviceTimelineSemaphoreFeatures(&pExtInfo->timelineSemaphore);
 
-                GetPhysicalDeviceBufferAddressFeatures(
-                    &pExtInfo->bufferDeviceAddress,
-                    &pExtInfo->bufferDeviceAddressCaptureReplay,
-                    &pExtInfo->bufferDeviceAddressMultiDevice);
+                    GetPhysicalDeviceBufferAddressFeatures(
+                        &pExtInfo->bufferDeviceAddress,
+                        &pExtInfo->bufferDeviceAddressCaptureReplay,
+                        &pExtInfo->bufferDeviceAddressMultiDevice);
 
-                GetPhysicalDeviceVulkanMemoryModelFeatures(
-                    &pExtInfo->vulkanMemoryModel,
-                    &pExtInfo->vulkanMemoryModelDeviceScope,
-                    &pExtInfo->vulkanMemoryModelAvailabilityVisibilityChains);
+                    GetPhysicalDeviceVulkanMemoryModelFeatures(
+                        &pExtInfo->vulkanMemoryModel,
+                        &pExtInfo->vulkanMemoryModelDeviceScope,
+                        &pExtInfo->vulkanMemoryModelAvailabilityVisibilityChains);
 
-                // These features aren't new to Vulkan 1.2, but the caps just didn't exist in their original extensions.
-                pExtInfo->samplerMirrorClampToEdge   = VK_TRUE;
-                pExtInfo->drawIndirectCount          = VK_TRUE;
-                pExtInfo->descriptorIndexing         = VK_TRUE;
-                pExtInfo->samplerFilterMinmax        =
-                    IsSingleChannelMinMaxFilteringSupported(this) ? VK_TRUE : VK_FALSE;
-                pExtInfo->shaderOutputViewportIndex  = VK_TRUE;
-                pExtInfo->shaderOutputLayer          = VK_TRUE;
-                pExtInfo->subgroupBroadcastDynamicId = VK_TRUE;
+                    // These features aren't new to Vulkan 1.2, but the caps just didn't exist in their original extensions.
+                    pExtInfo->samplerMirrorClampToEdge   = VK_TRUE;
+                    pExtInfo->drawIndirectCount          = VK_TRUE;
+                    pExtInfo->descriptorIndexing         = VK_TRUE;
+                    pExtInfo->samplerFilterMinmax        =
+                        IsSingleChannelMinMaxFilteringSupported(this) ? VK_TRUE : VK_FALSE;
+                    pExtInfo->shaderOutputViewportIndex  = VK_TRUE;
+                    pExtInfo->shaderOutputLayer          = VK_TRUE;
+                    pExtInfo->subgroupBroadcastDynamicId = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -5082,12 +5298,17 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceFragmentShadingRateFeaturesKHR *>(pHeader);
 
-                bool vrsSupported      = (PalProperties().gfxipProperties.supportedVrsRates > 0);
-                bool vrsImageSupported = (PalProperties().imageProperties.vrsTileSize.width > 0);
+                if (updateFeatures)
+                {
+                    bool vrsSupported      = (PalProperties().gfxipProperties.supportedVrsRates > 0);
+                    bool vrsImageSupported = (PalProperties().imageProperties.vrsTileSize.width > 0);
 
-                pExtInfo->attachmentFragmentShadingRate = vrsImageSupported;
-                pExtInfo->pipelineFragmentShadingRate   = vrsSupported;
-                pExtInfo->primitiveFragmentShadingRate  = vrsSupported;
+                    pExtInfo->attachmentFragmentShadingRate = vrsImageSupported;
+                    pExtInfo->pipelineFragmentShadingRate   = vrsSupported;
+                    pExtInfo->primitiveFragmentShadingRate  = vrsSupported;
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -5096,16 +5317,21 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceConditionalRenderingFeaturesEXT*>(pHeader);
 
-                if (IsConditionalRenderingSupported(this))
+                if (updateFeatures)
                 {
-                    pExtInfo->conditionalRendering          = VK_TRUE;
-                    pExtInfo->inheritedConditionalRendering = VK_TRUE;
+                    if (IsConditionalRenderingSupported(this))
+                    {
+                        pExtInfo->conditionalRendering          = VK_TRUE;
+                        pExtInfo->inheritedConditionalRendering = VK_TRUE;
+                    }
+                    else
+                    {
+                        pExtInfo->conditionalRendering          = VK_FALSE;
+                        pExtInfo->inheritedConditionalRendering = VK_FALSE;
+                    }
                 }
-                else
-                {
-                    pExtInfo->conditionalRendering          = VK_FALSE;
-                    pExtInfo->inheritedConditionalRendering = VK_FALSE;
-                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -5113,16 +5339,29 @@ void PhysicalDevice::GetFeatures2(
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT*>(pHeader);
-                pExtInfo->texelBufferAlignment = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->texelBufferAlignment = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader);
-                pExtInfo->robustImageAccess2  = VK_TRUE;
-                pExtInfo->robustBufferAccess2 = VK_TRUE;
-                pExtInfo->nullDescriptor      = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->robustImageAccess2  = VK_TRUE;
+                    pExtInfo->robustBufferAccess2 = VK_TRUE;
+                    pExtInfo->nullDescriptor      = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
 
                 break;
             }
@@ -5130,14 +5369,26 @@ void PhysicalDevice::GetFeatures2(
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT*>(pHeader);
-                pExtInfo->extendedDynamicState = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->extendedDynamicState = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePrivateDataFeaturesEXT*>(pHeader);
-                pExtInfo->privateData = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->privateData = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
@@ -5145,44 +5396,80 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo =
                     reinterpret_cast<VkPhysicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR*>(pHeader);
-                pExtInfo->shaderSubgroupUniformControlFlow = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderSubgroupUniformControlFlow = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceImageRobustnessFeaturesEXT*>(pHeader);
-                pExtInfo->robustImageAccess = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->robustImageAccess = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDevice4444FormatsFeaturesEXT*>(pHeader);
-                pExtInfo->formatA4R4G4B4 = VK_TRUE;
-                pExtInfo->formatA4B4G4R4 = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->formatA4R4G4B4 = VK_TRUE;
+                    pExtInfo->formatA4B4G4R4 = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceSynchronization2FeaturesKHR*>(pHeader);
-                pExtInfo->synchronization2 = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->synchronization2 = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceCustomBorderColorFeaturesEXT*>(pHeader);
-                pExtInfo->customBorderColors = VK_TRUE;
-                pExtInfo->customBorderColorWithoutFormat = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->customBorderColors = VK_TRUE;
+                    pExtInfo->customBorderColorWithoutFormat = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceColorWriteEnableFeaturesEXT*>(pHeader);
-                pExtInfo->colorWriteEnable = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->colorWriteEnable = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
@@ -5190,9 +5477,14 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceExtendedDynamicState2FeaturesEXT*>(pHeader);
 
-                pExtInfo->extendedDynamicState2                   = VK_TRUE;
-                pExtInfo->extendedDynamicState2LogicOp            = VK_FALSE;
-                pExtInfo->extendedDynamicState2PatchControlPoints = VK_FALSE;
+                if (updateFeatures)
+                {
+                    pExtInfo->extendedDynamicState2                   = VK_TRUE;
+                    pExtInfo->extendedDynamicState2LogicOp            = VK_FALSE;
+                    pExtInfo->extendedDynamicState2PatchControlPoints = VK_FALSE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
@@ -5200,15 +5492,25 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceYcbcrImageArraysFeaturesEXT*>(pHeader);
 
-                pExtInfo->ycbcrImageArrays = VK_FALSE;
+                if (updateFeatures)
+                {
+                    pExtInfo->ycbcrImageArrays = VK_FALSE;
+                }
 
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES_KHR:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR*>(pHeader);
-                pExtInfo->shaderZeroInitializeWorkgroupMemory = VK_TRUE;
+
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderZeroInitializeWorkgroupMemory = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
@@ -5221,6 +5523,8 @@ void PhysicalDevice::GetFeatures2(
 
         pHeader = reinterpret_cast<VkStructHeaderNonConst*>(pHeader->pNext);
     }
+
+    return structSize;
 }
 
 // =====================================================================================================================
@@ -5737,7 +6041,8 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->primitiveFragmentShadingRateWithMultipleViewports    = VK_TRUE;
             pProps->layeredShadingRateAttachments                        = VK_FALSE;
             pProps->fragmentShadingRateNonTrivialCombinerOps             = VK_TRUE;
-            pProps->maxFragmentSizeAspectRatio                           = 1;
+            pProps->maxFragmentSizeAspectRatio                           = Util::Max(pProps->maxFragmentSize.width,
+                                                                                     pProps->maxFragmentSize.height);
             pProps->fragmentShadingRateWithShaderDepthStencilWrites      =
                 PalProperties().gfxipProperties.flags.supportVrsWithDsExports;
             pProps->fragmentShadingRateWithSampleMask                    = VK_TRUE;
@@ -5746,9 +6051,9 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->fragmentShadingRateWithFragmentShaderInterlock       = VK_FALSE;
             pProps->fragmentShadingRateWithCustomSampleLocations         = VK_TRUE;
             pProps->fragmentShadingRateStrictMultiplyCombiner            = VK_TRUE;
-
-            pProps->maxFragmentShadingRateCoverageSamples =
-                (pProps->maxFragmentSize.width *  pProps->maxFragmentSize.height);
+            pProps->maxFragmentShadingRateCoverageSamples                =
+                Util::Min((m_limits.maxSampleMaskWords * 32u),
+                          (pProps->maxFragmentSize.width * pProps->maxFragmentSize.height * Pal::MaxMsaaColorSamples));
 
             pProps->maxFragmentShadingRateRasterizationSamples =
                 static_cast<VkSampleCountFlagBits>(Pal::MaxMsaaColorSamples);
@@ -5798,6 +6103,7 @@ void PhysicalDevice::GetFormatProperties2(
 {
     VK_ASSERT(pFormatProperties->sType == VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2);
     GetFormatProperties(format, &pFormatProperties->formatProperties);
+
 }
 
 // =====================================================================================================================
@@ -6496,7 +6802,7 @@ static void VerifyProperties(
 
     VkPhysicalDeviceFeatures features = {};
 
-    VK_ASSERT(device.GetFeatures(&features) == VK_SUCCESS);
+    device.GetFeatures(&features);
 
     VerifyLimits(device, limits, features);
 
@@ -6888,10 +7194,10 @@ VkResult PhysicalDevice::GetFragmentShadingRates(
                                                   VK_SAMPLE_COUNT_2_BIT |
                                                   VK_SAMPLE_COUNT_4_BIT;
 
-                 // Set 8 samples on 1x1
+                 // For fragmentSize {1,1} the sampleCounts must be ~0, requiriment from spec.
                  if ((fragmentSize.width == 1) && (fragmentSize.height == 1))
                  {
-                     sampleCounts |= VK_SAMPLE_COUNT_8_BIT;
+                     sampleCounts = ~0u;
                  }
 
                 pFragmentShadingRates[outputCount].sampleCounts = sampleCounts;
@@ -7170,7 +7476,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2(
     VkPhysicalDeviceFeatures2*                  pFeatures)
 {
     ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetFeatures2(
-        reinterpret_cast<VkStructHeaderNonConst*>(pFeatures));
+        reinterpret_cast<VkStructHeaderNonConst*>(pFeatures), true);
 }
 
 // =====================================================================================================================

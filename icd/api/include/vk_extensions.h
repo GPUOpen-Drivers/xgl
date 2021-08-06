@@ -355,8 +355,6 @@ public:
         AMD_SHADER_TRINARY_MINMAX,
         AMD_TEXTURE_GATHER_BIAS_LOD,
 
-        // ANDROID Extensions
-
         // GOOGLE Extensions
         GOOGLE_DECORATE_STRING,
         GOOGLE_HLSL_FUNCTIONALITY1,

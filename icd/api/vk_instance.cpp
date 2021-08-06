@@ -711,9 +711,6 @@ VkResult Instance::Destroy(void)
     // Free memory
     FreeMem(this);
 
-    // __gcov_flush() is used to flush code coverage data to files. It would be called by Android native process when it
-    // exits. But for Android apk process, it should be called explicitly.
-
     // Cannot fail.
     return VK_SUCCESS;
 }

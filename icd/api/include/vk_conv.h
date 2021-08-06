@@ -1735,12 +1735,39 @@ constexpr VK_INLINE Pal::SwizzledFormat PalFmt(
     return{ chNumFormat,{ r, g, b, a } };
 }
 
+#if ( VKI_GPU_DECOMPRESS)
+static VkFormat convertCompressedFormat(VkFormat format)
+{
+    if (Formats::IsASTCFormat(format))
+    {
+        AstcMappedInfo mapInfo = {};
+        Formats::GetAstcMappedInfo(format, &mapInfo);
+        format = mapInfo.format;
+    }
+    else if (Formats::IsEtc2Format(format))
+    {
+        format = ((format == VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK)   ||
+                  (format == VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK) ||
+                  (format == VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK)) ?
+                  VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+    }
+    return format;
+}
+#endif
+
 // =====================================================================================================================
 // Converts Vulkan format to PAL equivalent.
 VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings& settings)
 {
     if (VK_ENUM_IN_RANGE(format, VK_FORMAT))
     {
+
+#if VKI_GPU_DECOMPRESS
+        if (settings.enableShaderDecode)
+        {
+            format = convertCompressedFormat(format);
+        }
+#endif
         return convert::VkToPalSwizzledFormatLookupTableStorage[format];
     }
     else

@@ -46,6 +46,12 @@ if (BUILD_WAYLAND_SUPPORT)
     target_include_directories(xgl PUBLIC ${WAYLAND_INCLUDE_DIRS})
 endif()
 
+#if VKI_GPU_DECOMPRESS
+if (VKI_GPU_DECOMPRESS)
+    target_include_directories(xgl PRIVATE ${XGL_GPUTEXDECODER_PATH})
+endif()
+#endif
+
 target_include_directories(xgl PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     api
@@ -55,6 +61,13 @@ target_include_directories(xgl PRIVATE
 ### XGL Subprojects ####################################################################################################
 # PAL
 add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
+
+#if VKI_GPU_DECOMPRESS
+# GPU Texture Decode
+if (VKI_GPU_DECOMPRESS)
+    add_subdirectory(${XGL_GPUTEXDECODER_PATH} ${PROJECT_BINARY_DIR}/gputexdecoder)
+endif()
+#endif
 
 # XGL cache creator tool
 if(XGL_BUILD_CACHE_CREATOR)
@@ -135,6 +148,14 @@ target_sources(xgl PRIVATE
     api/utils/json_writer.cpp
     api/icd_main.cpp
 )
+
+#if VKI_GPU_DECOMPRESS
+if(VKI_GPU_DECOMPRESS)
+    target_sources(xgl PRIVATE
+        api/appopt/gpu_decode_layer.cpp
+    )
+endif()
+#endif
 
 if(ICD_BUILD_LLPC)
     target_sources(xgl PRIVATE
@@ -273,8 +294,6 @@ target_sources(xgl PRIVATE
     layers/vk_layer_switchable_graphics.cpp
 )
 
-### ICD Android interface ######################################################
-
 ### Link Libraries #####################################################################################################
 if (UNIX)
     target_link_libraries(xgl PRIVATE dl c stdc++ ${CMAKE_DL_LIBS} pthread)
@@ -318,6 +337,12 @@ target_link_libraries(xgl PRIVATE vkgc)
 target_link_libraries(xgl PRIVATE pal)
 target_link_libraries(xgl PRIVATE khronos_vulkan_interface)
 
+#if VKI_GPU_DECOMPRESS
+if(VKI_GPU_DECOMPRESS)
+    target_link_libraries(xgl PRIVATE gputexdecoder)
+endif()
+#endif
+
 ### XGL cache_support ####
 add_library(xgl_cache_support INTERFACE)
 
@@ -331,12 +356,6 @@ target_include_directories(xgl_cache_support INTERFACE
 target_link_libraries(xgl_cache_support INTERFACE pal)
 
 target_link_libraries(xgl PRIVATE xgl_cache_support)
-
-### Visual Studio Filters ##############################################################################################
-target_find_headers(xgl)
-if(MSVC)
-    target_source_groups(xgl)
-endif()
 
 ### ICD loader configuration ###########################################################################################
 if(UNIX)

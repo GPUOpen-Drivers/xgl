@@ -291,8 +291,6 @@ void Buffer::LogBufferCreate(
         static_cast<uint32_t>(PalUsageFlag::TransformFeedbackCounterBuffer), "Usage Flag Mismatch");
     static_assert(VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT ==
         static_cast<uint32_t>(PalUsageFlag::ConditionalRendering), "Usage Flag Mismatch");
-    static_assert(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV ==
-        static_cast<uint32_t>(PalUsageFlag::RayTracing), "Usage Flag Mismatch");
     static_assert(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT ==
         static_cast<uint32_t>(PalUsageFlag::ShaderDeviceAddress), "Usage Flag Mismatch");
 
