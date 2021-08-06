@@ -22,21 +22,17 @@
  #  SOFTWARE.
  #
  #######################################################################################################################
+project(GPU_TEX_DECODER
+    LANGUAGES "CXX"
+)
 
-# This will become the value of PAL_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the PAL interface
-# that the ICD supports.  PAL uses this value to enable backwards-compatibility for older interface versions.  It must
-# be updated on each PAL promotion after handling all of the interface changes described in palLib.h.
-ICD_PAL_CLIENT_MAJOR_VERSION = 674
-ICD_PAL_CLIENT_MINOR_VERSION = 0
+add_library(gputexdecoder STATIC)
+add_library(AMD::gputexdecoder ALIAS gputexdecoder)
 
-# This will become the value of GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION if ICD_GPUOPEN_DEVMODE_BUILD=1.  It describes
-# the interface version of the gpuopen shared module (part of PAL) that the ICD supports.
-ICD_GPUOPEN_CLIENT_MAJOR_VERSION = 42
-ICD_GPUOPEN_CLIENT_MINOR_VERSION = 0
+# add PAL dependency
+target_link_libraries(gputexdecoder PUBLIC pal)
 
-# This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION if ICD_BUILD_LLPC=1.  It describes the version of the
-# interface version of LLPC that the ICD supports.
-ICD_LLPC_CLIENT_MAJOR_VERSION = 45
+### Add Source Directories
+target_include_directories(gputexdecoder PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+target_sources(gputexdecoder PRIVATE ${CMAKE_CURRENT_LIST_DIR}/gpuTexDecoder.cpp)
 
-# When ICD_LLPC_CLIENT_MAJOR_VERSION >= 39, Set ENABLE_VKGC to 1 to use Vkgc namespace instead of Llpc namespace in ICD
-ENABLE_VKGC=1

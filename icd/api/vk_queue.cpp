@@ -476,7 +476,17 @@ VkResult Queue::Submit(
                                                 virtStackFrame.AllocArray<Pal::ICmdBuffer*>(cmdBufferCount) :
                                                 nullptr;
 
-            result = ((pPalCmdBuffers != nullptr) || (cmdBufferCount == 0)) ? result : VK_ERROR_OUT_OF_HOST_MEMORY;
+            Pal::CmdBufInfo* pCmdBufInfos = (cmdBufferCount > 0) ?
+                                            virtStackFrame.AllocArray<Pal::CmdBufInfo>(cmdBufferCount) :
+                                            nullptr;
+
+            result = (((pPalCmdBuffers != nullptr) && (pCmdBufInfos != nullptr)) ||
+                      (cmdBufferCount == 0)) ? result : VK_ERROR_OUT_OF_HOST_MEMORY;
+
+            if (pCmdBufInfos != nullptr)
+            {
+                memset(pCmdBufInfos, 0, sizeof(Pal::CmdBufInfo) * cmdBufferCount);
+            }
 
             bool lastBatch = (submitIdx == submitCount - 1);
 
@@ -485,7 +495,7 @@ VkResult Queue::Submit(
 
             perSubQueueInfo.cmdBufferCount  = 0;
             perSubQueueInfo.ppCmdBuffers    = pPalCmdBuffers;
-            perSubQueueInfo.pCmdBufInfoList = nullptr;
+            perSubQueueInfo.pCmdBufInfoList = pCmdBufInfos;
 
             Pal::SubmitInfo palSubmitInfo = {};
 
@@ -634,6 +644,11 @@ VkResult Queue::Submit(
                     result = PalToVkResult(palResult);
                 }
 
+            }
+
+            if (pCmdBufInfos != nullptr)
+            {
+                virtStackFrame.FreeArray(pCmdBufInfos);
             }
 
             if (isSynchronization2 && (pCmdBuffers != nullptr))

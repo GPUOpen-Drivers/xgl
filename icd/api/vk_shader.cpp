@@ -74,13 +74,27 @@ VK_INLINE void MetroHashTo128Bit(
 }
 
 // =====================================================================================================================
+// Calculate a 128-bit hash from the SPIRV code.  This is used by profile-guided compilation parameter tuning.
+Pal::ShaderHash ShaderModule::BuildCodeHash(
+    const void*  pCode,
+    const size_t codeSize)
+{
+    Pal::ShaderHash result;
+
+    Util::MetroHash::Hash codeHash = {};
+    Util::MetroHash128::Hash(static_cast<const uint8_t*>(pCode), codeSize, codeHash.bytes);
+
+    MetroHashTo128Bit(codeHash, &result.lower, &result.upper);
+
+    return result;
+}
+
+// =====================================================================================================================
 // Returns a 128-bit hash based on this module's SPIRV code plus an optional entry point combination.
 Pal::ShaderHash ShaderModule::GetCodeHash(
-    const char* pEntryPoint
-    ) const
+    Pal::ShaderHash codeHash,
+    const char*     pEntryPoint)
 {
-    Pal::ShaderHash hash = m_codeHash;
-
     if (pEntryPoint != nullptr)
     {
         size_t entryLength = strlen(pEntryPoint);
@@ -95,12 +109,12 @@ Pal::ShaderHash ShaderModule::GetCodeHash(
 
             MetroHashTo128Bit(entryHash, &entryLower, &entryUpper);
 
-            hash.lower ^= entryLower;
-            hash.upper ^= entryUpper;
+            codeHash.lower ^= entryLower;
+            codeHash.upper ^= entryUpper;
         }
     }
 
-    return hash;
+    return codeHash;
 }
 
 // =====================================================================================================================
@@ -119,11 +133,11 @@ void* ShaderModule::GetShaderData(
 
 // =====================================================================================================================
 // Gets first valid shader data.
-void* ShaderModule::GetFirstValidShaderData() const
+void* ShaderModule::GetFirstValidShaderData(const ShaderModuleHandle* pHandle)
 {
-    if (m_handle.pLlpcShaderModule)
+    if (pHandle->pLlpcShaderModule)
     {
-        return m_handle.pLlpcShaderModule;
+        return pHandle->pLlpcShaderModule;
     }
 
     return nullptr;
@@ -136,13 +150,8 @@ ShaderModule::ShaderModule(
 {
     m_codeSize = codeSize;
     m_pCode    = pCode;
+    m_codeHash = BuildCodeHash(pCode, codeSize);
 
-    // Calculate a 128-bit hash from the SPIRV code.  This is used by profile-guided compilation
-    // parameter tuning.
-    Util::MetroHash::Hash codeHash = {};
-    Util::MetroHash128::Hash(static_cast<const uint8_t*>(pCode), codeSize, codeHash.bytes);
-
-    MetroHashTo128Bit(codeHash, &m_codeHash.lower, &m_codeHash.upper);
     memset(&m_handle, 0, sizeof(m_handle));
 }
 
@@ -186,8 +195,7 @@ VkResult ShaderModule::Init(const Device* pDevice, VkShaderModuleCreateFlags fla
                                         flags,
                                         m_codeSize,
                                         m_pCode,
-                                        &m_handle
-                                        );
+                                        &m_handle);
 }
 
 // =====================================================================================================================

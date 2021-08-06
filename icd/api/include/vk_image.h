@@ -248,7 +248,7 @@ private:
             uint32_t boundToExternalMemory  : 1;  // If true, indicates the image is bound to an external memory, and
                                                   //   the m_pPalMemory is a pointer to an external Pal image (does
                                                   //   not include backing pinned system memory case).
-            uint32_t androidPresentable     : 1;  // True if this image is created as Android presentable image.
+            uint32_t reservedBit            : 1;
             uint32_t externalPinnedHost     : 1;  // True if image backing memory is compatible with pinned sysmem.
             uint32_t externalD3DHandle      : 1;  // True if image is backed by a D3D11 image
             uint32_t isColorFormat          : 1;  // True if the image has a color format
@@ -354,10 +354,6 @@ private:
 
     SwapChain*              m_pSwapChain;         // If this image is a presentable image this tells
                                                   // which swap chain the image belongs to
-
-    Memory*                 m_pImageMemory;       // If this image is Android presentable image this tells the gpuMemory
-                                                  // bound. Android swapchain is implemented in loader.Presentable image
-                                                  // use this member to track the gpuMemory created from external handle.
 
     ResourceOptimizerKey    m_ResourceKey;
 

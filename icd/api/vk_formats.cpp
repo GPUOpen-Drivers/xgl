@@ -32,6 +32,162 @@
 #include "include/vk_conv.h"
 namespace vk
 {
+#if ( VKI_GPU_DECOMPRESS)
+// =====================================================================================================================
+// This function should only be called for astc formats
+void Formats::GetAstcMappedInfo(
+    VkFormat        format,
+    AstcMappedInfo* pMapInfo)
+{
+    switch (format)
+    {
+        case VK_FORMAT_ASTC_4x4_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 4;
+            pMapInfo->hScale = 4;
+            break;
+        case VK_FORMAT_ASTC_4x4_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 4;
+            pMapInfo->hScale = 4;
+            break;
+        case VK_FORMAT_ASTC_5x4_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 5;
+            pMapInfo->hScale = 4;
+            break;
+        case VK_FORMAT_ASTC_5x4_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 5;
+            pMapInfo->hScale = 4;
+            break;
+        case VK_FORMAT_ASTC_5x5_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 5;
+            pMapInfo->hScale = 5;
+            break;
+        case VK_FORMAT_ASTC_5x5_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 5;
+            pMapInfo->hScale = 5;
+            break;
+        case VK_FORMAT_ASTC_6x5_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 6;
+            pMapInfo->hScale = 5;
+            break;
+        case VK_FORMAT_ASTC_6x5_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 6;
+            pMapInfo->hScale = 5;
+            break;
+        case VK_FORMAT_ASTC_6x6_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 6;
+            pMapInfo->hScale = 6;
+            break;
+        case VK_FORMAT_ASTC_6x6_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 6;
+            pMapInfo->hScale = 6;
+            break;
+        case VK_FORMAT_ASTC_8x5_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 8;
+            pMapInfo->hScale = 5;
+            break;
+        case VK_FORMAT_ASTC_8x5_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 8;
+            pMapInfo->hScale = 5;
+            break;
+        case VK_FORMAT_ASTC_8x6_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 8;
+            pMapInfo->hScale = 6;
+            break;
+        case VK_FORMAT_ASTC_8x6_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 8;
+            pMapInfo->hScale = 6;
+            break;
+        case VK_FORMAT_ASTC_8x8_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 8;
+            pMapInfo->hScale = 8;
+            break;
+        case VK_FORMAT_ASTC_8x8_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 8;
+            pMapInfo->hScale = 8;
+            break;
+        case VK_FORMAT_ASTC_10x5_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 10;
+            pMapInfo->hScale = 5;
+            break;
+        case VK_FORMAT_ASTC_10x5_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 10;
+            pMapInfo->hScale = 5;
+            break;
+        case VK_FORMAT_ASTC_10x6_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 10;
+            pMapInfo->hScale = 6;
+            break;
+        case VK_FORMAT_ASTC_10x6_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 10;
+            pMapInfo->hScale = 6;
+            break;
+        case VK_FORMAT_ASTC_10x8_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 10;
+            pMapInfo->hScale = 8;
+            break;
+        case VK_FORMAT_ASTC_10x8_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 10;
+            pMapInfo->hScale = 8;
+            break;
+        case VK_FORMAT_ASTC_10x10_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 10;
+            pMapInfo->hScale = 10;
+            break;
+        case VK_FORMAT_ASTC_10x10_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 10;
+            pMapInfo->hScale = 10;
+            break;
+        case VK_FORMAT_ASTC_12x10_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 12;
+            pMapInfo->hScale = 10;
+            break;
+        case VK_FORMAT_ASTC_12x10_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 12;
+            pMapInfo->hScale = 10;
+            break;
+        case VK_FORMAT_ASTC_12x12_UNORM_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_UNORM;
+            pMapInfo->wScale = 12;
+            pMapInfo->hScale = 12;
+            break;
+        case VK_FORMAT_ASTC_12x12_SRGB_BLOCK:
+            pMapInfo->format = VK_FORMAT_R8G8B8A8_SRGB;
+            pMapInfo->wScale = 12;
+            pMapInfo->hScale = 12;
+            break;
+        default:
+            VK_ASSERT(IsASTCFormat(format));
+            VK_NEVER_CALLED();
+            break;
+    }
+}
+#endif
 
 // =====================================================================================================================
 // Helper function to calculate image texels based on whether an image is compressed or not. Element is compatible to

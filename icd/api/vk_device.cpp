@@ -73,6 +73,10 @@
 
 #include "appopt/async_layer.h"
 
+#if VKI_GPU_DECOMPRESS
+#include "appopt/gpu_decode_layer.h"
+#endif
+
 #include "appopt/barrier_filter_layer.h"
 #include "appopt/strange_brigade_layer.h"
 
@@ -148,47 +152,74 @@ namespace vk
 
 // =====================================================================================================================
 // Returns VK_SUCCESS if all requested features are supported, VK_ERROR_FEATURE_NOT_PRESENT otherwise.
-template <typename T>
 static VkResult VerifyRequestedPhysicalDeviceFeatures(
     const PhysicalDevice* pPhysicalDevice,
-    const T*              pRequestedFeatures)
+    VirtualStackFrame*    pVirtStackFrame,
+    const void*           pRequestedFeatures,
+    bool                  isPhysicalDeviceFeature)
 {
-    T      supportedFeatures;
     size_t headerSize;
+    size_t structSize;
 
-    // Start by making a copy of the requested features all so that uninitialized struct padding always matches below.
-    memcpy(&supportedFeatures, pRequestedFeatures, sizeof(T));
+    VkBool32* pSupportedFeatures = nullptr;
+    VkStructHeaderNonConst structSizeFeaturesHeader = {};
+    structSizeFeaturesHeader.sType = static_cast<const VkStructHeader*>(pRequestedFeatures)->sType;
+    VkResult result = VK_SUCCESS;
 
-    if (std::is_same<T, VkPhysicalDeviceFeatures>::value)
+    structSize = isPhysicalDeviceFeature ? pPhysicalDevice->GetFeatures(nullptr) :
+                    pPhysicalDevice->GetFeatures2((&structSizeFeaturesHeader), false);
+
+    // allocate appropriate sized memory to pSupportedFeatures
+    pSupportedFeatures = pVirtStackFrame->AllocArray<VkBool32>(structSize/sizeof(VkBool32));
+
+    if ((pSupportedFeatures != nullptr) && (structSize != 0))
     {
-        pPhysicalDevice->GetFeatures(reinterpret_cast<VkPhysicalDeviceFeatures*>(&supportedFeatures));
+        // Start by making a copy of the requested features all so that uninitialized struct padding always matches below.
+        memcpy(pSupportedFeatures, pRequestedFeatures, structSize);
 
-        // The original VkPhysicalDeviceFeatures struct doesn't contain a VkStructHeader
-        headerSize = 0;
+        if (isPhysicalDeviceFeature)
+        {
+            VkPhysicalDeviceFeatures* pPhysicalDeviceFeatures = reinterpret_cast<VkPhysicalDeviceFeatures*>(pSupportedFeatures);
+
+            pPhysicalDevice->GetFeatures(pPhysicalDeviceFeatures);
+
+            // The original VkPhysicalDeviceFeatures struct doesn't contain a VkStructHeader
+            headerSize = 0;
+        }
+        else
+        {
+            VkStructHeaderNonConst* pHeader = reinterpret_cast<VkStructHeaderNonConst*>(pSupportedFeatures);
+
+            pHeader->pNext = nullptr; // Make sure GetFeatures2 doesn't clobber the original requested features chain
+
+            // update the features using default true
+            pPhysicalDevice->GetFeatures2(pHeader, true);
+
+            headerSize = offsetof(VkPhysicalDeviceFeatures2, features);
+        }
+
+        const size_t numFeatures = (structSize - headerSize) / sizeof(VkBool32); // Struct padding may give us extra features
+        const auto   supported   = static_cast<const VkBool32*>(Util::VoidPtrInc(pSupportedFeatures, headerSize));
+        const auto   requested   = static_cast<const VkBool32*>(Util::VoidPtrInc(pRequestedFeatures, headerSize));
+
+        for (size_t featureNdx = 0; featureNdx < numFeatures; ++featureNdx)
+        {
+            if (requested[featureNdx] && !supported[featureNdx])
+            {
+                result = VK_ERROR_FEATURE_NOT_PRESENT;
+
+                break;
+            }
+        }
     }
     else
     {
-        VkStructHeaderNonConst* pHeader = reinterpret_cast<VkStructHeaderNonConst*>(&supportedFeatures);
-
-        pHeader->pNext = nullptr; // Make sure GetFeatures2 doesn't clobber the original requested features chain
-        pPhysicalDevice->GetFeatures2(pHeader);
-
-        headerSize = offsetof(VkPhysicalDeviceFeatures2, features);
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    const size_t numFeatures = (sizeof(T) - headerSize) / sizeof(VkBool32); // Struct padding may give us extra features
-    const auto   supported   = static_cast<const VkBool32*>(Util::VoidPtrInc(&supportedFeatures, headerSize));
-    const auto   requested   = static_cast<const VkBool32*>(Util::VoidPtrInc(pRequestedFeatures, headerSize));
+    pVirtStackFrame->FreeArray(pSupportedFeatures);
 
-    for (size_t featureNdx = 0; featureNdx < numFeatures; ++featureNdx)
-    {
-        if (requested[featureNdx] && !supported[featureNdx])
-        {
-            return VK_ERROR_FEATURE_NOT_PRESENT;
-        }
-    }
-
-    return VK_SUCCESS;
+    return result;
 }
 
 // =====================================================================================================================
@@ -228,6 +259,9 @@ Device::Device(
     m_pAsyncLayer(nullptr),
     m_pAppOptLayer(nullptr),
     m_pBarrierFilterLayer(nullptr),
+#if VKI_GPU_DECOMPRESS
+    m_pGpuDecoderLayer(nullptr),
+#endif
     m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true),
     m_useComputeAsTransferQueue(useComputeAsTransferQueue),
     m_useGlobalGpuVa(false)
@@ -443,536 +477,189 @@ VkResult Device::Create(
 
     const VkStructHeader* pHeader = nullptr;
 
-    for (pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
-        ((pHeader != nullptr) && (vkResult == VK_SUCCESS));
-        pHeader = pHeader->pNext)
+    VirtualStackAllocator* pStackAllocator = nullptr;
+
+    palResult = pInstance->StackMgr()->AcquireAllocator(&pStackAllocator);
+
+    if (palResult == Pal::Result::Success)
     {
-        switch (static_cast<int>(pHeader->sType))
+        VirtualStackFrame virtStackFrame(pStackAllocator);
+
+        for (pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
+            ((pHeader != nullptr) && (vkResult == VK_SUCCESS));
+            pHeader = pHeader->pNext)
         {
-        case VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO:
-        {
-            const VkDeviceGroupDeviceCreateInfo* pDeviceGroupCreateInfo =
-                        reinterpret_cast<const VkDeviceGroupDeviceCreateInfo*>(pHeader);
 
-            numDevices = pDeviceGroupCreateInfo->physicalDeviceCount;
-
-            VK_ASSERT(numDevices <= MaxPalDevices);
-            numDevices = Util::Min(numDevices, MaxPalDevices);
-
-            for (uint32_t deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
+            switch (static_cast<int>(pHeader->sType))
             {
-                pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(
-                        pDeviceGroupCreateInfo->pPhysicalDevices[deviceIdx]);
+            case VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO:
+            {
+                const VkDeviceGroupDeviceCreateInfo* pDeviceGroupCreateInfo =
+                            reinterpret_cast<const VkDeviceGroupDeviceCreateInfo*>(pHeader);
 
-                pPalDevices[deviceIdx]      = pPhysicalDevice->PalDevice();
-                pPhysicalDevices[deviceIdx] = pPhysicalDevice;
+                numDevices = pDeviceGroupCreateInfo->physicalDeviceCount;
 
-                VK_ASSERT(pInstance == pPhysicalDevice->VkInstance());
+                VK_ASSERT(numDevices <= MaxPalDevices);
+                numDevices = Util::Min(numDevices, MaxPalDevices);
+
+                for (uint32_t deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
+                {
+                    pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(
+                            pDeviceGroupCreateInfo->pPhysicalDevices[deviceIdx]);
+
+                    pPalDevices[deviceIdx]      = pPhysicalDevice->PalDevice();
+                    pPhysicalDevices[deviceIdx] = pPhysicalDevice;
+
+                    VK_ASSERT(pInstance == pPhysicalDevice->VkInstance());
+                }
+                break;
             }
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2:
-        {
-            const auto pPhysicalDeviceFeatures2 = reinterpret_cast<const VkPhysicalDeviceFeatures2*>(pHeader);
-
-            VK_ASSERT(pCreateInfo->pEnabledFeatures == nullptr);
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceFeatures2>(
-                pPhysicalDevice,
-                pPhysicalDeviceFeatures2);
-
-            // If present, VkPhysicalDeviceFeatures2 controls which features are enabled instead of pEnabledFeatures
-            pEnabledFeatures = &pPhysicalDeviceFeatures2->features;
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevice16BitStorageFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDevice16BitStorageFeatures*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevice8BitStorageFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDevice8BitStorageFeatures*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GPA_FEATURES_AMD:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceGpaFeaturesAMD>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceGpaFeaturesAMD*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceSamplerYcbcrConversionFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceSamplerYcbcrConversionFeatures*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTER_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceVariablePointerFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceVariablePointerFeatures*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceProtectedMemoryFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceProtectedMemoryFeatures*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceMultiviewFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceMultiviewFeatures*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderDrawParameterFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceShaderDrawParameterFeatures*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceDescriptorIndexingFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceDescriptorIndexingFeatures*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT16_INT8_FEATURES_KHR:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceFloat16Int8FeaturesKHR>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceFloat16Int8FeaturesKHR*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceInlineUniformBlockFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceInlineUniformBlockFeaturesEXT*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceScalarBlockLayoutFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceScalarBlockLayoutFeatures*>(pHeader));
-
-            if ((vkResult == VK_SUCCESS) &&
-                reinterpret_cast<const VkPhysicalDeviceScalarBlockLayoutFeatures*>(pHeader)->scalarBlockLayout)
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2:
             {
-                scalarBlockLayoutEnabled = true;
+                VK_ASSERT(pCreateInfo->pEnabledFeatures == nullptr);
+
+                // If present, VkPhysicalDeviceFeatures2 controls which features are enabled instead of pEnabledFeatures
+                pEnabledFeatures = &reinterpret_cast<const VkPhysicalDeviceFeatures2*>(pHeader)->features;
+
+                break;
             }
 
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceTransformFeedbackFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceTransformFeedbackFeaturesEXT*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceVulkanMemoryModelFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceVulkanMemoryModelFeatures*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderAtomicInt64Features>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceShaderAtomicInt64Features*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceMemoryPriorityFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceMemoryPriorityFeaturesEXT*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceDepthClipEnableFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceDepthClipEnableFeaturesEXT*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceHostQueryResetFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceHostQueryResetFeatures*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceBufferDeviceAddressFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceBufferDeviceAddressFeatures*>(pHeader));
-
-            if ((vkResult == VK_SUCCESS) &&
-                reinterpret_cast<const VkPhysicalDeviceBufferDeviceAddressFeatures*>(pHeader)->bufferDeviceAddressMultiDevice)
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES:
             {
-                bufferDeviceAddressMultiDeviceEnabled = true;
+                if (reinterpret_cast<const VkPhysicalDeviceScalarBlockLayoutFeatures*>(pHeader)->scalarBlockLayout)
+                {
+                    scalarBlockLayoutEnabled = true;
+                }
+
+                break;
             }
 
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceLineRasterizationFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceLineRasterizationFeaturesEXT*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceUniformBufferStandardLayoutFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceUniformBufferStandardLayoutFeatures*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderClockFeaturesKHR>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceShaderClockFeaturesKHR*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceSubgroupSizeControlFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceSubgroupSizeControlFeaturesEXT*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceImagelessFramebufferFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceImagelessFramebufferFeatures*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES:
-        {
-
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceTimelineSemaphoreFeatures>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceTimelineSemaphoreFeatures*>(pHeader));
-
-            break;
-        }
-        case VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD:
-        {
-            const VkDeviceMemoryOverallocationCreateInfoAMD* pMemoryOverallocationCreateInfo =
-                reinterpret_cast<const VkDeviceMemoryOverallocationCreateInfoAMD*>(pHeader);
-
-            overallocationBehavior = pMemoryOverallocationCreateInfo->overallocationBehavior;
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD:
-        {
-            const VkPhysicalDeviceCoherentMemoryFeaturesAMD * pDeviceCoherentMemory =
-                reinterpret_cast<const VkPhysicalDeviceCoherentMemoryFeaturesAMD *>(pHeader);
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceCoherentMemoryFeaturesAMD>(
-                pPhysicalDevice,
-                pDeviceCoherentMemory);
-
-            if (vkResult == VK_SUCCESS)
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES:
             {
+                if (reinterpret_cast<const VkPhysicalDeviceBufferDeviceAddressFeatures*>(pHeader)->bufferDeviceAddressMultiDevice)
+                {
+                    bufferDeviceAddressMultiDeviceEnabled = true;
+                }
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES:
+            {
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD:
+            {
+                const VkDeviceMemoryOverallocationCreateInfoAMD* pMemoryOverallocationCreateInfo =
+                    reinterpret_cast<const VkDeviceMemoryOverallocationCreateInfoAMD*>(pHeader);
+
+                overallocationBehavior = pMemoryOverallocationCreateInfo->overallocationBehavior;
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD:
+            {
+
                 deviceCoherentMemoryEnabled = enabledDeviceExtensions.IsExtensionEnabled(
-                                                  DeviceExtensions::AMD_DEVICE_COHERENT_MEMORY) &&
-                                              pDeviceCoherentMemory->deviceCoherentMemory;
+                                                DeviceExtensions::AMD_DEVICE_COHERENT_MEMORY) &&
+                                                reinterpret_cast<const VkPhysicalDeviceCoherentMemoryFeaturesAMD *>(pHeader)->deviceCoherentMemory;
+
+                break;
             }
 
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceVulkan11Features>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceVulkan11Features*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceVulkan12Features>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceVulkan12Features*>(pHeader));
-
-            if ((vkResult == VK_SUCCESS) &&
-                reinterpret_cast<const VkPhysicalDeviceVulkan12Features*>(pHeader)->scalarBlockLayout)
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES:
             {
-                scalarBlockLayoutEnabled = true;
+
+                if (reinterpret_cast<const VkPhysicalDeviceVulkan12Features*>(pHeader)->scalarBlockLayout)
+                {
+                    scalarBlockLayoutEnabled = true;
+                }
+
+                break;
             }
 
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceFragmentShadingRateFeaturesKHR*>(pHeader));
-
-            if ((vkResult == VK_SUCCESS) &&
-                reinterpret_cast<const VkPhysicalDeviceFragmentShadingRateFeaturesKHR*>(pHeader)->attachmentFragmentShadingRate)
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
             {
-                attachmentFragmentShadingRate = true;
+
+                if (reinterpret_cast<const VkPhysicalDeviceFragmentShadingRateFeaturesKHR*>(pHeader)->attachmentFragmentShadingRate)
+                {
+                    attachmentFragmentShadingRate = true;
+                }
+                break;
             }
-            break;
-        }
 
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceConditionalRenderingFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceConditionalRenderingFeaturesEXT*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceRobustness2FeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader));
-
-            if ((vkResult == VK_SUCCESS) &&
-                reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->robustBufferAccess2)
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT:
             {
-                extendedRobustnessEnabled.robustBufferAccess = true;
+
+                if (reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->robustBufferAccess2)
+                {
+                    extendedRobustnessEnabled.robustBufferAccess = true;
+                }
+
+                if (reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->robustImageAccess2)
+                {
+                    extendedRobustnessEnabled.robustImageAccess = true;
+                }
+
+                if (reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->nullDescriptor)
+                {
+                    extendedRobustnessEnabled.nullDescriptor = true;
+                }
+
+                break;
             }
 
-            if ((vkResult == VK_SUCCESS) &&
-                reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->robustImageAccess2)
-            {
-                extendedRobustnessEnabled.robustImageAccess = true;
-            }
-
-            if ((vkResult == VK_SUCCESS) &&
-                reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->nullDescriptor)
-            {
-                extendedRobustnessEnabled.nullDescriptor = true;
-            }
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceExtendedDynamicStateFeaturesEXT*>(pHeader));
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevicePrivateDataFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDevicePrivateDataFeaturesEXT*>(pHeader));
-
-            if (vkResult == VK_SUCCESS)
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES_EXT:
             {
                 privateDataEnabled = reinterpret_cast<const VkPhysicalDevicePrivateDataFeaturesEXT*>(pHeader)->privateData;
+
+                break;
             }
-            break;
-        }
 
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES_EXT:
-        {
-            const VkPhysicalDeviceImageRobustnessFeaturesEXT* pImageRobustnessFeatures =
-                reinterpret_cast<const VkPhysicalDeviceImageRobustnessFeaturesEXT*>(pHeader);
-
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceImageRobustnessFeaturesEXT>(
-                pPhysicalDevice,
-                pImageRobustnessFeatures);
-
-            if ((vkResult == VK_SUCCESS) &&
-                pImageRobustnessFeatures->robustImageAccess)
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES_EXT:
             {
-                extendedRobustnessEnabled.robustImageAccess = true;
+                if (reinterpret_cast<const VkPhysicalDeviceImageRobustnessFeaturesEXT*>(pHeader)->robustImageAccess)
+                {
+                    extendedRobustnessEnabled.robustImageAccess = true;
+                }
+
+                break;
             }
 
-            break;
+            default:
+                break;
+            }
+
+            // TODO Remove below check after physical device properties for the following extensions are added.
+            // The loader device create info should be ignored by the driver.
+            if ((static_cast<int>(pHeader->sType) != VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO)
+                && (static_cast<int>(pHeader->sType) != VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO)
+                && (static_cast<int>(pHeader->sType) != VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO_EXT)
+                && (static_cast<int>(pHeader->sType) != VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD))
+            {
+                vkResult = VerifyRequestedPhysicalDeviceFeatures(pPhysicalDevice, &virtStackFrame, pHeader, false);
+            }
         }
 
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT:
+        // If the pNext chain includes a VkPhysicalDeviceFeatures2 structure, then pEnabledFeatures must be NULL.
+        if ((vkResult == VK_SUCCESS) && (pCreateInfo->pEnabledFeatures != nullptr))
         {
-            const auto* pFeatures = reinterpret_cast<const VkPhysicalDevice4444FormatsFeaturesEXT*>(pHeader);
-
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevice4444FormatsFeaturesEXT>(
+            vkResult = VerifyRequestedPhysicalDeviceFeatures(
                 pPhysicalDevice,
-                pFeatures);
-
-            break;
+                &virtStackFrame,
+                pCreateInfo->pEnabledFeatures,
+                true);
         }
 
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT:
-        {
-            const auto pColorWriteEnableFeatures =
-                reinterpret_cast<const VkPhysicalDeviceColorWriteEnableFeaturesEXT*>(pHeader);
-
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceColorWriteEnableFeaturesEXT>(
-                pPhysicalDevice,
-                pColorWriteEnableFeatures);
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_IMAGE_ARRAYS_FEATURES_EXT:
-        {
-            const auto pYcbcrImageArraysFeatures =
-                reinterpret_cast<const VkPhysicalDeviceYcbcrImageArraysFeaturesEXT*>(pHeader);
-
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceYcbcrImageArraysFeaturesEXT>(
-                pPhysicalDevice,
-                pYcbcrImageArraysFeatures);
-
-            break;
-        }
-
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES_KHR:
-        {
-            const auto* pFeatures = reinterpret_cast<const VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR*>(pHeader);
-
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR>(
-                pPhysicalDevice,
-                pFeatures);
-
-            break;
-        }
-
-        default:
-            break;
-        }
+        // Release the stack allocator
+        pInstance->StackMgr()->ReleaseAllocator(pStackAllocator);
     }
-
-    // If the pNext chain includes a VkPhysicalDeviceFeatures2 structure, then pEnabledFeatures must be NULL.
-    if ((vkResult == VK_SUCCESS) && (pCreateInfo->pEnabledFeatures != nullptr))
+    else
     {
-        vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceFeatures>(
-            pPhysicalDevice,
-            pCreateInfo->pEnabledFeatures);
+        vkResult = PalToVkResult(palResult);
     }
 
     for (uint32 i = 0; ((i < pCreateInfo->queueCreateInfoCount) && (vkResult == VK_SUCCESS)); ++i)
@@ -1507,9 +1194,11 @@ VkResult Device::Initialize(
         deviceProps.engineProperties[Pal::EngineTypeDma].minTimestampAlignment :
         deviceProps.engineProperties[Pal::EngineTypeUniversal].minTimestampAlignment;
 
-    m_enabledFeatures.deviceCoherentMemory = deviceCoherentMemoryEnabled;
-    m_enabledFeatures.scalarBlockLayout    = scalarBlockLayoutEnabled;
-    m_enabledFeatures.extendedRobustness   = extendedRobustnessEnabled;
+    m_enabledFeatures.deviceCoherentMemory         = deviceCoherentMemoryEnabled;
+    m_enabledFeatures.scalarBlockLayout            = scalarBlockLayoutEnabled;
+    m_enabledFeatures.robustBufferAccessExtended   = extendedRobustnessEnabled.robustBufferAccess;
+    m_enabledFeatures.robustImageAccessExtended    = extendedRobustnessEnabled.robustImageAccess;
+    m_enabledFeatures.nullDescriptorExtended       = extendedRobustnessEnabled.nullDescriptor;
 
     // If VkPhysicalDeviceBufferDeviceAddressFeaturesEXT.bufferDeviceAddressMultiDevice is enabled
     // and if globalGpuVaSupport is supported and if multiple devices are used set the global GpuVa.
@@ -1624,6 +1313,25 @@ VkResult Device::Initialize(
             result = VK_ERROR_OUT_OF_HOST_MEMORY;
         }
     }
+
+#if VKI_GPU_DECOMPRESS
+    if ((result == VK_SUCCESS) && (m_settings.enableShaderDecode))
+    {
+        void* pGpuDecoderLayer = nullptr;
+
+        pGpuDecoderLayer = VkInstance()->AllocMem(sizeof(GpuDecoderLayer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+        if (pGpuDecoderLayer != nullptr)
+        {
+            m_pGpuDecoderLayer = VK_PLACEMENT_NEW(pGpuDecoderLayer) GpuDecoderLayer(this);
+            result = m_pGpuDecoderLayer->Init(this);
+        }
+        else
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+    }
+#endif
 
     if ((result == VK_SUCCESS) && m_settings.enableAsyncCompile)
     {
@@ -1783,6 +1491,13 @@ void Device::InitDispatchTable()
     {
         m_pAsyncLayer->OverrideDispatchTable(&m_dispatchTable);
     }
+
+#if VKI_GPU_DECOMPRESS
+    if (m_pGpuDecoderLayer != nullptr)
+    {
+        m_pGpuDecoderLayer->OverrideDispatchTable(&m_dispatchTable);
+    }
+#endif
 
 }
 
@@ -2008,6 +1723,14 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 
         VkInstance()->FreeMem(m_pAsyncLayer);
     }
+
+#if VKI_GPU_DECOMPRESS
+    if (m_pGpuDecoderLayer != nullptr)
+    {
+        Util::Destructor(m_pGpuDecoderLayer);
+        VkInstance()->FreeMem(m_pGpuDecoderLayer);
+    }
+#endif
 
     for (uint32_t i = 0; i < Queue::MaxQueueFamilies; ++i)
     {
@@ -4348,8 +4071,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetGpaDeviceClockModeAMD(
 
         if (palResult == Pal::Result::Success)
         {
-            pInfo->engineClockRatioToPeak = output.engineClockRatioToPeak;
-            pInfo->memoryClockRatioToPeak = output.memoryClockRatioToPeak;
+            const Pal::DeviceProperties& properties = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
+
+            pInfo->engineClockRatioToPeak = static_cast<float>(output.engineClockFrequency) /
+                                            properties.gfxipProperties.performance.maxGpuClock;
+            pInfo->memoryClockRatioToPeak = static_cast<float>(output.memoryClockFrequency) /
+                                            properties.gpuMemoryProperties.performance.maxMemClock;
         }
     }
 

@@ -52,6 +52,30 @@ struct ShaderModuleHandle;
 class PipelineBinaryCache;
 
 // =====================================================================================================================
+struct ShaderStageInfo
+{
+    ShaderStage                      stage;
+    const ShaderModuleHandle*        pModuleHandle;
+    Pal::ShaderHash                  codeHash;            // This hash includes entry point info
+    size_t                           codeSize;
+    const char*                      pEntryPoint;
+    VkPipelineShaderStageCreateFlags flags;
+    const VkSpecializationInfo*      pSpecializationInfo;
+};
+
+// =====================================================================================================================
+struct GraphicsPipelineShaderStageInfo
+{
+    ShaderStageInfo stages[ShaderStage::ShaderStageGfxCount];
+};
+
+// =====================================================================================================================
+struct ComputePipelineShaderStageInfo
+{
+    ShaderStageInfo stage;
+};
+
+// =====================================================================================================================
 class PipelineCompiler
 {
 public:
@@ -102,7 +126,6 @@ public:
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         size_t*                           pPipelineBinarySize,
         const void**                      ppPipelineBinary,
-        uint32_t                          rasterizationStream,
         Util::MetroHash::Hash*            pCacheId);
 
     VkResult CreateComputePipelineBinary(
@@ -114,11 +137,15 @@ public:
         const void**                      ppPipelineBinary,
         Util::MetroHash::Hash*            pCacheId);
 
-    void UpdatePipelineCreationFeedback(
+    static void GetPipelineCreationFeedback(
+        const VkStructHeader*                           pHeader,
+        const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo);
+
+    static void UpdatePipelineCreationFeedback(
         VkPipelineCreationFeedbackEXT*  pPipelineCreationFeedback,
         const PipelineCreationFeedback* pFeedbackFromCompiler);
 
-    VkResult SetPipelineCreationFeedbackInfo(
+    static VkResult SetPipelineCreationFeedbackInfo(
         const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo,
         uint32_t                                       stageCount,
         const VkPipelineShaderStageCreateInfo*         pStages,
@@ -126,17 +153,19 @@ public:
         const PipelineCreationFeedback*                pStageFeedback);
 
     VkResult ConvertGraphicsPipelineInfo(
-        Device*                                         pDevice,
+        const Device*                                   pDevice,
         const VkGraphicsPipelineCreateInfo*             pIn,
-        GraphicsPipelineBinaryCreateInfo*               pInfo,
-        VbBindingInfo*                                  pVbInfo,
-        const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo);
+        const GraphicsPipelineShaderStageInfo*          pShaderInfo,
+        GraphicsPipelineBinaryCreateInfo*               pCreateInfo,
+        VbBindingInfo*                                  pVbInfo);
 
     VkResult ConvertComputePipelineInfo(
-        Device*                                         pDevice,
+        const Device*                                   pDevice,
         const VkComputePipelineCreateInfo*              pIn,
-        ComputePipelineBinaryCreateInfo*                pInfo,
-        const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo);
+        const ComputePipelineShaderStageInfo*           pShaderInfo,
+        ComputePipelineBinaryCreateInfo*                pInfo);
+
+    bool IsValidShaderModule(const ShaderModuleHandle* pShaderModule) const;
 
     void FreeShaderModule(ShaderModuleHandle* pShaderModule);
 
@@ -181,16 +210,6 @@ public:
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
-
-    void ApplyProfileOptions(
-        Device*                      pDevice,
-        ShaderStage                  stage,
-        ShaderModule*                pShaderModule,
-        Vkgc::PipelineOptions*       pPipelineOptions,
-        Vkgc::PipelineShaderInfo*    pShaderInfo,
-        PipelineOptimizerKey*        pProfileKey,
-        Vkgc::NggState*              pNggState
-    );
 
     template<class PipelineBuildInfo>
     bool ReplacePipelineBinary(

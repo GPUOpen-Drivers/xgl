@@ -57,6 +57,10 @@
 #include "palHashMap.h"
 #include "palPipeline.h"
 
+#if VKI_GPU_DECOMPRESS
+#include "imported/gputexdecoder/gpuTexDecoder.h"
+#endif
+
 namespace Pal
 {
 class IPipeline;
@@ -94,6 +98,9 @@ class SqttMgr;
 class SwapChain;
 class ChillMgr;
 class AsyncLayer;
+#if VKI_GPU_DECOMPRESS
+class GpuDecoderLayer;
+#endif
 
 // =====================================================================================================================
 // Specifies properties for importing a semaphore, it's an encapsulation of VkImportSemaphoreFdInfoKHR and
@@ -117,19 +124,27 @@ public:
         bool nullDescriptor;
     };
 
-    struct DeviceFeatures
+    union DeviceFeatures
     {
-        VkBool32                robustBufferAccess;
-        VkBool32                sparseBinding;
-        // The state of enabled feature VK_EXT_scalar_block_layout.
-        VkBool32                scalarBlockLayout;
-        // Attachment Fragment Shading Rate feature in VK_KHR_variable_rate_shading
-        VkBool32                attachmentFragmentShadingRate;
-        // The states of enabled feature DEVICE_COHERENT_MEMORY_FEATURES_AMD which is defined by
-        // extensions VK_AMD_device_coherent_memory
-        VkBool32                deviceCoherentMemory;
-        // The state of enabled features in VK_EXT_robustness2.
-        ExtendedRobustness      extendedRobustness;
+        struct
+        {
+            uint32                robustBufferAccess            : 1;
+            uint32                sparseBinding                 : 1;
+            // The state of enabled feature VK_EXT_scalar_block_layout.
+            uint32                scalarBlockLayout             : 1;
+            // Attachment Fragment Shading Rate feature in VK_KHR_variable_rate_shading
+            uint32                attachmentFragmentShadingRate : 1;
+            // The states of enabled feature DEVICE_COHERENT_MEMORY_FEATURES_AMD which is defined by
+            // extensions VK_AMD_device_coherent_memory
+            uint32                deviceCoherentMemory          : 1;
+            // The state of enabled features in VK_EXT_robustness2.
+            uint32                robustBufferAccessExtended    : 1;
+            uint32                robustImageAccessExtended     : 1;
+            uint32                nullDescriptorExtended        : 1;
+            uint32                reserved                      : 24;
+        };
+
+        uint32 u32All;
     };
 
     // Pipelines used for internal operations, e.g. certain resource copies
@@ -361,6 +376,9 @@ public:
     VK_FORCEINLINE ShaderOptimizer* GetShaderOptimizer()
         { return &m_shaderOptimizer; }
 
+    VK_FORCEINLINE const ShaderOptimizer* GetShaderOptimizer() const
+        { return &m_shaderOptimizer; }
+
     VK_FORCEINLINE ResourceOptimizer* GetResourceOptimizer()
         { return &m_resourceOptimizer; }
 
@@ -540,11 +558,6 @@ public:
     VK_INLINE const InternalPipeline& GetTimestampQueryCopyPipeline() const
         { return m_timestampQueryCopyPipeline; }
 
-    VK_INLINE InternalPipeline& GetInternalRayTracingPipeline()
-    {
-        return m_internalRayTracingPipeline;
-    }
-
     VK_INLINE const Pal::IMsaaState* const * GetBltMsaaState(uint32_t imgSampleCount) const;
 
     VK_INLINE bool IsExtensionEnabled(DeviceExtensions::ExtensionId id) const
@@ -564,6 +577,14 @@ public:
 
     VK_INLINE AsyncLayer* GetAsyncLayer()
         { return m_pAsyncLayer; }
+
+#if VKI_GPU_DECOMPRESS
+    VK_INLINE  GpuDecoderLayer* GetGpuDecoderLayer()
+        { return m_pGpuDecoderLayer; }
+
+    VK_INLINE InternalPipeline& GetInternalTexDecodePipeline()
+        {    return m_internalTexDecodePipeline; }
+#endif
 
     VK_INLINE Util::Mutex* GetMemoryMutex()
         { return &m_memoryMutex; }
@@ -747,8 +768,6 @@ protected:
 
     InternalPipeline                    m_timestampQueryCopyPipeline;
 
-    InternalPipeline                    m_internalRayTracingPipeline;
-
     static const uint32_t BltMsaaStateCount = 4;
 
     Pal::IMsaaState*                    m_pBltMsaaState[BltMsaaStateCount][MaxPalDevices];
@@ -762,6 +781,11 @@ protected:
     OptLayer*                           m_pAppOptLayer;            // State for an app-specific layer, otherwise null
     BarrierFilterLayer*                 m_pBarrierFilterLayer;     // State for enabling barrier filtering, otherwise
                                                                    // null
+
+#if VKI_GPU_DECOMPRESS
+    GpuDecoderLayer*                     m_pGpuDecoderLayer;
+    InternalPipeline                     m_internalTexDecodePipeline;
+#endif
 
     Util::Mutex                         m_memoryMutex;             // Shared mutex used occasionally by memory objects
 

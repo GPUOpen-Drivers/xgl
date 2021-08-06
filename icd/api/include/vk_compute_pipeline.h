@@ -112,8 +112,7 @@ protected:
         CreateInfo*                        pOutInfo);
 
     static uint64_t BuildApiHash(
-        const VkComputePipelineCreateInfo* pCreateInfo,
-        Util::MetroHash::Hash*             pBaseHash);
+        const VkComputePipelineCreateInfo* pCreateInfo);
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(ComputePipeline);

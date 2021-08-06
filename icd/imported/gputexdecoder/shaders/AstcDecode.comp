@@ -1,0 +1,1118 @@
+/* Copyright (c) 2021 Advanced Micro Devices, Inc.  All rights reserved.*/
+
+// This ASTC Decode Algorithm is impelmented according to the spec:
+// https://www.khronos.org/registry/DataFormat/specs/1.3/dataformat.1.3.html#ASTC
+// This impelmention generate many ALU Ops instead of Memory lookup table.
+//# If you have any question, feel free to contact yuhachen@amd.com
+
+#version 450
+#extension GL_EXT_scalar_block_layout : enable
+#extension  GL_EXT_samplerless_texture_functions : enable
+
+// color Format
+#define FMT_LUMINANCE  0
+#define FMT_LUMINANCE_DELTA  1
+#define FMT_HDR_LUMINANCE_LARGE_RANGE  2
+#define FMT_HDR_LUMINANCE_SMALL_RANGE  3
+#define FMT_LUMINANCE_ALPHA  4
+#define FMT_LUMINANCE_ALPHA_DELTA  5
+#define FMT_RGB_SCALE  6
+#define FMT_HDR_RGB_SCALE  7
+#define FMT_RGB  8
+#define FMT_RGB_DELTA  9
+#define FMT_RGB_SCALE_ALPHA  10
+#define FMT_HDR_RGB  11
+#define FMT_RGBA  12
+#define FMT_RGBA_DELTA  13
+#define FMT_HDR_RGB_LDR_ALPHA  14
+#define FMT_HDR_RGBA  15
+
+
+// Block Define
+#define PARTITION_IDX_BITS 10
+#define PARTITION_CNT_BITS 2
+#define PARTITION_START_BITS 13
+#define CEM_BITS_COUNT 6
+#define BOLCK_BITS_COUNT 128
+#define BLOCK_MODE_BITS_COUNT 11
+
+#define COLOR_ENDPOINT_START_BITS_FOR_ONE_PARTITIONS \
+            (128 - BLOCK_MODE_BITS_COUNT - PARTITION_CNT_BITS - 4)
+
+#define COLOR_ENDPOINT_START_BITS_FOR_OTHER_PARTITIONS \
+            (128 - BLOCK_MODE_BITS_COUNT - PARTITION_CNT_BITS - PARTITION_IDX_BITS - CEM_BITS_COUNT)
+
+struct BlockMode
+{
+  uint weightWidth;
+  uint weightHeight;
+  uint weightCnt;
+  uint quantizationMode;
+  uint partitionCnt;
+  uint isDualWeightPlane;
+  bool isErrorBlock;
+};
+
+struct BitPair
+{
+    uint bitToRead;
+    uint bitToShift;
+    uint inPutIdx;
+};
+
+struct QuantModeInfo
+{
+    uint trits;
+    uint bits;
+    uint quints;
+    uint offset;
+};
+
+layout(std430, binding = 0) uniform ColorUnquantizationTables
+{
+    uint color_unquantization_tables[1206];
+    int quantization_mode_table[17][128];
+};
+
+layout(std430, binding = 1) uniform QuintTritsInteger
+{
+   uint tritsInteger[256][5];
+   uint quintsInteger[128][3];
+
+};
+
+layout(std430, binding = 2) uniform QuantizationTransferTable
+{
+   uint quantization_and_transfer_table[142];
+};
+
+
+layout(set = 0, binding = 3) uniform utextureBuffer astcSrcBuffer2D;
+layout(set = 0, binding = 4) writeonly uniform image2D outputImage;
+layout(rgba32ui,binding = 5) readonly  uniform uimage2D astcSrcImage2D;
+
+
+layout(local_size_x_id = 0, local_size_y_id = 1, local_size_z = 1) in;
+layout(constant_id = 2) const bool isSrgb = false;
+layout(constant_id = 3) const bool isBufferCopy = false;
+shared BlockMode blockInfo;
+shared uvec4 blockData;
+shared uint bitsOfWeight;
+shared uint blockMode;
+shared uint partitionIdx;
+shared uint cem;
+shared uvec4 bitsSwapped;
+uvec4 numOfBitsTrits[21] =
+{
+   uvec4(1,0,0,0),
+   uvec4(0,1,0,2),
+   uvec4(2,0,0,5),
+   uvec4(0,0,1,9),
+   uvec4(1,1,0,14),
+   uvec4(3,0,0,20),
+   uvec4(1,0,1,28),
+   uvec4(2,1,0,38),
+   uvec4(4,0,0,50),
+   uvec4(2,0,1,66),
+   uvec4(3,1,0,86),
+   uvec4(5,0,0,110),
+   uvec4(3,0,1,142),
+   uvec4(4,1,0,182),
+   uvec4(6,0,0,230),
+   uvec4(4,0,1,294),
+   uvec4(5,1,0,374),
+   uvec4(7,0,0,470),
+   uvec4(5,0,1,598),
+   uvec4(6,1,0,758),
+   uvec4(8,0,0,950)
+};
+
+uint ReadVecBits32(const in uvec4 src, uint bitCnt, uint bitOffset)
+{
+    uint offset = bitOffset % 32;
+    uint start = bitOffset >> 5;
+    uint res = 0;
+    int sum = int(32 - offset - bitCnt);
+    if (sum < 0)
+    {
+        uint reslow = 0;
+        uint resHigh = 0;
+        uint bitCntLow = 32 - offset;
+        uint bitCntHigh = bitCnt - bitCntLow;
+
+        uint maskLow = (1 << bitCntLow) - 1;
+        uint maskHigh = (1 << bitCntHigh) - 1;
+        reslow = src[start] >> offset;
+        reslow &= maskLow;
+
+        resHigh = src[start + 1] & maskHigh;
+        res = (resHigh << bitCntLow) | reslow;
+    }
+    else
+    {
+        uint mask = (1 << bitCnt) - 1;
+        res = src[start] >> (bitOffset & 0x1F);
+        res &= mask;
+    }
+    return res;
+}
+
+
+uint ReadBits32(const in uint src ,uint bitCnt, uint bitOffset)
+{
+   uint mask = (1 << bitCnt) - 1;
+   uint value = src >> (bitOffset & 0x1F);
+   return value & mask;
+}
+
+// *****Those Utility Func is for ColorEndPoint UnPack*****START
+
+uvec4 blue_contract(uint r, uint g, uint b, uint a)
+{
+    uvec4 ret;
+    ret.r = (r + b) >> 1;
+    ret.g = (g + b) >> 1;
+    ret.b = b;
+    ret.a = a;
+    return ret;
+}
+
+void luminance_unpack(out uvec4 ep0, out uvec4 ep1,
+        uint v0, uint v1)
+{
+    ep0 = uvec4(uvec3(v0), 0xff);
+    ep1 = uvec4(uvec3(v1), 0xff);
+}
+
+void luminance_delta_unpack(out uvec4 ep0, out uvec4 ep1,
+        uint v0, uint v1)
+{
+    uint l0 = (v0 >> 2) | (v1 & 0xc0);
+    uint l1 = l0 + (v1 & 0x3f);
+    l1 = min(l1, 0xff);
+    ep0 = uvec4(uvec3(l0), 0xff);
+    ep1 = uvec4(uvec3(l1), 0xff);
+}
+
+void luminance_alpha_unpack(out uvec4 ep0, out uvec4 ep1,
+    uint v0, uint v1, uint v2, uint v3)
+{
+    ep0 = uvec4(uvec3(v0), v2);
+    ep1 = uvec4(uvec3(v1), v3);
+}
+
+void luminance_alpha_delta_unpack(out uvec4 ep0, out uvec4 ep1,
+    uint v0, uint v1, uint v2, uint v3)
+{
+    uint ul0, ul1, ua0, ua1;
+    int lum0 = int(v0);
+    int lum1 = int(v1);
+    int alpha0 = int(v2);
+    int alpha1 = int(v3);
+
+    lum0 |= (lum1 & 0x80) << 1;
+    alpha0 |= (alpha1 & 0x80) << 1;
+    lum1 &= 0x7F;
+    alpha1 &= 0x7F;
+    lum1 =   (lum1   & 0x40) > 0?(lum1 - 0x80):lum1;
+    alpha1 = (alpha1 & 0x40) > 0?(alpha1 - 0x80):alpha1;
+
+    lum0 >>= 1;
+    lum1 >>= 1;
+    alpha0 >>= 1;
+    alpha1 >>= 1;
+    lum1 += lum0;
+    alpha1 += alpha0;
+    ul1 = clamp(lum1, 0, 255);
+    ua1 = clamp(alpha1, 0, 255);
+    ul0 = uint(lum0);
+    ua0 = uint(alpha0);;
+
+    uint v0_v1 = clamp(v0 + v1, 0, 0xff);
+    uint v2_v3 = clamp(v2 + v3, 0, 0xff);
+    ep0 = uvec4(ul0, ul0, ul0, alpha0);
+    ep1 = uvec4(ul1, ul1, ul1, alpha1);
+}
+
+void rgb_scale_unpack(out uvec4 ep0, out uvec4 ep1,
+        uint v0, uint v1, uint v2, uint v3)
+{
+    ep0 = uvec4((uvec3(v0, v1, v2) * v3) >> 8, 0xff);
+    ep1 = uvec4(v0, v1, v2, 0xff);
+}
+
+void rgb_scale_alpha_unpack(out uvec4 ep0, out uvec4 ep1,
+        uint v0, uint v1, uint v2, uint v3, uint v4, uint v5)
+{
+    ep0 = uvec4((uvec3(v0, v1, v2) * v3) >> 8, v4);
+    ep1 = uvec4(v0, v1, v2, v5);
+}
+
+void rgb_unpack(out uvec4 ep0, out uvec4 ep1,
+        uint v0, uint v1, uint v2, uint v3, uint v4, uint v5)
+{
+    uint s0 = v0 + v2 + v4;
+    uint s1 = v1 + v3 + v5;
+    if (s1 >= s0)
+    {
+        ep0 = uvec4(v0, v2, v4, 0xff);
+        ep1 = uvec4(v1, v3, v5, 0xff);
+    }
+    else
+    {
+        ep0 = blue_contract(v1, v3, v5, 0xff);
+        ep1 = blue_contract(v0, v2, v4, 0xff);
+    }
+}
+
+void rgb_delta_unpack(out uvec4 ep0, out uvec4 ep1,
+        uint v0, uint v1, uint v2, uint v3, uint v4, uint v5)
+{
+     ivec4 color[2] = ivec4[]( ivec4(255), ivec4(255) );
+     color[0].x = int(v0);
+     color[0].y = int(v2);
+     color[0].z = int(v4);
+
+     color[1].x = int(v1);
+     color[1].y = int(v3);
+     color[1].z = int(v5);
+     
+    // perform the bit-transfer procedure
+    color[0].x |= (color[1].x & 0x80) << 1;
+    color[0].y |= (color[1].y & 0x80) << 1;
+    color[0].z |= (color[1].z & 0x80) << 1;
+    color[1].x &= 0x7F;
+    color[1].y &= 0x7F;
+    color[1].z &= 0x7F;
+
+    color[1].x = (color[1].x & 0x40) >0?(color[1].x - 0x80):color[1].x;
+    color[1].y = (color[1].y & 0x40) >0?(color[1].y - 0x80):color[1].y;
+    color[1].z = (color[1].z & 0x40) >0?(color[1].z - 0x80):color[1].z;
+
+    color[0].x >>= 1;
+    color[0].y >>= 1;
+    color[0].z >>= 1;
+    color[1].x >>= 1;
+    color[1].y >>= 1;
+    color[1].z >>= 1;
+
+    int rgbsum = (color[1].x + color[1].y + color[1].z)>=0?1:0;
+
+    color[1].x += color[0].x;
+    color[1].y += color[0].y;
+    color[1].z += color[0].z;
+
+    color[0].x = rgbsum == 0? ((color[0].x + color[0].z) >> 1):color[0].x ;
+    color[0].y = rgbsum == 0? ((color[0].y + color[0].z) >> 1):color[0].y ;
+    color[1].x = rgbsum == 0? ((color[1].x + color[1].z) >> 1):color[1].x ;
+    color[1].y = rgbsum == 0? ((color[1].y + color[1].z) >> 1):color[1].y ;
+
+    ivec3 icolor0 = clamp(color[1 - rgbsum].xyz,ivec3(0), ivec3(255));
+    ivec3 icolor1 = clamp(color[rgbsum].xyz,ivec3(0), ivec3(255));
+    ep0.xyz = uvec3(icolor0);
+    ep0.w = 255;
+
+    ep1.xyz = uvec3(icolor1);
+    ep1.w = 255;
+}
+
+void rgba_unpack(out uvec4 ep0, out uvec4 ep1,
+        uint v0, uint v1, uint v2, uint v3,
+        uint v4, uint v5, uint v6, uint v7)
+{
+    uint s0 = v0 + v2 + v4;
+    uint s1 = v1 + v3 + v5;
+    if (s1 >= s0)
+    {
+        ep0 = uvec4(v0, v2, v4, v6);
+        ep1 = uvec4(v1, v3, v5, v7);
+    }
+    else
+    {
+        ep0 = blue_contract(v1, v3, v5, v7);
+        ep1 = blue_contract(v0, v2, v4, v6);
+    }
+}
+
+void rgba_delta_unpack(out uvec4 ep0, out uvec4 ep1,
+        uint v0, uint v1, uint v2, uint v3, uint v4, uint v5, uint v6, uint v7)
+{
+     ivec4 color[2] = ivec4[]( ivec4(255), ivec4(255) );
+     color[0].x = int(v0);
+     color[0].y = int(v2);
+     color[0].z = int(v4);
+     color[0].w = int(v6);
+
+     color[1].x = int(v1);
+     color[1].y = int(v3);
+     color[1].z = int(v5);
+     color[1].w = int(v7);
+
+    // perform the bit-transfer procedure
+    color[0].x |= (color[1].x & 0x80) << 1;
+    color[0].y |= (color[1].y & 0x80) << 1;
+    color[0].z |= (color[1].z & 0x80) << 1;
+    color[0].w |= (color[1].w & 0x80) << 1;
+
+    color[1].x &= 0x7F;
+    color[1].y &= 0x7F;
+    color[1].z &= 0x7F;
+    color[1].w &= 0x7F;
+
+    color[1].x = (color[1].x & 0x40) >0?(color[1].x - 0x80):color[1].x;
+    color[1].y = (color[1].y & 0x40) >0?(color[1].y - 0x80):color[1].y;
+    color[1].z = (color[1].z & 0x40) >0?(color[1].z - 0x80):color[1].z;
+    color[1].w = (color[1].w & 0x40) >0?(color[1].w - 0x80):color[1].w;
+
+    color[0].x >>= 1;
+    color[0].y >>= 1;
+    color[0].z >>= 1;
+    color[0].w >>= 1;
+
+    color[1].x >>= 1;
+    color[1].y >>= 1;
+    color[1].z >>= 1;
+    color[1].w >>= 1;
+
+    int rgbsum = (color[1].x + color[1].y + color[1].z)>=0?1:0;
+
+    color[1].x += color[0].x;
+    color[1].y += color[0].y;
+    color[1].z += color[0].z;
+    color[1].w += color[0].w;
+
+    color[0].x = rgbsum == 0? ((color[0].x + color[0].z) >> 1):color[0].x ;
+    color[0].y = rgbsum == 0? ((color[0].y + color[0].z) >> 1):color[0].y ;
+    color[1].x = rgbsum == 0? ((color[1].x + color[1].z) >> 1):color[1].x ;
+    color[1].y = rgbsum == 0? ((color[1].y + color[1].z) >> 1):color[1].y ;
+
+    ivec4 icolor0 = clamp(color[1 - rgbsum],ivec4(0), ivec4(255));
+    ivec4 icolor1 = clamp(color[rgbsum],ivec4(0), ivec4(255));
+
+    ep0 = uvec4(icolor0);
+    ep1 = uvec4(icolor1);
+}
+
+// *****Those Utility Func is for ColorEndPoint UnPack*****END
+
+uint Hash52(uint inp)
+{
+    uint tmp = inp;
+    tmp ^= tmp >> 15;
+    tmp *= 0xEEDE0891;            // (2^4+1)*(2^7+1)*(2^17-1)
+    tmp ^= tmp >> 5;
+    tmp += tmp << 16;
+    tmp ^= tmp >> 7;
+    tmp ^= tmp >> 3;
+    tmp ^= tmp << 6;
+    tmp ^= tmp >> 17;
+    return tmp;
+}
+
+uint SelectPartition(uint seed, uint x, uint y, uint z, uint partitionCnt)
+{
+    seed += (partitionCnt - 1) * 1024;
+    uint rnum = Hash52(seed);
+
+    uint seed1 = rnum & 0xF;
+    uint seed2 = (rnum >> 4) & 0xF;
+    uint seed3 = (rnum >> 8) & 0xF;
+    uint seed4 = (rnum >> 12) & 0xF;
+    uint seed5 = (rnum >> 16) & 0xF;
+    uint seed6 = (rnum >> 20) & 0xF;
+    uint seed7 = (rnum >> 24) & 0xF;
+    uint seed8 = (rnum >> 28) & 0xF;
+    uint seed9 = (rnum >> 18) & 0xF;
+    uint seed10 = (rnum >> 22) & 0xF;
+    uint seed11 = (rnum >> 26) & 0xF;
+    uint seed12 = ((rnum >> 30) | (rnum << 2)) & 0xF;
+
+    // squaring all the seeds in order to bias their distribution
+    // towards lower values.
+    seed1 *= seed1;
+    seed2 *= seed2;
+    seed3 *= seed3;
+    seed4 *= seed4;
+    seed5 *= seed5;
+    seed6 *= seed6;
+    seed7 *= seed7;
+    seed8 *= seed8;
+    seed9 *= seed9;
+    seed10 *= seed10;
+    seed11 *= seed11;
+    seed12 *= seed12;
+
+    uint sh1, sh2, sh3;
+    if ((seed & 1) == 1u)
+    {
+        sh1 = ((seed & 2) != 0u) ? 4 : 5;
+        sh2 = (partitionCnt == 3 ? 6 : 5);
+    }
+    else
+    {
+        sh1 = (partitionCnt == 3 ? 6 : 5);
+        sh2 = ((seed & 2) != 0u) ? 4 : 5;
+    }
+    sh3 = ((seed & 0x10) != 0u) ? sh1 : sh2;
+
+    seed1 >>= sh1;
+    seed2 >>= sh2;
+    seed3 >>= sh1;
+    seed4 >>= sh2;
+    seed5 >>= sh1;
+    seed6 >>= sh2;
+    seed7 >>= sh1;
+    seed8 >>= sh2;
+
+    seed9 >>= sh3;
+    seed10 >>= sh3;
+    seed11 >>= sh3;
+    seed12 >>= sh3;
+
+    uint a = seed1 * x + seed2 * y + seed11 * z + (rnum >> 14);
+    uint b = seed3 * x + seed4 * y + seed12 * z + (rnum >> 10);
+    uint c = seed5 * x + seed6 * y + seed9 * z + (rnum >> 6);
+    uint d = seed7 * x + seed8 * y + seed10 * z + (rnum >> 2);
+
+    // apply the saw
+    a &= 0x3F;
+    b &= 0x3F;
+    c &= 0x3F;
+    d &= 0x3F;
+
+    // remove some of the components if we are to output < 4 partitions.
+    if (partitionCnt <= 3)
+        d = 0;
+    if (partitionCnt <= 2)
+        c = 0;
+    if (partitionCnt <= 1)
+        b = 0;
+
+
+    uint resPartition;
+    if (a >= b && a >= c && a >= d)
+        resPartition = 0;
+    else if (b >= c && b >= d)
+        resPartition = 1;
+    else if (c >= d)
+        resPartition = 2;
+    else
+        resPartition = 3;
+
+    return resPartition;
+}
+
+uint ComputeTexelPartition(uint partitionCnt, uint partitionIdx, uint xCoord, uint yCoord, uint zCoord)
+{
+   if(gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z < 32)
+   {
+      xCoord <<= 1;
+      yCoord <<= 1;
+      zCoord <<= 1;
+   }
+   uint resPartition = SelectPartition(partitionIdx, xCoord, yCoord, zCoord, partitionCnt);
+   return resPartition;
+}
+
+void ReserveWeightData(const in uvec4 blockData, uint threadId)
+{
+   if(threadId < 16u)
+   {
+     uint lidy_read = threadId / 4;
+     uint lidx_read = threadId % 4;
+     lowp uint p = (blockData[lidy_read]& (0xffu << (lidx_read * 8u)))>>(lidx_read * 8u);
+     p = ((p & 0xfu) << 4) | ((p >> 4u) & 0xfu);
+     p = ((p & 0x33u) << 2) | ((p >> 2u) & 0x33u);
+     p = ((p & 0x55u) << 1) | ((p >> 1u) & 0x55u);
+     atomicOr(bitsSwapped[3u - lidy_read], p<<((3u - lidx_read) * 8u));
+   }
+}
+
+// Extract WeightCnt,QuantizationMode, DualPlaneMode
+void ParseDecodeBlockMode2D(const in uint blockMode, inout BlockMode blockInfo)
+{
+   uint quantMode = (blockMode >> 4) & 1;
+   uint p   = (blockMode >> 9) & 1;
+   uint Dp  = (blockMode >> 10) & 1;
+   uint Wh1 = ((blockMode >> 5) & 0x3);
+
+   // p1, p2 in low bits
+   if ((blockMode & 0x3) != 0u)
+   {
+      quantMode |= (blockMode & 3) << 1;
+      uint Wh2 = (blockMode >> 7) & 0x3;
+      uint mode = (blockMode >> 2) & 0x3;
+
+      if(mode == 0u)
+      {
+         blockInfo.weightWidth = Wh2 + 4;
+         blockInfo.weightHeight = Wh1 + 2;
+      }
+      else if(mode == 1u)
+      {
+         blockInfo.weightWidth = Wh2 + 8;
+         blockInfo.weightHeight = Wh1 + 2;
+      }
+      else if(mode == 2u)
+      {
+         blockInfo.weightWidth = Wh1 + 2;
+         blockInfo.weightHeight = Wh2 + 8;
+      }
+      else if(mode == 3u)
+      {
+         Wh2 &= 1;
+         if ((blockMode & 0x100) != 0u)
+         {
+            blockInfo.weightWidth  = Wh2 + 2;
+            blockInfo.weightHeight = Wh1 + 2;
+         }
+         else
+         {
+            blockInfo.weightWidth = Wh1 + 2;
+            blockInfo.weightHeight = Wh2 + 6;
+         }
+      }
+   }
+   else
+   {
+      quantMode |= ((blockMode >> 2) & 3) << 1;
+      if (((blockMode >> 2) & 3) == 0u)
+      {
+         blockInfo.isErrorBlock = true;
+      }
+      uint Wh2 = (blockMode >> 9) & 0x3;
+      uint mode2 = (blockMode >> 7) & 0x3;
+      if(mode2 == 0u)
+      {
+         blockInfo.weightWidth = 12;
+         blockInfo.weightHeight = Wh1 + 2;
+      }
+      else if(mode2 == 1u)
+      {
+         blockInfo.weightHeight = Wh1 + 2;
+         blockInfo.weightWidth = 12;
+      }
+      else if(mode2 == 2u)
+      {
+         blockInfo.weightWidth = Wh1 + 6;
+         blockInfo.weightHeight = Wh2 + 6;
+         Dp = 0;
+         p  = 0;
+      }
+      else if(mode2 == 3u)
+      {
+         switch ((blockMode >> 5) & 3)
+         {
+         case 0:
+            blockInfo.weightWidth = 6;
+            blockInfo.weightHeight = 10;
+            break;
+         case 1:
+            blockInfo.weightWidth = 10;
+            blockInfo.weightHeight = 6;
+            break;
+         case 2:
+         case 3:
+            blockInfo.isErrorBlock = true;
+            break;
+         }
+      }
+   }
+   blockInfo.isDualWeightPlane = Dp;
+   blockInfo.quantizationMode = (quantMode - 2) + 6 * p;
+   uint weightCount = blockInfo.weightWidth * blockInfo.weightHeight;
+   blockInfo.weightCnt = (blockInfo.isDualWeightPlane == 1u) ? 2 * weightCount : weightCount;
+   return;
+}
+
+uint ComputeIseBitCnt(uint weightCnt, QuantModeInfo quantInfo)
+{
+  return quantInfo.bits * weightCnt +
+         ((weightCnt * quantInfo.trits * 8 + 4) / 5) +
+         ((weightCnt * quantInfo.quints * 7 + 2) / 3);
+}
+
+void FindNumOfBitsTritsQuints(uint quantMode, out QuantModeInfo quantInfo)
+{
+   uvec4 info = numOfBitsTrits[quantMode];
+   quantInfo.bits = info.x;
+   quantInfo.trits = info.y;
+   quantInfo.quints = info.z;
+   quantInfo.offset = info.w;
+   return;
+}
+
+uint DecodeIse(const QuantModeInfo quantMode, uint weightIntIdx, const in uvec4 blockData, uint bitOffset, uint weightCnt)
+{
+   uint res;
+   if(quantMode.trits > 0)
+   {
+     uint step   = weightIntIdx / 5;
+     uint offset = weightIntIdx - 5 * step;
+     bitOffset += (step * 8 + step * 5 * quantMode.bits);
+     uint loopCnt = weightCnt / 5;
+     uint tritsHightBits = 0;
+     if(bitOffset + 7 > weightCnt)
+     {
+        uint readBits = weightCnt - bitOffset;
+        if(readBits >= 6)
+        {
+           tritsHightBits = ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 1 + 0) << 0 |
+                            ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 2 + 2) << 2 |
+                            ReadVecBits32(blockData, 1, bitOffset + quantMode.bits * 3 + 4) << 4 |
+                            ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 4 + 5) << 5;
+        }
+        else if(readBits >= 5)
+        {
+             tritsHightBits = ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 1 + 0) << 0 |
+                             ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 2 + 2) << 2 |
+                             ReadVecBits32(blockData, 1, bitOffset + quantMode.bits * 3 + 4) << 4;
+        }
+        else if(readBits > 2)
+        {
+            tritsHightBits = ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 1 + 0) << 0 |
+                             ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 2 + 2) << 2;
+        }
+        else
+        {
+            tritsHightBits = ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 1 + 0) << 0;
+        }
+     }
+     else
+     {
+          tritsHightBits = ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 1 + 0) << 0 |
+                           ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 2 + 2) << 2 |
+                           ReadVecBits32(blockData, 1, bitOffset + quantMode.bits * 3 + 4) << 4 |
+                           ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 4 + 5) << 5 |
+                           ReadVecBits32(blockData, 1, bitOffset + quantMode.bits * 5 + 7) << 7;
+     }
+
+     uint index = tritsInteger[tritsHightBits][offset];
+     if(quantMode.bits > 0)
+     {
+        uint bitsStart = (offset * quantMode.bits) + ((offset * 8 + 4) / 5);
+        uint bitsVal = ReadVecBits32(blockData, quantMode.bits, bitsStart + bitOffset);
+        res = (index << quantMode.bits) | bitsVal;
+     }
+     else
+     {
+         res = index;
+     }
+   }
+   else if(quantMode.quints > 0)
+   {
+      uint step   = weightIntIdx / 3;
+      uint offset = weightIntIdx - 3 * step;
+      uint tritsHightBits = 0;
+      bitOffset += (step * 7 + step * 3 * quantMode.bits);
+      if(bitOffset + 6 > weightCnt)
+      {
+         uint readBits = weightCnt - bitOffset;
+         if(readBits < 5)
+         {
+            tritsHightBits = ReadVecBits32(blockData, 3, bitOffset + quantMode.bits * 1 + 0);
+         }
+         else
+         {
+             tritsHightBits = ReadVecBits32(blockData, 3, bitOffset + quantMode.bits * 1 + 0) << 0 |
+                             ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 2 + 3) << 3;
+         }
+      }
+      else
+      {
+           tritsHightBits = ReadVecBits32(blockData, 3, bitOffset + quantMode.bits * 1 + 0) << 0 |
+                            ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 2 + 3) << 3 |
+                            ReadVecBits32(blockData, 2, bitOffset + quantMode.bits * 3 + 5) << 5;
+      }
+
+       uint index = quintsInteger[tritsHightBits][offset];
+
+      if(quantMode.bits > 0)
+      {
+         uint bitsStart = (offset * quantMode.bits) + ((offset * 7 + 2) / 3);
+         uint bitsVal = ReadVecBits32(blockData, quantMode.bits, bitsStart + bitOffset);
+         res = (index << quantMode.bits) | bitsVal;
+      }
+      else
+      {
+         res = index;
+      }
+   }
+   else
+   {
+      bitOffset += (weightIntIdx * quantMode.bits);
+      res = ReadVecBits32(blockData, quantMode.bits, bitOffset);
+   }
+
+    return res;
+}
+
+uint DecodeWeight(const in uvec4 blockData, uint weight_index, const QuantModeInfo quantMode, uint weightCnt)
+{
+    uint weight = DecodeIse(quantMode, weight_index, blockData, 0, weightCnt);
+    return quantization_and_transfer_table[weight + quantMode.offset];
+}
+
+uint Compute2DTexelWight(const in uvec4 blockData,
+const in BlockMode blockInfo, QuantModeInfo quantMode, uint offset, uvec2 pixelCoord, uint weightCnt)
+{
+   // normalize Coord
+   const uvec2 DsDt = uvec2((1024 + (uvec2(gl_WorkGroupSize.xy) >> 1))) / uvec2(gl_WorkGroupSize.xy - 1);
+
+   uvec2 CsCt = DsDt * pixelCoord;
+   uvec2 WeightWH = uvec2(blockInfo.weightWidth, blockInfo.weightHeight);
+   uvec2 GsGt = uvec2((CsCt * (WeightWH.xy - 1) + 32) >> 6);
+
+   uvec2 jsjt = uvec2(GsGt.xy >> 4);
+   uvec2 fsft = uvec2(GsGt.xy & 0X0F);
+
+   uint v0 = jsjt.x + jsjt.y * WeightWH.x;
+   uint stride = 1 << blockInfo.isDualWeightPlane;
+   uint p00 = DecodeWeight(blockData, stride * v0 + offset, quantMode,weightCnt);
+   uint p10, p01, p11;
+
+   p01 = DecodeWeight(blockData, stride * (v0 + 1) + offset, quantMode,weightCnt);
+   p10 = DecodeWeight(blockData, stride * (v0 + WeightWH.x) + offset, quantMode,weightCnt);
+   p11 = DecodeWeight(blockData, stride * (v0 + WeightWH.x + 1) + offset, quantMode,weightCnt);
+
+   uint w11 = (fsft.x * fsft.y + 8) >> 4;
+   uint w10 = fsft.y - w11;
+   uint w01 = fsft.x - w11;
+   uint w00 = 16 - fsft.x - fsft.y + w11;
+   uint  res = (p00 * w00 + p01 * w01 + p10 * w10 + p11 * w11 + 8) >> 4;
+   return res;
+}
+
+uvec4 GetTheWeights(const in uvec4 blockData, const in uvec4 swappedData,
+const in BlockMode blockInfo, QuantModeInfo quantMode, uint bitsOfWeight, uvec2 pixelCoord, uint cem, uint weightCnt)
+{
+   // Extract Plane2 Component 2bit which between the Color EndPoint and More Config bits.
+   uint plane2Component = 0;
+   if(blockInfo.isDualWeightPlane == 1u)
+   {
+      uint encodeTypeModeBits = 0;
+      if((cem & 3) != 0)
+        encodeTypeModeBits = max(0, int(3 * blockInfo.partitionCnt - 4));
+
+      // Read Plane Component
+      plane2Component = ReadVecBits32(blockData, 2,
+      BOLCK_BITS_COUNT - bitsOfWeight - encodeTypeModeBits - 2);
+   }
+
+   uvec4 resWeights;
+   uint plane1Weight = Compute2DTexelWight(swappedData, blockInfo, quantMode, 0, pixelCoord, weightCnt);
+   if(blockInfo.isDualWeightPlane == 1u)
+   {
+      uint plane2Weight = Compute2DTexelWight(swappedData, blockInfo, quantMode, 1, pixelCoord, weightCnt);
+
+    // this weight replace the weight in plane2Component.
+    // x * (1 - a) + y * a
+    resWeights =
+    mix(uvec4(plane1Weight), uvec4(plane2Weight), equal(uvec4(plane2Component), uvec4(0, 1, 2, 3)));
+   }
+   else
+   {
+     resWeights = uvec4(plane1Weight);
+   }
+
+   return resWeights;
+}
+
+uint ComputeColorIseBitCnt(uint partitionCnt, uint cem)
+{
+  uint ret;
+    if (partitionCnt > 1)
+    {
+        bool sameClass = ((cem & 3) == 0);
+
+        // all 4bits decide the color format(HDR,LDR,LUMA)
+        if (sameClass)
+            ret = ((cem >> 4) + 1) * partitionCnt;
+        else
+            ret = (cem & 3) * partitionCnt + bitCount(ReadBits32(uint(cem), partitionCnt, 2));
+    }
+    else
+    {
+        ret = (cem >> 2) + 1;
+    }
+    return ret * 2;
+}
+
+uvec2 GetColorFormatAndOffset(const in uvec4 blockData, uint encodeType, uint partitionCnt, uint endPointIdx)
+{
+   uvec2 colorFmtAndOffset;
+   // partitionCnt is 1
+   if(partitionCnt == 1u)
+   {
+      colorFmtAndOffset.x = ReadVecBits32(blockData, CEM_BITS_COUNT - 2, PARTITION_START_BITS);
+      colorFmtAndOffset.y = 0;
+   }
+   else
+   {
+      uint baseClass = encodeType & 0x3;
+      if(baseClass != 0)
+      {
+         baseClass--;
+         uint ciBits = ((encodeType >> (2 + endPointIdx)) & 1);
+         colorFmtAndOffset.x = (ciBits + baseClass) << 2;
+         colorFmtAndOffset.x |= (encodeType >> (2 + partitionCnt + 2 * endPointIdx)) & 0x3;
+         if(endPointIdx != 0)
+         {
+           colorFmtAndOffset.y = (encodeType & 0x3) * endPointIdx + bitCount(ReadBits32(encodeType, endPointIdx, 2));
+         }
+         else
+         {
+           colorFmtAndOffset.y = 0;
+         }
+      }
+      else
+      {
+         colorFmtAndOffset.x = (encodeType >> 2) & 0xF;
+         colorFmtAndOffset.y = ((colorFmtAndOffset.x >> 2) + 1) * endPointIdx;
+      }
+   }
+   colorFmtAndOffset.y *= 2;
+   return colorFmtAndOffset;
+}
+
+uint GetColorEndPointWeight(const in uvec4 blockData, QuantModeInfo quantMode, uint colorIdx, uint channelIdx, uint bitOffset)
+{
+  uint res = 0;
+  res = DecodeIse(quantMode, (channelIdx + colorIdx), blockData, bitOffset, 128);
+  return res;
+}
+
+void UnpackColorEndPoint(const in uvec4 blockData, uint bitOffset,
+QuantModeInfo quantInfo, uint colorFmt, uint colorIdx, out uvec4 ep0, out uvec4 ep1)
+{
+
+// Get Specific Channel of Color.
+#define GetUnpackedColorChannelVal(i) \
+   color_unquantization_tables[quantInfo.offset + \
+   GetColorEndPointWeight(blockData, quantInfo, colorIdx, i, bitOffset)]
+
+   uint v0, v1, v2, v3, v4, v5, v6, v7;
+   v0 = GetUnpackedColorChannelVal(0);
+   v1 = GetUnpackedColorChannelVal(1);
+   uint colorMode = colorFmt >> 2;
+
+   if(colorMode >= 1u)
+   {
+      v2 = GetUnpackedColorChannelVal(2);
+      v3 = GetUnpackedColorChannelVal(3);
+   }
+
+   if(colorMode >= 2u)
+   {
+      v4 = GetUnpackedColorChannelVal(4);
+      v5 = GetUnpackedColorChannelVal(5);
+   }
+   if(colorMode >= 3u)
+   {
+      v6 = GetUnpackedColorChannelVal(6);
+      v7 = GetUnpackedColorChannelVal(7);
+   }
+
+   switch(colorFmt)
+   {
+   case FMT_LUMINANCE:
+       luminance_unpack(ep0, ep1, v0, v1);
+       break;
+   case FMT_LUMINANCE_DELTA:
+       luminance_delta_unpack(ep0, ep1, v0, v1);
+       break;
+   case FMT_LUMINANCE_ALPHA:
+       luminance_alpha_unpack(ep0, ep1, v0, v1, v2, v3);
+       break;
+   case FMT_LUMINANCE_ALPHA_DELTA:
+       luminance_alpha_delta_unpack(ep0, ep1, v0, v1, v2, v3);
+       break;
+   case FMT_RGB_SCALE:
+       rgb_scale_unpack(ep0, ep1, v0, v1, v2, v3);
+       break;
+   case FMT_RGB_SCALE_ALPHA:
+       rgb_scale_alpha_unpack(ep0, ep1, v0, v1, v2, v3, v4, v5);
+       break;
+   case FMT_RGB:
+       rgb_unpack(ep0, ep1, v0, v1, v2, v3, v4, v5);
+       break;
+   case FMT_RGB_DELTA:
+       rgb_delta_unpack(ep0, ep1, v0, v1, v2, v3, v4, v5);
+       break;
+   case FMT_RGBA:
+       rgba_unpack(ep0, ep1, v0, v1, v2, v3, v4, v5, v6, v7);
+       break;
+   case FMT_RGBA_DELTA:
+       rgba_delta_unpack(ep0, ep1, v0, v1, v2, v3, v4, v5, v6, v7);
+       break;
+   }
+
+   ep0 *= 257;
+   ep1 *= 257;
+}
+
+uvec4 ProcessSrgbColor(uvec4 color)
+{
+  float r = float(color.r);
+  float g = float(color.g);
+  float b = float(color.b);
+   if (r <= 0.0031308f)
+       r = r * 12.92f;
+   else if (r <= 1)
+       r = 1.055f * pow(r, (1.0f / 2.4f)) - 0.055f;
+
+   if (g <= 0.0031308f)
+       g = g * 12.92f;
+   else if (g <= 1)
+       g = 1.055f * pow(g, (1.0f / 2.4f)) - 0.055f;
+
+   if (b <= 0.0031308f)
+       b = b * 12.92f;
+   else if (b <= 1)
+       b = 1.055f * pow(b, (1.0f / 2.4f)) - 0.055f;
+   return uvec4(r, g, b, color.w);
+}
+
+uvec4 InterpolateEndpoint(uvec4 ep0, uvec4 ep1, uvec4 weight)
+{
+    // Lerp the Color
+    uvec4 ecolor0 = ep0;
+    uvec4 ecolor1 = ep1;
+    if(isSrgb)
+    {
+       ecolor0 = ep0 >> 8;
+       ecolor1 = ep1 >> 8;
+    }
+    uvec4 color = (ecolor0 * (64 - weight) + ecolor1 * weight + 32) >> 6;
+    uvec4 finalColor = color;
+    if(isSrgb)
+    {
+       color = color | (color << 8);
+       finalColor = ProcessSrgbColor(color);
+    }
+    return finalColor;
+}
+
+void main()
+{
+   // Load Image Block
+   ivec3 globalcoord = ivec3(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y, gl_GlobalInvocationID.z);
+   uint threadId = gl_LocalInvocationIndex;
+   uvec2 pixelCoord = uvec2(gl_LocalInvocationID.xy);
+   ivec2 blockCoord = ivec2(gl_WorkGroupID.x, gl_WorkGroupID.y);
+
+   if(threadId == 0u)
+   {  //uint(blockCoord.y * gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_NumWorkGroups.x + blockCoord.x * gl_WorkGroupSize.x)
+      bitsSwapped = uvec4(0);
+      if(isBufferCopy == true)
+      {
+         blockData = uvec4(texelFetch(astcSrcBuffer2D, int(blockCoord.y * gl_NumWorkGroups.x + blockCoord.x)).xyzw);
+      }
+      else
+      {
+         blockData = imageLoad(astcSrcImage2D, blockCoord);
+      }
+
+      blockMode = ReadVecBits32(blockData, BLOCK_MODE_BITS_COUNT, 0);
+      //BlockMode blockInfo;
+      ParseDecodeBlockMode2D(blockMode, blockInfo);
+
+      // Extract the partitionCnt
+      blockInfo.partitionCnt = ReadVecBits32(blockData, PARTITION_CNT_BITS, BLOCK_MODE_BITS_COUNT) + 1;
+
+      // Extract the partitionIndex(seed)
+      partitionIdx = 0;
+      if(blockInfo.partitionCnt > 1)
+      {
+         partitionIdx = ReadVecBits32(blockData, PARTITION_IDX_BITS, PARTITION_START_BITS);
+      }
+
+      // Get CEM bits
+      cem = 0;
+      if(blockInfo.partitionCnt > 1)
+      {
+         cem = ReadVecBits32(blockData, CEM_BITS_COUNT,
+           BLOCK_MODE_BITS_COUNT + PARTITION_CNT_BITS + PARTITION_IDX_BITS);
+      }
+      else
+      {
+         cem =ReadVecBits32(blockData, CEM_BITS_COUNT - 2, PARTITION_START_BITS);
+      }
+   }
+   barrier();
+
+   // WeightBit to Read, and Bits expect Weight.
+   QuantModeInfo quantInfo, colorInfo;
+   FindNumOfBitsTritsQuints(blockInfo.quantizationMode, quantInfo);
+   bitsOfWeight = ComputeIseBitCnt(blockInfo.weightCnt, quantInfo);
+
+   if((blockMode & 0x1FF) == 0x1FC)
+   {
+       // Process the void block
+       uvec4 returncolor = uvec4(blockData[2]&0xffffu, blockData[2]>>16u, blockData[3]&0xffffu, blockData[3]>>16u);
+       vec4 returnpixels = vec4(returncolor) / 65536.0f;
+       imageStore(outputImage, globalcoord.xy, returnpixels);
+       return;
+   }
+
+   ReserveWeightData(blockData,threadId);
+   barrier();
+
+   uvec4 weights = GetTheWeights(blockData, bitsSwapped, blockInfo, quantInfo, bitsOfWeight, pixelCoord.xy, cem, bitsOfWeight);
+
+   // Get Color EndPoint.
+   uint encodeTypeModeBits = max(0, int(3 * blockInfo.partitionCnt - 4));
+   uint baseClassBits = ((cem & 0x3) != 0u) ? encodeTypeModeBits : 0;
+   uint colorEndPointBits = blockInfo.partitionCnt > 1 ?
+        COLOR_ENDPOINT_START_BITS_FOR_OTHER_PARTITIONS - bitsOfWeight - baseClassBits :
+        COLOR_ENDPOINT_START_BITS_FOR_ONE_PARTITIONS - bitsOfWeight;
+
+   // Get partition
+   uint endpointIdx = ComputeTexelPartition(blockInfo.partitionCnt, partitionIdx,
+   gl_LocalInvocationID.x, gl_LocalInvocationID.y, 0);
+
+   uint colorIseBitsCnt = ComputeColorIseBitCnt(blockInfo.partitionCnt, cem);
+
+   if(colorIseBitsCnt > 18)
+   {
+     // error block
+   }
+   
+   // Get Color Quant Mode and Decode Color Data
+   colorEndPointBits = (blockInfo.isDualWeightPlane == 1u)? colorEndPointBits - 2 : colorEndPointBits;
+   int colorQuantizationMode = quantization_mode_table[colorIseBitsCnt / 2][colorEndPointBits];
+
+   if(colorQuantizationMode < 4)
+   {
+      // error block
+   }
+
+   // Get Color EndPoint Mode info and Offset.
+   FindNumOfBitsTritsQuints(colorQuantizationMode, colorInfo);
+
+   // Get Color Format and EndPoint Index
+   uvec2 colorFmtAndOffset;
+   uint encodeType = 0;
+   if(blockInfo.partitionCnt > 1)
+   {
+      // Get More Config Data
+      uint moreConfig = ReadVecBits32(blockData, encodeTypeModeBits, BOLCK_BITS_COUNT - bitsOfWeight - encodeTypeModeBits);
+      encodeType = (moreConfig << CEM_BITS_COUNT) | cem;
+      colorFmtAndOffset = GetColorFormatAndOffset(blockData, encodeType, blockInfo.partitionCnt, endpointIdx);
+   }
+   else
+   {
+      colorFmtAndOffset = GetColorFormatAndOffset(blockData, 0, blockInfo.partitionCnt, 0);
+   }
+
+   // UnPack EndPoint
+   uvec4 ep0, ep1;
+   uint colorEndPointStartOffset = (blockInfo.partitionCnt > 1) ? PARTITION_IDX_BITS + 19: 17;
+   UnpackColorEndPoint(blockData, colorEndPointStartOffset,
+   colorInfo, colorFmtAndOffset.x, colorFmtAndOffset.y, ep0, ep1);
+
+   // Interpolate the Final Color
+   uvec4 color = InterpolateEndpoint(ep0, ep1, weights);
+   vec4 outColor = vec4(color) / 65536.0f;
+   imageStore(outputImage, globalcoord.xy, outColor);
+}

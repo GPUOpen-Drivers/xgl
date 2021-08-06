@@ -210,6 +210,29 @@ protected:
     void CreateStaticState();
     void DestroyStaticState(const VkAllocationCallbacks* pAllocator);
 
+    static VkResult CreatePipelineBinaries(
+        Device*                                        pDevice,
+        const VkGraphicsPipelineCreateInfo*            pCreateInfo,
+        const GraphicsPipelineShaderStageInfo*         pShaderInfo,
+        GraphicsPipelineBinaryCreateInfo*              pBinaryCreateInfo,
+        PipelineCache*                                 pPipelineCache,
+        const VkPipelineCreationFeedbackCreateInfoEXT* pCreationFeedbackInfo,
+        Util::MetroHash::Hash*                         pCacheIds,
+        size_t*                                        pPipelineBinarySizes,
+        const void**                                   pPipelineBinaries);
+
+    static VkResult CreatePipelineObjects(
+        Device*                             pDevice,
+        const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        const VkAllocationCallbacks*        pAllocator,
+        const VbBindingInfo*                pVbInfo,
+        const size_t*                       pPipelineBinarySizes,
+        const void**                        pPipelineBinaries,
+        PipelineCache*                      pPipelineCache,
+        const Util::MetroHash::Hash*        pCacheIds,
+        GraphicsPipelineObjectCreateInfo*   pObjectCreateInfo,
+        VkPipeline*                         pPipeline);
+
     ~GraphicsPipeline();
 
 private:

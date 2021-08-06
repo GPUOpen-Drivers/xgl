@@ -88,6 +88,12 @@ macro(xgl_set_compile_definitions)
     endif()
 #endif
 
+#if VKI_GPU_DECOMPRESS
+    if(VKI_GPU_DECOMPRESS)
+        target_compile_definitions(xgl PRIVATE VKI_GPU_DECOMPRESS)
+    endif()
+#endif
+
 #if VKI_EXPOSE_EXT_CONDITIONAL_RENDERING
     if(VKI_EXPOSE_EXT_CONDITIONAL_RENDERING)
         target_compile_definitions(xgl PRIVATE VKI_EXPOSE_EXT_CONDITIONAL_RENDERING)

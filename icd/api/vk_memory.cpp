@@ -69,10 +69,8 @@ VkResult Memory::Create(
     // indicate whether it is a allocation that supposed to be imported.
     Pal::OsExternalHandle handle    = 0;
     bool sharedViaNtHandle          = false;
-    bool sharedViaAndroidHwBuf      = false;
     bool isExternal                 = false;
     bool isHostMappedForeign        = false;
-    bool isAndroidHardwareBuffer    = false;
     void* pPinnedHostPtr            = nullptr; // If non-null, this memory is allocated as pinned system memory
     bool isCaptureReplay            = false;
 
@@ -205,14 +203,8 @@ VkResult Memory::Create(
 #if defined(__unix__)
                     VK_ASSERT(pExtInfo->handleTypes &
                            (VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT      |
-                            VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT    |
-                            VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID));
-
-                    if (pExtInfo->handleTypes &
-                        VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
-                    {
-                        sharedViaAndroidHwBuf = true;
-                    }
+                            VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT
+                               ));
 #endif
                     createInfo.flags.interprocess = 1;
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 657
@@ -324,11 +316,11 @@ VkResult Memory::Create(
 
     if (vkResult == VK_SUCCESS)
     {
-        if ((isExternal) || (sharedViaAndroidHwBuf))
+        if (isExternal
+            )
         {
             ImportMemoryInfo importInfo = {};
             importInfo.handle           = handle;
-            importInfo.isAhbHandle      = isAndroidHardwareBuffer || sharedViaAndroidHwBuf;
             importInfo.isNtHandle       = sharedViaNtHandle;
 
             if (pBoundImage != nullptr)
@@ -779,7 +771,6 @@ VkResult Memory::OpenExternalSharedImage(
 
     palOpenInfo.resourceInfo.hExternalResource        = importInfo.handle;
     palOpenInfo.resourceInfo.flags.ntHandle           = importInfo.isNtHandle;
-    palOpenInfo.resourceInfo.flags.androidHwBufHandle = importInfo.isAhbHandle;
 #if defined(__unix__)
     palOpenInfo.resourceInfo.handleType               = Pal::HandleType::DmaBufFd;
 #endif
@@ -1034,7 +1025,6 @@ VkResult Memory::OpenExternalMemory(
     }
 
     openInfo.resourceInfo.flags.ntHandle           = importInfo.isNtHandle;
-    openInfo.resourceInfo.flags.androidHwBufHandle = importInfo.isAhbHandle;
     // Get CPU memory requirements for PAL
     gpuMemorySize = pDevice->PalDevice(DefaultDeviceIndex)->GetExternalSharedGpuMemorySize(&palResult);
     VK_ASSERT(palResult == Pal::Result::Success);

@@ -148,6 +148,114 @@ void Pipeline::GenerateHashFromDynamicStateCreateInfo(
 }
 
 // =====================================================================================================================
+VkResult Pipeline::BuildShaderStageInfo(
+    const Device*                          pDevice,
+    const uint32_t                         stageCount,
+    const VkPipelineShaderStageCreateInfo* pStages,
+    uint32_t                               (*pfnGetOutputIdx)(const uint32_t inputIdx,
+                                                              const uint32_t stageIdx),
+    ShaderStageInfo*                       pShaderStageInfo,
+    ShaderModuleHandle*                    pTempModules)
+{
+    VkResult result = VK_SUCCESS;
+
+    PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
+
+    uint32_t numNewModules = 0;
+
+    for (uint32_t i = 0; i < stageCount; ++i)
+    {
+        const VkPipelineShaderStageCreateInfo& stageInfo = pStages[i];
+        const ShaderStage                      stage     = ShaderFlagBitToStage(stageInfo.stage);
+        const uint32_t                         outIdx    = pfnGetOutputIdx(i, stage);
+
+        if (stageInfo.module != VK_NULL_HANDLE)
+        {
+            const ShaderModule* pModule = ShaderModule::ObjectFromHandle(stageInfo.module);
+
+            pShaderStageInfo[outIdx].pModuleHandle = pModule->GetShaderModuleHandle();
+            pShaderStageInfo[outIdx].codeHash      = pModule->GetCodeHash(stageInfo.pName);
+            pShaderStageInfo[outIdx].codeSize      = pModule->GetCodeSize();
+        }
+        else
+        {
+            // Caller must make sure that pNewModules should be non-null if shader module may be deprecated.
+            // Meanwhile, the memory pointed by pNewModules should be initialized to 0 and can take all the
+            // newly-built modules in the pipeline (at most stageCount entries required).
+            // Caller should release the newly-built temporary modules set in pNewModules manually after
+            // creation of pipeline.
+            VK_ASSERT(pTempModules != nullptr);
+
+            EXTRACT_VK_STRUCTURES_0(
+                shaderModule,
+                ShaderModuleCreateInfo,
+                static_cast<const VkShaderModuleCreateInfo*>(stageInfo.pNext),
+                SHADER_MODULE_CREATE_INFO);
+
+            VK_ASSERT(pShaderModuleCreateInfo != nullptr);
+
+            const Pal::ShaderHash codeHash =
+                ShaderModule::BuildCodeHash(pShaderModuleCreateInfo->pCode, pShaderModuleCreateInfo->codeSize);
+
+            result = pCompiler->BuildShaderModule(pDevice,
+                                                  pShaderModuleCreateInfo->flags,
+                                                  pShaderModuleCreateInfo->codeSize,
+                                                  pShaderModuleCreateInfo->pCode,
+                                                  &pTempModules[numNewModules]);
+
+            if (result != VK_SUCCESS)
+            {
+                break;
+            }
+
+            pShaderStageInfo[outIdx].pModuleHandle = &pTempModules[numNewModules++];
+            pShaderStageInfo[outIdx].codeHash      = ShaderModule::GetCodeHash(codeHash, stageInfo.pName);
+            pShaderStageInfo[outIdx].codeSize      = pShaderModuleCreateInfo->codeSize;
+        }
+
+        pShaderStageInfo[outIdx].stage               = stage;
+        pShaderStageInfo[outIdx].pEntryPoint         = stageInfo.pName;
+        pShaderStageInfo[outIdx].flags               = stageInfo.flags;
+        pShaderStageInfo[outIdx].pSpecializationInfo = stageInfo.pSpecializationInfo;
+
+    }
+
+    if (result != VK_SUCCESS)
+    {
+        for (uint32_t i = 0; i < numNewModules; ++i)
+        {
+            pCompiler->FreeShaderModule(&pTempModules[i]);
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+void Pipeline::FreeTempModules(
+    const Device*       pDevice,
+    const uint32_t      maxStageCount,
+    ShaderModuleHandle* pTempModules)
+{
+    if ((pTempModules != nullptr) && (maxStageCount > 0))
+    {
+        PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
+
+        for (uint32_t i = 0; i < maxStageCount; ++i)
+        {
+            if (pCompiler->IsValidShaderModule(&pTempModules[i]))
+            {
+                pCompiler->FreeShaderModule(&pTempModules[i]);
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
 Pipeline::Pipeline(
     Device* const       pDevice,
     VkPipelineBindPoint type)

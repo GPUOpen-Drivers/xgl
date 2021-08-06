@@ -55,6 +55,65 @@ namespace vk
 {
 
 // =====================================================================================================================
+// The shader stages of Pre-Rasterization Shaders section
+constexpr uint32_t PrsShaderMask = 0
+    | ((1 << ShaderStage::ShaderStageVertex)
+    |  (1 << ShaderStage::ShaderStageTessControl)
+    |  (1 << ShaderStage::ShaderStageTessEval)
+    |  (1 << ShaderStage::ShaderStageGeometry));
+
+// =====================================================================================================================
+// The shader stages of Fragment Shader (Post-Rasterization) section
+constexpr uint32_t FgsShaderMask = (1 << ShaderStage::ShaderStageFragment);
+
+// =====================================================================================================================
+// Helper function used to check whether a specific dynamic state is set
+static bool IsDynamicStateEnabled(const uint32_t dynamicStateFlags, const DynamicStatesInternal internalState)
+{
+    return dynamicStateFlags & (1 << static_cast<uint32_t>(internalState));
+}
+
+// =====================================================================================================================
+// Builds app profile key and applies profile options.
+static void ApplyProfileOptions(
+    const Device*                pDevice,
+    const ShaderStage            stage,
+    const Pal::ShaderHash        shaderHash,
+    const size_t                 shaderSize,
+    Vkgc::PipelineOptions*       pPipelineOptions,
+    Vkgc::PipelineShaderInfo*    pShaderInfo,
+    PipelineOptimizerKey*        pProfileKey,
+    Vkgc::NggState*              pNggState
+    )
+{
+    auto&    settings  = pDevice->GetRuntimeSettings();
+    PipelineShaderOptionsPtr options = {};
+    options.pPipelineOptions = pPipelineOptions;
+    options.pOptions     = &pShaderInfo->options;
+    options.pNggState    = pNggState;
+
+    auto& shaderKey = pProfileKey->shaders[stage];
+    if (settings.pipelineUseShaderHashAsProfileHash)
+    {
+        const void* pModuleData = pShaderInfo->pModuleData;
+        shaderKey.codeHash.lower = Vkgc::IPipelineDumper::GetShaderHash(pModuleData);
+        shaderKey.codeHash.upper = 0;
+    }
+    else
+    {
+        // Populate the pipeline profile key.  The hash used by the profile is different from the default
+        // internal hash in that it only depends on the SPIRV code + entry point.  This is to reduce the
+        // chance that internal changes to our hash calculation logic drop us off pipeline profiles.
+        shaderKey.codeHash = shaderHash;
+    }
+    shaderKey.codeSize = shaderSize;
+
+    // Override the compile parameters based on any app profile
+    const auto* pShaderOptimizer = pDevice->GetShaderOptimizer();
+    pShaderOptimizer->OverrideShaderCreateInfo(*pProfileKey, stage, options);
+}
+
+// =====================================================================================================================
 PipelineCompiler::PipelineCompiler(
     PhysicalDevice* pPhysicalDevice)
     :
@@ -313,6 +372,18 @@ VkResult PipelineCompiler::BuildShaderModule(
         pInstance->FreeMem(const_cast<void*>(pCode));
     }
     return result;
+}
+
+// =====================================================================================================================
+// Check whether the shader module is valid
+bool PipelineCompiler::IsValidShaderModule(
+    const ShaderModuleHandle* pShaderModule) const
+{
+    bool isValid = false;
+
+    isValid |= (pShaderModule->pLlpcShaderModule != nullptr);
+
+    return isValid;
 }
 
 // =====================================================================================================================
@@ -620,7 +691,6 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
     size_t*                           pPipelineBinarySize,
     const void**                      ppPipelineBinary,
-    uint32_t                          rasterizationStream,
     Util::MetroHash::Hash*            pCacheId)
 {
     VkResult               result        = VK_SUCCESS;
@@ -719,10 +789,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         hash.Update(deviceIdx);
         hash.Update(pCreateInfo->compilerType);
         hash.Update(pCreateInfo->pipelineInfo.dynamicVertexStride);
-        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
-        {
-            hash.Update(reinterpret_cast<const uint8_t*>(settings.llpcOptions), sizeof(settings.llpcOptions));
-        }
+        hash.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
 
         hash.Finalize(pCacheId->bytes);
 
@@ -753,7 +820,6 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
                     pCreateInfo,
                     pPipelineBinarySize,
                     ppPipelineBinary,
-                    rasterizationStream,
                     shaderInfos,
                     pPipelineDumpHandle,
                     pipelineHash,
@@ -915,11 +981,8 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         hash.Update(pCreateInfo->pipelineProfileKey);
         hash.Update(deviceIdx);
         hash.Update(pCreateInfo->compilerType);
-        hash.Update(settings.forceCsThreadGroupSwizzleMode);
-        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
-        {
-            hash.Update(reinterpret_cast<const uint8_t*>(settings.llpcOptions), sizeof(settings.llpcOptions));
-        }
+        hash.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
+
         hash.Finalize(pCacheId->bytes);
 
         cacheResult = GetCachedPipelineBinary(pCacheId, pPipelineBinaryCache, pPipelineBinarySize, ppPipelineBinary,
@@ -1017,7 +1080,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
 // =====================================================================================================================
 // If provided, obtains the the pipeline creation feedback create info pointer and clears the feedback flags.
-void PipelineCompiler::GetPipelineCreationInfoNext(
+void PipelineCompiler::GetPipelineCreationFeedback(
         const VkStructHeader*                             pHeader,
         const VkPipelineCreationFeedbackCreateInfoEXT**   ppPipelineCreationFeadbackCreateInfo)
 {
@@ -1120,314 +1183,241 @@ VkResult PipelineCompiler::SetPipelineCreationFeedbackInfo(
 }
 
 // =====================================================================================================================
-// Converts Vulkan graphics pipeline parameters to an internal structure
-VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
-    Device*                                         pDevice,
-    const VkGraphicsPipelineCreateInfo*             pIn,
-    GraphicsPipelineBinaryCreateInfo*               pCreateInfo,
-    VbBindingInfo*                                  pVbInfo,
-    const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo)
+// Builds the description of the internal descriptor set used to represent the VB table for SC.  Returns the number
+// of ResourceMappingNodes consumed by this function.  This function does not add the node that describes the top-level
+// pointer to this set.
+void BuildLlpcVertexInputDescriptors(
+    const Device*                               pDevice,
+    const VkPipelineVertexInputStateCreateInfo* pInput,
+    VbBindingInfo*                              pVbInfo)
 {
-    VK_ASSERT(pIn != nullptr);
+    VK_ASSERT(pVbInfo != nullptr);
 
-    VkResult               result    = VK_SUCCESS;
-    const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
-    auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
-    auto                   flags     = pIn->flags;
+    const uint32_t srdDwSize = pDevice->GetProperties().descriptorSizes.bufferView / sizeof(uint32_t);
+    uint32_t activeBindings = 0;
 
-    EXTRACT_VK_STRUCTURES_0(
-        gfxPipeline,
-        GraphicsPipelineCreateInfo,
-        pIn,
-        GRAPHICS_PIPELINE_CREATE_INFO)
+    // Sort the strides by binding slot
+    uint32_t strideByBindingSlot[Pal::MaxVertexBuffers] = {};
 
-    if ((pIn != nullptr) && (ppPipelineCreationFeadbackCreateInfo != nullptr))
+    for (uint32_t recordIndex = 0; recordIndex < pInput->vertexBindingDescriptionCount; ++recordIndex)
     {
-        GetPipelineCreationInfoNext(
-            reinterpret_cast<const VkStructHeader*>(pIn->pNext),
-            ppPipelineCreationFeadbackCreateInfo);
+        const VkVertexInputBindingDescription& record = pInput->pVertexBindingDescriptions[recordIndex];
+
+        strideByBindingSlot[record.binding] = record.stride;
     }
 
-    // Fill in necessary non-zero defaults in case some information is missing
-    const RenderPass* pRenderPass = nullptr;
-    const PipelineLayout* pLayout = nullptr;
-    const VkPipelineShaderStageCreateInfo* pStageInfos[ShaderStage::ShaderStageGfxCount] = {};
+    // Build the description of the VB table by inserting all of the active binding slots into it
+    pVbInfo->bindingCount = 0;
+    pVbInfo->bindingTableSize = 0;
+    // Find the set of active vertex buffer bindings by figuring out which vertex attributes are consumed by the
+    // pipeline.
+    //
+    // (Note that this ignores inputs eliminated by whole program optimization, but considering that we have not yet
+    // compiled the shader and have not performed whole program optimization, this is the best we can do; it's a
+    // chicken-egg problem).
 
-    if (pGraphicsPipelineCreateInfo != nullptr)
+    for (uint32_t aindex = 0; aindex < pInput->vertexAttributeDescriptionCount; ++aindex)
     {
-        for (uint32_t i = 0; i < pGraphicsPipelineCreateInfo->stageCount; ++i)
+        const VkVertexInputAttributeDescription& attrib = pInput->pVertexAttributeDescriptions[aindex];
+
+        VK_ASSERT(attrib.binding < Pal::MaxVertexBuffers);
+
+        bool isNotActiveBinding = ((1 << attrib.binding) & activeBindings) == 0;
+
+        if (isNotActiveBinding)
         {
-            ShaderStage stage = ShaderFlagBitToStage(pGraphicsPipelineCreateInfo->pStages[i].stage);
-            VK_ASSERT(stage < ShaderStage::ShaderStageGfxCount);
-            pStageInfos[stage] = &pGraphicsPipelineCreateInfo->pStages[i];
+            // Write out the meta information that the VB binding manager needs from pipelines
+            auto* pOutBinding = &pVbInfo->bindings[pVbInfo->bindingCount++];
+            activeBindings |= (1 << attrib.binding);
+
+            pOutBinding->slot = attrib.binding;
+            pOutBinding->byteStride = strideByBindingSlot[attrib.binding];
+
+            pVbInfo->bindingTableSize = Util::Max(pVbInfo->bindingTableSize, attrib.binding + 1);
+        }
+    }
+}
+
+// =====================================================================================================================
+static void BuildRasterizationState(
+    const VkPipelineRasterizationStateCreateInfo* pRs,
+    const uint32_t                                dynamicStateFlags,
+    GraphicsPipelineBinaryCreateInfo*             pCreateInfo)
+{
+    if (pRs != nullptr)
+    {
+        EXTRACT_VK_STRUCTURES_1(
+            rasterizationDepthClipState,
+            PipelineRasterizationDepthClipStateCreateInfoEXT,
+            PipelineRasterizationStateStreamCreateInfoEXT,
+            static_cast<const VkPipelineRasterizationDepthClipStateCreateInfoEXT*>(pRs->pNext),
+            PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT,
+            PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT);
+
+        pCreateInfo->pipelineInfo.vpState.depthClipEnable         = (pRs->depthClampEnable == VK_FALSE);
+        pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = (pRs->rasterizerDiscardEnable != VK_FALSE);
+        pCreateInfo->pipelineInfo.rsState.polygonMode             = pRs->polygonMode;
+        pCreateInfo->pipelineInfo.rsState.cullMode                = pRs->cullMode;
+        pCreateInfo->pipelineInfo.rsState.frontFace               = pRs->frontFace;
+        pCreateInfo->pipelineInfo.rsState.depthBiasEnable         = pRs->depthBiasEnable;
+
+        if (pPipelineRasterizationDepthClipStateCreateInfoEXT != nullptr)
+        {
+            pCreateInfo->pipelineInfo.vpState.depthClipEnable =
+                pPipelineRasterizationDepthClipStateCreateInfoEXT->depthClipEnable;
         }
 
-        uint32 activeStages = {};
-
-        for (uint32_t i = 0; i < pGraphicsPipelineCreateInfo->stageCount; ++i)
+        if (pPipelineRasterizationStateStreamCreateInfoEXT != nullptr)
         {
-            activeStages = activeStages | pGraphicsPipelineCreateInfo->pStages[i].stage;
+            pCreateInfo->rasterizationStream = pPipelineRasterizationStateStreamCreateInfoEXT->rasterizationStream;
         }
 
-        VK_IGNORE(pGraphicsPipelineCreateInfo->flags & VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT);
-
-        pRenderPass = RenderPass::ObjectFromHandle(pGraphicsPipelineCreateInfo->renderPass);
-
-        if (pGraphicsPipelineCreateInfo->layout != VK_NULL_HANDLE)
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizerDiscardEnableExt) == true)
         {
-            pLayout = PipelineLayout::ObjectFromHandle(pGraphicsPipelineCreateInfo->layout);
+            pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = false;
         }
+    }
+}
 
-        pCreateInfo->pipelineInfo.pVertexInput = pGraphicsPipelineCreateInfo->pVertexInputState;
+// =====================================================================================================================
+static void BuildMultisampleState(
+    const Device*                               pDevice,
+    const VkPipelineMultisampleStateCreateInfo* pMs,
+    const RenderPass*                           pRenderPass,
+    const uint32_t                              subpass,
+    const uint32_t                              dynamicStateFlags,
+    GraphicsPipelineBinaryCreateInfo*           pCreateInfo)
+{
+    if (pMs != nullptr)
+    {
+        EXTRACT_VK_STRUCTURES_0(
+            SampleLocations,
+            PipelineSampleLocationsStateCreateInfoEXT,
+            static_cast<const VkPipelineSampleLocationsStateCreateInfoEXT*>(pMs->pNext),
+            PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT);
 
-        const VkPipelineInputAssemblyStateCreateInfo* pIa = pGraphicsPipelineCreateInfo->pInputAssemblyState;
-
-        // According to the spec this should never be null
-        VK_ASSERT(pIa != nullptr);
-
-        pCreateInfo->pipelineInfo.iaState.enableMultiView    = (pRenderPass != nullptr) ?
-                                                                pRenderPass->IsMultiviewEnabled() :
-                                                                0;
-
-        pCreateInfo->pipelineInfo.iaState.topology           = pIa->topology;
-        pCreateInfo->pipelineInfo.iaState.disableVertexReuse = false;
-
-        if (activeStages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
+        if (pMs->rasterizationSamples != 1)
         {
-            EXTRACT_VK_STRUCTURES_1(
-                Tess,
-                PipelineTessellationStateCreateInfo,
-                PipelineTessellationDomainOriginStateCreateInfo,
-                pGraphicsPipelineCreateInfo->pTessellationState,
-                PIPELINE_TESSELLATION_STATE_CREATE_INFO,
-                PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO)
+            uint32_t rasterizationSampleCount = pMs->rasterizationSamples;
 
-            if (pPipelineTessellationStateCreateInfo != nullptr)
+            uint32_t subpassCoverageSampleCount = (pRenderPass != nullptr) ?
+                pRenderPass->GetSubpassMaxSampleCount(subpass) :
+                rasterizationSampleCount;
+
+            uint32_t subpassColorSampleCount = (pRenderPass != nullptr) ?
+                pRenderPass->GetSubpassColorSampleCount(subpass) :
+                rasterizationSampleCount;
+
+            // subpassCoverageSampleCount would be equal to zero if there are zero attachments.
+            subpassCoverageSampleCount = (subpassCoverageSampleCount == 0) ?
+                rasterizationSampleCount :
+                subpassCoverageSampleCount;
+
+            subpassColorSampleCount = (subpassColorSampleCount == 0) ?
+                subpassCoverageSampleCount :
+                subpassColorSampleCount;
+
+            if (pMs->sampleShadingEnable && (pMs->minSampleShading > 0.0f))
             {
-                pCreateInfo->pipelineInfo.iaState.patchControlPoints = pPipelineTessellationStateCreateInfo->patchControlPoints;
+                pCreateInfo->pipelineInfo.rsState.perSampleShading =
+                    ((subpassColorSampleCount * pMs->minSampleShading) > 1.0f);
+            }
+            else
+            {
+                pCreateInfo->pipelineInfo.rsState.perSampleShading = false;
             }
 
-            if (pPipelineTessellationDomainOriginStateCreateInfo)
-            {
-                // Vulkan 1.0 incorrectly specified the tessellation u,v coordinate origin as lower left even though
-                // framebuffer and image coordinate origins are in the upper left.  This has since been fixed, but
-                // an extension exists to use the previous behavior.  Doing so with flat shading would likely appear
-                // incorrect, but Vulkan specifies that the provoking vertex is undefined when tessellation is active.
-                if (pPipelineTessellationDomainOriginStateCreateInfo->domainOrigin == VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT)
-                {
-                    pCreateInfo->pipelineInfo.iaState.switchWinding = true;
-                }
-            }
+            pCreateInfo->pipelineInfo.rsState.numSamples = rasterizationSampleCount;
+
+            // NOTE: The sample pattern index here is actually the offset of sample position pair. This is
+            // different from the field of creation info of image view. For image view, the sample pattern
+            // index is really table index of the sample pattern.
+            pCreateInfo->pipelineInfo.rsState.samplePatternIdx =
+                Device::GetDefaultSamplePatternIndex(subpassCoverageSampleCount) * Pal::MaxMsaaRasterizerSamples;
         }
 
-        const VkPipelineRasterizationStateCreateInfo* pRs = pGraphicsPipelineCreateInfo->pRasterizationState;
-
-        // By default rasterization is disabled, unless rasterization creation info is present
-        pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = true;
-
-        if (pRs != nullptr)
+        pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable = (pMs->alphaToCoverageEnable == VK_TRUE);
+        if (pPipelineSampleLocationsStateCreateInfoEXT != nullptr)
         {
-            pCreateInfo->pipelineInfo.vpState.depthClipEnable         = (pRs->depthClampEnable == VK_FALSE);
-            pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = (pRs->rasterizerDiscardEnable != VK_FALSE);
-            pCreateInfo->pipelineInfo.rsState.polygonMode             = pRs->polygonMode;
-            pCreateInfo->pipelineInfo.rsState.cullMode                = pRs->cullMode;
-            pCreateInfo->pipelineInfo.rsState.frontFace               = pRs->frontFace;
-            pCreateInfo->pipelineInfo.rsState.depthBiasEnable         = pRs->depthBiasEnable;
-
-            union
-            {
-                const VkStructHeader*                                        pInfo;
-                const VkPipelineRasterizationDepthClipStateCreateInfoEXT*    pRsDepthClip;
-            };
-
-            pInfo = static_cast<const VkStructHeader*>(pRs->pNext);
-
-            while (pInfo != nullptr)
-            {
-                switch (static_cast<uint32_t>(pInfo->sType))
-                {
-                case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT:
-                    pCreateInfo->pipelineInfo.vpState.depthClipEnable = pRsDepthClip->depthClipEnable;
-
-                    break;
-                default:
-                    break;
-                }
-
-                pInfo = pInfo->pNext;
-            }
-
-            const VkPipelineDynamicStateCreateInfo* pDy = pGraphicsPipelineCreateInfo->pDynamicState;
-
-            if (pDy != nullptr)
-            {
-                for (uint32_t i = 0; i < pDy->dynamicStateCount; ++i)
-                {
-                    switch (static_cast<uint32_t>(pDy->pDynamicStates[i]))
-                    {
-                    case VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT:
-                        pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = false;
-                        break;
-                    default:
-                        break;
-                    }
-                }
-            }
+            pCreateInfo->sampleLocationGridSize =
+                pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo.sampleLocationGridSize;
         }
 
-        const VkPipelineMultisampleStateCreateInfo* pMs = pGraphicsPipelineCreateInfo->pMultisampleState;
-
+        if (pCreateInfo->pipelineInfo.rsState.perSampleShading)
+        {
+            const RuntimeSettings&       settings   = pDevice->GetRuntimeSettings();
+            if (!(pCreateInfo->sampleLocationGridSize.width > 1 || pCreateInfo->sampleLocationGridSize.height > 1
+               ))
+            {
+                pCreateInfo->pipelineInfo.options.enableInterpModePatch = true;
+            }
+        }
+    }
+    else
+    {
         pCreateInfo->pipelineInfo.rsState.numSamples = 1;
-
-        if ((pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable != VK_TRUE) && (pMs != nullptr))
-        {
-            EXTRACT_VK_STRUCTURES_1(
-                SampleLocations,
-                PipelineMultisampleStateCreateInfo,
-                PipelineSampleLocationsStateCreateInfoEXT,
-                pMs,
-                PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT)
-
-            bool multisampleEnable = (pMs->rasterizationSamples != 1);
-
-            if (multisampleEnable)
-            {
-                uint32_t rasterizationSampleCount = pMs->rasterizationSamples;
-
-                uint32_t subpassCoverageSampleCount = (pRenderPass != nullptr) ?
-                    pRenderPass->GetSubpassMaxSampleCount(pGraphicsPipelineCreateInfo->subpass) :
-                    rasterizationSampleCount;
-
-                uint32_t subpassColorSampleCount = (pRenderPass != nullptr) ?
-                    pRenderPass->GetSubpassColorSampleCount(pGraphicsPipelineCreateInfo->subpass) :
-                    rasterizationSampleCount;
-
-                // subpassCoverageSampleCount would be equal to zero if there are zero attachments.
-                subpassCoverageSampleCount = (subpassCoverageSampleCount == 0) ?
-                    rasterizationSampleCount :
-                    subpassCoverageSampleCount;
-
-                subpassColorSampleCount = (subpassColorSampleCount == 0) ?
-                    subpassCoverageSampleCount :
-                    subpassColorSampleCount;
-
-                if (pMs->sampleShadingEnable && (pMs->minSampleShading > 0.0f))
-                {
-                    pCreateInfo->pipelineInfo.rsState.perSampleShading =
-                        ((subpassColorSampleCount * pMs->minSampleShading) > 1.0f);
-                }
-                else
-                {
-                    pCreateInfo->pipelineInfo.rsState.perSampleShading = false;
-                }
-
-                pCreateInfo->pipelineInfo.rsState.numSamples = rasterizationSampleCount;
-
-                // NOTE: The sample pattern index here is actually the offset of sample position pair. This is
-                // different from the field of creation info of image view. For image view, the sample pattern
-                // index is really table index of the sample pattern.
-                pCreateInfo->pipelineInfo.rsState.samplePatternIdx =
-                    Device::GetDefaultSamplePatternIndex(subpassCoverageSampleCount) * Pal::MaxMsaaRasterizerSamples;
-            }
-
-            pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable = (pMs->alphaToCoverageEnable == VK_TRUE);
-            if (pPipelineSampleLocationsStateCreateInfoEXT != nullptr)
-            {
-                pCreateInfo->sampleLocationGridSize =
-                    pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo.sampleLocationGridSize;
-            }
-        }
-
-        const VkPipelineColorBlendStateCreateInfo* pCb = pGraphicsPipelineCreateInfo->pColorBlendState;
-        bool dualSourceBlend = false;
-
-        if ((pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable != VK_TRUE) && (pCb != nullptr))
-        {
-            const uint32_t numColorTargets = Util::Min(pCb->attachmentCount, Pal::MaxColorTargets);
-
-            for (uint32_t i = 0; i < numColorTargets; ++i)
-            {
-                const VkPipelineColorBlendAttachmentState& src = pCb->pAttachments[i];
-                auto pLlpcCbDst = &pCreateInfo->pipelineInfo.cbState.target[i];
-
-                VkFormat cbFormat = VK_FORMAT_UNDEFINED;
-
-                if (pRenderPass != nullptr)
-                {
-                    cbFormat = pRenderPass->GetColorAttachmentFormat(pGraphicsPipelineCreateInfo->subpass, i);
-                }
-
-                // If the sub pass attachment format is UNDEFINED, then it means that that subpass does not
-                // want to write to any attachment for that output (VK_ATTACHMENT_UNUSED).  Under such cases,
-                // disable shader writes through that target. There is one exception for alphaToCoverageEnable
-                // and attachment zero, which can be set to VK_ATTACHMENT_UNUSED.
-                if ((cbFormat != VK_FORMAT_UNDEFINED) ||
-                    (pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable && (i == 0u)))
-                {
-                    pLlpcCbDst->format               = (cbFormat != VK_FORMAT_UNDEFINED) ?
-                                                        cbFormat  : pRenderPass->GetAttachmentDesc(i).format;
-                    pLlpcCbDst->blendEnable          = (src.blendEnable == VK_TRUE);
-                    pLlpcCbDst->blendSrcAlphaToColor = IsSrcAlphaUsedInBlend(src.srcAlphaBlendFactor) ||
-                                                        IsSrcAlphaUsedInBlend(src.dstAlphaBlendFactor) ||
-                                                        IsSrcAlphaUsedInBlend(src.srcColorBlendFactor) ||
-                                                        IsSrcAlphaUsedInBlend(src.dstColorBlendFactor);
-                    pLlpcCbDst->channelWriteMask     = src.colorWriteMask;
-                }
-
-                dualSourceBlend |= GetDualSourceBlendEnableState(src);
-            }
-        }
-
-        pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable = dualSourceBlend;
-
-        VkFormat dbFormat = VK_FORMAT_UNDEFINED;
-
-        if (pRenderPass != nullptr)
-        {
-            dbFormat = pRenderPass->GetDepthStencilAttachmentFormat(pGraphicsPipelineCreateInfo->subpass);
-        }
-
-        pCreateInfo->dbFormat = dbFormat;
     }
+}
 
-    if (m_gfxIp.major >= 10)
+// =====================================================================================================================
+static void BuildViewportState(
+    const Device*                            pDevice,
+    const VkPipelineViewportStateCreateInfo* pVs,
+    const uint32_t                           dynamicStateFlags,
+    GraphicsPipelineBinaryCreateInfo*        pCreateInfo)
+{
+    if (pVs != nullptr)
     {
-        const bool                 hasGs        = pStageInfos[ShaderStage::ShaderStageGeometry] != nullptr;
-        const bool                 hasTess      = pStageInfos[ShaderStage::ShaderStageTessControl] != nullptr;
+    }
+}
+
+// =====================================================================================================================
+static void BuildNggState(
+    const Device*                     pDevice,
+    const VkShaderStageFlagBits       activeStages,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo)
+{
+    const RuntimeSettings&       settings   = pDevice->GetRuntimeSettings();
+    const Pal::DeviceProperties& deviceProp = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
+
+    if (deviceProp.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+    {
+        const bool hasGs   = activeStages & VK_SHADER_STAGE_GEOMETRY_BIT;
+        const bool hasTess = activeStages & VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+
         const GraphicsPipelineType pipelineType =
             hasTess ? (hasGs ? GraphicsPipelineTypeTessGs : GraphicsPipelineTypeTess) :
                       (hasGs ? GraphicsPipelineTypeGs : GraphicsPipelineTypeVsFs);
 
-        pCreateInfo->pipelineInfo.nggState.enableNgg                  =
+        pCreateInfo->pipelineInfo.nggState.enableNgg =
             Util::TestAnyFlagSet(settings.enableNgg, pipelineType);
         pCreateInfo->pipelineInfo.nggState.enableGsUse = Util::TestAnyFlagSet(
             settings.enableNgg,
             GraphicsPipelineTypeGs | GraphicsPipelineTypeTessGs);
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 44
-        pCreateInfo->pipelineInfo.nggState.forceNonPassthrough        = settings.nggForceCullingMode;
+        pCreateInfo->pipelineInfo.nggState.forceNonPassthrough   = settings.nggForceCullingMode;
 #else
-        pCreateInfo->pipelineInfo.nggState.forceCullingMode           = settings.nggForceCullingMode;
+        pCreateInfo->pipelineInfo.nggState.forceCullingMode         = settings.nggForceCullingMode;
 #endif
-        pCreateInfo->pipelineInfo.nggState.alwaysUsePrimShaderTable   = settings.nggAlwaysUsePrimShaderTable;
-        pCreateInfo->pipelineInfo.nggState.compactMode                =
+        pCreateInfo->pipelineInfo.nggState.alwaysUsePrimShaderTable = settings.nggAlwaysUsePrimShaderTable;
+        pCreateInfo->pipelineInfo.nggState.compactMode              =
             static_cast<Vkgc::NggCompactMode>(settings.nggCompactionMode);
 
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 45
-        pCreateInfo->pipelineInfo.nggState.enableFastLaunch           = false;
+        pCreateInfo->pipelineInfo.nggState.enableFastLaunch       = false;
 #endif
-        pCreateInfo->pipelineInfo.nggState.enableVertexReuse          = false;
-        pCreateInfo->pipelineInfo.nggState.enableBackfaceCulling      = settings.nggEnableBackfaceCulling;
-        pCreateInfo->pipelineInfo.nggState.enableFrustumCulling       = settings.nggEnableFrustumCulling;
-        pCreateInfo->pipelineInfo.nggState.enableBoxFilterCulling     = settings.nggEnableBoxFilterCulling;
-        pCreateInfo->pipelineInfo.nggState.enableSphereCulling        = settings.nggEnableSphereCulling;
-        pCreateInfo->pipelineInfo.nggState.enableSmallPrimFilter      = settings.nggEnableSmallPrimFilter;
-        pCreateInfo->pipelineInfo.nggState.enableCullDistanceCulling  = settings.nggEnableCullDistanceCulling;
+        pCreateInfo->pipelineInfo.nggState.enableVertexReuse         = false;
+        pCreateInfo->pipelineInfo.nggState.enableBackfaceCulling     = settings.nggEnableBackfaceCulling;
+        pCreateInfo->pipelineInfo.nggState.enableFrustumCulling      = settings.nggEnableFrustumCulling;
+        pCreateInfo->pipelineInfo.nggState.enableBoxFilterCulling    = settings.nggEnableBoxFilterCulling;
+        pCreateInfo->pipelineInfo.nggState.enableSphereCulling       = settings.nggEnableSphereCulling;
+        pCreateInfo->pipelineInfo.nggState.enableSmallPrimFilter     = settings.nggEnableSmallPrimFilter;
+        pCreateInfo->pipelineInfo.nggState.enableCullDistanceCulling = settings.nggEnableCullDistanceCulling;
 
         if (settings.disableNggCulling)
         {
             uint32_t disableNggCullingMask = (settings.disableNggCulling & DisableNggCullingAlways);
-            uint32_t numTargets            = 0;
+            uint32_t numTargets = 0;
 
             for (uint32_t i = 0; i < Pal::MaxColorTargets; ++i)
             {
@@ -1453,79 +1443,78 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             }
         }
 
-        pCreateInfo->pipelineInfo.nggState.backfaceExponent           = settings.nggBackfaceExponent;
-        pCreateInfo->pipelineInfo.nggState.subgroupSizing             =
+        pCreateInfo->pipelineInfo.nggState.backfaceExponent = settings.nggBackfaceExponent;
+        pCreateInfo->pipelineInfo.nggState.subgroupSizing   =
             static_cast<Vkgc::NggSubgroupSizingType>(settings.nggSubgroupSizing);
 
-        pCreateInfo->pipelineInfo.nggState.primsPerSubgroup           = settings.nggPrimsPerSubgroup;
-        pCreateInfo->pipelineInfo.nggState.vertsPerSubgroup           = settings.nggVertsPerSubgroup;
+        pCreateInfo->pipelineInfo.nggState.primsPerSubgroup = settings.nggPrimsPerSubgroup;
+        pCreateInfo->pipelineInfo.nggState.vertsPerSubgroup = settings.nggVertsPerSubgroup;
     }
+}
 
-    pCreateInfo->flags = flags;
-
-    ApplyPipelineOptions(pDevice, flags, &pCreateInfo->pipelineInfo.options);
-
-    // Build the LLPC pipeline
-    Vkgc::PipelineShaderInfo* shaderInfos[] =
+// =====================================================================================================================
+static void BuildPipelineShaderInfo(
+    const Device*                                 pDevice,
+    const ShaderStageInfo*                        pShaderInfoIn,
+    Vkgc::PipelineShaderInfo*                     pShaderInfoOut,
+    Vkgc::PipelineOptions*                        pPipelineOptions,
+    PipelineOptimizerKey*                         pOptimizerKey,
+    Vkgc::NggState*                               pNggState
+    )
+{
+    if (pShaderInfoIn != nullptr)
     {
-        &pCreateInfo->pipelineInfo.vs,
-        &pCreateInfo->pipelineInfo.tcs,
-        &pCreateInfo->pipelineInfo.tes,
-        &pCreateInfo->pipelineInfo.gs,
-        &pCreateInfo->pipelineInfo.fs
-    };
+        const Pal::DeviceProperties& deviceProp = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
+        const Vkgc::ShaderStage      stage      = pShaderInfoIn->stage;
 
-    // Apply patches
-    pCreateInfo->pipelineInfo.pInstance      = pInstance;
-    pCreateInfo->pipelineInfo.pfnOutputAlloc = AllocateShaderOutput;
+        PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
-    uint32_t stageMask = 0;
+        pShaderInfoOut->pModuleData         = ShaderModule::GetFirstValidShaderData(pShaderInfoIn->pModuleHandle);
+        pShaderInfoOut->pSpecializationInfo = pShaderInfoIn->pSpecializationInfo;
+        pShaderInfoOut->pEntryTarget        = pShaderInfoIn->pEntryPoint;
+        pShaderInfoOut->entryStage          = stage;
 
-    for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
-    {
-        auto pStage = pStageInfos[stage];
-        auto pShaderInfo = shaderInfos[stage];
+        pCompiler->ApplyDefaultShaderOptions(stage,
+                                             &pShaderInfoOut->options
+                                             );
 
-        if (pStage == nullptr)
-            continue;
-
-        stageMask |= (1 << stage);
-
-        auto pShaderModule = ShaderModule::ObjectFromHandle(pStage->module);
-        pShaderInfo->pModuleData           = pShaderModule->GetFirstValidShaderData();
-        pShaderInfo->pSpecializationInfo   = pStage->pSpecializationInfo;
-        pShaderInfo->pEntryTarget          = pStage->pName;
-        pShaderInfo->entryStage = static_cast<Vkgc::ShaderStage>(stage);
-
-        ApplyDefaultShaderOptions(static_cast<ShaderStage>(stage),
-                                  &pShaderInfo->options
-                                  );
-
-        if ((pStage->flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0)
+        if ((pShaderInfoIn->flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0)
         {
-            pShaderInfo->options.allowVaryWaveSize = true;
+            pShaderInfoOut->options.allowVaryWaveSize = true;
         }
 
         ApplyProfileOptions(pDevice,
-                            static_cast<ShaderStage>(stage),
-                            pShaderModule,
-                            &pCreateInfo->pipelineInfo.options,
-                            pShaderInfo,
-                            &pCreateInfo->pipelineProfileKey,
-                            &pCreateInfo->pipelineInfo.nggState
+                            stage,
+                            pShaderInfoIn->codeHash,
+                            pShaderInfoIn->codeSize,
+                            pPipelineOptions,
+                            pShaderInfoOut,
+                            pOptimizerKey,
+                            pNggState
                             );
 
     }
+}
+
+// =====================================================================================================================
+static VkResult BuildPipelineResourceMapping(
+    const Device*                     pDevice,
+    const PipelineLayout*             pLayout,
+    const uint32_t                    stageMask,
+    const VbBindingInfo*              pVbInfo,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo)
+{
+    VkResult result = VK_SUCCESS;
 
     if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
     {
 
         size_t genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
 
-        size_t tempBufferSize    = genericMappingBufferSize + pCreateInfo->mappingBufferSize;
-        pCreateInfo->pTempBuffer = pInstance->AllocMem(tempBufferSize,
-                                                       VK_DEFAULT_MEM_ALIGN,
-                                                       VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+        size_t tempBufferSize = genericMappingBufferSize + pCreateInfo->mappingBufferSize;
+        pCreateInfo->pTempBuffer = pDevice->VkInstance()->AllocMem(tempBufferSize,
+                                                                VK_DEFAULT_MEM_ALIGN,
+                                                                VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
 
         if (pCreateInfo->pTempBuffer == nullptr)
         {
@@ -1537,47 +1526,337 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
             // NOTE: Zero the allocated space that is used to create pipeline resource mappings. Some
             // fields of resource mapping nodes are unused for certain node types. We must initialize
-            // them to zeroes.
+            // them to zeros.
             memset(pCreateInfo->pTempBuffer, 0, tempBufferSize);
 
             // Build the LLPC resource mapping description. This data contains things about how shader
             // inputs like descriptor set bindings are communicated to this pipeline in a form that
             // LLPC can understand.
             result = pLayout->BuildLlpcPipelineMapping(stageMask,
+                                                       pVbInfo,
                                                        pCreateInfo->pTempBuffer,
-                                                       &pCreateInfo->pipelineInfo.resourceMapping,
-                                                       pCreateInfo->pipelineInfo.pVertexInput,
-                                                       pVbInfo);
+                                                       &pCreateInfo->pipelineInfo.resourceMapping);
         }
     }
 
-    pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
+    return result;
+}
+
+// =====================================================================================================================
+template <uint32_t shaderMask>
+static void BuildPipelineShadersInfo(
+    const Device*                          pDevice,
+    const VkGraphicsPipelineCreateInfo*    pIn,
+    const GraphicsPipelineShaderStageInfo* pShaderInfo,
+    GraphicsPipelineBinaryCreateInfo*      pCreateInfo)
+{
+
+    pCreateInfo->flags = pIn->flags;
+
+    pDevice->GetCompiler(DefaultDeviceIndex)->ApplyPipelineOptions(pDevice, pIn->flags, &pCreateInfo->pipelineInfo.options);
+
+    Vkgc::PipelineShaderInfo* ppShaderInfoOut[] =
+    {
+        &pCreateInfo->pipelineInfo.vs,
+        &pCreateInfo->pipelineInfo.tcs,
+        &pCreateInfo->pipelineInfo.tes,
+        &pCreateInfo->pipelineInfo.gs,
+        &pCreateInfo->pipelineInfo.fs,
+    };
 
     for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
     {
-        auto pStage = pStageInfos[stage];
-        auto pShaderInfo = shaderInfos[stage];
-
-        if (pStage == nullptr)
-            continue;
-
-        auto pShaderModule = ShaderModule::ObjectFromHandle(pStage->module);
-        pShaderInfo->pModuleData = pShaderModule->GetShaderData(pCreateInfo->compilerType);
+        if (pShaderInfo->stages[stage].pModuleHandle != nullptr)
+        {
+            BuildPipelineShaderInfo(pDevice,
+                                    &pShaderInfo->stages[stage],
+                                    ppShaderInfoOut[stage],
+                                    &pCreateInfo->pipelineInfo.options,
+                                    &pCreateInfo->pipelineProfileKey,
+                                    &pCreateInfo->pipelineInfo.nggState
+            );
+        }
     }
 
-    if (pIn->pDynamicState != nullptr)
+    pCreateInfo->compilerType = pDevice->GetCompiler(DefaultDeviceIndex)->CheckCompilerType(&pCreateInfo->pipelineInfo);
+
+    for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
     {
-        for( uint32_t ndx = 0; ndx < pIn->pDynamicState->dynamicStateCount; ++ndx)
+        if (((shaderMask & (1 << stage)) != 0) && (pShaderInfo->stages[stage].pModuleHandle != nullptr))
         {
-            if(pIn->pDynamicState->pDynamicStates[ndx] == VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT)
+            ppShaderInfoOut[stage]->pModuleData =
+                ShaderModule::GetShaderData(pCreateInfo->compilerType, pShaderInfo->stages[stage].pModuleHandle);
+        }
+    }
+}
+
+// =====================================================================================================================
+static void BuildColorBlendState(
+    const Device*                              pDevice,
+    const VkPipelineColorBlendStateCreateInfo* pCb,
+    const RenderPass*                          pRenderPass,
+    const uint32_t                             subpass,
+    GraphicsPipelineBinaryCreateInfo*          pCreateInfo)
+{
+    bool dualSourceBlendEnabled = false;
+
+    if (pCb != nullptr)
+    {
+        const uint32_t numColorTargets = Util::Min(pCb->attachmentCount, Pal::MaxColorTargets);
+
+        for (uint32_t i = 0; i < numColorTargets; ++i)
+        {
+            const VkPipelineColorBlendAttachmentState& src = pCb->pAttachments[i];
+            auto pLlpcCbDst = &pCreateInfo->pipelineInfo.cbState.target[i];
+
+            VkFormat cbFormat = VK_FORMAT_UNDEFINED;
+
+            if (pRenderPass != nullptr)
             {
-                pCreateInfo->pipelineInfo.dynamicVertexStride = true;
-                break;
+                cbFormat = pRenderPass->GetColorAttachmentFormat(subpass, i);
+            }
+
+            // If the sub pass attachment format is UNDEFINED, then it means that that subpass does not
+            // want to write to any attachment for that output (VK_ATTACHMENT_UNUSED).  Under such cases,
+            // disable shader writes through that target. There is one exception for alphaToCoverageEnable
+            // and attachment zero, which can be set to VK_ATTACHMENT_UNUSED.
+            if ((cbFormat != VK_FORMAT_UNDEFINED) || (i == 0u))
+            {
+                VkFormat renderPassFormat = ((pRenderPass != nullptr) ?
+                                                pRenderPass->GetAttachmentDesc(i).format :
+                                                VK_FORMAT_UNDEFINED);
+
+                pLlpcCbDst->format = (cbFormat != VK_FORMAT_UNDEFINED) ?
+                                      cbFormat : renderPassFormat;
+
+                pLlpcCbDst->blendEnable = (src.blendEnable == VK_TRUE);
+                pLlpcCbDst->blendSrcAlphaToColor =
+                    GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.srcAlphaBlendFactor) ||
+                    GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.dstAlphaBlendFactor) ||
+                    GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.srcColorBlendFactor) ||
+                    GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.dstColorBlendFactor);
+                pLlpcCbDst->channelWriteMask = src.colorWriteMask;
+            }
+        }
+
+        dualSourceBlendEnabled = GraphicsPipelineCommon::GetDualSourceBlendEnableState(pDevice, pCb);
+    }
+
+    pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable = dualSourceBlendEnabled;
+
+    VkFormat dbFormat = VK_FORMAT_UNDEFINED;
+
+    if (pRenderPass != nullptr)
+    {
+        dbFormat = pRenderPass->GetDepthStencilAttachmentFormat(subpass);
+    }
+
+    pCreateInfo->dbFormat = dbFormat;
+}
+
+// =====================================================================================================================
+static void BuildVertexInputInterfaceState(
+    const Device*                       pDevice,
+    const VkGraphicsPipelineCreateInfo* pIn,
+    const uint32_t                      dynamicStateFlags,
+    GraphicsPipelineBinaryCreateInfo*   pCreateInfo,
+    VbBindingInfo*                      pVbInfo)
+{
+    VK_ASSERT(pIn->pVertexInputState);
+
+    pCreateInfo->pipelineInfo.pVertexInput               = pIn->pVertexInputState;
+    pCreateInfo->pipelineInfo.iaState.topology           = pIn->pInputAssemblyState->topology;
+    pCreateInfo->pipelineInfo.iaState.disableVertexReuse = false;
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInputBindingStrideExt) == true)
+    {
+        pCreateInfo->pipelineInfo.dynamicVertexStride = true;
+    }
+
+    BuildLlpcVertexInputDescriptors(pDevice, pIn->pVertexInputState, pVbInfo);
+}
+
+// =====================================================================================================================
+static void BuildPreRasterizationShaderState(
+    const Device*                          pDevice,
+    const VkGraphicsPipelineCreateInfo*    pIn,
+    const GraphicsPipelineShaderStageInfo* pShaderInfo,
+    const uint32_t                         dynamicStateFlags,
+    const VkShaderStageFlagBits            activeStages,
+    GraphicsPipelineBinaryCreateInfo*      pCreateInfo)
+{
+    const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
+
+    BuildRasterizationState(pIn->pRasterizationState, dynamicStateFlags, pCreateInfo);
+
+    BuildViewportState(pDevice, pIn->pViewportState, dynamicStateFlags, pCreateInfo);
+
+    BuildNggState(pDevice, activeStages, pCreateInfo);
+
+    if (activeStages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
+    {
+        EXTRACT_VK_STRUCTURES_1(
+            Tess,
+            PipelineTessellationStateCreateInfo,
+            PipelineTessellationDomainOriginStateCreateInfo,
+            pIn->pTessellationState,
+            PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+            PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO)
+
+        if (pPipelineTessellationStateCreateInfo != nullptr)
+        {
+            pCreateInfo->pipelineInfo.iaState.patchControlPoints = pPipelineTessellationStateCreateInfo->patchControlPoints;
+        }
+
+        if (pPipelineTessellationDomainOriginStateCreateInfo)
+        {
+            // Vulkan 1.0 incorrectly specified the tessellation u,v coordinate origin as lower left even though
+            // framebuffer and image coordinate origins are in the upper left.  This has since been fixed, but
+            // an extension exists to use the previous behavior.  Doing so with flat shading would likely appear
+            // incorrect, but Vulkan specifies that the provoking vertex is undefined when tessellation is active.
+            if (pPipelineTessellationDomainOriginStateCreateInfo->domainOrigin == VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT)
+            {
+                pCreateInfo->pipelineInfo.iaState.switchWinding = true;
             }
         }
     }
 
-    pCreateInfo->freeCompilerBinary = FreeWithCompiler;
+    BuildPipelineShadersInfo<PrsShaderMask>(pDevice, pIn, pShaderInfo, pCreateInfo);
+}
+
+// =====================================================================================================================
+static void BuildFragmentShaderState(
+    const Device*                          pDevice,
+    const VkGraphicsPipelineCreateInfo*    pIn,
+    const GraphicsPipelineShaderStageInfo* pShaderInfo,
+    const uint32_t                         dynamicStateFlags,
+    GraphicsPipelineBinaryCreateInfo*      pCreateInfo)
+{
+    const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
+
+    BuildMultisampleState(pDevice, pIn->pMultisampleState, pRenderPass, pIn->subpass, dynamicStateFlags, pCreateInfo);
+
+    BuildPipelineShadersInfo<FgsShaderMask>(pDevice, pIn, pShaderInfo, pCreateInfo);
+
+    // Handle VkPipelineDepthStencilStateCreateInfo
+    if (pIn->pDepthStencilState != nullptr)
+    {
+    }
+}
+
+// =====================================================================================================================
+static void BuildFragmentOutputInterfaceState(
+    const Device*                       pDevice,
+    const VkGraphicsPipelineCreateInfo* pIn,
+    GraphicsPipelineBinaryCreateInfo*   pCreateInfo)
+{
+    const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
+
+    BuildColorBlendState(pDevice,
+                         pIn->pColorBlendState,
+                         pRenderPass, pIn->subpass, pCreateInfo);
+
+    pCreateInfo->pipelineInfo.iaState.enableMultiView =
+        (pRenderPass != nullptr) ? pRenderPass->IsMultiviewEnabled() :
+                                   false;
+
+    // Handle VkPipelineDepthStencilStateCreateInfo
+    if (pIn->pDepthStencilState != nullptr)
+    {
+    }
+}
+
+// =====================================================================================================================
+static VkResult BuildExecutablePipelineState(
+    const Device*                       pDevice,
+    const VkGraphicsPipelineCreateInfo* pIn,
+    const uint32_t                      dynamicStateFlags,
+    GraphicsPipelineBinaryCreateInfo*   pCreateInfo,
+    VbBindingInfo*                      pVbInfo)
+{
+    const RuntimeSettings& settings         = pDevice->GetRuntimeSettings();
+    PipelineCompiler*      pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
+
+    const PipelineLayout* pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
+
+    if (pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable == true)
+    {
+        pCreateInfo->pipelineInfo.rsState.numSamples            = 1;
+        pCreateInfo->pipelineInfo.rsState.perSampleShading      = false;
+        pCreateInfo->pipelineInfo.rsState.samplePatternIdx      = 0;
+        pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable = false;
+        pCreateInfo->pipelineInfo.options.enableInterpModePatch = false;
+
+        memset(pCreateInfo->pipelineInfo.cbState.target, 0, sizeof(pCreateInfo->pipelineInfo.cbState.target));
+
+        pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable = false;
+    }
+
+    Vkgc::PipelineShaderInfo* shaderInfos[] =
+    {
+        &pCreateInfo->pipelineInfo.vs,
+        &pCreateInfo->pipelineInfo.tcs,
+        &pCreateInfo->pipelineInfo.tes,
+        &pCreateInfo->pipelineInfo.gs,
+        &pCreateInfo->pipelineInfo.fs,
+    };
+
+    uint32_t availableStageMask = 0;
+
+    for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
+    {
+        if (shaderInfos[stage]->pModuleData != nullptr)
+        {
+            availableStageMask |= (1 << stage);
+        }
+    }
+
+    VkResult result = BuildPipelineResourceMapping(pDevice, pLayout, availableStageMask, pVbInfo, pCreateInfo);
+
+    return result;
+}
+
+// =====================================================================================================================
+// Converts Vulkan graphics pipeline parameters to an internal structure
+VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
+    const Device*                                   pDevice,
+    const VkGraphicsPipelineCreateInfo*             pIn,
+    const GraphicsPipelineShaderStageInfo*          pShaderInfo,
+    GraphicsPipelineBinaryCreateInfo*               pCreateInfo,
+    VbBindingInfo*                                  pVbInfo)
+{
+    VK_ASSERT(pIn != nullptr);
+
+    VkResult result = VK_SUCCESS;
+
+    const VkGraphicsPipelineCreateInfo* pGraphicsPipelineCreateInfo = pIn;
+
+    VkShaderStageFlagBits activeStages = GraphicsPipelineCommon::GetActiveShaderStages(
+                                             pIn
+                                             );
+
+    uint32_t dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(
+                                     pIn->pDynamicState
+                                                      );
+
+    BuildVertexInputInterfaceState(pDevice, pIn, dynamicStateFlags, pCreateInfo, pVbInfo);
+
+    BuildPreRasterizationShaderState(pDevice, pIn, pShaderInfo, dynamicStateFlags, activeStages, pCreateInfo);
+
+    const bool enableRasterization =
+        (pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable == false) ||
+        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizerDiscardEnableExt);
+
+    if (enableRasterization)
+    {
+        BuildFragmentShaderState(pDevice, pIn, pShaderInfo, dynamicStateFlags, pCreateInfo);
+
+        BuildFragmentOutputInterfaceState(pDevice, pIn, pCreateInfo);
+    }
+
+    {
+        result = BuildExecutablePipelineState(pDevice, pIn, dynamicStateFlags, pCreateInfo, pVbInfo);
+    }
 
     return result;
 }
@@ -1657,15 +1936,15 @@ void PipelineCompiler::ApplyPipelineOptions(
     pOptions->enableRelocatableShaderElf = settings.enableRelocatableShaders;
     pOptions->disableImageResourceCheck = settings.disableImageResourceTypeCheck;
 
-    if (pDevice->GetEnabledFeatures().extendedRobustness.robustBufferAccess)
+    if (pDevice->GetEnabledFeatures().robustBufferAccessExtended)
     {
         pOptions->extendedRobustness.robustBufferAccess = true;
     }
-    if (pDevice->GetEnabledFeatures().extendedRobustness.robustImageAccess)
+    if (pDevice->GetEnabledFeatures().robustImageAccessExtended)
     {
         pOptions->extendedRobustness.robustImageAccess = true;
     }
-    if (pDevice->GetEnabledFeatures().extendedRobustness.nullDescriptor)
+    if (pDevice->GetEnabledFeatures().nullDescriptorExtended)
     {
         pOptions->extendedRobustness.nullDescriptor = true;
     }
@@ -1674,10 +1953,10 @@ void PipelineCompiler::ApplyPipelineOptions(
 // =====================================================================================================================
 // Converts Vulkan compute pipeline parameters to an internal structure
 VkResult PipelineCompiler::ConvertComputePipelineInfo(
-    Device*                                         pDevice,
+    const Device*                                   pDevice,
     const VkComputePipelineCreateInfo*              pIn,
-    ComputePipelineBinaryCreateInfo*                pCreateInfo,
-    const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo)
+    const ComputePipelineShaderStageInfo*           pShaderInfo,
+    ComputePipelineBinaryCreateInfo*                pCreateInfo)
 {
     VkResult result    = VK_SUCCESS;
 
@@ -1686,10 +1965,6 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     PipelineLayout* pLayout = nullptr;
 
     VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO);
-
-    GetPipelineCreationInfoNext(
-        reinterpret_cast<const VkStructHeader*>(pIn->pNext),
-        ppPipelineCreationFeadbackCreateInfo);
 
     if (pIn->layout != VK_NULL_HANDLE)
     {
@@ -1700,14 +1975,13 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 
     ApplyPipelineOptions(pDevice, pIn->flags, &pCreateInfo->pipelineInfo.options);
 
-    ShaderModule* pShaderModule = ShaderModule::ObjectFromHandle(pIn->stage.module);
-
-    pCreateInfo->pipelineInfo.cs.pModuleData         = pShaderModule->GetFirstValidShaderData();
-    pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pIn->stage.pSpecializationInfo;
-    pCreateInfo->pipelineInfo.cs.pEntryTarget        = pIn->stage.pName;
+    pCreateInfo->pipelineInfo.cs.pModuleData =
+        ShaderModule::GetFirstValidShaderData(pShaderInfo->stage.pModuleHandle);
+    pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pShaderInfo->stage.pSpecializationInfo;
+    pCreateInfo->pipelineInfo.cs.pEntryTarget        = pShaderInfo->stage.pEntryPoint;
     pCreateInfo->pipelineInfo.cs.entryStage          = Vkgc::ShaderStageCompute;
 
-    if ((pIn->stage.flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0)
+    if ((pShaderInfo->stage.flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0)
     {
         pCreateInfo->pipelineInfo.cs.options.allowVaryWaveSize = true;
     }
@@ -1739,15 +2013,15 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
             // inputs like descriptor set bindings are communicated to this pipeline in a form that
             // LLPC can understand.
             result = pLayout->BuildLlpcPipelineMapping(Vkgc::ShaderStageComputeBit,
-                                                       pCreateInfo->pTempBuffer,
-                                                       &pCreateInfo->pipelineInfo.resourceMapping,
                                                        nullptr,
-                                                       nullptr);
+                                                       pCreateInfo->pTempBuffer,
+                                                       &pCreateInfo->pipelineInfo.resourceMapping);
         }
     }
 
     pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
-    pCreateInfo->pipelineInfo.cs.pModuleData = pShaderModule->GetShaderData(pCreateInfo->compilerType);
+    pCreateInfo->pipelineInfo.cs.pModuleData =
+        ShaderModule::GetShaderData(pCreateInfo->compilerType, pShaderInfo->stage.pModuleHandle);;
 
     ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute,
                               &pCreateInfo->pipelineInfo.cs.options
@@ -1755,7 +2029,8 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 
     ApplyProfileOptions(pDevice,
                         ShaderStage::ShaderStageCompute,
-                        pShaderModule,
+                        pShaderInfo->stage.codeHash,
+                        pShaderInfo->stage.codeSize,
                         nullptr,
                         &pCreateInfo->pipelineInfo.cs,
                         &pCreateInfo->pipelineProfileKey,
@@ -1801,45 +2076,6 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
     pShaderOptions->wgpMode       = ((settings.enableWgpMode & (1 << stage)) != 0);
     pShaderOptions->waveBreakSize = static_cast<Vkgc::WaveBreakSize>(settings.waveBreakSize);
 
-}
-
-// =====================================================================================================================
-// Builds app profile key and applies profile options.
-void PipelineCompiler::ApplyProfileOptions(
-    Device*                      pDevice,
-    ShaderStage                  stage,
-    ShaderModule*                pShaderModule,
-    Vkgc::PipelineOptions*       pPipelineOptions,
-    Vkgc::PipelineShaderInfo*    pShaderInfo,
-    PipelineOptimizerKey*        pProfileKey,
-    Vkgc::NggState*              pNggState
-    )
-{
-    auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
-    PipelineShaderOptionsPtr options = {};
-    options.pPipelineOptions = pPipelineOptions;
-    options.pOptions     = &pShaderInfo->options;
-    options.pNggState    = pNggState;
-
-    auto& shaderKey = pProfileKey->shaders[stage];
-    if (settings.pipelineUseShaderHashAsProfileHash)
-    {
-        const void* pModuleData = pShaderInfo->pModuleData;
-        shaderKey.codeHash.lower = Vkgc::IPipelineDumper::GetShaderHash(pModuleData);
-        shaderKey.codeHash.upper = 0;
-    }
-    else
-    {
-        // Populate the pipeline profile key.  The hash used by the profile is different from the default
-        // internal hash in that it only depends on the SPIRV code + entry point.  This is to reduce the
-        // chance that internal changes to our hash calculation logic drop us off pipeline profiles.
-        shaderKey.codeHash = pShaderModule->GetCodeHash(pShaderInfo->pEntryTarget);
-    }
-    shaderKey.codeSize = pShaderModule->GetCodeSize();
-
-    // Override the compile parameters based on any app profile
-    auto* pShaderOptimizer = pDevice->GetShaderOptimizer();
-    pShaderOptimizer->OverrideShaderCreateInfo(*pProfileKey, stage, options);
 }
 
 // =====================================================================================================================

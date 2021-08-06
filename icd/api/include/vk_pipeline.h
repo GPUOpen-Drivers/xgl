@@ -60,6 +60,8 @@ class  ComputePipeline;
 class  GraphicsPipeline;
 class  PipelineLayout;
 struct RuntimeSettings;
+struct ShaderStageInfo;
+struct ShaderModuleHandle;
 
 // The top-level user data layout is portioned into different sections based on the value type (push constant,
 // descriptor set addresses, etc.).  This structure describes the offsets and sizes of those regions.
@@ -140,9 +142,7 @@ public:
     const UserDataLayout* GetUserDataLayout(void) const { return &m_userDataLayout; }
 
     static VK_FORCEINLINE Pipeline* BaseObjectFromHandle(VkPipeline pipeline)
-    {
-        return reinterpret_cast<Pipeline*>(pipeline);
-    }
+        { return reinterpret_cast<Pipeline*>(pipeline); }
 
     const Pal::IPipeline* PalPipeline(int32_t idx) const
     {
@@ -156,19 +156,13 @@ public:
         return m_pPalPipeline[idx];
     }
 
-    VK_INLINE uint64_t PalPipelineHash() const
-    {
-        return m_palPipelineHash;
-    }
+    VK_INLINE uint64_t PalPipelineHash() const { return m_palPipelineHash; }
 
-    VK_INLINE uint64_t GetApiHash() const
-        { return m_apiHash; }
+    VK_INLINE uint64_t GetApiHash() const { return m_apiHash; }
 
-    VK_INLINE const PipelineBinaryInfo* GetBinary() const
-        { return m_pBinary; }
+    VK_INLINE const PipelineBinaryInfo* GetBinary() const { return m_pBinary; }
 
-    VK_INLINE VkPipelineBindPoint GetType() const
-        { return m_type; }
+    VK_INLINE VkPipelineBindPoint GetType() const { return m_type; }
 
     // This function returns true if any of the bits in the given state mask (corresponding to shifted values of
     // VK_DYNAMIC_STATE_*) should be programmed by the pipeline when it is bound (instead of by the application via
@@ -212,6 +206,20 @@ protected:
     static void GenerateHashFromDynamicStateCreateInfo(
         const VkPipelineDynamicStateCreateInfo& desc,
         Util::MetroHash128*                     pHasher);
+
+    static VkResult BuildShaderStageInfo(
+        const Device*                          pDevice,
+        const uint32_t                         stageCount,
+        const VkPipelineShaderStageCreateInfo* pStages,
+        uint32_t                               (*pfnGetOutputIdx)(const uint32_t inputIdx,
+                                                                  const uint32_t stageIdx),
+        ShaderStageInfo*                       pShaderStageInfo,
+        ShaderModuleHandle*                    pTempModules);
+
+    static void FreeTempModules(
+        const Device*       pDevice,
+        const uint32_t      maxStageCount,
+        ShaderModuleHandle* pTempModules);
 
     Device* const                      m_pDevice;
     UserDataLayout                     m_userDataLayout;

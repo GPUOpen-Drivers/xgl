@@ -94,9 +94,9 @@ struct GraphicsPipelineBinaryCreateInfo
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
     FreeCompilerBinary                     freeCompilerBinary;
-    Util::MetroHash::Hash                  basePipelineHash;
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback[ShaderStage::ShaderStageGfxCount];
+    uint32_t                               rasterizationStream;
 };
 
 // =====================================================================================================================
@@ -110,7 +110,6 @@ struct ComputePipelineBinaryCreateInfo
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
     FreeCompilerBinary                     freeCompilerBinary;
-    Util::MetroHash::Hash                  basePipelineHash;
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback;
 };
@@ -160,7 +159,6 @@ public:
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         size_t*                           pPipelineBinarySize,
         const void**                      ppPipelineBinary,
-        uint32_t                          rasterizationStream,
         Vkgc::PipelineShaderInfo**        ppShadersInfo,
         void*                             pPipelineDumpHandle,
         uint64_t                          pipelineHash,

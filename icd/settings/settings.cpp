@@ -620,9 +620,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
-                // Forcing these DCC settings prevents extreme corruption due to DCC for color attachments and provides an additional
-                // gain of 2-4% over what is achieved from the above force image sharing mode optimization.
                 m_settings.forceEnableDcc = (ForceDccForNonColorAttachmentShaderStorage |
+                                             ForceDccForColorAttachments |
                                              ForceDccFor2DShaderStorage |
                                              ForceDccFor3DShaderStorage |
                                              ForceDccFor32BppShaderStorage |
@@ -663,6 +662,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                              ForceDccForNonColorAttachmentShaderStorage |
                                              ForceDccFor64BppShaderStorage);
             }
+
+            m_settings.implicitExternalSynchronization = false;
         }
 
         if (appProfile == AppProfile::GhostReconBreakpoint)
@@ -679,6 +680,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                              ForceDccForNonColorAttachmentShaderStorage |
                                              ForceDccFor64BppShaderStorage);
             }
+
+            m_settings.implicitExternalSynchronization = false;
         }
 
         if (appProfile == AppProfile::DoomEternal)

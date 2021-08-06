@@ -199,7 +199,6 @@ Image::Image(
         barrierPolicyFormat,
         extraLayoutUsages),
     m_pSwapChain(nullptr),
-    m_pImageMemory(nullptr),
     m_ResourceKey(resourceKey)
 {
     m_internalFlags.u32All = internalFlags.u32All;
@@ -809,38 +808,6 @@ VkResult Image::Create(
         (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
         &imageSharingMode);
 
-    if ((result == VK_SUCCESS) && (imageFlags.androidPresentable))
-    {
-        VkDeviceMemory    pDeviceMemory = {};
-        result = Image::CreatePresentableImage(
-            pDevice,
-            &presentImageCreateInfo,
-            pAllocator,
-            pCreateInfo->usage,
-            Pal::PresentMode::Windowed,
-            pImage,
-            createInfoFormat,
-            imageSharingMode,
-            pCreateInfo->queueFamilyIndexCount,
-            pCreateInfo->pQueueFamilyIndices,
-            &pDeviceMemory);
-
-        if (result == VK_SUCCESS)
-        {
-            Image* pPresentableImage = Image::ObjectFromHandle(*pImage);
-            pPresentableImage->m_pImageMemory = Memory::ObjectFromHandle(pDeviceMemory);
-
-            Pal::Result palResult = pDevice->AddMemReference(
-                pDevice->PalDevice(DefaultDeviceIndex),
-                pPresentableImage->m_pImageMemory->PalMemory(DefaultDeviceIndex),
-                false);
-
-            result = PalToVkResult(palResult);
-        }
-
-        return result;
-    }
-
     // Calculate required system memory size
     const size_t apiSize   = ObjectSize(pDevice);
     size_t       totalSize = apiSize;
@@ -1185,14 +1152,6 @@ VkResult Image::Destroy(
     {
         // Free the system memory allocated by InitSparseVirtualMemory
         pAllocator->pfnFree(pAllocator->pUserData, m_perGpu[0].pPalMemory);
-    }
-
-    if (m_pImageMemory != nullptr)
-    {
-        pDevice->RemoveMemReference(pDevice->PalDevice(DefaultDeviceIndex),
-                                    m_pImageMemory->PalMemory(DefaultDeviceIndex));
-        m_pImageMemory->PalMemory(DefaultDeviceIndex)->Destroy();
-        pAllocator->pfnFree(pAllocator->pUserData, m_pImageMemory);
     }
 
     Util::Destructor(this);

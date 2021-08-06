@@ -9,7 +9,6 @@
     "Pipeline Options",
     "Present",
     "SPIRV Options",
-    "Ray Tracing",
     "Debugging",
     "General",
     "Memory",
@@ -1238,18 +1237,6 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Force ray tracing shaders to run with a particular wave size. This is ignored if subgroup operations are used by the shader, see SubgroupSize. 0  - Let compiler choose Wave32 vs Wave64 mode (default) 32 - Run in Wave32 mode 64 - Run in Wave64 mode ",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": 32
-      },
-      "Type": "uint32",
-      "Name": "RtWaveSize",
-      "Scope": "Driver"
-    },
-    {
       "Description": "Enable NGG mode, use an implicit primitive shader on a per-pipeline type basis. Use this instead of PAL setting, NggEnableMode.",
       "Tags": [
         "SPIRV Options"
@@ -2044,82 +2031,6 @@
       "Name": "DumpDuplicatePipelines"
     },
     {
-      "Description": "Mask for enabling SPIR-V pass for internal ray tracing pipelines. The bit is corresponding to the enum defined in gpurt header.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "Defaults": {
-        "Default": "0xffffffffffffffff"
-      },
-      "Flags": {
-        "IsHex": true,
-        "IsBitmask": true
-      },
-      "Scope": "Driver",
-      "Type": "uint64",
-      "Name": "RtInternalPipelineSpvPassMask"
-    },
-    {
-      "Description": "Box sorting heuristic",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "Defaults": {
-        "Default": "BoxSortingClosest"
-      },
-      "ValidValues": {
-        "IsEnum": true,
-        "Name": "BoxSortingMode",
-        "Values": [
-          {
-            "Name": "BoxSortingClosest",
-            "Value": 0,
-            "Description": "Traversal is ordered to enter the children that intersect the ray closer to the ray origin first."
-          },
-          {
-            "Name": "BoxSortingLargest",
-            "Value": 1,
-            "Description": "Traversal is ordered to enter the children that have the largest interval where the box intersects the ray first."
-          },
-          {
-            "Name": "BoxSortingMidPoint",
-            "Value": 2,
-            "Description": "Traversal is ordered to enter the children that have a midpoint in the interval where the box intersects that has the lowest intersection time before clamping."
-          },
-          {
-            "Name": "BoxSortingDisabled",
-            "Value": 3,
-            "Description": "Disable box sorting heuristic."
-          },
-          {
-            "Name": "BoxSortingLargestFirstAndClosest",
-            "Value": 4,
-            "Description": "Auto select box sort mode. If rayFlag indicates RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, choose BoxSortLargest. Otherwise choose BoxSortClosest."
-          },
-          {
-            "Name": "BoxSortingLargestFirstAndClosestMidpoint",
-            "Value": 5,
-            "Description": "Auto select box sort mode. If rayFlag indicates RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, choose BoxSortLargest. Otherwise choose BoxSortMidPoint."
-          }
-        ]
-      },
-      "Type": "enum",
-      "Name": "BoxSortingHeuristic",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Enable Variable Bits Morton Codes - Selects the largest axis per bit rather than rotating xyzxyz",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "EnableVariableBitsMortonCodes",
-      "Scope": "Driver"
-    },
-    {
       "Name": "DbgBarrierPostCmdEnable",
       "Description": "Triggers a CmdBarrier call after any command in the given mask.  The barrier behavior is controlled by the other DbgBarrierPost* settings in this category.  Requires VK_ENABLE_DEBUG_BARRIERS=1 to take effect. 0x8FFFFFFF: All commands (heavyweight option)",
       "Tags": [
@@ -2269,21 +2180,6 @@
             "Name": "DbgBarrierVideo",
             "Value": 67108864,
             "Description": "Any video operations"
-          },
-          {
-            "Name": "DbgBuildAccelerationStructureTLAS",
-            "Value": 134217728,
-            "Description": "Build ray tracing operations"
-          },
-          {
-            "Name": "DbgBuildAccelerationStructureBLAS",
-            "Value": 268435456,
-            "Description": "Build ray tracing operations"
-          },
-          {
-            "Name": "DbgTraceRays",
-            "Value": 536870912,
-            "Description": "Trace ray tracing operations"
           },
           {
             "Name": "DbgBarrierBeginRendering",
@@ -4522,19 +4418,16 @@
       "Name": "ForceCsThreadGroupSwizzleMode"
     },
     {
-      "Description": "Force all ray tracing shaders compiled in unified mode to have swizzled thread groups.",
+      "Description": "Enable GPU decompress pass for astc/etc image, it is on the vkCopyBufferToImage, and not safe depending on application.",
       "Tags": [
-        "Optimization"
+        "Developer Mode"
       ],
-      "ValidValues": {
-        "Name": "ThreadGroupSwizzleMode"
-      },
       "Defaults": {
-        "Default": "ThreadGroupSwizzleModeDefault"
+        "Default": false
       },
       "Scope": "Driver",
-      "Type": "enum",
-      "Name": "ForceRtThreadGroupSwizzleMode"
+      "Type": "bool",
+      "Name": "EnableShaderDecode"
     },
     {
       "Description": "Determines the string that's used to trigger a start-frame delimiter via vkQueueInsertDebugUtilsLabelEXT. This string is \"AmdFrameBegin\" by default.",

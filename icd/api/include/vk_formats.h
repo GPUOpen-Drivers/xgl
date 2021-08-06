@@ -40,6 +40,17 @@
 namespace vk
 {
 
+#if ( VKI_GPU_DECOMPRESS)
+
+// =====================================================================================================================
+struct AstcMappedInfo
+{
+    VkFormat format;
+    uint32_t wScale;
+    uint32_t hScale;
+};
+#endif
+
 // =====================================================================================================================
 // Container for storing compile-time meta-information about Vulkan formats.
 //
@@ -65,6 +76,9 @@ struct Formats
 
     VK_INLINE static uint32_t GetIndex(VkFormat format);
     VK_INLINE static VkFormat FromIndex(uint32_t index);
+#if ( VKI_GPU_DECOMPRESS)
+    static void GetAstcMappedInfo(VkFormat format, AstcMappedInfo* pMapInfo);
+#endif
     static VkExtent3D ElementsToTexels(VkFormat format, const VkExtent3D& extent, const RuntimeSettings& settings);
     static Pal::Formats::NumericSupportFlags GetNumberFormat(VkFormat format, const RuntimeSettings& settings);
 };

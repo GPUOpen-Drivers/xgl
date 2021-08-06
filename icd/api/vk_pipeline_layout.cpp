@@ -465,70 +465,12 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
 }
 
 // =====================================================================================================================
-// Builds the description of the internal descriptor set used to represent the VB table for SC.  Returns the number
-// of ResourceMappingNodes consumed by this function.  This function does not add the node that describes the top-level
-// pointer to this set.
-int32_t PipelineLayout::BuildLlpcVertexInputDescriptors(
-    const VkPipelineVertexInputStateCreateInfo* pInput,
-    VbBindingInfo*                              pVbInfo) const
-{
-    VK_ASSERT(pVbInfo != nullptr);
-
-    const uint32_t srdDwSize = m_pDevice->GetProperties().descriptorSizes.bufferView / sizeof(uint32_t);
-    uint32_t activeBindings = 0;
-
-    // Sort the strides by binding slot
-    uint32_t strideByBindingSlot[Pal::MaxVertexBuffers] = {};
-
-    for (uint32_t recordIndex = 0; recordIndex < pInput->vertexBindingDescriptionCount; ++recordIndex)
-    {
-        const VkVertexInputBindingDescription& record = pInput->pVertexBindingDescriptions[recordIndex];
-
-        strideByBindingSlot[record.binding] = record.stride;
-    }
-
-    // Build the description of the VB table by inserting all of the active binding slots into it
-    pVbInfo->bindingCount     = 0;
-    pVbInfo->bindingTableSize = 0;
-    // Find the set of active vertex buffer bindings by figuring out which vertex attributes are consumed by the
-    // pipeline.
-    //
-    // (Note that this ignores inputs eliminated by whole program optimization, but considering that we have not yet
-    // compiled the shader and have not performed whole program optimization, this is the best we can do; it's a
-    // chicken-egg problem).
-
-    for (uint32_t aindex = 0; aindex < pInput->vertexAttributeDescriptionCount; ++aindex)
-    {
-        const VkVertexInputAttributeDescription& attrib = pInput->pVertexAttributeDescriptions[aindex];
-
-        VK_ASSERT(attrib.binding < Pal::MaxVertexBuffers);
-
-        bool isNotActiveBinding = ((1 << attrib.binding) & activeBindings) == 0;
-
-        if (isNotActiveBinding)
-        {
-            // Write out the meta information that the VB binding manager needs from pipelines
-            auto* pOutBinding = &pVbInfo->bindings[pVbInfo->bindingCount++];
-            activeBindings |= (1 << attrib.binding);
-
-            pOutBinding->slot = attrib.binding;
-            pOutBinding->byteStride = strideByBindingSlot[attrib.binding];
-
-            pVbInfo->bindingTableSize = Util::Max(pVbInfo->bindingTableSize, attrib.binding + 1);
-        }
-    }
-
-    return srdDwSize *pVbInfo->bindingTableSize;
-}
-
-// =====================================================================================================================
 // This function populates the resource mapping node details to the shader-stage specific pipeline info structure.
 VkResult PipelineLayout::BuildLlpcPipelineMapping(
-    uint32_t                                    stageMask,
-    void*                                       pBuffer,
-    Vkgc::ResourceMappingData*                  pResourceMapping,
-    const VkPipelineVertexInputStateCreateInfo* pVertexInput,
-    VbBindingInfo*                              pVbInfo
+    const uint32_t             stageMask,
+    const VbBindingInfo*       pVbInfo,
+    void*                      pBuffer,
+    Vkgc::ResourceMappingData* pResourceMapping
     ) const
 {
     VkResult result = VK_SUCCESS;
@@ -632,7 +574,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
         }
     }
 
-    if ((result == VK_SUCCESS) && (pVertexInput != nullptr))
+    if ((result == VK_SUCCESS) && (pVbInfo != nullptr))
     {
         // Build the internal vertex buffer table mapping
         constexpr uint32_t VbTablePtrRegCount = 1; // PAL requires all indirect user data tables to be 1DW
@@ -643,8 +585,8 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
             VK_ASSERT(pVbInfo != nullptr);
 
             // Build the table description itself
-            auto vbTableSize = BuildLlpcVertexInputDescriptors(pVertexInput,
-                                                               pVbInfo);
+            const uint32_t srdDwSize = m_pDevice->GetProperties().descriptorSizes.bufferView / sizeof(uint32_t);
+            uint32_t vbTableSize = pVbInfo->bindingTableSize * srdDwSize;
 
             // Add the set pointer node pointing to this table
             auto pVbTblPtrNode = &pUserDataNodes[userDataNodeCount];

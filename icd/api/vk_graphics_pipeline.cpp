@@ -51,55 +51,24 @@ namespace vk
 {
 
 // =====================================================================================================================
-// Create a graphics pipeline object.
-VkResult GraphicsPipeline::Create(
-    Device*                                 pDevice,
-    PipelineCache*                          pPipelineCache,
-    const VkGraphicsPipelineCreateInfo*     pCreateInfo,
-    const VkAllocationCallbacks*            pAllocator,
-    VkPipeline*                             pPipeline)
+// Create graphics pipeline binaries
+VkResult GraphicsPipeline::CreatePipelineBinaries(
+    Device*                                        pDevice,
+    const VkGraphicsPipelineCreateInfo*            pCreateInfo,
+    const GraphicsPipelineShaderStageInfo*         pShaderInfo,
+    GraphicsPipelineBinaryCreateInfo*              pBinaryCreateInfo,
+    PipelineCache*                                 pPipelineCache,
+    const VkPipelineCreationFeedbackCreateInfoEXT* pCreationFeedbackInfo,
+    Util::MetroHash::Hash*                         pCacheIds,
+    size_t*                                        pPipelineBinarySizes,
+    const void**                                   pPipelineBinaries)
 {
-    uint64 startTimeTicks = Util::GetPerfCpuTime();
-
-    // Parse the create info and build patched AMDIL shaders
-    GraphicsPipelineObjectCreateInfo objectCreateInfo                   = {};
-    VbBindingInfo                    vbInfo                             = {};
-    GraphicsPipelineBinaryCreateInfo binaryCreateInfo                   = {};
-    size_t                           pipelineBinarySizes[MaxPalDevices] = {};
-    const void*                      pPipelineBinaries[MaxPalDevices]   = {};
-    Util::MetroHash::Hash            cacheId[MaxPalDevices]             = {};
-    Pal::Result                      palResult                          = Pal::Result::Success;
-    PipelineCompiler*                pDefaultCompiler                   = pDevice->GetCompiler(DefaultDeviceIndex);
-    const RuntimeSettings&           settings                           = pDevice->GetRuntimeSettings();
-    Util::MetroHash64                palPipelineHasher;
-
-    const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo = nullptr;
-
-    VkResult result = pDefaultCompiler->ConvertGraphicsPipelineInfo(
-        pDevice, pCreateInfo, &binaryCreateInfo, &vbInfo, &pPipelineCreationFeadbackCreateInfo);
-
-    BuildPipelineObjectCreateInfo(pDevice, pCreateInfo, &vbInfo, &objectCreateInfo);
-
-    // PAL internally disables dual-source blending when the blend func is min or max. In cases when it will be disabled, we should
-    // overwrite dual source blending option so the pipeline is compiled with the correct value. This avoids a mismatch in how data
-    // comes out of shaders and how the CB expects to see the data.
-    // This can be done for all ASICs, but is required for GFX10+
-    const bool canEnableDualSourceBlend = pDevice->PalDevice(DefaultDeviceIndex)->CanEnableDualSourceBlend(objectCreateInfo.blend);
-
-    if (canEnableDualSourceBlend == false)
-    {
-        objectCreateInfo.pipeline.cbState.dualSourceBlendEnable = false;
-        binaryCreateInfo.pipelineInfo.cbState.dualSourceBlendEnable = false;
-    }
-
-    uint64_t apiPsoHash = BuildApiHash(pCreateInfo, &objectCreateInfo, &binaryCreateInfo.basePipelineHash);
-
-    const uint32_t numPalDevices = pDevice->NumPalDevices();
-
-    uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&binaryCreateInfo.pipelineInfo);
+    VkResult          result = VK_SUCCESS;
+    const uint32_t    numPalDevices = pDevice->NumPalDevices();
+    PipelineCompiler* pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
     for (uint32_t i = 0; (result == VK_SUCCESS) && (i < numPalDevices)
-        ; ++i)
+         ; ++i)
     {
         if (i == DefaultDeviceIndex)
         {
@@ -107,33 +76,31 @@ VkResult GraphicsPipeline::Create(
                 pDevice,
                 i,
                 pPipelineCache,
-                &binaryCreateInfo,
-                &pipelineBinarySizes[i],
+                pBinaryCreateInfo,
+                &pPipelineBinarySizes[i],
                 &pPipelineBinaries[i],
-                objectCreateInfo.rasterizationStream,
-                &cacheId[i]);
+                &pCacheIds[i]);
         }
         else
         {
             GraphicsPipelineBinaryCreateInfo binaryCreateInfoMGPU = {};
             VbBindingInfo vbInfoMGPU = {};
             pDefaultCompiler->ConvertGraphicsPipelineInfo(
-                    pDevice, pCreateInfo, &binaryCreateInfoMGPU, &vbInfoMGPU, nullptr);
+                pDevice, pCreateInfo, pShaderInfo, &binaryCreateInfoMGPU, &vbInfoMGPU);
 
             result = pDevice->GetCompiler(i)->CreateGraphicsPipelineBinary(
                 pDevice,
                 i,
                 pPipelineCache,
                 &binaryCreateInfoMGPU,
-                &pipelineBinarySizes[i],
+                &pPipelineBinarySizes[i],
                 &pPipelineBinaries[i],
-                objectCreateInfo.rasterizationStream,
-                &cacheId[i]);
+                &pCacheIds[i]);
 
             if (result == VK_SUCCESS)
             {
                 pDefaultCompiler->SetPipelineCreationFeedbackInfo(
-                    pPipelineCreationFeadbackCreateInfo,
+                    pCreationFeedbackInfo,
                     pCreateInfo->stageCount,
                     pCreateInfo->pStages,
                     &binaryCreateInfoMGPU.pipelineFeedback,
@@ -144,47 +111,59 @@ VkResult GraphicsPipeline::Create(
         }
     }
 
-    if (result == VK_SUCCESS)
-    {
-        pDevice->GetShaderOptimizer()->OverrideGraphicsPipelineCreateInfo(
-            binaryCreateInfo.pipelineProfileKey,
-            objectCreateInfo.activeStages,
-            &objectCreateInfo.pipeline,
-            &objectCreateInfo.immedInfo.graphicsShaderInfos);
+    return result;
+}
 
-        palPipelineHasher.Update(objectCreateInfo.pipeline);
-    }
+// =====================================================================================================================
+// Create graphics pipeline objects
+VkResult GraphicsPipeline::CreatePipelineObjects(
+    Device*                             pDevice,
+    const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks*        pAllocator,
+    const VbBindingInfo*                pVbInfo,
+    const size_t*                       pPipelineBinarySizes,
+    const void**                        pPipelineBinaries,
+    PipelineCache*                      pPipelineCache,
+    const Util::MetroHash::Hash*        pCacheIds,
+    GraphicsPipelineObjectCreateInfo*   pObjectCreateInfo,
+    VkPipeline*                         pPipeline)
+{
+    VkResult          result        = VK_SUCCESS;
+    Pal::Result       palResult     = Pal::Result::Success;
+    const uint32_t    numPalDevices = pDevice->NumPalDevices();
+    uint64_t          apiPsoHash    = 0;
+    Util::MetroHash64 palPipelineHasher;
 
-    RenderStateCache* pRSCache = pDevice->GetRenderStateCache();
-
-    // Get the pipeline size from PAL and allocate memory.
-    void*  pSystemMem = nullptr;
-    size_t palSize    = 0;
-
-    if (result == VK_SUCCESS)
-    {
-        objectCreateInfo.pipeline.pipelineBinarySize = pipelineBinarySizes[DefaultDeviceIndex];
-        objectCreateInfo.pipeline.pPipelineBinary    = pPipelineBinaries[DefaultDeviceIndex];
-
-        palSize =
-            pDevice->PalDevice(DefaultDeviceIndex)->GetGraphicsPipelineSize(objectCreateInfo.pipeline, &palResult);
-        VK_ASSERT(palResult == Pal::Result::Success);
-
-        pSystemMem = pDevice->AllocApiObject(
-            pAllocator,
-            sizeof(GraphicsPipeline) + (palSize * numPalDevices));
-
-        if (pSystemMem == nullptr)
-        {
-            result = VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
-    }
+    apiPsoHash = BuildApiHash(pCreateInfo, pObjectCreateInfo);
+    palPipelineHasher.Update(pObjectCreateInfo->pipeline);
 
     // Create the PAL pipeline object.
     Pal::IPipeline*          pPalPipeline[MaxPalDevices]     = {};
     Pal::IMsaaState*         pPalMsaa[MaxPalDevices]         = {};
     Pal::IColorBlendState*   pPalColorBlend[MaxPalDevices]   = {};
     Pal::IDepthStencilState* pPalDepthStencil[MaxPalDevices] = {};
+
+    // Get the pipeline size from PAL and allocate memory.
+    void*  pSystemMem = nullptr;
+    size_t palSize    = 0;
+
+    pObjectCreateInfo->pipeline.pipelineBinarySize = pPipelineBinarySizes[DefaultDeviceIndex];
+    pObjectCreateInfo->pipeline.pPipelineBinary    = pPipelineBinaries[DefaultDeviceIndex];
+
+    palSize =
+        pDevice->PalDevice(DefaultDeviceIndex)->GetGraphicsPipelineSize(pObjectCreateInfo->pipeline, &palResult);
+    VK_ASSERT(palResult == Pal::Result::Success);
+
+    pSystemMem = pDevice->AllocApiObject(
+        pAllocator,
+        sizeof(GraphicsPipeline) + (palSize * numPalDevices));
+
+    if (pSystemMem == nullptr)
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    RenderStateCache* pRSCache = pDevice->GetRenderStateCache();
 
     if (result == VK_SUCCESS)
     {
@@ -200,12 +179,12 @@ VkResult GraphicsPipeline::Create(
                 // won't be created.  Otherwise, like if gl_DeviceIndex is used, they will be.
                 if (pPipelineBinaries[deviceIdx] != nullptr)
                 {
-                    objectCreateInfo.pipeline.pipelineBinarySize = pipelineBinarySizes[deviceIdx];
-                    objectCreateInfo.pipeline.pPipelineBinary    = pPipelineBinaries[deviceIdx];
+                    pObjectCreateInfo->pipeline.pipelineBinarySize = pPipelineBinarySizes[deviceIdx];
+                    pObjectCreateInfo->pipeline.pPipelineBinary    = pPipelineBinaries[deviceIdx];
                 }
 
                 palResult = pPalDevice->CreateGraphicsPipeline(
-                    objectCreateInfo.pipeline,
+                    pObjectCreateInfo->pipeline,
                     Util::VoidPtrInc(pSystemMem, palOffset),
                     &pPalPipeline[deviceIdx]);
 
@@ -220,9 +199,9 @@ VkResult GraphicsPipeline::Create(
 
                     palResult = pDevice->GetCompiler(deviceIdx)->RegisterAndLoadReinjectionBinary(
                         &info.internalPipelineHash,
-                        &cacheId[deviceIdx],
-                        &objectCreateInfo.pipeline.pipelineBinarySize,
-                        &objectCreateInfo.pipeline.pPipelineBinary,
+                        &pCacheIds[deviceIdx],
+                        &pObjectCreateInfo->pipeline.pipelineBinarySize,
+                        &pObjectCreateInfo->pipeline.pPipelineBinary,
                         pPipelineCache);
 
                     if (palResult == Util::Result::Success)
@@ -230,7 +209,7 @@ VkResult GraphicsPipeline::Create(
                         pPalPipeline[deviceIdx]->Destroy();
 
                         palResult = pPalDevice->CreateGraphicsPipeline(
-                            objectCreateInfo.pipeline,
+                            pObjectCreateInfo->pipeline,
                             Util::VoidPtrInc(pSystemMem, palOffset),
                             &pPalPipeline[deviceIdx]);
                     }
@@ -242,33 +221,31 @@ VkResult GraphicsPipeline::Create(
                 }
 #endif
 
-                VK_ASSERT(palSize == pPalDevice->GetGraphicsPipelineSize(objectCreateInfo.pipeline, nullptr));
+                VK_ASSERT(palSize == pPalDevice->GetGraphicsPipelineSize(pObjectCreateInfo->pipeline, nullptr));
                 palOffset += palSize;
             }
 
             // Create the PAL MSAA state object
             if (palResult == Pal::Result::Success)
             {
-                const auto& pMs = pCreateInfo->pMultisampleState;
-
                 // Force full sample shading if the app didn't enable it, but the shader wants
                 // per-sample shading by the use of SampleId or similar features.
-                if ((objectCreateInfo.immedInfo.rasterizerDiscardEnable != VK_TRUE) && (pMs != nullptr) &&
-                    (pMs->sampleShadingEnable == false))
+                if ((pObjectCreateInfo->immedInfo.rasterizerDiscardEnable != VK_TRUE) &&
+                    (pObjectCreateInfo->flags.sampleShadingEnable == false))
                 {
                     const auto& info = pPalPipeline[deviceIdx]->GetInfo();
 
                     if (info.ps.flags.perSampleShading == 1)
                     {
                         // Override the shader rate to 1x1 if SampleId used in shader
-                        Force1x1ShaderRate(&objectCreateInfo.immedInfo.vrsRateParams);
-                        objectCreateInfo.flags.force1x1ShaderRate     |= true;
-                        objectCreateInfo.msaa.pixelShaderSamples = objectCreateInfo.msaa.coverageSamples;
+                        Force1x1ShaderRate(&pObjectCreateInfo->immedInfo.vrsRateParams);
+                        pObjectCreateInfo->flags.force1x1ShaderRate |= true;
+                        pObjectCreateInfo->msaa.pixelShaderSamples   = pObjectCreateInfo->msaa.coverageSamples;
                     }
                 }
 
                 palResult = pRSCache->CreateMsaaState(
-                    objectCreateInfo.msaa,
+                    pObjectCreateInfo->msaa,
                     pAllocator,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
                     pPalMsaa);
@@ -278,24 +255,24 @@ VkResult GraphicsPipeline::Create(
             if (palResult == Pal::Result::Success)
             {
                 palResult = pRSCache->CreateColorBlendState(
-                    objectCreateInfo.blend,
+                    pObjectCreateInfo->blend,
                     pAllocator,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
                     pPalColorBlend);
             }
 
             // Create the PAL depth stencil state object
-            if ((palResult == Pal::Result::Success) && objectCreateInfo.flags.bindDepthStencilObject)
+            if ((palResult == Pal::Result::Success) && pObjectCreateInfo->flags.bindDepthStencilObject)
             {
                 palResult = pRSCache->CreateDepthStencilState(
-                    objectCreateInfo.immedInfo.depthStencilCreateInfo,
+                    pObjectCreateInfo->immedInfo.depthStencilCreateInfo,
                     pAllocator,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
                     pPalDepthStencil);
             }
 
             // Reset the PAL stencil maskupdate flags
-            objectCreateInfo.immedInfo.stencilRefMasks.flags.u8All = 0xff;
+            pObjectCreateInfo->immedInfo.stencilRefMasks.flags.u8All = 0xff;
         }
 
         result = PalToVkResult(palResult);
@@ -309,35 +286,35 @@ VkResult GraphicsPipeline::Create(
         (result == VK_SUCCESS))
     {
         pBinaryInfo = PipelineBinaryInfo::Create(
-            pipelineBinarySizes[DefaultDeviceIndex],
+            pPipelineBinarySizes[DefaultDeviceIndex],
             pPipelineBinaries[DefaultDeviceIndex],
             pAllocator);
     }
 
-    const bool viewIndexFromDeviceIndex = Util::TestAnyFlagSet(
-        pCreateInfo->flags,
-        VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT);
-
     // On success, wrap it up in a Vulkan object.
     if (result == VK_SUCCESS)
     {
+        const bool viewIndexFromDeviceIndex = Util::TestAnyFlagSet(
+            pCreateInfo->flags,
+            VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT);
+
         VK_PLACEMENT_NEW(pSystemMem) GraphicsPipeline(
             pDevice,
             pPalPipeline,
-            objectCreateInfo.pLayout,
-            objectCreateInfo.immedInfo,
-            objectCreateInfo.staticStateMask,
-            objectCreateInfo.flags.bindDepthStencilObject,
-            objectCreateInfo.flags.bindTriangleRasterState,
-            objectCreateInfo.flags.bindStencilRefMasks,
-            objectCreateInfo.flags.bindInputAssemblyState,
-            objectCreateInfo.flags.force1x1ShaderRate,
-            objectCreateInfo.flags.customSampleLocations,
-            vbInfo,
+            pObjectCreateInfo->pLayout,
+            pObjectCreateInfo->immedInfo,
+            pObjectCreateInfo->staticStateMask,
+            pObjectCreateInfo->flags.bindDepthStencilObject,
+            pObjectCreateInfo->flags.bindTriangleRasterState,
+            pObjectCreateInfo->flags.bindStencilRefMasks,
+            pObjectCreateInfo->flags.bindInputAssemblyState,
+            pObjectCreateInfo->flags.force1x1ShaderRate,
+            pObjectCreateInfo->flags.customSampleLocations,
+            *pVbInfo,
             pPalMsaa,
             pPalColorBlend,
             pPalDepthStencil,
-            objectCreateInfo.sampleCoverage,
+            pObjectCreateInfo->sampleCoverage,
             viewIndexFromDeviceIndex,
             pBinaryInfo,
             apiPsoHash,
@@ -345,17 +322,6 @@ VkResult GraphicsPipeline::Create(
 
         *pPipeline = GraphicsPipeline::HandleFromVoidPointer(pSystemMem);
     }
-
-    // Free the created pipeline binaries now that the PAL Pipelines/PipelineBinaryInfo have read them.
-    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
-    {
-        if (pPipelineBinaries[deviceIdx] != nullptr)
-        {
-            pDevice->GetCompiler(deviceIdx)->FreeGraphicsPipelineBinary(
-                &binaryCreateInfo, pPipelineBinaries[deviceIdx], pipelineBinarySizes[deviceIdx]);
-        }
-    }
-    pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfo);
 
     if (result != VK_SUCCESS)
     {
@@ -383,6 +349,97 @@ VkResult GraphicsPipeline::Create(
 
         pDevice->FreeApiObject(pAllocator, pSystemMem);
     }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Create a graphics pipeline object.
+VkResult GraphicsPipeline::Create(
+    Device*                                 pDevice,
+    PipelineCache*                          pPipelineCache,
+    const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+    const VkAllocationCallbacks*            pAllocator,
+    VkPipeline*                             pPipeline)
+{
+    uint64 startTimeTicks = Util::GetPerfCpuTime();
+
+    PipelineCompiler* pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
+
+    const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfo = nullptr;
+
+    pDefaultCompiler->GetPipelineCreationFeedback(static_cast<const VkStructHeader*>(pCreateInfo->pNext),
+                                                  &pPipelineCreationFeedbackCreateInfo);
+
+    // 1. Build pipeline binary create info
+    GraphicsPipelineBinaryCreateInfo binaryCreateInfo = {};
+    GraphicsPipelineShaderStageInfo  shaderStageInfo  = {};
+    VbBindingInfo                    vbInfo           = {};
+    ShaderModuleHandle               tempModules[ShaderStage::ShaderStageGfxCount] = {};
+
+    VkResult result = BuildPipelineBinaryCreateInfo(
+        pDevice, pCreateInfo, &binaryCreateInfo, &shaderStageInfo, &vbInfo, tempModules);
+
+    // 2. Create pipeine binaries
+    size_t                pipelineBinarySizes[MaxPalDevices] = {};
+    const void*           pPipelineBinaries[MaxPalDevices]   = {};
+    Util::MetroHash::Hash cacheId[MaxPalDevices]             = {};
+
+    if (result == VK_SUCCESS)
+    {
+        result = CreatePipelineBinaries(pDevice,
+                                        pCreateInfo,
+                                        &shaderStageInfo,
+                                        &binaryCreateInfo,
+                                        pPipelineCache,
+                                        pPipelineCreationFeedbackCreateInfo,
+                                        cacheId,
+                                        pipelineBinarySizes,
+                                        pPipelineBinaries);
+    }
+
+    uint64_t pipelineHash = 0;
+
+    if (result == VK_SUCCESS)
+    {
+        pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&binaryCreateInfo.pipelineInfo);
+
+        // 3. Build pipeline object create info
+        GraphicsPipelineObjectCreateInfo objectCreateInfo = {};
+        GraphicsPipelineBinaryInfo       binaryInfo       = {};
+        binaryInfo.pOptimizerKey = &binaryCreateInfo.pipelineProfileKey;
+
+        BuildPipelineObjectCreateInfo(
+            pDevice, pCreateInfo, &vbInfo, &binaryInfo, &objectCreateInfo);
+
+        // 4. Create pipeline objects
+        result = CreatePipelineObjects(
+            pDevice,
+            pCreateInfo,
+            pAllocator,
+            &vbInfo,
+            pipelineBinarySizes,
+            pPipelineBinaries,
+            pPipelineCache,
+            cacheId,
+            &objectCreateInfo,
+            pPipeline);
+    }
+
+    // Free the temporary newly-built shader modules
+    FreeTempModules(pDevice, ShaderStage::ShaderStageGfxCount, tempModules);
+
+    // Free the created pipeline binaries now that the PAL Pipelines/PipelineBinaryInfo have read them.
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+    {
+        if (pPipelineBinaries[deviceIdx] != nullptr)
+        {
+            pDevice->GetCompiler(deviceIdx)->FreeGraphicsPipelineBinary(
+                &binaryCreateInfo, pPipelineBinaries[deviceIdx], pipelineBinarySizes[deviceIdx]);
+        }
+    }
+    pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfo);
+
     if (result == VK_SUCCESS)
     {
         uint64_t durationTicks = Util::GetPerfCpuTime() - startTimeTicks;
@@ -390,14 +447,17 @@ VkResult GraphicsPipeline::Create(
         binaryCreateInfo.pipelineFeedback.feedbackValid = true;
         binaryCreateInfo.pipelineFeedback.duration = duration;
         pDefaultCompiler->SetPipelineCreationFeedbackInfo(
-            pPipelineCreationFeadbackCreateInfo,
+            pPipelineCreationFeedbackCreateInfo,
             pCreateInfo->stageCount,
             pCreateInfo->pStages,
             &binaryCreateInfo.pipelineFeedback,
             binaryCreateInfo.stageFeedback);
 
         // The hash is same as pipline dump file name, we can easily analyze further.
-        AmdvlkLog(settings.logTagIdMask, PipelineCompileTime, "0x%016llX-%llu", pipelineHash, duration);
+        AmdvlkLog(pDevice->GetRuntimeSettings().logTagIdMask,
+                  PipelineCompileTime,
+                  "0x%016llX-%llu",
+                  pipelineHash, duration);
     }
 
     return result;
@@ -426,7 +486,8 @@ GraphicsPipeline::GraphicsPipeline(
     uint64_t                               apiHash,
     Util::MetroHash64*                     pPalPipelineHasher)
     :
-    GraphicsPipelineCommon(pDevice),
+    GraphicsPipelineCommon(
+        pDevice),
     m_info(immedInfo),
     m_vbInfo(vbInfo),
     m_flags()
@@ -638,7 +699,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             if (*pViewportCount != m_info.viewportParams.count)
             {
                 *pViewportCount = m_info.viewportParams.count;
-                pRenderState->dirty.viewport = 1;
+                pRenderState->dirtyGraphics.viewport = 1;
             }
         }
         while (deviceGroup.IterateNext());
@@ -661,7 +722,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             if (*pScissorCount != m_info.scissorRectParams.count)
             {
                 *pScissorCount = m_info.scissorRectParams.count;
-                pRenderState->dirty.scissor = 1;
+                pRenderState->dirtyGraphics.scissor = 1;
             }
         }
         while (deviceGroup.IterateNext());
@@ -676,35 +737,35 @@ void GraphicsPipeline::BindToCmdBuffer(
         {
             pDepthStencilCreateInfo->depthEnable = m_info.depthStencilCreateInfo.depthEnable;
 
-            pRenderState->dirty.depthStencil = 1;
+            pRenderState->dirtyGraphics.depthStencil = 1;
         }
         if (ContainsStaticState(DynamicStatesInternal::DepthWriteEnableExt) &&
             (pDepthStencilCreateInfo->depthWriteEnable != m_info.depthStencilCreateInfo.depthWriteEnable))
         {
             pDepthStencilCreateInfo->depthWriteEnable = m_info.depthStencilCreateInfo.depthWriteEnable;
 
-            pRenderState->dirty.depthStencil = 1;
+            pRenderState->dirtyGraphics.depthStencil = 1;
         }
         if (ContainsStaticState(DynamicStatesInternal::DepthCompareOpExt) &&
             (pDepthStencilCreateInfo->depthFunc != m_info.depthStencilCreateInfo.depthFunc))
         {
             pDepthStencilCreateInfo->depthFunc = m_info.depthStencilCreateInfo.depthFunc;
 
-            pRenderState->dirty.depthStencil = 1;
+            pRenderState->dirtyGraphics.depthStencil = 1;
         }
         if (ContainsStaticState(DynamicStatesInternal::DepthBoundsTestEnableExt) &&
             (pDepthStencilCreateInfo->depthBoundsEnable != m_info.depthStencilCreateInfo.depthBoundsEnable))
         {
             pDepthStencilCreateInfo->depthBoundsEnable = m_info.depthStencilCreateInfo.depthBoundsEnable;
 
-            pRenderState->dirty.depthStencil = 1;
+            pRenderState->dirtyGraphics.depthStencil = 1;
         }
         if (ContainsStaticState(DynamicStatesInternal::StencilTestEnableExt) &&
             (pDepthStencilCreateInfo->stencilEnable != m_info.depthStencilCreateInfo.stencilEnable))
         {
             pDepthStencilCreateInfo->stencilEnable = m_info.depthStencilCreateInfo.stencilEnable;
 
-            pRenderState->dirty.depthStencil = 1;
+            pRenderState->dirtyGraphics.depthStencil = 1;
         }
         if (ContainsStaticState(DynamicStatesInternal::StencilOpExt) &&
             ((pDepthStencilCreateInfo->front.stencilFailOp != m_info.depthStencilCreateInfo.front.stencilFailOp) ||
@@ -721,7 +782,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             pDepthStencilCreateInfo->front = m_info.depthStencilCreateInfo.front;
             pDepthStencilCreateInfo->back  = m_info.depthStencilCreateInfo.back;
 
-            pRenderState->dirty.depthStencil = 1;
+            pRenderState->dirtyGraphics.depthStencil = 1;
         }
     }
     else
@@ -753,7 +814,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             pRenderState->triangleRasterState.flags.depthBiasEnable = m_info.triangleRasterState.flags.depthBiasEnable;
         }
 
-        pRenderState->dirty.rasterState = 1;
+        pRenderState->dirtyGraphics.rasterState = 1;
     }
     else
     {
@@ -795,7 +856,7 @@ void GraphicsPipeline::BindToCmdBuffer(
     // Check whether the dirty bit should be set
     if (memcmp(&pRenderState->stencilRefMasks, &prevStencilRefMasks, sizeof(Pal::StencilRefMaskParams)) != 0)
     {
-        pRenderState->dirty.stencilRef = 1;
+        pRenderState->dirtyGraphics.stencilRef = 1;
     }
 
     if (m_flags.bindInputAssemblyState == false)
@@ -813,7 +874,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             pRenderState->inputAssemblyState.topology = m_info.inputAssemblyState.topology;
         }
 
-        pRenderState->dirty.inputAssembly = 1;
+        pRenderState->dirtyGraphics.inputAssembly = 1;
     }
     else
     {
@@ -855,19 +916,19 @@ void GraphicsPipeline::BindToCmdBuffer(
                 // is skipped due to matching Pal pipeline hash values and CB_TARGET_MASK has been altered by the
                 // previous pipeline via color write enable.  Passing in a count of 0 resets the mask.
                 pRenderState->colorWriteMaskParams.count = 0;
-                pRenderState->dirty.colorWriteEnable     = 1;
+                pRenderState->dirtyGraphics.colorWriteEnable     = 1;
             }
 
             if ((palPipelineBound == false) && ContainsStaticState(DynamicStatesInternal::RasterizerDiscardEnableExt))
             {
                 // Need to update static rasterizerDiscardEnable setting if the Pal pipeline bind is skipped
                 pRenderState->rasterizerDiscardEnable       = m_info.rasterizerDiscardEnable;
-                pRenderState->dirty.rasterizerDiscardEnable = 1;
+                pRenderState->dirtyGraphics.rasterizerDiscardEnable = 1;
             }
             else if (ContainsDynamicState(DynamicStatesInternal::RasterizerDiscardEnableExt))
             {
                 // Binding a pipeline overwrites the dynamic rasterizerDiscardEnable setting so need to force validation
-                pRenderState->dirty.rasterizerDiscardEnable = 1;
+                pRenderState->dirtyGraphics.rasterizerDiscardEnable = 1;
             }
         }
         else
@@ -887,7 +948,7 @@ void GraphicsPipeline::BindToCmdBuffer(
         {
             pCmdBuffer->PalCmdBindDepthStencilState(pPalCmdBuf, deviceIdx, m_pPalDepthStencil[deviceIdx]);
 
-            pRenderState->dirty.depthStencil = 0;
+            pRenderState->dirtyGraphics.depthStencil = 0;
         }
 
         pCmdBuffer->PalCmdBindColorBlendState(pPalCmdBuf, deviceIdx, m_pPalColorBlend[deviceIdx]);
@@ -902,7 +963,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             pPalCmdBuf->CmdSetInputAssemblyState(m_info.inputAssemblyState);
 
             pRenderState->staticTokens.inputAssemblyState = newTokens.inputAssemblyState;
-            pRenderState->dirty.inputAssembly             = 0;
+            pRenderState->dirtyGraphics.inputAssembly             = 0;
         }
 
         if (CmdBuffer::IsStaticStateDifferent(oldTokens.triangleRasterState, newTokens.triangleRasterState) &&
@@ -911,7 +972,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             pPalCmdBuf->CmdSetTriangleRasterState(m_info.triangleRasterState);
 
             pRenderState->staticTokens.triangleRasterState = newTokens.triangleRasterState;
-            pRenderState->dirty.rasterState                = 0;
+            pRenderState->dirtyGraphics.rasterState                = 0;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::LineWidth) &&
@@ -965,7 +1026,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             }
             else
             {
-                pRenderState->dirty.colorWriteEnable = 0;
+                pRenderState->dirtyGraphics.colorWriteEnable = 0;
             }
         }
 
@@ -976,7 +1037,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             pPalCmdBuf->CmdSetPerDrawVrsRate(m_info.vrsRateParams);
 
             pRenderState->staticTokens.fragmentShadingRate = newTokens.fragmentShadingRate;
-            pRenderState->dirty.vrs = 0;
+            pRenderState->dirtyGraphics.vrs = 0;
         }
     }
     while (deviceGroup.IterateNext());

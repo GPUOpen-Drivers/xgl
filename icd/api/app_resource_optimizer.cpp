@@ -423,6 +423,25 @@ void ResourceOptimizer::BuildAppProfile()
             m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccEnableMode;
         }
     }
+    else if (appProfile == AppProfile::Rage2)
+    {
+        // Disable DCC for resource causing corruption
+        if (gfxIpLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xb92ea6fe16e91aba;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+
+            // This resource is just for Renderdoc
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x111fa3cb932fb5fa;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+        }
+    }
 }
 
 #if ICD_RUNTIME_APP_PROFILE

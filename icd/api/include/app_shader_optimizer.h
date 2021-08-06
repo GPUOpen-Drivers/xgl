@@ -94,17 +94,17 @@ public:
     void OverrideShaderCreateInfo(
         const PipelineOptimizerKey&  pipelineKey,
         ShaderStage                  shaderStage,
-        PipelineShaderOptionsPtr     options);
+        PipelineShaderOptionsPtr     options) const;
 
     void OverrideGraphicsPipelineCreateInfo(
         const PipelineOptimizerKey&       pipelineKey,
         VkShaderStageFlagBits             shaderStages,
         Pal::GraphicsPipelineCreateInfo*  pPalCreateInfo,
-        Pal::DynamicGraphicsShaderInfos*  pGraphicsShaderInfos);
+        Pal::DynamicGraphicsShaderInfos*  pGraphicsShaderInfos) const;
 
     void OverrideComputePipelineCreateInfo(
         const PipelineOptimizerKey&      pipelineKey,
-        Pal::DynamicComputeShaderInfo*   pDynamicCompueShaderInfo);
+        Pal::DynamicComputeShaderInfo*   pDynamicCompueShaderInfo) const;
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(ShaderOptimizer);
@@ -113,35 +113,35 @@ private:
         const PipelineProfile&           profile,
         const PipelineOptimizerKey&      pipelineKey,
         ShaderStage                      shaderStage,
-        PipelineShaderOptionsPtr         options);
+        PipelineShaderOptionsPtr         options) const;
 
     void ApplyProfileToGraphicsPipelineCreateInfo(
         const PipelineProfile&            profile,
         const PipelineOptimizerKey&       pipelineKey,
         VkShaderStageFlagBits             shaderStages,
         Pal::GraphicsPipelineCreateInfo*  pPalCreateInfo,
-        Pal::DynamicGraphicsShaderInfos*  pGraphicsShaderInfos);
+        Pal::DynamicGraphicsShaderInfos*  pGraphicsShaderInfos) const;
 
     void ApplyProfileToComputePipelineCreateInfo(
         const PipelineProfile&           profile,
         const PipelineOptimizerKey&      pipelineKey,
-        Pal::DynamicComputeShaderInfo*   pDynamicComputeShaderInfo);
+        Pal::DynamicComputeShaderInfo*   pDynamicComputeShaderInfo) const;
 
     void ApplyProfileToDynamicGraphicsShaderInfo(
         const ShaderProfileAction&      action,
-        Pal::DynamicGraphicsShaderInfo* pGraphicsShaderInfo);
+        Pal::DynamicGraphicsShaderInfo* pGraphicsShaderInfo) const;
 
     void ApplyProfileToDynamicComputeShaderInfo(
         const ShaderProfileAction&     action,
-        Pal::DynamicComputeShaderInfo* pComputeShaderInfo);
+        Pal::DynamicComputeShaderInfo* pComputeShaderInfo) const;
 
     bool ProfilePatternMatchesPipeline(
         const PipelineProfilePattern& pattern,
-        const PipelineOptimizerKey&   pipelineKey);
+        const PipelineOptimizerKey&   pipelineKey) const;
 
     Pal::ShaderHash GetFirstMatchingShaderHash(
         const PipelineProfilePattern& pattern,
-        const PipelineOptimizerKey&   pipelineKey);
+        const PipelineOptimizerKey&   pipelineKey) const;
 
     void BuildTuningProfile();
     void BuildAppProfile();
@@ -154,7 +154,10 @@ private:
 #endif
 
 #if PAL_ENABLE_PRINTS_ASSERTS
-    void PrintProfileEntryMatch(const PipelineProfile& profile, uint32_t index, const PipelineOptimizerKey& key);
+    void PrintProfileEntryMatch(
+        const PipelineProfile&      profile,
+        uint32_t                    index,
+        const PipelineOptimizerKey& key) const;
 #endif
 
     Device*                m_pDevice;
@@ -170,7 +173,7 @@ private:
 #endif
 
 #if PAL_ENABLE_PRINTS_ASSERTS
-    Util::Mutex            m_printMutex;
+    mutable Util::Mutex    m_printMutex;
 #endif
 };
 

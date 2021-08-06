@@ -24,43 +24,6 @@
  #######################################################################################################################
 include_guard()
 
-### Helper Macros #####################################################################################################
-macro(target_find_headers _target)
-    get_target_property(${_target}_INCLUDES_DIRS ${_target} INCLUDE_DIRECTORIES)
-
-    if(${_target}_INCLUDES_DIRS)
-        foreach(_include_dir IN ITEMS ${${_target}_INCLUDES_DIRS})
-            file(GLOB_RECURSE _include_files
-                LIST_DIRECTORIES false
-                "${_include_dir}/*.h"
-                "${_include_dir}/*.hpp"
-            )
-
-            list(APPEND ${_target}_INCLUDES ${_include_files})
-        endforeach()
-
-        target_sources(${_target} PRIVATE ${${_target}_INCLUDES})
-    endif()
-endmacro()
-
-# Source Groups Helper #############################################################################
-# This helper creates source groups for generators that support them. This is primarily MSVC and
-# XCode, but there are other generators that support IDE project files.
-#
-# Note: this only adds files that have been added to the target's SOURCES property. To add headers
-# to this list, be sure that you call target_find_headers before you call target_source_groups.
-macro(target_source_groups _target)
-    get_target_property(${_target}_SOURCES ${_target} SOURCES)
-    foreach(_source IN ITEMS ${${_target}_SOURCES})
-        set(_source ${_source})
-        get_filename_component(_source_path "${_source}" ABSOLUTE)
-        file(RELATIVE_PATH _source_path_rel "${PROJECT_SOURCE_DIR}" "${_source_path}")
-        get_filename_component(_source_path_rel "${_source_path_rel}" DIRECTORY)
-        string(REPLACE "/" "\\" _group_path "${_source_path_rel}")
-        source_group("${_group_path}" FILES "${_source}")
-    endforeach()
-endmacro()
-
 macro(xgl_append_common_sanitizer_flags)
     if(NOT MSVC)
         # Append -fno-omit-frame-pointer and turn on debug info to get better stack traces.

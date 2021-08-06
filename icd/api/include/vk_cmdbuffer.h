@@ -118,7 +118,7 @@ struct PipelineBindState
     PipelineDynamicBindInfo dynamicBindInfo;
 };
 
-union DirtyState
+union DirtyGraphicsState
 {
     struct
     {
@@ -196,8 +196,8 @@ struct AllGpuRenderState
     Framebuffer*             pFramebuffer;
 
     // Dirty bits indicate which state should be validated. It assumed viewport/scissor in perGpuStates will likely be
-    // changed for all GPUs if it is changed for any GPU. Put DirtyState management here will be easier to manage.
-    DirtyState dirty;
+    // changed for all GPUs if it is changed for any GPU. Put DirtyGraphicsState management here will be easier to manage.
+    DirtyGraphicsState dirtyGraphics;
 
     // Value of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
     // defined by the last bound GraphicsPipeline, which was not nullptr.
@@ -973,7 +973,7 @@ public:
 
     VK_INLINE uint32_t NumDeviceEvents(uint32_t numEvents) const
     {
-        return m_pDevice->NumPalDevices() * numEvents;
+        return m_numPalDevices * numEvents;
     }
 
 #if VK_ENABLE_DEBUG_BARRIERS
@@ -1023,8 +1023,7 @@ public:
         return &pPerGpuState[deviceIdx];
     }
 
-    AllGpuRenderState* RenderState()
-        { return &m_allGpuState; }
+    AllGpuRenderState* RenderState() { return &m_allGpuState; }
 
     // Get a safe number of objects that can be allocated by the virtual stack frame allocator without risking OOM error.
     uint32_t EstimateMaxObjectsOnVirtualStack(size_t objectSize) const
@@ -1194,7 +1193,8 @@ private:
             uint32_t useSplitReleaseAcquire              :  1;
             uint32_t reserved2                           :  3;
             uint32_t reserved3                           :  1;
-            uint32_t reserved                            : 16;
+            uint32_t reserved4                           :  1;
+            uint32_t reserved                            : 15;
         };
     };
 
@@ -1206,6 +1206,7 @@ private:
     uint32_t                      m_curDeviceMask;     // Device mask the command buffer is currently set to
     uint32_t                      m_rpDeviceMask;      // Device mask for the render pass instance
     uint32_t                      m_cbBeginDeviceMask; // Device mask this command buffer began with
+    const uint32_t                m_numPalDevices;
     VkShaderStageFlags            m_validShaderStageFlags;
     Pal::ICmdBuffer*              m_pPalCmdBuffers[MaxPalDevices];
     VirtualStackAllocator*        m_pStackAllocator;
@@ -1299,7 +1300,7 @@ void CmdBuffer::PalCmdBufferSetUserData(
     uint32_t               perDeviceStride,
     const uint32_t*        pEntryValues)
 {
-    for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+    for (uint32_t deviceIdx = 0; deviceIdx < m_numPalDevices; deviceIdx++)
     {
         PalCmdBuffer(deviceIdx)->CmdSetUserData(bindPoint,
             firstEntry,
@@ -1317,7 +1318,7 @@ void CmdBuffer::InsertDeviceEvents(
     uint32_t                stride
     ) const
 {
-    for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+    for (uint32_t deviceIdx = 0; deviceIdx < m_numPalDevices; deviceIdx++)
     {
         pDestEvents[(deviceIdx * stride) + index] = pSrcEvents->PalEvent(deviceIdx);
     }

@@ -101,6 +101,7 @@ enum class AppProfile : uint32_t
     XSystemEngine,         // XSystem Engine by Laminar Research
     UnityEngine,           // Unity Engine by Unity Technologies (Default)
     SaschaWillemsExamples, // Vulkan Examples by Sascha Willems
+    Maxon,                       // Maxon
 };
 
 struct ProfileSettings
