@@ -260,30 +260,30 @@ void InternalMemMgr::Destroy()
 
             InternalMemoryPool* pPool = it.Get();
 
-            pPool->groupMemory.Unmap();
+            Unmap(&pPool->groupMemory);
 
             for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
             {
                 m_pDevice->RemoveMemReference(m_pDevice->PalDevice(deviceIdx),
-                                              pPool->groupMemory.PalMemory(deviceIdx));
+                    pPool->groupMemory.pPalMemory[deviceIdx]);
             }
 
             // Delete the memory object and the system memory associated with it
-            pPool->groupMemory.Destroy(m_pDevice->VkInstance());
+            DestroyDeviceGroupMemory(&pPool->groupMemory, m_pDevice->VkInstance());
 
             // Delete Shadow Memory
-            pPool->groupShadowMemory.Unmap();
+            Unmap(&pPool->groupShadowMemory);
 
             for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
             {
-                if (pPool->groupShadowMemory.PalMemory(deviceIdx) != nullptr)
+                if (pPool->groupShadowMemory.pPalMemory[deviceIdx] != nullptr)
                 {
                     m_pDevice->RemoveMemReference(m_pDevice->PalDevice(deviceIdx),
-                                                    pPool->groupShadowMemory.PalMemory(deviceIdx));
+                        pPool->groupShadowMemory.pPalMemory[deviceIdx]);
                 }
             }
 
-            pPool->groupShadowMemory.Destroy(m_pDevice->VkInstance());
+            DestroyDeviceGroupMemory(&pPool->groupShadowMemory, m_pDevice->VkInstance());
 
             // Delete the buddy allocator
             PAL_DELETE(pPool->pBuddyAllocator, m_pSysMemAllocator);
@@ -487,7 +487,7 @@ VkResult InternalMemMgr::CreateMemoryPoolAndSubAllocate(
     // Persistently map the base allocation if requested.
     if ((result == VK_SUCCESS) && (poolInfo.flags.persistentMapped))
     {
-        Pal::Result palResult = pInternalMemory->groupMemory.Map();
+        Pal::Result palResult = Map(&pInternalMemory->groupMemory);
         result = PalToVkResult(palResult);
     }
 
@@ -506,7 +506,7 @@ VkResult InternalMemMgr::CreateMemoryPoolAndSubAllocate(
             VK_ASSERT(newPool.pBuddyAllocator == pInternalMemory->pBuddyAllocator);
 
             // Unmap any persistently mapped memory
-            pInternalMemory->groupMemory.Unmap();
+            Unmap(&pInternalMemory->groupMemory);
 
             // Release this pool's base GPU memory allocation
             FreeBaseGpuMem(pInternalMemory);
@@ -644,11 +644,11 @@ VkResult InternalMemMgr::AllocGpuMem(
         // Persistently map the allocation if necessary
         if ((result == VK_SUCCESS) && (createInfo.flags.persistentMapped))
         {
-            pInternalMemory->m_memoryPool.groupMemory.Map();
+            Map(&pInternalMemory->m_memoryPool.groupMemory);
 
             if (createInfo.flags.needShadow)
             {
-                pInternalMemory->m_memoryPool.groupShadowMemory.Map();
+                Map(&pInternalMemory->m_memoryPool.groupShadowMemory);
             }
         }
     }
@@ -658,13 +658,13 @@ VkResult InternalMemMgr::AllocGpuMem(
         // On success make sure to fill in the size and alignment information of the allocation
         // This helps making the deallocation faster because we can find the proper kval in the buddy allocator
         // immediately
-        pInternalMemory->m_memoryPool.groupMemory.GetVirtualAddress(
-                                                    pInternalMemory->m_gpuVA, pInternalMemory->m_offset);
+        GetVirtualAddress(&pInternalMemory->m_memoryPool.groupMemory,
+                          pInternalMemory->m_gpuVA, pInternalMemory->m_offset);
 
         if (createInfo.flags.needShadow)
         {
-            pInternalMemory->m_memoryPool.groupShadowMemory.GetVirtualAddress(
-                                                    pInternalMemory->m_gpuShadowVA, pInternalMemory->m_offset);
+            GetVirtualAddress(&pInternalMemory->m_memoryPool.groupShadowMemory,
+                              pInternalMemory->m_gpuShadowVA, pInternalMemory->m_offset);
 
             // Check the lower part of the VA for the Descriptor and Shadow Table are equal
             VK_ASSERT(static_cast<int32_t>(pInternalMemory->m_gpuVA[0]) ==
@@ -746,7 +746,7 @@ VkResult InternalMemMgr::AllocAndBindGpuMem(
         {
             // If the memory allocation succeeded then try to bind the memory to the object
             palResult = ppBindableObjectPerDevice[deviceIdx]->BindGpuMemory(
-                pInternalMemory->m_memoryPool.groupMemory.PalMemory(deviceIdx),
+                pInternalMemory->m_memoryPool.groupMemory.pPalMemory[deviceIdx],
                 pInternalMemory->m_offset);
         }
 
@@ -784,7 +784,7 @@ void InternalMemMgr::FreeGpuMem(
 
         // Unmap if the allocation was persistently mapped.  Note that we only do this here for allocations that
         // are not sub-allocated.
-        pInternalMemory->m_memoryPool.groupMemory.Unmap();
+        Unmap(&pInternalMemory->m_memoryPool.groupMemory);
 
         // Free the base allocation
         FreeBaseGpuMem(&pInternalMemory->m_memoryPool);
@@ -869,17 +869,17 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
                         {
                             localCreateInfo.flags.useReservedGpuVa = 1;
                             localCreateInfo.pReservedGpuVaOwner    =
-                                pGpuMemory->groupMemory.m_pPalMemory[primaryIndex];
+                                pGpuMemory->groupMemory.pPalMemory[primaryIndex];
                         }
 
                         palResult = m_pDevice->PalDevice(deviceIdx)->CreateGpuMemory(
                             localCreateInfo,
                             Util::VoidPtrInc(pSystemMem, palMemOffset),
-                            &pGpuMemory->groupMemory.m_pPalMemory[deviceIdx]);
+                            &pGpuMemory->groupMemory.pPalMemory[deviceIdx]);
 
                         if (pFirstAlloc == nullptr)
                         {
-                            pFirstAlloc = pGpuMemory->groupMemory.m_pPalMemory[deviceIdx];
+                            pFirstAlloc = pGpuMemory->groupMemory.pPalMemory[deviceIdx];
                         }
 
                         if ((palResult == Pal::Result::Success) && needShadow)
@@ -892,7 +892,7 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
 
                             // Allocate Shadow
                             Pal::gpusize gpuVA[MaxPalDevices];
-                            pGpuMemory->groupMemory.GetVirtualAddress(gpuVA, 0);
+                            GetVirtualAddress(&pGpuMemory->groupMemory, gpuVA, 0);
 
                             // For shadow descriptor tables use a GPU-read-only CPU-visible pool with a corresponding
                             // VA range. This ensures that the top 32 bits of shadow descriptor table addresses will
@@ -910,7 +910,7 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
                             palResult = m_pDevice->PalDevice(deviceIdx)->CreateGpuMemory(
                                 shadowCreateInfo,
                                 Util::VoidPtrInc(pSystemShadowMem, palMemOffset),
-                                &pGpuMemory->groupShadowMemory.m_pPalMemory[deviceIdx]);
+                                &pGpuMemory->groupShadowMemory.pPalMemory[deviceIdx]);
                         }
                     }
 
@@ -923,7 +923,7 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
                         palResult = pPalDevice->OpenSharedGpuMemory(
                             shareMem,
                             Util::VoidPtrInc(pSystemMem, palMemOffset),
-                            &pGpuMemory->groupMemory.m_pPalMemory[deviceIdx]);
+                            &pGpuMemory->groupMemory.pPalMemory[deviceIdx]);
                     }
 
                     if (palResult == Pal::Result::Success)
@@ -941,14 +941,14 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
                         // Add the newly created memory object to the residency list
                         palResult = m_pDevice->AddMemReference(
                             m_pDevice->PalDevice(deviceIdx),
-                            pGpuMemory->groupMemory.m_pPalMemory[deviceIdx],
+                            pGpuMemory->groupMemory.pPalMemory[deviceIdx],
                             memCreateFlags.readOnly);
 
                         if ((palResult == Pal::Result::Success) && needShadow)
                         {
                             palResult = m_pDevice->AddMemReference(
                                 m_pDevice->PalDevice(deviceIdx),
-                                pGpuMemory->groupShadowMemory.m_pPalMemory[deviceIdx],
+                                pGpuMemory->groupShadowMemory.pPalMemory[deviceIdx],
                                 memCreateFlags.readOnly);
                         }
                     }
@@ -960,7 +960,7 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
         if (palResult != Pal::Result::Success)
         {
             // Free the GPU memory object and system memory in case of failure
-            pGpuMemory->groupMemory.Destroy(m_pDevice->VkInstance());
+            DestroyDeviceGroupMemory(&pGpuMemory->groupMemory, m_pDevice->VkInstance());
         }
 
         return PalToVkResult(palResult);
@@ -981,51 +981,39 @@ void InternalMemMgr::FreeBaseGpuMem(
     for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
     {
         // Remove memory object from the residency list
-        if (pGpuMemory->groupMemory.m_pPalMemory[deviceIdx] != nullptr)
+        if (pGpuMemory->groupMemory.pPalMemory[deviceIdx] != nullptr)
         {
             m_pDevice->RemoveMemReference(
                 m_pDevice->PalDevice(deviceIdx),
-                pGpuMemory->groupMemory.m_pPalMemory[deviceIdx]);
+                pGpuMemory->groupMemory.pPalMemory[deviceIdx]);
         }
 
         // Remove shadow group memory from the residency list
-        if (pGpuMemory->groupShadowMemory.m_pPalMemory[deviceIdx] != nullptr)
+        if (pGpuMemory->groupShadowMemory.pPalMemory[deviceIdx] != nullptr)
         {
             m_pDevice->RemoveMemReference(
                 m_pDevice->PalDevice(deviceIdx),
-                pGpuMemory->groupShadowMemory.m_pPalMemory[deviceIdx]);
+                pGpuMemory->groupShadowMemory.pPalMemory[deviceIdx]);
         }
     }
 
     // Free the GPU memory object and system memory used by the object
-    pGpuMemory->groupMemory.Destroy(m_pDevice->VkInstance());
-    pGpuMemory->groupShadowMemory.Destroy(m_pDevice->VkInstance());
+    DestroyDeviceGroupMemory(&pGpuMemory->groupMemory, m_pDevice->VkInstance());
+    DestroyDeviceGroupMemory(&pGpuMemory->groupShadowMemory, m_pDevice->VkInstance());
 }
 
 // =====================================================================================================================
-Pal::IGpuMemory* DeviceGroupMemory::PalMemory(int32_t idx) const
+void InternalMemMgr::DestroyDeviceGroupMemory(
+    const struct DeviceGroupMemory* pGroupMemory,
+    Instance* pInstance)
 {
-    VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
-    return m_pPalMemory[idx];
-}
-
-// =====================================================================================================================
-void* DeviceGroupMemory::CpuAddr(int32_t idx) const
-{
-    VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
-    return m_pPersistentCpuAddr[idx];
-}
-
-// =====================================================================================================================
-void DeviceGroupMemory::Destroy(Instance* pInstance) const
-{
-    void* pSystemMem = m_pPalMemory[0];
+    void* pSystemMem = pGroupMemory->pPalMemory[0];
 
     for (uint32_t deviceIdx = 0; deviceIdx < MaxPalDevices; deviceIdx++)
     {
-        if (m_pPalMemory[deviceIdx] != nullptr)
+        if (pGroupMemory->pPalMemory[deviceIdx] != nullptr)
         {
-            m_pPalMemory[deviceIdx]->Destroy();
+            pGroupMemory->pPalMemory[deviceIdx]->Destroy();
         }
     }
 
@@ -1033,15 +1021,17 @@ void DeviceGroupMemory::Destroy(Instance* pInstance) const
 }
 
 // =====================================================================================================================
-Pal::Result DeviceGroupMemory::Map()
+Pal::Result InternalMemMgr::Map(
+    struct DeviceGroupMemory* pGroupMemory)
 {
     Pal::Result result = Pal::Result::ErrorNotMappable;
 
     for (uint32_t deviceIdx = 0; (deviceIdx < MaxPalDevices); deviceIdx++)
     {
-        if (m_pPalMemory[deviceIdx] != nullptr)
+        if (pGroupMemory->pPalMemory[deviceIdx] != nullptr)
         {
-            if (m_pPalMemory[deviceIdx]->Map(&m_pPersistentCpuAddr[deviceIdx]) == Pal::Result::Success)
+            if (pGroupMemory->pPalMemory[deviceIdx]->Map(&pGroupMemory->pPersistentCpuAddr[deviceIdx]) ==
+                Pal::Result::Success)
             {
                 result = Pal::Result::Success;
             }
@@ -1051,7 +1041,8 @@ Pal::Result DeviceGroupMemory::Map()
 }
 
 // =====================================================================================================================
-Pal::Result DeviceGroupMemory::Unmap() const
+Pal::Result InternalMemMgr::Unmap(
+    const struct DeviceGroupMemory* pGroupMemory)
 {
     Pal::Result result = Pal::Result::Success;
 
@@ -1059,21 +1050,24 @@ Pal::Result DeviceGroupMemory::Unmap() const
         (deviceIdx < MaxPalDevices) && (result == Pal::Result::Success);
         deviceIdx++)
     {
-        if ((m_pPalMemory[deviceIdx] != nullptr) &&
-            (m_pPersistentCpuAddr[deviceIdx] != nullptr))
+        if ((pGroupMemory->pPalMemory[deviceIdx] != nullptr) &&
+            (pGroupMemory->pPersistentCpuAddr[deviceIdx] != nullptr))
         {
-            result = m_pPalMemory[deviceIdx]->Unmap();
+            result = pGroupMemory->pPalMemory[deviceIdx]->Unmap();
         }
     }
     return result;
 }
 
 // =====================================================================================================================
-void DeviceGroupMemory::GetVirtualAddress(Pal::gpusize* pGpuVA, Pal::gpusize memOffset)
+void InternalMemMgr::GetVirtualAddress(
+    struct DeviceGroupMemory* pGroupMemory,
+    Pal::gpusize* pGpuVA,
+    Pal::gpusize memOffset)
 {
     for (uint32_t deviceIdx = 0; deviceIdx < MaxPalDevices; deviceIdx++)
     {
-        Pal::IGpuMemory* pPalMemory = PalMemory(deviceIdx);
+        Pal::IGpuMemory* pPalMemory = pGroupMemory->pPalMemory[deviceIdx];
         if (pPalMemory != nullptr)
         {
             pGpuVA[deviceIdx] = pPalMemory->Desc().gpuVirtAddr + memOffset;
@@ -1089,9 +1083,9 @@ Pal::Result InternalMemory::Map(
 {
     Pal::Result result = Pal::Result::Success;
 
-    if (m_memoryPool.groupMemory.CpuAddr(idx) != nullptr)
+    if (m_memoryPool.groupMemory.pPersistentCpuAddr[idx] != nullptr)
     {
-        *pCpuAddr = m_memoryPool.groupMemory.CpuAddr(idx);
+        *pCpuAddr = m_memoryPool.groupMemory.pPersistentCpuAddr[idx];
     }
     else
     {
@@ -1114,13 +1108,13 @@ Pal::Result InternalMemory::ShadowMap(
 {
     Pal::Result result = Pal::Result::Success;
 
-    if (m_memoryPool.groupShadowMemory.CpuAddr(idx) != nullptr)
+    if (m_memoryPool.groupShadowMemory.pPersistentCpuAddr[idx] != nullptr)
     {
-        *ppCpuAddr = m_memoryPool.groupShadowMemory.CpuAddr(idx);
+        *ppCpuAddr = m_memoryPool.groupShadowMemory.pPersistentCpuAddr[idx];
     }
     else
     {
-        Pal::IGpuMemory*  pPalMemory = m_memoryPool.groupShadowMemory.PalMemory(idx);
+        Pal::IGpuMemory*  pPalMemory = m_memoryPool.groupShadowMemory.pPalMemory[idx];
 
         if (pPalMemory != nullptr)
         {
@@ -1140,7 +1134,7 @@ Pal::Result InternalMemory::ShadowMap(
 // Unmaps an internal memory sub-allocation
 Pal::Result InternalMemory::Unmap(uint32_t idx)
 {
-    if (m_memoryPool.groupMemory.CpuAddr(idx) == nullptr)
+    if (m_memoryPool.groupMemory.pPersistentCpuAddr[idx] == nullptr)
     {
         return PalMemory(idx)->Unmap();
     }

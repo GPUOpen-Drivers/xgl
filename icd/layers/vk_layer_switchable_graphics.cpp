@@ -199,10 +199,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
     VK_ASSERT(pAllocCb != nullptr);
 
     VK_ASSERT(pPhysicalDeviceCount != nullptr);
-    uint32_t physicalDeviceCount = *pPhysicalDeviceCount;
+    uint32_t physicalDeviceCount = 0;
     VkPhysicalDevice* pLayerPhysicalDevices = nullptr;
 
-    if (pPhysicalDevices != nullptr)
+    result = nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, NULL);
+
+    if (result == VK_SUCCESS)
     {
         void* pMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
                                                 physicalDeviceCount * sizeof(VkPhysicalDevice),
@@ -225,29 +227,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
     }
 #if defined(__unix__)
 
-    if (pPhysicalDevices == nullptr)
-    {
-        void* pMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
-                                  physicalDeviceCount * sizeof(VkPhysicalDevice),
-                                  sizeof(void*),
-                                  VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-
-        if (pMemory == nullptr)
-        {
-            result = VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
-        else
-        {
-            pLayerPhysicalDevices = static_cast<VkPhysicalDevice*>(pMemory);
-        }
-
-        result = nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, pLayerPhysicalDevices);
-    }
-
     if (result == VK_SUCCESS)
     {
-        bool radvExists = false;
-
         // Allocate memory space to place the PhysicalDeviceProperties
         void* pPropertiesMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
                                   physicalDeviceCount * sizeof(VkPhysicalDeviceProperties),
@@ -262,75 +243,41 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
         else
         {
             for (uint32_t i = 0; i < physicalDeviceCount; i++)
-            {
-                // Determine whether RADV Vulkan driver exists and get all physical device properites
                 nextLinkFuncs.pfnGetPhysicalDeviceProperties(pLayerPhysicalDevices[i], &pProperties[i]);
-                if (((pProperties[i].vendorID == VENDOR_ID_AMD) || (pProperties[i].vendorID == VENDOR_ID_ATI)) &&
-                   (strstr(pProperties[i].deviceName, "RADV") != nullptr))
-                {
-                    radvExists = true;
-                }
-            }
         }
 
         if (result == VK_SUCCESS)
         {
-            if ((physicalDeviceCount > 1) && radvExists)
-            {
-                // Return specified physical devices according to environment variable AMD_VULKAN_ICD
-                const char* pEnv = getenv("AMD_VULKAN_ICD");
-                size_t reportPhysicalDeviceCount = 0;
+            uint32_t returnedPhysicalDeviceCount = 0;
+            uint32_t availablePhysicalDeviceCount = 0;
 
-                if ((pEnv != nullptr) && (strcmp(pEnv, "RADV") == 0))
-                {
-                    // Environment variable AMD_VULKAN_ICD = RADV indicates apps want to use RADV driver
-                    // So only reports RADV returned physical devices
-                    for (uint32_t i = 0; i < physicalDeviceCount; i++)
-                    {
-                        // Don't report AMD Vulkan driver returned physical devices
-                        if (((pProperties[i].vendorID != VENDOR_ID_AMD) && (pProperties[i].vendorID != VENDOR_ID_ATI)) ||
-                            (strstr(pProperties[i].deviceName, "RADV") != nullptr))
-                        {
-                            if (pPhysicalDevices != nullptr)
-                            {
-                                pPhysicalDevices[reportPhysicalDeviceCount] = pLayerPhysicalDevices[i];
-                            }
-                            reportPhysicalDeviceCount++;
-                        }
-                    }
-                }
-                else
-                {
-                    // In this case, apps want to use AMD Vulkan driver instead of RADV
-                    for (uint32_t i = 0; i < physicalDeviceCount; i++)
-                    {
-                        // Don't report RADV&llvmpipe driver returned physical devices
-                        if ((strstr(pProperties[i].deviceName, "RADV") == nullptr) &&
-                            (strstr(pProperties[i].deviceName, "llvmpipe") == nullptr))
-                        {
-                            if (pPhysicalDevices != nullptr)
-                            {
-                                pPhysicalDevices[reportPhysicalDeviceCount] = pLayerPhysicalDevices[i];
-                            }
-                            reportPhysicalDeviceCount++;
-                        }
-                    }
-                }
-                // Modify the PhysicalDeviceCount
-                *pPhysicalDeviceCount = reportPhysicalDeviceCount;
-            }
-            else
+            // Return specified physical devices according to environment variable AMD_VULKAN_ICD
+            const char* pEnv = getenv("AMD_VULKAN_ICD");
+            bool preferRADV = pEnv && !strcmp(pEnv, "RADV");
+
+            for (uint32_t i = 0; i < physicalDeviceCount; i++)
             {
-                // Return all the physical devices to apps
-                if (pPhysicalDevices != nullptr)
+                bool isAMD      = pProperties[i].vendorID == VENDOR_ID_AMD || pProperties[i].vendorID == VENDOR_ID_ATI;
+                bool isRADV     = isAMD && strstr(pProperties[i].deviceName, "RADV")     != nullptr;
+                bool isLLVMpipe =          strstr(pProperties[i].deviceName, "llvmpipe") != nullptr;
+
+                if ((!isAMD || isRADV == preferRADV) && (!isLLVMpipe || preferRADV))
                 {
-                    for (uint32_t i = 0; i < physicalDeviceCount; i++)
+                    if (pPhysicalDevices != nullptr)
                     {
-                        pPhysicalDevices[i] = pLayerPhysicalDevices[i];
+                        if (returnedPhysicalDeviceCount < *pPhysicalDeviceCount)
+                            pPhysicalDevices[returnedPhysicalDeviceCount++] = pLayerPhysicalDevices[i];
                     }
+                    else
+                        returnedPhysicalDeviceCount++;
+
+                    availablePhysicalDeviceCount++;
                 }
-                *pPhysicalDeviceCount = physicalDeviceCount;
             }
+            *pPhysicalDeviceCount = returnedPhysicalDeviceCount;
+
+            if (pPhysicalDevices != nullptr && returnedPhysicalDeviceCount < availablePhysicalDeviceCount)
+                result = VK_INCOMPLETE;
         }
 
         if (pProperties != nullptr)
