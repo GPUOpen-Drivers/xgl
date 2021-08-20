@@ -40,6 +40,8 @@ macro(xgl_options)
 
     option(XGL_BUILD_NAVI22 "Build open source vulkan for Navi22" ON)
 
+    option(XGL_BUILD_NAVI23 "Build open source vulkan for Navi23" ON)
+
     option(XGL_BUILD_LIT "Build with Lit test?" OFF)
 
     option(XGL_BUILD_CACHE_CREATOR "Build cache-creator tools?" OFF)

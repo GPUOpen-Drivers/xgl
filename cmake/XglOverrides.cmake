@@ -162,6 +162,8 @@ macro(xgl_overrides_pal)
 
     set(PAL_BUILD_NAVI22 ${XGL_BUILD_NAVI22} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
+    set(PAL_BUILD_NAVI23 ${XGL_BUILD_NAVI23} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
     # Wayland
     set(PAL_BUILD_WAYLAND ${BUILD_WAYLAND_SUPPORT} CACHE BOOL "Build PAL with Wayland support" FORCE)
 
@@ -189,6 +191,8 @@ macro(xgl_overrides_vkgc)
         set(LLPC_BUILD_NAVI12 ${XGL_BUILD_NAVI12} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
         set(LLPC_BUILD_NAVI22 ${XGL_BUILD_NAVI22} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
+        set(LLPC_BUILD_NAVI23 ${XGL_BUILD_NAVI23} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
         set(LLPC_BUILD_RAVEN2 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
