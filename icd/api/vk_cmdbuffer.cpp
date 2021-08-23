@@ -6553,7 +6553,8 @@ VK_INLINE void CmdBuffer::WritePushConstants(
     // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant because
     // a future vkCmdBindPipeline will reprogram the user data registers during the rebase.
     if (PalPipelineBindingOwnedBy(palBindPoint, apiBindPoint) &&
-        pBindState->userDataLayout.pushConstRegBase == userDataLayout.pushConstRegBase)
+        pBindState->userDataLayout.pushConstRegBase == userDataLayout.pushConstRegBase &&
+        pBindState->userDataLayout.pushConstRegCount >= startInDwords + lengthInDwords)
     {
         utils::IterateMask deviceGroup(m_curDeviceMask);
         do

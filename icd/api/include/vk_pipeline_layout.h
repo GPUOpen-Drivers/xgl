@@ -117,8 +117,9 @@ public:
 
     VkResult BuildLlpcPipelineMapping(
         const uint32_t             stageMask,
-        const VbBindingInfo*       pVbInfo,
+        VbInfo*                    pVbInfo,
         void*                      pBuffer,
+        bool                       appendFetchShaderCb,
         Vkgc::ResourceMappingData* pResourceMapping) const;
 
     static VkResult Create(

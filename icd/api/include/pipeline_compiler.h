@@ -38,6 +38,7 @@
 #include "include/compiler_solution_llpc.h"
 
 #include "include/vk_shader_code.h"
+#include "include/vk_conv.h"
 
 namespace vk
 {
@@ -47,6 +48,8 @@ class PipelineCache;
 class ShaderModule;
 class PipelineCompiler;
 struct VbBindingInfo;
+struct VbInfo;
+struct UberFetchShaderBufferInfo;
 struct ShaderModuleHandle;
 
 class PipelineBinaryCache;
@@ -157,7 +160,7 @@ public:
         const VkGraphicsPipelineCreateInfo*             pIn,
         const GraphicsPipelineShaderStageInfo*          pShaderInfo,
         GraphicsPipelineBinaryCreateInfo*               pCreateInfo,
-        VbBindingInfo*                                  pVbInfo);
+        VbInfo*                                         pVbInfo);
 
     VkResult ConvertComputePipelineInfo(
         const Device*                                   pDevice,
@@ -207,6 +210,11 @@ public:
     void GetElfCacheMetricString(char* pOutStr, size_t outStrSize);
 
     void DestroyPipelineBinaryCache();
+
+    VkResult BuildUberFetchShaderInternalData(PipelineCompilerType                        compilerType,
+                                              const VkPipelineVertexInputStateCreateInfo* pVertexInput,
+                                              bool                                        isDynamicStride,
+                                              UberFetchShaderBufferInfo*                  pFetchShaderBufferInfo);
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
@@ -267,6 +275,8 @@ private:
     uint32_t             m_totalBinaries;      // Total number of binaries compiled or fetched
     int64_t              m_totalTimeSpent;     // Accumulation of time spent either loading or compiling pipeline
                                                // binaries
+
+    UberFetchShaderFormatInfoMap m_uberFetchShaderInfoFormatMap;  // Uber fetch shader format info map
 
     void GetPipelineCreationInfoNext(
         const VkStructHeader*                             pHeader,

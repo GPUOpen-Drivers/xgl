@@ -270,7 +270,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
                     }
                     else
                         returnedPhysicalDeviceCount++;
-                    
+
                     availablePhysicalDeviceCount++;
                 }
             }

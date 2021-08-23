@@ -961,6 +961,30 @@
       "Type": "bool"
     },
     {
+      "Name": "EnableUberFetchShader",
+      "Description": "Enable uber fetch shder.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
+      "Name": "ForceAlignedForDynamicStride",
+      "Description": "Force vertex stride is aligned when dynamic vertex stride is enabled",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
       "Description": "Enable pipeline dump, pipeline is stored with .pipe format. You must set AMD_DEBUG_DIR and make sure $AMD_DEBUG_DIR + pipelineDumpDir is  an available directory.",
       "Tags": [
         "SPIRV Options"

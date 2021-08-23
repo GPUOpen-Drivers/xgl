@@ -97,22 +97,11 @@ struct MemoryPoolProperties
 };
 
 // =====================================================================================================================
-// Device Group Memory class, a container for memory and access for multi-gpu
+// Device Group Memory struct, a container for memory and access for multi-gpu
 struct DeviceGroupMemory
 {
-    Pal::IGpuMemory* PalMemory(int32_t idx) const;
-
-    void* CpuAddr(int32_t idx) const;
-
-    void  Destroy(Instance* pInstance) const;
-
-    Pal::Result Map();
-    Pal::Result Unmap() const;
-
-    void GetVirtualAddress(Pal::gpusize* pGpuVA, Pal::gpusize memOffset);
-
-    Pal::IGpuMemory*    m_pPalMemory[MaxPalDevices];          // PAL GPU memory object of the internal base allocation
-    void*               m_pPersistentCpuAddr[MaxPalDevices];  // Persistently mapped CPU address
+    Pal::IGpuMemory*    pPalMemory[MaxPalDevices];          // PAL GPU memory object of the internal base allocation
+    void*               pPersistentCpuAddr[MaxPalDevices];  // Persistently mapped CPU address
 };
 
 // Structure holding information about an internal GPU memory base allocation
@@ -138,13 +127,13 @@ public:
     Pal::IGpuMemory* PalMemory(int32_t idx)
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
-        return m_memoryPool.groupMemory.PalMemory(idx);
+        return m_memoryPool.groupMemory.pPalMemory[idx];
     }
 
     Pal::IGpuMemory* PalMemory(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
-        return m_memoryPool.groupMemory.PalMemory(idx);
+        return m_memoryPool.groupMemory.pPalMemory[idx];
     }
 
     Pal::gpusize GpuVirtAddr(int32_t idx) const
@@ -162,7 +151,7 @@ public:
     void* CpuAddr(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
-        return Util::VoidPtrInc(m_memoryPool.groupMemory.CpuAddr(idx), static_cast<size_t>(m_offset));
+        return Util::VoidPtrInc(m_memoryPool.groupMemory.pPersistentCpuAddr[idx], static_cast<size_t>(m_offset));
     }
 
     Pal::gpusize Offset() const
@@ -250,6 +239,13 @@ public:
     void GetCommonPool(InternalSubAllocPool poolId, InternalMemCreateInfo* pAllocInfo) const;
 
     VkResult CalcSubAllocationPool(const MemoryPoolProperties& poolProps, void** ppPoolInfo);
+
+    void  DestroyDeviceGroupMemory(const struct DeviceGroupMemory* pGroupMemory, Instance* pInstance);
+
+    Pal::Result Map(struct DeviceGroupMemory* pGroupMemory);
+    Pal::Result Unmap(const struct DeviceGroupMemory* pGroupMemory);
+
+    void GetVirtualAddress(struct DeviceGroupMemory* pGroupMemory, Pal::gpusize* pGpuVA, Pal::gpusize memOffset);
 
 private:
     typedef Util::List<InternalMemoryPool, PalAllocator>                                               MemoryPoolList;
