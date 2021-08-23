@@ -84,7 +84,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
         else
         {
             GraphicsPipelineBinaryCreateInfo binaryCreateInfoMGPU = {};
-            VbBindingInfo vbInfoMGPU = {};
+            VbInfo vbInfoMGPU = {};
             pDefaultCompiler->ConvertGraphicsPipelineInfo(
                 pDevice, pCreateInfo, pShaderInfo, &binaryCreateInfoMGPU, &vbInfoMGPU);
 
@@ -120,7 +120,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
     Device*                             pDevice,
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
     const VkAllocationCallbacks*        pAllocator,
-    const VbBindingInfo*                pVbInfo,
+    const VbInfo*                       pVbInfo,
     const size_t*                       pPipelineBinarySizes,
     const void**                        pPipelineBinaries,
     PipelineCache*                      pPipelineCache,
@@ -374,7 +374,7 @@ VkResult GraphicsPipeline::Create(
     // 1. Build pipeline binary create info
     GraphicsPipelineBinaryCreateInfo binaryCreateInfo = {};
     GraphicsPipelineShaderStageInfo  shaderStageInfo  = {};
-    VbBindingInfo                    vbInfo           = {};
+    VbInfo                           vbInfo           = {};
     ShaderModuleHandle               tempModules[ShaderStage::ShaderStageGfxCount] = {};
 
     VkResult result = BuildPipelineBinaryCreateInfo(
@@ -476,7 +476,7 @@ GraphicsPipeline::GraphicsPipeline(
     bool                                   bindInputAssemblyState,
     bool                                   force1x1ShaderRate,
     bool                                   customSampleLocations,
-    const VbBindingInfo&                   vbInfo,
+    const VbInfo&                          vbInfo,
     Pal::IMsaaState**                      pPalMsaa,
     Pal::IColorBlendState**                pPalColorBlend,
     Pal::IDepthStencilState**              pPalDepthStencil,
@@ -1038,6 +1038,18 @@ void GraphicsPipeline::BindToCmdBuffer(
 
             pRenderState->staticTokens.fragmentShadingRate = newTokens.fragmentShadingRate;
             pRenderState->dirtyGraphics.vrs = 0;
+        }
+
+        if (m_vbInfo.uberFetchShaderBuffer.bufferSize > 0)
+        {
+            VK_ASSERT(m_vbInfo.uberFetchShaderBuffer.userDataOffset > 0);
+            Pal::gpusize gpuAddress = {};
+            uint32_t* pCpuAddr = pPalCmdBuf->CmdAllocateEmbeddedData(m_vbInfo.uberFetchShaderBuffer.bufferSize, 1, &gpuAddress);
+            memcpy(pCpuAddr, m_vbInfo.uberFetchShaderBuffer.bufferData, m_vbInfo.uberFetchShaderBuffer.bufferSize);
+            pPalCmdBuf->CmdSetUserData(Pal::PipelineBindPoint::Graphics,
+                                       m_vbInfo.uberFetchShaderBuffer.userDataOffset,
+                                       2,
+                                       reinterpret_cast<uint32_t*>(&gpuAddress));
         }
     }
     while (deviceGroup.IterateNext());

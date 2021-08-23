@@ -29,6 +29,7 @@
 #pragma once
 
 #include "include/vk_pipeline.h"
+#include "vkgcDefs.h"
 #include "palColorBlendState.h"
 #include "palDepthStencilState.h"
 #include "palMetroHash.h"
@@ -61,6 +62,19 @@ struct VbBindingInfo
         uint32_t slot;
         uint32_t byteStride;
     } bindings[Pal::MaxVertexBuffers];
+};
+
+struct UberFetchShaderBufferInfo
+{
+    uint32_t userDataOffset;
+    uint32_t bufferSize;
+    uint32_t bufferData[Vkgc::MaxFetchShaderInternalBufferSize];
+};
+
+struct VbInfo
+{
+    VbBindingInfo bindingInfo;
+    UberFetchShaderBufferInfo uberFetchShaderBuffer;
 };
 
 // =====================================================================================================================
@@ -175,14 +189,14 @@ protected:
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
         GraphicsPipelineBinaryCreateInfo*   pBinInfo,
         GraphicsPipelineShaderStageInfo*    pShaderInfo,
-        VbBindingInfo*                      pVbInfo,
+        VbInfo*                             pVbInfo,
         ShaderModuleHandle*                 pTempModules);
 
     // Convert API information into internal create info used to create internal pipeline object
     static void BuildPipelineObjectCreateInfo(
         const Device*                       pDevice,
         const VkGraphicsPipelineCreateInfo* pIn,
-        const VbBindingInfo*                pVbInfo,
+        const VbInfo*                       pVbInfo,
         const GraphicsPipelineBinaryInfo*   pBinInfo,
         GraphicsPipelineObjectCreateInfo*   pObjInfo);
 

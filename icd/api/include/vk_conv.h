@@ -3386,6 +3386,41 @@ VK_INLINE uint32_t VkToVkgcShaderStageMask(VkShaderStageFlags vkShaderStageFlags
     return vkgcShaderMask;
 }
 
+// =====================================================================================================================
+struct UberFetchShaderFormatInfo
+{
+    Pal::SwizzledFormat swizzledFormat;
+    Pal::SwizzledFormat unpackedFormat;
+    uint32_t            bufferFormat;
+    uint32_t            unpackedBufferFormat;
+    union
+    {
+        struct
+        {
+            uint32_t            isPacked          : 1;
+            uint32_t            isFixed           : 1;
+            uint32_t            componentCount    : 4;
+            uint32_t            componentSize     : 4;
+            uint32_t            alignment         : 4;
+            uint32_t            reserved          : 18;
+        };
+        uint32_t u32All;
+    };
+};
+
+typedef Util::HashMap<VkFormat, UberFetchShaderFormatInfo, PalAllocator, Util::JenkinsHashFunc>
+    UberFetchShaderFormatInfoMap;
+class PhysicalDevice;
+
+// =====================================================================================================================
+VkResult InitializeUberFetchShaderFormatTable(
+    PhysicalDevice*               pPhysicalDevice,
+    UberFetchShaderFormatInfoMap* pFormatInfoMap);
+
+UberFetchShaderFormatInfo GetUberFetchShaderFormatInfo(
+    UberFetchShaderFormatInfoMap* pFormatInfoMap,
+    VkFormat                      vkFormat);
+
 } // namespace vk
 
 #endif /* __VK_CONV_H__ */

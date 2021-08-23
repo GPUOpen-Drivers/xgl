@@ -158,7 +158,7 @@ public:
         const VkAllocationCallbacks*    pAllocator) override;
 
     const VbBindingInfo& GetVbBindingInfo() const
-        { return m_vbInfo; }
+        { return m_vbInfo.bindingInfo; }
 
     void BindToCmdBuffer(
         CmdBuffer*                             pCmdBuffer,
@@ -197,7 +197,7 @@ protected:
         bool                                   bindInputAssemblyState,
         bool                                   force1x1ShaderRate,
         bool                                   customSampleLocations,
-        const VbBindingInfo&                   vbInfo,
+        const VbInfo&                          vbInfo,
         Pal::IMsaaState**                      pPalMsaa,
         Pal::IColorBlendState**                pPalColorBlend,
         Pal::IDepthStencilState**              pPalDepthStencil,
@@ -225,7 +225,7 @@ protected:
         Device*                             pDevice,
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
         const VkAllocationCallbacks*        pAllocator,
-        const VbBindingInfo*                pVbInfo,
+        const VbInfo*                       pVbInfo,
         const size_t*                       pPipelineBinarySizes,
         const void**                        pPipelineBinaries,
         PipelineCache*                      pPipelineCache,
@@ -242,7 +242,7 @@ private:
     Pal::IMsaaState*                m_pPalMsaa[MaxPalDevices];         // PAL MSAA state object
     Pal::IColorBlendState*          m_pPalColorBlend[MaxPalDevices];   // PAL color blend state object
     Pal::IDepthStencilState*        m_pPalDepthStencil[MaxPalDevices]; // PAL depth stencil state object
-    VbBindingInfo                   m_vbInfo;                          // Information about vertex buffer bindings
+    VbInfo                          m_vbInfo;                          // Information about vertex buffer bindings
 
     union
     {

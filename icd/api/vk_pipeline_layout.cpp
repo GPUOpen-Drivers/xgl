@@ -127,6 +127,7 @@ VkResult PipelineLayout::ConvertCreateInfo(
     // 1 extra user data node for the vertex buffer table pointer
     // 1 extra user data node for push constant
     pPipelineInfo->numUserDataNodes   = 2;
+
     pInfo->setCount = pIn->setLayoutCount;
 
     pInfo->userDataRegCount      = 0;
@@ -144,6 +145,12 @@ VkResult PipelineLayout::ConvertCreateInfo(
         pInfo->userDataLayout.transformFeedbackRegCount = 1;
         pInfo->userDataRegCount                        += pInfo->userDataLayout.transformFeedbackRegCount;
         pPipelineInfo->numUserDataNodes                += 1;
+    }
+
+    // Reserve one user data nodes for uber-fetch shader.
+    if (pDevice->GetRuntimeSettings().enableUberFetchShader)
+    {
+        pPipelineInfo->numUserDataNodes += 1;
     }
 
     // Calculate the number of bytes needed for push constants
@@ -468,13 +475,13 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
 // This function populates the resource mapping node details to the shader-stage specific pipeline info structure.
 VkResult PipelineLayout::BuildLlpcPipelineMapping(
     const uint32_t             stageMask,
-    const VbBindingInfo*       pVbInfo,
+    VbInfo*                    pVbInfo,
     void*                      pBuffer,
+    bool                       appendFetchShaderCb,
     Vkgc::ResourceMappingData* pResourceMapping
     ) const
 {
     VkResult result = VK_SUCCESS;
-
     Vkgc::ResourceMappingRootNode* pUserDataNodes = static_cast<Vkgc::ResourceMappingRootNode*>(pBuffer);
     Vkgc::ResourceMappingNode* pResourceNodes =
         reinterpret_cast<Vkgc::ResourceMappingNode*>(pUserDataNodes + m_pipelineInfo.numUserDataNodes);
@@ -586,7 +593,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
 
             // Build the table description itself
             const uint32_t srdDwSize = m_pDevice->GetProperties().descriptorSizes.bufferView / sizeof(uint32_t);
-            uint32_t vbTableSize = pVbInfo->bindingTableSize * srdDwSize;
+            uint32_t vbTableSize = pVbInfo->bindingInfo.bindingTableSize * srdDwSize;
 
             // Add the set pointer node pointing to this table
             auto pVbTblPtrNode = &pUserDataNodes[userDataNodeCount];
@@ -602,6 +609,32 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
         else
         {
             result = VK_ERROR_INITIALIZATION_FAILED;
+        }
+
+        if (appendFetchShaderCb)
+        {
+            // Append node for uber fetch shader constant buffer
+            constexpr uint32_t FetchShaderCbRegCount = 2;
+            if ((userDataNodeCount + FetchShaderCbRegCount) <=
+                m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.maxUserDataEntries)
+            {
+                auto pFetchShaderCbNode = &pUserDataNodes[userDataNodeCount];
+                pFetchShaderCbNode->node.type             = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
+                pFetchShaderCbNode->node.offsetInDwords   = m_info.userDataRegCount + VbTablePtrRegCount;
+                pFetchShaderCbNode->node.sizeInDwords     = FetchShaderCbRegCount;
+                pFetchShaderCbNode->node.srdRange.set     = Vkgc::InternalDescriptorSetId;
+                pFetchShaderCbNode->node.srdRange.binding = Vkgc::FetchShaderInternalBufferBinding;
+                pFetchShaderCbNode->visibility = Vkgc::ShaderStageVertexBit;
+
+                pVbInfo->uberFetchShaderBuffer.userDataOffset = pFetchShaderCbNode->node.offsetInDwords;
+                userDataNodeCount += 1;
+            }
+            else
+            {
+                VK_NEVER_CALLED();
+                result = VK_ERROR_INITIALIZATION_FAILED;
+            }
+
         }
     }
 

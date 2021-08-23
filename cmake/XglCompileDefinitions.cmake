@@ -66,6 +66,10 @@ macro(xgl_set_compile_definitions)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI22=1)
     endif()
 
+    if(XGL_BUILD_NAVI23)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI23=1)
+    endif()
+
 #if VKI_KHR_DISPLAY
     if(VKI_KHR_DISPLAY)
         target_compile_definitions(xgl PRIVATE VKI_KHR_DISPLAY)
