@@ -312,6 +312,15 @@ Device::Device(
         m_enabledFeatures.robustBufferAccess = false;
     }
 
+    if (RuntimeSettings().enableRelocatableShaders)
+    {
+        m_enabledFeatures.mustWriteImmutableSamplers = true;
+    }
+    else
+    {
+        m_enabledFeatures.mustWriteImmutableSamplers = false;
+    }
+
     m_enabledFeatures.scalarBlockLayout = false;
 
     m_enabledFeatures.attachmentFragmentShadingRate = false;
