@@ -1154,6 +1154,11 @@
             "Name": "ShaderReplaceShaderISA",
             "Value": 4,
             "Description": "Enable replace ISA shader in the pipeline, For every pipeline in the ShaderReplacementPipelineHashs, would find if there is a file named 0xAAA_replace.txt under ShaderReplacementDir, would be loaded for the replacement the replace shader look like this  *----offset: ISACODE----* 848:0x7E120303   1480:0x7E1E0303  2592:0x7E0E030E"
+          },
+          {
+            "Name": "ShaderReplaceShaderHashPipelineBinaryHash",
+            "Value": 5,
+            "Description": "Enable both shader hash based shader replacement and pipeline binary hash based pipeline binary replacement. In cases where both a pipeline and one or more of its shaders are replaced, the replacement shader will take precedence and will potentially change the hash of the pipeline. The pipeline will only be replaced if the pipeline replacement file has the new hash."
           }
         ],
         "Name": "ShaderReplaceMode"

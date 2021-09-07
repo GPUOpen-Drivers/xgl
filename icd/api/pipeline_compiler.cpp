@@ -348,7 +348,8 @@ VkResult PipelineCompiler::BuildShaderModule(
     Util::MetroHash64::Hash(reinterpret_cast<const uint8_t*>(pCode), codeSize, hash.bytes);
     bool findReplaceShader = false;
 
-    if (pSettings->shaderReplaceMode == ShaderReplaceShaderHash)
+    if ((pSettings->shaderReplaceMode == ShaderReplaceShaderHash) ||
+        (pSettings->shaderReplaceMode == ShaderReplaceShaderHashPipelineBinaryHash))
     {
         size_t replaceCodeSize = 0;
         void* pReplaceCode = nullptr;
@@ -394,7 +395,7 @@ void PipelineCompiler::FreeShaderModule(
 }
 
 // =====================================================================================================================
-// Replaces pipeline binary from external replacment file (<pipeline_name>_repalce.elf)
+// Replaces pipeline binary from external replacement file (<pipeline_name>_replace.elf)
 template<class PipelineBuildInfo>
 bool PipelineCompiler::ReplacePipelineBinary(
         const PipelineBuildInfo* pPipelineBuildInfo,
@@ -713,7 +714,8 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         &pCreateInfo->pipelineInfo.fs,
     };
 
-    if (settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash)
+    if ((settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash) ||
+        (settings.shaderReplaceMode == ShaderReplaceShaderHashPipelineBinaryHash))
     {
         if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary, pipelineHash))
         {
@@ -904,7 +906,8 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     ShaderModuleHandle shaderModuleReplaceHandle = {};
     bool shaderModuleReplaced = false;
 
-    if (settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash)
+    if ((settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash) ||
+        (settings.shaderReplaceMode == ShaderReplaceShaderHashPipelineBinaryHash))
     {
         if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary, pipelineHash))
         {
