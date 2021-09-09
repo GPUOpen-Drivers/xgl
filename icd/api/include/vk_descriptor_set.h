@@ -101,11 +101,11 @@ public:
         return &(DynamicDescriptorData()[idx]);
     }
 
-    VK_INLINE static DescriptorSet* StateFromHandle(VkDescriptorSet set);
-    VK_INLINE static Pal::gpusize GpuAddressFromHandle(uint32_t deviceIdx, VkDescriptorSet set);
-    VK_INLINE static void UserDataPtrValueFromHandle(VkDescriptorSet set, uint32_t deviceIdx, uint32_t* pUserData);
+    inline static DescriptorSet* StateFromHandle(VkDescriptorSet set);
+    inline static Pal::gpusize GpuAddressFromHandle(uint32_t deviceIdx, VkDescriptorSet set);
+    inline static void UserDataPtrValueFromHandle(VkDescriptorSet set, uint32_t deviceIdx, uint32_t* pUserData);
 
-     VK_INLINE static void PatchedDynamicDataFromHandle(
+     inline static void PatchedDynamicDataFromHandle(
         VkDescriptorSet set,
         uint32_t        deviceIdx,
         uint32_t*       pUserData,

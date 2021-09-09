@@ -67,7 +67,7 @@ public:
     }
 
     // Starts a new thread which starts by running function TaskThreadFunc.
-    VK_INLINE void Begin()
+    void Begin()
     {
         Util::Thread::Begin(ThreadFunc, this);
     }
@@ -81,7 +81,7 @@ public:
     }
 
     // Set flag stop and trig event.
-    VK_INLINE void SetStop()
+    void SetStop()
     {
         m_event.Set();
         m_stop = true;

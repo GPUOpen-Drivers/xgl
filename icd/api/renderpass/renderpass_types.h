@@ -45,10 +45,10 @@ struct RPImageLayout
     VkImageLayout layout;       // Base Vulkan image layout
     uint32_t      extraUsage;   // Extra PAL layout usages (used to e.g. make attachments resolve-compatible)
 
-    VK_INLINE bool operator==(const RPImageLayout& rhs) const
+    bool operator==(const RPImageLayout& rhs) const
         { return (layout == rhs.layout) && (extraUsage == rhs.extraUsage); }
 
-    VK_INLINE bool operator!=(const RPImageLayout& rhs) const
+    bool operator!=(const RPImageLayout& rhs) const
         { return (layout != rhs.layout) || (extraUsage != rhs.extraUsage); }
 };
 

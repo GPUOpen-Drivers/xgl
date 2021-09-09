@@ -78,13 +78,13 @@ public:
 
     VkResult RestoreFence(const Device* pDevice);
 
-    VK_INLINE uint32_t GetActiveDeviceMask() const
+    uint32_t GetActiveDeviceMask() const
         { return m_activeDeviceMask; }
 
-    VK_INLINE void ClearActiveDeviceMask()
+    void ClearActiveDeviceMask()
         { m_activeDeviceMask = 0; }
 
-    VK_INLINE void SetActiveDevice(uint32_t deviceIdx)
+    void SetActiveDevice(uint32_t deviceIdx)
         { m_activeDeviceMask |= (1 << deviceIdx); }
 
     VK_FORCEINLINE Pal::IFence* PalFence(int32_t idx) const

@@ -409,3 +409,4 @@ vkCmdCopyBufferToImage2KHR                          @device     @dext(KHR_copy_c
 vkCmdCopyImage2KHR                                  @device     @dext(KHR_copy_commands2)
 vkCmdCopyImageToBuffer2KHR                          @device     @dext(KHR_copy_commands2)
 vkCmdResolveImage2KHR                               @device     @dext(KHR_copy_commands2)
+

@@ -124,7 +124,7 @@ public:
 
     void Unmap(void);
 
-    VK_INLINE bool IsMultiInstance() const
+    bool IsMultiInstance() const
     {
         return m_flags.multiInstance;
     }
@@ -135,12 +135,12 @@ public:
 
     Pal::IGpuMemory* PalMemory(uint32_t resourceIndex, uint32_t memoryIndex);
 
-    VK_INLINE Pal::IGpuMemory* PalMemory(uint32_t resourceIndex) const
+    Pal::IGpuMemory* PalMemory(uint32_t resourceIndex) const
     {
         return m_pPalMemory[resourceIndex][resourceIndex];
     }
 
-    VK_INLINE Pal::IImage* GetExternalPalImage() const
+    Pal::IImage* GetExternalPalImage() const
     {
         return m_pExternalPalImage;
     }
@@ -161,7 +161,7 @@ private:
 
     // Marks that the logical device's allocation count is incremented and needs to be decremented during the
     // destruction of this memory object.
-    VK_INLINE void SetAllocationCounted(uint32_t sizeAccountedForDeviceMask)
+    void SetAllocationCounted(uint32_t sizeAccountedForDeviceMask)
     {
         m_flags.allocationCounted = 1;
         m_sizeAccountedForDeviceMask = sizeAccountedForDeviceMask;

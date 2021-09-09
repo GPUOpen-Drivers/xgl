@@ -148,6 +148,7 @@ VkResult ComputePipeline::Create(
     VkResult result = BuildShaderStageInfo(pDevice,
                                            1,
                                            &pCreateInfo->stage,
+                                           false,
                                            [](const uint32_t inputIdx, const uint32_t stageIdx)
                                            {
                                                return 0u;

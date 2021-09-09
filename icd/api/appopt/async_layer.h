@@ -78,7 +78,7 @@ public:
 
     virtual void OverrideDispatchTable(DispatchTable* pDispatchTable) override;
 
-    VK_INLINE Device* GetDevice() { return m_pDevice; }
+    Device* GetDevice() { return m_pDevice; }
 
     void* GetTaskThread(TaskType type)
     {

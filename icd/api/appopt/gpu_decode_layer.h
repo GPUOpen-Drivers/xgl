@@ -54,12 +54,12 @@ public:
     VkResult Init(Device* pDevice);
 
     virtual void OverrideDispatchTable(DispatchTable* pDispatchTable) override;
-    VK_INLINE GpuTexDecoder::Device* GetTexDecoder()
+    GpuTexDecoder::Device* GetTexDecoder()
     {
         return m_pGpuTexDecoder;
     }
 
-    VK_INLINE bool isAstcSrgbaFormat(VkFormat format)
+    bool isAstcSrgbaFormat(VkFormat format)
     {
          return Formats::IsASTCFormat(format) &&
             (static_cast<uint32_t>(format) % 2 == 0);

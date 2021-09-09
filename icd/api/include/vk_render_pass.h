@@ -232,43 +232,43 @@ public:
 
     uint32_t GetColorAttachmentSamples(uint32_t subPassIndex, uint32_t colorTarget) const;
     uint32_t GetDepthStencilAttachmentSamples(uint32_t subPassIndex) const;
-    VK_INLINE VkResolveModeFlagBits GetDepthResolveMode(uint32_t subpass) const
+    VkResolveModeFlagBits GetDepthResolveMode(uint32_t subpass) const
         { return m_createInfo.pSubpasses[subpass].depthResolveMode; }
 
-    VK_INLINE VkResolveModeFlagBits GetStencilResolveMode(uint32_t subpass) const
+    VkResolveModeFlagBits GetStencilResolveMode(uint32_t subpass) const
         { return m_createInfo.pSubpasses[subpass].stencilResolveMode; }
 
     uint32_t GetSubpassColorReferenceCount(uint32_t subPassIndex) const;
-    VK_INLINE uint32_t GetAttachmentCount() const { return m_createInfo.attachmentCount; }
+    uint32_t GetAttachmentCount() const { return m_createInfo.attachmentCount; }
     const AttachmentDescription& GetAttachmentDesc(uint32_t attachmentIndex) const;
     const AttachmentReference& GetSubpassColorReference(uint32_t subpass, uint32_t index) const;
     const AttachmentReference& GetSubpassDepthStencilReference(uint32_t subpass) const;
 
-    VK_INLINE uint32_t GetSubpassMaxSampleCount(uint32_t subpass) const
+    uint32_t GetSubpassMaxSampleCount(uint32_t subpass) const
     {
         return Util::Max(m_createInfo.pSubpasses[subpass].subpassSampleCount.colorCount,
                          m_createInfo.pSubpasses[subpass].subpassSampleCount.depthCount);
     }
 
-    VK_INLINE uint32_t GetSubpassColorSampleCount(uint32_t subpass) const
+    uint32_t GetSubpassColorSampleCount(uint32_t subpass) const
         { return m_createInfo.pSubpasses[subpass].subpassSampleCount.colorCount; }
 
-    VK_INLINE uint32_t GetSubpassDepthSampleCount(uint32_t subpass) const
+    uint32_t GetSubpassDepthSampleCount(uint32_t subpass) const
         { return m_createInfo.pSubpasses[subpass].subpassSampleCount.depthCount; }
 
-    VK_INLINE const RenderPassExecuteInfo* GetExecuteInfo() const
+    const RenderPassExecuteInfo* GetExecuteInfo() const
         { return m_pExecuteInfo; }
 
-    VK_INLINE uint64_t GetHash() const
+    uint64_t GetHash() const
         { return m_createInfo.hash; }
 
-    VK_INLINE uint32_t GetSubpassCount() const
+    uint32_t GetSubpassCount() const
         { return m_createInfo.subpassCount; }
 
-    VK_INLINE uint32_t GetViewMask(uint32_t subpass) const
+    uint32_t GetViewMask(uint32_t subpass) const
         { return m_createInfo.pSubpasses[subpass].viewMask; }
 
-    VK_INLINE uint32_t GetActiveViewsBitMask() const
+    uint32_t GetActiveViewsBitMask() const
     {
         uint32_t activeViewsBitMask = 0;
 
@@ -282,7 +282,7 @@ public:
         return activeViewsBitMask;
     }
 
-    VK_INLINE bool IsMultiviewEnabled() const
+    bool IsMultiviewEnabled() const
     {
         // When a subpass uses a non-zero view mask,
         // multiview functionality is considered to be enabled.

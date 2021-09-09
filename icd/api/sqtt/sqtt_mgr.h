@@ -64,7 +64,7 @@ public:
         uint32_t                        queueFamilyIndex,
         const VkCommandBufferBeginInfo* pBeginInfo);
 
-    VK_INLINE const DispatchTable* GetNextLayer() const
+    const DispatchTable* GetNextLayer() const
         { return &m_nextLayer; }
 
     static void PalDeveloperCallback(

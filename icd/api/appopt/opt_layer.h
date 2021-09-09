@@ -49,7 +49,7 @@ public:
 
     virtual void OverrideDispatchTable(DispatchTable* pDispatchTable) = 0;
 
-    VK_INLINE const DispatchTable* GetNextLayer() const
+    const DispatchTable* GetNextLayer() const
         { return &m_nextLayer; }
 
 protected:

@@ -576,7 +576,7 @@ void SubpassDescription::Init(
             stencilResolveMode = pExtInfo->stencilResolveMode;
 
             depthStencilResolveAttachment.Init(
-                pExtInfo->pDepthStencilResolveAttachment[subpassIndex]);
+                *(pExtInfo->pDepthStencilResolveAttachment));
 
             break;
         }

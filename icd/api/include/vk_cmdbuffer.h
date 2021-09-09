@@ -718,7 +718,7 @@ public:
     void CmdBeginConditionalRendering(const VkConditionalRenderingBeginInfoEXT* pConditionalRenderingBegin);
     void CmdEndConditionalRendering();
 
-    VK_INLINE void SetDeviceMask(uint32_t deviceMask)
+    void SetDeviceMask(uint32_t deviceMask)
     {
         // Ensure we are enabling valid devices within the group
         VK_ASSERT((m_pDevice->GetPalDeviceMask() & deviceMask) == deviceMask);
@@ -733,12 +733,12 @@ public:
         m_curDeviceMask = deviceMask;
     }
 
-    VK_INLINE uint32_t GetDeviceMask() const
+    uint32_t GetDeviceMask() const
     {
         return m_curDeviceMask;
     }
 
-    VK_INLINE void SetRpDeviceMask(uint32_t deviceMask)
+   void SetRpDeviceMask(uint32_t deviceMask)
     {
         VK_ASSERT(deviceMask != 0);
 
@@ -748,17 +748,17 @@ public:
         m_rpDeviceMask = deviceMask;
     }
 
-    VK_INLINE uint32_t GetRpDeviceMask() const
+    uint32_t GetRpDeviceMask() const
     {
         return m_rpDeviceMask;
     }
 
-    VK_INLINE uint32_t GetBeginDeviceMask() const
+    uint32_t GetBeginDeviceMask() const
     {
         return m_cbBeginDeviceMask;
     }
 
-    VK_INLINE bool IsProtected() const
+    bool IsProtected() const
     {
         return m_pCmdPool->IsProtected();
     }
@@ -771,7 +771,7 @@ public:
     VK_FORCEINLINE Instance* VkInstance(void) const
         { return m_pDevice->VkInstance(); }
 
-    VK_INLINE Pal::ICmdBuffer* PalCmdBuffer(
+    Pal::ICmdBuffer* PalCmdBuffer(
             int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
@@ -798,7 +798,7 @@ public:
             const Pal::CmdBufferBuildInfo& cmdInfo);
 
     Pal::Result PalCmdBufferEnd();
-    Pal::Result PalCmdBufferReset(Pal::ICmdAllocator* pCmdAllocator, bool returnGpuMemory);
+    Pal::Result PalCmdBufferReset(bool returnGpuMemory);
 
     void PalCmdBufferDestroy();
 
@@ -918,7 +918,6 @@ public:
         EventContainer_T*    pEvent,
         Pal::HwPipePoint     resetPoint);
 
-    template< bool regionPerDevice >
     void PalCmdResolveImage(
         const Image&                   srcImage,
         Pal::ImageLayout               srcImageLayout,
@@ -935,17 +934,17 @@ public:
 
     void PalCmdBindMsaaStates(const Pal::IMsaaState* const * pStates);
 
-    VK_INLINE void PalCmdBindMsaaState(
+    inline void PalCmdBindMsaaState(
         Pal::ICmdBuffer*       pPalCmdBuf,
         uint32_t               deviceIdx,
         const Pal::IMsaaState* pState);
 
-    VK_INLINE void PalCmdBindColorBlendState(
+    inline void PalCmdBindColorBlendState(
         Pal::ICmdBuffer*             pPalCmdBuf,
         uint32_t                     deviceIdx,
         const Pal::IColorBlendState* pState);
 
-    VK_INLINE void PalCmdBindDepthStencilState(
+    inline void PalCmdBindDepthStencilState(
         Pal::ICmdBuffer*               pPalCmdBuf,
         uint32_t                       deviceIdx,
         const Pal::IDepthStencilState* pState);
@@ -954,37 +953,37 @@ public:
         uint32_t numSamplesPerPixel,
         const  Pal::MsaaQuadSamplePattern& quadSamplePattern);
 
-    VK_INLINE void PalCmdBufferSetUserData(
+    inline void PalCmdBufferSetUserData(
         Pal::PipelineBindPoint bindPoint,
         uint32_t               firstEntry,
         uint32_t               entryCount,
         uint32_t               perDeviceStride,
         const uint32_t*        pEntryValues);
 
-    VK_INLINE void PalCmdSuspendPredication(
+    void PalCmdSuspendPredication(
         bool suspend);
 
     template< typename EventContainer_T >
-    VK_INLINE void InsertDeviceEvents(
+    void InsertDeviceEvents(
         const Pal::IGpuEvent**  pDestEvents,
         const EventContainer_T* pSrcEvents,
         uint32_t                index,
         uint32_t                stride) const;
 
-    VK_INLINE uint32_t NumDeviceEvents(uint32_t numEvents) const
+    uint32_t NumDeviceEvents(uint32_t numEvents) const
     {
         return m_numPalDevices * numEvents;
     }
 
 #if VK_ENABLE_DEBUG_BARRIERS
-    VK_INLINE void DbgBarrierPreCmd(uint32_t cmd)
+    void DbgBarrierPreCmd(uint32_t cmd)
     {
         if (m_dbgBarrierPreCmdMask & (cmd))
         {
             DbgCmdBarrier(true);
         }
     }
-    VK_INLINE void DbgBarrierPostCmd(uint32_t cmd)
+    void DbgBarrierPostCmd(uint32_t cmd)
     {
         if (m_dbgBarrierPostCmdMask & (cmd))
         {
@@ -992,16 +991,19 @@ public:
         }
     }
 #else
-    VK_INLINE void DbgBarrierPreCmd(uint32_t cmd) {}
-    VK_INLINE void DbgBarrierPostCmd(uint32_t cmd) {}
+    void DbgBarrierPreCmd(uint32_t cmd) {}
+    void DbgBarrierPostCmd(uint32_t cmd) {}
 #endif
 
     SqttCmdBufferState* GetSqttState()
         { return m_pSqttState; }
 
-    VK_INLINE static bool IsStaticStateDifferent(
-        uint32_t oldToken,
-        uint32_t newToken);
+    static bool IsStaticStateDifferent(
+        uint32_t currentToken,
+        uint32_t newToken)
+    {
+        return ((currentToken != newToken) || (currentToken == DynamicRenderStateToken));
+    }
 
     static PFN_vkCmdBindDescriptorSets GetCmdBindDescriptorSetsFunc(const Device* pDevice);
 
@@ -1050,7 +1052,7 @@ private:
 
     void ResetState();
 
-    VK_INLINE void CalcCounterBufferAddrs(
+    void CalcCounterBufferAddrs(
         uint32_t            firstCounterBuffer,
         uint32_t            counterBufferCount,
         const VkBuffer*     pCounterBuffers,
@@ -1095,8 +1097,8 @@ private:
         Pal::PipelineBindPoint palBindPoint,
         RebindUserDataFlags    flags);
 
-    VK_INLINE void RPBeginSubpass();
-    VK_INLINE void RPEndSubpass();
+    void RPBeginSubpass();
+    void RPEndSubpass();
     void RPResolveAttachments(uint32_t count, const RPResolveInfo* pResolves);
     void RPSyncPoint(const RPSyncPointInfo& syncPoint, VirtualStackFrame* pVirtStack);
     void RPLoadOpClearColor(uint32_t count, const RPLoadOpClearInfo* pClears);
@@ -1106,8 +1108,24 @@ private:
 
     void RPInitSamplePattern();
 
-    VK_INLINE Pal::ImageLayout RPGetAttachmentLayout(uint32_t attachment, uint32_t plane);
-    VK_INLINE void RPSetAttachmentLayout(uint32_t attachment, uint32_t plane, Pal::ImageLayout layout);
+    Pal::ImageLayout RPGetAttachmentLayout(
+        uint32_t attachment,
+        uint32_t plane)
+    {
+        VK_ASSERT(attachment < m_allGpuState.pRenderPass->GetAttachmentCount());
+        VK_ASSERT(attachment < m_renderPassInstance.maxAttachmentCount);
+        return m_renderPassInstance.pAttachments[attachment].planeLayout[plane];
+    }
+
+    void RPSetAttachmentLayout(
+        uint32_t attachment,
+        uint32_t plane,
+        Pal::ImageLayout layout)
+    {
+        VK_ASSERT(attachment < m_allGpuState.pRenderPass->GetAttachmentCount());
+        VK_ASSERT(attachment < m_renderPassInstance.maxAttachmentCount);
+        m_renderPassInstance.pAttachments[attachment].planeLayout[plane] = layout;
+    }
 
     void FillTimestampQueryPool(
         const TimestampQueryPool& timestampQueryPool,
@@ -1145,17 +1163,20 @@ private:
     template <uint32_t numPalDevices>
     static PFN_vkCmdBindDescriptorSets GetCmdBindDescriptorSetsFunc(const Device* pDevice);
 
-    VK_INLINE bool PalPipelineBindingOwnedBy(
+    bool PalPipelineBindingOwnedBy(
         Pal::PipelineBindPoint palBind,
         PipelineBindPoint apiBind
-        ) const;
+        ) const
+        {
+            return m_allGpuState.palToApiPipeline[static_cast<uint32_t>(palBind)] == apiBind;
+        }
 
-    VK_INLINE static void ConvertPipelineBindPoint(
+    static void ConvertPipelineBindPoint(
         VkPipelineBindPoint     pipelineBindPoint,
         Pal::PipelineBindPoint* pPalBindPoint,
         PipelineBindPoint*      pApiBind);
 
-    VK_INLINE void WritePushConstants(
+    void WritePushConstants(
         PipelineBindPoint      apiBindPoint,
         Pal::PipelineBindPoint palBindPoint,
         const PipelineLayout*  pLayout,
@@ -1167,7 +1188,7 @@ private:
     void ResetVertexBuffer();
     void UpdateVertexBufferStrides(const GraphicsPipeline* pPipeline);
 
-    VK_INLINE void UpdateLargestPipelineStackSize(const uint32_t deviceIndex, const uint32_t pipelineStackSize)
+    void UpdateLargestPipelineStackSize(const uint32_t deviceIndex, const uint32_t pipelineStackSize)
     {
         PerGpuState(deviceIndex)->maxPipelineStackSize =
             Util::Max(PerGpuState(deviceIndex)->maxPipelineStackSize, pipelineStackSize);
@@ -1236,13 +1257,6 @@ private:
 };
 
 // =====================================================================================================================
-bool CmdBuffer::IsStaticStateDifferent(
-    uint32_t currentToken,
-    uint32_t newToken)
-{
-    return ((currentToken != newToken) ||
-            (currentToken == DynamicRenderStateToken));
-}
 
 // =====================================================================================================================
 void CmdBuffer::PalCmdBindMsaaState(
@@ -1322,29 +1336,6 @@ void CmdBuffer::InsertDeviceEvents(
     {
         pDestEvents[(deviceIdx * stride) + index] = pSrcEvents->PalEvent(deviceIdx);
     }
-}
-
-// =====================================================================================================================
-Pal::ImageLayout CmdBuffer::RPGetAttachmentLayout(
-    uint32_t attachment,
-    uint32_t plane)
-{
-    VK_ASSERT(attachment < m_allGpuState.pRenderPass->GetAttachmentCount());
-    VK_ASSERT(attachment < m_renderPassInstance.maxAttachmentCount);
-
-    return m_renderPassInstance.pAttachments[attachment].planeLayout[plane];
-}
-
-// =====================================================================================================================
-void CmdBuffer::RPSetAttachmentLayout(
-    uint32_t         attachment,
-    uint32_t         plane,
-    Pal::ImageLayout layout)
-{
-    VK_ASSERT(attachment < m_allGpuState.pRenderPass->GetAttachmentCount());
-    VK_ASSERT(attachment < m_renderPassInstance.maxAttachmentCount);
-
-    m_renderPassInstance.pAttachments[attachment].planeLayout[plane] = layout;
 }
 
 VK_DEFINE_DISPATCHABLE(CmdBuffer);

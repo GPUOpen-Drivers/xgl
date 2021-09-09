@@ -101,16 +101,16 @@ protected:
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Framebuffer);
 
-    VK_INLINE void SetImageViews(
+    void SetImageViews(
         const VkImageView& imageView,
         Attachment*        pAttachments);
 
-    VK_INLINE void SetSubresRanges(
+    void SetSubresRanges(
         const Image* pImage,
         Attachment*  pAttachment);
 
     // Get the start address of the first Attachment object relative to the start of a Framebuffer object.
-    VK_INLINE static size_t GetAttachmentsOffset()
+    static size_t GetAttachmentsOffset()
     {
         // The alignment requirement of Framebuffer is less than of Attachment.
         // Therefore, we need to round up (this only works if the Framebuffer object is sufficiently aligned).

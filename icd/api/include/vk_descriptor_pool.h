@@ -84,10 +84,10 @@ public:
 
     void Reset();
 
-    VK_INLINE void* CpuAddr(uint32_t deviceIdx) const
+    void* CpuAddr(uint32_t deviceIdx) const
         { return m_pCpuAddr[deviceIdx]; }
 
-    VK_INLINE void* CpuShadowAddr(uint32_t deviceIdx) const
+    void* CpuShadowAddr(uint32_t deviceIdx) const
         { return m_pCpuShadowAddr[deviceIdx]; }
 
 protected:
@@ -169,7 +169,7 @@ public:
     template <uint32_t numPalDevices>
     void Reset();
 
-    VK_INLINE size_t GetPrivateDataSize() const
+    size_t GetPrivateDataSize() const
     {
         return m_privateDataSize;
     }

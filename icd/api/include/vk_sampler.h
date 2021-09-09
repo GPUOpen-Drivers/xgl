@@ -59,13 +59,13 @@ public:
         Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
-    VK_INLINE uint64_t GetApiHash() const
+    uint64_t GetApiHash() const
         { return m_apiHash; }
 
-    VK_INLINE bool IsYCbCrSampler() const
+    bool IsYCbCrSampler() const
         { return m_isYCbCrSampler; }
 
-    VK_INLINE uint32_t GetMultiPlaneCount() const
+    uint32_t GetMultiPlaneCount() const
     {
         return m_multiPlaneCount;
     }

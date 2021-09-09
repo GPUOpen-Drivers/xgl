@@ -81,14 +81,14 @@ public:
         uint32_t    startQuery,
         uint32_t    queryCount) = 0;
 
-    VK_INLINE VkQueryType GetQueryType() const
+    VkQueryType GetQueryType() const
     {
         return m_queryType;
     }
 
-    VK_INLINE const PalQueryPool* AsPalQueryPool() const;
-    VK_INLINE const QueryPoolWithStorageView* AsQueryPoolWithStorageView() const;
-    VK_INLINE const TimestampQueryPool* AsTimestampQueryPool() const;
+    inline const PalQueryPool* AsPalQueryPool() const;
+    inline const QueryPoolWithStorageView* AsQueryPoolWithStorageView() const;
+    inline const TimestampQueryPool* AsTimestampQueryPool() const;
 
 protected:
     QueryPool(
@@ -174,7 +174,7 @@ private:
 class QueryPoolWithStorageView : public QueryPool
 {
 public:
-    VK_INLINE const void* GetStorageView(uint32_t deviceIdx) const
+    const void* GetStorageView(uint32_t deviceIdx) const
         { return m_pStorageView[deviceIdx]; }
 
 protected:
@@ -245,20 +245,20 @@ public:
         uint32_t    startQuery,
         uint32_t    queryCount) override;
 
-    VK_INLINE const InternalMemory& GetMemory() const
+    const InternalMemory& GetMemory() const
         { return m_internalMem; }
 
-    VK_INLINE Pal::gpusize GetSlotOffset(uint32_t query) const
+    Pal::gpusize GetSlotOffset(uint32_t query) const
     {
         VK_ASSERT(query < m_entryCount);
 
         return m_internalMem.Offset() + query * m_slotSize;
     }
 
-    VK_INLINE uint32_t GetSlotSize() const
+    uint32_t GetSlotSize() const
         { return m_slotSize; }
 
-    VK_INLINE const Pal::IGpuMemory& PalMemory(uint32_t deviceIdx) const
+    const Pal::IGpuMemory& PalMemory(uint32_t deviceIdx) const
         { return *m_internalMem.PalMemory(deviceIdx); }
 
 private:
@@ -275,7 +275,7 @@ private:
 };
 
 // =====================================================================================================================
-VK_INLINE const PalQueryPool* QueryPool::AsPalQueryPool() const
+inline const PalQueryPool* QueryPool::AsPalQueryPool() const
 {
     VK_ASSERT(m_queryType != VK_QUERY_TYPE_TIMESTAMP);
 
@@ -283,14 +283,14 @@ VK_INLINE const PalQueryPool* QueryPool::AsPalQueryPool() const
 }
 
 // =====================================================================================================================
-VK_INLINE const TimestampQueryPool* QueryPool::AsTimestampQueryPool() const
+inline const TimestampQueryPool* QueryPool::AsTimestampQueryPool() const
 {
     VK_ASSERT(m_queryType == VK_QUERY_TYPE_TIMESTAMP);
 
     return static_cast<const TimestampQueryPool*>(this);
 }
 
-VK_INLINE const QueryPoolWithStorageView* QueryPool::AsQueryPoolWithStorageView() const
+inline const QueryPoolWithStorageView* QueryPool::AsQueryPoolWithStorageView() const
 {
     if ((m_queryType != VK_QUERY_TYPE_TIMESTAMP)
        )

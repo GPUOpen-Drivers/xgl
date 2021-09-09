@@ -81,7 +81,7 @@ public:
     void DebugLabelEnd();
     void DebugLabelInsert(const VkDebugUtilsLabelEXT* pMarkerInfo);
 
-    VK_INLINE const DispatchTable* GetNextLayer() const
+    const DispatchTable* GetNextLayer() const
         { return m_pNextLayer; }
 
 private:
@@ -138,13 +138,13 @@ public:
 
     void PipelineBound(VkPipelineBindPoint bindPoint, VkPipeline pipeline);
 
-    VK_INLINE const DispatchTable* GetNextLayer() const
+    const DispatchTable* GetNextLayer() const
         { return m_pNextLayer; }
 
-    VK_INLINE CmdBuffer* GetParent() const
+    CmdBuffer* GetParent() const
         { return m_pCmdBuf; }
 
-    VK_INLINE RgpSqttMarkerCbID GetId() const
+    RgpSqttMarkerCbID GetId() const
         { return m_cbId; }
 
     void PalBarrierCallback(

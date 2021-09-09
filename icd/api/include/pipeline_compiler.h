@@ -55,6 +55,31 @@ struct ShaderModuleHandle;
 class PipelineBinaryCache;
 
 // =====================================================================================================================
+// Make sure that our internal values are the same as the VK values
+static_assert((1 << ShaderStage::ShaderStageVertex) == VK_SHADER_STAGE_VERTEX_BIT,
+              "Internal vertex shader stage value is different from that defined in Vulkan.");
+static_assert((1 << ShaderStage::ShaderStageTessControl) == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+              "Internal tessellation control shader stage value is different from that defined in Vulkan.");
+static_assert((1 << ShaderStage::ShaderStageTessEval) == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+              "Internal tessellation evaluation stage value is different from that defined in Vulkan.");
+static_assert((1 << ShaderStage::ShaderStageGeometry) == VK_SHADER_STAGE_GEOMETRY_BIT,
+              "Internal geometry shader stage value is different from that defined in Vulkan.");
+static_assert((1 << ShaderStage::ShaderStageFragment) == VK_SHADER_STAGE_FRAGMENT_BIT,
+              "Internal fragment shader stage value is different from that defined in Vulkan.");
+
+// =====================================================================================================================
+// The shader stages of Pre-Rasterization Shaders section
+constexpr uint32_t PrsShaderMask = 0
+    | ((1 << ShaderStage::ShaderStageVertex)
+    |  (1 << ShaderStage::ShaderStageTessControl)
+    |  (1 << ShaderStage::ShaderStageTessEval)
+    |  (1 << ShaderStage::ShaderStageGeometry));
+
+// =====================================================================================================================
+// The shader stages of Fragment Shader (Post-Rasterization) section
+constexpr uint32_t FgsShaderMask = (1 << ShaderStage::ShaderStageFragment);
+
+// =====================================================================================================================
 struct ShaderStageInfo
 {
     ShaderStage                      stage;
@@ -114,6 +139,12 @@ public:
         const void*               pCode,
         ShaderModuleHandle*       pModule);
 
+    bool IsValidShaderModule(
+        const ShaderModuleHandle* pShaderModule) const;
+
+    void FreeShaderModule(
+        ShaderModuleHandle* pShaderModule);
+
     virtual VkResult CreatePartialPipelineBinary(
         uint32_t                             deviceIdx,
         void*                                pShaderModuleData,
@@ -159,6 +190,7 @@ public:
         const Device*                                   pDevice,
         const VkGraphicsPipelineCreateInfo*             pIn,
         const GraphicsPipelineShaderStageInfo*          pShaderInfo,
+        const PipelineLayout*                           pPipelineLayout,
         GraphicsPipelineBinaryCreateInfo*               pCreateInfo,
         VbInfo*                                         pVbInfo);
 
@@ -167,10 +199,6 @@ public:
         const VkComputePipelineCreateInfo*              pIn,
         const ComputePipelineShaderStageInfo*           pShaderInfo,
         ComputePipelineBinaryCreateInfo*                pInfo);
-
-    bool IsValidShaderModule(const ShaderModuleHandle* pShaderModule) const;
-
-    void FreeShaderModule(ShaderModuleHandle* pShaderModule);
 
     void FreeComputePipelineBinary(
         ComputePipelineBinaryCreateInfo* pCreateInfo,
@@ -205,7 +233,7 @@ public:
         Vkgc::PipelineShaderOptions* pShaderOptions
     ) const;
 
-    VK_INLINE Vkgc::GfxIpVersion& GetGfxIp() { return m_gfxIp; }
+    Vkgc::GfxIpVersion& GetGfxIp() { return m_gfxIp; }
 
     void GetElfCacheMetricString(char* pOutStr, size_t outStrSize);
 
@@ -215,6 +243,20 @@ public:
                                               const VkPipelineVertexInputStateCreateInfo* pVertexInput,
                                               bool                                        isDynamicStride,
                                               UberFetchShaderBufferInfo*                  pFetchShaderBufferInfo);
+
+    void GetComputePipelineCacheId(
+        uint32_t                         deviceIdx,
+        ComputePipelineBinaryCreateInfo* pCreateInfo,
+        uint64_t                         pipelineHash,
+        const Util::MetroHash::Hash&     settingsHash,
+        Util::MetroHash::Hash*           pCacheId);
+
+    void GetGraphicsPipelineCacheId(
+        uint32_t                          deviceIdx,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        uint64_t                          pipelineHash,
+        const Util::MetroHash::Hash&      settingsHash,
+        Util::MetroHash::Hash*            pCacheId);
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
@@ -282,8 +324,6 @@ private:
         const VkStructHeader*                             pHeader,
         const VkPipelineCreationFeedbackCreateInfoEXT**   ppPipelineCreationFeadbackCreateInfo);
 
-    static VkPipelineCreateFlags GetCacheIdControlFlags(
-        VkPipelineCreateFlags in);
 }; // class PipelineCompiler
 
 } // namespce vk

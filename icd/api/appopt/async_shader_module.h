@@ -57,7 +57,7 @@ public:
         Device*                      pDevice,
         const VkAllocationCallbacks* pAllocator);
 
-    VK_INLINE VkShaderModule GetNextLayerModule()
+    VkShaderModule GetNextLayerModule()
     {
         return (m_asyncModule == VK_NULL_HANDLE) ? m_immedModule : m_asyncModule;
     }

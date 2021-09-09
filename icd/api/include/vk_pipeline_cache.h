@@ -68,7 +68,7 @@ public:
 
     VkResult Merge(uint32_t srcCacheCount, const PipelineCache** ppSrcCaches);
 
-    VK_INLINE PipelineBinaryCache* GetPipelineCache() const { return m_pBinaryCache; }
+    PipelineBinaryCache* GetPipelineCache() const { return m_pBinaryCache; }
     Vkgc::ICache* GetCacheAdapter() const
     {
       return (m_pBinaryCache != nullptr ? m_pBinaryCache->GetCacheAdapter() : nullptr);

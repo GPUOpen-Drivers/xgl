@@ -75,12 +75,12 @@ struct ResourceOptimizerKey
     uint64_t apiHash; // Hash of the *CreateInfo struct
 };
 
-VK_INLINE static bool ResourceKeysEqual(
+inline bool ResourceKeysEqual(
     const ResourceOptimizerKey& lhs,
     const ResourceOptimizerKey& rhs)
     { return (lhs.dimensions == rhs.dimensions) && (lhs.apiHash == rhs.apiHash); }
 
-VK_INLINE static bool ResourceKeysNotEqual(
+inline bool ResourceKeysNotEqual(
     const ResourceOptimizerKey& lhs,
     const ResourceOptimizerKey& rhs)
     { return (lhs.dimensions != rhs.dimensions) || (lhs.apiHash != rhs.apiHash); }

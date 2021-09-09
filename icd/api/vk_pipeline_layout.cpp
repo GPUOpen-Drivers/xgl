@@ -34,6 +34,7 @@
 #include "include/vk_sampler.h"
 #include "include/vk_utils.h"
 #include "palMetroHash.h"
+#include "palVectorImpl.h"
 
 namespace vk
 {
@@ -66,6 +67,7 @@ uint64_t PipelineLayout::BuildApiHash(
     return hash;
 }
 
+// =====================================================================================================================
 constexpr size_t PipelineLayout::GetMaxResMappingRootNodeSize()
 {
     return
@@ -261,7 +263,7 @@ VkResult PipelineLayout::ConvertCreateInfo(
 // =====================================================================================================================
 // Creates a pipeline layout object.
 VkResult PipelineLayout::Create(
-    Device*                           pDevice,
+    const Device*                     pDevice,
     const VkPipelineLayoutCreateInfo* pCreateInfo,
     const VkAllocationCallbacks*      pAllocator,
     VkPipelineLayout*                 pPipelineLayout)
@@ -278,7 +280,7 @@ VkResult PipelineLayout::Create(
     for (uint32_t i = 0; i < pCreateInfo->setLayoutCount; ++i)
     {
         DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pCreateInfo->pSetLayouts[i]);
-        setLayoutsArraySize += pLayout->GetObjectSize();
+        setLayoutsArraySize += pLayout->GetObjectSize(VK_SHADER_STAGE_ALL);
     }
 
     // Need to add extra storage for DescriptorSetLayout*, SetUserDataLayout, the descriptor set layouts themselves,
@@ -326,11 +328,209 @@ VkResult PipelineLayout::Create(
             const DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pCreateInfo->pSetLayouts[i]);
 
             // Copy the original descriptor set layout object
-            pLayout->Copy(pDevice, ppSetLayouts[i]);
+            pLayout->Copy(pDevice, VK_SHADER_STAGE_ALL, ppSetLayouts[i]);
 
-            currentSetLayoutOffset += pLayout->GetObjectSize();
+            currentSetLayoutOffset += pLayout->GetObjectSize(VK_SHADER_STAGE_ALL);
         }
 
+        VK_PLACEMENT_NEW(pSysMem) PipelineLayout(pDevice, info, pipelineInfo, apiHash);
+
+        *pPipelineLayout = PipelineLayout::HandleFromVoidPointer(pSysMem);
+    }
+
+    if (result != VK_SUCCESS)
+    {
+        if (pSysMem != nullptr)
+        {
+            pDevice->FreeApiObject(pAllocator, pSysMem);
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Create a pipeline layout object via existing pipeline layouts
+VkResult PipelineLayout::Create(
+    const Device*                pDevice,
+    const VkPipelineLayout*      pReference,
+    const VkShaderStageFlags*    pRefShaderMask,
+    const uint32_t               refCount,
+    const VkAllocationCallbacks* pAllocator,
+    VkPipelineLayout*            pPipelineLayout)
+{
+    VkResult result = VK_SUCCESS;
+
+    VkPipelineLayoutCreateInfo createInfo   = {};
+    Info                       info         = {};
+    PipelineInfo               pipelineInfo = {};
+    uint64_t                   apiHash      = 0;
+
+    Util::Vector<size_t,                4, Util::GenericAllocator> mergedDescriptorSetLayoutsSize{ nullptr };
+    Util::Vector<VkDescriptorSetLayout, 4, Util::GenericAllocator> mergedDescriptorSetLayouts{ nullptr };
+    Util::Vector<VkShaderStageFlags,    4, Util::GenericAllocator> mergedShaderMasks{ nullptr };
+
+    VkPushConstantRange pushConstantRange = {};
+    pushConstantRange.offset     = 0;
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_ALL;
+
+    size_t setLayoutsArraySize = 0;
+
+    for (uint32_t set = 0; ; ++set)
+    {
+        Util::Vector<VkDescriptorSetLayout, 2, Util::GenericAllocator> setLayouts     = { nullptr };
+        Util::Vector<VkShaderStageFlags,    2, Util::GenericAllocator> setShaderMasks = { nullptr };
+
+        bool aboveLargestSet = true;
+
+        for (uint32_t i = 0; i < refCount; ++i)
+        {
+            const PipelineLayout* pRef = PipelineLayout::ObjectFromHandle(pReference[i]);
+
+            if (pRef != nullptr)
+            {
+                const PipelineLayout::Info& layoutInfo = pRef->GetInfo();
+
+                if (set < layoutInfo.setCount)
+                {
+                    aboveLargestSet = false;
+
+                    const DescriptorSetLayout* pLayout = pRef->GetSetLayouts(set);
+
+                    if (pLayout->IsEmpty(pRefShaderMask[i]) == false)
+                    {
+                        setLayouts.PushBack(DescriptorSetLayout::HandleFromObject(pLayout));
+                        setShaderMasks.PushBack(pRefShaderMask[i]);
+                    }
+                }
+            }
+        }
+
+        if (aboveLargestSet == true)
+        {
+            break;
+        }
+
+        const size_t objSize =
+            DescriptorSetLayout::GetObjectSize(setLayouts.Data(), setShaderMasks.Data(), setLayouts.size());
+        setLayoutsArraySize += objSize;
+        mergedDescriptorSetLayoutsSize.PushBack(objSize);
+    }
+
+    for (uint32_t i = 0; i < refCount; ++i)
+    {
+        const PipelineLayout* pRef = PipelineLayout::ObjectFromHandle(pReference[i]);
+
+        if (pRef != nullptr)
+        {
+            const PipelineLayout::Info& layoutInfo = pRef->GetInfo();
+
+            pushConstantRange.size =
+                Util::Max<uint32_t>(pushConstantRange.size,
+                                    layoutInfo.userDataLayout.pushConstRegCount * sizeof(uint32_t));
+
+        }
+    }
+
+    uint32_t setLayoutCount = mergedDescriptorSetLayoutsSize.size();
+    const size_t apiSize = sizeof(PipelineLayout);
+    const size_t setUserDataLayoutSize =
+        Util::Pow2Align((setLayoutCount * sizeof(SetUserDataLayout)), ExtraDataAlignment());
+    const size_t descriptorSetLayoutSize =
+        Util::Pow2Align((setLayoutCount * sizeof(DescriptorSetLayout*)), ExtraDataAlignment());
+
+    size_t objSize = apiSize + setUserDataLayoutSize + descriptorSetLayoutSize + setLayoutsArraySize;
+
+    void* pSysMem = pDevice->AllocApiObject(pAllocator, objSize);
+
+    if (pSysMem == nullptr)
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        memset(pSysMem, 0, objSize);
+
+        SetUserDataLayout*    pSetUserData = nullptr;
+        DescriptorSetLayout** ppSetLayouts = nullptr;
+
+        pSetUserData = static_cast<SetUserDataLayout*>(Util::VoidPtrInc(pSysMem, apiSize));
+        ppSetLayouts = static_cast<DescriptorSetLayout**>(
+            Util::VoidPtrInc(pSysMem, apiSize + setUserDataLayoutSize));
+
+        size_t currentSetLayoutOffset = apiSize + setUserDataLayoutSize + descriptorSetLayoutSize;
+
+        for (uint32_t set = 0; ; ++set)
+        {
+            Util::Vector<VkDescriptorSetLayout, 2, Util::GenericAllocator> setLayouts     = { nullptr };
+            Util::Vector<VkShaderStageFlags,    2, Util::GenericAllocator> setShaderMasks = { nullptr };
+
+            bool aboveLargestSet = true;
+
+            for (uint32_t i = 0; i < refCount; ++i)
+            {
+                const PipelineLayout* pRef = PipelineLayout::ObjectFromHandle(pReference[i]);
+
+                if (pRef != nullptr)
+                {
+                    const PipelineLayout::Info& layoutInfo = pRef->GetInfo();
+
+                    if (set < layoutInfo.setCount)
+                    {
+                        aboveLargestSet = false;
+
+                        const DescriptorSetLayout* pLayout = pRef->GetSetLayouts(set);
+
+                        if (pLayout->IsEmpty(pRefShaderMask[i]) == false)
+                        {
+                            setLayouts.PushBack(DescriptorSetLayout::HandleFromObject(pLayout));
+                            setShaderMasks.PushBack(pRefShaderMask[i]);
+                        }
+                    }
+                }
+            }
+
+            if (aboveLargestSet == true)
+            {
+                break;
+            }
+
+            ppSetLayouts[set] = reinterpret_cast<DescriptorSetLayout*>(Util::VoidPtrInc(pSysMem, currentSetLayoutOffset));
+
+            DescriptorSetLayout::Merge(pDevice,
+                                       setLayouts.Data(),
+                                       setShaderMasks.Data(),
+                                       setLayouts.size(),
+                                       ppSetLayouts[set]);
+
+            mergedDescriptorSetLayouts.PushBack(DescriptorSetLayout::HandleFromObject(ppSetLayouts[set]));
+
+            currentSetLayoutOffset += mergedDescriptorSetLayoutsSize[set];
+        }
+
+        createInfo.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        createInfo.pNext          = nullptr;
+        createInfo.setLayoutCount = mergedDescriptorSetLayouts.size();
+        createInfo.pSetLayouts    = mergedDescriptorSetLayouts.Data();
+        if (pushConstantRange.size > 0)
+        {
+            createInfo.pushConstantRangeCount = 1;
+            createInfo.pPushConstantRanges    = &pushConstantRange;
+        }
+
+        apiHash = BuildApiHash(&createInfo);
+
+        result = ConvertCreateInfo(
+            pDevice,
+            &createInfo,
+            &info,
+            &pipelineInfo,
+            pSetUserData);
+    }
+
+    if (result == VK_SUCCESS)
+    {
         VK_PLACEMENT_NEW(pSysMem) PipelineLayout(pDevice, info, pipelineInfo, apiHash);
 
         *pPipelineLayout = PipelineLayout::HandleFromVoidPointer(pSysMem);
@@ -353,7 +553,7 @@ Vkgc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
     VkDescriptorType descriptorType)
 {
     auto nodeType = Vkgc::ResourceMappingNodeType::Unknown;
-    switch(static_cast<uint32_t>(descriptorType))
+    switch (static_cast<uint32_t>(descriptorType))
     {
     case VK_DESCRIPTOR_TYPE_SAMPLER:
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorSampler;
@@ -362,21 +562,45 @@ Vkgc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorCombinedTexture;
         break;
     case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorResource;
+        break;
     case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 49
+    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorImage;
+        break;
+    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorConstTexelBuffer;
+        break;
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
+        break;
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact;
+        break;
+#else
+    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorResource;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
         break;
-    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-        nodeType = Vkgc::ResourceMappingNodeType::DescriptorResource;
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
+        break;
+#endif
+
+    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
+        break;
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
+        break;
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
         break;
     case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
         nodeType = Vkgc::ResourceMappingNodeType::PushConst;
@@ -456,9 +680,25 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
             VK_ASSERT((binding.info.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
                       (binding.info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC));
             auto pNode = &pDynNodes[*pDynNodeCount];
-            pNode->node.type                = (binding.dyn.dwArrayStride == 2) ?
-                                        Vkgc::ResourceMappingNodeType::DescriptorBufferCompact :
-                                        Vkgc::ResourceMappingNodeType::DescriptorBuffer;
+            if (binding.info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+            {
+                pNode->node.type = (binding.dyn.dwArrayStride == 2) ?
+                    Vkgc::ResourceMappingNodeType::DescriptorBufferCompact :
+                    Vkgc::ResourceMappingNodeType::DescriptorBuffer;
+
+            }
+            else
+            {
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 49
+                pNode->node.type = (binding.dyn.dwArrayStride == 2) ?
+                    Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact:
+                    Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
+#else
+                pNode->node.type = (binding.dyn.dwArrayStride == 2) ?
+                    Vkgc::ResourceMappingNodeType::DescriptorBufferCompact :
+                    Vkgc::ResourceMappingNodeType::DescriptorBuffer;
+#endif
+            }
             pNode->node.offsetInDwords      = userDataRegBase + binding.dyn.dwOffset;
             pNode->node.sizeInDwords        = binding.dyn.dwSize;
             pNode->node.srdRange.binding    = binding.info.binding;
@@ -535,49 +775,52 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
 
         uint32_t visibility = stageMask & VkToVkgcShaderStageMask(pSetLayout->Info().activeStageMask);
 
-        // Build the resource mapping nodes for the contents of this set.
-        auto pDynNodes   = &pUserDataNodes[userDataNodeCount];
-        auto pStaNodes   = &pResourceNodes[mappingNodeCount];
-        auto pDescValues = &pDescriptorRangeValues[descriptorRangeCount];
-
-        uint32_t dynNodeCount   = 0;
-        uint32_t staNodeCount   = 0;
-        uint32_t descRangeCount = 0;
-
-        result = BuildLlpcSetMapping(
-            visibility,
-            setIndex,
-            pSetLayout,
-            pDynNodes,
-            &dynNodeCount,
-            pStaNodes,
-            &staNodeCount,
-            pDescValues,
-            &descRangeCount,
-            m_info.userDataLayout.setBindingRegBase + pSetUserData->dynDescDataRegOffset);
-
-        // Increase the number of mapping nodes used by the number of static section nodes added.
-        mappingNodeCount += staNodeCount;
-
-        // Increase the number of user data nodes used by the number of dynamic section nodes added.
-        userDataNodeCount += dynNodeCount;
-
-        // Increase the number of descriptor range value nodes used by immutable samplers
-        descriptorRangeCount += descRangeCount;
-
-        // Add a top-level user data node entry for this set's pointer if there are static nodes.
-        if (pSetUserData->setPtrRegOffset != InvalidReg)
+        if (visibility != 0)
         {
-            auto pSetPtrNode = &pUserDataNodes[userDataNodeCount];
+            // Build the resource mapping nodes for the contents of this set.
+            auto pDynNodes   = &pUserDataNodes[userDataNodeCount];
+            auto pStaNodes   = &pResourceNodes[mappingNodeCount];
+            auto pDescValues = &pDescriptorRangeValues[descriptorRangeCount];
 
-            pSetPtrNode->node.type               = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
-            pSetPtrNode->node.offsetInDwords     = m_info.userDataLayout.setBindingRegBase +
-                pSetUserData->setPtrRegOffset;
-            pSetPtrNode->node.sizeInDwords       = SetPtrRegCount;
-            pSetPtrNode->node.tablePtr.nodeCount = staNodeCount;
-            pSetPtrNode->node.tablePtr.pNext     = pStaNodes;
-            pSetPtrNode->visibility              = visibility;
-            userDataNodeCount++;
+            uint32_t dynNodeCount   = 0;
+            uint32_t staNodeCount   = 0;
+            uint32_t descRangeCount = 0;
+
+            result = BuildLlpcSetMapping(
+                visibility,
+                setIndex,
+                pSetLayout,
+                pDynNodes,
+                &dynNodeCount,
+                pStaNodes,
+                &staNodeCount,
+                pDescValues,
+                &descRangeCount,
+                m_info.userDataLayout.setBindingRegBase + pSetUserData->dynDescDataRegOffset);
+
+            // Increase the number of mapping nodes used by the number of static section nodes added.
+            mappingNodeCount += staNodeCount;
+
+            // Increase the number of user data nodes used by the number of dynamic section nodes added.
+            userDataNodeCount += dynNodeCount;
+
+            // Increase the number of descriptor range value nodes used by immutable samplers
+            descriptorRangeCount += descRangeCount;
+
+            // Add a top-level user data node entry for this set's pointer if there are static nodes.
+            if (pSetUserData->setPtrRegOffset != InvalidReg)
+            {
+                auto pSetPtrNode = &pUserDataNodes[userDataNodeCount];
+
+                pSetPtrNode->node.type               = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
+                pSetPtrNode->node.offsetInDwords     = m_info.userDataLayout.setBindingRegBase +
+                                                       pSetUserData->setPtrRegOffset;
+                pSetPtrNode->node.sizeInDwords       = SetPtrRegCount;
+                pSetPtrNode->node.tablePtr.nodeCount = staNodeCount;
+                pSetPtrNode->node.tablePtr.pNext     = pStaNodes;
+                pSetPtrNode->visibility              = visibility;
+                userDataNodeCount++;
+            }
         }
     }
 

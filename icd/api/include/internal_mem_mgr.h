@@ -122,7 +122,7 @@ struct InternalMemoryPool
 class InternalMemory
 {
 public:
-    VK_INLINE InternalMemory();
+    inline InternalMemory();
 
     Pal::IGpuMemory* PalMemory(int32_t idx)
     {

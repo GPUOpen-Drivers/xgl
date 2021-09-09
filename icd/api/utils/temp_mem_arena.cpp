@@ -142,7 +142,7 @@ void TempMemArena::FreeChunks(
 }
 
 // =====================================================================================================================
-VK_INLINE void* TempMemArena::AllocFromChunk(
+void* TempMemArena::AllocFromChunk(
     MemChunk* pChunk,
     size_t    size)
 {

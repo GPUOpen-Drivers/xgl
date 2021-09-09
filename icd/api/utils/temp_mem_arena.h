@@ -86,7 +86,7 @@ private:
     };
 
     void* AllocFromNewChunk(size_t size);
-    VK_INLINE void* AllocFromChunk(MemChunk* pChunk, size_t size);
+    void* AllocFromChunk(MemChunk* pChunk, size_t size);
     void ResetChunk(MemChunk* pChunk);
     void FreeChunks(MemChunk* pChunk);
 

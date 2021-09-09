@@ -37,6 +37,7 @@
 namespace vk
 {
 
+class PipelineCache;
 struct PipelineOptimizerKey;
 struct GraphicsPipelineBinaryCreateInfo;
 struct GraphicsPipelineShaderStageInfo;
@@ -66,6 +67,8 @@ struct VbBindingInfo
 
 struct UberFetchShaderBufferInfo
 {
+    bool requirePerIntanceFetch;
+    bool requirePerCompFetch;
     uint32_t userDataOffset;
     uint32_t bufferSize;
     uint32_t bufferData[Vkgc::MaxFetchShaderInternalBufferSize];
@@ -127,7 +130,6 @@ struct GraphicsPipelineObjectCreateInfo
     Pal::DepthStencilStateCreateInfo            ds;
     GraphicsPipelineObjectImmedInfo             immedInfo;
     uint32_t                                    staticStateMask;
-    const PipelineLayout*                       pLayout;
     uint32_t                                    sampleCoverage;
     VkShaderStageFlagBits                       activeStages;
     VkFormat                                    dbFormat;
@@ -163,9 +165,17 @@ struct GraphicsPipelineBinaryInfo
 class GraphicsPipelineCommon : public Pipeline
 {
 public:
+    // Create an executable graphics pipline or graphics pipeline library
+    static VkResult Create(
+        Device*                             pDevice,
+        PipelineCache*                      pPipelineCache,
+        const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        const VkAllocationCallbacks*        pAllocator,
+        VkPipeline*                         pPipeline);
+
     // Get the active shader stages through API info
     static VkShaderStageFlagBits GetActiveShaderStages(
-        const VkGraphicsPipelineCreateInfo*             pGraphicsPipelineCreateInfo
+        const VkGraphicsPipelineCreateInfo*  pGraphicsPipelineCreateInfo
         );
 
     // Returns true if Dual Source Blending is to be enabled based on the given ColorBlendAttachmentState
@@ -179,7 +189,7 @@ public:
 
     // Get the dynamics states specified by API info
     static uint32_t GetDynamicStateFlags(
-        const VkPipelineDynamicStateCreateInfo*   pDy
+        const VkPipelineDynamicStateCreateInfo* pDy
         );
 
 protected:
@@ -187,6 +197,7 @@ protected:
     static VkResult BuildPipelineBinaryCreateInfo(
         const Device*                       pDevice,
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        const PipelineLayout*               pPipelineLayout,
         GraphicsPipelineBinaryCreateInfo*   pBinInfo,
         GraphicsPipelineShaderStageInfo*    pShaderInfo,
         VbInfo*                             pVbInfo,
@@ -198,6 +209,7 @@ protected:
         const VkGraphicsPipelineCreateInfo* pIn,
         const VbInfo*                       pVbInfo,
         const GraphicsPipelineBinaryInfo*   pBinInfo,
+        const PipelineLayout*               pPipelineLayout,
         GraphicsPipelineObjectCreateInfo*   pObjInfo);
 
     // Generates the API PSO hash using the contents of the VkGraphicsPipelineCreateInfo struct
@@ -205,6 +217,32 @@ protected:
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,
         const GraphicsPipelineObjectCreateInfo* pInfo);
 
+    // Generate API PSO hash for state of vertex input interface section
+    static void GenerateHashForVertexInputInterfaceState(
+        const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        Util::MetroHash128*                 pBaseHasher,
+        Util::MetroHash128*                 pApiHasher);
+
+    // Generate API PSO hash for state of pre-rasterization shaders section
+    static void GenerateHashForPreRasterizationShadersState(
+        const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+        const GraphicsPipelineObjectCreateInfo* pInfo,
+        Util::MetroHash128*                     pBaseHasher,
+        Util::MetroHash128*                     pApiHasher);
+
+    // Generate API PSO hash for state of fragment shader section
+    static void GenerateHashForFragmentShaderState(
+        const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+        Util::MetroHash128*                     pBaseHasher,
+        Util::MetroHash128*                     pApiHasher);
+
+    // Generate API PSO hash for state of fragment output interface section
+    static void GenerateHashForFragmentOutputInterfaceState(
+        const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        Util::MetroHash128*                 pBaseHasher,
+        Util::MetroHash128*                 pApiHasher);
+
+    // Constructor of GraphicsPipelineCommon
     GraphicsPipelineCommon(
         Device* const pDevice)
         : Pipeline(

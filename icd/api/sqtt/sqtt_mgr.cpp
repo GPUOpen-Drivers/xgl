@@ -44,7 +44,7 @@ namespace vk
 // =====================================================================================================================
 // This function atomically increments the given 32-bit unsigned int until a given max value, at which point it
 // wraps to 0.
-VK_INLINE uint32_t AtomicWrappedIncrement(
+static uint32_t AtomicWrappedIncrement(
     uint32_t           maxValue,
     volatile uint32_t* pValue)
 {

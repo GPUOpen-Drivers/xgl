@@ -63,39 +63,39 @@ public:
         Device*                      pDevice,
         const VkAllocationCallbacks* pAllocator);
 
-    VK_INLINE const void* Descriptor(
+    inline const void* Descriptor(
         uint32_t      deviceIdx,
         bool          isShaderStorageDesc,
         size_t        srdSize) const;
 
-    VK_INLINE const Pal::IColorTargetView* PalColorTargetView(int32_t idx) const
+    const Pal::IColorTargetView* PalColorTargetView(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_pColorTargetViews[idx];
     }
 
-    VK_INLINE const Pal::IDepthStencilView* PalDepthStencilView(int32_t idx) const
+    const Pal::IDepthStencilView* PalDepthStencilView(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_pDepthStencilViews[idx];
     }
 
-    VK_INLINE const Image* GetImage() const
+    const Image* GetImage() const
         { return m_pImage; }
 
-    VK_INLINE VkFormat GetViewFormat() const
+    VkFormat GetViewFormat() const
         { return m_viewFormat; }
 
-    VK_INLINE const Pal::Range GetZRange() const
+    const Pal::Range GetZRange() const
         { return m_zRange; }
 
-    VK_INLINE void GetFrameBufferAttachmentSubresRange(Pal::SubresRange* pRange) const;
+    inline void GetFrameBufferAttachmentSubresRange(Pal::SubresRange* pRange) const;
 
-    VK_INLINE bool NeedsFmaskViewSrds() const
+    bool NeedsFmaskViewSrds() const
         { return m_needsFmaskViewSrds; }
 
 protected:
-    static VK_INLINE void BuildImageSrds(
+    static void BuildImageSrds(
         const Device*                pDevice,
         size_t                       srdSize,
         const Image*                 pImage,
@@ -106,7 +106,7 @@ protected:
         const VkImageViewCreateInfo* pCreateInfo,
         void*                        pSrdMemory);
 
-    static VK_INLINE void BuildFmaskViewSrds(
+    static void BuildFmaskViewSrds(
         const Device*                pDevice,
         size_t                       fmaskDescSize,
         const Image*                 pImage,
@@ -114,7 +114,7 @@ protected:
         const VkImageViewCreateInfo* pCreateInfo,
         void*                        pFmaskMemory);
 
-    static VK_INLINE Pal::Result BuildColorTargetView(
+    static Pal::Result BuildColorTargetView(
         const Pal::IDevice*       pPalDevice,
         const Pal::IImage*        pPalImage,
         VkImageViewType           viewType,
@@ -126,7 +126,7 @@ protected:
         Pal::IColorTargetView**   pColorView,
         const RuntimeSettings&    settings);
 
-    static VK_INLINE Pal::Result BuildDepthStencilView(
+    static Pal::Result BuildDepthStencilView(
         const Pal::IDevice*       pPalDevice,
         const Pal::IImage*        pPalImage,
         VkImageViewType           viewType,
@@ -138,7 +138,7 @@ protected:
         Pal::IDepthStencilView**  pDepthStencilView,
         const RuntimeSettings&    settings);
 
-    VK_INLINE ImageView(
+    ImageView(
         Pal::IColorTargetView**  pColorTargetView,
         Pal::IDepthStencilView** pDepthStencilView,
         const Image*             pImage,

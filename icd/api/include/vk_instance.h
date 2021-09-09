@@ -120,27 +120,27 @@ public:
 
     void PhysicalDevicesChanged();
 
-    VK_INLINE void* AllocMem(
+    inline void* AllocMem(
         size_t                  size,
         size_t                  alignment,
         VkSystemAllocationScope allocType);
 
-    VK_INLINE void* AllocMem(
+    inline void* AllocMem(
         size_t                  size,
         VkSystemAllocationScope allocType);
 
-    VK_INLINE void FreeMem(void* pMem);
+    inline void FreeMem(void* pMem);
 
-    VK_INLINE VirtualStackMgr* StackMgr()
+    VirtualStackMgr* StackMgr()
         { return m_pVirtualStackMgr; }
 
-    VK_INLINE PalAllocator* Allocator()
+    PalAllocator* Allocator()
         { return &m_palAllocator; }
 
-    VK_INLINE PalAllocator* GetPrivateAllocator()
+    PalAllocator* GetPrivateAllocator()
         { return &m_privateAllocator; }
 
-    VK_INLINE VkAllocationCallbacks* GetAllocCallbacks()
+    VkAllocationCallbacks* GetAllocCallbacks()
         { return &m_allocCallbacks; }
 
     VK_FORCEINLINE Pal::IPlatform* PalPlatform() const
@@ -154,10 +154,10 @@ public:
         uint32_t*                   pPropertyCount,
         VkExtensionProperties*      pProperties);
 
-    VK_INLINE uint32_t GetAPIVersion() const
+    uint32_t GetAPIVersion() const
         { return m_apiVersion; }
 
-    VK_INLINE uint32_t GetAppVersion() const
+    uint32_t GetAppVersion() const
         { return m_appVersion; }
 
     VK_FORCEINLINE const PhysicalDeviceManager* GetPhysicalDeviceManager() const
@@ -169,10 +169,10 @@ public:
 
     bool IsDeviceExtensionAvailable(DeviceExtensions::ExtensionId id) const;
 
-    static VK_INLINE bool IsExtensionSupported(InstanceExtensions::ExtensionId id)
+    static bool IsExtensionSupported(InstanceExtensions::ExtensionId id)
         { return GetSupportedExtensions().IsExtensionSupported(id); }
 
-    VK_INLINE bool IsExtensionEnabled(InstanceExtensions::ExtensionId id) const
+    bool IsExtensionEnabled(InstanceExtensions::ExtensionId id) const
         { return m_enabledExtensions.IsExtensionEnabled(id); }
 
     VkResult FindScreens(
@@ -199,18 +199,18 @@ public:
         uint32_t*               pModeCount,
         Pal::ScreenMode**       ppModeList);
 
-    VK_INLINE const DispatchTable& GetDispatchTable() const
+    const DispatchTable& GetDispatchTable() const
         { return m_dispatchTable; }
 
     void EnableTracingSupport();
 
-    VK_INLINE bool IsTracingSupportEnabled() const
+    bool IsTracingSupportEnabled() const
         { return m_flags.sqttSupport; }
 
-    VK_INLINE bool IsNullGpuModeEnabled() const
+    bool IsNullGpuModeEnabled() const
         { return m_flags.nullGpuMode; }
 
-    VK_INLINE Pal::NullGpuId GetNullGpuId() const
+    Pal::NullGpuId GetNullGpuId() const
         { return m_nullGpuId; }
 
     DevModeMgr* GetDevModeMgr()

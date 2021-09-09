@@ -78,9 +78,14 @@ public:
         VkDeviceSize       memOffset,
         const uint32_t*    pDeviceIndices);
 
-    VkResult GetMemoryRequirements(
+    void GetMemoryRequirements(
         const Device*         pDevice,
         VkMemoryRequirements* pMemoryRequirements);
+
+    static void CalculateMemoryRequirements(
+        const Device*             pDevice,
+        const VkBufferCreateInfo* pCreateInfo,
+        VkMemoryRequirements*     pMemoryRequirements);
 
     VkDeviceSize GetSize() const
         { return m_size; }
@@ -130,13 +135,8 @@ private:
 
     Buffer(Device*                      pDevice,
            const VkAllocationCallbacks* pAllocator,
-           VkBufferCreateFlags          flags,
-           VkBufferUsageFlags           usage,
+           const VkBufferCreateInfo*    pCreateInfo,
            Pal::IGpuMemory**            pGpuMemory,
-           VkSharingMode                sharingMode,
-           uint32_t                     queueFamilyIndexCount,
-           const uint32_t*              pQueueFamilyIndices,
-           VkDeviceSize                 size,
            BufferFlags                  internalFlags);
 
     // Compute size required for the object.  One copy of PerGpuInfo is included in the object and we need
@@ -147,12 +147,22 @@ private:
     }
 
     static void LogBufferCreate(
-        VkDeviceSize              size,
         const VkBufferCreateInfo* pCreateInfo,
         VkBuffer                  buffer,
         const Device*             pDevice);
 
     void LogGpuMemoryBind(const Device* pDevice, const Pal::IGpuMemory* pPalMemory, VkDeviceSize memOffset) const;
+
+    static void GetBufferMemoryRequirements(
+        const Device*         pDevice,
+        const BufferFlags*    pBufferFlags,
+        const VkDeviceSize    size,
+        VkMemoryRequirements* pMemoryRequirements);
+
+    static void CalculateBufferFlags(
+        const Device*             pDevice,
+        const VkBufferCreateInfo* pCreateInfo,
+        BufferFlags*              pBufferFlags);
 
     const VkDeviceSize      m_size;
     VkDeviceSize            m_memOffset;
@@ -165,7 +175,7 @@ private:
 };
 
 // =====================================================================================================================
-VK_INLINE Pal::gpusize GetBufferAddress(
+inline Pal::gpusize GetBufferAddress(
     uint32_t     deviceIndex,
     VkBuffer     buffer,
     VkDeviceSize offset)
@@ -181,7 +191,7 @@ VK_INLINE Pal::gpusize GetBufferAddress(
 }
 
 // =====================================================================================================================
-VK_INLINE Pal::gpusize GetBufferSize(
+inline Pal::gpusize GetBufferSize(
     VkBuffer     buffer,
     VkDeviceSize offset)
 {
