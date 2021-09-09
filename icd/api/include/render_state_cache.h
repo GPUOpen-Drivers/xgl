@@ -215,7 +215,7 @@ private:
         uint32_t         token,
         ParamHashMap*    pMap);
 
-    VK_INLINE bool IsEnabled(uint32_t staticStateFlag) const;
+    bool IsEnabled(uint32_t staticStateFlag) const;
 
     Pal::Result AllocMem(
         size_t                       size,

@@ -66,7 +66,7 @@ constexpr uint32_t MaxRangePerAttachment        = 2;    // Depth/stencil images 
 static_assert((MaxRangePerAttachment == MaxPalDepthAspectsPerMask),
               "API's max depth/stencil ranges per attachment and PAL max depth aspects must match");
 
-VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings& settings);
+inline Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings& settings);
 
 #define VK_TO_PAL_TABLE_COMPLEX(srcType, srcTypeName, dstType, convertFunc, mapping) \
     VK_TO_PAL_TABLE_COMPLEX_WITH_SUFFIX(srcType, srcTypeName, dstType, convertFunc, mapping, )
@@ -110,7 +110,7 @@ VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettin
                 "identity mapping"); \
             return lookupTable; \
         } \
-        VK_INLINE dstType convertFunc(Vk##srcTypeName value) \
+        inline dstType convertFunc(Vk##srcTypeName value) \
         { \
             VK_DBG_CHECK(VkToPal##convertFunc##Valid[value], "Enum value intentionally unhandled"); \
             return VkToPal##convertFunc##LookupTable[value]; \
@@ -169,7 +169,7 @@ VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettin
 #define VK_TO_PAL_TABLE_I_WITH_SUFFIX(srcType, srcTypeName, dstType, mapping, suffix) \
     namespace convert \
     { \
-        VK_INLINE Pal::dstType dstType(Vk##srcTypeName value) \
+        inline Pal::dstType dstType(Vk##srcTypeName value) \
         { \
             VK_DBG_DECL(size_t numHandled = 0); \
             mapping \
@@ -199,7 +199,7 @@ VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettin
 #define PAL_TO_VK_TABLE_X(srcType, srcTypeName, dstType, mapping, returnValue) \
     namespace convert \
     { \
-        VK_INLINE Vk##dstType PalToVK##dstType(Pal::srcType value) \
+        inline Vk##dstType PalToVK##dstType(Pal::srcType value) \
         { \
             switch (value) \
             { \
@@ -240,7 +240,7 @@ VK_TO_PAL_ENTRY_X(PRIMITIVE_TOPOLOGY_PATCH_LIST,                    PrimitiveTyp
 
 // =====================================================================================================================
 // Converts Vulkan primitive topology to PAL primitive type
-VK_INLINE Pal::PrimitiveType VkToPalPrimitiveType(
+inline Pal::PrimitiveType VkToPalPrimitiveType(
     VkPrimitiveTopology     topology)
 {
    return  convert::PrimitiveType(topology);
@@ -265,7 +265,7 @@ VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_PATCH_LIST,                      Primitiv
 
 // =====================================================================================================================
 // Converts Vulkan primitive topology to PAL equivalent
-VK_INLINE Pal::PrimitiveTopology VkToPalPrimitiveTopology(VkPrimitiveTopology topology)
+inline Pal::PrimitiveTopology VkToPalPrimitiveTopology(VkPrimitiveTopology topology)
 {
     return convert::PrimitiveTopology(topology);
 }
@@ -282,7 +282,7 @@ VK_TO_PAL_ENTRY_X(  SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,       TexAddressMode::
 
 // =====================================================================================================================
 // Converts Vulkan texture addressing mode to PAL equivalent
-VK_INLINE Pal::TexAddressMode VkToPalTexAddressMode(
+inline Pal::TexAddressMode VkToPalTexAddressMode(
                               VkSamplerAddressMode texAddress)
 {
     if (texAddress == VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE)
@@ -297,7 +297,7 @@ VK_INLINE Pal::TexAddressMode VkToPalTexAddressMode(
 
 // =====================================================================================================================
 // Converts Vulkan border color type to PAL equivalent
-VK_INLINE Pal::BorderColorType VkToPalBorderColorType(VkBorderColor borderColor)
+inline Pal::BorderColorType VkToPalBorderColorType(VkBorderColor borderColor)
 {
     switch (borderColor)
     {
@@ -329,7 +329,7 @@ VK_TO_PAL_ENTRY_X(  POLYGON_MODE_FILL,                        FillMode::Solid   
 // =====================================================================================================================
 )
 
-VK_INLINE Pal::FillMode VkToPalFillMode(VkPolygonMode fillMode)
+inline Pal::FillMode VkToPalFillMode(VkPolygonMode fillMode)
 {
     return convert::FillMode(fillMode);
 }
@@ -337,7 +337,7 @@ VK_INLINE Pal::FillMode VkToPalFillMode(VkPolygonMode fillMode)
 // No range size and begin range in VkCullModeFlagBits, so no direct macro mapping here
 namespace convert
 {
-    VK_INLINE Pal::CullMode CullMode(VkCullModeFlags cullMode)
+    inline Pal::CullMode CullMode(VkCullModeFlags cullMode)
     {
         switch (cullMode)
         {
@@ -360,7 +360,7 @@ namespace convert
 
 // =====================================================================================================================
 // Converts Vulkan cull mode to PAL equivalent
-VK_INLINE Pal::CullMode VkToPalCullMode(VkCullModeFlags cullMode)
+inline Pal::CullMode VkToPalCullMode(VkCullModeFlags cullMode)
 {
     return convert::CullMode(cullMode);
 }
@@ -375,7 +375,7 @@ VK_TO_PAL_ENTRY_I(  FRONT_FACE_CLOCKWISE,                          FaceOrientati
 
 // =====================================================================================================================
 // Converts Vulkan face orientation to PAL equivalent
-VK_INLINE Pal::FaceOrientation VkToPalFaceOrientation(VkFrontFace frontFace)
+inline Pal::FaceOrientation VkToPalFaceOrientation(VkFrontFace frontFace)
 {
     return convert::FaceOrientation(frontFace);
 }
@@ -403,7 +403,7 @@ VK_TO_PAL_ENTRY_X(  LOGIC_OP_SET,                           LogicOp::Set        
 
 // =====================================================================================================================
 // Converts Vulkan logic operation to PAL equivalent
-VK_INLINE Pal::LogicOp VkToPalLogicOp(VkLogicOp logicOp)
+inline Pal::LogicOp VkToPalLogicOp(VkLogicOp logicOp)
 {
     return convert::LogicOp(logicOp);
 }
@@ -436,7 +436,7 @@ VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,             Blend::OneMin
 // =====================================================================================================================
 // Converts Vulkan blend factor to PAL equivalent
 
-VK_INLINE Pal::Blend VkToPalBlend(VkBlendFactor blend)
+inline Pal::Blend VkToPalBlend(VkBlendFactor blend)
 {
     return convert::Blend(blend);
 }
@@ -454,7 +454,7 @@ VK_TO_PAL_ENTRY_I(  BLEND_OP_MAX,                           BlendFunc::Max      
 
 // =====================================================================================================================
 // Converts Vulkan blend func to PAL equivalent
-VK_INLINE Pal::BlendFunc VkToPalBlendFunc(VkBlendOp blendFunc)
+inline Pal::BlendFunc VkToPalBlendFunc(VkBlendOp blendFunc)
 {
     return convert::BlendFunc(blendFunc);
 }
@@ -474,7 +474,7 @@ VK_TO_PAL_ENTRY_I(  STENCIL_OP_DECREMENT_AND_WRAP,          StencilOp::DecWrap  
 
 // =====================================================================================================================
 // Converts Vulkan stencil op to PAL equivalent
-VK_INLINE Pal::StencilOp VkToPalStencilOp(VkStencilOp stencilOp)
+inline Pal::StencilOp VkToPalStencilOp(VkStencilOp stencilOp)
 {
     return convert::StencilOp(stencilOp);
 }
@@ -495,7 +495,7 @@ VK_TO_PAL_ENTRY_I(  COMPARE_OP_ALWAYS,                      CompareFunc::Always 
 
 // =====================================================================================================================
 // Converts Vulkan stencil op to PAL equivalent
-VK_INLINE Pal::CompareFunc VkToPalCompareFunc(VkCompareOp compareOp)
+inline Pal::CompareFunc VkToPalCompareFunc(VkCompareOp compareOp)
 {
     return convert::CompareFunc(compareOp);
 }
@@ -509,14 +509,14 @@ VK_TO_PAL_ENTRY_X(  INDEX_TYPE_UINT32,                      IndexType::Idx32    
 
 // =====================================================================================================================
 // Converts Vulkan index type to PAL equivalent.
-VK_INLINE Pal::IndexType VkToPalIndexType(VkIndexType indexType)
+inline Pal::IndexType VkToPalIndexType(VkIndexType indexType)
 {
     return convert::IndexType(indexType);
 }
 
 // =====================================================================================================================
 // Converts Vulkan Filter parameters to the PAL equivalent.
-VK_INLINE Pal::TexFilter VkToPalTexFilter(
+inline Pal::TexFilter VkToPalTexFilter(
     VkBool32            anisotropicEnabled,
     VkFilter            magFilter,
     VkFilter            minFilter,
@@ -569,7 +569,7 @@ VK_INLINE Pal::TexFilter VkToPalTexFilter(
 
 // =====================================================================================================================
 // Converts a Vulkan texture filter quality parameter to the pal equivalent
-VK_INLINE Pal::ImageTexOptLevel VkToPalTexFilterQuality(TextureFilterOptimizationSettings texFilterQuality)
+inline Pal::ImageTexOptLevel VkToPalTexFilterQuality(TextureFilterOptimizationSettings texFilterQuality)
 {
     switch (texFilterQuality)
     {
@@ -588,7 +588,7 @@ VK_INLINE Pal::ImageTexOptLevel VkToPalTexFilterQuality(TextureFilterOptimizatio
 
 // =====================================================================================================================
 // Selects the first PAL aspect from the Vulkan aspect mask and removes the corresponding bits from it.
-VK_INLINE uint32 VkToPalImagePlaneExtract(
+inline uint32 VkToPalImagePlaneExtract(
     Pal::ChNumFormat    format,
     VkImageAspectFlags* pAspectMask)
 {
@@ -702,7 +702,7 @@ VK_INLINE uint32 VkToPalImagePlaneExtract(
 
 // =====================================================================================================================
 // Selects a single PAL aspect that directly corresponds to the specified mask.
-VK_INLINE uint32 VkToPalImagePlaneSingle(
+inline uint32 VkToPalImagePlaneSingle(
     VkFormat               format,
     VkImageAspectFlags     aspectMask,
     const RuntimeSettings& settings)
@@ -753,7 +753,7 @@ VK_TO_PAL_ENTRY_X(  IMAGE_TILING_OPTIMAL,                   ImageTiling::Optimal
 
 // =====================================================================================================================
 // Converts Vulkan image tiling to PAL equivalent
-VK_INLINE Pal::ImageTiling VkToPalImageTiling(VkImageTiling tiling)
+inline Pal::ImageTiling VkToPalImageTiling(VkImageTiling tiling)
 {
     return convert::ImageTiling(tiling);
 }
@@ -769,7 +769,7 @@ VK_TO_PAL_ENTRY_I(  IMAGE_TYPE_3D,                          ImageType::Tex3d    
 
 // =====================================================================================================================
 // Converts Vulkan image type to PAL equivalent.
-VK_INLINE Pal::ImageType VkToPalImageType(VkImageType imgType)
+inline Pal::ImageType VkToPalImageType(VkImageType imgType)
 {
     return convert::ImageType(imgType);
 }
@@ -789,7 +789,7 @@ VK_TO_PAL_ENTRY_X(  IMAGE_VIEW_TYPE_CUBE_ARRAY,             ImageViewType::TexCu
 
 // =====================================================================================================================
 // Converts Vulkan image view type to PAL equivalent.
-VK_INLINE Pal::ImageViewType VkToPalImageViewType(VkImageViewType imgViewType)
+inline Pal::ImageViewType VkToPalImageViewType(VkImageViewType imgViewType)
 {
     return convert::ImageViewType(imgViewType);
 }
@@ -805,14 +805,14 @@ VK_TO_PAL_TABLE_I(  SAMPLER_REDUCTION_MODE, SamplerReductionMode,   TexFilterMod
 
 // =====================================================================================================================
 // Converts Vulkan filter mode to PAL equivalent.
-VK_INLINE Pal::TexFilterMode VkToPalTexFilterMode(VkSamplerReductionMode filterMode)
+inline Pal::TexFilterMode VkToPalTexFilterMode(VkSamplerReductionMode filterMode)
 {
     return convert::TexFilterMode(filterMode);
 }
 
 // =====================================================================================================================
 // Converts Vulkan video profile level to PAL equivalent.
-VK_INLINE uint32_t VkToPalVideoProfileLevel(uint32_t level)
+inline uint32_t VkToPalVideoProfileLevel(uint32_t level)
 {
     // Vulkan level value is created using VK_MAKE_VERSION
     uint32_t major = level >> 22;
@@ -824,7 +824,7 @@ VK_INLINE uint32_t VkToPalVideoProfileLevel(uint32_t level)
 
 // =====================================================================================================================
 // Converts PAL video profile level to Vulkan equivalent.
-VK_INLINE uint32_t PalToVkVideoProfileLevel(uint32_t level)
+inline uint32_t PalToVkVideoProfileLevel(uint32_t level)
 {
     // PAL level is represented as version multiplied by 10
     uint32_t major = level / 10;
@@ -865,21 +865,21 @@ VK_TO_PAL_STRUC_X( QUERY_TYPE_TIMESTAMP,
 
 // =====================================================================================================================
 // Converts Vulkan query type to PAL equivalent
-VK_INLINE Pal::QueryType VkToPalQueryType(VkQueryType queryType)
+inline Pal::QueryType VkToPalQueryType(VkQueryType queryType)
 {
     return convert::QueryTypePool(queryType).m_type;
 }
 
 // =====================================================================================================================
 // Converts Vulkan query type to PAL equivalent
-VK_INLINE Pal::QueryPoolType VkToPalQueryPoolType(VkQueryType queryType)
+inline Pal::QueryPoolType VkToPalQueryPoolType(VkQueryType queryType)
 {
     return convert::QueryTypePool(queryType).m_poolType;
 }
 
 // =====================================================================================================================
 // Converts Vulkan query control flags to PAL equivalent
-VK_INLINE Pal::QueryControlFlags VkToPalQueryControlFlags(
+inline Pal::QueryControlFlags VkToPalQueryControlFlags(
     VkQueryType         queryType,
     VkQueryControlFlags flags)
 {
@@ -895,7 +895,7 @@ VK_INLINE Pal::QueryControlFlags VkToPalQueryControlFlags(
 
 // =====================================================================================================================
 // Converts Vulkan query result flags to PAL equivalent
-VK_INLINE Pal::QueryResultFlags VkToPalQueryResultFlags(VkQueryResultFlags flags)
+inline Pal::QueryResultFlags VkToPalQueryResultFlags(VkQueryResultFlags flags)
 {
     uint32_t palFlags = Pal::QueryResultDefault;
 
@@ -924,7 +924,7 @@ VK_INLINE Pal::QueryResultFlags VkToPalQueryResultFlags(VkQueryResultFlags flags
 
 // =====================================================================================================================
 // Converts Vulkan pipeline statistics query flags to PAL equivalent
-VK_INLINE Pal::QueryPipelineStatsFlags VkToPalQueryPipelineStatsFlags(VkQueryPipelineStatisticFlags flags)
+inline Pal::QueryPipelineStatsFlags VkToPalQueryPipelineStatsFlags(VkQueryPipelineStatisticFlags flags)
 {
     static_assert(
     (static_cast<uint32_t>(VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT) ==
@@ -973,7 +973,7 @@ VK_TO_PAL_ENTRY_X(  COMPONENT_SWIZZLE_A,                      ChannelSwizzle::W 
 // ====================================================================================================================
 // Reswizzles a format given a component mapping.  The input image format should be a previously unswizzled format,
 // such as one returned by VkToPalFormat() function.
-VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
+inline Pal::SwizzledFormat RemapFormatComponents(
     Pal::SwizzledFormat       format,
     Pal::SubresRange          subresRange,
     const VkComponentMapping& mapping,
@@ -1173,7 +1173,7 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
 
 // =====================================================================================================================
 // Returns the Vulkan image aspect flag bits corresponding to the given PAL YUV format.
-VK_INLINE VkImageAspectFlags PalYuvFormatToVkImageAspectPlane(
+inline VkImageAspectFlags PalYuvFormatToVkImageAspectPlane(
     const Pal::ChNumFormat format)
 {
     switch (format)
@@ -1207,7 +1207,7 @@ VK_INLINE VkImageAspectFlags PalYuvFormatToVkImageAspectPlane(
 // =====================================================================================================================
 // Converts Vulkan image subresource range to PAL equivalent.
 // It may generate two PAL subresource range entries in case both depth and stencil aspect is selected in the mask.
-VK_INLINE void VkToPalSubresRange(
+inline void VkToPalSubresRange(
     VkFormat                        format,
     const VkImageSubresourceRange&  range,
     uint32_t                        mipLevels,
@@ -1246,7 +1246,7 @@ VK_INLINE void VkToPalSubresRange(
 
 // =====================================================================================================================
 // Converts a Vulkan scissor params to a PAL scissor rect params
-VK_INLINE Pal::ScissorRectParams VkToPalScissorParams(const VkPipelineViewportStateCreateInfo& scissors)
+inline Pal::ScissorRectParams VkToPalScissorParams(const VkPipelineViewportStateCreateInfo& scissors)
 {
     Pal::ScissorRectParams palScissors;
 
@@ -1264,7 +1264,7 @@ VK_INLINE Pal::ScissorRectParams VkToPalScissorParams(const VkPipelineViewportSt
 
 // =====================================================================================================================
 // Converts a Vulkan offset 2D to a PAL offset 2D
-VK_INLINE Pal::Offset2d VkToPalOffset2d(const VkOffset2D& offset)
+inline Pal::Offset2d VkToPalOffset2d(const VkOffset2D& offset)
 {
     Pal::Offset2d result;
     result.x = offset.x;
@@ -1274,7 +1274,7 @@ VK_INLINE Pal::Offset2d VkToPalOffset2d(const VkOffset2D& offset)
 
 // =====================================================================================================================
 // Converts a Vulkan offset 3D to a PAL offset 3D
-VK_INLINE Pal::Offset3d VkToPalOffset3d(const VkOffset3D& offset)
+inline Pal::Offset3d VkToPalOffset3d(const VkOffset3D& offset)
 {
     Pal::Offset3d result;
     result.x = offset.x;
@@ -1285,7 +1285,7 @@ VK_INLINE Pal::Offset3d VkToPalOffset3d(const VkOffset3D& offset)
 
 // =====================================================================================================================
 // Converts a Vulkan extent 2D to a PAL extent 2D
-VK_INLINE Pal::Extent2d VkToPalExtent2d(const VkExtent2D& extent)
+inline Pal::Extent2d VkToPalExtent2d(const VkExtent2D& extent)
 {
     Pal::Extent2d result;
     result.width  = extent.width;
@@ -1295,7 +1295,7 @@ VK_INLINE Pal::Extent2d VkToPalExtent2d(const VkExtent2D& extent)
 
 // =====================================================================================================================
 // Converts a PAL extent 2D to a Vulkan extent 2D
-VK_INLINE VkExtent2D PalToVkExtent2d(const Pal::Extent2d& extent)
+inline VkExtent2D PalToVkExtent2d(const Pal::Extent2d& extent)
 {
     VkExtent2D result;
     result.width  = extent.width;
@@ -1305,7 +1305,7 @@ VK_INLINE VkExtent2D PalToVkExtent2d(const Pal::Extent2d& extent)
 
 // =====================================================================================================================
 // Converts PAL GpuType to Vulkan VkPhysicalDeviceType
-VK_INLINE VkPhysicalDeviceType PalToVkGpuType(const Pal::GpuType gpuType)
+inline VkPhysicalDeviceType PalToVkGpuType(const Pal::GpuType gpuType)
 {
     const VkPhysicalDeviceType gpuTypeTbl[] =
     {
@@ -1322,7 +1322,7 @@ VK_INLINE VkPhysicalDeviceType PalToVkGpuType(const Pal::GpuType gpuType)
 
 // =====================================================================================================================
 // Converts a Vulkan extent 3D to a PAL extent 3D
-VK_INLINE Pal::Extent3d VkToPalExtent3d(const VkExtent3D& extent)
+inline Pal::Extent3d VkToPalExtent3d(const VkExtent3D& extent)
 {
     Pal::Extent3d result;
     result.width  = extent.width;
@@ -1333,7 +1333,7 @@ VK_INLINE Pal::Extent3d VkToPalExtent3d(const VkExtent3D& extent)
 
 // =====================================================================================================================
 // Converts a PAL extent 3D to a Vulkan extent 3D
-VK_INLINE VkExtent3D PalToVkExtent3d(const Pal::Extent3d& extent)
+inline VkExtent3D PalToVkExtent3d(const Pal::Extent3d& extent)
 {
     VkExtent3D result;
     result.width  = extent.width;
@@ -1344,7 +1344,7 @@ VK_INLINE VkExtent3D PalToVkExtent3d(const Pal::Extent3d& extent)
 
 // =====================================================================================================================
 // Converts two Vulkan 3D offsets to a PAL signed extent 3D
-VK_INLINE Pal::SignedExtent3d VkToPalSignedExtent3d(const VkOffset3D offsets[2])
+inline Pal::SignedExtent3d VkToPalSignedExtent3d(const VkOffset3D offsets[2])
 {
     Pal::SignedExtent3d result;
     result.width  = offsets[1].x  - offsets[0].x;
@@ -1355,14 +1355,14 @@ VK_INLINE Pal::SignedExtent3d VkToPalSignedExtent3d(const VkOffset3D offsets[2])
 
 // =====================================================================================================================
 // Converts value in texels to value in blocks, specifying block dimension for the given coordinate.
-VK_INLINE uint32_t TexelsToBlocks(uint32_t texels, uint32_t blockSize)
+inline uint32_t TexelsToBlocks(uint32_t texels, uint32_t blockSize)
 {
     return Util::RoundUpToMultiple(texels, blockSize) / blockSize;
 }
 
 // =====================================================================================================================
 // Converts signed value in texels to signed value in blocks, specifying block dimension for the given coordinate.
-VK_INLINE int32_t TexelsToBlocks(int32_t texels, uint32_t blockSize)
+inline int32_t TexelsToBlocks(int32_t texels, uint32_t blockSize)
 {
     uint32_t value = Util::Math::Absu(texels);
     value = Util::RoundUpToMultiple(value, blockSize) / blockSize;
@@ -1373,14 +1373,14 @@ VK_INLINE int32_t TexelsToBlocks(int32_t texels, uint32_t blockSize)
 
 // =====================================================================================================================
 // Converts pitch value in texels to pitch value in blocks, specifying block dimension for the given coordinate.
-VK_INLINE Pal::gpusize PitchTexelsToBlocks(Pal::gpusize texels, uint32_t blockSize)
+inline Pal::gpusize PitchTexelsToBlocks(Pal::gpusize texels, uint32_t blockSize)
 {
     return Util::RoundUpToMultiple(texels, static_cast<Pal::gpusize>(blockSize)) / blockSize;
 }
 
 // =====================================================================================================================
 // Converts extent in texels to extent in blocks, specifying block dimensions.
-VK_INLINE Pal::Extent3d TexelsToBlocks(Pal::Extent3d texels, Pal::Extent3d blockSize)
+inline Pal::Extent3d TexelsToBlocks(Pal::Extent3d texels, Pal::Extent3d blockSize)
 {
     Pal::Extent3d blocks;
 
@@ -1393,7 +1393,7 @@ VK_INLINE Pal::Extent3d TexelsToBlocks(Pal::Extent3d texels, Pal::Extent3d block
 
 // =====================================================================================================================
 // Converts signed extent in texels to signed extent in blocks, specifying block dimensions.
-VK_INLINE Pal::SignedExtent3d TexelsToBlocks(Pal::SignedExtent3d texels, Pal::Extent3d blockSize)
+inline Pal::SignedExtent3d TexelsToBlocks(Pal::SignedExtent3d texels, Pal::Extent3d blockSize)
 {
     Pal::SignedExtent3d blocks;
 
@@ -1406,7 +1406,7 @@ VK_INLINE Pal::SignedExtent3d TexelsToBlocks(Pal::SignedExtent3d texels, Pal::Ex
 
 // =====================================================================================================================
 // Converts offset in texels to offset in blocks, specifying block dimensions.
-VK_INLINE Pal::Offset3d TexelsToBlocks(Pal::Offset3d texels, Pal::Extent3d blockSize)
+inline Pal::Offset3d TexelsToBlocks(Pal::Offset3d texels, Pal::Extent3d blockSize)
 {
     Pal::Offset3d blocks;
 
@@ -1419,7 +1419,7 @@ VK_INLINE Pal::Offset3d TexelsToBlocks(Pal::Offset3d texels, Pal::Extent3d block
 
 // =====================================================================================================================
 // Queries the number of bytes in a pixel or element for the given format.
-VK_INLINE Pal::uint32 BytesPerPixel(Pal::ChNumFormat format, uint32 plane)
+inline Pal::uint32 BytesPerPixel(Pal::ChNumFormat format, uint32 plane)
 {
     if (Pal::Formats::IsYuvPlanar(format))
     {
@@ -1460,7 +1460,7 @@ VK_INLINE Pal::uint32 BytesPerPixel(Pal::ChNumFormat format, uint32 plane)
 // =====================================================================================================================
 // Converts a Vulkan image-copy structure to one or more PAL image-copy-region structures.
 template<typename ImageCopyType>
-VK_INLINE void VkToPalImageCopyRegion(
+void VkToPalImageCopyRegion(
     const ImageCopyType&    imageCopy,
     Pal::ChNumFormat        srcFormat,
     Pal::ChNumFormat        dstFormat,
@@ -1519,7 +1519,7 @@ VK_INLINE void VkToPalImageCopyRegion(
 // =====================================================================================================================
 // Converts a Vulkan image-blit structure to one or more PAL image-scaled-copy-region structures.
 template<typename ImageBlitType>
-VK_INLINE void VkToPalImageScaledCopyRegion(
+void VkToPalImageScaledCopyRegion(
     const ImageBlitType&        imageBlit,
     Pal::ChNumFormat            srcFormat,
     Pal::ChNumFormat            dstFormat,
@@ -1564,7 +1564,7 @@ VK_INLINE void VkToPalImageScaledCopyRegion(
 
 // =====================================================================================================================
 // Converts a Vulkan image-blit structure to one or more PAL color-space-conversion-region structures.
-VK_INLINE Pal::ColorSpaceConversionRegion VkToPalImageColorSpaceConversionRegion(
+inline Pal::ColorSpaceConversionRegion VkToPalImageColorSpaceConversionRegion(
     const VkImageBlit&  imageBlit,
     Pal::SwizzledFormat srcFormat,
     Pal::SwizzledFormat dstFormat)
@@ -1628,7 +1628,7 @@ VK_INLINE Pal::ColorSpaceConversionRegion VkToPalImageColorSpaceConversionRegion
 // =====================================================================================================================
 // Converts a Vulkan image-resolve structure to one or more PAL image-resolve-region structures.
 template<typename ImageResolveType>
-VK_INLINE void VkToPalImageResolveRegion(
+void VkToPalImageResolveRegion(
     const ImageResolveType&     imageResolve,
     Pal::ChNumFormat            srcFormat,
     Pal::ChNumFormat            dstFormat,
@@ -1673,7 +1673,7 @@ VK_INLINE void VkToPalImageResolveRegion(
 // =====================================================================================================================
 // Converts a Vulkan buffer-image-copy structure to a PAL memory-image-copy-region structure.
 template<typename BufferImageCopyType>
-VK_INLINE Pal::MemoryImageCopyRegion VkToPalMemoryImageCopyRegion(
+Pal::MemoryImageCopyRegion VkToPalMemoryImageCopyRegion(
     const BufferImageCopyType&  bufferImageCopy,
     Pal::ChNumFormat            format,
     uint32                      plane,
@@ -1725,7 +1725,7 @@ extern Pal::SwizzledFormat VkToPalSwizzledFormatLookupTableStorage[VK_FORMAT_END
 };
 
 // =====================================================================================================================
-constexpr VK_INLINE Pal::SwizzledFormat PalFmt(
+constexpr Pal::SwizzledFormat PalFmt(
     Pal::ChNumFormat    chNumFormat,
     Pal::ChannelSwizzle r,
     Pal::ChannelSwizzle g,
@@ -1735,7 +1735,7 @@ constexpr VK_INLINE Pal::SwizzledFormat PalFmt(
     return{ chNumFormat,{ r, g, b, a } };
 }
 
-#if ( VKI_GPU_DECOMPRESS)
+#if (VKI_GPU_DECOMPRESS)
 static VkFormat convertCompressedFormat(VkFormat format)
 {
     if (Formats::IsASTCFormat(format))
@@ -1746,10 +1746,7 @@ static VkFormat convertCompressedFormat(VkFormat format)
     }
     else if (Formats::IsEtc2Format(format))
     {
-        format = ((format == VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK)   ||
-                  (format == VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK) ||
-                  (format == VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK)) ?
-                  VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+        format = VK_FORMAT_R8G8B8A8_UNORM;
     }
     return format;
 }
@@ -1757,7 +1754,7 @@ static VkFormat convertCompressedFormat(VkFormat format)
 
 // =====================================================================================================================
 // Converts Vulkan format to PAL equivalent.
-VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings& settings)
+inline Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings& settings)
 {
     if (VK_ENUM_IN_RANGE(format, VK_FORMAT))
     {
@@ -1807,7 +1804,7 @@ VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettin
 // extension and propose revisions to VK_EXT_swapchain_colorspace.
 namespace convert
 {
-    VK_INLINE Pal::ScreenColorSpace ScreenColorSpace(VkSurfaceFormatKHR surfaceFormat)
+    inline Pal::ScreenColorSpace ScreenColorSpace(VkSurfaceFormatKHR surfaceFormat)
     {
         union
         {
@@ -1895,7 +1892,7 @@ namespace convert
 }
 
 // =====================================================================================================================
-VK_INLINE Pal::ScreenColorSpace VkToPalScreenSpace(VkSurfaceFormatKHR colorFormat)
+inline Pal::ScreenColorSpace VkToPalScreenSpace(VkSurfaceFormatKHR colorFormat)
 {
     return convert::ScreenColorSpace(colorFormat);
 }
@@ -1903,7 +1900,7 @@ VK_INLINE Pal::ScreenColorSpace VkToPalScreenSpace(VkSurfaceFormatKHR colorForma
 // =====================================================================================================================
 // Converts Vulkan source pipeline stage flags to PAL HW pipe point.
 // Selects a source pipe point that matches all stage flags to use for setting/resetting events.
-VK_INLINE Pal::HwPipePoint VkToPalSrcPipePoint(PipelineStageFlags flags)
+inline Pal::HwPipePoint VkToPalSrcPipePoint(PipelineStageFlags flags)
 {
     // Flags that only require signaling at top-of-pipe.
     static const PipelineStageFlags srcTopOfPipeFlags =
@@ -1986,7 +1983,7 @@ VK_INLINE Pal::HwPipePoint VkToPalSrcPipePoint(PipelineStageFlags flags)
 
 // =====================================================================================================================
 // Converts Vulkan source pipeline stage flags to PAL HW top or bottom pipe point.
-VK_INLINE Pal::HwPipePoint VkToPalSrcPipePointForTimestampWrite(PipelineStageFlags flags)
+inline Pal::HwPipePoint VkToPalSrcPipePointForTimestampWrite(PipelineStageFlags flags)
 {
     // Flags that require signaling at top-of-pipe.
     static const PipelineStageFlags srcTopOfPipeFlags =
@@ -2008,7 +2005,7 @@ VK_INLINE Pal::HwPipePoint VkToPalSrcPipePointForTimestampWrite(PipelineStageFla
 
 // =====================================================================================================================
 // Converts Vulkan source pipeline stage flags to PAL buffer marker writes (top/bottom only)
-VK_INLINE Pal::HwPipePoint VkToPalSrcPipePointForMarkers(
+inline Pal::HwPipePoint VkToPalSrcPipePointForMarkers(
     PipelineStageFlags   flags,
     Pal::EngineType      engineType)
 {
@@ -2107,7 +2104,7 @@ static const size_t MaxHwPipePoints = sizeof(hwPipePointMappingTable) / sizeof(h
 // By having the flexibility to specify multiple pipe points for barriers we can avoid going with the least common
 // denominator like in case of event sets/resets.
 // The function returns the number of pipe points set in the return value.
-VK_INLINE uint32_t VkToPalSrcPipePoints(PipelineStageFlags flags, Pal::HwPipePoint* pPalPipePoints)
+inline uint32_t VkToPalSrcPipePoints(PipelineStageFlags flags, Pal::HwPipePoint* pPalPipePoints)
 {
     uint32_t pipePointCount = 0;
 
@@ -2126,7 +2123,7 @@ VK_INLINE uint32_t VkToPalSrcPipePoints(PipelineStageFlags flags, Pal::HwPipePoi
 // =====================================================================================================================
 // Converts Vulkan destination pipeline stage flags to PAL HW pipe point.
 // This way a target pipeline stage is selected where the wait for events happens
-VK_INLINE Pal::HwPipePoint VkToPalWaitPipePoint(PipelineStageFlags flags)
+inline Pal::HwPipePoint VkToPalWaitPipePoint(PipelineStageFlags flags)
 {
     static_assert((Pal::HwPipePostIndexFetch == Pal::HwPipePreCs) && (Pal::HwPipePostIndexFetch == Pal::HwPipePreBlt),
         "The code here assumes pre-CS and pre-blit match post-index-fetch.");
@@ -2181,7 +2178,7 @@ VK_INLINE Pal::HwPipePoint VkToPalWaitPipePoint(PipelineStageFlags flags)
 
 // =====================================================================================================================
 // Converts Vulkan source pipeline stage flags to PAL pipeline stage mask.
-VK_INLINE uint32_t VkToPalPipelineStageFlags(
+inline uint32_t VkToPalPipelineStageFlags(
     PipelineStageFlags   stageMask)
 {
     uint32_t palPipelineStageMask = 0;
@@ -2329,7 +2326,7 @@ PAL_TO_VK_ENTRY_X(  ImageTiling::Optimal,                   IMAGE_TILING_OPTIMAL
 PAL_TO_VK_RETURN_X(                                         IMAGE_TILING_LINEAR                                        )
 )
 
-VK_INLINE VkImageTiling PalToVkImageTiling(Pal::ImageTiling tiling)
+inline VkImageTiling PalToVkImageTiling(Pal::ImageTiling tiling)
 {
     return convert::PalToVKImageTiling(tiling);
 }
@@ -2353,7 +2350,7 @@ PAL_TO_VK_RETURN_X(                                         SURFACE_TRANSFORM_ID
 
 // =====================================================================================================================
 // Converts PAL surface transform to Vulkan.
-VK_INLINE VkSurfaceTransformFlagBitsKHR PalToVkSurfaceTransform(Pal::SurfaceTransformFlags transformFlag)
+inline VkSurfaceTransformFlagBitsKHR PalToVkSurfaceTransform(Pal::SurfaceTransformFlags transformFlag)
 {
     if (transformFlag)
     {
@@ -2364,7 +2361,7 @@ VK_INLINE VkSurfaceTransformFlagBitsKHR PalToVkSurfaceTransform(Pal::SurfaceTran
 
 // =====================================================================================================================
 // Converts Vulkan WSI Platform Type to PAL equivalent.
-VK_INLINE Pal::WsiPlatform VkToPalWsiPlatform(VkIcdWsiPlatform Platform)
+inline Pal::WsiPlatform VkToPalWsiPlatform(VkIcdWsiPlatform Platform)
 {
     Pal::WsiPlatform palPlatform = Pal::WsiPlatform::Win32;
 
@@ -2405,7 +2402,7 @@ VK_TO_PAL_ENTRY_I(  PRESENT_MODE_FIFO_RELAXED_KHR,               SwapChainMode::
 
 // =====================================================================================================================
 // Converts Vulkan present mode to PAL equivalent.
-VK_INLINE Pal::SwapChainMode VkToPalSwapChainMode(VkPresentModeKHR presentMode)
+inline Pal::SwapChainMode VkToPalSwapChainMode(VkPresentModeKHR presentMode)
 {
     return convert::SwapChainMode(presentMode);
 }
@@ -2413,7 +2410,7 @@ VK_INLINE Pal::SwapChainMode VkToPalSwapChainMode(VkPresentModeKHR presentMode)
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 610
 namespace convert
 {
-    VK_INLINE Pal::CompositeAlphaMode CompositeAlpha(VkCompositeAlphaFlagBitsKHR compositeAlpha)
+    inline Pal::CompositeAlphaMode CompositeAlpha(VkCompositeAlphaFlagBitsKHR compositeAlpha)
     {
         switch (compositeAlpha)
         {
@@ -2438,21 +2435,21 @@ namespace convert
 
 // =====================================================================================================================
 // Converts Vulkan composite alpha flag to PAL equivalent.
-VK_INLINE Pal::CompositeAlphaMode VkToPalCompositeAlphaMode(VkCompositeAlphaFlagBitsKHR compositeAlpha)
+inline Pal::CompositeAlphaMode VkToPalCompositeAlphaMode(VkCompositeAlphaFlagBitsKHR compositeAlpha)
 {
     return convert::CompositeAlpha(compositeAlpha);
 }
 #else
 // =====================================================================================================================
 // Converts Vulkan composite alpha flag to PAL equivalent.
-VK_INLINE Pal::CompositeAlphaMode VkToPalCompositeAlphaMode(VkCompositeAlphaFlagBitsKHR compositeAlpha)
+inline Pal::CompositeAlphaMode VkToPalCompositeAlphaMode(VkCompositeAlphaFlagBitsKHR compositeAlpha)
 {
     return static_cast<Pal::CompositeAlphaMode>(compositeAlpha);
 }
 
 // =====================================================================================================================
 // Converts Vulkan composite alpha flag to PAL equivalent.
-VK_INLINE VkCompositeAlphaFlagsKHR PalToVkSupportedCompositeAlphaMode(uint32 compositeAlpha)
+inline VkCompositeAlphaFlagsKHR PalToVkSupportedCompositeAlphaMode(uint32 compositeAlpha)
 {
     static_assert((static_cast<uint32>(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) ==
                    static_cast<uint32>(Pal::CompositeAlphaMode::Opaque)) &&
@@ -2471,7 +2468,7 @@ VK_INLINE VkCompositeAlphaFlagsKHR PalToVkSupportedCompositeAlphaMode(uint32 com
 // =====================================================================================================================
 // Converts Vulkan image creation flags to PAL image creation flags (unfortunately, PAL doesn't define a dedicated type
 // for the image creation flags so we have to return the constructed flag set as a uint32_t)
-VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
+inline uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
                                            VkFormat           format)
 {
     Pal::ImageCreateInfo palImageCreateInfo;
@@ -2494,7 +2491,7 @@ VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
 
 // =====================================================================================================================
 // Converts  PAL image creation flags to Vulkan image creation flags.
-VK_INLINE VkImageCreateFlags PalToVkImageCreateFlags(Pal::ImageCreateFlags imageCreateFlags)
+inline VkImageCreateFlags PalToVkImageCreateFlags(Pal::ImageCreateFlags imageCreateFlags)
 {
     VkImageUsageFlags vkImageCreateFlags = 0;
 
@@ -2525,7 +2522,7 @@ VK_INLINE VkImageCreateFlags PalToVkImageCreateFlags(Pal::ImageCreateFlags image
 
 // =====================================================================================================================
 // Converts Vulkan image usage flags to PAL image usage flags
-VK_INLINE Pal::ImageUsageFlags VkToPalImageUsageFlags(VkImageUsageFlags imageUsageFlags,
+inline Pal::ImageUsageFlags VkToPalImageUsageFlags(VkImageUsageFlags imageUsageFlags,
                                                       uint32_t          samples,
                                                       VkImageUsageFlags maskSetShaderReadForTransferSrc,
                                                       VkImageUsageFlags maskSetShaderWriteForTransferDst)
@@ -2556,7 +2553,7 @@ VK_INLINE Pal::ImageUsageFlags VkToPalImageUsageFlags(VkImageUsageFlags imageUsa
 
 // =====================================================================================================================
 // Converts PAL image usage flag to Vulkan.
-VK_INLINE VkImageUsageFlags PalToVkImageUsageFlags(Pal::ImageUsageFlags imageUsageFlags)
+inline VkImageUsageFlags PalToVkImageUsageFlags(Pal::ImageUsageFlags imageUsageFlags)
 {
     VkImageUsageFlags vkImageUsageFlags = 0;
 
@@ -2590,7 +2587,7 @@ extern VkResult PalToVkError(Pal::Result result);
 
 // =====================================================================================================================
 // Converts a PAL result to an equivalent VK result.
-VK_INLINE VkResult PalToVkResult(
+inline VkResult PalToVkResult(
     Pal::Result result)
 {
     VkResult vkResult = VK_SUCCESS;
@@ -2641,13 +2638,13 @@ VK_TO_PAL_ENTRY_X(PIPELINE_BIND_POINT_GRAPHICS,             PipelineBindPoint::G
 
 // =====================================================================================================================
 // Converts Vulkan pipeline bind point to PAL equivalent
-VK_INLINE Pal::PipelineBindPoint VkToPalPipelineBindPoint(VkPipelineBindPoint pipelineBind)
+inline Pal::PipelineBindPoint VkToPalPipelineBindPoint(VkPipelineBindPoint pipelineBind)
 {
     return convert::PipelineBindPoint(pipelineBind);
 }
 
 // =====================================================================================================================
-VK_INLINE Pal::ShaderType VkToPalShaderType(
+inline Pal::ShaderType VkToPalShaderType(
     VkShaderStageFlagBits shaderStage)
 {
     switch (shaderStage)
@@ -2672,7 +2669,7 @@ VK_INLINE Pal::ShaderType VkToPalShaderType(
 
 // =====================================================================================================================
 // Converts Vulkan clear depth to PAL equivalent valid range
-VK_INLINE float VkToPalClearDepth(float depth)
+inline float VkToPalClearDepth(float depth)
 {
     if (Util::Math::IsNaN(depth))
     {
@@ -2684,7 +2681,7 @@ VK_INLINE float VkToPalClearDepth(float depth)
 
 // =====================================================================================================================
 // Converts Vulkan clear color value to PAL equivalent
-VK_INLINE Pal::ClearColor VkToPalClearColor(
+inline Pal::ClearColor VkToPalClearColor(
     const VkClearColorValue*   pClearColor,
     const Pal::SwizzledFormat& swizzledFormat)
 {
@@ -2726,14 +2723,14 @@ VK_INLINE Pal::ClearColor VkToPalClearColor(
 
 // =====================================================================================================================
 // Converts integer nanoseconds to single precision seconds
-VK_INLINE float NanosecToSec(uint64_t nanosecs)
+inline float NanosecToSec(uint64_t nanosecs)
 {
     return static_cast<float>(static_cast<double>(nanosecs) / 1000000000.0);
 }
 
 // =====================================================================================================================
 // Converts maximum sample count to VkSampleCountFlags
-VK_INLINE VkSampleCountFlags MaxSampleCountToSampleCountFlags(uint32_t maxSampleCount)
+inline VkSampleCountFlags MaxSampleCountToSampleCountFlags(uint32_t maxSampleCount)
 {
     return (maxSampleCount << 1) - 1;
 }
@@ -2744,7 +2741,7 @@ constexpr uint32_t VkMemoryHeapNum = Pal::GpuHeapCount - 1;
 
 // =====================================================================================================================
 // Converts PAL GPU heap to Vulkan memory heap flags
-VK_INLINE VkMemoryHeapFlags PalGpuHeapToVkMemoryHeapFlags(Pal::GpuHeap heap)
+inline VkMemoryHeapFlags PalGpuHeapToVkMemoryHeapFlags(Pal::GpuHeap heap)
 {
     switch (heap)
     {
@@ -2762,7 +2759,7 @@ VK_INLINE VkMemoryHeapFlags PalGpuHeapToVkMemoryHeapFlags(Pal::GpuHeap heap)
 
 // =====================================================================================================================
 // Returns the Vulkan format feature flags corresponding to the given PAL format feature flags.
-VK_INLINE VkFormatFeatureFlags PalToVkFormatFeatureFlags(Pal::FormatFeatureFlags flags)
+inline VkFormatFeatureFlags PalToVkFormatFeatureFlags(Pal::FormatFeatureFlags flags)
 {
     VkFormatFeatureFlags retFlags = 0;
 
@@ -2851,7 +2848,7 @@ VK_INLINE VkFormatFeatureFlags PalToVkFormatFeatureFlags(Pal::FormatFeatureFlags
 
 // =====================================================================================================================
 // Converts Vulkan rasterization order to PAL equivalent (out-of-order primitive enable)
-VK_INLINE bool VkToPalRasterizationOrder(VkRasterizationOrderAMD order)
+inline bool VkToPalRasterizationOrder(VkRasterizationOrderAMD order)
 {
     VK_ASSERT(VK_ENUM_IN_RANGE_AMD(order, VK_RASTERIZATION_ORDER));
 
@@ -2915,7 +2912,7 @@ VK_TO_PAL_TABLE_I_AMD(GPA_PERF_BLOCK, GpaPerfBlockAMD, GpuBlock,
 )
 
 // =====================================================================================================================
-VK_INLINE Pal::GpuBlock VkToPalGpuBlock(
+inline Pal::GpuBlock VkToPalGpuBlock(
     VkGpaPerfBlockAMD perfBlock)
 {
     return convert::GpuBlock(perfBlock);
@@ -2934,14 +2931,14 @@ VK_TO_PAL_TABLE_I_AMD(GPA_DEVICE_CLOCK_MODE, GpaDeviceClockModeAMD, DeviceClockM
 )
 
 // =====================================================================================================================
-VK_INLINE Pal::DeviceClockMode VkToPalDeviceClockMode(
+inline Pal::DeviceClockMode VkToPalDeviceClockMode(
     VkGpaDeviceClockModeAMD clockMode)
 {
     return convert::DeviceClockMode(clockMode);
 }
 
 // =====================================================================================================================
-VK_INLINE uint32_t VkToPalPerfExperimentShaderFlags(
+inline uint32_t VkToPalPerfExperimentShaderFlags(
     VkGpaSqShaderStageFlags stageMask)
 {
     uint32_t perfFlags = 0;
@@ -2991,7 +2988,7 @@ PalClearRegion VkToPalClearRegion(const VkClearRect& clearRect, const uint32_t z
 // =====================================================================================================================
 // Converts Vulkan clear rect to an equivalent PAL box
 template <>
-VK_INLINE Pal::Box VkToPalClearRegion<Pal::Box>(
+inline Pal::Box VkToPalClearRegion<Pal::Box>(
     const VkClearRect& clearRect,
     const uint32_t     zOffset)
 {
@@ -3010,7 +3007,7 @@ VK_INLINE Pal::Box VkToPalClearRegion<Pal::Box>(
 // =====================================================================================================================
 // Converts Vulkan clear rect to an equivalent PAL clear bound target region
 template <>
-VK_INLINE Pal::ClearBoundTargetRegion VkToPalClearRegion<Pal::ClearBoundTargetRegion>(
+inline Pal::ClearBoundTargetRegion VkToPalClearRegion<Pal::ClearBoundTargetRegion>(
     const VkClearRect& clearRect,
     const uint32_t     zOffset)
 {
@@ -3028,7 +3025,7 @@ VK_INLINE Pal::ClearBoundTargetRegion VkToPalClearRegion<Pal::ClearBoundTargetRe
 
 // =====================================================================================================================
 // Overrides range of layers in PAL clear region
-VK_INLINE void OverrideLayerRanges(
+inline void OverrideLayerRanges(
     Pal::ClearBoundTargetRegion& clearRegion,
     const Pal::Range             layerRange)
 {
@@ -3040,7 +3037,7 @@ VK_INLINE void OverrideLayerRanges(
 
 // =====================================================================================================================
 // Overrides range of layers in PAL box
-VK_INLINE void OverrideLayerRanges(
+inline void OverrideLayerRanges(
     Pal::Box&        box,
     const Pal::Range layerRange)
 {
@@ -3052,7 +3049,7 @@ VK_INLINE void OverrideLayerRanges(
 
 // =====================================================================================================================
 // Converts Vulkan rect 2D to an equivalent PAL rect
-VK_INLINE Pal::Rect VkToPalRect(
+inline Pal::Rect VkToPalRect(
     const VkRect2D& rect2D)
 {
     Pal::Rect rect { };
@@ -3066,7 +3063,7 @@ VK_INLINE Pal::Rect VkToPalRect(
 }
 
 // =====================================================================================================================
-VK_INLINE void VkToPalViewport(
+inline void VkToPalViewport(
     const VkViewport&    viewport,
     uint32_t             viewportIdx,
     bool                 khrMaintenance1,
@@ -3098,7 +3095,7 @@ VK_INLINE void VkToPalViewport(
 }
 
 // =====================================================================================================================
-VK_INLINE VkImageUsageFlags VkFormatFeatureFlagsToImageUsageFlags(
+inline VkImageUsageFlags VkFormatFeatureFlagsToImageUsageFlags(
         VkFormatFeatureFlags formatFeatures)
 {
     VkImageUsageFlags imageUsage = 0;
@@ -3138,7 +3135,7 @@ VK_INLINE VkImageUsageFlags VkFormatFeatureFlagsToImageUsageFlags(
 }
 
 // =====================================================================================================================
-VK_INLINE void VkToPalScissorRect(
+inline void VkToPalScissorRect(
     const VkRect2D&         scissorRect,
     uint32_t                scissorIdx,
     Pal::ScissorRectParams* pParams)
@@ -3152,7 +3149,7 @@ VK_INLINE void VkToPalScissorRect(
 }
 
 // =====================================================================================================================
-VK_INLINE Pal::QueuePriority VkToPalGlobalPriority(
+inline Pal::QueuePriority VkToPalGlobalPriority(
     VkQueueGlobalPriorityEXT vkPriority)
 {
     Pal::QueuePriority palPriority = Pal::QueuePriority::Normal;
@@ -3179,7 +3176,7 @@ VK_INLINE Pal::QueuePriority VkToPalGlobalPriority(
 }
 
 // =====================================================================================================================
-VK_INLINE Pal::ResolveMode VkToPalResolveMode(
+inline Pal::ResolveMode VkToPalResolveMode(
     VkResolveModeFlagBits vkResolveMode)
 {
     switch (vkResolveMode)
@@ -3202,7 +3199,7 @@ VK_INLINE Pal::ResolveMode VkToPalResolveMode(
 // =====================================================================================================================
 // VFS extension states implementations have to accept anything in the range{ 1,2,4 } ^ 2.
 // Clamp fragment to maxFragmentSize after each combiner operation.
-VK_INLINE VkExtent2D VkClampShadingRate(
+inline VkExtent2D VkClampShadingRate(
     const VkExtent2D& fragmentSize,
     const VkExtent2D& maxSupportedFragmentSize)
 {
@@ -3215,7 +3212,7 @@ VK_INLINE VkExtent2D VkClampShadingRate(
 }
 
 // =====================================================================================================================
-VK_INLINE Pal::VrsShadingRate VkToPalShadingSize(
+inline Pal::VrsShadingRate VkToPalShadingSize(
     const VkExtent2D& fragmentSize)
 {
     Pal::VrsShadingRate vrsShadingRate = Pal::VrsShadingRate::_1x1;
@@ -3245,7 +3242,7 @@ VK_INLINE Pal::VrsShadingRate VkToPalShadingSize(
 }
 
 // =====================================================================================================================
-VK_INLINE VkExtent2D PalToVkShadingSize(
+inline VkExtent2D PalToVkShadingSize(
     const Pal::VrsShadingRate& vrsShadingRate)
 {
     VkExtent2D fragmentSize = {0,0};
@@ -3279,7 +3276,7 @@ VK_INLINE VkExtent2D PalToVkShadingSize(
 }
 
 // =====================================================================================================================
-VK_INLINE Pal::VrsCombiner VkToPalShadingRateCombinerOp(
+inline Pal::VrsCombiner VkToPalShadingRateCombinerOp(
     VkFragmentShadingRateCombinerOpKHR fragmentShadingRateCombinerOp)
 {
     Pal::VrsCombiner vrsCombiner = Pal::VrsCombiner::Passthrough;
@@ -3310,7 +3307,7 @@ VK_INLINE Pal::VrsCombiner VkToPalShadingRateCombinerOp(
 }
 
 // =====================================================================================================================
-VK_INLINE Pal::ResourceDescriptionDescriptorType VkToPalDescriptorType(
+inline Pal::ResourceDescriptionDescriptorType VkToPalDescriptorType(
     VkDescriptorType vkType)
 {
     Pal::ResourceDescriptionDescriptorType retType = Pal::ResourceDescriptionDescriptorType::Count;
@@ -3362,7 +3359,7 @@ VK_INLINE Pal::ResourceDescriptionDescriptorType VkToPalDescriptorType(
 }
 
 // =====================================================================================================================
-VK_INLINE DescriptorBindingFlags VkToInternalDescriptorBindingFlag(
+inline DescriptorBindingFlags VkToInternalDescriptorBindingFlag(
         VkDescriptorBindingFlags vkFlagBits)
 {
     DescriptorBindingFlags internalFlagBits = {};
@@ -3376,7 +3373,7 @@ VK_INLINE DescriptorBindingFlags VkToInternalDescriptorBindingFlag(
 }
 
 // =====================================================================================================================
-VK_INLINE uint32_t VkToVkgcShaderStageMask(VkShaderStageFlags vkShaderStageFlags)
+inline uint32_t VkToVkgcShaderStageMask(VkShaderStageFlags vkShaderStageFlags)
 {
     // The graphics and compute bits map directly
     uint32_t vkgcShaderMask = (VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT) & vkShaderStageFlags;

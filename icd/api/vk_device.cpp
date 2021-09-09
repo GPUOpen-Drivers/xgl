@@ -52,7 +52,6 @@
 #include "include/vk_compute_pipeline.h"
 #include "include/vk_cmdbuffer.h"
 #include "include/vk_event.h"
-#include "include/vk_graphics_pipeline.h"
 #include "include/vk_memory.h"
 #include "include/vk_pipeline_cache.h"
 #include "include/vk_query.h"
@@ -65,6 +64,7 @@
 #include "include/vk_swapchain.h"
 #include "include/vk_utils.h"
 #include "include/vk_conv.h"
+#include "include/graphics_pipeline_common.h"
 #include "include/internal_layer_hooks.h"
 
 #include "sqtt/sqtt_layer.h"
@@ -271,6 +271,8 @@ Device::Device(
 
     memset(m_pQueues, 0, sizeof(m_pQueues));
 
+    m_enabledFeatures.u32All = 0;
+
     m_maxVrsShadingRate = {0, 0};
 
     for (uint32_t deviceIdx = 0; deviceIdx < palDeviceCount; ++deviceIdx)
@@ -299,10 +301,6 @@ Device::Device(
         {
             m_enabledFeatures.sparseBinding = true;
         }
-    }
-    else
-    {
-        memset(&m_enabledFeatures, 0, sizeof(DeviceFeatures));
     }
 
     if (m_settings.robustBufferAccess == FeatureForceEnable)
@@ -2403,7 +2401,7 @@ VkResult Device::CreateGraphicsPipelines(
     {
         const VkGraphicsPipelineCreateInfo* pCreateInfo = &pCreateInfos[i];
 
-        VkResult result = GraphicsPipeline::Create(
+        VkResult result = GraphicsPipelineCommon::Create(
             this,
             pPipelineCache,
             pCreateInfo,
@@ -3419,7 +3417,7 @@ bool Device::ReserveFastPrivateDataSlot(
 // for extension private_data
 void* Device::AllocApiObject(
         const VkAllocationCallbacks*    pAllocator,
-        const size_t                    totalObjectSize)
+        const size_t                    totalObjectSize) const
 {
     VK_ASSERT(pAllocator != nullptr);
 
@@ -3444,7 +3442,7 @@ void* Device::AllocApiObject(
 // for extension private_data
 void Device::FreeApiObject(
         const VkAllocationCallbacks*    pAllocator,
-        void*                           pMemory)
+        void*                           pMemory) const
 {
     VK_ASSERT(pAllocator != nullptr);
 

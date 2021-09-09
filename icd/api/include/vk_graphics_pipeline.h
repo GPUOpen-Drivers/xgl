@@ -164,7 +164,7 @@ public:
         CmdBuffer*                             pCmdBuffer,
         const Pal::DynamicGraphicsShaderInfos& graphicsShaderInfos) const;
 
-    VK_INLINE const Pal::DynamicGraphicsShaderInfos& GetBindInfo() const { return m_info.graphicsShaderInfos; }
+    const Pal::DynamicGraphicsShaderInfos& GetBindInfo() const { return m_info.graphicsShaderInfos; }
 
     const Pal::IMsaaState* const* GetMsaaStates() const { return m_pPalMsaa; }
 
@@ -210,10 +210,18 @@ protected:
     void CreateStaticState();
     void DestroyStaticState(const VkAllocationCallbacks* pAllocator);
 
+    static VkResult AchievePipelineLayout(
+        const Device*                       pDevice,
+        const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        const VkAllocationCallbacks*        pAllocator,
+        PipelineLayout**                    ppPipelineLayout,
+        bool*                               pIsTemporary);
+
     static VkResult CreatePipelineBinaries(
         Device*                                        pDevice,
         const VkGraphicsPipelineCreateInfo*            pCreateInfo,
         const GraphicsPipelineShaderStageInfo*         pShaderInfo,
+        const PipelineLayout*                          pPipelineLayout,
         GraphicsPipelineBinaryCreateInfo*              pBinaryCreateInfo,
         PipelineCache*                                 pPipelineCache,
         const VkPipelineCreationFeedbackCreateInfoEXT* pCreationFeedbackInfo,
@@ -225,6 +233,7 @@ protected:
         Device*                             pDevice,
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
         const VkAllocationCallbacks*        pAllocator,
+        const PipelineLayout*               pPipelineLayout,
         const VbInfo*                       pVbInfo,
         const size_t*                       pPipelineBinarySizes,
         const void**                        pPipelineBinaries,

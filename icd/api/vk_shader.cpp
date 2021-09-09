@@ -62,7 +62,7 @@ void* VKAPI_CALL AllocateShaderOutput(
 
 // =====================================================================================================================
 // Concatenates a MetroHash::Hash to two 64-bit uints.
-VK_INLINE void MetroHashTo128Bit(
+static void MetroHashTo128Bit(
     const Util::MetroHash::Hash& hash,
     uint64_t*                    pLower,
     uint64_t*                    pUpper)

@@ -321,7 +321,9 @@ static void GetSpvCode(
     }
     else
     {
-        // TODO:  Etc code
+        PAL_ASSERT(type == InternalTexConvertCsType::ConvertETC2ToRGBA8);
+        *pCode = Etc2Decoder;
+        *pSize = sizeof(Etc2Decoder);
     }
 
 }
@@ -355,7 +357,11 @@ void Device::Init(
     m_bufferViewSizeInDwords = m_info.pDeviceProperties->gfxipProperties.srdSizes.bufferView / sizeof(uint32);
 
     // 3 Table and 1 TexBuffer, and 2 Image resource.
-    m_srdDwords = (3 + 1) * m_bufferViewSizeInDwords + 2 * m_imageViewSizeInDwords;
+    m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertASTCToRGBA8)]
+        = (3 + 1) * m_bufferViewSizeInDwords + 2 * m_imageViewSizeInDwords;
+    // 1 Image resource for output and 1 TexBuffer for Input
+    m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertETC2ToRGBA8)]
+        =  2 * m_imageViewSizeInDwords;
 }
 
 // =====================================================================================================================
@@ -374,7 +380,9 @@ Pal::Result Device::GpuDecodeImage(
     if (type == InternalTexConvertCsType::ConvertASTCToRGBA8)
     {
         uint32* pUserData = nullptr;
-        CreateAstcUserData(InternalTexConvertCsType::ConvertASTCToRGBA8, &pUserData, m_srdDwords);
+        CreateUserData(InternalTexConvertCsType::ConvertASTCToRGBA8,
+                       &pUserData,
+                       m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertASTCToRGBA8)]);
         BindPipeline(type, constInfo);
 
         // Image To Image
@@ -409,10 +417,46 @@ Pal::Result Device::GpuDecodeImage(
             }
         }
     }
-    else // for ETC Decode
+    else // for ETC2 Decode
     {
-        // TODO: ETC2 Decode
+        PAL_ASSERT(type == InternalTexConvertCsType::ConvertETC2ToRGBA8);
+        uint32* pUserData = nullptr;
+        CreateUserData(InternalTexConvertCsType::ConvertETC2ToRGBA8,
+                       &pUserData,
+                       m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertETC2ToRGBA8)]);
+        BindPipeline(type, constInfo);
+
+        if (pSrcImage != nullptr)
+        {
+            for (uint32 idx = 0; idx < regionCount; ++idx)
+            {
+                Pal::ImageCopyRegion copyRegion = pPalImageRegions[idx];
+                uint32 mips                     = copyRegion.srcSubres.mipLevel;
+                Pal::SubresId palSrcSubResId    = copyRegion.srcSubres;
+                Pal::SubresId palDstSubResId    = copyRegion.dstSubres;
+
+                Pal::SwizzledFormat dstFormat = pDstImage->GetImageCreateInfo().swizzledFormat;
+                Pal::SwizzledFormat srcFormat = pSrcImage->GetImageCreateInfo().swizzledFormat;
+
+                Pal::ImageViewInfo imageView[2] = {};
+
+                BuildImageViewInfo(&imageView[0], pDstImage, palDstSubResId, dstFormat, true);
+                BuildImageViewInfo(&imageView[1], pSrcImage, palSrcSubResId, srcFormat, false);
+
+                m_info.pPalDevice->CreateImageViewSrds(2, imageView, pUserData);
+
+                uint32 threadGroupsX = (pSrcImage->GetImageCreateInfo().extent.width + 7) / 8;
+                uint32 threadGroupsY = (pSrcImage->GetImageCreateInfo().extent.height + 7) / 8;
+                uint32 threadGroupsZ = 1;
+
+                m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
+            }
+
+        }
+
     }
+
+    m_pPalCmdBuffer->CmdRestoreComputeState(Pal::ComputeStateAll);
 
     return Pal::Result::Success;
 }
@@ -433,7 +477,9 @@ Pal::Result Device::GpuDecodeBuffer(
     if (type == InternalTexConvertCsType::ConvertASTCToRGBA8)
     {
         uint32* pUserData = nullptr;
-        CreateAstcUserData(InternalTexConvertCsType::ConvertASTCToRGBA8, &pUserData, m_srdDwords);
+        CreateUserData(InternalTexConvertCsType::ConvertASTCToRGBA8,
+                       &pUserData,
+                       m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertASTCToRGBA8)]);
         BindPipeline(type, constInfo);
 
         // Buffer To Image
@@ -454,7 +500,7 @@ Pal::Result Device::GpuDecodeBuffer(
 }
 
 // =====================================================================================================================
-void Device::CreateAstcUserData(
+void Device::CreateUserData(
     InternalTexConvertCsType    type,
     uint32**                    ppUserData,
     uint32                      srdDwords)
@@ -462,11 +508,14 @@ void Device::CreateAstcUserData(
     *ppUserData = CreateAndBindEmbeddedUserData(m_pPalCmdBuffer, srdDwords, 0, 1);
     memset(*ppUserData, 0, srdDwords * sizeof(uint32));
 
-    if (m_pTableMemory == nullptr)
+    if (type == InternalTexConvertCsType::ConvertASTCToRGBA8)
     {
-        CreateTableMemory();
+        if (m_pTableMemory == nullptr)
+        {
+            CreateTableMemory();
+        }
+        SetupInternalTables(type, ppUserData);
     }
-    SetupInternalTables(type, ppUserData);
 }
 
 // =====================================================================================================================
@@ -562,57 +611,82 @@ Pal::IPipeline* Device::GetInternalPipeline(
     Pal::IPipeline* pPipeline = nullptr;
     void* pMemory = nullptr;
     PipelineBuildInfo buildInfo = {};
-    GpuDecodeMappingNode astcResourceNodes[AstcInternalPipelineNodes];
 
     if (type == InternalTexConvertCsType::ConvertASTCToRGBA8)
     {
-        uint32 offset = 0;
+        GpuDecodeMappingNode astcResourceNodes[AstcInternalPipelineNodes];
+        uint32 offset       = 0;
         buildInfo.nodeCount = 1;
 
         // 1.Color UnQuantization Buffer View
-        astcResourceNodes[0].nodeType = NodeType::Buffer;
-        astcResourceNodes[0].sizeInDwords = m_bufferViewSizeInDwords;
+        astcResourceNodes[0].nodeType       = NodeType::Buffer;
+        astcResourceNodes[0].sizeInDwords   = m_bufferViewSizeInDwords;
         astcResourceNodes[0].offsetInDwords = 0;
-        astcResourceNodes[0].binding = 0;
-        astcResourceNodes[0].set = 0;
+        astcResourceNodes[0].binding        = 0;
+        astcResourceNodes[0].set            = 0;
 
         // 2.Trits Quints Buffer View
-        astcResourceNodes[1].nodeType = NodeType::Buffer;
-        astcResourceNodes[1].sizeInDwords = m_bufferViewSizeInDwords;
+        astcResourceNodes[1].nodeType       = NodeType::Buffer;
+        astcResourceNodes[1].sizeInDwords   = m_bufferViewSizeInDwords;
         astcResourceNodes[1].offsetInDwords = 1 * m_bufferViewSizeInDwords;
-        astcResourceNodes[1].binding = 1;
-        astcResourceNodes[1].set = 0;
+        astcResourceNodes[1].binding        = 1;
+        astcResourceNodes[1].set            = 0;
 
         // 3.Quant and Transfer Buffer View
-        astcResourceNodes[2].nodeType = NodeType::Buffer;
-        astcResourceNodes[2].sizeInDwords = m_bufferViewSizeInDwords;
+        astcResourceNodes[2].nodeType       = NodeType::Buffer;
+        astcResourceNodes[2].sizeInDwords   = m_bufferViewSizeInDwords;
         astcResourceNodes[2].offsetInDwords = 2 * m_bufferViewSizeInDwords;
-        astcResourceNodes[2].binding = 2;
-        astcResourceNodes[2].set = 0;
+        astcResourceNodes[2].binding        = 2;
+        astcResourceNodes[2].set            = 0;
 
         // 4. TexBuffer View for Src Image Buffer
-        astcResourceNodes[3].nodeType = NodeType::TexBuffer;
-        astcResourceNodes[3].sizeInDwords = m_bufferViewSizeInDwords;
+        astcResourceNodes[3].nodeType       = NodeType::TexBuffer;
+        astcResourceNodes[3].sizeInDwords   = m_bufferViewSizeInDwords;
         astcResourceNodes[3].offsetInDwords = 3 * m_bufferViewSizeInDwords;
-        astcResourceNodes[3].binding = 3;
-        astcResourceNodes[3].set = 0;
+        astcResourceNodes[3].binding        = 3;
+        astcResourceNodes[3].set            = 0;
 
         // 5. Image View for Src Image
-        astcResourceNodes[4].nodeType = NodeType::Image;
-        astcResourceNodes[4].sizeInDwords = m_imageViewSizeInDwords;
+        astcResourceNodes[4].nodeType       = NodeType::Image;
+        astcResourceNodes[4].sizeInDwords   = m_imageViewSizeInDwords;
         astcResourceNodes[4].offsetInDwords = 4 * m_bufferViewSizeInDwords;
-        astcResourceNodes[4].binding = 4;
-        astcResourceNodes[4].set = 0;
+        astcResourceNodes[4].binding        = 4;
+        astcResourceNodes[4].set            = 0;
 
         // 6. Image View for Dst Image
-        astcResourceNodes[5].nodeType = NodeType::Image;
-        astcResourceNodes[5].sizeInDwords = m_imageViewSizeInDwords;
+        astcResourceNodes[5].nodeType       = NodeType::Image;
+        astcResourceNodes[5].sizeInDwords   = m_imageViewSizeInDwords;
         astcResourceNodes[5].offsetInDwords = 4 * m_bufferViewSizeInDwords + m_imageViewSizeInDwords;
-        astcResourceNodes[5].binding = 5;
-        astcResourceNodes[5].set = 0;
+        astcResourceNodes[5].binding        = 5;
+        astcResourceNodes[5].set            = 0;
 
         buildInfo.pUserDataNodes = astcResourceNodes;
-        buildInfo.shaderType = InternalTexConvertCsType::ConvertASTCToRGBA8;
+        buildInfo.shaderType     = InternalTexConvertCsType::ConvertASTCToRGBA8;
+        GetSpvCode(buildInfo.shaderType, &(buildInfo.code.pSpvCode), &(buildInfo.code.spvSize));
+    }
+    else
+    {
+        PAL_ASSERT(type == InternalTexConvertCsType::ConvertETC2ToRGBA8);
+        GpuDecodeMappingNode etc2ResourceNodes[Etc2InternalPipelineNodes];
+        uint32 offset       = 0;
+        buildInfo.nodeCount = 1;
+
+        // 1. output
+        etc2ResourceNodes[0].nodeType       = NodeType::Image;
+        etc2ResourceNodes[0].sizeInDwords   = m_imageViewSizeInDwords;
+        etc2ResourceNodes[0].offsetInDwords = 0;
+        etc2ResourceNodes[0].binding        = 0;
+        etc2ResourceNodes[0].set            = 0;
+
+        //2. input
+        etc2ResourceNodes[1].nodeType       = NodeType::Image;
+        etc2ResourceNodes[1].sizeInDwords   = m_imageViewSizeInDwords;
+        etc2ResourceNodes[1].offsetInDwords = 1 * m_imageViewSizeInDwords;
+        etc2ResourceNodes[1].binding        = 1;
+        etc2ResourceNodes[1].set            = 0;
+
+        buildInfo.pUserDataNodes = etc2ResourceNodes;
+        buildInfo.shaderType     = InternalTexConvertCsType::ConvertETC2ToRGBA8;
         GetSpvCode(buildInfo.shaderType, &(buildInfo.code.pSpvCode), &(buildInfo.code.spvSize));
     }
 

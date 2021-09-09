@@ -55,6 +55,7 @@ using Pal::uint32;
 using Pal::uint64;
 
 constexpr uint32 AstcInternalPipelineNodes = 6;
+constexpr uint32 Etc2InternalPipelineNodes = 2;
 
 // Enum for internal texture format convert type
 enum class InternalTexConvertCsType : uint32
@@ -162,7 +163,7 @@ public:
         const CompileTimeConstants& constInfo);
 
 private:
-    void CreateAstcUserData(
+    void CreateUserData(
         InternalTexConvertCsType    type,
         uint32**                    ppUserData,
         uint32                      srdDwords);
@@ -217,6 +218,6 @@ private:
     Pal::ICmdBuffer*    m_pPalCmdBuffer;      // The associated PAL cmdbuffer
     uint32              m_bufferViewSizeInDwords{0};
     uint32              m_imageViewSizeInDwords{0};
-    uint32              m_srdDwords;
+    uint32              m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::Count)];
 };
 }

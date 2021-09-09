@@ -123,38 +123,46 @@ public:
         Vkgc::ResourceMappingData* pResourceMapping) const;
 
     static VkResult Create(
-        Device*                             pDevice,
+        const Device*                       pDevice,
         const VkPipelineLayoutCreateInfo*   pCreateInfo,
         const VkAllocationCallbacks*        pAllocator,
         VkPipelineLayout*                   pPipelineLayout);
+
+    static VkResult Create(
+        const Device*                pDevice,
+        const VkPipelineLayout*      pReference,
+        const VkShaderStageFlags*    pRefShaderMask,
+        const uint32_t               refCount,
+        const VkAllocationCallbacks* pAllocator,
+        VkPipelineLayout*            pPipelineLayout);
 
     VkResult Destroy(
         Device*                             pDevice,
         const VkAllocationCallbacks*        pAllocator);
 
-    VK_INLINE uint64_t GetApiHash() const
+    uint64_t GetApiHash() const
         { return m_apiHash; }
 
-    VK_INLINE const PipelineInfo* GetPipelineInfo() const
+    const PipelineInfo* GetPipelineInfo() const
         { return &m_pipelineInfo; }
 
-    VK_INLINE const Info& GetInfo() const
+    const Info& GetInfo() const
         { return m_info; }
 
     // Descriptor set layouts in this pipeline layout
-    VK_INLINE const SetUserDataLayout& GetSetUserData(uint32_t setIndex) const
+    const SetUserDataLayout& GetSetUserData(uint32_t setIndex) const
     {
         return static_cast<const SetUserDataLayout*>(Util::VoidPtrInc(this, sizeof(*this)))[setIndex];
     }
 
     // Original descriptor set layout pointers
-    VK_INLINE const DescriptorSetLayout* GetSetLayouts(uint32_t setIndex) const
+    const DescriptorSetLayout* GetSetLayouts(uint32_t setIndex) const
     {
         return static_cast<const DescriptorSetLayout* const*>(
             Util::VoidPtrInc(this, sizeof(*this) + SetUserDataLayoutSize()))[setIndex];
     }
 
-    VK_INLINE DescriptorSetLayout* GetSetLayouts(uint32_t setIndex)
+    DescriptorSetLayout* GetSetLayouts(uint32_t setIndex)
     {
         return static_cast<DescriptorSetLayout**>(
             Util::VoidPtrInc(this, sizeof(*this) + SetUserDataLayoutSize()))[setIndex];

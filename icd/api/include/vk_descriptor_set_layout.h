@@ -123,37 +123,42 @@ public:
     };
 
     static VkResult Create(
-        Device*                                     pDevice,
-        const VkDescriptorSetLayoutCreateInfo*      pCreateInfo,
-        const VkAllocationCallbacks*                pAllocator,
-        VkDescriptorSetLayout*                      pLayout);
+        const Device*                          pDevice,
+        const VkDescriptorSetLayoutCreateInfo* pCreateInfo,
+        const VkAllocationCallbacks*           pAllocator,
+        VkDescriptorSetLayout*                 pLayout);
+
+    static size_t GetObjectSize(
+        const VkDescriptorSetLayout* pLayouts,
+        const VkShaderStageFlags*    pShaderMasks,
+        const uint32_t               count);
+
+    static void Merge(
+        const Device*                pDevice,
+        const VkDescriptorSetLayout* pLayouts,
+        const VkShaderStageFlags*    pShaderMasks,
+        const uint32_t               count,
+        DescriptorSetLayout*         pOutLayout);
 
     void Copy(
-        const Device*                               pDevice,
-        DescriptorSetLayout*                        pOutLayout) const;
+        const Device*        pDevice,
+        const uint32_t       shaderMask,
+        DescriptorSetLayout* pOutLayout) const;
 
     VkResult Destroy(
-        Device*                                     pDevice,
-        const VkAllocationCallbacks*                pAllocator,
-        bool                                        freeMemory);
+        Device*                      pDevice,
+        const VkAllocationCallbacks* pAllocator,
+        bool                         freeMemory);
 
-    uint32_t GetBindingInfoArrayByteSize() const
-    {
-        return m_info.count * sizeof(DescriptorSetLayout::BindingInfo);
-    }
+    size_t GetBindingInfoArrayByteSize(VkShaderStageFlags shaderMask) const;
 
-    uint32_t GetImmSamplerArrayByteSize() const;
+    size_t GetImmSamplerArrayByteSize(VkShaderStageFlags shaderMask) const;
 
-    uint32_t GetImmYCbCrMetaDataArrayByteSize() const;
+    size_t GetImmYCbCrMetaDataArrayByteSize(VkShaderStageFlags shaderMask) const;
 
-    uint32_t GetObjectSize() const
-    {
-        const uint32_t apiSize = sizeof(DescriptorSetLayout);
+    size_t GetObjectSize(VkShaderStageFlags shaderMask) const;
 
-        return apiSize + GetBindingInfoArrayByteSize()
-                       + GetImmSamplerArrayByteSize()
-                       + GetImmYCbCrMetaDataArrayByteSize();
-    }
+    bool IsEmpty(VkShaderStageFlags shaderMask) const;
 
     const BindingInfo& Binding(uint32_t bindingIndex) const
     {
@@ -173,6 +178,10 @@ public:
         const VkDescriptorSetLayoutBinding* type,
         const DescriptorBindingFlags bindingFlags);
 
+    static uint32_t GetDescStaticSectionDwSize(
+        const DescriptorSetLayout* pSrcDescSetLayout,
+        const uint32_t             binding);
+
     static uint32_t GetDescDynamicSectionDwSize(const Device* pDevice, VkDescriptorType type);
     static uint32_t GetDescImmutableSectionDwSize(const Device* pDevice, VkDescriptorType type);
     static uint32_t GetDynamicBufferDescDwSize(const Device* pDevice);
@@ -191,7 +200,7 @@ public:
         return offset;
     }
 
-    VK_INLINE uint64_t GetApiHash() const
+    uint64_t GetApiHash() const
         { return m_apiHash; }
 
 protected:
@@ -202,6 +211,12 @@ protected:
 
     ~DescriptorSetLayout()
         { }
+
+    bool CoverAllActiveShaderStages(const uint32_t shaderMask) const
+    {
+        bool result = ((~shaderMask & m_info.activeStageMask) == 0);
+        return result;
+    }
 
     static VkResult ConvertCreateInfo(
         const Device*                                pDevice,
@@ -221,7 +236,8 @@ protected:
         uint32_t                            descSizeInDw,
         ImmSectionInfo*                     pSectionInfo,
         BindingSectionInfo*                 pBindingSectionInfo,
-        const DescriptorBindingFlags        bindingFlags);
+        const DescriptorBindingFlags        bindingFlags,
+        const DescriptorSetLayout*          pSrcDescSetLayout = nullptr);
 
     static void GenerateHashFromBinding(
         Util::MetroHash64*                  pHasher,

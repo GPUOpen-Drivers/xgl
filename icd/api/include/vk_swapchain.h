@@ -125,25 +125,25 @@ public:
     VK_FORCEINLINE Pal::ISwapChain* PalSwapChain() const
         { return m_pPalSwapChain; }
 
-    VK_INLINE const FullscreenMgr* GetFullscreenMgr() const
+    const FullscreenMgr* GetFullscreenMgr() const
         { return m_pFullscreenMgr; }
 
-    VK_INLINE FullscreenMgr* GetFullscreenMgr()
+    FullscreenMgr* GetFullscreenMgr()
         { return m_pFullscreenMgr; }
 
-    VK_INLINE uint32_t GetPresentCount() const
+    uint32_t GetPresentCount() const
         { return m_presentCount; }
 
-    VK_INLINE VkPresentModeKHR GetPresentMode() const
+    VkPresentModeKHR GetPresentMode() const
         { return m_presentMode; }
 
-    VK_INLINE uint32_t GetAppOwnedImageCount() const
+    uint32_t GetAppOwnedImageCount() const
         { return m_appOwnedImageCount; }
 
-    VK_INLINE bool IsHwCompositingSupported() const
+    bool IsHwCompositingSupported() const
         { return (m_properties.flags.hwCompositing == 1); }
 
-    VK_INLINE const Pal::ScreenColorConfig& GetColorParams() const
+    const Pal::ScreenColorConfig& GetColorParams() const
         { return m_colorParams; }
 
     Pal::IGpuMemory* UpdatePresentInfo(
@@ -262,13 +262,13 @@ public:
         SwapChain*                 pSwapChain,
         Pal::PresentSwapChainInfo* pPresentInfo);
 
-    VK_INLINE ExclusiveModeFlags GetExclusiveModeFlags() const
+    ExclusiveModeFlags GetExclusiveModeFlags() const
         { return m_exclusiveModeFlags; }
 
-    VK_INLINE uint32_t GetVidPnSourceId() const
+    uint32_t GetVidPnSourceId() const
         { return m_vidPnSourceId; }
 
-    VK_INLINE Pal::IScreen* GetPalScreen() const
+    Pal::IScreen* GetPalScreen() const
         { return m_pScreen; }
 
     bool TryEnterExclusive(SwapChain* pSwapChain);

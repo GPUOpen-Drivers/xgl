@@ -37,7 +37,7 @@ typedef Vkgc::ShaderStage ShaderStage;
 constexpr uint32_t ShaderStageCount = ShaderStage::ShaderStageCount;
 
 /// Translate shader stage flag bits to corresponding shader stage.
-VK_INLINE ShaderStage ShaderFlagBitToStage(const VkShaderStageFlagBits& shaderBits)
+inline ShaderStage ShaderFlagBitToStage(const VkShaderStageFlagBits& shaderBits)
 {
     ShaderStage stage = ShaderStage::ShaderStageCount; // Initialize it with an invalid value
     if (shaderBits & VK_SHADER_STAGE_VERTEX_BIT)

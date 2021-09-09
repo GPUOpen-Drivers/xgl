@@ -57,6 +57,7 @@
 // EXT macros
 #define VK_EXT_EXTENDED_DYNAMIC_STATE2_SPEC_VERSION         VK_EXT_EXTENDED_DYNAMIC_STATE_2_SPEC_VERSION
 #define VK_EXT_ROBUSTNESS2_SPEC_VERSION                     VK_EXT_ROBUSTNESS_2_SPEC_VERSION
+#define VK_EXT_SHADER_ATOMIC_FLOAT2_SPEC_VERSION            VK_EXT_SHADER_ATOMIC_FLOAT_2_SPEC_VERSION
 #define VK_EXT_SWAPCHAIN_COLORSPACE_EXTENSION_NAME          VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME
 #define VK_EXT_SWAPCHAIN_COLORSPACE_SPEC_VERSION            VK_EXT_SWAPCHAIN_COLOR_SPACE_SPEC_VERSION
 
@@ -84,12 +85,12 @@ public:
             }
         }
 
-        VK_INLINE bool IsExtensionSupported(typename T::ExtensionId id) const
+        bool IsExtensionSupported(typename T::ExtensionId id) const
         {
             return m_supported[id].specVersion != 0;
         }
 
-        VK_INLINE void AddExtension(typename T::ExtensionId id, const char* name, uint32_t specVersion)
+        void AddExtension(typename T::ExtensionId id, const char* name, uint32_t specVersion)
         {
             // Don't allow adding extensions redundantly.
             VK_ASSERT(!IsExtensionSupported(id));
@@ -100,13 +101,13 @@ public:
             m_supportedCount++;
         }
 
-        VK_INLINE const VkExtensionProperties& GetExtensionInfo(typename T::ExtensionId id) const
+        const VkExtensionProperties& GetExtensionInfo(typename T::ExtensionId id) const
         {
             VK_ASSERT(IsExtensionSupported(id));
             return m_supported[id];
         }
 
-        VK_INLINE uint32_t GetExtensionCount() const
+        uint32_t GetExtensionCount() const
         {
             return m_supportedCount;
         }
@@ -127,12 +128,12 @@ public:
             }
         }
 
-        VK_INLINE void EnableExtension(typename T::ExtensionId id)
+        void EnableExtension(typename T::ExtensionId id)
         {
             m_enabled[id] = true;
         }
 
-        VK_INLINE bool IsExtensionEnabled(typename T::ExtensionId id) const
+        bool IsExtensionEnabled(typename T::ExtensionId id) const
         {
             return m_enabled[id];
         }
@@ -141,7 +142,7 @@ public:
         bool                    m_enabled[T::Count];
     };
 
-    VK_INLINE static bool EnableExtensions(
+    static bool EnableExtensions(
         const char* const* const    extensionNames,
         uint32_t                    extensionNameCount,
         const Supported&            supported,
@@ -308,6 +309,7 @@ public:
         EXT_IMAGE_ROBUSTNESS,
         EXT_INLINE_UNIFORM_BLOCK,
         EXT_LINE_RASTERIZATION,
+        EXT_LOAD_STORE_OP_NONE,
         EXT_MEMORY_BUDGET,
         EXT_MEMORY_PRIORITY,
         EXT_PCI_BUS_INFO,
@@ -321,6 +323,8 @@ public:
         EXT_SAMPLE_LOCATIONS,
         EXT_SCALAR_BLOCK_LAYOUT,
         EXT_SEPARATE_STENCIL_USAGE,
+        EXT_SHADER_ATOMIC_FLOAT,
+        EXT_SHADER_ATOMIC_FLOAT2,
         EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION,
         EXT_SHADER_IMAGE_ATOMIC_INT64,
         EXT_SHADER_STENCIL_EXPORT,

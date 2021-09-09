@@ -73,10 +73,10 @@ public:
 
     void Destroy(const VkAllocationCallbacks* pAllocator);
 
-    VK_INLINE VkResult GetStatus()
+    VkResult GetStatus()
         { return m_session.IsReady() ? VK_SUCCESS : VK_NOT_READY; }
 
-    VK_INLINE GpuUtil::GpaSession* PalSession()
+    GpuUtil::GpaSession* PalSession()
         { return &m_session; }
 
 private:

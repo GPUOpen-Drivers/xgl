@@ -134,19 +134,19 @@ public:
     void PopulateQueueFamilies();
     void PopulateFormatProperties();
 
-    VK_INLINE uint32_t GetMemoryTypeMask() const
+    uint32_t GetMemoryTypeMask() const
     {
         return m_memoryTypeMask;
     }
 
     uint32_t GetMemoryTypeMaskMatching(VkMemoryPropertyFlags flags) const;
 
-    VK_INLINE uint32_t GetMemoryTypeMaskForExternalSharing() const
+    uint32_t GetMemoryTypeMaskForExternalSharing() const
     {
         return m_memoryTypeMaskForExternalSharing;
     }
 
-    VK_INLINE bool GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndexBits) const
+    bool GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndexBits) const
     {
         VK_ASSERT(heapIndex < Pal::GpuHeapCount);
         VK_ASSERT(pVkIndexBits != nullptr);
@@ -162,19 +162,19 @@ public:
         }
     }
 
-    VK_INLINE Pal::GpuHeap GetPalHeapFromVkTypeIndex(uint32_t vkIndex) const
+    Pal::GpuHeap GetPalHeapFromVkTypeIndex(uint32_t vkIndex) const
     {
         VK_ASSERT(vkIndex < m_memoryProperties.memoryTypeCount);
         return m_memoryVkIndexToPalHeap[vkIndex];
     }
 
-    VK_INLINE Pal::GpuHeap GetPalHeapFromVkHeapIndex(uint32_t heapIndex) const
+    Pal::GpuHeap GetPalHeapFromVkHeapIndex(uint32_t heapIndex) const
     {
         VK_ASSERT(heapIndex < m_memoryProperties.memoryHeapCount);
         return m_heapVkToPal[heapIndex];
     }
 
-    VK_INLINE bool GetVkHeapIndexFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkHeapIndex) const
+    bool GetVkHeapIndexFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkHeapIndex) const
     {
         VK_ASSERT(heapIndex < Pal::GpuHeapCount);
 
@@ -183,54 +183,54 @@ public:
         return *pVkHeapIndex != Pal::GpuHeapCount;
     }
 
-    VK_INLINE const VkPhysicalDeviceMemoryProperties& GetMemoryProperties() const
+    const VkPhysicalDeviceMemoryProperties& GetMemoryProperties() const
     {
         return m_memoryProperties;
     }
 
-    VK_INLINE Pal::QueueType GetQueueFamilyPalQueueType(
+    Pal::QueueType GetQueueFamilyPalQueueType(
         uint32_t queueFamilyIndex) const
     {
         return m_queueFamilies[queueFamilyIndex].palQueueType;
     }
 
-    VK_INLINE bool GetQueueGroupCompatible(
+    bool GetQueueGroupCompatible(
         uint32_t queueFamilyIndex) const
     {
         return m_queueFamilies[queueFamilyIndex].flags.queueGroupCompatible;
     }
 
-    VK_INLINE Pal::EngineType GetQueueFamilyPalEngineType(
+    Pal::EngineType GetQueueFamilyPalEngineType(
         uint32_t queueFamilyIndex) const
     {
         return m_queueFamilies[queueFamilyIndex].palEngineType;
     }
 
-    VK_INLINE uint32_t GetCompQueueEngineIndex(
+    uint32_t GetCompQueueEngineIndex(
         const uint32_t queueIndex) const
     {
         return m_compQueueEnginesNdx[queueIndex];
     }
 
-    VK_INLINE uint32_t GetUniversalQueueEngineIndex(
+    uint32_t GetUniversalQueueEngineIndex(
         const uint32_t queueIndex) const
     {
         return m_universalQueueEnginesNdx[queueIndex];
     }
 
-    VK_INLINE uint32_t GetQueueFamilyPalImageLayoutFlag(
+    uint32_t GetQueueFamilyPalImageLayoutFlag(
         uint32_t queueFamilyIndex) const
     {
         return m_queueFamilies[queueFamilyIndex].palImageLayoutFlag;
     }
 
-    VK_INLINE VkShaderStageFlags GetValidShaderStages(
+    VkShaderStageFlags GetValidShaderStages(
         uint32_t queueFamilyIndex) const
     {
         return m_queueFamilies[queueFamilyIndex].validShaderStages;
     }
 
-    VK_INLINE const VkQueueFamilyProperties& GetQueueFamilyProperties(
+    const VkQueueFamilyProperties& GetQueueFamilyProperties(
         uint32_t queueFamilyIndex) const
     {
         return m_queueFamilies[queueFamilyIndex].properties;
@@ -246,7 +246,7 @@ public:
 
     size_t GetFeatures(VkPhysicalDeviceFeatures* pFeatures) const;
 
-    VK_INLINE VkResult GetFormatProperties(
+    VkResult GetFormatProperties(
         VkFormat            format,
         VkFormatProperties* pFormatProperties) const
     {
@@ -257,65 +257,65 @@ public:
         return VK_SUCCESS;
     }
 
-    VK_INLINE bool FormatSupportsMsaa(VkFormat format) const
+    bool FormatSupportsMsaa(VkFormat format) const
     {
         uint32_t formatIndex = Formats::GetIndex(format);
 
         return Util::WideBitfieldIsSet(m_formatFeatureMsaaTarget, formatIndex);
     }
 
-    VK_INLINE void GetPhysicalDeviceIDProperties(
+    void GetPhysicalDeviceIDProperties(
         uint8_t*                 pDeviceUUID,
         uint8_t*                 pDriverUUID,
         uint8_t*                 pDeviceLUID,
         uint32_t*                pDeviceNodeMask,
         VkBool32*                pDeviceLUIDValid) const;
 
-    VK_INLINE void GetPhysicalDeviceMaintenance3Properties(
+    void GetPhysicalDeviceMaintenance3Properties(
         uint32_t*                pMaxPerSetDescriptors,
         VkDeviceSize*            pMaxMemoryAllocationSize) const;
 
-    VK_INLINE void GetPhysicalDeviceMultiviewProperties(
+    void GetPhysicalDeviceMultiviewProperties(
         uint32_t*                pMaxMultiviewViewCount,
         uint32_t*                pMaxMultiviewInstanceIndex) const;
 
-    VK_INLINE void GetPhysicalDevicePointClippingProperties(
+    void GetPhysicalDevicePointClippingProperties(
         VkPointClippingBehavior* pPointClippingBehavior) const;
 
-    VK_INLINE void GetPhysicalDeviceProtectedMemoryProperties(
+    void GetPhysicalDeviceProtectedMemoryProperties(
         VkBool32*                pProtectedNoFault) const;
 
-    VK_INLINE void GetPhysicalDeviceSubgroupProperties(
+    void GetPhysicalDeviceSubgroupProperties(
         uint32_t*                pSubgroupSize,
         VkShaderStageFlags*      pSupportedStages,
         VkSubgroupFeatureFlags*  pSupportedOperations,
         VkBool32*                pQuadOperationsInAllStages) const;
 
-    VK_INLINE void GetPhysicalDeviceDriverProperties(
+    void GetPhysicalDeviceDriverProperties(
         VkDriverId*              pDriverID,
         char*                    pDriverName,
         char*                    pDriverInfo,
         VkConformanceVersion*    pConformanceVersion) const;
 
     template<typename T>
-    VK_INLINE void GetPhysicalDeviceFloatControlsProperties(
+    void GetPhysicalDeviceFloatControlsProperties(
         T                        pFloatControlsProperties) const;
 
     template<typename T>
-    VK_INLINE void GetPhysicalDeviceDescriptorIndexingProperties(
+    void GetPhysicalDeviceDescriptorIndexingProperties(
         T                        pDescriptorIndexingProperties) const;
 
-    VK_INLINE void GetPhysicalDeviceDepthStencilResolveProperties(
+    void GetPhysicalDeviceDepthStencilResolveProperties(
         VkResolveModeFlags*      pSupportedDepthResolveModes,
         VkResolveModeFlags*      pSupportedStencilResolveModes,
         VkBool32*                pIndependentResolveNone,
         VkBool32*                pIndependentResolve) const;
 
-    VK_INLINE void GetPhysicalDeviceSamplerFilterMinmaxProperties(
+    void GetPhysicalDeviceSamplerFilterMinmaxProperties(
         VkBool32*                pFilterMinmaxSingleComponentFormats,
         VkBool32*                pFilterMinmaxImageComponentMapping) const;
 
-    VK_INLINE void GetPhysicalDeviceTimelineSemaphoreProperties(
+    void GetPhysicalDeviceTimelineSemaphoreProperties(
         uint64_t*                pMaxTimelineSemaphoreValueDifference) const;
 
     VkResult GetExternalMemoryProperties(
@@ -341,74 +341,74 @@ public:
         uint32_t*                                       pPropertyCount,
         utils::ArrayView<VkSparseImageFormatProperties> properties) const;
 
-    VK_INLINE void GetPhysicalDevice16BitStorageFeatures(
+    void GetPhysicalDevice16BitStorageFeatures(
         VkBool32* pStorageBuffer16BitAccess,
         VkBool32* pUniformAndStorageBuffer16BitAccess,
         VkBool32* pStoragePushConstant16,
         VkBool32* pStorageInputOutput16) const;
 
-    VK_INLINE void GetPhysicalDeviceMultiviewFeatures(
+    void GetPhysicalDeviceMultiviewFeatures(
         VkBool32* pMultiview,
         VkBool32* pMultiviewGeometryShader,
         VkBool32* pMultiviewTessellationShader) const;
 
-    VK_INLINE void GetPhysicalDeviceVariablePointerFeatures(
+    void GetPhysicalDeviceVariablePointerFeatures(
         VkBool32* pVariablePointersStorageBuffer,
         VkBool32* pVariablePointers) const;
 
-    VK_INLINE void GetPhysicalDeviceProtectedMemoryFeatures(
+    void GetPhysicalDeviceProtectedMemoryFeatures(
         VkBool32* pProtectedMemory) const;
 
-    VK_INLINE void GetPhysicalDeviceSamplerYcbcrConversionFeatures(
+    void GetPhysicalDeviceSamplerYcbcrConversionFeatures(
         VkBool32* pSamplerYcbcrConversion) const;
 
-    VK_INLINE void GetPhysicalDeviceShaderDrawParameterFeatures(
+    void GetPhysicalDeviceShaderDrawParameterFeatures(
         VkBool32* pShaderDrawParameters) const;
 
-    VK_INLINE void GetPhysicalDevice8BitStorageFeatures(
+    void GetPhysicalDevice8BitStorageFeatures(
         VkBool32* pStorageBuffer8BitAccess,
         VkBool32* pUniformAndStorageBuffer8BitAccess,
         VkBool32* pStoragePushConstant8) const;
 
-    VK_INLINE void GetPhysicalDeviceShaderAtomicInt64Features(
+    void GetPhysicalDeviceShaderAtomicInt64Features(
         VkBool32* pShaderBufferInt64Atomics,
         VkBool32* pShaderSharedInt64Atomics) const;
 
-    VK_INLINE void GetPhysicalDeviceFloat16Int8Features(
+    void GetPhysicalDeviceFloat16Int8Features(
         VkBool32* pShaderFloat16,
         VkBool32* pShaderInt8) const;
 
     template<typename T>
-    VK_INLINE void GetPhysicalDeviceDescriptorIndexingFeatures(
+    void GetPhysicalDeviceDescriptorIndexingFeatures(
         T         pDescriptorIndexingFeatures) const;
 
-    VK_INLINE void GetPhysicalDeviceScalarBlockLayoutFeatures(
+    void GetPhysicalDeviceScalarBlockLayoutFeatures(
         VkBool32* pScalarBlockLayout) const;
 
-    VK_INLINE void GetPhysicalDeviceImagelessFramebufferFeatures(
+    void GetPhysicalDeviceImagelessFramebufferFeatures(
         VkBool32* pImagelessFramebuffer) const;
 
-    VK_INLINE void GetPhysicalDeviceUniformBufferStandardLayoutFeatures(
+    void GetPhysicalDeviceUniformBufferStandardLayoutFeatures(
         VkBool32* pUniformBufferStandardLayout) const;
 
-    VK_INLINE void GetPhysicalDeviceSubgroupExtendedTypesFeatures(
+    void GetPhysicalDeviceSubgroupExtendedTypesFeatures(
         VkBool32* pShaderSubgroupExtendedTypes) const;
 
-    VK_INLINE void GetPhysicalDeviceSeparateDepthStencilLayoutsFeatures(
+    void GetPhysicalDeviceSeparateDepthStencilLayoutsFeatures(
         VkBool32* pSeparateDepthStencilLayouts) const;
 
-    VK_INLINE void GetPhysicalDeviceHostQueryResetFeatures(
+    void GetPhysicalDeviceHostQueryResetFeatures(
         VkBool32* pHostQueryReset) const;
 
-    VK_INLINE void GetPhysicalDeviceTimelineSemaphoreFeatures(
+    void GetPhysicalDeviceTimelineSemaphoreFeatures(
         VkBool32* pTimelineSemaphore) const;
 
-    VK_INLINE void GetPhysicalDeviceBufferAddressFeatures(
+    void GetPhysicalDeviceBufferAddressFeatures(
         VkBool32* pBufferDeviceAddress,
         VkBool32* pBufferDeviceAddressCaptureReplay,
         VkBool32* pBufferDeviceAddressMultiDevice) const;
 
-    VK_INLINE void GetPhysicalDeviceVulkanMemoryModelFeatures(
+    void GetPhysicalDeviceVulkanMemoryModelFeatures(
         VkBool32* pVulkanMemoryModel,
         VkBool32* pVulkanMemoryModelDeviceScope,
         VkBool32* pVulkanMemoryModelAvailabilityVisibilityChains) const;
@@ -524,32 +524,32 @@ public:
         return m_properties.gpuMemoryProperties.flags.virtualRemappingSupport;
     }
 
-    VK_INLINE const RuntimeSettings& GetRuntimeSettings() const
+    const RuntimeSettings& GetRuntimeSettings() const
     {
         return m_pSettingsLoader->GetSettings();
     }
 
-    VK_INLINE VulkanSettingsLoader* GetSettingsLoader() const
+    VulkanSettingsLoader* GetSettingsLoader() const
     {
         return m_pSettingsLoader;
     }
 
-    VK_INLINE const VkPhysicalDeviceLimits& GetLimits() const
+    const VkPhysicalDeviceLimits& GetLimits() const
     {
         return m_limits;
     }
 
-    VK_INLINE uint32_t GetVrHighPrioritySubEngineIndex() const
+    uint32_t GetVrHighPrioritySubEngineIndex() const
     {
         return m_vrHighPrioritySubEngineIndex;
     }
 
-    VK_INLINE uint32_t GetRtCuHighComputeSubEngineIndex() const
+    uint32_t GetRtCuHighComputeSubEngineIndex() const
     {
         return m_RtCuHighComputeSubEngineIndex;
     }
 
-    VK_INLINE uint32_t GetSubgroupSize() const
+    uint32_t GetSubgroupSize() const
     {
         uint32_t subgroupSize = m_properties.gfxipProperties.shaderCore.maxWavefrontSize;
 
@@ -561,7 +561,7 @@ public:
         return subgroupSize;
     }
 
-    VK_INLINE bool IsPrtSupportedOnDmaEngine() const
+    bool IsPrtSupportedOnDmaEngine() const
     {
         return m_prtOnDmaSupported;
     }
@@ -633,29 +633,29 @@ public:
         const Instance*       pInstance,
         const PhysicalDevice* pPhysicalDevice);
 
-    VK_INLINE const DeviceExtensions::Supported& GetSupportedExtensions() const
+    const DeviceExtensions::Supported& GetSupportedExtensions() const
         { return m_supportedExtensions; }
 
-    VK_INLINE const DeviceExtensions::Supported& GetAllowedExtensions() const
+    const DeviceExtensions::Supported& GetAllowedExtensions() const
         { return m_allowedExtensions; }
 
-    VK_INLINE bool IsExtensionSupported(DeviceExtensions::ExtensionId id) const
+    bool IsExtensionSupported(DeviceExtensions::ExtensionId id) const
         { return m_supportedExtensions.IsExtensionSupported(id); }
 
-    VK_INLINE bool IsExtensionSupported(InstanceExtensions::ExtensionId id) const
+    bool IsExtensionSupported(InstanceExtensions::ExtensionId id) const
         { return VkInstance()->IsExtensionSupported(id); }
 
     uint32_t GetSupportedAPIVersion() const;
 
-    VK_INLINE uint32_t GetEnabledAPIVersion() const
+    uint32_t GetEnabledAPIVersion() const
     {
         return Util::Min(GetSupportedAPIVersion(), VkInstance()->GetAPIVersion());
     }
 
-    VK_INLINE AppProfile GetAppProfile() const
+    AppProfile GetAppProfile() const
         { return m_appProfile; }
 
-    VK_INLINE const PhysicalDeviceGpaProperties& GetGpaProperties() const
+    const PhysicalDeviceGpaProperties& GetGpaProperties() const
         { return m_gpaProps; }
 
     void LateInitialize();
@@ -677,7 +677,7 @@ public:
         Pal::gpusize allocationSize,
         uint32_t     heapIdx);
 
-    VK_INLINE bool ShouldAddRemoteBackupHeap(uint32_t vkIndex) const
+    bool ShouldAddRemoteBackupHeap(uint32_t vkIndex) const
         { return m_memoryVkIndexAddRemoteBackupHeap[vkIndex]; }
 
     bool IsOverrideHeapChoiceToLocalWithinBudget(Pal::gpusize size) const;

@@ -423,43 +423,43 @@ public:
     Pal::EngineType GetQueueFamilyPalEngineType(
         uint32_t queueFamilyIndex) const;
 
-    VK_INLINE uint32_t GetQueueFamilyPalImageLayoutFlag(
+    uint32_t GetQueueFamilyPalImageLayoutFlag(
         uint32_t queueFamilyIndex) const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->GetQueueFamilyPalImageLayoutFlag(queueFamilyIndex);
     }
 
-    VK_INLINE uint32_t GetMemoryTypeMask() const
+    uint32_t GetMemoryTypeMask() const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMask();
     }
 
-    VK_INLINE uint32_t GetMemoryTypeMaskMatching(VkMemoryPropertyFlags flags) const
+    uint32_t GetMemoryTypeMaskMatching(VkMemoryPropertyFlags flags) const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMaskMatching(flags);
     }
 
-    VK_INLINE uint32_t GetMemoryTypeMaskForExternalSharing() const
+    uint32_t GetMemoryTypeMaskForExternalSharing() const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMaskForExternalSharing();
     }
 
-    VK_INLINE bool GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndexBits) const
+    bool GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndexBits) const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->GetVkTypeIndexBitsFromPalHeap(heapIndex, pVkIndexBits);
     }
 
-    VK_INLINE Pal::GpuHeap GetPalHeapFromVkTypeIndex(uint32_t vkIndex) const
+    Pal::GpuHeap GetPalHeapFromVkTypeIndex(uint32_t vkIndex) const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->GetPalHeapFromVkTypeIndex(vkIndex);
     }
 
-    VK_INLINE uint32_t GetUmdFpsCapFrameRate() const
+    uint32_t GetUmdFpsCapFrameRate() const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().osProperties.umdFpsCapFrameRate;
     }
 
-    VK_INLINE uint64_t TimestampFrequency() const
+    uint64_t TimestampFrequency() const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().timestampFrequency;
     }
@@ -485,10 +485,10 @@ public:
         uint32_t                     bindInfoCount,
         const VkBindImageMemoryInfo* pBindInfos) const;
 
-    VK_INLINE const DeviceFeatures& GetEnabledFeatures() const
+    const DeviceFeatures& GetEnabledFeatures() const
         { return m_enabledFeatures; }
 
-    VK_INLINE bool IsGlobalGpuVaEnabled() const
+    bool IsGlobalGpuVaEnabled() const
         { return m_useGlobalGpuVa; }
 
     Pal::PrtFeatureFlags GetPrtFeatures() const;
@@ -502,14 +502,14 @@ public:
         Pal::IDevice*       pPalDevice,
         Pal::IGpuMemory*    pPalMemory);
 
-    VK_INLINE const RuntimeSettings& GetRuntimeSettings() const
+    const RuntimeSettings& GetRuntimeSettings() const
         { return m_settings; }
 
     // return too many objects if the allocation count will exceed max limit.
     // There is a potential improvement by using atomic inc/dec.
     // That require us to limit the max allocation to some value less than UINT_MAX
     // to avoid the overflow.
-    VK_INLINE VkResult IncreaseAllocationCount()
+    VkResult IncreaseAllocationCount()
     {
         VkResult vkResult = VK_SUCCESS;
         Util::MutexAuto lock(&m_memoryMutex);
@@ -525,7 +525,7 @@ public:
         return vkResult;
     }
 
-    VK_INLINE void DecreaseAllocationCount()
+    void DecreaseAllocationCount()
     {
         Util::MutexAuto lock(&m_memoryMutex);
         m_allocatedCount --;
@@ -546,7 +546,7 @@ public:
         uint32_t     deviceMask,
         uint32_t     heapIdx);
 
-    VK_INLINE bool ShouldAddRemoteBackupHeap(
+    bool ShouldAddRemoteBackupHeap(
         uint32_t deviceIdx,
         uint32_t memoryTypeIdx,
         uint32_t palHeapIdx) const
@@ -555,41 +555,41 @@ public:
                 m_overallocationRequestedForPalHeap[palHeapIdx]);
     }
 
-    VK_INLINE const InternalPipeline& GetTimestampQueryCopyPipeline() const
+    const InternalPipeline& GetTimestampQueryCopyPipeline() const
         { return m_timestampQueryCopyPipeline; }
 
-    VK_INLINE const Pal::IMsaaState* const * GetBltMsaaState(uint32_t imgSampleCount) const;
+    inline const Pal::IMsaaState* const * GetBltMsaaState(uint32_t imgSampleCount) const;
 
-    VK_INLINE bool IsExtensionEnabled(DeviceExtensions::ExtensionId id) const
+    bool IsExtensionEnabled(DeviceExtensions::ExtensionId id) const
         { return m_enabledExtensions.IsExtensionEnabled(id); }
 
-    VK_INLINE AppProfile GetAppProfile() const
+    AppProfile GetAppProfile() const
         { return VkPhysicalDevice(DefaultDeviceIndex)->GetAppProfile(); }
 
-    VK_INLINE SqttMgr* GetSqttMgr()
+    SqttMgr* GetSqttMgr()
         { return m_pSqttMgr; }
 
-    VK_INLINE OptLayer* GetAppOptLayer()
+    OptLayer* GetAppOptLayer()
         { return m_pAppOptLayer; }
 
-    VK_INLINE BarrierFilterLayer* GetBarrierFilterLayer()
+    BarrierFilterLayer* GetBarrierFilterLayer()
         { return m_pBarrierFilterLayer; }
 
-    VK_INLINE AsyncLayer* GetAsyncLayer()
+    AsyncLayer* GetAsyncLayer()
         { return m_pAsyncLayer; }
 
 #if VKI_GPU_DECOMPRESS
-    VK_INLINE  GpuDecoderLayer* GetGpuDecoderLayer()
+    GpuDecoderLayer* GetGpuDecoderLayer()
         { return m_pGpuDecoderLayer; }
 
-    VK_INLINE InternalPipeline& GetInternalTexDecodePipeline()
+    InternalPipeline& GetInternalTexDecodePipeline()
         {    return m_internalTexDecodePipeline; }
 #endif
 
-    VK_INLINE Util::Mutex* GetMemoryMutex()
+    Util::Mutex* GetMemoryMutex()
         { return &m_memoryMutex; }
 
-    VK_INLINE PipelineCompiler* GetCompiler(uint32_t idx) const
+    PipelineCompiler* GetCompiler(uint32_t idx) const
         { return m_perGpu[idx].pPhysicalDevice->GetCompiler(); }
 
     static const Pal::MsaaQuadSamplePattern* GetDefaultQuadSamplePattern(uint32_t sampleCount);
@@ -597,7 +597,7 @@ public:
 
     VkDeviceSize GetMemoryBaseAddrAlignment(uint32_t memoryTypes) const;
 
-    VK_INLINE RenderStateCache* GetRenderStateCache()
+    RenderStateCache* GetRenderStateCache()
         { return &m_renderStateCache; }
 
     uint32_t GetPinnedSystemMemoryTypes() const;
@@ -623,16 +623,16 @@ public:
     VK_FORCEINLINE const DeviceBarrierPolicy& GetBarrierPolicy() const
         { return m_barrierPolicy; }
 
-    VK_INLINE bool IsAllocationSizeTrackingEnabled() const
+    bool IsAllocationSizeTrackingEnabled() const
         { return m_allocationSizeTracking; }
 
-    VK_INLINE bool UseStridedCopyQueryResults() const
+    bool UseStridedCopyQueryResults() const
         { return (m_properties.timestampQueryPoolSlotSize == 32); }
 
-    VK_INLINE bool UseCompactDynamicDescriptors() const
+    bool UseCompactDynamicDescriptors() const
         { return !GetRuntimeSettings().enableRelocatableShaders && !GetEnabledFeatures().robustBufferAccess;}
 
-    VK_INLINE bool SupportDepthStencilResolve() const
+    bool SupportDepthStencilResolve() const
     {
         return (IsExtensionEnabled(DeviceExtensions::KHR_DEPTH_STENCIL_RESOLVE) ||
                 (VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 2, 0)) ||
@@ -659,7 +659,7 @@ public:
         return m_maxVrsShadingRate;
     }
 
-    VK_INLINE size_t GetPrivateDataSize() const
+    size_t GetPrivateDataSize() const
     {
         return m_privateDataSize;
     }
@@ -669,16 +669,16 @@ public:
 
     void* AllocApiObject(
         const VkAllocationCallbacks*    pAllocator,
-        const size_t                    totalObjectSize);
+        const size_t                    totalObjectSize) const;
 
     void FreeApiObject(
         const VkAllocationCallbacks*    pAllocator,
-        void*                           pMemory);
+        void*                           pMemory) const;
 
     void FreeUnreservedPrivateData(
         void*                           pMemory) const;
 
-    VK_INLINE Util::RWLock* GetPrivateDataRWLock()
+    Util::RWLock* GetPrivateDataRWLock()
     {
         return &m_privateDataRWLock;
     }
@@ -691,7 +691,7 @@ public:
     void ReleaseBorderColorIndex(
         uint32_t                 pBorderColor);
 
-    VK_INLINE Pal::IBorderColorPalette* GetPalBorderColorPalette(uint32_t deviceIdx) const
+    Pal::IBorderColorPalette* GetPalBorderColorPalette(uint32_t deviceIdx) const
     {
         return m_perGpu[deviceIdx].pPalBorderColorPalette;
     }

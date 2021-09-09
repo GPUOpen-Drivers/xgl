@@ -724,7 +724,7 @@ Pal::Result CmdBuffer::PalCmdBufferEnd()
 }
 
 // =====================================================================================================================
-Pal::Result CmdBuffer::PalCmdBufferReset(Pal::ICmdAllocator* pCmdAllocator, bool returnGpuMemory)
+Pal::Result CmdBuffer::PalCmdBufferReset(bool returnGpuMemory)
 {
     Pal::Result result = Pal::Result::Success;
 
@@ -1520,7 +1520,7 @@ VkResult CmdBuffer::Reset(VkCommandBufferResetFlags flags)
             ReleaseResources();
         }
 
-        result = PalToVkResult(PalCmdBufferReset(nullptr, releaseResources));
+        result = PalToVkResult(PalCmdBufferReset(releaseResources));
 
         m_flags.wasBegun = false;
     }
@@ -2032,15 +2032,6 @@ void CmdBuffer::BindDescriptorSets(
     }
 
     DbgBarrierPostCmd(DbgBarrierBindSetsPushConstants);
-}
-
-// =====================================================================================================================
-VK_INLINE bool CmdBuffer::PalPipelineBindingOwnedBy(
-    Pal::PipelineBindPoint palBind,
-    PipelineBindPoint      apiBind
-    ) const
-{
-    return m_allGpuState.palToApiPipeline[static_cast<uint32_t>(palBind)] == apiBind;
 }
 
 // =====================================================================================================================
@@ -3306,7 +3297,6 @@ void CmdBuffer::PalCmdSetEvent(
 }
 
 // =====================================================================================================================
-template<bool regionPerDevice>
 void CmdBuffer::PalCmdResolveImage(
     const Image&                   srcImage,
     Pal::ImageLayout               srcImageLayout,
@@ -3333,7 +3323,7 @@ void CmdBuffer::PalCmdResolveImage(
                     dstImageLayout,
                     resolveMode,
                     regionCount,
-                    pRegions + (regionPerDevice ? (MaxRangePerAttachment * deviceIdx) : 0),
+                    pRegions,
                     0);
     }
     while (deviceGroup.IterateNext());
@@ -3342,18 +3332,6 @@ void CmdBuffer::PalCmdResolveImage(
 
     DbgBarrierPostCmd(DbgBarrierResolve);
 }
-
-// =====================================================================================================================
-// Instantiate the template function
-template void CmdBuffer::PalCmdResolveImage<true>(
-    const Image&                   srcImage,
-    Pal::ImageLayout               srcImageLayout,
-    const Image&                   dstImage,
-    Pal::ImageLayout               dstImageLayout,
-    Pal::ResolveMode               resolveMode,
-    uint32_t                       regionCount,
-    const Pal::ImageResolveRegion* pRegions,
-    uint32_t                       deviceMask);
 
 // =====================================================================================================================
 // Clears a set of attachments in the current subpass using PAL's CmdClear*Image() commands.
@@ -3567,7 +3545,7 @@ void CmdBuffer::ResolveImage(
                 ++rectIdx;
             }
 
-            PalCmdResolveImage<false>(
+            PalCmdResolveImage(
                 *pSrcImage,
                 palSrcImageLayout,
                 *pDstImage,
@@ -6351,7 +6329,7 @@ void CmdBuffer::RPResolveAttachments(
                 regions[idx].pQuadSamplePattern = pSampleLocations;
             }
 
-            PalCmdResolveImage<false>(
+            PalCmdResolveImage(
                 *srcAttachment.pImage,
                 srcLayout,
                 *dstAttachment.pImage,
@@ -6527,7 +6505,7 @@ void CmdBuffer::EndRenderPass()
 }
 
 // =====================================================================================================================
-VK_INLINE void CmdBuffer::WritePushConstants(
+void CmdBuffer::WritePushConstants(
     PipelineBindPoint      apiBindPoint,
     Pal::PipelineBindPoint palBindPoint,
     const PipelineLayout*  pLayout,
@@ -7118,7 +7096,7 @@ void CmdBuffer::EndTransformFeedback(
 }
 
 // =====================================================================================================================
-VK_INLINE void CmdBuffer::CalcCounterBufferAddrs(
+void CmdBuffer::CalcCounterBufferAddrs(
     uint32_t            firstCounterBuffer,
     uint32_t            counterBufferCount,
     const VkBuffer*     pCounterBuffers,

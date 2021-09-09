@@ -588,7 +588,7 @@ void PhysicalDevice::InitializePlatformKey(
 // - markPipelineCacheWithBuildTimestamp: decides whether to mix in __DATE__ __TIME__ from compiler to UUID
 // - useGlobalCacheId                   : decides if UUID should be portable between machines
 //
-static VK_INLINE void GenerateCacheUuid(
+static void GenerateCacheUuid(
     const RuntimeSettings& settings,
     const Pal::DeviceProperties& palProps,
     AppProfile appProfile,
@@ -956,7 +956,6 @@ VkResult PhysicalDevice::Initialize()
                         (1UL << memoryTypeIndex);
 
                     m_memoryTypeMask |= 1 << m_memoryProperties.memoryTypeCount;
-
                     ++m_memoryProperties.memoryTypeCount;
                 }
             }
@@ -1171,6 +1170,15 @@ void PhysicalDevice::PopulateFormatProperties()
                     GetLinearSampleBits(fmtProperties, palOptimalFormat.format, Pal::ImageTiling::Optimal, &optimalFlags);
                 }
                 while (aspectMask != 0);
+            }
+        }
+
+        if (format == VK_FORMAT_R32_SFLOAT)
+        {
+            if (IsExtensionSupported(DeviceExtensions::EXT_SHADER_ATOMIC_FLOAT))
+            {
+                optimalFlags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT;
+                bufferFlags |= VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT;
             }
         }
 
@@ -3650,32 +3658,35 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 #if defined(__unix__)
 #endif
 
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_IMAGE_ATOMIC_INT64));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_IMAGE_ATOMIC_INT64));
 
-        if ((pPhysicalDevice == nullptr) ||
-            IsConditionalRenderingSupported(pPhysicalDevice))
-        {
-            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CONDITIONAL_RENDERING));
-        }
+    if ((pPhysicalDevice == nullptr) ||
+        IsConditionalRenderingSupported(pPhysicalDevice))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CONDITIONAL_RENDERING));
+    }
 
-        if ((pPhysicalDevice == nullptr) ||
-            (pPhysicalDevice->PalProperties().gfxipProperties.supportedVrsRates != 0))
-        {
-            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_FRAGMENT_SHADING_RATE));
-        }
+    if ((pPhysicalDevice == nullptr) ||
+        (pPhysicalDevice->PalProperties().gfxipProperties.supportedVrsRates != 0))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_FRAGMENT_SHADING_RATE));
+    }
 
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SAMPLER_YCBCR_CONVERSION));
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_BUFFER_DEVICE_ADDRESS));
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ROBUSTNESS2));
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_TERMINATE_INVOCATION));
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE2));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SAMPLER_YCBCR_CONVERSION));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_BUFFER_DEVICE_ADDRESS));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ROBUSTNESS2));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_TERMINATE_INVOCATION));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE2));
 
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COPY_COMMANDS2));
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW));
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_4444_FORMATS));
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SYNCHRONIZATION2));
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CUSTOM_BORDER_COLOR));
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_COLOR_WRITE_ENABLE));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COPY_COMMANDS2));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_4444_FORMATS));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SYNCHRONIZATION2));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CUSTOM_BORDER_COLOR));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_COLOR_WRITE_ENABLE));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_LOAD_STORE_OP_NONE));
 
     bool disableAMDVendorExtensions = false;
     if (pPhysicalDevice != nullptr)
@@ -3756,7 +3767,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 // =====================================================================================================================
 // Is the queue suitable for normal use (i.e. non-exclusive and no elevated priority).
 template<class T>
-VK_INLINE static bool IsNormalQueue(const T& engineCapabilities)
+static bool IsNormalQueue(const T& engineCapabilities)
 {
     return ((engineCapabilities.flags.exclusive == 0) &&
             (((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityNormal) != 0) ||
@@ -4658,13 +4669,11 @@ void PhysicalDevice::GetPhysicalDeviceBufferAddressFeatures(
     VkBool32* pBufferDeviceAddressMultiDevice
     ) const
 {
-    {
-        *pBufferDeviceAddress              = VK_TRUE;
-        *pBufferDeviceAddressCaptureReplay =
-            PalProperties().gfxipProperties.flags.supportCaptureReplay ? VK_TRUE : VK_FALSE;
-        *pBufferDeviceAddressMultiDevice   =
-            PalProperties().gpuMemoryProperties.flags.globalGpuVaSupport;
-    }
+    *pBufferDeviceAddress              = VK_TRUE;
+    *pBufferDeviceAddressCaptureReplay =
+        PalProperties().gfxipProperties.flags.supportCaptureReplay ? VK_TRUE : VK_FALSE;
+    *pBufferDeviceAddressMultiDevice   =
+        PalProperties().gpuMemoryProperties.flags.globalGpuVaSupport;
 }
 
 // =====================================================================================================================
@@ -5505,6 +5514,53 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     pExtInfo->shaderZeroInitializeWorkgroupMemory = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT:
+            {
+                auto pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderBufferFloat32Atomics   = VK_TRUE;
+                    pExtInfo->shaderBufferFloat32AtomicAdd = VK_FALSE;
+                    pExtInfo->shaderBufferFloat64Atomics   = VK_TRUE;
+                    pExtInfo->shaderBufferFloat64AtomicAdd = VK_FALSE;
+                    pExtInfo->shaderSharedFloat32Atomics   = VK_TRUE;
+                    pExtInfo->shaderSharedFloat32AtomicAdd = VK_FALSE;
+                    pExtInfo->shaderSharedFloat64Atomics   = VK_TRUE;
+                    pExtInfo->shaderSharedFloat64AtomicAdd = VK_FALSE;
+                    pExtInfo->shaderImageFloat32Atomics    = VK_TRUE;
+                    pExtInfo->shaderImageFloat32AtomicAdd  = VK_FALSE;
+                    pExtInfo->sparseImageFloat32Atomics    = VK_TRUE;
+                    pExtInfo->sparseImageFloat32AtomicAdd  = VK_FALSE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderBufferFloat16Atomics      = VK_FALSE;
+                    pExtInfo->shaderBufferFloat16AtomicAdd    = VK_FALSE;
+                    pExtInfo->shaderBufferFloat16AtomicMinMax = VK_FALSE;
+                    pExtInfo->shaderBufferFloat32AtomicMinMax = VK_TRUE;
+                    pExtInfo->shaderBufferFloat64AtomicMinMax = VK_TRUE;
+                    pExtInfo->shaderSharedFloat16Atomics      = VK_FALSE;
+                    pExtInfo->shaderSharedFloat16AtomicAdd    = VK_FALSE;
+                    pExtInfo->shaderSharedFloat16AtomicMinMax = VK_FALSE;
+                    pExtInfo->shaderSharedFloat32AtomicMinMax = VK_TRUE;
+                    pExtInfo->shaderSharedFloat64AtomicMinMax = VK_TRUE;
+                    pExtInfo->shaderImageFloat32AtomicMinMax  = VK_TRUE;
+                    pExtInfo->sparseImageFloat32AtomicMinMax  = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6784,10 +6840,8 @@ static void VerifyExtensions(
                && dev.IsExtensionSupported(DeviceExtensions::KHR_SHADER_SUBGROUP_EXTENDED_TYPES)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_TIMELINE_SEMAPHORE)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_UNIFORM_BUFFER_STANDARD_LAYOUT)
-               && dev.IsExtensionSupported(DeviceExtensions::KHR_VULKAN_MEMORY_MODEL));
-        {
-            VK_ASSERT(dev.IsExtensionSupported(DeviceExtensions::KHR_BUFFER_DEVICE_ADDRESS));
-        }
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_VULKAN_MEMORY_MODEL)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_BUFFER_DEVICE_ADDRESS));
     }
 }
 

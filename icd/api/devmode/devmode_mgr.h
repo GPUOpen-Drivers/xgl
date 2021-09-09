@@ -179,9 +179,9 @@ public:
         uint64_t                       value,
         Pal::IQueueSemaphore*          pQueueSemaphore);
 
-    VK_INLINE bool IsQueueTimingActive(const Device* pDevice) const;
-    VK_INLINE bool GetTraceFrameBeginTag(uint64_t* pTag) const;
-    VK_INLINE bool GetTraceFrameEndTag(uint64_t* pTag) const;
+    inline bool IsQueueTimingActive(const Device* pDevice) const;
+    inline bool GetTraceFrameBeginTag(uint64_t* pTag) const;
+    inline bool GetTraceFrameEndTag(uint64_t* pTag) const;
 
     Util::Result RegisterPipelineCache(
         PipelineBinaryCache* pPipelineCache,
@@ -189,10 +189,10 @@ public:
 
     void DeregisterPipelineCache(
         PipelineBinaryCache* pPipelineCache);
-    VK_INLINE Util::ListIterator<PipelineBinaryCache*, PalAllocator> GetPipelineCacheListIterator()
+    Util::ListIterator<PipelineBinaryCache*, PalAllocator> GetPipelineCacheListIterator()
         { return m_pipelineCaches.Begin(); }
 
-    VK_INLINE Util::RWLock* GetPipelineReinjectionLock()
+    Util::RWLock* GetPipelineReinjectionLock()
         { return &m_pipelineReinjectionLock; }
 
 private:
@@ -363,7 +363,7 @@ private:
 #if ICD_GPUOPEN_DEVMODE_BUILD
 // =====================================================================================================================
 // Returns true if queue operations are currently being timed by RGP traces.
-VK_INLINE bool DevModeMgr::IsQueueTimingActive(
+inline bool DevModeMgr::IsQueueTimingActive(
     const Device* pDevice
     ) const
 {

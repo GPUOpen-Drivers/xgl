@@ -58,24 +58,25 @@ struct AstcMappedInfo
 // on the current HW) -- put such information in PhysicalDevice or Device.
 struct Formats
 {
-    VK_INLINE static bool IsColorFormat(VkFormat format);
-    VK_INLINE static bool IsDepthStencilFormat(VkFormat format);
-    VK_INLINE static bool IsBcCompressedFormat(VkFormat format);
-    VK_INLINE static bool IsRTVertexFormat(VkFormat format);
-    VK_INLINE static bool IsYuvFormat(VkFormat format);
-    VK_INLINE static bool IsYuvPlanar(VkFormat format);
-    VK_INLINE static bool IsYuvPacked(VkFormat format);
-    VK_INLINE static bool IsYuvXChromaSubsampled(VkFormat format);
-    VK_INLINE static bool IsYuvYChromaSubsampled(VkFormat format);
-    VK_INLINE static uint32_t GetYuvPlaneCounts(VkFormat format);
-    VK_INLINE static bool IsASTCFormat(VkFormat format);
-    VK_INLINE static bool IsEtc2Format(VkFormat format);
-    VK_INLINE static bool HasDepth(VkFormat format);
-    VK_INLINE static bool HasStencil(VkFormat format);
-    VK_INLINE static VkFormat GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask);
+    inline static bool IsColorFormat(VkFormat format);
+    inline static bool IsDepthStencilFormat(VkFormat format);
+    inline static bool IsBcCompressedFormat(VkFormat format);
+    inline static bool IsRTVertexFormat(VkFormat format);
+    inline static bool IsYuvFormat(VkFormat format);
+    inline static bool IsYuvPlanar(VkFormat format);
+    inline static bool IsYuvPacked(VkFormat format);
+    inline static bool IsYuvXChromaSubsampled(VkFormat format);
+    inline static bool IsYuvYChromaSubsampled(VkFormat format);
+    inline static uint32_t GetYuvPlaneCounts(VkFormat format);
+    inline static bool IsASTCFormat(VkFormat format);
+    inline static bool IsEtc2Format(VkFormat format);
+    inline static bool IsEacFormat(VkFormat format);
+    inline static bool HasDepth(VkFormat format);
+    inline static bool HasStencil(VkFormat format);
+    inline static VkFormat GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask);
 
-    VK_INLINE static uint32_t GetIndex(VkFormat format);
-    VK_INLINE static VkFormat FromIndex(uint32_t index);
+    inline static uint32_t GetIndex(VkFormat format);
+    inline static VkFormat FromIndex(uint32_t index);
 #if ( VKI_GPU_DECOMPRESS)
     static void GetAstcMappedInfo(VkFormat format, AstcMappedInfo* pMapInfo);
 #endif
@@ -241,7 +242,14 @@ bool Formats::IsASTCFormat(
 bool Formats::IsEtc2Format(
     VkFormat format)
 {
-    return ((format >= VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK) && (format <= VK_FORMAT_EAC_R11G11_SNORM_BLOCK));
+    return ((format >= VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK) && (format <= VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK));
+}
+
+// =====================================================================================================================
+bool Formats::IsEacFormat(
+    VkFormat format)
+{
+    return ((format >= VK_FORMAT_EAC_R11_UNORM_BLOCK) && (format <= VK_FORMAT_EAC_R11G11_SNORM_BLOCK));
 }
 
 // =====================================================================================================================

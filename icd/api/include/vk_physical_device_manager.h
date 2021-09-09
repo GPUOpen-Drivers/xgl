@@ -75,7 +75,7 @@ public:
         uint32_t  maxDeviceGroupIndices,
         int32_t*  pDeviceGroupIndices) const;
 
-    VK_INLINE uint32_t GetDeviceCount() const
+    uint32_t GetDeviceCount() const
         { return m_devices.NumElements(); }
 
     VK_FORCEINLINE Instance* VkInstance() const

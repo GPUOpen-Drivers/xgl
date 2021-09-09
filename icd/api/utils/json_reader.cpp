@@ -67,7 +67,7 @@ static void JsonDefaultFree(
 
 // =====================================================================================================================
 // Returns the next character after offset entries without advancing the buffer.
-VK_INLINE char JsonPeek(
+static char JsonPeek(
     JsonContext* pCtx,
     size_t       offset = 0)
 {
@@ -83,7 +83,7 @@ VK_INLINE char JsonPeek(
 
 // =====================================================================================================================
 // Advances the buffer
-VK_INLINE void JsonAdvance(JsonContext* pCtx)
+static void JsonAdvance(JsonContext* pCtx)
 {
     if (pCtx->sz > 0)
     {
@@ -94,7 +94,7 @@ VK_INLINE void JsonAdvance(JsonContext* pCtx)
 
 // =====================================================================================================================
 // Returns the next character after eating white-space and ignoring comments.  Advances the buffer.
-VK_INLINE char JsonNextToken(
+static char JsonNextToken(
     JsonContext* pCtx)
 {
     while (true)

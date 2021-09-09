@@ -242,7 +242,7 @@ static const LayoutUsageHelper g_LayoutUsageHelper;
 
 // =====================================================================================================================
 // Converts ImageLayout to Cache masks, for use with VK_ACCESS_MEMORY_WRITE and VK_ACCESS_MEMORY_READ only.
-static VK_INLINE uint32_t ImageLayoutToCacheMask(VkImageLayout imageLayout)
+static uint32_t ImageLayoutToCacheMask(VkImageLayout imageLayout)
 {
     uint32_t cacheMask = 0;
 
@@ -291,7 +291,7 @@ static VK_INLINE uint32_t ImageLayoutToCacheMask(VkImageLayout imageLayout)
 
 // =====================================================================================================================
 // Converts source access flags to source cache coherency flags.
-static VK_INLINE uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLayout imageLayout)
+static uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLayout imageLayout)
 {
     uint32_t cacheMask = 0;
 
@@ -355,7 +355,7 @@ static VK_INLINE uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLa
 
 // =====================================================================================================================
 // Converts destination access flags to destination cache coherency flags.
-static VK_INLINE uint32_t DstAccessToCacheMask(AccessFlags accessMask, VkImageLayout imageLayout)
+static uint32_t DstAccessToCacheMask(AccessFlags accessMask, VkImageLayout imageLayout)
 {
     uint32_t cacheMask = 0;
 

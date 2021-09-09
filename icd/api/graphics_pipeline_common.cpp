@@ -124,7 +124,7 @@ static bool IsDynamicStateEnabled(const uint32_t dynamicStateFlags, const Dynami
 
 // =====================================================================================================================
 // Returns true if the given VkBlendFactor factor is a dual source blend factor
-static VK_INLINE bool IsDualSourceBlend(VkBlendFactor blend)
+static bool IsDualSourceBlend(VkBlendFactor blend)
 {
     switch (blend)
     {
@@ -139,7 +139,7 @@ static VK_INLINE bool IsDualSourceBlend(VkBlendFactor blend)
 }
 
 // =====================================================================================================================
-static VK_INLINE void BuildPalColorBlendStateCreateInfo(
+static void BuildPalColorBlendStateCreateInfo(
     const VkPipelineColorBlendStateCreateInfo* pColorBlendState,
     Pal::ColorBlendStateCreateInfo*            pInfo)
 {
@@ -221,7 +221,7 @@ bool GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(VkBlendFactor blend)
 }
 
 // =====================================================================================================================
-static VK_INLINE VkFormat GetDepthFormat(
+static VkFormat GetDepthFormat(
     const RenderPass*                       pRenderPass,
     const uint32_t                          subpassIndex
     )
@@ -232,7 +232,7 @@ static VK_INLINE VkFormat GetDepthFormat(
 }
 
 // =====================================================================================================================
-static VK_INLINE uint32_t GetColorAttachmentCount(
+static uint32_t GetColorAttachmentCount(
     const RenderPass*                       pRenderPass,
     const uint32_t                          subpassIndex
 )
@@ -243,25 +243,24 @@ static VK_INLINE uint32_t GetColorAttachmentCount(
 
 // =====================================================================================================================
 VkShaderStageFlagBits GraphicsPipelineCommon::GetActiveShaderStages(
-    const VkGraphicsPipelineCreateInfo*             pGraphicsPipelineCreateInfo
+    const VkGraphicsPipelineCreateInfo*  pGraphicsPipelineCreateInfo
     )
 {
     VK_ASSERT(pGraphicsPipelineCreateInfo != nullptr);
 
-    VkShaderStageFlagBits activeStage     = static_cast<VkShaderStageFlagBits>(0);
-    VkShaderStageFlagBits activeStageMask = static_cast<VkShaderStageFlagBits>(0xFFFFFFFF);
+    VkShaderStageFlagBits activeStages = static_cast<VkShaderStageFlagBits>(0);
 
     for (uint32_t i = 0; i < pGraphicsPipelineCreateInfo->stageCount; ++i)
     {
-        activeStage = static_cast<VkShaderStageFlagBits>(activeStage | pGraphicsPipelineCreateInfo->pStages[i].stage);
+        activeStages = static_cast<VkShaderStageFlagBits>(activeStages | pGraphicsPipelineCreateInfo->pStages[i].stage);
     }
 
-    return static_cast<VkShaderStageFlagBits>(activeStage & activeStageMask);
+    return activeStages;
 }
 
 // =====================================================================================================================
 uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
-    const VkPipelineDynamicStateCreateInfo*   pDy
+    const VkPipelineDynamicStateCreateInfo* pDy
     )
 {
     uint32_t dynamicState = 0;
@@ -378,6 +377,24 @@ uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
     }
 
     return dynamicState;
+}
+
+// =====================================================================================================================
+VkResult GraphicsPipelineCommon::Create(
+    Device*                             pDevice,
+    PipelineCache*                      pPipelineCache,
+    const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks*        pAllocator,
+    VkPipeline*                         pPipeline)
+{
+    VkResult result;
+
+    {
+        result =  GraphicsPipeline::Create(
+            pDevice, pPipelineCache, pCreateInfo, pAllocator, pPipeline);
+    }
+
+    return result;
 }
 
 // =====================================================================================================================
@@ -762,6 +779,9 @@ static void BuildMultisampleState(
         pInfo->msaa.occlusionQuerySamples  = subpassDepthSampleCount;
         pInfo->sampleCoverage              = subpassCoverageSampleCount;
 
+        pInfo->pipeline.cbState.target[0].forceAlphaToOne = (pMs->alphaToOneEnable == VK_TRUE);
+        pInfo->pipeline.cbState.alphaToCoverageEnable     = (pMs->alphaToCoverageEnable == VK_TRUE);
+
         if (pInfo->flags.customSampleLocations)
         {
             // Enable single-sampled custom sample locations if necessary
@@ -807,6 +827,7 @@ static void BuildDepthStencilState(
     {
         pInfo->immedInfo.depthStencilCreateInfo.stencilEnable     = (pDs->stencilTestEnable == VK_TRUE);
         pInfo->immedInfo.depthStencilCreateInfo.depthEnable       = (pDs->depthTestEnable == VK_TRUE);
+        pInfo->immedInfo.depthStencilCreateInfo.depthWriteEnable  = (pDs->depthWriteEnable == VK_TRUE);
         pInfo->immedInfo.depthStencilCreateInfo.depthFunc         = VkToPalCompareFunc(pDs->depthCompareOp);
         pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable = (pDs->depthBoundsTestEnable == VK_TRUE);
 
@@ -1028,8 +1049,6 @@ static void BuildPreRasterizationShaderState(
     const uint32_t                      dynamicStateFlags,
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
-    pInfo->pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
-
     // Build states via VkPipelineRasterizationStateCreateInfo
     BuildRasterizationState(pDevice, pIn->pRasterizationState, dynamicStateFlags, pInfo);
 
@@ -1077,8 +1096,6 @@ static void BuildFragmentShaderState(
 {
     const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
     const uint32_t    subpass     = pIn->subpass;
-
-    pInfo->pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
 
     // Build states via VkPipelineMultisampleStateCreateInfo
     BuildMultisampleState(pIn->pMultisampleState, pRenderPass, subpass, dynamicStateFlags, pInfo);
@@ -1133,24 +1150,6 @@ static void BuildFragmentOutputInterfaceState(
         subpass,
         dynamicStateFlags,
         pInfo);
-    }
-
-    // According to the spec, VkPipelineMultisampleStateCreateInfo::alphaToCoverageEnable and alphaToOneEnable
-    // belongs to fragment output interface section
-    // The alpha component of the fragment's first color output is replaced with one if alphaToOneEnable is set.
-    if (pIn->pMultisampleState != nullptr)
-    {
-        pInfo->pipeline.cbState.target[0].forceAlphaToOne = (pIn->pMultisampleState->alphaToOneEnable == VK_TRUE);
-        pInfo->pipeline.cbState.alphaToCoverageEnable = (pIn->pMultisampleState->alphaToCoverageEnable == VK_TRUE);
-    }
-
-    // According to the spec, VkPipelineDepthStencilStateCreateInfo::depthWriteEnable belongs to fragment output
-    // interface section
-    if ((pInfo->dbFormat != VK_FORMAT_UNDEFINED) &&
-        (pIn->pDepthStencilState != nullptr))
-    {
-        pInfo->immedInfo.depthStencilCreateInfo.depthWriteEnable =
-            (pIn->pDepthStencilState->depthWriteEnable == VK_TRUE);
     }
 
     BuildRenderingState(pDevice,
@@ -1301,16 +1300,16 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     const VkGraphicsPipelineCreateInfo* pIn,
     const VbInfo*                       pVbInfo,
     const GraphicsPipelineBinaryInfo*   pBinInfo,
+    const PipelineLayout*               pPipelineLayout,
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
-    const VkGraphicsPipelineCreateInfo* pGraphicsPipelineCreateInfo = pIn;
 
-    pInfo->activeStages = GetActiveShaderStages(pGraphicsPipelineCreateInfo
+    pInfo->activeStages = GetActiveShaderStages(pIn
                                                 );
 
-    uint32_t dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(
-                                     pGraphicsPipelineCreateInfo->pDynamicState
-                                                      );
+    uint32_t dynamicStateFlags = GetDynamicStateFlags(
+                                     pIn->pDynamicState
+                                     );
 
     BuildVertexInputInterfaceState(pDevice, pIn, &pVbInfo->bindingInfo, dynamicStateFlags, false, pInfo);
 
@@ -1352,16 +1351,16 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
 VkResult GraphicsPipelineCommon::BuildPipelineBinaryCreateInfo(
     const Device*                       pDevice,
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    const PipelineLayout*               pPipelineLayout,
     GraphicsPipelineBinaryCreateInfo*   pBinInfo,
     GraphicsPipelineShaderStageInfo*    pShaderInfo,
     VbInfo*                             pVbInfo,
     ShaderModuleHandle*                 pTempModules)
 {
-    PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
-
     VkResult result = BuildShaderStageInfo(pDevice,
                                            pCreateInfo->stageCount,
                                            pCreateInfo->pStages,
+                                           pCreateInfo->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR,
                                            [](const uint32_t inputIdx, const uint32_t stageIdx)
                                            {
                                                return stageIdx;
@@ -1371,7 +1370,8 @@ VkResult GraphicsPipelineCommon::BuildPipelineBinaryCreateInfo(
 
     if (result == VK_SUCCESS)
     {
-        result = pCompiler->ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, pShaderInfo, pBinInfo, pVbInfo);
+        result = pDevice->GetCompiler(DefaultDeviceIndex)->ConvertGraphicsPipelineInfo(
+            pDevice, pCreateInfo, pShaderInfo, pPipelineLayout, pBinInfo, pVbInfo);
     }
 
     return result;
@@ -1768,6 +1768,166 @@ static void GenerateHashFromColorBlendStateCreateInfo(
 }
 
 // =====================================================================================================================
+void GraphicsPipelineCommon::GenerateHashForVertexInputInterfaceState(
+    const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    Util::MetroHash128*                 pBaseHasher,
+    Util::MetroHash128*                 pApiHasher)
+{
+    if (pCreateInfo->pVertexInputState != nullptr)
+    {
+        GenerateHashFromVertexInputStateCreateInfo(*pCreateInfo->pVertexInputState, pBaseHasher);
+    }
+
+    if (pCreateInfo->pInputAssemblyState != nullptr)
+    {
+        GenerateHashFromInputAssemblyStateCreateInfo(*pCreateInfo->pInputAssemblyState, pBaseHasher, pApiHasher);
+    }
+}
+
+// =====================================================================================================================
+void GraphicsPipelineCommon::GenerateHashForPreRasterizationShadersState(
+    const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+    const GraphicsPipelineObjectCreateInfo* pInfo,
+    Util::MetroHash128*                     pBaseHasher,
+    Util::MetroHash128*                     pApiHasher)
+{
+    for (uint32_t i = 0; i < pCreateInfo->stageCount; ++i)
+    {
+        if (pCreateInfo->pStages[i].stage & PrsShaderMask)
+        {
+            GenerateHashFromShaderStageCreateInfo(pCreateInfo->pStages[i], pBaseHasher);
+        }
+    }
+
+    if (pCreateInfo->layout != VK_NULL_HANDLE)
+    {
+        pBaseHasher->Update(PipelineLayout::ObjectFromHandle(pCreateInfo->layout)->GetApiHash());
+    }
+
+    if ((pInfo->immedInfo.rasterizerDiscardEnable == false) && (pCreateInfo->pViewportState != nullptr))
+    {
+        GenerateHashFromViewportStateCreateInfo(*pCreateInfo->pViewportState, pInfo->staticStateMask, pApiHasher);
+    }
+
+    if (pCreateInfo->pRasterizationState != nullptr)
+    {
+        bool rasterizerDiscardEnableDynamic = ((pInfo->staticStateMask &
+                                                (1UL << static_cast<uint32_t>(DynamicStatesInternal::RasterizerDiscardEnableExt))) == 0);
+
+        GenerateHashFromRasterizationStateCreateInfo(*pCreateInfo->pRasterizationState,
+                                                     rasterizerDiscardEnableDynamic,
+                                                     pBaseHasher,
+                                                     pApiHasher);
+    }
+
+    if ((pInfo->activeStages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
+        && (pCreateInfo->pTessellationState != nullptr))
+    {
+        GenerateHashFromTessellationStateCreateInfo(*pCreateInfo->pTessellationState, pBaseHasher);
+    }
+
+    if (pCreateInfo->renderPass != VK_NULL_HANDLE)
+    {
+        pBaseHasher->Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetHash());
+    }
+
+    pBaseHasher->Update(pCreateInfo->subpass);
+
+    EXTRACT_VK_STRUCTURES_0(
+        discardRectangle,
+        PipelineDiscardRectangleStateCreateInfoEXT,
+        static_cast<const VkPipelineDiscardRectangleStateCreateInfoEXT*>(pCreateInfo->pNext),
+        PIPELINE_DISCARD_RECTANGLE_STATE_CREATE_INFO_EXT)
+
+    if (pPipelineDiscardRectangleStateCreateInfoEXT != nullptr)
+    {
+        pApiHasher->Update(pPipelineDiscardRectangleStateCreateInfoEXT->sType);
+        pApiHasher->Update(pPipelineDiscardRectangleStateCreateInfoEXT->flags);
+        pApiHasher->Update(pPipelineDiscardRectangleStateCreateInfoEXT->discardRectangleMode);
+        pApiHasher->Update(pPipelineDiscardRectangleStateCreateInfoEXT->discardRectangleCount);
+
+        if (pPipelineDiscardRectangleStateCreateInfoEXT->pDiscardRectangles != nullptr)
+        {
+            for (uint32 i = 0; i < pPipelineDiscardRectangleStateCreateInfoEXT->discardRectangleCount; i++)
+            {
+                pApiHasher->Update(pPipelineDiscardRectangleStateCreateInfoEXT->pDiscardRectangles[i]);
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
+void GraphicsPipelineCommon::GenerateHashForFragmentShaderState(
+    const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+    Util::MetroHash128*                     pBaseHasher,
+    Util::MetroHash128*                     pApiHasher)
+{
+    for (uint32_t i = 0; i < pCreateInfo->stageCount; ++i)
+    {
+        if (pCreateInfo->pStages[i].stage & FgsShaderMask)
+        {
+            GenerateHashFromShaderStageCreateInfo(pCreateInfo->pStages[i], pBaseHasher);
+        }
+    }
+
+    if (pCreateInfo->layout != VK_NULL_HANDLE)
+    {
+        pBaseHasher->Update(PipelineLayout::ObjectFromHandle(pCreateInfo->layout)->GetApiHash());
+    }
+
+    if (pCreateInfo->pMultisampleState != nullptr)
+    {
+        GenerateHashFromMultisampleStateCreateInfo(*pCreateInfo->pMultisampleState, pBaseHasher, pApiHasher);
+    }
+
+    const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pCreateInfo->renderPass);
+
+    if ((pCreateInfo->pDepthStencilState != nullptr) &&
+        (GetDepthFormat(pRenderPass, pCreateInfo->subpass) != VK_FORMAT_UNDEFINED))
+    {
+        GenerateHashFromDepthStencilStateCreateInfo(*pCreateInfo->pDepthStencilState, pApiHasher);
+    }
+
+    EXTRACT_VK_STRUCTURES_0(
+        variableRateShading,
+        PipelineFragmentShadingRateStateCreateInfoKHR,
+        static_cast<const VkPipelineFragmentShadingRateStateCreateInfoKHR*>(pCreateInfo->pNext),
+        PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR)
+
+    if (pPipelineFragmentShadingRateStateCreateInfoKHR != nullptr)
+    {
+        pApiHasher->Update(pPipelineFragmentShadingRateStateCreateInfoKHR->fragmentSize.width);
+        pApiHasher->Update(pPipelineFragmentShadingRateStateCreateInfoKHR->fragmentSize.height);
+        pApiHasher->Update(pPipelineFragmentShadingRateStateCreateInfoKHR->combinerOps[0]);
+        pApiHasher->Update(pPipelineFragmentShadingRateStateCreateInfoKHR->combinerOps[1]);
+    }
+}
+
+// =====================================================================================================================
+void GraphicsPipelineCommon::GenerateHashForFragmentOutputInterfaceState(
+    const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    Util::MetroHash128*                 pBaseHasher,
+    Util::MetroHash128*                 pApiHasher)
+{
+
+    const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pCreateInfo->renderPass);
+
+    if ((pCreateInfo->pColorBlendState != nullptr) &&
+        (GetColorAttachmentCount(pRenderPass, pCreateInfo->subpass) != 0))
+
+    {
+        GenerateHashFromColorBlendStateCreateInfo(*pCreateInfo->pColorBlendState, pBaseHasher, pApiHasher);
+    }
+
+    if (pCreateInfo->renderPass != VK_NULL_HANDLE)
+    {
+        pBaseHasher->Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetHash());
+    }
+
+    pBaseHasher->Update(pCreateInfo->subpass);
+}
+
+// =====================================================================================================================
 // Generates the API PSO hash using the contents of the VkGraphicsPipelineCreateInfo struct
 // Pipeline compilation affected by:
 //     - pCreateInfo->pStages
@@ -1789,81 +1949,29 @@ uint64_t GraphicsPipelineCommon::BuildApiHash(
     Util::MetroHash128 baseHasher;
     Util::MetroHash128 apiHasher;
 
+    uint32_t dynamicStateFlags = GetDynamicStateFlags(
+        pCreateInfo->pDynamicState
+    );
+
     baseHasher.Update(pCreateInfo->flags);
-    baseHasher.Update(pCreateInfo->stageCount);
+    baseHasher.Update(dynamicStateFlags);
 
     const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pCreateInfo->renderPass);
 
-    for (uint32_t i = 0; i < pCreateInfo->stageCount; i++)
+    GenerateHashForVertexInputInterfaceState(pCreateInfo, &baseHasher, &apiHasher);
+
+    GenerateHashForPreRasterizationShadersState(pCreateInfo, pInfo, &baseHasher, &apiHasher);
+
+    const bool enableRasterization =
+        (pInfo->immedInfo.rasterizerDiscardEnable == false) ||
+        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizerDiscardEnableExt);
+
+    if (enableRasterization)
     {
-        GenerateHashFromShaderStageCreateInfo(pCreateInfo->pStages[i], &baseHasher);
+        GenerateHashForFragmentShaderState(pCreateInfo, &baseHasher, &apiHasher);
+
+        GenerateHashForFragmentOutputInterfaceState(pCreateInfo, &baseHasher, &apiHasher);
     }
-
-    if (pCreateInfo->pVertexInputState != nullptr)
-    {
-        GenerateHashFromVertexInputStateCreateInfo(*pCreateInfo->pVertexInputState, &baseHasher);
-    }
-
-    if (pCreateInfo->pInputAssemblyState != nullptr)
-    {
-        GenerateHashFromInputAssemblyStateCreateInfo(*pCreateInfo->pInputAssemblyState, &baseHasher, &apiHasher);
-    }
-
-    if ((pInfo->activeStages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
-        && (pCreateInfo->pTessellationState != nullptr))
-    {
-        GenerateHashFromTessellationStateCreateInfo(*pCreateInfo->pTessellationState, &baseHasher);
-    }
-
-    if ((pInfo->immedInfo.rasterizerDiscardEnable != VK_TRUE) && (pCreateInfo->pViewportState != nullptr))
-    {
-        GenerateHashFromViewportStateCreateInfo(*pCreateInfo->pViewportState, pInfo->staticStateMask, &apiHasher);
-    }
-
-    if (pCreateInfo->pRasterizationState != nullptr)
-    {
-        bool rasterizerDiscardEnableDynamic = ((pInfo->staticStateMask &
-            (1UL << static_cast<uint32_t>(DynamicStatesInternal::RasterizerDiscardEnableExt))) == 0);
-
-        GenerateHashFromRasterizationStateCreateInfo(*pCreateInfo->pRasterizationState,
-                                                     rasterizerDiscardEnableDynamic,
-                                                     &baseHasher,
-                                                     &apiHasher);
-    }
-
-    if ((pInfo->immedInfo.rasterizerDiscardEnable != VK_TRUE) && (pCreateInfo->pMultisampleState != nullptr))
-    {
-        GenerateHashFromMultisampleStateCreateInfo(*pCreateInfo->pMultisampleState, &baseHasher, &apiHasher);
-    }
-
-    if ((pInfo->immedInfo.rasterizerDiscardEnable != VK_TRUE) &&
-        (pCreateInfo->pDepthStencilState != nullptr)          &&
-        (GetDepthFormat(pRenderPass, pCreateInfo->subpass) != VK_FORMAT_UNDEFINED))
-    {
-        GenerateHashFromDepthStencilStateCreateInfo(*pCreateInfo->pDepthStencilState, &apiHasher);
-    }
-
-    if ((pInfo->immedInfo.rasterizerDiscardEnable != VK_TRUE) &&
-        (pCreateInfo->pColorBlendState != nullptr)            &&
-        (GetColorAttachmentCount(pRenderPass, pCreateInfo->subpass) != 0))
-
-    {
-        GenerateHashFromColorBlendStateCreateInfo(*pCreateInfo->pColorBlendState, &baseHasher, &apiHasher);
-    }
-
-    if (pCreateInfo->pDynamicState != nullptr)
-    {
-        GenerateHashFromDynamicStateCreateInfo(*pCreateInfo->pDynamicState, &apiHasher);
-    }
-
-    baseHasher.Update(PipelineLayout::ObjectFromHandle(pCreateInfo->layout)->GetApiHash());
-
-    if (pCreateInfo->renderPass != VK_NULL_HANDLE)
-    {
-        baseHasher.Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetHash());
-    }
-
-    baseHasher.Update(pCreateInfo->subpass);
 
     if ((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
     {
@@ -1871,42 +1979,6 @@ uint64_t GraphicsPipelineCommon::BuildApiHash(
     }
 
     apiHasher.Update(pCreateInfo->basePipelineIndex);
-
-    if (pCreateInfo->pNext != nullptr)
-    {
-        const void* pNext = pCreateInfo->pNext;
-
-        while (pNext != nullptr)
-        {
-            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
-
-            switch (static_cast<uint32>(pHeader->sType))
-            {
-            case VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT:
-            {
-                const auto* pExtInfo = static_cast<const VkPipelineDiscardRectangleStateCreateInfoEXT*>(pNext);
-                apiHasher.Update(pExtInfo->sType);
-                apiHasher.Update(pExtInfo->flags);
-                apiHasher.Update(pExtInfo->discardRectangleMode);
-                apiHasher.Update(pExtInfo->discardRectangleCount);
-
-                if (pExtInfo->pDiscardRectangles != nullptr)
-                {
-                    for (uint32 i = 0; i < pExtInfo->discardRectangleCount; i++)
-                    {
-                        apiHasher.Update(pExtInfo->pDiscardRectangles[i]);
-                    }
-                }
-
-                break;
-            }
-            default:
-                break;
-            }
-
-            pNext = pHeader->pNext;
-        }
-    }
 
     baseHasher.Finalize(reinterpret_cast<uint8_t* const>(&baseHash));
 

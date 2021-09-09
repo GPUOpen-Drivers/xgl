@@ -44,30 +44,20 @@ namespace vk
 Buffer::Buffer(
     Device*                      pDevice,
     const VkAllocationCallbacks* pAllocator,
-    VkBufferCreateFlags          flags,
-    VkBufferUsageFlags           usage,
+    const VkBufferCreateInfo*    pCreateInfo,
     Pal::IGpuMemory**            pGpuMemory,
-    VkSharingMode                sharingMode,
-    uint32_t                     queueFamilyIndexCount,
-    const uint32_t*              pQueueFamilyIndices,
-    VkDeviceSize                 size,
     BufferFlags                  internalFlags)
     :
-    m_size(size),
+    m_size(pCreateInfo->size),
     m_memOffset(0),
     m_barrierPolicy(
         pDevice,
-        usage,
-        sharingMode,
-        queueFamilyIndexCount,
-        pQueueFamilyIndices)
+        pCreateInfo->usage,
+        pCreateInfo->sharingMode,
+        pCreateInfo->queueFamilyIndexCount,
+        pCreateInfo->pQueueFamilyIndices)
 {
     m_internalFlags.u32All                = internalFlags.u32All;
-    m_internalFlags.usageUniformBuffer    = (usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)    ? 1 : 0;
-    m_internalFlags.createSparseBinding   = (flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)   ? 1 : 0;
-    m_internalFlags.createSparseResidency = (flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
-    m_internalFlags.createProtected       = (flags & VK_BUFFER_CREATE_PROTECTED_BIT)        ? 1 : 0;
-    // Note: The VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT is only used in vk_memory objects.
 
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
@@ -93,21 +83,16 @@ VkResult Buffer::Create(
     const VkAllocationCallbacks*    pAllocator,
     VkBuffer*                       pBuffer)
 {
-    VkDeviceSize     size;
     void*            pMemory   = nullptr;
     Pal::IGpuMemory* pGpuMemory[MaxPalDevices] = {};
 
     Pal::Result palResult = Pal::Result::Success;
 
-    // We ignore sharing information for buffers, it has no relevance for us currently.
-    VK_IGNORE(pCreateInfo->sharingMode);
-
     size_t apiSize = ObjectSize(pDevice);
 
-    size = pCreateInfo->size;
     bool isSparse = (pCreateInfo->flags & SparseEnablingFlags) != 0;
 
-    if (isSparse && (size != 0))
+    if (isSparse && (pCreateInfo->size != 0))
     {
         // We need virtual remapping support for all sparse resources
         VK_ASSERT(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->IsVirtualRemappingSupported());
@@ -123,7 +108,7 @@ VkResult Buffer::Create(
 
         info.alignment          = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().
                                                                 gpuMemoryProperties.virtualMemAllocGranularity;
-        info.size               = Util::Pow2Align(size, info.alignment);
+        info.size               = Util::Pow2Align(pCreateInfo->size, info.alignment);
         info.flags.u32All       = 0;
         info.flags.virtualAlloc = 1;
         info.flags.globalGpuVa  = pDevice->IsGlobalGpuVaEnabled();
@@ -176,65 +161,21 @@ VkResult Buffer::Create(
         }
     }
 
-    BufferFlags bufferFlags;
-
-    bufferFlags.u32All = 0;
-
     if (palResult == Pal::Result::Success)
     {
-        const VkExternalMemoryBufferCreateInfo* pExternalInfo =
-            static_cast<const VkExternalMemoryBufferCreateInfo*>(pCreateInfo->pNext);
-        if ((pExternalInfo != nullptr) &&
-            (pExternalInfo->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO))
-        {
-            VkExternalMemoryProperties externalMemoryProperties = {};
-
-            pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetExternalMemoryProperties(
-                isSparse,
-                false,
-                static_cast<VkExternalMemoryHandleTypeFlagBits>(pExternalInfo->handleTypes),
-                &externalMemoryProperties);
-
-            if (externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT)
-            {
-                bufferFlags.dedicatedRequired = true;
-            }
-
-            if (externalMemoryProperties.externalMemoryFeatures & (VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
-                                                                   VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT))
-            {
-                bufferFlags.externallyShareable = true;
-
-                if (pExternalInfo->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT)
-                {
-                    bufferFlags.externalPinnedHost = true;
-                }
-            }
-        }
-    }
-
-    if (palResult == Pal::Result::Success)
-    {
-        bufferFlags.internalMemBound = isSparse;
+        BufferFlags bufferFlags;
+        CalculateBufferFlags(pDevice, pCreateInfo, &bufferFlags);
 
         // Construct API buffer object.
         VK_PLACEMENT_NEW (pMemory) Buffer (pDevice,
                                            pAllocator,
-                                           pCreateInfo->flags,
-                                           pCreateInfo->usage,
+                                           pCreateInfo,
                                            pGpuMemory,
-                                           pCreateInfo->sharingMode,
-                                           pCreateInfo->queueFamilyIndexCount,
-                                           pCreateInfo->pQueueFamilyIndices,
-                                           size,
                                            bufferFlags);
 
         *pBuffer = Buffer::HandleFromVoidPointer(pMemory);
-    }
 
-    if (palResult == Pal::Result::Success)
-    {
-        LogBufferCreate(size, pCreateInfo, *pBuffer, pDevice);
+        LogBufferCreate(pCreateInfo, *pBuffer, pDevice);
     }
 
     return PalToVkResult(palResult);
@@ -243,7 +184,6 @@ VkResult Buffer::Create(
 // =====================================================================================================================
 // Logs the creation of a new buffer to PAL
 void Buffer::LogBufferCreate(
-    VkDeviceSize              size,
     const VkBufferCreateInfo* pCreateInfo,
     VkBuffer                  buffer,
     const Device*             pDevice)
@@ -295,7 +235,7 @@ void Buffer::LogBufferCreate(
         static_cast<uint32_t>(PalUsageFlag::ShaderDeviceAddress), "Usage Flag Mismatch");
 
     Pal::ResourceDescriptionBuffer desc = {};
-    desc.size        = static_cast<Util::uint64>(size);
+    desc.size        = pCreateInfo->size;
     desc.createFlags = pCreateInfo->flags;
     desc.usageFlags  = pCreateInfo->usage;
 
@@ -430,21 +370,46 @@ VkResult Buffer::BindMemory(
 }
 
 // =====================================================================================================================
-// Get the buffer's memory requirements
-VkResult Buffer::GetMemoryRequirements(
+// Get the buffer's memory requirements from VkBuffer itself
+void Buffer::GetMemoryRequirements(
     const Device*         pDevice,
+    VkMemoryRequirements* pMemoryRequirements)
+{
+    GetBufferMemoryRequirements(pDevice, &m_internalFlags, m_size, pMemoryRequirements);
+}
+
+// =====================================================================================================================
+// Get the buffer's memory requirements from VkBufferCreateInfo
+void Buffer::CalculateMemoryRequirements(
+    const Device*             pDevice,
+    const VkBufferCreateInfo* pCreateInfo,
+    VkMemoryRequirements*     pMemoryRequirements)
+{
+    BufferFlags bufferFlags;
+
+    CalculateBufferFlags(pDevice, pCreateInfo, &bufferFlags);
+
+    GetBufferMemoryRequirements(pDevice, &bufferFlags, pCreateInfo->size, pMemoryRequirements);
+}
+
+// =====================================================================================================================
+// Get the buffer's memory requirements
+void Buffer::GetBufferMemoryRequirements(
+    const Device*         pDevice,
+    const BufferFlags*    pBufferFlags,
+    const VkDeviceSize    size,
     VkMemoryRequirements* pMemoryRequirements)
 {
     pMemoryRequirements->alignment = 4;
 
     // In case of sparse buffers the alignment and granularity is the page size
-    if (m_internalFlags.createSparseBinding)
+    if (pBufferFlags->createSparseBinding)
     {
         pMemoryRequirements->alignment = Util::Max(pMemoryRequirements->alignment,
                                                    pDevice->GetProperties().virtualMemPageSize);
     }
 
-    if (m_internalFlags.usageUniformBuffer)
+    if (pBufferFlags->usageUniformBuffer)
     {
         constexpr VkDeviceSize UniformBufferAlignment = static_cast<VkDeviceSize>(sizeof(float) * 4);
 
@@ -452,13 +417,13 @@ VkResult Buffer::GetMemoryRequirements(
                                                    UniformBufferAlignment);
     }
 
-    pMemoryRequirements->size = Util::RoundUpToMultiple(m_size, pMemoryRequirements->alignment);
+    pMemoryRequirements->size = Util::RoundUpToMultiple(size, pMemoryRequirements->alignment);
 
     // MemoryRequirements cannot return smaller size than buffer size.
     // MAX_UINT64 can be used as buffer size.
-    if (m_size > pMemoryRequirements->size)
+    if (size > pMemoryRequirements->size)
     {
-        pMemoryRequirements->size = m_size;
+        pMemoryRequirements->size = size;
     }
 
     // Allow all available memory types for buffers
@@ -478,19 +443,19 @@ VkResult Buffer::GetMemoryRequirements(
     }
 
     // Limit heaps to those compatible with pinned system memory
-    if (m_internalFlags.externalPinnedHost)
+    if (pBufferFlags->externalPinnedHost)
     {
         pMemoryRequirements->memoryTypeBits &= pDevice->GetPinnedSystemMemoryTypes();
 
         VK_ASSERT(pMemoryRequirements->memoryTypeBits != 0);
     }
 
-    if (m_internalFlags.externallyShareable)
+    if (pBufferFlags->externallyShareable)
     {
         pMemoryRequirements->memoryTypeBits &= pDevice->GetMemoryTypeMaskForExternalSharing();
     }
 
-    if (m_internalFlags.createProtected)
+    if (pBufferFlags->createProtected)
     {
         // If the buffer is protected only keep the protected type
         pMemoryRequirements->memoryTypeBits &= pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_PROTECTED_BIT);
@@ -507,8 +472,54 @@ VkResult Buffer::GetMemoryRequirements(
         // remove the device coherent memory type
         pMemoryRequirements->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD);
     }
+}
 
-    return VK_SUCCESS;
+void Buffer::CalculateBufferFlags(
+    const Device*             pDevice,
+    const VkBufferCreateInfo* pCreateInfo,
+    BufferFlags*              pBufferFlags)
+{
+    pBufferFlags->u32All = 0;
+
+    pBufferFlags->usageUniformBuffer    = (pCreateInfo->usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)    ? 1 : 0;
+    pBufferFlags->createSparseBinding   = (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)   ? 1 : 0;
+    pBufferFlags->createSparseResidency = (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
+    pBufferFlags->createProtected       = (pCreateInfo->flags & VK_BUFFER_CREATE_PROTECTED_BIT)        ? 1 : 0;
+    // Note: The VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT is only used in vk_memory objects.
+
+    bool isSparse = (pCreateInfo->flags & SparseEnablingFlags) != 0;
+
+    const VkExternalMemoryBufferCreateInfo* pExternalInfo =
+        static_cast<const VkExternalMemoryBufferCreateInfo*>(pCreateInfo->pNext);
+    if ((pExternalInfo != nullptr) &&
+        (pExternalInfo->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO))
+    {
+        VkExternalMemoryProperties externalMemoryProperties = {};
+
+        pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetExternalMemoryProperties(
+            isSparse,
+            false,
+            static_cast<VkExternalMemoryHandleTypeFlagBits>(pExternalInfo->handleTypes),
+            &externalMemoryProperties);
+
+        if (externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT)
+        {
+            pBufferFlags->dedicatedRequired = true;
+        }
+
+        if (externalMemoryProperties.externalMemoryFeatures & (VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
+                                                               VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT))
+        {
+            pBufferFlags->externallyShareable = true;
+
+            if (pExternalInfo->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT)
+            {
+                pBufferFlags->externalPinnedHost = true;
+            }
+        }
+    }
+
+     pBufferFlags->internalMemBound = isSparse;
 }
 
 namespace entry

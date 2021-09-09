@@ -204,7 +204,7 @@ protected:
         uint32_t u32All;
     };
 
-    VK_INLINE VkResult BindSparseEntry(
+    VkResult BindSparseEntry(
         const VkBindSparseInfo& bindInfo,
         uint32_t                resourceDeviceIndex,
         uint32_t                memoryDeviceIndex,
