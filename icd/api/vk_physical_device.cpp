@@ -957,9 +957,6 @@ VkResult PhysicalDevice::Initialize()
 
                     m_memoryTypeMask |= 1 << m_memoryProperties.memoryTypeCount;
 
-                    m_memoryVkIndexAddRemoteBackupHeap[m_memoryProperties.memoryTypeCount] =
-                        m_memoryVkIndexAddRemoteBackupHeap[memoryTypeIndex];
-
                     ++m_memoryProperties.memoryTypeCount;
                 }
             }
