@@ -51,11 +51,33 @@ namespace vk
 {
 
 // =====================================================================================================================
+// Achieve pipeline layout from VkGraphicsPipelineCreateInfo.
+// If the pipeline layout is temporary, callee must destroy it manually.
+VkResult GraphicsPipeline::AchievePipelineLayout(
+    const Device*                       pDevice,
+    const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks*        pAllocator,
+    PipelineLayout**                    ppPipelineLayout,
+    bool*                               pIsTemporary)
+{
+    VkResult result = VK_SUCCESS;
+
+    *pIsTemporary = false;
+
+    {
+        *ppPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 // Create graphics pipeline binaries
 VkResult GraphicsPipeline::CreatePipelineBinaries(
     Device*                                        pDevice,
     const VkGraphicsPipelineCreateInfo*            pCreateInfo,
     const GraphicsPipelineShaderStageInfo*         pShaderInfo,
+    const PipelineLayout*                          pPipelineLayout,
     GraphicsPipelineBinaryCreateInfo*              pBinaryCreateInfo,
     PipelineCache*                                 pPipelineCache,
     const VkPipelineCreationFeedbackCreateInfoEXT* pCreationFeedbackInfo,
@@ -86,7 +108,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
             GraphicsPipelineBinaryCreateInfo binaryCreateInfoMGPU = {};
             VbInfo vbInfoMGPU = {};
             pDefaultCompiler->ConvertGraphicsPipelineInfo(
-                pDevice, pCreateInfo, pShaderInfo, &binaryCreateInfoMGPU, &vbInfoMGPU);
+                pDevice, pCreateInfo, pShaderInfo, pPipelineLayout, &binaryCreateInfoMGPU, &vbInfoMGPU);
 
             result = pDevice->GetCompiler(i)->CreateGraphicsPipelineBinary(
                 pDevice,
@@ -120,6 +142,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
     Device*                             pDevice,
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
     const VkAllocationCallbacks*        pAllocator,
+    const PipelineLayout*               pPipelineLayout,
     const VbInfo*                       pVbInfo,
     const size_t*                       pPipelineBinarySizes,
     const void**                        pPipelineBinaries,
@@ -301,7 +324,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
         VK_PLACEMENT_NEW(pSystemMem) GraphicsPipeline(
             pDevice,
             pPalPipeline,
-            pObjectCreateInfo->pLayout,
+            pPipelineLayout,
             pObjectCreateInfo->immedInfo,
             pObjectCreateInfo->staticStateMask,
             pObjectCreateInfo->flags.bindDepthStencilObject,
@@ -371,16 +394,24 @@ VkResult GraphicsPipeline::Create(
     pDefaultCompiler->GetPipelineCreationFeedback(static_cast<const VkStructHeader*>(pCreateInfo->pNext),
                                                   &pPipelineCreationFeedbackCreateInfo);
 
-    // 1. Build pipeline binary create info
+    // 1. Get pipeline layout
+    bool            isTempLayout      = false;
+    PipelineLayout* pPipelineLayout   = nullptr;
+    VkResult result = AchievePipelineLayout(pDevice, pCreateInfo, pAllocator, &pPipelineLayout, &isTempLayout);
+
+    // 2. Build pipeline binary create info
     GraphicsPipelineBinaryCreateInfo binaryCreateInfo = {};
     GraphicsPipelineShaderStageInfo  shaderStageInfo  = {};
     VbInfo                           vbInfo           = {};
     ShaderModuleHandle               tempModules[ShaderStage::ShaderStageGfxCount] = {};
 
-    VkResult result = BuildPipelineBinaryCreateInfo(
-        pDevice, pCreateInfo, &binaryCreateInfo, &shaderStageInfo, &vbInfo, tempModules);
+    if (result == VK_SUCCESS)
+    {
+        result = BuildPipelineBinaryCreateInfo(
+            pDevice, pCreateInfo, pPipelineLayout, &binaryCreateInfo, &shaderStageInfo, &vbInfo, tempModules);
+    }
 
-    // 2. Create pipeine binaries
+    // 3. Create pipeine binaries
     size_t                pipelineBinarySizes[MaxPalDevices] = {};
     const void*           pPipelineBinaries[MaxPalDevices]   = {};
     Util::MetroHash::Hash cacheId[MaxPalDevices]             = {};
@@ -390,6 +421,7 @@ VkResult GraphicsPipeline::Create(
         result = CreatePipelineBinaries(pDevice,
                                         pCreateInfo,
                                         &shaderStageInfo,
+                                        pPipelineLayout,
                                         &binaryCreateInfo,
                                         pPipelineCache,
                                         pPipelineCreationFeedbackCreateInfo,
@@ -404,19 +436,20 @@ VkResult GraphicsPipeline::Create(
     {
         pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&binaryCreateInfo.pipelineInfo);
 
-        // 3. Build pipeline object create info
+        // 4. Build pipeline object create info
         GraphicsPipelineObjectCreateInfo objectCreateInfo = {};
         GraphicsPipelineBinaryInfo       binaryInfo       = {};
         binaryInfo.pOptimizerKey = &binaryCreateInfo.pipelineProfileKey;
 
         BuildPipelineObjectCreateInfo(
-            pDevice, pCreateInfo, &vbInfo, &binaryInfo, &objectCreateInfo);
+            pDevice, pCreateInfo, &vbInfo, &binaryInfo, pPipelineLayout, &objectCreateInfo);
 
-        // 4. Create pipeline objects
+        // 5. Create pipeline objects
         result = CreatePipelineObjects(
             pDevice,
             pCreateInfo,
             pAllocator,
+            pPipelineLayout,
             &vbInfo,
             pipelineBinarySizes,
             pPipelineBinaries,
@@ -428,6 +461,12 @@ VkResult GraphicsPipeline::Create(
 
     // Free the temporary newly-built shader modules
     FreeTempModules(pDevice, ShaderStage::ShaderStageGfxCount, tempModules);
+
+    // Free the temporary merged pipeline layout used only for current pipeline
+    if (isTempLayout)
+    {
+        pPipelineLayout->Destroy(pDevice, pAllocator);
+    }
 
     // Free the created pipeline binaries now that the PAL Pipelines/PipelineBinaryInfo have read them.
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)

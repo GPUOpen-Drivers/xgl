@@ -51,7 +51,7 @@ class DeferredHostOperation;
 
 enum FreeCompilerBinary : uint32_t
 {
-    FreeWithCompiler,
+    FreeWithCompiler          = 0,
     FreeWithInstanceAllocator,
     DoNotFree
 };
@@ -162,6 +162,7 @@ public:
         Vkgc::PipelineShaderInfo**        ppShadersInfo,
         void*                             pPipelineDumpHandle,
         uint64_t                          pipelineHash,
+        Util::MetroHash::Hash*            pCacheId,
         int64_t*                          pCompileTime) = 0;
 
     virtual VkResult CreateComputePipelineBinary(
@@ -173,6 +174,7 @@ public:
         const void**                ppPipelineBinary,
         void*                       pPipelineDumpHandle,
         uint64_t                    pipelineHash,
+        Util::MetroHash::Hash*      pCacheId,
         int64_t*                    pCompileTime) = 0;
 
     virtual void FreeGraphicsPipelineBinary(

@@ -156,21 +156,21 @@ public:
         return m_pPalPipeline[idx];
     }
 
-    VK_INLINE uint64_t PalPipelineHash() const { return m_palPipelineHash; }
+    uint64_t PalPipelineHash() const { return m_palPipelineHash; }
 
-    VK_INLINE uint64_t GetApiHash() const { return m_apiHash; }
+    uint64_t GetApiHash() const { return m_apiHash; }
 
-    VK_INLINE const PipelineBinaryInfo* GetBinary() const { return m_pBinary; }
+    const PipelineBinaryInfo* GetBinary() const { return m_pBinary; }
 
-    VK_INLINE VkPipelineBindPoint GetType() const { return m_type; }
+    VkPipelineBindPoint GetType() const { return m_type; }
 
     // This function returns true if any of the bits in the given state mask (corresponding to shifted values of
     // VK_DYNAMIC_STATE_*) should be programmed by the pipeline when it is bound (instead of by the application via
     // vkCmdSet*).
-    VK_INLINE bool ContainsStaticState(DynamicStatesInternal dynamicState) const
+    bool ContainsStaticState(DynamicStatesInternal dynamicState) const
         { return ((m_staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) != 0); }
 
-    VK_INLINE bool ContainsDynamicState(DynamicStatesInternal dynamicState) const
+    bool ContainsDynamicState(DynamicStatesInternal dynamicState) const
         { return ((m_staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) == 0); }
 
     VkResult GetShaderDisassembly(
@@ -211,6 +211,7 @@ protected:
         const Device*                          pDevice,
         const uint32_t                         stageCount,
         const VkPipelineShaderStageCreateInfo* pStages,
+        const bool                             duplicateExistingModules,
         uint32_t                               (*pfnGetOutputIdx)(const uint32_t inputIdx,
                                                                   const uint32_t stageIdx),
         ShaderStageInfo*                       pShaderStageInfo,

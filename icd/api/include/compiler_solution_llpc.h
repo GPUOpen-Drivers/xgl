@@ -87,6 +87,7 @@ public:
         Vkgc::PipelineShaderInfo**        ppShadersInfo,
         void*                             pPipelineDumpHandle,
         uint64_t                          pipelineHash,
+        Util::MetroHash::Hash*            pCacheId,
         int64_t*                          pCompileTime) override;
 
     virtual VkResult CreateComputePipelineBinary(
@@ -98,6 +99,7 @@ public:
         const void**                     ppPipelineBinary,
         void*                            pPipelineDumpHandle,
         uint64_t                         pipelineHash,
+        Util::MetroHash::Hash*           pCacheId,
         int64_t*                         pCompileTime) override;
 
     virtual void FreeGraphicsPipelineBinary(

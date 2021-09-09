@@ -243,7 +243,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
         else
         {
             for (uint32_t i = 0; i < physicalDeviceCount; i++)
+            {
                 nextLinkFuncs.pfnGetPhysicalDeviceProperties(pLayerPhysicalDevices[i], &pProperties[i]);
+            }
         }
 
         if (result == VK_SUCCESS)
@@ -253,31 +255,69 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
 
             // Return specified physical devices according to environment variable AMD_VULKAN_ICD
             const char* pEnv = getenv("AMD_VULKAN_ICD");
-            bool preferRADV = pEnv && !strcmp(pEnv, "RADV");
+            bool preferRadv = pEnv && (strcmp(pEnv, "RADV") == 0);
+            bool amdvlkExists = false;
+            uint32_t nonAmdvlkCount = 0;
 
             for (uint32_t i = 0; i < physicalDeviceCount; i++)
             {
-                bool isAMD      = pProperties[i].vendorID == VENDOR_ID_AMD || pProperties[i].vendorID == VENDOR_ID_ATI;
-                bool isRADV     = isAMD && strstr(pProperties[i].deviceName, "RADV")     != nullptr;
-                bool isLLVMpipe =          strstr(pProperties[i].deviceName, "llvmpipe") != nullptr;
+                bool isAmd      = (pProperties[i].vendorID == VENDOR_ID_AMD) || (pProperties[i].vendorID == VENDOR_ID_ATI);
+                bool isRadv     = isAmd && strstr(pProperties[i].deviceName, "RADV")     != nullptr;
+                bool isLlvmpipe =          strstr(pProperties[i].deviceName, "llvmpipe") != nullptr;
 
-                if ((!isAMD || isRADV == preferRADV) && (!isLLVMpipe || preferRADV))
+                if ((!isAmd || (isRadv == preferRadv)) && (!isLlvmpipe || preferRadv))
                 {
                     if (pPhysicalDevices != nullptr)
                     {
                         if (returnedPhysicalDeviceCount < *pPhysicalDeviceCount)
+                        {
                             pPhysicalDevices[returnedPhysicalDeviceCount++] = pLayerPhysicalDevices[i];
+                        }
                     }
                     else
+                    {
                         returnedPhysicalDeviceCount++;
+                    }
+
+                    availablePhysicalDeviceCount++;
+                }
+
+                if (isAmd && !isRadv)
+                {
+                    amdvlkExists = true;
+                }
+
+                if (isRadv || isLlvmpipe)
+                {
+                    pLayerPhysicalDevices[nonAmdvlkCount++] = pLayerPhysicalDevices[i];
+                }
+            }
+
+            if (!amdvlkExists && !preferRadv)
+            {
+                for (uint32_t i = 0; i < nonAmdvlkCount; i++)
+                {
+                    if (pPhysicalDevices != nullptr)
+                    {
+                        if (returnedPhysicalDeviceCount < *pPhysicalDeviceCount)
+                        {
+                            pPhysicalDevices[returnedPhysicalDeviceCount++] = pLayerPhysicalDevices[i];
+                        }
+                    }
+                    else
+                    {
+                        returnedPhysicalDeviceCount++;
+                    }
 
                     availablePhysicalDeviceCount++;
                 }
             }
             *pPhysicalDeviceCount = returnedPhysicalDeviceCount;
 
-            if (pPhysicalDevices != nullptr && returnedPhysicalDeviceCount < availablePhysicalDeviceCount)
+            if ((pPhysicalDevices != nullptr) && (returnedPhysicalDeviceCount < availablePhysicalDeviceCount))
+            {
                 result = VK_INCOMPLETE;
+            }
         }
 
         if (pProperties != nullptr)

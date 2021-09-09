@@ -62,7 +62,6 @@
 #define VK_ALERT PAL_ALERT
 #define VK_ALERT_ALWAYS_MSG PAL_ALERT_ALWAYS_MSG
 #define VK_SOFT_ASSERT(expr) VK_ALERT(!(expr))
-#define VK_INLINE PAL_INLINE
 #define VK_NEW PAL_NEW
 #define VK_PLACEMENT_NEW PAL_PLACEMENT_NEW
 #define VK_NOT_IMPLEMENTED do { PAL_NOT_IMPLEMENTED(); } while (0)
@@ -132,14 +131,14 @@ typedef VkAccessFlags2KHR        AccessFlags;
 namespace utils
 {
 
-VK_INLINE uint64_t TicksToNano(uint64_t ticks)
+inline uint64_t TicksToNano(uint64_t ticks)
 {
     return (ticks * NANOSECONDS_IN_A_SECOND) / static_cast<Pal::uint64>(Util::GetPerfFrequency());
 }
 
 // =====================================================================================================================
 // Get driver build time hash
-VK_INLINE uint32_t GetBuildTimeHash()
+inline uint32_t GetBuildTimeHash()
 {
     return Util::HashLiteralString(__DATE__ __TIME__);
 }
@@ -147,7 +146,7 @@ VK_INLINE uint32_t GetBuildTimeHash()
 // =====================================================================================================================
 // This function can be used to get the right externsion structure of specific type in case there are more than one
 // extension is supported
-VK_INLINE const VkStructHeader* GetExtensionStructure(const VkStructHeader* pHeader, VkStructureType sType)
+inline const VkStructHeader* GetExtensionStructure(const VkStructHeader* pHeader, VkStructureType sType)
 {
     const VkStructHeader* pIter = pHeader;
     while(pIter != nullptr)
@@ -166,7 +165,7 @@ VK_INLINE const VkStructHeader* GetExtensionStructure(const VkStructHeader* pHea
 
 // =====================================================================================================================
 template<typename ExtStruct, typename SrcStruct>
-VK_INLINE const ExtStruct* GetExtensionStructure(
+const ExtStruct* GetExtensionStructure(
     const SrcStruct* pHeader,
     VkStructureType  sType)
 {
@@ -176,7 +175,7 @@ VK_INLINE const ExtStruct* GetExtensionStructure(
 
 // =====================================================================================================================
 // Returns the number of indices of a particular index type that fit into a buffer of the given byte-size.
-VK_INLINE uint32_t BufferSizeToIndexCount(Pal::IndexType indexType, VkDeviceSize bufferSize)
+inline uint32_t BufferSizeToIndexCount(Pal::IndexType indexType, VkDeviceSize bufferSize)
 {
     static_assert((static_cast<int32_t>(Pal::IndexType::Idx8)  == 0) &&
                   (static_cast<int32_t>(Pal::IndexType::Idx16) == 1) &&
@@ -187,7 +186,7 @@ VK_INLINE uint32_t BufferSizeToIndexCount(Pal::IndexType indexType, VkDeviceSize
 }
 
 // =====================================================================================================================
-VK_INLINE void GetExecutableNameAndPath(wchar_t* pExecutableName, wchar_t* pExecutablePath)
+inline void GetExecutableNameAndPath(wchar_t* pExecutableName, wchar_t* pExecutablePath)
 {
     // Get the wchar_t executable name and path
     wchar_t  executableNameAndPathBuffer[PATH_MAX];
@@ -210,7 +209,7 @@ VK_INLINE void GetExecutableNameAndPath(wchar_t* pExecutableName, wchar_t* pExec
 }
 
 // =====================================================================================================================
-VK_INLINE void GetExecutableNameAndPath(char* pExecutableName, char* pExecutablePath)
+inline void GetExecutableNameAndPath(char* pExecutableName, char* pExecutablePath)
 {
     // Get the executable name and path
     char  executableNameAndPathBuffer[PATH_MAX];
@@ -233,7 +232,7 @@ VK_INLINE void GetExecutableNameAndPath(char* pExecutableName, char* pExecutable
 }
 
 // =====================================================================================================================
-VK_INLINE int StrCmpCaseInsensitive(
+inline int StrCmpCaseInsensitive(
     const char* a,
     const char* b)
 {
@@ -261,7 +260,7 @@ VK_INLINE int StrCmpCaseInsensitive(
 
 // =====================================================================================================================
 // Return true if Big Software Release 6.0 is supported.
-VK_INLINE bool BigSW60Supported(const Pal::BigSoftwareReleaseInfo& bigSwInfo)
+inline bool BigSW60Supported(const Pal::BigSoftwareReleaseInfo& bigSwInfo)
 {
     return ((bigSwInfo.majorVersion > 2019) ||
             ((bigSwInfo.majorVersion == 2019) && (bigSwInfo.minorVersion >= 1)));
@@ -271,7 +270,7 @@ VK_INLINE bool BigSW60Supported(const Pal::BigSoftwareReleaseInfo& bigSwInfo)
 class IterateMask
 {
 public:
-    VK_INLINE IterateMask(uint32_t mask) :
+    IterateMask(uint32_t mask) :
         m_index(0),
         m_mask(mask)
     {
@@ -283,7 +282,7 @@ public:
 #endif
     }
 
-    VK_INLINE bool IterateNext()
+    bool IterateNext()
     {
 #if (VKI_BUILD_MAX_NUM_GPUS > 1)
         if (Util::BitMaskScanForward(&m_index, m_mask) == true)
@@ -295,7 +294,7 @@ public:
         return false;
     }
 
-    VK_INLINE uint32_t Index() const
+    uint32_t Index() const
     {
         return m_index;
     }
@@ -322,7 +321,7 @@ class ArrayView
 public:
     // Create a view into an array of ElementT with stride determined by OuterT.
     template<class OuterT>
-    VK_INLINE ArrayView(OuterT* pData, ElementT* pFirstElement) :
+    ArrayView(OuterT* pData, ElementT* pFirstElement) :
         m_pData(reinterpret_cast<CharT*>(pData)),
         m_stride(sizeof(OuterT))
     {
@@ -337,18 +336,18 @@ public:
     }
 
     // Use this form to achieve tight packing of elements, if needed.
-    VK_INLINE explicit ArrayView(ElementT* pData) :
+    explicit ArrayView(ElementT* pData) :
         m_pData(reinterpret_cast<CharT*>(pData)),
         m_stride(sizeof(ElementT))
     {
     }
 
-    VK_INLINE bool IsNull() const
+    bool IsNull() const
     {
         return m_pData == nullptr;
     }
 
-    VK_INLINE ElementT& operator[](int32_t ndx) const
+    ElementT& operator[](int32_t ndx) const
     {
         return *reinterpret_cast<ElementT*>(m_pData + ndx * m_stride);
     }

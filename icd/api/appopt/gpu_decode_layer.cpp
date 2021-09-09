@@ -52,30 +52,35 @@ namespace GpuTexDecoder
     {
         VkResult result = VK_SUCCESS;
         vk::Device* pDevice = reinterpret_cast<vk::Device*>(initInfo.pClientUserData);
+
+        VK_ASSERT(constInfo.numConstants <= 4);
         VkSpecializationMapEntry mapEntries[4] =
         {
-            // local_thread_x
+            // local_thread_x - ASTC
+            // ALPHA_BITS - ETC2
             {
                 0,
                 0,
                 sizeof(uint32_t)
             },
 
-            // local_thread_y
+            // local_thread_y - ASTC
+            // WIDTH = ETC2
             {
                 1,
                 1 * sizeof(uint32_t),
                 sizeof(uint32_t)
             },
 
-            // isSrgb Format
+            // isSrgb Format - ASTC
+            // HEIGHT - ETC2
             {
                 2,
                 2 * sizeof(uint32_t),
                 sizeof(uint32_t)
             },
 
-            // isBufferTexture
+            // isBufferTexture - ASTC
             {
                 3,
                 3 * sizeof(uint32_t),
@@ -93,9 +98,9 @@ namespace GpuTexDecoder
         };
 
         Vkgc::ResourceMappingRootNode rootNode = {};
-        Vkgc::ResourceMappingNode nodes[GpuTexDecoder::AstcInternalPipelineNodes] = {};
         if (buildInfo.shaderType == GpuTexDecoder::InternalTexConvertCsType::ConvertASTCToRGBA8)
         {
+            Vkgc::ResourceMappingNode nodes[GpuTexDecoder::AstcInternalPipelineNodes] = {};
             GpuTexDecoder::GpuDecodeMappingNode* pDecodeNode = buildInfo.pUserDataNodes;
             for (size_t index = 0; index < GpuTexDecoder::AstcInternalPipelineNodes; index++)
             {
@@ -125,6 +130,42 @@ namespace GpuTexDecoder
             rootNode.node.offsetInDwords = 0;
             rootNode.node.sizeInDwords = 1;
             rootNode.node.tablePtr.nodeCount = GpuTexDecoder::AstcInternalPipelineNodes;
+            rootNode.node.tablePtr.pNext = &nodes[0];
+            rootNode.visibility = Vkgc::ShaderStageComputeBit;
+        }
+
+        if (buildInfo.shaderType == GpuTexDecoder::InternalTexConvertCsType::ConvertETC2ToRGBA8)
+        {
+            Vkgc::ResourceMappingNode nodes[GpuTexDecoder::Etc2InternalPipelineNodes] = {};
+            GpuTexDecoder::GpuDecodeMappingNode* pDecodeNode = buildInfo.pUserDataNodes;
+            for (size_t index = 0; index < GpuTexDecoder::Etc2InternalPipelineNodes; index++)
+            {
+                if (pDecodeNode[index].nodeType == GpuTexDecoder::NodeType::Image)
+                {
+                    nodes[index].type = Vkgc::ResourceMappingNodeType::DescriptorResource;
+                    nodes[index].sizeInDwords = pDecodeNode[index].sizeInDwords;
+                    nodes[index].offsetInDwords = pDecodeNode[index].offsetInDwords;
+                    nodes[index].srdRange.binding = pDecodeNode[index].binding;
+                    nodes[index].srdRange.set = pDecodeNode[index].set;
+                }
+                else
+                {
+                    Vkgc::ResourceMappingNodeType vkgcType =
+                        (pDecodeNode[index].nodeType == GpuTexDecoder::NodeType::Buffer) ?
+                        Vkgc::ResourceMappingNodeType::DescriptorBuffer :
+                        Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
+                    nodes[index].type = vkgcType;
+                    nodes[index].sizeInDwords = pDecodeNode[index].sizeInDwords;
+                    nodes[index].offsetInDwords = pDecodeNode[index].offsetInDwords;
+                    nodes[index].srdRange.binding = pDecodeNode[index].binding;
+                    nodes[index].srdRange.set = pDecodeNode[index].set;
+                }
+            }
+
+            rootNode.node.type = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
+            rootNode.node.offsetInDwords = 0;
+            rootNode.node.sizeInDwords = 1;
+            rootNode.node.tablePtr.nodeCount = GpuTexDecoder::Etc2InternalPipelineNodes;
             rootNode.node.tablePtr.pNext = &nodes[0];
             rootNode.visibility = Vkgc::ShaderStageComputeBit;
         }
@@ -217,12 +258,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(
     const Image* const pSrcImage        = Image::ObjectFromHandle(srcImage);
     const Image* const pDstImage        = Image::ObjectFromHandle(dstImage);
 
-    const Pal::SwizzledFormat srcFormat = VkToPalFormat(pSrcImage->GetFormat(), pDevice->GetRuntimeSettings());
-    const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat(), pDevice->GetRuntimeSettings());
-
     if (Formats::IsASTCFormat(pDstImage->GetFormat()))
     {
-        VK_ASSERT(Formats::IsASTCFormat(pDstImage->GetFormat()));
+        const Pal::SwizzledFormat srcFormat = VkToPalFormat(pSrcImage->GetFormat(), pDevice->GetRuntimeSettings());
+        const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat(), pDevice->GetRuntimeSettings());
+
         uint32_t maxObj = pCmdBuffer->EstimateMaxObjectsOnVirtualStack(sizeof(Pal::ImageCopyRegion));
 
         const auto maxRegions = Util::Max(maxObj, MaxPalAspectsPerMask);
@@ -274,6 +314,81 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(
 
         virtStackFrame.FreeArray(pPalRegions);
     }
+    else if (Formats::IsEtc2Format(pDstImage->GetFormat()))
+    {
+        VkFormat payloadFormat = pSrcImage->GetFormat();
+
+        const Pal::SwizzledFormat srcFormat = VkToPalFormat(payloadFormat, pDevice->GetRuntimeSettings());
+        const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat(), pDevice->GetRuntimeSettings());
+
+        uint32_t maxObj = pCmdBuffer->EstimateMaxObjectsOnVirtualStack(sizeof(Pal::ImageCopyRegion));
+
+        const auto maxRegions = Util::Max(maxObj, MaxPalAspectsPerMask);
+        auto       regionBatch = Util::Min(regionCount * MaxPalAspectsPerMask, maxRegions);
+
+        VirtualStackFrame virtStackFrame(pCmdBuffer->GetStackAllocator());
+        Pal::ImageCopyRegion* pPalRegions =
+            virtStackFrame.AllocArray<Pal::ImageCopyRegion>(regionBatch);
+
+        VkFormat format = pDstImage->GetFormat();
+
+        uint32_t alphaBits = 0;
+
+        switch (format)
+	    {
+	        case VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK:
+	        case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK:
+                alphaBits = 0;
+                break;
+	        case VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK:
+	        case VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK:
+                alphaBits = 1;
+                break;
+            case VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK:
+            case VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK:
+                alphaBits = 8;
+                break;
+	        default:
+		    break;
+	    }
+
+        const Pal::ImageCreateInfo& imageInfo = pDstImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
+
+        uint32_t const_data[3] =
+        {
+            alphaBits,
+            imageInfo.extent.width,
+            imageInfo.extent.height
+        };
+
+        GpuTexDecoder::CompileTimeConstants constInfo = {};
+        constInfo.numConstants = 3;
+        constInfo.pConstants = const_data;
+
+        for (uint32_t regionIdx = 0; regionIdx < regionCount;)
+        {
+            uint32_t palRegionCount = 0;
+
+            while ((regionIdx < regionCount) &&
+                (palRegionCount <= (regionBatch - MaxPalAspectsPerMask)))
+            {
+                VkToPalImageCopyRegion(pRegions[regionIdx], srcFormat.format, dstFormat.format,
+                    pPalRegions, &palRegionCount);
+
+                ++regionIdx;
+            }
+
+            pDevice->GetGpuDecoderLayer()->GetTexDecoder()->GpuDecodeImage(
+                GpuTexDecoder::InternalTexConvertCsType::ConvertETC2ToRGBA8,
+                pCmdBuffer->PalCmdBuffer(DefaultDeviceIndex),
+                pSrcImage->PalImage(DefaultDeviceIndex),
+                pDstImage->PalImage(DefaultDeviceIndex),
+                regionCount, pPalRegions, constInfo);
+        }
+
+        virtStackFrame.FreeArray(pPalRegions);
+
+    }
     else
     {
         DECODER_WAPPER_CALL_NEXT_LAYER(vkCmdCopyImage(cmdBuffer,
@@ -319,6 +434,30 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(
                                                                  pAllocator,
                                                                  pImage);
 
+    }
+    else if(Formats::IsEtc2Format(format) &&
+            (pCreateInfo->usage == VK_IMAGE_USAGE_TRANSFER_SRC_BIT))
+    {
+        VkImageCreateInfo etc2SrcInfo = *pCreateInfo;
+        switch (pCreateInfo->format)
+        {
+            case VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK:
+            case VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK:
+                etc2SrcInfo.format = VK_FORMAT_R32G32B32A32_UINT;
+                break;
+            case VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK:
+            case VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK:
+            case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK:
+            case VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK:
+                etc2SrcInfo.format = VK_FORMAT_R32G32_UINT;
+                break;
+            default:
+            break;
+        }
+        vkResult = DECODER_WAPPER_CALL_NEXT_LAYER(vkCreateImage)(device,
+                                                                 &etc2SrcInfo,
+                                                                 pAllocator,
+                                                                 pImage);
     }
     else
     {

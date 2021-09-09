@@ -83,16 +83,16 @@ public:
     void Init(Device* pDevice);
 
     template<typename ObjectType>
-    VK_INLINE bool IsEnabled(
+    bool IsEnabled(
         ObjectType objectType) const;
 
     template<typename HandleType,
-             typename ObjectType> VK_INLINE SqttMetaState* GetMetaState(
+             typename ObjectType> SqttMetaState* GetMetaState(
         ObjectType objectType,
         HandleType handle);
 
     template<typename HandleType,
-             typename ObjectType> VK_INLINE const char* GetDebugName(
+             typename ObjectType> const char* GetDebugName(
         ObjectType objectType,
         HandleType handle);
 

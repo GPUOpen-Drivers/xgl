@@ -761,7 +761,7 @@ void RenderStateCache::DestroyDepthStencilState(
 
 // =====================================================================================================================
 // Returns true if the given
-VK_INLINE bool RenderStateCache::IsEnabled(
+bool RenderStateCache::IsEnabled(
     uint32_t staticStateFlag
     ) const
 {

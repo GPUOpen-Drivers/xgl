@@ -190,7 +190,7 @@ VkResult GpaSession::CmdEnd(CmdBuffer* pCmdBuf)
 }
 
 // =====================================================================================================================
-VK_INLINE VkResult ConvertPerfCounterId(
+static VkResult ConvertPerfCounterId(
     const VkGpaPerfCounterAMD& perfCounter,
     GpuUtil::PerfCounterId*    pId)
 {

@@ -31,6 +31,7 @@
 #include "include/vk_descriptor_set_layout.h"
 #include "include/vk_device.h"
 #include "include/vk_sampler.h"
+#include "palVectorImpl.h"
 
 #include "palMetroHash.h"
 
@@ -215,6 +216,18 @@ uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(
 }
 
 // =====================================================================================================================
+// Returns the dword size required in the static section of the given binding point of the given DescriptorSetLayout.
+uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(
+    const DescriptorSetLayout* pSrcDescSetLayout,
+    const uint32_t             binding)
+{
+    const BindingInfo& bindingInfo = pSrcDescSetLayout->Binding(binding);
+
+    return (bindingInfo.info.descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT) ?
+           bindingInfo.sta.dwSize : bindingInfo.sta.dwArrayStride;
+}
+
+// =====================================================================================================================
 // Returns the dword size of the dynamic descriptor
 uint32_t DescriptorSetLayout::GetDynamicBufferDescDwSize(const Device* pDevice)
 {
@@ -342,7 +355,8 @@ void DescriptorSetLayout::ConvertImmutableInfo(
     uint32_t                            descSizeInDw,
     ImmSectionInfo*                     pSectionInfo,
     BindingSectionInfo*                 pBindingSectionInfo,
-    const DescriptorBindingFlags        bindingFlags)
+    const DescriptorBindingFlags        bindingFlags,
+    const DescriptorSetLayout*          pSrcDescSetLayout)
 {
     if ((pBindingInfo->pImmutableSamplers != nullptr) &&
         ((pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER) ||
@@ -388,19 +402,32 @@ void DescriptorSetLayout::ConvertImmutableInfo(
             // Copy the immutable descriptor data.
             uint32_t* pDestAddr = &pSectionInfo->pImmutableSamplerData[pBindingSectionInfo->dwOffset];
 
-            for (uint32_t i = 0; i < descCount; ++i, pDestAddr += pBindingSectionInfo->dwArrayStride)
+            if (pSrcDescSetLayout == nullptr)
             {
-                const void* pSamplerDesc = Sampler::ObjectFromHandle(pBindingInfo->pImmutableSamplers[i])->Descriptor();
-
-                memcpy(pDestAddr, pSamplerDesc, descSizeInDw * sizeof(uint32_t));
-
-                if (Sampler::ObjectFromHandle(pBindingInfo->pImmutableSamplers[i])->IsYCbCrSampler())
+                for (uint32_t i = 0; i < descCount; ++i, pDestAddr += pBindingSectionInfo->dwArrayStride)
                 {
-                    // Copy the YCbCrMetaData
-                    const void* pYCbCrMetaData = Util::VoidPtrInc(pSamplerDesc, descSizeInDw * sizeof(uint32_t));
-                    void* pImmutableYCbCrMetaDataDestAddr = Util::VoidPtrInc(pDestAddr, descSizeInDw * sizeof(uint32_t));
-                    memcpy(pImmutableYCbCrMetaDataDestAddr, pYCbCrMetaData, yCbCrMetaDataSizeInDW * sizeof(uint32_t));
+                    const void* pSamplerDesc = Sampler::ObjectFromHandle(pBindingInfo->pImmutableSamplers[i])->Descriptor();
+
+                    memcpy(pDestAddr, pSamplerDesc, descSizeInDw * sizeof(uint32_t));
+
+                    if (Sampler::ObjectFromHandle(pBindingInfo->pImmutableSamplers[i])->IsYCbCrSampler())
+                    {
+                        // Copy the YCbCrMetaData
+                        const void* pYCbCrMetaData = Util::VoidPtrInc(pSamplerDesc, descSizeInDw * sizeof(uint32_t));
+                        void* pImmutableYCbCrMetaDataDestAddr = Util::VoidPtrInc(pDestAddr, descSizeInDw * sizeof(uint32_t));
+                        memcpy(pImmutableYCbCrMetaDataDestAddr, pYCbCrMetaData, yCbCrMetaDataSizeInDW * sizeof(uint32_t));
+                    }
                 }
+            }
+            else
+            {
+                const DescriptorSetLayout::BindingInfo& refBindingInfo =
+                    pSrcDescSetLayout->Binding(pBindingInfo->binding);
+
+                const void* pSamplerDesc = Util::VoidPtrInc(pSrcDescSetLayout->Info().imm.pImmutableSamplerData,
+                                                            refBindingInfo.imm.dwOffset * sizeof(uint32_t));
+
+                memcpy(pDestAddr, pSamplerDesc, refBindingInfo.imm.dwSize * sizeof(uint32_t));
             }
         }
     }
@@ -422,9 +449,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
 {
     VK_ASSERT((pIn != nullptr) && (pIn->sType == VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO));
 
-    pOut->activeStageMask = VK_SHADER_STAGE_ALL; // TODO set this up properly enumerating the active stages.
-                                                 // currently this flag is only tested for non zero, so
-                                                 // setting all flags active makes no difference...
+    pOut->activeStageMask               = 0;
 
     pOut->varDescStride                 = 0;
 
@@ -459,6 +484,13 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
         }
     }
 
+    {
+        for (uint32 inIndex = 0; inIndex < pIn->bindingCount; ++inIndex)
+        {
+            pOut->activeStageMask |= pIn->pBindings[inIndex].stageFlags;
+        }
+    }
+
     // Bindings numbers are allowed to come in out-of-order, as well as with gaps.
     // We compute offsets using the size we've seen so far as we iterate, so we need to handle
     // the bindings in binding-number order, rather than array order.
@@ -469,7 +501,9 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
     for (uint32 inIndex = 0; inIndex < pIn->bindingCount; ++inIndex)
     {
         const VkDescriptorSetLayoutBinding & currentBinding = pIn->pBindings[inIndex];
+        {
             pOutBindings[currentBinding.binding].info = currentBinding;
+        }
 
         if (currentBinding.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
         {
@@ -542,7 +576,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
 // =====================================================================================================================
 // Creates a descriptor set layout object.
 VkResult DescriptorSetLayout::Create(
-    Device*                                      pDevice,
+    const Device*                                pDevice,
     const VkDescriptorSetLayoutCreateInfo*       pCreateInfo,
     const VkAllocationCallbacks*                 pAllocator,
     VkDescriptorSetLayout*                       pLayout)
@@ -574,8 +608,9 @@ VkResult DescriptorSetLayout::Create(
             }
         }
 
+        {
             bindingCount = Util::Max(bindingCount, desc.binding + 1);
-
+        }
     }
 
     const size_t bindingInfoAuxSize     = bindingCount          * sizeof(BindingInfo);
@@ -629,45 +664,300 @@ VkResult DescriptorSetLayout::Create(
 }
 
 // =====================================================================================================================
+// Get the size in byte of a merged DescriptorSetLayout
+size_t DescriptorSetLayout::GetObjectSize(
+    const VkDescriptorSetLayout* pLayouts,
+    const VkShaderStageFlags*    pShaderMasks,
+    const uint32_t               count)
+{
+    size_t size = sizeof(DescriptorSetLayout);
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const DescriptorSetLayout* pSetLayout = DescriptorSetLayout::ObjectFromHandle(pLayouts[i]);
+        const VkShaderStageFlags   shaderMask = pShaderMasks[i];
+
+        size += pSetLayout->GetBindingInfoArrayByteSize(shaderMask);
+        size += pSetLayout->GetImmSamplerArrayByteSize(shaderMask);
+        size += pSetLayout->GetImmYCbCrMetaDataArrayByteSize(shaderMask);
+    }
+
+    return size;
+}
+
+// =====================================================================================================================
+// Merge several descriptor set layouts into one layout.
+// The output memory pointed by pOutLayout is required to be initialized to 0 by callee.
+void DescriptorSetLayout::Merge(
+    const Device*                pDevice,
+    const VkDescriptorSetLayout* pLayouts,
+    const VkShaderStageFlags*    pShaderMasks,
+    const uint32_t               count,
+    DescriptorSetLayout*         pOutLayout)
+{
+    constexpr size_t apiSize = sizeof(DescriptorSetLayout);
+
+    CreateInfo   mergedInfo   = {};
+    BindingInfo* pBindingInfo = static_cast<BindingInfo*>(Util::VoidPtrInc(pOutLayout, apiSize));
+
+    // The i th element in this array is the source descriptor set layout from which binding i in the
+    // merged layout should copy.
+    Util::Vector<const DescriptorSetLayout*, 8, Util::GenericAllocator> pRefDescSetLayouts{ nullptr };
+    pRefDescSetLayouts.Resize(8, nullptr);
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const DescriptorSetLayout* pRef       = DescriptorSetLayout::ObjectFromHandle(pLayouts[i]);
+        const CreateInfo&          refInfo    = pRef->Info();
+        const VkShaderStageFlags   shaderMask = pShaderMasks[i];
+
+        for (uint32_t j = 0; j < refInfo.count; ++j)
+        {
+            const BindingInfo&       refBinding   = pRef->Binding(j);
+            const VkShaderStageFlags activeStages = refBinding.info.stageFlags & shaderMask;
+
+            if ((activeStages != 0) && (refBinding.info.descriptorCount > 0))
+            {
+                uint32_t bindingIdx = refBinding.info.binding;
+
+                BindingInfo& mergedBinding = pBindingInfo[bindingIdx];
+
+                if (mergedBinding.info.stageFlags == 0)
+                {
+                    VK_ASSERT(mergedBinding.info.descriptorCount == 0);
+
+                    mergedBinding = refBinding;
+
+                    mergedInfo.count = Util::Max(mergedInfo.count, bindingIdx + 1);
+
+                    if (pRefDescSetLayouts.NumElements() <= bindingIdx)
+                    {
+                        pRefDescSetLayouts.Resize(bindingIdx * 2, nullptr);
+                    }
+                    pRefDescSetLayouts[bindingIdx] = pRef;
+                }
+                else
+                {
+                    VK_ASSERT(mergedBinding.info.descriptorCount == refBinding.info.descriptorCount);
+                    VK_ASSERT(mergedBinding.info.descriptorType == refBinding.info.descriptorType);
+                    VK_ASSERT(mergedBinding.bindingFlags.u32all == refBinding.bindingFlags.u32all);
+
+                    mergedBinding.info.stageFlags |= activeStages;
+                }
+            }
+        }
+    }
+
+    mergedInfo.imm.pImmutableSamplerData = reinterpret_cast<uint32_t*>(
+        Util::VoidPtrInc(pOutLayout, apiSize + mergedInfo.count * sizeof(BindingInfo)));
+
+    for (uint32_t bindingIdx = 0; bindingIdx < mergedInfo.count; ++bindingIdx)
+    {
+        const uint32 descAlignmentInDw = pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32);
+
+        BindingInfo& binding = pBindingInfo[bindingIdx];
+
+        mergedInfo.activeStageMask |= binding.info.stageFlags;
+
+        if ((bindingIdx == mergedInfo.count - 1) && binding.bindingFlags.variableDescriptorCount)
+        {
+            mergedInfo.varDescStride = GetSingleDescStaticSize(pDevice, binding.info.descriptorType);
+        }
+
+        const uint32_t staticDescSize =
+            (pRefDescSetLayouts[bindingIdx] == nullptr) ?
+                GetSingleDescStaticSize(pDevice, binding.info.descriptorType) :
+                GetDescStaticSectionDwSize(pRefDescSetLayouts[bindingIdx], bindingIdx);
+
+        ConvertBindingInfo(
+            &binding.info,
+            staticDescSize,
+            descAlignmentInDw,
+            &mergedInfo.sta,
+            &binding.sta);
+
+        ConvertBindingInfo(
+            &binding.info,
+            GetDescDynamicSectionDwSize(pDevice, binding.info.descriptorType),
+            descAlignmentInDw,
+            &mergedInfo.dyn,
+            &binding.dyn);
+
+        ConvertImmutableInfo(
+            &binding.info,
+            GetDescImmutableSectionDwSize(pDevice, binding.info.descriptorType),
+            &mergedInfo.imm,
+            &binding.imm,
+            binding.bindingFlags,
+            pRefDescSetLayouts[bindingIdx]);
+
+        if ((binding.info.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
+            (binding.info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC))
+        {
+            mergedInfo.numDynamicDescriptors += binding.info.descriptorCount;
+        }
+    }
+
+    VK_PLACEMENT_NEW(pOutLayout) DescriptorSetLayout(pDevice, mergedInfo, 0);
+}
+
+// =====================================================================================================================
 // Copy descriptor set layout object
 void DescriptorSetLayout::Copy(
-    const Device*                   pDevice,
-    DescriptorSetLayout*            pOutLayout) const
+    const Device*        pDevice,
+    const uint32_t       shaderMask,
+    DescriptorSetLayout* pOutLayout) const
 {
-    const size_t apiSize = sizeof(DescriptorSetLayout);
+    if (CoverAllActiveShaderStages(shaderMask))
+    {
+        constexpr size_t apiSize = sizeof(DescriptorSetLayout);
 
-    CreateInfo info = Info();
+        CreateInfo info = Info();
 
-    // Copy the bindings array
-    void* pBindings = Util::VoidPtrInc(pOutLayout, apiSize);
+        // Copy the bindings array
+        void* pBindings = Util::VoidPtrInc(pOutLayout, apiSize);
 
-    memcpy(pBindings, Util::VoidPtrInc(this, apiSize), GetBindingInfoArrayByteSize());
+        memcpy(pBindings, Util::VoidPtrInc(this, apiSize), GetBindingInfoArrayByteSize(shaderMask));
 
-    // Copy the immutable sampler data
-    void* pImmutableSamplerData = Util::VoidPtrInc(pOutLayout, apiSize + GetBindingInfoArrayByteSize());
+        // Copy the immutable sampler data
+        void* pImmutableSamplerData = Util::VoidPtrInc(pOutLayout, apiSize + GetBindingInfoArrayByteSize(shaderMask));
 
-    memcpy(pImmutableSamplerData,
-           Util::VoidPtrInc(this, apiSize + GetBindingInfoArrayByteSize()),
-           GetImmSamplerArrayByteSize() + GetImmYCbCrMetaDataArrayByteSize());
+        memcpy(pImmutableSamplerData,
+               Util::VoidPtrInc(this, apiSize + GetBindingInfoArrayByteSize(shaderMask)),
+               GetImmSamplerArrayByteSize(shaderMask) + GetImmYCbCrMetaDataArrayByteSize(shaderMask));
 
-    // Set the base pointer of the immutable sampler data to the appropriate location within the allocated memory
-    info.imm.pImmutableSamplerData = reinterpret_cast<uint32_t*>(pImmutableSamplerData);
+        // Set the base pointer of the immutable sampler data to the appropriate location within the allocated memory
+        info.imm.pImmutableSamplerData = reinterpret_cast<uint32_t*>(pImmutableSamplerData);
 
-    VK_PLACEMENT_NEW(pOutLayout) DescriptorSetLayout(pDevice, info, GetApiHash());
+        VK_PLACEMENT_NEW(pOutLayout) DescriptorSetLayout(pDevice, info, GetApiHash());
+    }
+    else
+    {
+        VkDescriptorSetLayout handle = DescriptorSetLayout::HandleFromObject(this);
+        Merge(pDevice, &handle, &shaderMask, 1, pOutLayout);
+    }
+}
+
+// =====================================================================================================================
+// Get the size in byte of the refBinding info of the specific shader stages
+size_t DescriptorSetLayout::GetBindingInfoArrayByteSize(VkShaderStageFlags shaderMask) const
+{
+    uint32_t numActiveBindings = 0;
+
+    if (CoverAllActiveShaderStages(shaderMask))
+    {
+        numActiveBindings = m_info.count;
+    }
+    else
+    {
+        for (uint32_t i = 0; i < m_info.count; ++i)
+        {
+            const VkDescriptorSetLayoutBinding& binding = Binding(i).info;
+
+            if ((binding.stageFlags & shaderMask) != 0)
+            {
+                numActiveBindings = Util::Max(numActiveBindings, binding.binding + 1);
+            }
+        }
+    }
+
+    return numActiveBindings * sizeof(DescriptorSetLayout::BindingInfo);
 }
 
 // =====================================================================================================================
 // Get the size in bytes of immutable samplers array
-uint32_t DescriptorSetLayout::GetImmSamplerArrayByteSize() const
+size_t DescriptorSetLayout::GetImmSamplerArrayByteSize(VkShaderStageFlags shaderMask) const
 {
-    return m_info.imm.numImmutableSamplers * m_pDevice->GetProperties().descriptorSizes.sampler;
+    uint32_t numActiveImmSamplers = 0;
+
+    if (CoverAllActiveShaderStages(shaderMask))
+    {
+        numActiveImmSamplers = m_info.imm.numImmutableSamplers;
+    }
+    else
+    {
+        for (uint32_t i = 0; i < m_info.count; ++i)
+        {
+            const VkDescriptorSetLayoutBinding& binding = Binding(i).info;
+
+            if (((binding.stageFlags & shaderMask) != 0) &&
+                (binding.pImmutableSamplers != nullptr) &&
+                ((binding.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER) ||
+                 (binding.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)))
+            {
+                numActiveImmSamplers += binding.descriptorCount;
+            }
+        }
+    }
+
+    return numActiveImmSamplers * m_pDevice->GetProperties().descriptorSizes.sampler;
 }
 
 // =====================================================================================================================
 // Get the size in bytes of immutable ycbcr meta data array
-uint32_t DescriptorSetLayout::GetImmYCbCrMetaDataArrayByteSize() const
+size_t DescriptorSetLayout::GetImmYCbCrMetaDataArrayByteSize(VkShaderStageFlags shaderMask) const
 {
-    return m_info.imm.numImmutableYCbCrMetaData * sizeof(Vkgc::SamplerYCbCrConversionMetaData);
+    uint32_t numActiveImmYcbcrMetaData = 0;
+
+    if (CoverAllActiveShaderStages(shaderMask))
+    {
+        numActiveImmYcbcrMetaData = m_info.imm.numImmutableYCbCrMetaData;
+    }
+    else
+    {
+        for (uint32_t i = 0; i < m_info.count; ++i)
+        {
+            const VkDescriptorSetLayoutBinding& binding = Binding(i).info;
+            const DescriptorBindingFlags& flags = Binding(i).bindingFlags;
+
+            if (((binding.stageFlags & shaderMask) != 0) &&
+                (binding.pImmutableSamplers != nullptr) &&
+                (flags.ycbcrConversionUsage != 0) &&
+                ((binding.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER) ||
+                 (binding.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)))
+            {
+                numActiveImmYcbcrMetaData += binding.descriptorCount;
+            }
+        }
+    }
+
+    return numActiveImmYcbcrMetaData * sizeof(Vkgc::SamplerYCbCrConversionMetaData);
+}
+
+// =====================================================================================================================
+// Get the size in byte of a DescriptorSetLayout
+size_t DescriptorSetLayout::GetObjectSize(VkShaderStageFlags shaderMask) const
+{
+    const uint32_t apiSize = sizeof(DescriptorSetLayout);
+
+    return apiSize + GetBindingInfoArrayByteSize(shaderMask)
+        + GetImmSamplerArrayByteSize(shaderMask)
+        + GetImmYCbCrMetaDataArrayByteSize(shaderMask);
+}
+
+// =====================================================================================================================
+// Check whether there is refBinding of the specified shader(s) in this DescriptorSetLayout
+bool DescriptorSetLayout::IsEmpty(VkShaderStageFlags shaderMask) const
+{
+    bool isEmpty = true;
+
+    if (CoverAllActiveShaderStages(shaderMask))
+    {
+        isEmpty = (m_info.count == 0);
+    }
+    else
+    {
+        for (uint32_t i = 0; i < m_info.count; ++i)
+        {
+            if ((Binding(i).info.stageFlags & shaderMask) != 0)
+            {
+                isEmpty = false;
+                break;
+            }
+        }
+    }
+
+    return isEmpty;
 }
 
 // =====================================================================================================================

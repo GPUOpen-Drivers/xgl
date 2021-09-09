@@ -77,7 +77,7 @@ public:
 
     void UnregisterCmdBuffer(CmdBuffer* pCmdBuffer);
 
-    VK_INLINE uint32_t GetQueueFamilyIndex() const { return m_queueFamilyIndex; }
+    uint32_t GetQueueFamilyIndex() const { return m_queueFamilyIndex; }
 
     const VkAllocationCallbacks* GetCmdPoolAllocator() const { return m_pAllocator; }
 

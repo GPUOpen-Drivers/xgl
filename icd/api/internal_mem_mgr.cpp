@@ -51,7 +51,7 @@ static constexpr Pal::gpusize PoolMinSuballocationSize  = 1ull << 4;    // 16 by
 // =====================================================================================================================
 // Filter invisible heap. For some objects as pipeline, invisible heap will be appended in memory requirement.
 // We filter this because we don't expect to support object memory migration.
-static VK_INLINE void FilterHeap(
+static void FilterHeap(
     Pal::GpuMemoryRequirements* pMemReq,
     Pal::GpuHeap typeToFilter)
 {

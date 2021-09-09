@@ -122,7 +122,10 @@ void Pipeline::GenerateHashFromShaderStageCreateInfo(
 {
     pHasher->Update(desc.flags);
     pHasher->Update(desc.stage);
-    pHasher->Update(ShaderModule::ObjectFromHandle(desc.module)->GetCodeHash(desc.pName));
+    if (desc.module != VK_NULL_HANDLE)
+    {
+        pHasher->Update(ShaderModule::ObjectFromHandle(desc.module)->GetCodeHash(desc.pName));
+    }
 
     if (desc.pSpecializationInfo != nullptr)
     {
@@ -152,6 +155,7 @@ VkResult Pipeline::BuildShaderStageInfo(
     const Device*                          pDevice,
     const uint32_t                         stageCount,
     const VkPipelineShaderStageCreateInfo* pStages,
+    const bool                             duplicateExistingModules,
     uint32_t                               (*pfnGetOutputIdx)(const uint32_t inputIdx,
                                                               const uint32_t stageIdx),
     ShaderStageInfo*                       pShaderStageInfo,
@@ -169,7 +173,7 @@ VkResult Pipeline::BuildShaderStageInfo(
         const ShaderStage                      stage     = ShaderFlagBitToStage(stageInfo.stage);
         const uint32_t                         outIdx    = pfnGetOutputIdx(i, stage);
 
-        if (stageInfo.module != VK_NULL_HANDLE)
+        if ((stageInfo.module != VK_NULL_HANDLE) && (duplicateExistingModules == false))
         {
             const ShaderModule* pModule = ShaderModule::ObjectFromHandle(stageInfo.module);
 
@@ -186,22 +190,35 @@ VkResult Pipeline::BuildShaderStageInfo(
             // creation of pipeline.
             VK_ASSERT(pTempModules != nullptr);
 
-            EXTRACT_VK_STRUCTURES_0(
-                shaderModule,
-                ShaderModuleCreateInfo,
-                static_cast<const VkShaderModuleCreateInfo*>(stageInfo.pNext),
-                SHADER_MODULE_CREATE_INFO);
+            VkShaderModuleCreateFlags flags    = 0;
+            size_t                    codeSize = 0;
+            const void*               pCode    = nullptr;
 
-            VK_ASSERT(pShaderModuleCreateInfo != nullptr);
+            if (stageInfo.module != VK_NULL_HANDLE)
+            {
+                // TODO: It's better to copy the compiled shader modules rather than compile them again.
+                const ShaderModule* pModule = ShaderModule::ObjectFromHandle(stageInfo.module);
+                codeSize = pModule->GetCodeSize();
+                pCode    = pModule->GetCode();
+            }
+            else
+            {
+                EXTRACT_VK_STRUCTURES_0(
+                    shaderModule,
+                    ShaderModuleCreateInfo,
+                    static_cast<const VkShaderModuleCreateInfo*>(stageInfo.pNext),
+                    SHADER_MODULE_CREATE_INFO);
 
-            const Pal::ShaderHash codeHash =
-                ShaderModule::BuildCodeHash(pShaderModuleCreateInfo->pCode, pShaderModuleCreateInfo->codeSize);
+                VK_ASSERT(pShaderModuleCreateInfo != nullptr);
 
-            result = pCompiler->BuildShaderModule(pDevice,
-                                                  pShaderModuleCreateInfo->flags,
-                                                  pShaderModuleCreateInfo->codeSize,
-                                                  pShaderModuleCreateInfo->pCode,
-                                                  &pTempModules[numNewModules]);
+                flags    = pShaderModuleCreateInfo->flags;
+                codeSize = pShaderModuleCreateInfo->codeSize;
+                pCode    = pShaderModuleCreateInfo->pCode;
+            }
+
+            const Pal::ShaderHash codeHash = ShaderModule::BuildCodeHash(pCode, codeSize);
+
+            result = pCompiler->BuildShaderModule(pDevice, flags, codeSize, pCode, &pTempModules[numNewModules]);
 
             if (result != VK_SUCCESS)
             {
@@ -210,7 +227,7 @@ VkResult Pipeline::BuildShaderStageInfo(
 
             pShaderStageInfo[outIdx].pModuleHandle = &pTempModules[numNewModules++];
             pShaderStageInfo[outIdx].codeHash      = ShaderModule::GetCodeHash(codeHash, stageInfo.pName);
-            pShaderStageInfo[outIdx].codeSize      = pShaderModuleCreateInfo->codeSize;
+            pShaderStageInfo[outIdx].codeSize      = codeSize;
         }
 
         pShaderStageInfo[outIdx].stage               = stage;
@@ -278,15 +295,36 @@ void Pipeline::Init(
     uint32_t              staticStateMask,
     uint64_t              apiHash)
 {
-    m_userDataLayout = pLayout->GetInfo().userDataLayout;
     m_staticStateMask = staticStateMask;
     m_apiHash = apiHash;
     m_pBinary = pBinary;
-    m_palPipelineHash = pPalPipeline[DefaultDeviceIndex]->GetInfo().internalPipelineHash.unique;
 
-    for (uint32_t devIdx = 0; devIdx < m_pDevice->NumPalDevices(); devIdx++)
+    if (pLayout != nullptr)
     {
-        m_pPalPipeline[devIdx] = pPalPipeline[devIdx];
+        m_userDataLayout = pLayout->GetInfo().userDataLayout;
+    }
+    else
+    {
+        memset(&m_userDataLayout, 0, sizeof(UserDataLayout));
+    }
+
+    if (pPalPipeline != nullptr)
+    {
+        m_palPipelineHash = pPalPipeline[DefaultDeviceIndex]->GetInfo().internalPipelineHash.unique;
+
+        for (uint32_t devIdx = 0; devIdx < m_pDevice->NumPalDevices(); devIdx++)
+        {
+            m_pPalPipeline[devIdx] = pPalPipeline[devIdx];
+        }
+    }
+    else
+    {
+        m_palPipelineHash = 0;
+
+        for (uint32_t devIdx = 0; devIdx < m_pDevice->NumPalDevices(); devIdx++)
+        {
+            m_pPalPipeline[devIdx] = nullptr;
+        }
     }
 }
 

@@ -301,10 +301,12 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     Vkgc::PipelineShaderInfo**        ppShadersInfo,
     void*                             pPipelineDumpHandle,
     uint64_t                          pipelineHash,
+    Util::MetroHash::Hash*            pCacheId,
     int64_t*                          pCompileTime)
 {
     VK_IGNORE(pDevice);
     VK_IGNORE(pipelineHash);
+    VK_IGNORE(pCacheId);
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
@@ -424,10 +426,12 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     const void**                     ppPipelineBinary,
     void*                            pPipelineDumpHandle,
     uint64_t                         pipelineHash,
+    Util::MetroHash::Hash*           pCacheId,
     int64_t*                         pCompileTime)
 {
     VK_IGNORE(pDevice);
     VK_IGNORE(pipelineHash);
+    VK_IGNORE(pCacheId);
 
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();

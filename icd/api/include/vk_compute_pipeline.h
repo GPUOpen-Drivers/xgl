@@ -74,7 +74,7 @@ public:
 
     static void BindNullPipeline(CmdBuffer* pCmdBuffer);
 
-    VK_INLINE const Pal::DynamicComputeShaderInfo& GetBindInfo() const
+    const Pal::DynamicComputeShaderInfo& GetBindInfo() const
         { return m_info.computeShaderInfo; }
 
 protected:

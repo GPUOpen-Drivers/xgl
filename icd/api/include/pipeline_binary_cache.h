@@ -147,10 +147,10 @@ public:
     CacheId* GetCacheIdForPipeline(
         const Pal::PipelineHash* pInternalPipelineHash);
 
-    VK_INLINE HashMapping::Iterator GetHashMappingIterator()
+    HashMapping::Iterator GetHashMappingIterator()
         { return m_hashMapping.Begin(); }
 
-    VK_INLINE Util::RWLock* GetHashMappingLock()
+    Util::RWLock* GetHashMappingLock()
         { return &m_hashMappingLock; }
 #endif
 

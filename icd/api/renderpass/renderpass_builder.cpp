@@ -163,7 +163,11 @@ Pal::Result RenderPassBuilder::BuildInitialState()
         {
             if (m_pAttachments[attachment].finalUseSubpass != VK_SUBPASS_EXTERNAL)
             {
-                m_pSubpasses[m_pAttachments[attachment].finalUseSubpass].flags.hasFinalUseAttachments = true;
+                m_pSubpasses[m_pAttachments[attachment].finalUseSubpass].flags.hasFinalUseAttachments |=
+                    ((m_pAttachments[attachment].prevReferenceLayout.layout       !=
+                     m_pAttachments[attachment].pDesc->finalLayout)                     ||
+                    (m_pAttachments[attachment].prevReferenceStencilLayout.layout !=
+                     m_pAttachments[attachment].pDesc->stencilFinalLayout));
             }
         }
 
@@ -1322,7 +1326,7 @@ size_t RenderPassBuilder::SubpassState::GetExtraSize() const
 
 // =====================================================================================================================
 template<typename T>
-VK_INLINE void* AssignArray(size_t n, void* pStorage, uint32_t* pArraySize, T** ppDest)
+void* AssignArray(size_t n, void* pStorage, uint32_t* pArraySize, T** ppDest)
 {
     *pArraySize = static_cast<uint32_t>(n);
 

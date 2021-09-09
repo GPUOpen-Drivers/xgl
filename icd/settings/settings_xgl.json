@@ -973,8 +973,44 @@
       "Type": "bool"
     },
     {
+      "Name": "DisablePerCompFetch",
+      "Description": "Disable per component fetch in uber fetch shader.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
+      "Name": "DisablePerInstanceFetch",
+      "Description": "Disable per instance fetch in uber fetch shader.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
       "Name": "ForceAlignedForDynamicStride",
       "Description": "Force vertex stride is aligned when dynamic vertex stride is enabled",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
+      "Name": "SupportPatchSpecConst",
+      "Description": "Support patch specialized constant",
       "Tags": [
         "SPIRV Options"
       ],

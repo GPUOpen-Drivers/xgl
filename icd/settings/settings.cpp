@@ -287,8 +287,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
                 // Mall no alloc settings give a 2.91% gain
-                m_settings.mallNoAllocCtPolicy = 0x01;
-                m_settings.mallNoAllocCtSsrPolicy = 0x01;
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
             }
 
             // Don't enable DCC for color attachments aside from those listed in the app_resource_optimizer
@@ -382,7 +382,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // Mall no alloc setting gives a ~0.82% gain
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
-                m_settings.mallNoAllocSsrPolicy = 0x01;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
             }
 
             m_settings.implicitExternalSynchronization = false;
@@ -650,9 +650,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
-                m_settings.mallNoAllocCtPolicy    = 0x01;
-                m_settings.mallNoAllocSsrPolicy   = 0x01;
-                m_settings.mallNoAllocCtSsrPolicy = 0x01;
+                m_settings.mallNoAllocCtPolicy    = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocSsrPolicy   = MallNoAllocSsrAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
 
                 m_settings.enableWgpMode          = 0x00000020;
 
@@ -682,6 +682,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
 
             m_settings.implicitExternalSynchronization = false;
+
+            m_settings.syncOsHdrState = false;
         }
 
         if (appProfile == AppProfile::DoomEternal)
@@ -721,9 +723,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // Mall no alloc settings give a ~1% gain
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
-                m_settings.mallNoAllocCtPolicy = 0x01;
-                m_settings.mallNoAllocCtSsrPolicy = 0x01;
-                m_settings.mallNoAllocSsrPolicy = 0x01;
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
                 m_settings.enableWgpMode = 0x20;
             }
 
@@ -786,6 +788,32 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::Valheim)
         {
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.csWaveSize = 32;
+                m_settings.fsWaveSize = 64;
+
+                if (pInfo->revision == Pal::AsicRevision::Navi21)
+                {
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                }
+
+                else if (pInfo->revision == Pal::AsicRevision::Navi22)
+                {
+                    m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                        ForceDccForColorAttachments |
+                        ForceDccFor3DShaderStorage |
+                        ForceDccForNonColorAttachmentShaderStorage);
+
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                }
+
+                else if (pInfo->revision == Pal::AsicRevision::Navi23)
+                {
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+                }
+            }
         }
 
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
@@ -967,6 +995,31 @@ void VulkanSettingsLoader::ValidateSettings()
     // Internal semaphore queue timing is always enabled when ETW is not available
     m_settings.devModeSemaphoreQueueTimingEnable = true;
 #endif
+
+    // Undo any heap overrides to local if oversubscription is allowed by default because they will likely
+    // degrade performance instead of improve it. When not allowed, testing should catch these cases
+    // so that overrides to local aren't added in the first place.
+    Pal::GpuMemoryHeapProperties heapProperties[Pal::GpuHeapCount] = {};
+
+    if ((m_pDevice->GetGpuMemoryHeapProperties(heapProperties) == Pal::Result::Success) &&
+        (heapProperties[Pal::GpuHeapLocal].heapSize < m_settings.memoryRemoteBackupHeapMinHeapSize) &&
+        (heapProperties[Pal::GpuHeapInvisible].heapSize < m_settings.memoryRemoteBackupHeapMinHeapSize))
+    {
+        if (heapProperties[Pal::GpuHeapGartUswc].heapSize > 0)
+        {
+            if (m_settings.cmdAllocatorDataHeap == Pal::GpuHeapLocal)
+            {
+                m_settings.cmdAllocatorDataHeap = Pal::GpuHeapGartUswc;
+            }
+
+            if (m_settings.cmdAllocatorEmbeddedHeap == Pal::GpuHeapLocal)
+            {
+                m_settings.cmdAllocatorEmbeddedHeap  = Pal::GpuHeapGartUswc;
+            }
+        }
+
+        m_settings.overrideHeapChoiceToLocal = 0;
+    }
 
     // Command buffer prefetching was found to be slower for command buffers in local memory.
     if (m_settings.cmdAllocatorDataHeap == Pal::GpuHeapLocal)

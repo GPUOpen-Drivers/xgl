@@ -55,18 +55,6 @@ namespace vk
 {
 
 // =====================================================================================================================
-// The shader stages of Pre-Rasterization Shaders section
-constexpr uint32_t PrsShaderMask = 0
-    | ((1 << ShaderStage::ShaderStageVertex)
-    |  (1 << ShaderStage::ShaderStageTessControl)
-    |  (1 << ShaderStage::ShaderStageTessEval)
-    |  (1 << ShaderStage::ShaderStageGeometry));
-
-// =====================================================================================================================
-// The shader stages of Fragment Shader (Post-Rasterization) section
-constexpr uint32_t FgsShaderMask = (1 << ShaderStage::ShaderStageFragment);
-
-// =====================================================================================================================
 // Helper function used to check whether a specific dynamic state is set
 static bool IsDynamicStateEnabled(const uint32_t dynamicStateFlags, const DynamicStatesInternal internalState)
 {
@@ -785,24 +773,13 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     if (shouldCompile && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr)))
     {
         int64_t startTime = Util::GetPerfCpuTime();
-        Util::MetroHash128 hash = {};
-        hash.Update(pipelineHash);
-        hash.Update(pCreateInfo->pipelineInfo.vs.options);
-        hash.Update(pCreateInfo->pipelineInfo.tes.options);
-        hash.Update(pCreateInfo->pipelineInfo.tcs.options);
-        hash.Update(pCreateInfo->pipelineInfo.gs.options);
-        hash.Update(pCreateInfo->pipelineInfo.fs.options);
-        hash.Update(pCreateInfo->pipelineInfo.options);
-        hash.Update(pCreateInfo->pipelineInfo.nggState);
-        hash.Update(GetCacheIdControlFlags(pCreateInfo->flags));
-        hash.Update(pCreateInfo->dbFormat);
-        hash.Update(pCreateInfo->pipelineProfileKey);
-        hash.Update(deviceIdx);
-        hash.Update(pCreateInfo->compilerType);
-        hash.Update(pCreateInfo->pipelineInfo.dynamicVertexStride);
-        hash.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
 
-        hash.Finalize(pCacheId->bytes);
+        GetGraphicsPipelineCacheId(
+            deviceIdx,
+            pCreateInfo,
+            pipelineHash,
+            m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash(),
+            pCacheId);
 
         cacheResult = GetCachedPipelineBinary(pCacheId, pPipelineBinaryCache, pPipelineBinarySize, ppPipelineBinary,
             &isUserCacheHit, &isInternalCacheHit, &pCreateInfo->freeCompilerBinary, &pCreateInfo->pipelineFeedback);
@@ -834,13 +811,12 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
                     shaderInfos,
                     pPipelineDumpHandle,
                     pipelineHash,
+                    pCacheId,
                     &compileTime);
             }
 
             if (result == VK_SUCCESS)
             {
-                pCreateInfo->freeCompilerBinary = FreeWithCompiler;
-
             }
         }
     }
@@ -984,17 +960,13 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     if (shouldCompile && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr)))
     {
         int64_t startTime = Util::GetPerfCpuTime();
-        Util::MetroHash128 hash = {};
-        hash.Update(pipelineHash);
-        hash.Update(pCreateInfo->pipelineInfo.cs.options);
-        hash.Update(pCreateInfo->pipelineInfo.options);
-        hash.Update(GetCacheIdControlFlags(pCreateInfo->flags));
-        hash.Update(pCreateInfo->pipelineProfileKey);
-        hash.Update(deviceIdx);
-        hash.Update(pCreateInfo->compilerType);
-        hash.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
 
-        hash.Finalize(pCacheId->bytes);
+        GetComputePipelineCacheId(
+            deviceIdx,
+            pCreateInfo,
+            pipelineHash,
+            m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash(),
+            pCacheId);
 
         cacheResult = GetCachedPipelineBinary(pCacheId, pPipelineBinaryCache, pPipelineBinarySize, ppPipelineBinary,
             &isUserCacheHit, &isInternalCacheHit, &pCreateInfo->freeCompilerBinary, &pCreateInfo->pipelineFeedback);
@@ -1025,13 +997,10 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
                     ppPipelineBinary,
                     pPipelineDumpHandle,
                     pipelineHash,
+                    pCacheId,
                     &compileTime);
             }
 
-            if (result == VK_SUCCESS)
-            {
-                pCreateInfo->freeCompilerBinary = FreeWithCompiler;
-            }
         }
     }
 
@@ -1253,17 +1222,20 @@ void BuildLlpcVertexInputDescriptors(
 static void BuildRasterizationState(
     const VkPipelineRasterizationStateCreateInfo* pRs,
     const uint32_t                                dynamicStateFlags,
+    bool*                                         pIsConservativeOverestimation,
     GraphicsPipelineBinaryCreateInfo*             pCreateInfo)
 {
     if (pRs != nullptr)
     {
-        EXTRACT_VK_STRUCTURES_1(
+        EXTRACT_VK_STRUCTURES_2(
             rasterizationDepthClipState,
             PipelineRasterizationDepthClipStateCreateInfoEXT,
             PipelineRasterizationStateStreamCreateInfoEXT,
+            PipelineRasterizationConservativeStateCreateInfoEXT,
             static_cast<const VkPipelineRasterizationDepthClipStateCreateInfoEXT*>(pRs->pNext),
             PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT,
-            PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT);
+            PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT,
+            PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT);
 
         pCreateInfo->pipelineInfo.vpState.depthClipEnable         = (pRs->depthClampEnable == VK_FALSE);
         pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = (pRs->rasterizerDiscardEnable != VK_FALSE);
@@ -1293,6 +1265,18 @@ static void BuildRasterizationState(
         {
             pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = false;
         }
+
+        if ((pPipelineRasterizationConservativeStateCreateInfoEXT != nullptr) &&
+            (pPipelineRasterizationConservativeStateCreateInfoEXT->conservativeRasterizationMode ==
+            VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT))
+        {
+            *pIsConservativeOverestimation = true;
+        }
+        else
+        {
+            *pIsConservativeOverestimation = false;
+        }
+
     }
 }
 
@@ -1392,6 +1376,7 @@ static void BuildViewportState(
 static void BuildNggState(
     const Device*                     pDevice,
     const VkShaderStageFlagBits       activeStages,
+    const bool                        isConservativeOverestimation,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo)
 {
     const RuntimeSettings&       settings   = pDevice->GetRuntimeSettings();
@@ -1426,7 +1411,8 @@ static void BuildNggState(
         pCreateInfo->pipelineInfo.nggState.enableFastLaunch       = false;
 #endif
         pCreateInfo->pipelineInfo.nggState.enableVertexReuse         = false;
-        pCreateInfo->pipelineInfo.nggState.enableBackfaceCulling     = settings.nggEnableBackfaceCulling;
+        pCreateInfo->pipelineInfo.nggState.enableBackfaceCulling     = (isConservativeOverestimation ?
+                                                                        false : settings.nggEnableBackfaceCulling);
         pCreateInfo->pipelineInfo.nggState.enableFrustumCulling      = settings.nggEnableFrustumCulling;
         pCreateInfo->pipelineInfo.nggState.enableBoxFilterCulling    = settings.nggEnableBoxFilterCulling;
         pCreateInfo->pipelineInfo.nggState.enableSphereCulling       = settings.nggEnableSphereCulling;
@@ -1468,6 +1454,16 @@ static void BuildNggState(
 
         pCreateInfo->pipelineInfo.nggState.primsPerSubgroup = settings.nggPrimsPerSubgroup;
         pCreateInfo->pipelineInfo.nggState.vertsPerSubgroup = settings.nggVertsPerSubgroup;
+    }
+}
+
+// =====================================================================================================================
+static void BuildDepthStencilState(
+    const VkPipelineDepthStencilStateCreateInfo* pDs,
+    GraphicsPipelineBinaryCreateInfo*            pCreateInfo)
+{
+    if (pDs != nullptr)
+    {
     }
 }
 
@@ -1563,6 +1559,34 @@ static VkResult BuildPipelineResourceMapping(
 }
 
 // =====================================================================================================================
+static void BuildCompilerInfo(
+    const Device*                          pDevice,
+    const GraphicsPipelineShaderStageInfo* pShaderInfo,
+    const uint32_t                         shaderMask,
+    GraphicsPipelineBinaryCreateInfo*      pCreateInfo)
+{
+    Vkgc::PipelineShaderInfo* ppShaderInfoOut[] =
+    {
+        &pCreateInfo->pipelineInfo.vs,
+        &pCreateInfo->pipelineInfo.tcs,
+        &pCreateInfo->pipelineInfo.tes,
+        &pCreateInfo->pipelineInfo.gs,
+        &pCreateInfo->pipelineInfo.fs,
+    };
+
+    pCreateInfo->compilerType = pDevice->GetCompiler(DefaultDeviceIndex)->CheckCompilerType(&pCreateInfo->pipelineInfo);
+
+    for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
+    {
+        if (((shaderMask & (1 << stage)) != 0) && (pShaderInfo->stages[stage].pModuleHandle != nullptr))
+        {
+            ppShaderInfoOut[stage]->pModuleData =
+                ShaderModule::GetShaderData(pCreateInfo->compilerType, pShaderInfo->stages[stage].pModuleHandle);
+        }
+    }
+}
+
+// =====================================================================================================================
 template <uint32_t shaderMask>
 static void BuildPipelineShadersInfo(
     const Device*                          pDevice,
@@ -1586,7 +1610,7 @@ static void BuildPipelineShadersInfo(
 
     for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
     {
-        if (pShaderInfo->stages[stage].pModuleHandle != nullptr)
+        if (((shaderMask & (1 << stage)) != 0) && (pShaderInfo->stages[stage].pModuleHandle != nullptr))
         {
             BuildPipelineShaderInfo(pDevice,
                                     &pShaderInfo->stages[stage],
@@ -1595,22 +1619,6 @@ static void BuildPipelineShadersInfo(
                                     &pCreateInfo->pipelineProfileKey,
                                     &pCreateInfo->pipelineInfo.nggState
             );
-        }
-    }
-
-    pCreateInfo->compilerType = pDevice->GetCompiler(DefaultDeviceIndex)->CheckCompilerType(&pCreateInfo->pipelineInfo);
-
-    if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
-    {
-        pCreateInfo->pipelineInfo.enableUberFetchShader = false;
-    }
-
-    for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
-    {
-        if (((shaderMask & (1 << stage)) != 0) && (pShaderInfo->stages[stage].pModuleHandle != nullptr))
-        {
-            ppShaderInfoOut[stage]->pModuleData =
-                ShaderModule::GetShaderData(pCreateInfo->compilerType, pShaderInfo->stages[stage].pModuleHandle);
         }
     }
 }
@@ -1715,16 +1723,17 @@ static void BuildPreRasterizationShaderState(
     const VkShaderStageFlagBits            activeStages,
     GraphicsPipelineBinaryCreateInfo*      pCreateInfo)
 {
-    const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
+    const RenderPass* pRenderPass                  = RenderPass::ObjectFromHandle(pIn->renderPass);
+    bool              isConservativeOverestimation = false;
 
-    BuildRasterizationState(pIn->pRasterizationState, dynamicStateFlags, pCreateInfo);
+    BuildRasterizationState(pIn->pRasterizationState, dynamicStateFlags, &isConservativeOverestimation, pCreateInfo);
 
     if (pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable == false)
     {
         BuildViewportState(pDevice, pIn->pViewportState, dynamicStateFlags, pCreateInfo);
     }
 
-    BuildNggState(pDevice, activeStages, pCreateInfo);
+    BuildNggState(pDevice, activeStages, isConservativeOverestimation, pCreateInfo);
 
     if (activeStages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
     {
@@ -1755,6 +1764,8 @@ static void BuildPreRasterizationShaderState(
     }
 
     BuildPipelineShadersInfo<PrsShaderMask>(pDevice, pIn, pShaderInfo, pCreateInfo);
+
+    BuildCompilerInfo(pDevice, pShaderInfo, PrsShaderMask, pCreateInfo);
 }
 
 // =====================================================================================================================
@@ -1769,12 +1780,11 @@ static void BuildFragmentShaderState(
 
     BuildMultisampleState(pDevice, pIn->pMultisampleState, pRenderPass, pIn->subpass, dynamicStateFlags, pCreateInfo);
 
+    BuildDepthStencilState(pIn->pDepthStencilState, pCreateInfo);
+
     BuildPipelineShadersInfo<FgsShaderMask>(pDevice, pIn, pShaderInfo, pCreateInfo);
 
-    // Handle VkPipelineDepthStencilStateCreateInfo
-    if (pIn->pDepthStencilState != nullptr)
-    {
-    }
+    BuildCompilerInfo(pDevice, pShaderInfo, FgsShaderMask, pCreateInfo);
 }
 
 // =====================================================================================================================
@@ -1792,11 +1802,6 @@ static void BuildFragmentOutputInterfaceState(
     pCreateInfo->pipelineInfo.iaState.enableMultiView =
         (pRenderPass != nullptr) ? pRenderPass->IsMultiviewEnabled() :
                                    false;
-
-    // Handle VkPipelineDepthStencilStateCreateInfo
-    if (pIn->pDepthStencilState != nullptr)
-    {
-    }
 }
 
 // =====================================================================================================================
@@ -1808,23 +1813,45 @@ static VkResult BuildUberFetchShaderInternalData(
     PipelineCompiler* pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
     VK_ASSERT(pCreateInfo->pipelineInfo.enableUberFetchShader);
 
-    return pDefaultCompiler->BuildUberFetchShaderInternalData(pCreateInfo->compilerType,
-                                                              pCreateInfo->pipelineInfo.pVertexInput,
-                                                              pCreateInfo->pipelineInfo.dynamicVertexStride,
-                                                              &pVbInfo->uberFetchShaderBuffer);
+    auto result =  pDefaultCompiler->BuildUberFetchShaderInternalData(pCreateInfo->compilerType,
+                                                                      pCreateInfo->pipelineInfo.pVertexInput,
+                                                                      pCreateInfo->pipelineInfo.dynamicVertexStride,
+                                                                      &pVbInfo->uberFetchShaderBuffer);
+
+    auto pSettings = &pDevice->GetRuntimeSettings();
+
+    if (pSettings->disablePerInstanceFetch)
+    {
+        if (pVbInfo->uberFetchShaderBuffer.requirePerIntanceFetch)
+        {
+            pCreateInfo->pipelineInfo.enableUberFetchShader = false;
+            pVbInfo->uberFetchShaderBuffer.bufferSize = 0;
+        }
+    }
+
+    if (pSettings->disablePerCompFetch)
+    {
+        if (pVbInfo->uberFetchShaderBuffer.requirePerCompFetch)
+        {
+            pCreateInfo->pipelineInfo.enableUberFetchShader = false;
+            pVbInfo->uberFetchShaderBuffer.bufferSize = 0;
+        }
+    }
+
+    return result;
 }
 // =====================================================================================================================
 static VkResult BuildExecutablePipelineState(
-    const Device*                       pDevice,
-    const VkGraphicsPipelineCreateInfo* pIn,
-    const uint32_t                      dynamicStateFlags,
-    GraphicsPipelineBinaryCreateInfo*   pCreateInfo,
-    VbInfo*                             pVbInfo)
+    const Device*                          pDevice,
+    const VkGraphicsPipelineCreateInfo*    pIn,
+    const GraphicsPipelineShaderStageInfo* pShaderInfo,
+    const PipelineLayout*                  pPipelineLayout,
+    const uint32_t                         dynamicStateFlags,
+    GraphicsPipelineBinaryCreateInfo*      pCreateInfo,
+    VbInfo*                                pVbInfo)
 {
     const RuntimeSettings& settings         = pDevice->GetRuntimeSettings();
     PipelineCompiler*      pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
-
-    const PipelineLayout* pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
 
     if (pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable == true)
     {
@@ -1858,12 +1885,32 @@ static VkResult BuildExecutablePipelineState(
         }
     }
 
-    VkResult result = BuildPipelineResourceMapping(pDevice, pLayout, availableStageMask, pVbInfo, pCreateInfo);
+    VkResult result = BuildPipelineResourceMapping(pDevice, pPipelineLayout, availableStageMask, pVbInfo, pCreateInfo);
 
-    if ((result == VK_SUCCESS) && pCreateInfo->pipelineInfo.enableUberFetchShader)
+    if (result == VK_SUCCESS)
     {
-        VK_ASSERT(pVbInfo->uberFetchShaderBuffer.userDataOffset > 0);
-        result = BuildUberFetchShaderInternalData(pDevice, pCreateInfo, pVbInfo);
+        // Compiler info is required to be re-built here since we may need to change the compiler when all the states
+        // of an executable graphics pipeline are available. The shader mask here refers to the shader stages which
+        // are valid in this pipeline.
+        const Vkgc::GraphicsPipelineBuildInfo& pipelineInfo = pCreateInfo->pipelineInfo;
+        uint32_t shaderMask = 0;
+        shaderMask |= (pipelineInfo.vs.pModuleData  != nullptr) ? (1 << ShaderStage::ShaderStageVertex)      : 0;
+        shaderMask |= (pipelineInfo.tcs.pModuleData != nullptr) ? (1 << ShaderStage::ShaderStageTessControl) : 0;
+        shaderMask |= (pipelineInfo.tes.pModuleData != nullptr) ? (1 << ShaderStage::ShaderStageTessEval)    : 0;
+        shaderMask |= (pipelineInfo.gs.pModuleData  != nullptr) ? (1 << ShaderStage::ShaderStageGeometry)    : 0;
+        shaderMask |= (pipelineInfo.fs.pModuleData  != nullptr) ? (1 << ShaderStage::ShaderStageFragment)    : 0;
+        BuildCompilerInfo(pDevice, pShaderInfo, shaderMask, pCreateInfo);
+
+        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
+        {
+            pCreateInfo->pipelineInfo.enableUberFetchShader = false;
+        }
+
+        if (pCreateInfo->pipelineInfo.enableUberFetchShader)
+        {
+            VK_ASSERT(pVbInfo->uberFetchShaderBuffer.userDataOffset > 0);
+            result = BuildUberFetchShaderInternalData(pDevice, pCreateInfo, pVbInfo);
+        }
     }
 
     return result;
@@ -1875,6 +1922,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     const Device*                                   pDevice,
     const VkGraphicsPipelineCreateInfo*             pIn,
     const GraphicsPipelineShaderStageInfo*          pShaderInfo,
+    const PipelineLayout*                           pPipelineLayout,
     GraphicsPipelineBinaryCreateInfo*               pCreateInfo,
     VbInfo*                                         pVbInfo)
 {
@@ -1882,15 +1930,13 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     VkResult result = VK_SUCCESS;
 
-    const VkGraphicsPipelineCreateInfo* pGraphicsPipelineCreateInfo = pIn;
-
     VkShaderStageFlagBits activeStages = GraphicsPipelineCommon::GetActiveShaderStages(
                                              pIn
                                              );
 
     uint32_t dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(
                                      pIn->pDynamicState
-                                                      );
+                                     );
 
     BuildVertexInputInterfaceState(pDevice, pIn, dynamicStateFlags, pCreateInfo, &pVbInfo->bindingInfo);
 
@@ -1908,7 +1954,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     }
 
     {
-        result = BuildExecutablePipelineState(pDevice, pIn, dynamicStateFlags, pCreateInfo, pVbInfo);
+        result = BuildExecutablePipelineState(
+            pDevice, pIn, pShaderInfo, pPipelineLayout, dynamicStateFlags, pCreateInfo, pVbInfo);
     }
 
     return result;
@@ -2252,7 +2299,7 @@ Util::Result PipelineCompiler::RegisterAndLoadReinjectionBinary(
 
 // =====================================================================================================================
 // Filter VkPipelineCreateFlags to only values used for pipeline caching
-VkPipelineCreateFlags PipelineCompiler::GetCacheIdControlFlags(
+static VkPipelineCreateFlags GetCacheIdControlFlags(
     VkPipelineCreateFlags in)
 {
     // The following flags should NOT affect cache computation
@@ -2266,6 +2313,83 @@ VkPipelineCreateFlags PipelineCompiler::GetCacheIdControlFlags(
     };
 
     return in & (~CacheIdIgnoreFlags);
+}
+
+// =====================================================================================================================
+// The pipeline cache ID contains additional inputs outside the shader creation information for pipeline executable
+// properties as well as options to avoid user error when changing performance tuning, compiler, or any other settings.
+static void GetCommonPipelineCacheId(
+    uint32_t                         deviceIdx,
+    VkPipelineCreateFlags            flags,
+    PipelineOptimizerKey*            pPipelineProfileKey,
+    PipelineCompilerType             compilerType,
+    uint64_t                         pipelineHash,
+    const Util::MetroHash::Hash&     settingsHash,
+    Util::MetroHash128*              pHash)
+{
+    pHash->Update(pipelineHash);
+    pHash->Update(deviceIdx);
+    pHash->Update(GetCacheIdControlFlags(flags));
+    pHash->Update(*pPipelineProfileKey);
+    pHash->Update(compilerType);
+    pHash->Update(settingsHash);
+}
+
+// =====================================================================================================================
+void PipelineCompiler::GetComputePipelineCacheId(
+    uint32_t                         deviceIdx,
+    ComputePipelineBinaryCreateInfo* pCreateInfo,
+    uint64_t                         pipelineHash,
+    const Util::MetroHash::Hash&     settingsHash,
+    Util::MetroHash::Hash*           pCacheId)
+{
+    Util::MetroHash128 hash = {};
+
+    GetCommonPipelineCacheId(
+        deviceIdx,
+        pCreateInfo->flags,
+        &pCreateInfo->pipelineProfileKey,
+        pCreateInfo->compilerType,
+        pipelineHash,
+        settingsHash,
+        &hash);
+
+    hash.Update(pCreateInfo->pipelineInfo.cs.options);
+    hash.Update(pCreateInfo->pipelineInfo.options);
+
+    hash.Finalize(pCacheId->bytes);
+}
+
+// =====================================================================================================================
+void PipelineCompiler::GetGraphicsPipelineCacheId(
+    uint32_t                          deviceIdx,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    uint64_t                          pipelineHash,
+    const Util::MetroHash::Hash&      settingsHash,
+    Util::MetroHash::Hash*            pCacheId)
+{
+    Util::MetroHash128 hash = {};
+
+    GetCommonPipelineCacheId(
+        deviceIdx,
+        pCreateInfo->flags,
+        &pCreateInfo->pipelineProfileKey,
+        pCreateInfo->compilerType,
+        pipelineHash,
+        settingsHash,
+        &hash);
+
+    hash.Update(pCreateInfo->pipelineInfo.vs.options);
+    hash.Update(pCreateInfo->pipelineInfo.tes.options);
+    hash.Update(pCreateInfo->pipelineInfo.tcs.options);
+    hash.Update(pCreateInfo->pipelineInfo.gs.options);
+    hash.Update(pCreateInfo->pipelineInfo.fs.options);
+    hash.Update(pCreateInfo->pipelineInfo.options);
+    hash.Update(pCreateInfo->pipelineInfo.nggState);
+    hash.Update(pCreateInfo->dbFormat);
+    hash.Update(pCreateInfo->pipelineInfo.dynamicVertexStride);
+
+    hash.Finalize(pCacheId->bytes);
 }
 
 // =====================================================================================================================
