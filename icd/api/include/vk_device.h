@@ -141,7 +141,8 @@ public:
             uint32                robustBufferAccessExtended    : 1;
             uint32                robustImageAccessExtended     : 1;
             uint32                nullDescriptorExtended        : 1;
-            uint32                reserved                      : 24;
+            uint32                mustWriteImmutableSamplers    : 1;
+            uint32                reserved                      : 23;
         };
 
         uint32 u32All;
@@ -631,6 +632,10 @@ public:
 
     bool UseCompactDynamicDescriptors() const
         { return !GetRuntimeSettings().enableRelocatableShaders && !GetEnabledFeatures().robustBufferAccess;}
+
+
+    bool MustWriteImmutableSamplers() const
+        { return GetEnabledFeatures().mustWriteImmutableSamplers; }
 
     bool SupportDepthStencilResolve() const
     {

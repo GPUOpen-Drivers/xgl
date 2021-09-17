@@ -347,6 +347,10 @@ VkResult DescriptorPool::AllocDescriptorSets(
                         setGpuMemOffset,
                         m_addresses,
                         pSetAllocHandle);
+                    if (m_pDevice->MustWriteImmutableSamplers())
+                    {
+                        pSet->WriteImmutableSamplers();
+                    }
                 }
                 else
                 {
