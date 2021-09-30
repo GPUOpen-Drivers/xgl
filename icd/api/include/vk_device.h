@@ -141,8 +141,10 @@ public:
             uint32                robustBufferAccessExtended    : 1;
             uint32                robustImageAccessExtended     : 1;
             uint32                nullDescriptorExtended        : 1;
+            // True if EXT_MEMORY_PRIORITY or EXT_PAGEABLE_DEVICE_LOCAL_MEMORY is enabled.
+            uint32                appControlledMemPriority      : 1;
             uint32                mustWriteImmutableSamplers    : 1;
-            uint32                reserved                      : 23;
+            uint32                reserved                      : 22;
         };
 
         uint32 u32All;
@@ -364,7 +366,8 @@ public:
         const bool                                  attachmentFragmentShadingRate,
         bool                                        scalarBlockLayoutEnabled,
         const ExtendedRobustness&                   extendedRobustnessEnabled,
-        bool                                        bufferDeviceAddressMultiDeviceEnabled);
+        bool                                        bufferDeviceAddressMultiDeviceEnabled,
+        bool                                        pageableDeviceLocalMemory);
 
     void InitDispatchTable();
 
@@ -453,11 +456,6 @@ public:
     Pal::GpuHeap GetPalHeapFromVkTypeIndex(uint32_t vkIndex) const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->GetPalHeapFromVkTypeIndex(vkIndex);
-    }
-
-    uint32_t GetUmdFpsCapFrameRate() const
-    {
-        return VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().osProperties.umdFpsCapFrameRate;
     }
 
     uint64_t TimestampFrequency() const
@@ -576,9 +574,6 @@ public:
     BarrierFilterLayer* GetBarrierFilterLayer()
         { return m_pBarrierFilterLayer; }
 
-    AsyncLayer* GetAsyncLayer()
-        { return m_pAsyncLayer; }
-
 #if VKI_GPU_DECOMPRESS
     GpuDecoderLayer* GetGpuDecoderLayer()
         { return m_pGpuDecoderLayer; }
@@ -632,7 +627,6 @@ public:
 
     bool UseCompactDynamicDescriptors() const
         { return !GetRuntimeSettings().enableRelocatableShaders && !GetEnabledFeatures().robustBufferAccess;}
-
 
     bool MustWriteImmutableSamplers() const
         { return GetEnabledFeatures().mustWriteImmutableSamplers; }
@@ -782,7 +776,6 @@ protected:
     const DeviceExtensions::Enabled     m_enabledExtensions;       // Enabled device extensions
     DispatchTable                       m_dispatchTable;           // Device dispatch table
     SqttMgr*                            m_pSqttMgr;                // Manager for developer mode SQ thread tracing
-    AsyncLayer*                         m_pAsyncLayer;             // State for async compiler layer, otherwise null
     OptLayer*                           m_pAppOptLayer;            // State for an app-specific layer, otherwise null
     BarrierFilterLayer*                 m_pBarrierFilterLayer;     // State for enabling barrier filtering, otherwise
                                                                    // null
@@ -812,6 +805,9 @@ protected:
 
     // If set to true, will use a compute queue internally for transfers.
     bool                                m_useComputeAsTransferQueue;
+
+    // If set to true, overrides compute queue to universal queue internally
+    bool                                m_useUniversalAsComputeQueue;
 
     // The max VRS shading rate supported
     VkExtent2D                          m_maxVrsShadingRate;
@@ -1156,6 +1152,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStippleEXT(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    lineStippleFactor,
     uint16_t                                    lineStipplePattern);
+
+VKAPI_ATTR void VKAPI_CALL vkSetDeviceMemoryPriorityEXT(
+    VkDevice                                    device,
+    VkDeviceMemory                              memory,
+    float                                       priority);
 
 } // namespace entry
 

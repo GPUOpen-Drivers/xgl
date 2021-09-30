@@ -39,6 +39,7 @@
 
 #include "include/vk_shader_code.h"
 #include "include/vk_conv.h"
+#include "include/defer_compile_thread.h"
 
 namespace vk
 {
@@ -48,8 +49,7 @@ class PipelineCache;
 class ShaderModule;
 class PipelineCompiler;
 struct VbBindingInfo;
-struct VbInfo;
-struct UberFetchShaderBufferInfo;
+struct PipelineInternalBufferInfo;
 struct ShaderModuleHandle;
 
 class PipelineBinaryCache;
@@ -192,7 +192,8 @@ public:
         const GraphicsPipelineShaderStageInfo*          pShaderInfo,
         const PipelineLayout*                           pPipelineLayout,
         GraphicsPipelineBinaryCreateInfo*               pCreateInfo,
-        VbInfo*                                         pVbInfo);
+        VbBindingInfo*                                  pVbInfo,
+        PipelineInternalBufferInfo*                     pInternalBufferInfo);
 
     VkResult ConvertComputePipelineInfo(
         const Device*                                   pDevice,
@@ -212,7 +213,7 @@ public:
 
     void FreeComputePipelineCreateInfo(ComputePipelineBinaryCreateInfo* pCreateInfo);
 
-    void FreeGraphicsPipelineCreateInfo(GraphicsPipelineBinaryCreateInfo* pCreateInfo);
+    void FreeGraphicsPipelineCreateInfo(GraphicsPipelineBinaryCreateInfo* pCreateInfo, bool keepConvertTempMem);
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
     Util::Result RegisterAndLoadReinjectionBinary(
@@ -239,10 +240,8 @@ public:
 
     void DestroyPipelineBinaryCache();
 
-    VkResult BuildUberFetchShaderInternalData(PipelineCompilerType                        compilerType,
-                                              const VkPipelineVertexInputStateCreateInfo* pVertexInput,
-                                              bool                                        isDynamicStride,
-                                              UberFetchShaderBufferInfo*                  pFetchShaderBufferInfo);
+    VkResult BuildPipelineInternalBufferData(GraphicsPipelineBinaryCreateInfo*     pCreateInfo,
+                                             PipelineInternalBufferInfo*           pInternalBufferInfo);
 
     void GetComputePipelineCacheId(
         uint32_t                         deviceIdx,
@@ -257,6 +256,24 @@ public:
         uint64_t                          pipelineHash,
         const Util::MetroHash::Hash&      settingsHash,
         Util::MetroHash::Hash*            pCacheId);
+
+    static void BuildNggState(
+        const Device*                     pDevice,
+        const VkShaderStageFlagBits       activeStages,
+        const bool                        isConservativeOverestimation,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo);
+
+    static void BuildPipelineShaderInfo(
+        const Device*                                 pDevice,
+        const ShaderStageInfo*                        pShaderInfoIn,
+        Vkgc::PipelineShaderInfo*                     pShaderInfoOut,
+        Vkgc::PipelineOptions*                        pPipelineOptions,
+        PipelineOptimizerKey*                         pOptimizerKey,
+        Vkgc::NggState*                               pNggState
+        );
+
+    void ExecuteDeferCompile(
+        DeferredCompileWorkload* pWorkload);
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
@@ -302,11 +319,30 @@ private:
         FreeCompilerBinary*          pFreeCompilerBinary,
         PipelineCreationFeedback*    pPipelineFeedback);
 
+    VkResult LoadShaderModuleFromCache(
+        const Device*             pDevice,
+        VkShaderModuleCreateFlags flags,
+        uint32_t                  compilerMask,
+        Util::MetroHash::Hash&    uniqueHash,
+        ShaderModuleHandle*       pShaderModule);
+
+    void StoreShaderModuleToCache(
+        const Device*             pDevice,
+        VkShaderModuleCreateFlags flags,
+        uint32_t                  compilerMask,
+        Util::MetroHash::Hash&    uniqueHash,
+        ShaderModuleHandle*       pShaderModule);
+
+    Util::MetroHash::Hash GetShaderModuleCacheHash(
+        VkShaderModuleCreateFlags flags,
+        uint32_t                  compilerMask,
+        Util::MetroHash::Hash&    uniqueHash);
+
     // -----------------------------------------------------------------------------------------------------------------
 
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object
     Vkgc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by Vkgcf
-
+    DeferCompileManager m_deferCompileMgr;     // Defer compile thread manager
     CompilerSolutionLlpc m_compilerSolutionLlpc;
 
     PipelineBinaryCache* m_pBinaryCache;       // Pipeline binary cache object
@@ -320,9 +356,10 @@ private:
 
     UberFetchShaderFormatInfoMap m_uberFetchShaderInfoFormatMap;  // Uber fetch shader format info map
 
-    void GetPipelineCreationInfoNext(
-        const VkStructHeader*                             pHeader,
-        const VkPipelineCreationFeedbackCreateInfoEXT**   ppPipelineCreationFeadbackCreateInfo);
+    typedef Util::HashMap<Util::MetroHash::Hash, ShaderModuleHandle, PalAllocator, Util::JenkinsHashFunc> ShaderModuleHandleMap;
+
+    Util::Mutex           m_shaderModuleCacheLock;
+    ShaderModuleHandleMap m_shaderModuleHandleMap;
 
 }; // class PipelineCompiler
 

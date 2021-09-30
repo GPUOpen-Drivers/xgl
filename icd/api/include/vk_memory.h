@@ -71,6 +71,10 @@ union MemoryPriority
         { return ((priority < memPriority.priority) ||
                   ((priority == memPriority.priority) && (offset < memPriority.offset))); }
 
+    bool operator!=(const MemoryPriority& memPriority) const
+        { return ((priority != memPriority.priority) ||
+                  ((priority == memPriority.priority) && (offset != memPriority.offset))); }
+
     static MemoryPriority FromSetting(uint32_t value);
 
     static MemoryPriority FromVkMemoryPriority(float value);
@@ -132,6 +136,10 @@ public:
     VkResult GetCommitment(VkDeviceSize* pCommittedMemoryInBytes);
 
     void ElevatePriority(MemoryPriority priority);
+
+    void SetPriority(
+        const MemoryPriority    priority,
+        const bool              mustBeLower);
 
     Pal::IGpuMemory* PalMemory(uint32_t resourceIndex, uint32_t memoryIndex);
 

@@ -100,6 +100,7 @@ VK_EXT_inline_uniform_block
 VK_EXT_transform_feedback
 VK_KHR_shader_float16_int8
 VK_EXT_memory_priority
+VK_EXT_pageable_device_local_memory
 VK_EXT_memory_budget
 VK_KHR_depth_stencil_resolve
 VK_EXT_host_query_reset
@@ -115,6 +116,7 @@ VK_EXT_line_rasterization
 VK_EXT_shader_atomic_float
 VK_EXT_shader_atomic_float2
 VK_KHR_shader_clock
+VK_KHR_shader_integer_dot_product
 VK_KHR_shader_subgroup_extended_types
 VK_KHR_spirv_1_4
 VK_EXT_texel_buffer_alignment
@@ -138,6 +140,7 @@ VK_EXT_4444_formats
 VK_EXT_color_write_enable
 VK_KHR_shader_terminate_invocation
 VK_KHR_synchronization2
+VK_EXT_primitive_topology_list_restart
 VK_EXT_extended_dynamic_state2
 VK_KHR_copy_commands2
 VK_EXT_ycbcr_image_arrays

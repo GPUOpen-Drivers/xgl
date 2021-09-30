@@ -50,6 +50,18 @@ class RenderPass;
 struct CmdBufferRenderState;
 
 // =====================================================================================================================
+// Create info of graphics pipeline deferred compile
+struct DeferGraphicsPipelineCreateInfo
+{
+    Device*                          pDevice;
+    PipelineCache*                   pPipelineCache;
+    GraphicsPipeline*                pPipeline;
+    GraphicsPipelineBinaryCreateInfo binaryCreateInfo;
+    GraphicsPipelineShaderStageInfo  shaderStageInfo;
+    GraphicsPipelineObjectCreateInfo objectCreateInfo;
+};
+
+// =====================================================================================================================
 // Convert sample location coordinates from [0,1] space (sent by the application) to [-8, 7] space (accepted by PAL)
 static void ConvertCoordinates(
     const VkSampleLocationEXT* pInSampleLocations,
@@ -158,7 +170,7 @@ public:
         const VkAllocationCallbacks*    pAllocator) override;
 
     const VbBindingInfo& GetVbBindingInfo() const
-        { return m_vbInfo.bindingInfo; }
+        { return m_vbInfo; }
 
     void BindToCmdBuffer(
         CmdBuffer*                             pCmdBuffer,
@@ -197,7 +209,8 @@ protected:
         bool                                   bindInputAssemblyState,
         bool                                   force1x1ShaderRate,
         bool                                   customSampleLocations,
-        const VbInfo&                          vbInfo,
+        const VbBindingInfo&                   vbInfo,
+        const PipelineInternalBufferInfo*      pInternalBuffer,
         Pal::IMsaaState**                      pPalMsaa,
         Pal::IColorBlendState**                pPalColorBlend,
         Pal::IDepthStencilState**              pPalDepthStencil,
@@ -234,7 +247,8 @@ protected:
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
         const VkAllocationCallbacks*        pAllocator,
         const PipelineLayout*               pPipelineLayout,
-        const VbInfo*                       pVbInfo,
+        const VbBindingInfo*                pVbInfo,
+        const PipelineInternalBufferInfo*   pInternalBuffer,
         const size_t*                       pPipelineBinarySizes,
         const void**                        pPipelineBinaries,
         PipelineCache*                      pPipelineCache,
@@ -247,12 +261,54 @@ protected:
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(GraphicsPipeline);
 
+    VkResult DeferCreateOptimizedPipeline(
+        Device*                           pDevice,
+        PipelineCache*                    pPipelineCache,
+        GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
+        GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
+        GraphicsPipelineObjectCreateInfo* pObjectCreateInfo);
+
+    static VkResult CreatePalPipelineObjects(
+        Device*                           pDevice,
+        PipelineCache*                    pPipelineCache,
+        GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
+        const size_t*                     pPipelineBinarySizes,
+        const void**                      pPipelineBinaries,
+        const Util::MetroHash::Hash*      pCacheIds,
+        void*                             pSystemMem,
+        Pal::IPipeline**                  pPalPipeline);
+
+    void SetOptimizedPipeline(Pal::IPipeline** pPalPipeline);
+
+    bool UseOptimizedPipeline() const
+    {
+        bool result = m_info.checkDeferCompilePipeline;
+        if (result)
+        {
+            Util::MutexAuto pipelineSwitchLock(const_cast<Util::Mutex*>(&m_pipelineSwitchLock));
+            result = m_pOptimizedPipeline[0] != nullptr && m_optimizedPipelineHash != 0;
+        }
+        return result;
+    }
+    VkResult BuildDeferCompileWorkload(
+        Device*                           pDevice,
+        PipelineCache*                    pPipelineCache,
+        GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
+        GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
+        GraphicsPipelineObjectCreateInfo* pObjectCreateInfo);
+
+    static void ExecuteDeferCreateOptimizedPipeline(void* pPayload);
+
     GraphicsPipelineObjectImmedInfo m_info;                            // Immediate state that will go in CmdSet* functions
     Pal::IMsaaState*                m_pPalMsaa[MaxPalDevices];         // PAL MSAA state object
     Pal::IColorBlendState*          m_pPalColorBlend[MaxPalDevices];   // PAL color blend state object
     Pal::IDepthStencilState*        m_pPalDepthStencil[MaxPalDevices]; // PAL depth stencil state object
-    VbInfo                          m_vbInfo;                          // Information about vertex buffer bindings
-
+    VbBindingInfo                   m_vbInfo;                          // Information about vertex buffer bindings
+    PipelineInternalBufferInfo      m_internalBufferInfo;              // Information about internal buffer
+    Pal::IPipeline*                 m_pOptimizedPipeline[MaxPalDevices]; // Optimized PAL pipelines
+    uint64_t                        m_optimizedPipelineHash;           // Pipeline hash of optimized PAL pipelines
+    Util::Mutex                     m_pipelineSwitchLock;              // Lock for optimized pipeline and default pipeline
+    DeferredCompileWorkload         m_deferWorkload;                   // Workload of deferred compiled
     union
     {
         uint8 value;

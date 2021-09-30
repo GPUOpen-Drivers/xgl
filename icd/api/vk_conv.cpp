@@ -1056,6 +1056,8 @@ uint32_t GetBufferSrdFormatInfo(
     }
     else
     {
+        VK_ASSERT(pPhysicalDevice->PalProperties().gfxipProperties.srdSizes.bufferView == 4 * sizeof(uint32_t));
+
         uint32_t result[4] = {};
         Pal::BufferViewInfo bufferInfo = {};
         bufferInfo.gpuAddr = 0x300000000ull;
@@ -1063,20 +1065,23 @@ uint32_t GetBufferSrdFormatInfo(
         bufferInfo.range = UINT32_MAX;
         bufferInfo.stride = Pal::Formats::BytesPerPixel(swizzledFormat.format);
         pPhysicalDevice->PalDevice()->CreateTypedBufferViewSrds(1, &bufferInfo, result);
+
+        // NOTE: Until now, all buffer format info is stored the fourth DWORD of buffer SRD. please modify
+        // both BilVertexFetchManager::IssueUberFetchInst and UberFetchShaderFormatInfo once it is changed.
         return result[3];
     }
 }
 
-#define INIT_UBER_FORMATINFO(vkFmt, palFmt, unpckedPalFmt, packed, fixed, compCnt, compSize, align) {  \
+#define INIT_UBER_FORMATINFO(vkFmt, palFmt, unpackedPalFmt, packed, fixed, compCnt, compSize, align) {  \
         UberFetchShaderFormatInfo fmtInfo = {};                                                     \
         fmtInfo.swizzledFormat = palFmt;                                                            \
-        fmtInfo.unpackedFormat = unpckedPalFmt;                                                     \
+        fmtInfo.unpackedFormat = unpackedPalFmt;                                                    \
         fmtInfo.isPacked       = packed;                                                            \
         fmtInfo.isFixed        = fixed;                                                             \
         fmtInfo.componentCount = compCnt;                                                           \
         fmtInfo.componentSize  = compSize;                                                          \
         fmtInfo.bufferFormat   = GetBufferSrdFormatInfo(pPhysicalDevice, palFmt);                   \
-        fmtInfo.unpackedBufferFormat = GetBufferSrdFormatInfo(pPhysicalDevice, unpckedPalFmt);      \
+        fmtInfo.unpackedBufferFormat = GetBufferSrdFormatInfo(pPhysicalDevice, unpackedPalFmt);     \
         fmtInfo.alignment      = align;                                                             \
         pFormatInfoMap->Insert(VK_FORMAT_##vkFmt, fmtInfo); }
 
@@ -1290,6 +1295,29 @@ VkResult InitializeUberFetchShaderFormatTable(
     INIT_UBER_FORMATINFO(UNDEFINED,
         PalFmt_Undefined,                         PalFmt_Undefined,                         0, 0, 0, 0, 4);
 
+    // OOB flag is in buffer dword3 on Gfx10+, and the value is different when stride is 0.
+    // to avoid access the exact bit in buffer SRD, we create untypeded buffer twice with different stride,
+    // and record the modified bits.
+
+    VK_ASSERT(pPhysicalDevice->PalProperties().gfxipProperties.srdSizes.bufferView == 4 * sizeof(uint32_t));
+
+    uint32_t defaultSrd[4] = {};
+    uint32_t zeroStrideSrd[4] = {};
+    Pal::BufferViewInfo bufferInfo = {};
+    bufferInfo.gpuAddr = 0x300000000ull;
+    bufferInfo.swizzledFormat = PalFmt_RGBA(32, 32, 32, 32, Float);
+    bufferInfo.range = UINT32_MAX;
+
+    // Build SRD with non-zero stride
+    bufferInfo.stride = 16;
+    pPhysicalDevice->PalDevice()->CreateUntypedBufferViewSrds(1, &bufferInfo, defaultSrd);
+
+    // Build SRD with zero stride
+    bufferInfo.stride = 0;
+    pPhysicalDevice->PalDevice()->CreateUntypedBufferViewSrds(1, &bufferInfo, zeroStrideSrd);
+
+    // Save the modified bits in buffer SRD
+    pFormatInfoMap->SetBufferFormatMask(defaultSrd[3] ^ zeroStrideSrd[3]);
     return VK_SUCCESS;
  }
 #undef INIT_UBER_FORMATINFO
@@ -1297,11 +1325,23 @@ VkResult InitializeUberFetchShaderFormatTable(
 // =====================================================================================================================
 UberFetchShaderFormatInfo GetUberFetchShaderFormatInfo(
     UberFetchShaderFormatInfoMap* pFormatInfoMap,
-    VkFormat                      vkFormat)
+    VkFormat                      vkFormat,
+    bool                          isZeroStride)
 {
-    UberFetchShaderFormatInfo dummyInfo = {};
+    UberFetchShaderFormatInfo formatInfo = {};
     auto pFormatInfo = pFormatInfoMap->FindKey(vkFormat);
-    return (pFormatInfo == nullptr) ? dummyInfo : *pFormatInfo;
+    if (pFormatInfo != nullptr)
+    {
+        formatInfo = *pFormatInfo;
+        if (isZeroStride)
+        {
+            // Apply zero stride modified bits, which are caclulated in UberFetchShaderFormatInfoMap initialization.
+            formatInfo.bufferFormat = formatInfo.bufferFormat ^ pFormatInfoMap->GetBufferFormatMask();
+            formatInfo.unpackedBufferFormat = formatInfo.unpackedBufferFormat ^ pFormatInfoMap->GetBufferFormatMask();
+        }
+    }
+
+    return formatInfo;
 }
 
 } // namespace vk

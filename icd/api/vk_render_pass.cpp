@@ -634,17 +634,6 @@ static size_t GetRenderPassCreateInfoRequiredMemorySize(
 {
     size_t createInfoSize = 0;
 
-    createInfoSize += pCreateInfo->attachmentCount * sizeof(AttachmentDescription);
-    createInfoSize += pCreateInfo->subpassCount * sizeof(SubpassDescription);
-    createInfoSize += pCreateInfo->dependencyCount * sizeof(SubpassDependency);
-
-    for (uint32_t subpassIndex = 0; subpassIndex < pCreateInfo->subpassCount; ++subpassIndex)
-    {
-        const auto& subpassDesc = pCreateInfo->pSubpasses[subpassIndex];
-
-        createInfoSize += GetSubpassDescriptionBaseMemorySize(subpassDesc);
-    }
-
     if (renderPassExt.pMultiviewCreateInfo != nullptr)
     {
         createInfoSize += renderPassExt.pMultiviewCreateInfo->correlationMaskCount * sizeof(uint32_t);
@@ -654,6 +643,19 @@ static size_t GetRenderPassCreateInfoRequiredMemorySize(
         auto pCreateInfo2 = reinterpret_cast<const VkRenderPassCreateInfo2*>(pCreateInfo);
 
         createInfoSize += pCreateInfo2->correlatedViewMaskCount * sizeof(uint32_t);
+    }
+
+    createInfoSize += pCreateInfo->attachmentCount * sizeof(AttachmentDescription);
+    // Subpasses need to be aligned
+    createInfoSize = Util::Pow2Align(createInfoSize, alignof(SubpassDescription));
+    createInfoSize += pCreateInfo->subpassCount * sizeof(SubpassDescription);
+    createInfoSize += pCreateInfo->dependencyCount * sizeof(SubpassDependency);
+
+    for (uint32_t subpassIndex = 0; subpassIndex < pCreateInfo->subpassCount; ++subpassIndex)
+    {
+        const auto& subpassDesc = pCreateInfo->pSubpasses[subpassIndex];
+
+        createInfoSize += GetSubpassDescriptionBaseMemorySize(subpassDesc);
     }
 
     return createInfoSize;
@@ -697,6 +699,8 @@ static void InitRenderPassCreateInfo(
     }
 
     nextPtr = Util::VoidPtrInc(nextPtr, pCreateInfo->attachmentCount * sizeof(AttachmentDescription));
+    // Struct needs to be aligned
+    nextPtr = Util::VoidPtrAlign(nextPtr, alignof(SubpassDescription));
     VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
 
     outRenderPassInfo->subpassCount = pCreateInfo->subpassCount;

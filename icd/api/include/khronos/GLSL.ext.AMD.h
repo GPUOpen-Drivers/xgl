@@ -84,6 +84,35 @@ enum GcnShaderAMD {
     GcnShaderCountAMD
 };
 
+#if VKI_TEXEL_BUFFER_EXPLICIT_FORMAT_SUPPORT
+// SPV_AMD_shader_texel_buffer_explicit_format
+static const Capability CapabilityImageBufferReadWriteWithFormatAMD = static_cast<Capability>(5024);
+
+static const Op OpImageBufferReadAMD = static_cast<Op>(5025);
+static const Op OpImageBufferWriteAMD = static_cast<Op>(5026);
+
+static const ImageFormat ImageFormatRgb32fAMD =         static_cast<ImageFormat>(5028);
+static const ImageFormat ImageFormatRgb32uiAMD =        static_cast<ImageFormat>(5029);
+static const ImageFormat ImageFormatRgb32iAMD =         static_cast<ImageFormat>(5030);
+static const ImageFormat ImageFormatR10G11B11fAMD =     static_cast<ImageFormat>(5031);
+static const ImageFormat ImageFormatRgb10A2SnormAMD =   static_cast<ImageFormat>(5032);
+static const ImageFormat ImageFormatRgb10A2iAMD =       static_cast<ImageFormat>(5033);
+static const ImageFormat ImageFormatRgba16SscaledAMD =  static_cast<ImageFormat>(5034);
+static const ImageFormat ImageFormatRgb10A2SscaledAMD = static_cast<ImageFormat>(5035);
+static const ImageFormat ImageFormatRg16SscaledAMD =    static_cast<ImageFormat>(5036);
+static const ImageFormat ImageFormatRgba8SscaledAMD =   static_cast<ImageFormat>(5037);
+static const ImageFormat ImageFormatRg8SscaledAMD =     static_cast<ImageFormat>(5038);
+static const ImageFormat ImageFormatR16SscaledAMD =     static_cast<ImageFormat>(5039);
+static const ImageFormat ImageFormatR8SscaledAMD =      static_cast<ImageFormat>(5040);
+static const ImageFormat ImageFormatRgba16UscaledAMD =  static_cast<ImageFormat>(5041);
+static const ImageFormat ImageFormatRgb10A2UscaledAMD = static_cast<ImageFormat>(5042);
+static const ImageFormat ImageFormatRg16UscaledAMD =    static_cast<ImageFormat>(5043);
+static const ImageFormat ImageFormatRgba8USscaledAMD =  static_cast<ImageFormat>(5044);
+static const ImageFormat ImageFormatRg8UscaledAMD =     static_cast<ImageFormat>(5045);
+static const ImageFormat ImageFormatR16UscaledAMD =     static_cast<ImageFormat>(5046);
+static const ImageFormat ImageFormatR8UscaledAMD =      static_cast<ImageFormat>(5047);
+#endif
+
 #if VKI_NORMALIZED_TRIG_FUNCTIONS
 // SPV_AMD_normalized_trig - Internal Use Only
 static const Capability CapabilityTrigNormalizedAMD = static_cast<Capability>(5058);

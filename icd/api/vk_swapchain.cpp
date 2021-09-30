@@ -335,11 +335,17 @@ VkResult SwapChain::Create(
                                                                  &palResult);
     VK_ASSERT(palResult == Pal::Result::Success);
 
-    size_t          queueFamilyArraySize = sizeof(uint32_t*) * pCreateInfo->queueFamilyIndexCount;
-    size_t          imageArraySize       = sizeof(VkImage) * swapImageCount;
-    size_t          memoryArraySize      = sizeof(VkDeviceMemory) * swapImageCount;
-    size_t          cmdBufArraySize      = sizeof(Pal::ICmdBuffer*) * swapImageCount;
-    size_t          objSize              = vkSwapChainSize +
+    properties.queueFamilyIndexCount =    ((pCreateInfo->imageSharingMode == VK_SHARING_MODE_CONCURRENT) ?
+                                           pCreateInfo->queueFamilyIndexCount : 0u);
+
+    // If imageSharingMode is VK_SHARING_MODE_CONCURRENT, queueFamilyIndexCount must be greater than 1.
+    VK_ASSERT((pCreateInfo->imageSharingMode != VK_SHARING_MODE_CONCURRENT) || (properties.queueFamilyIndexCount > 1));
+
+    const size_t    queueFamilyArraySize = sizeof(uint32_t*) * properties.queueFamilyIndexCount;
+    const size_t    imageArraySize       = sizeof(VkImage) * swapImageCount;
+    const size_t    memoryArraySize      = sizeof(VkDeviceMemory) * swapImageCount;
+    const size_t    cmdBufArraySize      = sizeof(Pal::ICmdBuffer*) * swapImageCount;
+    const size_t    objSize              = vkSwapChainSize +
                                            queueFamilyArraySize +
                                            palSwapChainSize +
                                            imageArraySize +
@@ -402,25 +408,26 @@ VkResult SwapChain::Create(
             &properties.imageCreateInfo);
     }
 
+    // Store creation info for image barrier policy
+    properties.usage       = pCreateInfo->imageUsage;
+    properties.sharingMode = pCreateInfo->imageSharingMode;
+    properties.format      = pCreateInfo->imageFormat;
+
     properties.images      = static_cast<VkImage*>(Util::VoidPtrInc(pMemory, offset));
     offset += imageArraySize;
 
     properties.imageMemory = static_cast<VkDeviceMemory*>(Util::VoidPtrInc(pMemory, offset));
     offset += memoryArraySize;
 
-    properties.pQueueFamilyIndices = static_cast<uint32_t*>(Util::VoidPtrInc(pMemory, offset));
-    offset += queueFamilyArraySize;
+    // memcpy queue family indices
+    if (queueFamilyArraySize > 0u)
+    {
+        properties.pQueueFamilyIndices = static_cast<uint32_t*>(Util::VoidPtrInc(pMemory, offset));
+        offset += queueFamilyArraySize;
+        memcpy(properties.pQueueFamilyIndices, pCreateInfo->pQueueFamilyIndices, queueFamilyArraySize);
+    }
 
     VK_ASSERT(offset == objSize);
-
-    // Store creation info for image barrier policy
-    properties.usage                 = pCreateInfo->imageUsage;
-    properties.queueFamilyIndexCount = pCreateInfo->queueFamilyIndexCount;
-    properties.sharingMode           = pCreateInfo->imageSharingMode;
-    properties.format                = pCreateInfo->imageFormat;
-
-    // memcpy queue family indices
-    memcpy(properties.pQueueFamilyIndices, pCreateInfo->pQueueFamilyIndices, queueFamilyArraySize);
 
     for (properties.imageCount = 0; properties.imageCount < swapImageCount; ++properties.imageCount)
     {

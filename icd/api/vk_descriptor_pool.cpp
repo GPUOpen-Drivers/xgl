@@ -450,10 +450,21 @@ VkResult DescriptorGpuMemHeap::Init(
 
     bool oneShot = (m_usage & VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT) == 0;
 
-    for (uint32_t i = 0; i < count; ++i)
+    if (pDevice->GetRuntimeSettings().pipelineLayoutMode == PipelineLayoutAngle)
     {
-        m_gpuMemSize += DescriptorSetLayout::GetSingleDescStaticSize(pDevice, pTypeCount[i].type) *
-            pTypeCount[i].descriptorCount;
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            m_gpuMemSize += AngleDescPattern::DescriptorSetBindingStride * sizeof(uint32_t) *
+                pTypeCount[i].descriptorCount;
+        }
+    }
+    else
+    {
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            m_gpuMemSize += DescriptorSetLayout::GetSingleDescStaticSize(pDevice, pTypeCount[i].type) *
+                pTypeCount[i].descriptorCount;
+        }
     }
 
     m_gpuMemAddrAlignment = pDevice->GetProperties().descriptorSizes.alignment;

@@ -71,8 +71,6 @@
 #include "sqtt/sqtt_mgr.h"
 #include "sqtt/sqtt_rgp_annotations.h"
 
-#include "appopt/async_layer.h"
-
 #if VKI_GPU_DECOMPRESS
 #include "appopt/gpu_decode_layer.h"
 #endif
@@ -256,7 +254,6 @@ Device::Device(
     m_enabledExtensions(enabledExtensions),
     m_dispatchTable(DispatchTable::Type::DEVICE, m_pInstance, this),
     m_pSqttMgr(nullptr),
-    m_pAsyncLayer(nullptr),
     m_pAppOptLayer(nullptr),
     m_pBarrierFilterLayer(nullptr),
 #if VKI_GPU_DECOMPRESS
@@ -264,6 +261,7 @@ Device::Device(
 #endif
     m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true),
     m_useComputeAsTransferQueue(useComputeAsTransferQueue),
+    m_useUniversalAsComputeQueue(pPhysicalDevices[DefaultDeviceIndex]->GetRuntimeSettings().useUniversalAsComputeQueue),
     m_useGlobalGpuVa(false)
     , m_pBorderColorUsedIndexes(nullptr)
 {
@@ -365,6 +363,11 @@ static void ConstructQueueCreateInfo(
     {
         palQueueType = Pal::QueueType::QueueTypeCompute;
     }
+    else if ((palQueueType == Pal::QueueType::QueueTypeCompute) &&
+        (pPhysicalDevices[deviceIdx]->GetRuntimeSettings().useUniversalAsComputeQueue))
+    {
+        palQueueType = Pal::QueueType::QueueTypeUniversal;
+    }
 
     pQueueCreateInfo->tmzOnly = isTmzQueue;
 
@@ -393,8 +396,14 @@ static void ConstructQueueCreateInfo(
     }
     else
     {
-        pQueueCreateInfo->engineType  =
-            pPhysicalDevices[deviceIdx]->GetQueueFamilyPalEngineType(queueFamilyIndex);
+        if (palQueueType == Pal::QueueType::QueueTypeUniversal)
+        {
+            pQueueCreateInfo->engineType = Pal::EngineType::EngineTypeUniversal;
+        }
+        else
+        {
+            pQueueCreateInfo->engineType = pPhysicalDevices[deviceIdx]->GetQueueFamilyPalEngineType(queueFamilyIndex);
+        }
 
         if (palQueueType == Pal::QueueType::QueueTypeUniversal)
         {
@@ -476,6 +485,7 @@ VkResult Device::Create(
     bool                              scalarBlockLayoutEnabled        = false;
     ExtendedRobustness                extendedRobustnessEnabled       = { false, false, false };
     bool                              attachmentFragmentShadingRate   = false;
+    bool                              pageableDeviceLocalMemory       = false;
 
     uint32                            privateDataSlotRequestCount           = 0;
     bool                              privateDataEnabled                    = false;
@@ -525,7 +535,8 @@ VkResult Device::Create(
             {
                 VK_ASSERT(pCreateInfo->pEnabledFeatures == nullptr);
 
-                // If present, VkPhysicalDeviceFeatures2 controls which features are enabled instead of pEnabledFeatures
+                // If present, VkPhysicalDeviceFeatures2 controls which features are enabled
+                // instead of pEnabledFeatures.
                 pEnabledFeatures = &reinterpret_cast<const VkPhysicalDeviceFeatures2*>(pHeader)->features;
 
                 break;
@@ -543,7 +554,19 @@ VkResult Device::Create(
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES:
             {
-                if (reinterpret_cast<const VkPhysicalDeviceBufferDeviceAddressFeatures*>(pHeader)->bufferDeviceAddressMultiDevice)
+                if (reinterpret_cast<const VkPhysicalDeviceBufferDeviceAddressFeatures*>(
+                    pHeader)->bufferDeviceAddressMultiDevice)
+                {
+                    bufferDeviceAddressMultiDeviceEnabled = true;
+                }
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT:
+            {
+                if (reinterpret_cast<const VkPhysicalDeviceBufferDeviceAddressFeaturesEXT*>(
+                    pHeader)->bufferDeviceAddressMultiDevice)
                 {
                     bufferDeviceAddressMultiDeviceEnabled = true;
                 }
@@ -571,8 +594,8 @@ VkResult Device::Create(
             {
 
                 deviceCoherentMemoryEnabled = enabledDeviceExtensions.IsExtensionEnabled(
-                                                DeviceExtensions::AMD_DEVICE_COHERENT_MEMORY) &&
-                                                reinterpret_cast<const VkPhysicalDeviceCoherentMemoryFeaturesAMD *>(pHeader)->deviceCoherentMemory;
+                    DeviceExtensions::AMD_DEVICE_COHERENT_MEMORY) &&
+                    reinterpret_cast<const VkPhysicalDeviceCoherentMemoryFeaturesAMD *>(pHeader)->deviceCoherentMemory;
 
                 break;
             }
@@ -591,7 +614,8 @@ VkResult Device::Create(
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
             {
 
-                if (reinterpret_cast<const VkPhysicalDeviceFragmentShadingRateFeaturesKHR*>(pHeader)->attachmentFragmentShadingRate)
+                if (reinterpret_cast<const VkPhysicalDeviceFragmentShadingRateFeaturesKHR*>(
+                    pHeader)->attachmentFragmentShadingRate)
                 {
                     attachmentFragmentShadingRate = true;
                 }
@@ -621,7 +645,8 @@ VkResult Device::Create(
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES_EXT:
             {
-                privateDataEnabled = reinterpret_cast<const VkPhysicalDevicePrivateDataFeaturesEXT*>(pHeader)->privateData;
+                privateDataEnabled = reinterpret_cast<const VkPhysicalDevicePrivateDataFeaturesEXT*>(
+                                     pHeader)->privateData;
 
                 break;
             }
@@ -632,6 +657,17 @@ VkResult Device::Create(
                 {
                     extendedRobustnessEnabled.robustImageAccess = true;
                 }
+
+                break;
+            }
+
+           case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT:
+            {
+               if (reinterpret_cast<const VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT*>(
+                   pHeader)->pageableDeviceLocalMemory)
+               {
+                   pageableDeviceLocalMemory = true;
+               }
 
                 break;
             }
@@ -1061,7 +1097,8 @@ VkResult Device::Create(
                 attachmentFragmentShadingRate,
                 scalarBlockLayoutEnabled,
                 extendedRobustnessEnabled,
-                bufferDeviceAddressMultiDeviceEnabled);
+                bufferDeviceAddressMultiDeviceEnabled,
+                pageableDeviceLocalMemory);
 
             // If we've failed to Initialize, make sure we destroy anything we might have allocated.
             if (vkResult != VK_SUCCESS)
@@ -1095,7 +1132,8 @@ VkResult Device::Initialize(
     const bool                              attachmentFragmentShadingRate,
     bool                                    scalarBlockLayoutEnabled,
     const ExtendedRobustness&               extendedRobustnessEnabled,
-    bool                                    bufferDeviceAddressMultiDeviceEnabled)
+    bool                                    bufferDeviceAddressMultiDeviceEnabled,
+    bool                                    pageableDeviceLocalMemory)
 {
     // Initialize the internal memory manager
     VkResult result = m_internalMemMgr.Init();
@@ -1206,6 +1244,12 @@ VkResult Device::Initialize(
     m_enabledFeatures.robustBufferAccessExtended   = extendedRobustnessEnabled.robustBufferAccess;
     m_enabledFeatures.robustImageAccessExtended    = extendedRobustnessEnabled.robustImageAccess;
     m_enabledFeatures.nullDescriptorExtended       = extendedRobustnessEnabled.nullDescriptor;
+
+    if (IsExtensionEnabled(DeviceExtensions::EXT_MEMORY_PRIORITY) ||
+        (IsExtensionEnabled(DeviceExtensions::EXT_PAGEABLE_DEVICE_LOCAL_MEMORY) && pageableDeviceLocalMemory))
+    {
+        m_enabledFeatures.appControlledMemPriority = true;
+    }
 
     // If VkPhysicalDeviceBufferDeviceAddressFeaturesEXT.bufferDeviceAddressMultiDevice is enabled
     // and if globalGpuVaSupport is supported and if multiple devices are used set the global GpuVa.
@@ -1340,20 +1384,6 @@ VkResult Device::Initialize(
     }
 #endif
 
-    if ((result == VK_SUCCESS) && m_settings.enableAsyncCompile)
-    {
-        void* pMemory = VkInstance()->AllocMem(sizeof(AsyncLayer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-
-        if (pMemory != nullptr)
-        {
-            m_pAsyncLayer = VK_PLACEMENT_NEW(pMemory) AsyncLayer(this);
-        }
-        else
-        {
-            result = VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
-    }
-
     const Pal::DeviceProperties& palProps = pPhysicalDevice->PalProperties();
 
     if (result == VK_SUCCESS)
@@ -1409,6 +1439,13 @@ VkResult Device::Initialize(
                 default:
                     break;
                 }
+            }
+            else if (enabled.IsExtensionEnabled(DeviceExtensions::ExtensionId::EXT_PAGEABLE_DEVICE_LOCAL_MEMORY) &&
+                     pageableDeviceLocalMemory)
+            {
+                // Add back-up heaps for device-local heaps
+                m_overallocationRequestedForPalHeap[Pal::GpuHeap::GpuHeapInvisible] = true;
+                m_overallocationRequestedForPalHeap[Pal::GpuHeap::GpuHeapLocal]     = true;
             }
             else if ((m_settings.overrideHeapChoiceToLocal != 0) && (palProps.gpuType == Pal::GpuType::Discrete))
             {
@@ -1491,12 +1528,6 @@ void Device::InitDispatchTable()
     if (m_pBarrierFilterLayer != nullptr)
     {
         m_pBarrierFilterLayer->OverrideDispatchTable(&m_dispatchTable);
-    }
-
-    // Install the async compile layer if needed
-    if (m_pAsyncLayer != nullptr)
-    {
-        m_pAsyncLayer->OverrideDispatchTable(&m_dispatchTable);
     }
 
 #if VKI_GPU_DECOMPRESS
@@ -1724,13 +1755,6 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
         VkInstance()->FreeMem(m_pAppOptLayer);
     }
 
-    if (m_pAsyncLayer != nullptr)
-    {
-        Util::Destructor(m_pAsyncLayer);
-
-        VkInstance()->FreeMem(m_pAsyncLayer);
-    }
-
 #if VKI_GPU_DECOMPRESS
     if (m_pGpuDecoderLayer != nullptr)
     {
@@ -1818,6 +1842,11 @@ Pal::QueueType Device::GetQueueFamilyPalQueueType(
         palQueueType = Pal::QueueType::QueueTypeCompute;
     }
 
+    else if ((palQueueType == Pal::QueueType::QueueTypeCompute) && m_useUniversalAsComputeQueue)
+    {
+        palQueueType = Pal::QueueType::QueueTypeUniversal;
+    }
+
     return palQueueType;
 }
 
@@ -1830,6 +1859,11 @@ Pal::EngineType Device::GetQueueFamilyPalEngineType(
     if ((palEngineType == Pal::EngineType::EngineTypeDma) && m_useComputeAsTransferQueue)
     {
         palEngineType = Pal::EngineType::EngineTypeCompute;
+    }
+
+    else if ((palEngineType == Pal::EngineType::EngineTypeCompute) && m_useUniversalAsComputeQueue)
+    {
+        palEngineType = Pal::EngineType::EngineTypeUniversal;
     }
 
     return palEngineType;
@@ -4194,6 +4228,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkSetDeviceMemoryPriorityEXT(
+    VkDevice                                    device,
+    VkDeviceMemory                              memory,
+    float                                       priority)
+{
+    Memory* pMemory = Memory::ObjectFromHandle(memory);
+    pMemory->SetPriority(MemoryPriority::FromVkMemoryPriority(priority), false);
 }
 
 } // entry

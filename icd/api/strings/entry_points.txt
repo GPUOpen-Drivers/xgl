@@ -362,6 +362,8 @@ vkGetPipelineExecutableInternalRepresentationsKHR   @device     @dext(KHR_pipeli
 
 vkCmdSetLineStippleEXT                              @device     @dext(EXT_line_rasterization)
 
+vkSetDeviceMemoryPriorityEXT                        @device     @dext(EXT_pageable_device_local_memory)
+
 vkCreatePrivateDataSlotEXT                          @device     @dext(EXT_private_data)
 vkDestroyPrivateDataSlotEXT                         @device     @dext(EXT_private_data)
 vkSetPrivateDataEXT                                 @device     @dext(EXT_private_data)

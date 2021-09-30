@@ -5363,6 +5363,8 @@ void CmdBuffer::SetSampleLocations(
 
     ConvertToPalMsaaQuadSamplePattern(pSampleLocationsInfo, &locations);
     PalCmdSetMsaaQuadSamplePattern(sampleLocationsPerPixel, locations);
+
+    m_allGpuState.staticTokens.samplePattern = DynamicRenderStateToken;
 }
 
 // =====================================================================================================================
@@ -5520,11 +5522,10 @@ void CmdBuffer::BeginRenderPass(
                 sizeof(SamplePattern) * subpassCount,
                 VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
 
-        memset(m_renderPassInstance.pSamplePatterns, 0, subpassCount * sizeof(SamplePattern));
-
         if (m_renderPassInstance.pSamplePatterns != nullptr)
         {
             m_renderPassInstance.maxSubpassCount = subpassCount;
+            memset(m_renderPassInstance.pSamplePatterns, 0, subpassCount * sizeof(SamplePattern));
         }
         else
         {
@@ -5924,7 +5925,7 @@ void CmdBuffer::RPSyncPoint(
 
                     const uint32_t sampleCount = attachment.pImage->GetImageSamples();
 
-                    if (sampleCount > 1)
+                    if (sampleCount > 0)
                     {
                          if (attachment.pImage->IsSampleLocationsCompatibleDepth() &&
                              tr.flags.isInitialLayoutTransition)
@@ -5956,6 +5957,27 @@ void CmdBuffer::RPSyncPoint(
     else if (maxTransitionCount != 0)
     {
         m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    // Construct a dumb transition to sync cache
+    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+    if (settings.enableDumbTransitionSync && (barrier.transitionCount == 0) && (rpBarrier.flags.needsGlobalTransition))
+    {
+        if (pPalTransitions == nullptr)
+        {
+            pPalTransitions = pVirtStack->AllocArray<Pal::BarrierTransition>(1);
+        }
+
+        if (pPalTransitions != nullptr)
+        {
+            Pal::BarrierTransition *pDumbTransition = &pPalTransitions[0];
+            pDumbTransition->srcCacheMask = 0;
+            pDumbTransition->dstCacheMask = 0;
+            pDumbTransition->imageInfo.pImage = nullptr;
+
+            barrier.transitionCount = 1;
+            barrier.pTransitions = pDumbTransition;
+        }
     }
 
     // Execute the barrier if it actually did anything
@@ -6531,8 +6553,8 @@ void CmdBuffer::WritePushConstants(
     // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant because
     // a future vkCmdBindPipeline will reprogram the user data registers during the rebase.
     if (PalPipelineBindingOwnedBy(palBindPoint, apiBindPoint) &&
-        pBindState->userDataLayout.pushConstRegBase == userDataLayout.pushConstRegBase &&
-        pBindState->userDataLayout.pushConstRegCount >= startInDwords + lengthInDwords)
+        (pBindState->userDataLayout.pushConstRegBase == userDataLayout.pushConstRegBase) &&
+        (pBindState->userDataLayout.pushConstRegCount >= (startInDwords + lengthInDwords)))
     {
         utils::IterateMask deviceGroup(m_curDeviceMask);
         do
@@ -7149,24 +7171,6 @@ void CmdBuffer::DrawIndirectByteCount(
             instanceCount);
     }
     while (deviceGroup.IterateNext());
-}
-
-// =====================================================================================================================
-void CmdBuffer::SetLineStippleEXT(
-    const Pal::LineStippleStateParams& params,
-    uint32_t                           staticToken)
-{
-    m_allGpuState.lineStipple = params;
-
-    utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
-    do
-    {
-        const uint32_t deviceIdx = deviceGroup.Index();
-        PalCmdBuffer(deviceIdx)->CmdSetLineStippleState(m_allGpuState.lineStipple);
-    }
-    while (deviceGroup.IterateNext());
-
-    m_allGpuState.staticTokens.lineStippleState = staticToken;
 }
 
 // =====================================================================================================================

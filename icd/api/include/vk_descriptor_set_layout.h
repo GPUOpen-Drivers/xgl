@@ -47,6 +47,20 @@ class MetroHash64;
 namespace vk
 {
 
+// Fixed offset for pipeline internal resource.
+constexpr uint32_t FetchShaderInternalBufferOffset = 0;
+constexpr uint32_t SpecConstBufferVertexOffset     = 2;
+constexpr uint32_t SpecConstBufferFragmentOffset   = 4;
+constexpr uint32_t SpecConstVertexInternalBufferBindingId = 5;
+constexpr uint32_t SpecConstFragmentInternalBufferBindingId = 9;
+
+// Constants for Angle style descriptor layout pattern
+namespace AngleDescPattern
+{
+constexpr uint32_t DescriptorSetOffset[4]          = { 6, 10, 18, 19 };
+constexpr uint32_t DescriptorSetBindingStride      = 12;
+}
+
 // Internal descriptor binding flags, which contains mapping of VkDescriptorBindingFlagBits
 struct DescriptorBindingFlags
 {

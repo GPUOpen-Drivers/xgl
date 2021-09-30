@@ -1298,7 +1298,7 @@ static void BuildExecutablePipelineState(
 void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     const Device*                       pDevice,
     const VkGraphicsPipelineCreateInfo* pIn,
-    const VbInfo*                       pVbInfo,
+    const VbBindingInfo*                pVbInfo,
     const GraphicsPipelineBinaryInfo*   pBinInfo,
     const PipelineLayout*               pPipelineLayout,
     GraphicsPipelineObjectCreateInfo*   pInfo)
@@ -1311,7 +1311,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
                                      pIn->pDynamicState
                                      );
 
-    BuildVertexInputInterfaceState(pDevice, pIn, &pVbInfo->bindingInfo, dynamicStateFlags, false, pInfo);
+    BuildVertexInputInterfaceState(pDevice, pIn, pVbInfo, dynamicStateFlags, false, pInfo);
 
     BuildPreRasterizationShaderState(pDevice,
                                      pIn,
@@ -1354,7 +1354,8 @@ VkResult GraphicsPipelineCommon::BuildPipelineBinaryCreateInfo(
     const PipelineLayout*               pPipelineLayout,
     GraphicsPipelineBinaryCreateInfo*   pBinInfo,
     GraphicsPipelineShaderStageInfo*    pShaderInfo,
-    VbInfo*                             pVbInfo,
+    VbBindingInfo*                      pVbInfo,
+    PipelineInternalBufferInfo*         pInternalBufferInfo,
     ShaderModuleHandle*                 pTempModules)
 {
     VkResult result = BuildShaderStageInfo(pDevice,
@@ -1371,7 +1372,7 @@ VkResult GraphicsPipelineCommon::BuildPipelineBinaryCreateInfo(
     if (result == VK_SUCCESS)
     {
         result = pDevice->GetCompiler(DefaultDeviceIndex)->ConvertGraphicsPipelineInfo(
-            pDevice, pCreateInfo, pShaderInfo, pPipelineLayout, pBinInfo, pVbInfo);
+            pDevice, pCreateInfo, pShaderInfo, pPipelineLayout, pBinInfo, pVbInfo, pInternalBufferInfo);
     }
 
     return result;

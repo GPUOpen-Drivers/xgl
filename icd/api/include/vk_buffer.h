@@ -82,11 +82,6 @@ public:
         const Device*         pDevice,
         VkMemoryRequirements* pMemoryRequirements);
 
-    static void CalculateMemoryRequirements(
-        const Device*             pDevice,
-        const VkBufferCreateInfo* pCreateInfo,
-        VkMemoryRequirements*     pMemoryRequirements);
-
     VkDeviceSize GetSize() const
         { return m_size; }
 
@@ -134,7 +129,6 @@ private:
     };
 
     Buffer(Device*                      pDevice,
-           const VkAllocationCallbacks* pAllocator,
            const VkBufferCreateInfo*    pCreateInfo,
            Pal::IGpuMemory**            pGpuMemory,
            BufferFlags                  internalFlags);

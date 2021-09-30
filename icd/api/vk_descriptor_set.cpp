@@ -104,7 +104,7 @@ void DescriptorSet<numPalDevices>::WriteImmutableSamplers()
             {
                 uint32_t* pSamplerDesc = Layout()->Info().imm.pImmutableSamplerData + bindingInfo.imm.dwOffset;
                 uint32_t* pDestAddr = StaticCpuAddress(deviceIdx) + Layout()->GetDstStaOffset(bindingInfo, 0);
-                memcpy(pDestAddr, pSamplerDesc, sizeof(uint32) * bindingInfo.imm.dwSize);
+                memcpy(pDestAddr, pSamplerDesc, sizeof(uint32)*bindingInfo.imm.dwSize);
             }
         }
     }

@@ -58,6 +58,9 @@
 // Internal (under development) extension definitions
 
 #include "devext/vk_amd_gpa_interface.h"
+#if VKI_TEXEL_BUFFER_EXPLICIT_FORMAT_SUPPORT
+#include "devext/vk_amd_shader_texel_buffer_explicit_format.h"
+#endif
 
 #define VK_FORMAT_BEGIN_RANGE VK_FORMAT_UNDEFINED
 #define VK_FORMAT_END_RANGE VK_FORMAT_ASTC_12x12_SRGB_BLOCK
