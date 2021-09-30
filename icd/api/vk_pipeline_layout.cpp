@@ -141,39 +141,19 @@ VkResult PipelineLayout::ConvertCreateInfo(
     pInfo->userDataLayout.setBindingRegCount        = 0;
     pInfo->userDataLayout.setBindingRegBase         = 0;
 
-    // Reserve an user-data to store the VA of buffer for transform feedback.
-    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK))
+    if (pDevice->GetRuntimeSettings().enableEarlyCompile)
     {
-        pInfo->userDataLayout.transformFeedbackRegCount = 1;
-        pInfo->userDataRegCount                        += pInfo->userDataLayout.transformFeedbackRegCount;
-        pPipelineInfo->numUserDataNodes                += 1;
+        // Early compile mode will enable uber-fetch shader and spec constant buffer on vertex shader and
+        // fragment shader implicitly. so we need three reserved node.
+        pPipelineInfo->numUserDataNodes += 3;
+        pInfo->userDataRegCount += 6; // Each buffer consume 2 user data register now.
     }
-
-    // Reserve one user data nodes for uber-fetch shader.
-    if (pDevice->GetRuntimeSettings().enableUberFetchShader)
+    else if (pDevice->GetRuntimeSettings().enableUberFetchShader)
     {
+        // Reserve one user data nodes for uber-fetch shader.
         pPipelineInfo->numUserDataNodes += 1;
+        pInfo->userDataRegCount += 2;
     }
-
-    // Calculate the number of bytes needed for push constants
-    uint32_t pushConstantsSizeInBytes = 0;
-
-    for (uint32_t i = 0; i < pIn->pushConstantRangeCount; ++i)
-    {
-        const VkPushConstantRange* pRange = &pIn->pPushConstantRanges[i];
-
-        // Test if this push constant range is active in at least one stage
-        if (pRange->stageFlags != 0)
-        {
-            pushConstantsSizeInBytes = Util::Max(pushConstantsSizeInBytes, pRange->offset + pRange->size);
-        }
-    }
-
-    uint32_t pushConstRegCount = pushConstantsSizeInBytes / sizeof(uint32_t);
-
-    pInfo->userDataLayout.pushConstRegBase  = pInfo->userDataLayout.transformFeedbackRegCount;
-    pInfo->userDataLayout.pushConstRegCount = pushConstRegCount;
-    pInfo->userDataRegCount                += pushConstRegCount;
 
     VK_ASSERT(pIn->setLayoutCount <= MaxDescriptorSets);
 
@@ -234,12 +214,52 @@ VkResult PipelineLayout::ConvertCreateInfo(
 
         // Add the number of user data regs used by this set to the total count for the whole layout
         pInfo->userDataRegCount += pSetUserData->totalRegCount;
+        if (pDevice->GetRuntimeSettings().pipelineLayoutMode == PipelineLayoutAngle)
+        {
+            // Force next set firstRegOffset align to AngleDescPattern.
+            if ((i + 1) < Util::ArrayLen(AngleDescPattern::DescriptorSetOffset))
+            {
+                if (pInfo->userDataRegCount < AngleDescPattern::DescriptorSetOffset[i + 1])
+                {
+                    pInfo->userDataRegCount = AngleDescPattern::DescriptorSetOffset[i + 1];
+                }
+            }
+        }
     }
 
     // Calculate total number of user data regs used for active descriptor set data
     pInfo->userDataLayout.setBindingRegCount = pInfo->userDataRegCount - pInfo->userDataLayout.setBindingRegBase;
 
     VK_ASSERT(totalDynDescCount <= MaxDynamicDescriptors);
+
+    // Calculate the number of bytes needed for push constants
+    uint32_t pushConstantsSizeInBytes = 0;
+
+    for (uint32_t i = 0; i < pIn->pushConstantRangeCount; ++i)
+    {
+        const VkPushConstantRange* pRange = &pIn->pPushConstantRanges[i];
+
+        // Test if this push constant range is active in at least one stage
+        if (pRange->stageFlags != 0)
+        {
+            pushConstantsSizeInBytes = Util::Max(pushConstantsSizeInBytes, pRange->offset + pRange->size);
+        }
+    }
+
+    uint32_t pushConstRegCount = pushConstantsSizeInBytes / sizeof(uint32_t);
+
+    pInfo->userDataLayout.pushConstRegBase = pInfo->userDataRegCount;
+    pInfo->userDataLayout.pushConstRegCount = pushConstRegCount;
+    pInfo->userDataRegCount += pushConstRegCount;
+
+    // Reserve an user-data to store the VA of buffer for transform feedback.
+    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK))
+    {
+        pInfo->userDataLayout.transformFeedbackRegBase = pInfo->userDataRegCount;
+        pInfo->userDataLayout.transformFeedbackRegCount = 1;
+        pInfo->userDataRegCount += pInfo->userDataLayout.transformFeedbackRegCount;
+        pPipelineInfo->numUserDataNodes += 1;
+    }
 
     // In case we need an internal vertex buffer table, add nodes required for its entries, and its set pointer.
     pPipelineInfo->numRsrcMapNodes += Pal::MaxVertexBuffers;
@@ -715,7 +735,7 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
 // This function populates the resource mapping node details to the shader-stage specific pipeline info structure.
 VkResult PipelineLayout::BuildLlpcPipelineMapping(
     const uint32_t             stageMask,
-    VbInfo*                    pVbInfo,
+    VbBindingInfo*             pVbInfo,
     void*                      pBuffer,
     bool                       appendFetchShaderCb,
     Vkgc::ResourceMappingData* pResourceMapping
@@ -732,41 +752,51 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     uint32_t mappingNodeCount     = 0; // Number of consumed ResourceMappingNodes (only sub-nodes)
     uint32_t descriptorRangeCount = 0; // Number of consumed StaticResourceValues
 
-    if (m_info.userDataLayout.transformFeedbackRegCount > 0)
-    {
-        uint32_t xfbStages       = (stageMask & (Vkgc::ShaderStageFragmentBit - 1)) >> 1;
-        uint32_t lastXfbStageBit = Vkgc::ShaderStageVertexBit;
+    constexpr uint32_t InternalCbRegCount = 2;
 
-        while (xfbStages > 0)
+    if (appendFetchShaderCb && pVbInfo != nullptr)
+    {
+        // Append node for uber fetch shader constant buffer
+        auto pFetchShaderCbNode = &pUserDataNodes[userDataNodeCount];
+        pFetchShaderCbNode->node.type             = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
+        pFetchShaderCbNode->node.offsetInDwords   = FetchShaderInternalBufferOffset;
+        pFetchShaderCbNode->node.sizeInDwords     = InternalCbRegCount;
+        pFetchShaderCbNode->node.srdRange.set     = Vkgc::InternalDescriptorSetId;
+        pFetchShaderCbNode->node.srdRange.binding = Vkgc::FetchShaderInternalBufferBinding;
+        pFetchShaderCbNode->visibility            = Vkgc::ShaderStageVertexBit;
+
+        userDataNodeCount += 1;
+    }
+
+    if (m_pDevice->GetRuntimeSettings().enableEarlyCompile)
+    {
+        if (stageMask & Vkgc::ShaderStageVertexBit)
         {
-            lastXfbStageBit <<= 1;
-            xfbStages >>= 1;
+            auto pSpecConstVertexCbNode = &pUserDataNodes[userDataNodeCount];
+            pSpecConstVertexCbNode->node.type             = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
+            pSpecConstVertexCbNode->node.offsetInDwords   = SpecConstBufferVertexOffset;
+            pSpecConstVertexCbNode->node.sizeInDwords     = InternalCbRegCount;
+            pSpecConstVertexCbNode->node.srdRange.set     = Vkgc::InternalDescriptorSetId;
+            pSpecConstVertexCbNode->node.srdRange.binding = SpecConstVertexInternalBufferBindingId;
+            pSpecConstVertexCbNode->visibility            = Vkgc::ShaderStageVertexBit;
+
+            userDataNodeCount += 1;
         }
 
-        if (lastXfbStageBit != 0)
+        if (stageMask & Vkgc::ShaderStageFragmentBit)
         {
-            auto pTransformFeedbackNode = &pUserDataNodes[userDataNodeCount];
-            pTransformFeedbackNode->node.type           = Vkgc::ResourceMappingNodeType::StreamOutTableVaPtr;
-            pTransformFeedbackNode->node.offsetInDwords = m_info.userDataLayout.transformFeedbackRegBase;
-            pTransformFeedbackNode->node.sizeInDwords   = m_info.userDataLayout.transformFeedbackRegCount;
-            pTransformFeedbackNode->visibility          = lastXfbStageBit;
+            auto pSpecConstVertexCbNode = &pUserDataNodes[userDataNodeCount];
+            pSpecConstVertexCbNode->node.type             = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
+            pSpecConstVertexCbNode->node.offsetInDwords   = SpecConstBufferFragmentOffset;
+            pSpecConstVertexCbNode->node.sizeInDwords     = InternalCbRegCount;
+            pSpecConstVertexCbNode->node.srdRange.set     = Vkgc::InternalDescriptorSetId;
+            pSpecConstVertexCbNode->node.srdRange.binding = SpecConstFragmentInternalBufferBindingId;
+            pSpecConstVertexCbNode->visibility            = Vkgc::ShaderStageVertexBit;
 
             userDataNodeCount += 1;
         }
     }
 
-    // TODO: Build the internal push constant resource mapping
-        if (m_info.userDataLayout.pushConstRegCount > 0)
-        {
-            auto pPushConstNode = &pUserDataNodes[userDataNodeCount];
-            pPushConstNode->node.type             = Vkgc::ResourceMappingNodeType::PushConst;
-            pPushConstNode->node.offsetInDwords   = m_info.userDataLayout.pushConstRegBase;
-            pPushConstNode->node.sizeInDwords     = m_info.userDataLayout.pushConstRegCount;
-            pPushConstNode->node.srdRange.set     = Vkgc::InternalDescriptorSetId;
-            pPushConstNode->visibility            = stageMask;
-
-            userDataNodeCount += 1;
-        }
     // Build descriptor for each set
     for (uint32_t setIndex = 0; (setIndex < m_info.setCount) && (result == VK_SUCCESS); ++setIndex)
     {
@@ -824,6 +854,41 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
         }
     }
 
+    // TODO: Build the internal push constant resource mapping
+        if (m_info.userDataLayout.pushConstRegCount > 0)
+        {
+            auto pPushConstNode = &pUserDataNodes[userDataNodeCount];
+            pPushConstNode->node.type = Vkgc::ResourceMappingNodeType::PushConst;
+            pPushConstNode->node.offsetInDwords = m_info.userDataLayout.pushConstRegBase;
+            pPushConstNode->node.sizeInDwords = m_info.userDataLayout.pushConstRegCount;
+            pPushConstNode->node.srdRange.set = Vkgc::InternalDescriptorSetId;
+            pPushConstNode->visibility = stageMask;
+
+            userDataNodeCount += 1;
+        }
+
+    if (m_info.userDataLayout.transformFeedbackRegCount > 0)
+    {
+        uint32_t xfbStages = (stageMask & (Vkgc::ShaderStageFragmentBit - 1)) >> 1;
+        uint32_t lastXfbStageBit = Vkgc::ShaderStageVertexBit;
+
+        while (xfbStages > 0)
+        {
+            lastXfbStageBit <<= 1;
+            xfbStages >>= 1;
+        }
+
+        if (lastXfbStageBit != 0)
+        {
+            auto pTransformFeedbackNode = &pUserDataNodes[userDataNodeCount];
+            pTransformFeedbackNode->node.type = Vkgc::ResourceMappingNodeType::StreamOutTableVaPtr;
+            pTransformFeedbackNode->node.offsetInDwords = m_info.userDataLayout.transformFeedbackRegBase;
+            pTransformFeedbackNode->node.sizeInDwords = m_info.userDataLayout.transformFeedbackRegCount;
+            pTransformFeedbackNode->visibility = lastXfbStageBit;
+
+            userDataNodeCount += 1;
+        }
+    }
     if ((result == VK_SUCCESS) && (pVbInfo != nullptr))
     {
         // Build the internal vertex buffer table mapping
@@ -836,7 +901,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
 
             // Build the table description itself
             const uint32_t srdDwSize = m_pDevice->GetProperties().descriptorSizes.bufferView / sizeof(uint32_t);
-            uint32_t vbTableSize = pVbInfo->bindingInfo.bindingTableSize * srdDwSize;
+            uint32_t vbTableSize = pVbInfo->bindingTableSize * srdDwSize;
 
             // Add the set pointer node pointing to this table
             auto pVbTblPtrNode = &pUserDataNodes[userDataNodeCount];
@@ -852,32 +917,6 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
         else
         {
             result = VK_ERROR_INITIALIZATION_FAILED;
-        }
-
-        if (appendFetchShaderCb)
-        {
-            // Append node for uber fetch shader constant buffer
-            constexpr uint32_t FetchShaderCbRegCount = 2;
-            if ((userDataNodeCount + FetchShaderCbRegCount) <=
-                m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.maxUserDataEntries)
-            {
-                auto pFetchShaderCbNode = &pUserDataNodes[userDataNodeCount];
-                pFetchShaderCbNode->node.type             = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
-                pFetchShaderCbNode->node.offsetInDwords   = m_info.userDataRegCount + VbTablePtrRegCount;
-                pFetchShaderCbNode->node.sizeInDwords     = FetchShaderCbRegCount;
-                pFetchShaderCbNode->node.srdRange.set     = Vkgc::InternalDescriptorSetId;
-                pFetchShaderCbNode->node.srdRange.binding = Vkgc::FetchShaderInternalBufferBinding;
-                pFetchShaderCbNode->visibility = Vkgc::ShaderStageVertexBit;
-
-                pVbInfo->uberFetchShaderBuffer.userDataOffset = pFetchShaderCbNode->node.offsetInDwords;
-                userDataNodeCount += 1;
-            }
-            else
-            {
-                VK_NEVER_CALLED();
-                result = VK_ERROR_INITIALIZATION_FAILED;
-            }
-
         }
     }
 

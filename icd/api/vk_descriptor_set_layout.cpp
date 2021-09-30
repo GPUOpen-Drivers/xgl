@@ -308,7 +308,7 @@ void DescriptorSetLayout::ConvertBindingInfo(
 {
 
     // Dword offset to this binding
-    pBindingSectionInfo->dwOffset = Util::Pow2Align(pSectionInfo->dwSize, descAlignmentInDw);
+    pBindingSectionInfo->dwOffset = Util::RoundUpToMultiple(pSectionInfo->dwSize, descAlignmentInDw);
 
     if (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)
     {
@@ -332,7 +332,7 @@ void DescriptorSetLayout::ConvertBindingInfo(
     if (pBindingSectionInfo->dwSize > 0)
     {
         // Update total section size by how much space this binding takes.
-        pSectionInfo->dwSize += pBindingSectionInfo->dwSize;
+        pSectionInfo->dwSize = pBindingSectionInfo->dwOffset + pBindingSectionInfo->dwSize;
 
         // Update total number of ResourceMappingNodes required by this binding.
         pSectionInfo->numRsrcMapNodes++;
@@ -530,7 +530,12 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
 
         // Determine the alignment requirement of descriptors in dwords.
         uint32 descAlignmentInDw = pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32);
-
+        uint32_t staDescAlignmentInDw = descAlignmentInDw;
+        if (pDevice->GetRuntimeSettings().pipelineLayoutMode == PipelineLayoutAngle)
+        {
+            VK_ASSERT(AngleDescPattern::DescriptorSetBindingStride % descAlignmentInDw == 0);
+            staDescAlignmentInDw = AngleDescPattern::DescriptorSetBindingStride;
+        }
         // If the last binding has the VARIABLE_DESCRIPTOR_COUNT_BIT set, write the varDescDwStride
         if ((bindingNumber == (pOut->count - 1)) && pBinding->bindingFlags.variableDescriptorCount)
         {
@@ -541,7 +546,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
         ConvertBindingInfo(
             &pBinding->info,
             GetDescStaticSectionDwSize(pDevice, &pBinding->info, pBinding->bindingFlags),
-            descAlignmentInDw,
+            staDescAlignmentInDw,
             &pOut->sta,
             &pBinding->sta);
 

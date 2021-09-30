@@ -59,6 +59,7 @@ enum FreeCompilerBinary : uint32_t
 // Represents the result of PipelineCompiler::BuildShaderModule
 struct ShaderModuleHandle
 {
+    uint32_t* pRefCount;
     void*   pLlpcShaderModule;   // Shader module handle from LLPC
 };
 

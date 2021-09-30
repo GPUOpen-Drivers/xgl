@@ -591,6 +591,8 @@ void DispatchTable::Init()
                         vkResetQueryPool                                );
     INIT_DISPATCH_ENTRY(vkCmdSetLineStippleEXT                          );
 
+    INIT_DISPATCH_ENTRY(vkSetDeviceMemoryPriorityEXT                    );
+
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT  );
     INIT_DISPATCH_ENTRY(vkGetCalibratedTimestampsEXT                    );
 

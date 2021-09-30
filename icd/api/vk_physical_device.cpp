@@ -741,6 +741,12 @@ VkResult PhysicalDevice::Initialize()
             Pal::GpuHeapGartCacheable
         };
 
+        if (settings.forceUMA)
+        {
+            heapProperties[Pal::GpuHeapInvisible].heapSize = 0;
+            heapProperties[Pal::GpuHeapLocal].heapSize     = 0;
+        }
+
         const Pal::gpusize invisHeapSize = heapProperties[Pal::GpuHeapInvisible].heapSize;
         const Pal::gpusize localHeapSize = heapProperties[Pal::GpuHeapLocal].heapSize;
 
@@ -859,29 +865,6 @@ VkResult PhysicalDevice::Initialize()
                         memTypeWantsCoherentMemory[memoryTypeIndex] = true;
                     }
                 }
-
-                // Optional: if we have exposed a memory type that is host visible, add a backup
-                // memory type that is not host visible. We will use it for optimally tiled images.
-                if (settings.addHostInvisibleMemoryTypesForOptimalImages &&
-                    ((pMemoryType->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0)  &&
-                    // Skip host visible+coherent+cached as we won't need it
-                    ((pMemoryType->propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) == 0))
-                {
-                    memoryTypeIndex = m_memoryProperties.memoryTypeCount++;
-
-                    m_memoryTypeMask                         |= 1 << memoryTypeIndex;
-                    m_memoryVkIndexToPalHeap[memoryTypeIndex] = palGpuHeap;
-                    m_memoryPalHeapToVkIndexBits[palGpuHeap] |= (1UL << memoryTypeIndex);
-
-                    VkMemoryType* pNextMemoryType = &m_memoryProperties.memoryTypes[memoryTypeIndex];
-
-                    constexpr VkFlags hostMask = (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT  |
-                                                    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-                                                    VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
-
-                    pNextMemoryType->heapIndex     = pMemoryType->heapIndex;
-                    pNextMemoryType->propertyFlags = pMemoryType->propertyFlags & ~hostMask;
-                }
             }
         }
 
@@ -956,6 +939,10 @@ VkResult PhysicalDevice::Initialize()
                         (1UL << memoryTypeIndex);
 
                     m_memoryTypeMask |= 1 << m_memoryProperties.memoryTypeCount;
+
+                    m_memoryVkIndexAddRemoteBackupHeap[m_memoryProperties.memoryTypeCount] =
+                        m_memoryVkIndexAddRemoteBackupHeap[memoryTypeIndex];
+
                     ++m_memoryProperties.memoryTypeCount;
                 }
             }
@@ -3613,8 +3600,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_HLSL_FUNCTIONALITY1));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SCALAR_BLOCK_LAYOUT));
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MEMORY_PRIORITY));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MEMORY_BUDGET));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MEMORY_PRIORITY));
 
     if ((pPhysicalDevice == nullptr) || pPhysicalDevice->PalProperties().gfxipProperties.flags.supportPostDepthCoverage)
     {
@@ -3678,8 +3665,15 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_TERMINATE_INVOCATION));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE2));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_INTEGER_DOT_PRODUCT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COPY_COMMANDS2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_ATOMIC_FLOAT));
+    if ((pPhysicalDevice == nullptr) || (pPhysicalDevice->PalProperties().gfxLevel > Pal::GfxIpLevel::GfxIp9))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_ATOMIC_FLOAT2));
+    }
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_4444_FORMATS));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SYNCHRONIZATION2));
@@ -4905,6 +4899,22 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES_KHR:
+            {
+                if (IsExtensionSupported(DeviceExtensions::KHR_SHADER_INTEGER_DOT_PRODUCT))
+                {
+                    auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderIntegerDotProductFeaturesKHR*>(pHeader);
+
+                    if (updateFeatures)
+                    {
+                        pExtInfo->shaderIntegerDotProduct = VK_TRUE;
+                    }
+
+                    structSize = sizeof(*pExtInfo);
+                }
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceScalarBlockLayoutFeatures*>(pHeader);
@@ -4974,6 +4984,21 @@ size_t PhysicalDevice::GetFeatures2(
                 }
 
                 structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVE_TOPOLOGY_LIST_RESTART_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->primitiveTopologyListRestart      = VK_TRUE;
+                    pExtInfo->primitiveTopologyPatchListRestart = VK_FALSE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+
                 break;
             }
 
@@ -5076,6 +5101,22 @@ size_t PhysicalDevice::GetFeatures2(
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceBufferDeviceAddressFeatures*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceBufferAddressFeatures(
+                        &pExtInfo->bufferDeviceAddress,
+                        &pExtInfo->bufferDeviceAddressCaptureReplay,
+                        &pExtInfo->bufferDeviceAddressMultiDevice);
+                }
+
+                structSize = sizeof(*pExtInfo);
+
+                break;
+            }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceBufferDeviceAddressFeaturesEXT*>(pHeader);
 
                 if (updateFeatures)
                 {
@@ -5527,11 +5568,25 @@ size_t PhysicalDevice::GetFeatures2(
                 {
                     pExtInfo->shaderBufferFloat32Atomics   = VK_TRUE;
                     pExtInfo->shaderBufferFloat32AtomicAdd = VK_FALSE;
-                    pExtInfo->shaderBufferFloat64Atomics   = VK_TRUE;
+                    if (PalProperties().gfxipProperties.flags.support64BitInstructions)
+                    {
+                        pExtInfo->shaderBufferFloat64Atomics   = VK_TRUE;
+                    }
+                    else
+                    {
+                        pExtInfo->shaderBufferFloat64Atomics   = VK_FALSE;
+                    }
                     pExtInfo->shaderBufferFloat64AtomicAdd = VK_FALSE;
                     pExtInfo->shaderSharedFloat32Atomics   = VK_TRUE;
                     pExtInfo->shaderSharedFloat32AtomicAdd = VK_FALSE;
-                    pExtInfo->shaderSharedFloat64Atomics   = VK_TRUE;
+                    if (PalProperties().gfxipProperties.flags.support64BitInstructions)
+                    {
+                        pExtInfo->shaderSharedFloat64Atomics   = VK_TRUE;
+                    }
+                    else
+                    {
+                        pExtInfo->shaderSharedFloat64Atomics   = VK_FALSE;
+                    }
                     pExtInfo->shaderSharedFloat64AtomicAdd = VK_FALSE;
                     pExtInfo->shaderImageFloat32Atomics    = VK_TRUE;
                     pExtInfo->shaderImageFloat32AtomicAdd  = VK_FALSE;
@@ -5553,14 +5608,41 @@ size_t PhysicalDevice::GetFeatures2(
                     pExtInfo->shaderBufferFloat16AtomicAdd    = VK_FALSE;
                     pExtInfo->shaderBufferFloat16AtomicMinMax = VK_FALSE;
                     pExtInfo->shaderBufferFloat32AtomicMinMax = VK_TRUE;
-                    pExtInfo->shaderBufferFloat64AtomicMinMax = VK_TRUE;
+                    if (PalProperties().gfxipProperties.flags.support64BitInstructions)
+                    {
+                        pExtInfo->shaderBufferFloat64AtomicMinMax = VK_TRUE;
+                    }
+                    else
+                    {
+                        pExtInfo->shaderBufferFloat64AtomicMinMax = VK_FALSE;
+                    }
                     pExtInfo->shaderSharedFloat16Atomics      = VK_FALSE;
                     pExtInfo->shaderSharedFloat16AtomicAdd    = VK_FALSE;
                     pExtInfo->shaderSharedFloat16AtomicMinMax = VK_FALSE;
                     pExtInfo->shaderSharedFloat32AtomicMinMax = VK_TRUE;
-                    pExtInfo->shaderSharedFloat64AtomicMinMax = VK_TRUE;
+                    if (PalProperties().gfxipProperties.flags.support64BitInstructions)
+                    {
+                        pExtInfo->shaderSharedFloat64AtomicMinMax = VK_TRUE;
+                    }
+                    else
+                    {
+                        pExtInfo->shaderSharedFloat64AtomicMinMax = VK_FALSE;
+                    }
                     pExtInfo->shaderImageFloat32AtomicMinMax  = VK_TRUE;
                     pExtInfo->sparseImageFloat32AtomicMinMax  = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->pageableDeviceLocalMemory = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6113,6 +6195,55 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_PROPERTIES_KHR:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceShaderIntegerDotProductPropertiesKHR*>(pNext);
+
+            const VkBool32 int8DotSupport = PalProperties().gfxipProperties.flags.supportInt8Dot ? VK_TRUE :
+                                                                                                    VK_FALSE;
+            pProps->integerDotProduct8BitUnsignedAccelerated         = int8DotSupport;
+            pProps->integerDotProduct8BitSignedAccelerated           = int8DotSupport;
+            pProps->integerDotProduct4x8BitPackedUnsignedAccelerated = int8DotSupport;
+            pProps->integerDotProduct4x8BitPackedSignedAccelerated   = int8DotSupport;
+
+            {
+                pProps->integerDotProduct8BitMixedSignednessAccelerated         = VK_FALSE;
+                pProps->integerDotProduct4x8BitPackedMixedSignednessAccelerated = VK_FALSE;
+            }
+
+            const VkBool32 int16DotSupport = ((PalProperties().gfxipProperties.flags.support16BitInstructions) &&
+                                                ((GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
+                                                (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))
+                                                ) ? VK_TRUE : VK_FALSE;
+
+            pProps->integerDotProduct16BitUnsignedAccelerated                       = int16DotSupport;
+            pProps->integerDotProduct16BitSignedAccelerated                         = int16DotSupport;
+            pProps->integerDotProductAccumulatingSaturating16BitUnsignedAccelerated = int16DotSupport;
+            pProps->integerDotProductAccumulatingSaturating16BitSignedAccelerated   = int16DotSupport;
+
+            pProps->integerDotProduct16BitMixedSignednessAccelerated                              = VK_FALSE;
+            pProps->integerDotProduct32BitUnsignedAccelerated                                     = VK_FALSE;
+            pProps->integerDotProduct32BitSignedAccelerated                                       = VK_FALSE;
+            pProps->integerDotProduct32BitMixedSignednessAccelerated                              = VK_FALSE;
+            pProps->integerDotProduct64BitUnsignedAccelerated                                     = VK_FALSE;
+            pProps->integerDotProduct64BitSignedAccelerated                                       = VK_FALSE;
+            pProps->integerDotProduct64BitMixedSignednessAccelerated                              = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating8BitUnsignedAccelerated                = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating8BitUnsignedAccelerated                = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating8BitSignedAccelerated                  = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated         = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated        = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated          = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated        = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating32BitUnsignedAccelerated               = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating32BitSignedAccelerated                 = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated        = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating64BitUnsignedAccelerated               = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating64BitSignedAccelerated                 = VK_FALSE;
+            pProps->integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated        = VK_FALSE;
+        }
+        break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES_EXT:
         {
             auto* pProps = static_cast<VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT*>(pNext);

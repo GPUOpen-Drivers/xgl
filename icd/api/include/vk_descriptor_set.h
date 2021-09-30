@@ -125,6 +125,8 @@ protected:
         DescriptorAddr*             pBaseAddrs,
         void*                       pAllocHandle);
 
+    void WriteImmutableSamplers();
+
     void Reset();
 
     void* AllocHandle() const

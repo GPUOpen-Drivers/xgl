@@ -279,7 +279,6 @@ private:
 
     Image(
         Device*                      pDevice,
-        const VkAllocationCallbacks* pAllocator,
         VkImageCreateFlags           flags,
         Pal::IImage**                pPalImage,
         Pal::IGpuMemory**            pPalMemory,

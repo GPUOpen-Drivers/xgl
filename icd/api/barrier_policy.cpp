@@ -293,7 +293,9 @@ static uint32_t ImageLayoutToCacheMask(VkImageLayout imageLayout)
 // Converts source access flags to source cache coherency flags.
 static uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLayout imageLayout)
 {
-    uint32_t cacheMask = 0;
+    uint32_t cacheMask = (((imageLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) ||
+                          (imageLayout == VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR)) ?
+                          Pal::CoherPresent : 0);
 
     if (accessMask & VK_ACCESS_SHADER_WRITE_BIT)
     {
@@ -357,7 +359,9 @@ static uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLayout image
 // Converts destination access flags to destination cache coherency flags.
 static uint32_t DstAccessToCacheMask(AccessFlags accessMask, VkImageLayout imageLayout)
 {
-    uint32_t cacheMask = 0;
+    uint32_t cacheMask = (((imageLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) ||
+                          (imageLayout == VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR)) ?
+                          Pal::CoherPresent : 0);
 
     if (accessMask & VK_ACCESS_INDIRECT_COMMAND_READ_BIT)
     {
@@ -688,7 +692,8 @@ void DeviceBarrierPolicy::InitQueueFamilyPolicies(
                                              | Pal::CoherResolve
                                              | Pal::CoherClear
                                              | Pal::CoherIndirectArgs
-                                             | Pal::CoherIndexData;
+                                             | Pal::CoherIndexData
+                                             | Pal::CoherPresent;
             policy.supportedLayoutUsageMask |= Pal::LayoutColorTarget
                                              | Pal::LayoutDepthStencilTarget
                                              | Pal::LayoutShaderRead
@@ -982,8 +987,8 @@ void ImageBarrierPolicy::InitImageCachePolicy(
 {
     // Initialize supported cache masks based on the usage flags provided.
     // Always allow CPU and memory reads/writes.
-    uint32_t supportedOutputCacheMask   = Pal::CoherCpu | Pal::CoherMemory;
-    uint32_t supportedInputCacheMask    = Pal::CoherCpu | Pal::CoherMemory;
+    uint32_t supportedOutputCacheMask   = Pal::CoherCpu | Pal::CoherMemory | Pal::CoherPresent;
+    uint32_t supportedInputCacheMask    = Pal::CoherCpu | Pal::CoherMemory | Pal::CoherPresent;
 
     if (usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
     {

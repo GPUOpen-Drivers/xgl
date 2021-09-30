@@ -92,7 +92,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
     for (uint32_t i = 0; (result == VK_SUCCESS) && (i < numPalDevices)
          ; ++i)
     {
-        if (i == DefaultDeviceIndex)
+        if ((i == DefaultDeviceIndex) || (pCreateInfo == nullptr))
         {
             result = pDevice->GetCompiler(i)->CreateGraphicsPipelineBinary(
                 pDevice,
@@ -106,9 +106,10 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
         else
         {
             GraphicsPipelineBinaryCreateInfo binaryCreateInfoMGPU = {};
-            VbInfo vbInfoMGPU = {};
+            VbBindingInfo vbInfoMGPU = {};
+            PipelineInternalBufferInfo internalBufferInfoMGPU = {};
             pDefaultCompiler->ConvertGraphicsPipelineInfo(
-                pDevice, pCreateInfo, pShaderInfo, pPipelineLayout, &binaryCreateInfoMGPU, &vbInfoMGPU);
+                pDevice, pCreateInfo, pShaderInfo, pPipelineLayout, &binaryCreateInfoMGPU, &vbInfoMGPU, &internalBufferInfoMGPU);
 
             result = pDevice->GetCompiler(i)->CreateGraphicsPipelineBinary(
                 pDevice,
@@ -129,11 +130,97 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                     binaryCreateInfoMGPU.stageFeedback);
             }
 
-            pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfoMGPU);
+            pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfoMGPU, false);
         }
     }
 
     return result;
+}
+
+// =====================================================================================================================
+// Creates graphics PAL pipeline objects
+VkResult GraphicsPipeline::CreatePalPipelineObjects(
+    Device*                           pDevice,
+    PipelineCache*                    pPipelineCache,
+    GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
+    const size_t*                     pPipelineBinarySizes,
+    const void**                      pPipelineBinaries,
+    const Util::MetroHash::Hash*      pCacheIds,
+    void*                             pSystemMem,
+    Pal::IPipeline**                  pPalPipeline)
+{
+    size_t palSize = 0;
+
+    pObjectCreateInfo->pipeline.pipelineBinarySize = pPipelineBinarySizes[DefaultDeviceIndex];
+    pObjectCreateInfo->pipeline.pPipelineBinary = pPipelineBinaries[DefaultDeviceIndex];
+
+    Pal::Result palResult = Pal::Result::Success;
+    palSize =
+        pDevice->PalDevice(DefaultDeviceIndex)->GetGraphicsPipelineSize(pObjectCreateInfo->pipeline, &palResult);
+    VK_ASSERT(palResult == Pal::Result::Success);
+
+    RenderStateCache* pRSCache      = pDevice->GetRenderStateCache();
+    const uint32_t    numPalDevices = pDevice->NumPalDevices();
+    size_t            palOffset     = 0;
+
+    for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
+    {
+        Pal::IDevice* pPalDevice = pDevice->PalDevice(deviceIdx);
+
+        if (palResult == Pal::Result::Success)
+        {
+            // If pPipelineBinaries[DefaultDeviceIndex] is sufficient for all devices, the other pipeline binaries
+            // won't be created.  Otherwise, like if gl_DeviceIndex is used, they will be.
+            if (pPipelineBinaries[deviceIdx] != nullptr)
+            {
+                pObjectCreateInfo->pipeline.pipelineBinarySize = pPipelineBinarySizes[deviceIdx];
+                pObjectCreateInfo->pipeline.pPipelineBinary = pPipelineBinaries[deviceIdx];
+            }
+
+            palResult = pPalDevice->CreateGraphicsPipeline(
+                pObjectCreateInfo->pipeline,
+                Util::VoidPtrInc(pSystemMem, palOffset),
+                &pPalPipeline[deviceIdx]);
+
+#if ICD_GPUOPEN_DEVMODE_BUILD
+            // Temporarily reinject post Pal pipeline creation (when the internal pipeline hash is available).
+            // The reinjection cache layer can be linked back into the pipeline cache chain once the
+            // Vulkan pipeline cache key can be stored (and read back) inside the ELF as metadata.
+            if ((pDevice->VkInstance()->GetDevModeMgr() != nullptr) &&
+                (palResult == Util::Result::Success))
+            {
+                const auto& info = pPalPipeline[deviceIdx]->GetInfo();
+
+                palResult = pDevice->GetCompiler(deviceIdx)->RegisterAndLoadReinjectionBinary(
+                    &info.internalPipelineHash,
+                    &pCacheIds[deviceIdx],
+                    &pObjectCreateInfo->pipeline.pipelineBinarySize,
+                    &pObjectCreateInfo->pipeline.pPipelineBinary,
+                    pPipelineCache);
+
+                if (palResult == Util::Result::Success)
+                {
+                    pPalPipeline[deviceIdx]->Destroy();
+
+                    palResult = pPalDevice->CreateGraphicsPipeline(
+                        pObjectCreateInfo->pipeline,
+                        Util::VoidPtrInc(pSystemMem, palOffset),
+                        &pPalPipeline[deviceIdx]);
+                }
+                else if (palResult == Util::Result::NotFound)
+                {
+                    // If a replacement was not found, proceed with the original
+                    palResult = Util::Result::Success;
+                }
+            }
+#endif
+
+            VK_ASSERT(palSize == pPalDevice->GetGraphicsPipelineSize(pObjectCreateInfo->pipeline, nullptr));
+            palOffset += palSize;
+        }
+    }
+
+    return PalToVkResult(palResult);
 }
 
 // =====================================================================================================================
@@ -143,7 +230,8 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
     const VkAllocationCallbacks*        pAllocator,
     const PipelineLayout*               pPipelineLayout,
-    const VbInfo*                       pVbInfo,
+    const VbBindingInfo*                pVbInfo,
+    const PipelineInternalBufferInfo*   pInternalBuffer,
     const size_t*                       pPipelineBinarySizes,
     const void**                        pPipelineBinaries,
     PipelineCache*                      pPipelineCache,
@@ -170,16 +258,13 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
     void*  pSystemMem = nullptr;
     size_t palSize    = 0;
 
-    pObjectCreateInfo->pipeline.pipelineBinarySize = pPipelineBinarySizes[DefaultDeviceIndex];
-    pObjectCreateInfo->pipeline.pPipelineBinary    = pPipelineBinaries[DefaultDeviceIndex];
-
     palSize =
         pDevice->PalDevice(DefaultDeviceIndex)->GetGraphicsPipelineSize(pObjectCreateInfo->pipeline, &palResult);
     VK_ASSERT(palResult == Pal::Result::Success);
 
     pSystemMem = pDevice->AllocApiObject(
         pAllocator,
-        sizeof(GraphicsPipeline) + (palSize * numPalDevices));
+        sizeof(GraphicsPipeline) + (palSize * numPalDevices) + pInternalBuffer->dataSize);
 
     if (pSystemMem == nullptr)
     {
@@ -190,63 +275,21 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
 
     if (result == VK_SUCCESS)
     {
-        size_t palOffset = sizeof(GraphicsPipeline);
+        result = CreatePalPipelineObjects(pDevice,
+            pPipelineCache,
+            pObjectCreateInfo,
+            pPipelineBinarySizes,
+            pPipelineBinaries,
+            pCacheIds,
+            Util::VoidPtrInc(pSystemMem, sizeof(GraphicsPipeline)),
+            pPalPipeline);
+    }
 
+    if (result == VK_SUCCESS)
+    {
         for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
         {
             Pal::IDevice* pPalDevice = pDevice->PalDevice(deviceIdx);
-
-            if (palResult == Pal::Result::Success)
-            {
-                // If pPipelineBinaries[DefaultDeviceIndex] is sufficient for all devices, the other pipeline binaries
-                // won't be created.  Otherwise, like if gl_DeviceIndex is used, they will be.
-                if (pPipelineBinaries[deviceIdx] != nullptr)
-                {
-                    pObjectCreateInfo->pipeline.pipelineBinarySize = pPipelineBinarySizes[deviceIdx];
-                    pObjectCreateInfo->pipeline.pPipelineBinary    = pPipelineBinaries[deviceIdx];
-                }
-
-                palResult = pPalDevice->CreateGraphicsPipeline(
-                    pObjectCreateInfo->pipeline,
-                    Util::VoidPtrInc(pSystemMem, palOffset),
-                    &pPalPipeline[deviceIdx]);
-
-#if ICD_GPUOPEN_DEVMODE_BUILD
-                // Temporarily reinject post Pal pipeline creation (when the internal pipeline hash is available).
-                // The reinjection cache layer can be linked back into the pipeline cache chain once the
-                // Vulkan pipeline cache key can be stored (and read back) inside the ELF as metadata.
-                if ((pDevice->VkInstance()->GetDevModeMgr() != nullptr) &&
-                    (palResult == Util::Result::Success))
-                {
-                    const auto& info = pPalPipeline[deviceIdx]->GetInfo();
-
-                    palResult = pDevice->GetCompiler(deviceIdx)->RegisterAndLoadReinjectionBinary(
-                        &info.internalPipelineHash,
-                        &pCacheIds[deviceIdx],
-                        &pObjectCreateInfo->pipeline.pipelineBinarySize,
-                        &pObjectCreateInfo->pipeline.pPipelineBinary,
-                        pPipelineCache);
-
-                    if (palResult == Util::Result::Success)
-                    {
-                        pPalPipeline[deviceIdx]->Destroy();
-
-                        palResult = pPalDevice->CreateGraphicsPipeline(
-                            pObjectCreateInfo->pipeline,
-                            Util::VoidPtrInc(pSystemMem, palOffset),
-                            &pPalPipeline[deviceIdx]);
-                    }
-                    else if (palResult == Util::Result::NotFound)
-                    {
-                        // If a replacement was not found, proceed with the original
-                        palResult = Util::Result::Success;
-                    }
-                }
-#endif
-
-                VK_ASSERT(palSize == pPalDevice->GetGraphicsPipelineSize(pObjectCreateInfo->pipeline, nullptr));
-                palOffset += palSize;
-            }
 
             // Create the PAL MSAA state object
             if (palResult == Pal::Result::Success)
@@ -321,6 +364,13 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
             pCreateInfo->flags,
             VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT);
 
+        PipelineInternalBufferInfo internalBuffer = *pInternalBuffer;
+        if (pInternalBuffer->dataSize > 0)
+        {
+            internalBuffer.pData = Util::VoidPtrInc(pSystemMem, sizeof(GraphicsPipeline) + (palSize * numPalDevices));
+            memcpy(internalBuffer.pData, pInternalBuffer->pData, pInternalBuffer->dataSize);
+        }
+
         VK_PLACEMENT_NEW(pSystemMem) GraphicsPipeline(
             pDevice,
             pPalPipeline,
@@ -334,6 +384,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
             pObjectCreateInfo->flags.force1x1ShaderRate,
             pObjectCreateInfo->flags.customSampleLocations,
             *pVbInfo,
+            &internalBuffer,
             pPalMsaa,
             pPalColorBlend,
             pPalDepthStencil,
@@ -400,15 +451,16 @@ VkResult GraphicsPipeline::Create(
     VkResult result = AchievePipelineLayout(pDevice, pCreateInfo, pAllocator, &pPipelineLayout, &isTempLayout);
 
     // 2. Build pipeline binary create info
-    GraphicsPipelineBinaryCreateInfo binaryCreateInfo = {};
-    GraphicsPipelineShaderStageInfo  shaderStageInfo  = {};
-    VbInfo                           vbInfo           = {};
+    GraphicsPipelineBinaryCreateInfo binaryCreateInfo  = {};
+    GraphicsPipelineShaderStageInfo  shaderStageInfo   = {};
+    VbBindingInfo                    vbInfo            = {};
+    PipelineInternalBufferInfo       internalBufferInfo = {};
     ShaderModuleHandle               tempModules[ShaderStage::ShaderStageGfxCount] = {};
 
     if (result == VK_SUCCESS)
     {
         result = BuildPipelineBinaryCreateInfo(
-            pDevice, pCreateInfo, pPipelineLayout, &binaryCreateInfo, &shaderStageInfo, &vbInfo, tempModules);
+            pDevice, pCreateInfo, pPipelineLayout, &binaryCreateInfo, &shaderStageInfo, &vbInfo, &internalBufferInfo, tempModules);
     }
 
     // 3. Create pipeine binaries
@@ -431,18 +483,21 @@ VkResult GraphicsPipeline::Create(
     }
 
     uint64_t pipelineHash = 0;
-
+    GraphicsPipelineObjectCreateInfo objectCreateInfo = {};
+    GraphicsPipelineBinaryInfo       binaryInfo       = {};
     if (result == VK_SUCCESS)
     {
         pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&binaryCreateInfo.pipelineInfo);
 
         // 4. Build pipeline object create info
-        GraphicsPipelineObjectCreateInfo objectCreateInfo = {};
-        GraphicsPipelineBinaryInfo       binaryInfo       = {};
         binaryInfo.pOptimizerKey = &binaryCreateInfo.pipelineProfileKey;
 
         BuildPipelineObjectCreateInfo(
             pDevice, pCreateInfo, &vbInfo, &binaryInfo, pPipelineLayout, &objectCreateInfo);
+
+        objectCreateInfo.immedInfo.checkDeferCompilePipeline =
+            pDevice->GetRuntimeSettings().deferCompileOptimizedPipeline &&
+            (binaryCreateInfo.pipelineInfo.enableEarlyCompile || binaryCreateInfo.pipelineInfo.enableUberFetchShader);
 
         // 5. Create pipeline objects
         result = CreatePipelineObjects(
@@ -451,6 +506,7 @@ VkResult GraphicsPipeline::Create(
             pAllocator,
             pPipelineLayout,
             &vbInfo,
+            &internalBufferInfo,
             pipelineBinarySizes,
             pPipelineBinaries,
             pPipelineCache,
@@ -468,6 +524,11 @@ VkResult GraphicsPipeline::Create(
         pPipelineLayout->Destroy(pDevice, pAllocator);
     }
 
+    if (internalBufferInfo.pData != nullptr)
+    {
+        pDevice->VkInstance()->FreeMem(internalBufferInfo.pData);
+        internalBufferInfo.pData = nullptr;
+    }
     // Free the created pipeline binaries now that the PAL Pipelines/PipelineBinaryInfo have read them.
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
@@ -477,7 +538,25 @@ VkResult GraphicsPipeline::Create(
                 &binaryCreateInfo, pPipelineBinaries[deviceIdx], pipelineBinarySizes[deviceIdx]);
         }
     }
-    pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfo);
+
+    // Deferred compile will reuse all object generated in BuildPipelineBinaryCreateInfo.
+    // i.e. we need keep temp buffer in binaryCreateInfo
+    pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfo,
+                                                     objectCreateInfo.immedInfo.checkDeferCompilePipeline);
+
+    if (objectCreateInfo.immedInfo.checkDeferCompilePipeline)
+    {
+        GraphicsPipeline* pThis = GraphicsPipeline::ObjectFromHandle(*pPipeline);
+        result = pThis->BuildDeferCompileWorkload(pDevice,
+                                                  pPipelineCache,
+                                                  &binaryCreateInfo,
+                                                  &shaderStageInfo,
+                                                  &objectCreateInfo);
+        if (result == VK_SUCCESS)
+        {
+            pDefaultCompiler->ExecuteDeferCompile(&pThis->m_deferWorkload);
+        }
+    }
 
     if (result == VK_SUCCESS)
     {
@@ -503,6 +582,326 @@ VkResult GraphicsPipeline::Create(
 }
 
 // =====================================================================================================================
+static size_t GetVertexInputStructSize(
+    const VkPipelineVertexInputStateCreateInfo* pVertexInput)
+{
+    size_t size = 0;
+    size += sizeof(VkPipelineVertexInputStateCreateInfo);
+    size += sizeof(VkVertexInputBindingDescription) * pVertexInput->vertexBindingDescriptionCount;
+    size += sizeof(VkVertexInputAttributeDescription) * pVertexInput->vertexAttributeDescriptionCount;
+
+    const VkPipelineVertexInputDivisorStateCreateInfoEXT* pVertexDivisor = nullptr;
+    const vk::VkStructHeader* pStructHeader =
+        static_cast<const vk::VkStructHeader*>(pVertexInput->pNext);
+    while (pStructHeader != nullptr)
+    {
+        if (pStructHeader->sType == VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT)
+        {
+            pVertexDivisor = reinterpret_cast<const VkPipelineVertexInputDivisorStateCreateInfoEXT*>(pStructHeader);
+            break;
+        }
+        else
+        {
+            pStructHeader = pStructHeader->pNext;
+        }
+    }
+
+    if (pVertexDivisor != nullptr)
+    {
+        size += sizeof(VkPipelineVertexInputDivisorStateCreateInfoEXT);
+        size += sizeof(VkVertexInputBindingDivisorDescriptionEXT) * pVertexDivisor->vertexBindingDivisorCount;
+    }
+
+    return size;
+}
+
+// =====================================================================================================================
+static void CopyVertexInputStruct(
+    const VkPipelineVertexInputStateCreateInfo* pSrcVertexInput,
+    VkPipelineVertexInputStateCreateInfo*       pDestVertexInput)
+{
+    // Copy VkPipelineVertexInputStateCreateInfo
+    *pDestVertexInput = *pSrcVertexInput;
+    void* pNext = Util::VoidPtrInc(pDestVertexInput, sizeof(VkPipelineVertexInputStateCreateInfo));
+
+    // Copy VkVertexInputBindingDescription
+    pDestVertexInput->pVertexBindingDescriptions = reinterpret_cast<VkVertexInputBindingDescription*>(pNext);
+    size_t size = sizeof(VkVertexInputBindingDescription) * pSrcVertexInput->vertexBindingDescriptionCount;
+    memcpy(pNext, pSrcVertexInput->pVertexBindingDescriptions, size);
+    pNext = Util::VoidPtrInc(pNext, size);
+
+    // Copy VkVertexInputAttributeDescription
+    pDestVertexInput->pVertexAttributeDescriptions = reinterpret_cast<VkVertexInputAttributeDescription*>(pNext);
+    size = sizeof(VkVertexInputAttributeDescription) * pSrcVertexInput->vertexAttributeDescriptionCount;
+    memcpy(pNext, pSrcVertexInput->pVertexAttributeDescriptions, size);
+    pNext = Util::VoidPtrInc(pNext, size);
+
+    const VkPipelineVertexInputDivisorStateCreateInfoEXT* pSrcVertexDivisor = nullptr;
+    const vk::VkStructHeader* pStructHeader =
+        reinterpret_cast<const vk::VkStructHeader*>(pSrcVertexInput->pNext);
+    while (pStructHeader != nullptr)
+    {
+        if (pStructHeader->sType == VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT)
+        {
+            pSrcVertexDivisor = reinterpret_cast<const VkPipelineVertexInputDivisorStateCreateInfoEXT*>(pStructHeader);
+            break;
+        }
+        else
+        {
+            pStructHeader = pStructHeader->pNext;
+        }
+    }
+
+    if (pSrcVertexDivisor != nullptr)
+    {
+        // Copy VkPipelineVertexInputDivisorStateCreateInfoEXT
+        VkPipelineVertexInputDivisorStateCreateInfoEXT* pDestVertexDivisor =
+            reinterpret_cast<VkPipelineVertexInputDivisorStateCreateInfoEXT*>(pNext);
+        *pDestVertexDivisor = *pSrcVertexDivisor;
+        pDestVertexInput->pNext = pDestVertexDivisor;
+        pNext = Util::VoidPtrInc(pNext, sizeof(VkPipelineVertexInputDivisorStateCreateInfoEXT));
+
+        // Copy VkVertexInputBindingDivisorDescriptionEXT
+        pDestVertexDivisor->pVertexBindingDivisors = reinterpret_cast<VkVertexInputBindingDivisorDescriptionEXT*>(pNext);
+        size = sizeof(VkVertexInputBindingDivisorDescriptionEXT) * pSrcVertexDivisor->vertexBindingDivisorCount;
+        memcpy(pNext, pSrcVertexDivisor->pVertexBindingDivisors, size);
+        pNext = Util::VoidPtrInc(pNext, size);
+    }
+}
+
+// =====================================================================================================================
+VkResult GraphicsPipeline::BuildDeferCompileWorkload(
+    Device*                           pDevice,
+    PipelineCache*                    pPipelineCache,
+    GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
+    GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
+    GraphicsPipelineObjectCreateInfo* pObjectCreateInfo)
+{
+    VkResult result = VK_SUCCESS;
+    DeferGraphicsPipelineCreateInfo* pCreateInfo = nullptr;
+
+    // Calculate payload size
+    size_t payloadSize = sizeof(DeferGraphicsPipelineCreateInfo) + sizeof(Util::Event);
+    for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; i++)
+    {
+        if (pShaderStageInfo->stages[i].pEntryPoint != nullptr)
+        {
+            payloadSize += strlen(pShaderStageInfo->stages[i].pEntryPoint) + 1;
+            if (pShaderStageInfo->stages[i].pSpecializationInfo != nullptr)
+            {
+                auto pSpecializationInfo = pShaderStageInfo->stages[i].pSpecializationInfo;
+                payloadSize += sizeof(VkSpecializationInfo);
+                payloadSize += sizeof(VkSpecializationMapEntry) * pSpecializationInfo->mapEntryCount;
+                payloadSize += pSpecializationInfo->dataSize;
+            }
+        }
+    }
+
+    size_t vertexInputSize = 0;
+    if ((pShaderStageInfo->stages[ShaderStage::ShaderStageVertex].pEntryPoint != nullptr) &&
+        (pBinaryCreateInfo->pipelineInfo.pVertexInput != nullptr))
+    {
+        vertexInputSize =  GetVertexInputStructSize(pBinaryCreateInfo->pipelineInfo.pVertexInput);
+        payloadSize += vertexInputSize;
+    }
+
+    size_t memOffset = 0;
+    Instance* pInstance = pDevice->VkInstance();
+    void* pPayloadMem = pInstance->AllocMem(payloadSize, VK_DEFAULT_MEM_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+    if (pPayloadMem == nullptr)
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        memset(pPayloadMem, 0, payloadSize);
+        pCreateInfo = static_cast<DeferGraphicsPipelineCreateInfo*>(pPayloadMem);
+        memOffset = sizeof(DeferGraphicsPipelineCreateInfo);
+
+        // Fill create info and reset defer compile related options
+        pCreateInfo->pDevice          = pDevice;
+        pCreateInfo->pPipelineCache   = pPipelineCache;
+        pCreateInfo->pPipeline        = this;
+        pCreateInfo->shaderStageInfo  = *pShaderStageInfo;
+        pCreateInfo->binaryCreateInfo = *pBinaryCreateInfo;
+        pCreateInfo->objectCreateInfo = *pObjectCreateInfo;
+
+        pCreateInfo->binaryCreateInfo.pipelineInfo.enableEarlyCompile = false;
+        pCreateInfo->binaryCreateInfo.pipelineInfo.enableUberFetchShader = false;
+        pCreateInfo->objectCreateInfo.immedInfo.checkDeferCompilePipeline = false;
+
+        PipelineShaderInfo* pShaderInfo[] =
+        {
+            &pCreateInfo->binaryCreateInfo.pipelineInfo.vs,
+            &pCreateInfo->binaryCreateInfo.pipelineInfo.tcs,
+            &pCreateInfo->binaryCreateInfo.pipelineInfo.tes,
+            &pCreateInfo->binaryCreateInfo.pipelineInfo.gs,
+            &pCreateInfo->binaryCreateInfo.pipelineInfo.fs,
+        };
+
+        // Do deep copy for binaryCreateInfo members
+        for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; i++)
+        {
+            if (pShaderStageInfo->stages[i].pEntryPoint != nullptr)
+            {
+                size_t size = strlen(pShaderStageInfo->stages[i].pEntryPoint) + 1;
+                char* pEntryPoint = reinterpret_cast<char*>(Util::VoidPtrInc(pPayloadMem, memOffset));
+                memcpy(pEntryPoint, pShaderStageInfo->stages[i].pEntryPoint, size);
+                pCreateInfo->shaderStageInfo.stages[i].pEntryPoint = pEntryPoint;
+                pShaderInfo[i]->pEntryTarget = pEntryPoint;
+                memOffset += size;
+
+                if (pShaderStageInfo->stages[i].pSpecializationInfo != nullptr)
+                {
+                    auto pSrcSpecInfo = pShaderStageInfo->stages[i].pSpecializationInfo;
+                    auto pDestSpecInfo = reinterpret_cast<VkSpecializationInfo*>(Util::VoidPtrInc(pPayloadMem, memOffset));
+                    *pDestSpecInfo = *pSrcSpecInfo;
+                    memOffset += sizeof(VkSpecializationInfo);
+
+                    pDestSpecInfo->pMapEntries = reinterpret_cast<VkSpecializationMapEntry*>(Util::VoidPtrInc(pPayloadMem, memOffset));
+                    memcpy(const_cast<VkSpecializationMapEntry*>(pDestSpecInfo->pMapEntries),
+                           pSrcSpecInfo->pMapEntries,
+                           pSrcSpecInfo->mapEntryCount * sizeof(VkSpecializationMapEntry));
+                    memOffset += pSrcSpecInfo->mapEntryCount * sizeof(VkSpecializationMapEntry);
+
+                    pDestSpecInfo->pData = Util::VoidPtrInc(pPayloadMem, memOffset);
+                    memcpy(const_cast<void*>(pDestSpecInfo->pData),
+                           pSrcSpecInfo->pData,
+                           pSrcSpecInfo->dataSize);
+                    memOffset += pSrcSpecInfo->dataSize;
+                    pCreateInfo->shaderStageInfo.stages[i].pSpecializationInfo = pDestSpecInfo;
+                    pShaderInfo[i]->pSpecializationInfo = pDestSpecInfo;
+                }
+            }
+        }
+
+        if (vertexInputSize != 0)
+        {
+            VkPipelineVertexInputStateCreateInfo* pVertexInput =
+                reinterpret_cast<VkPipelineVertexInputStateCreateInfo*>(Util::VoidPtrInc(pPayloadMem, memOffset));
+            pCreateInfo->binaryCreateInfo.pipelineInfo.pVertexInput = pVertexInput;
+            CopyVertexInputStruct(pBinaryCreateInfo->pipelineInfo.pVertexInput, pVertexInput);
+            memOffset += vertexInputSize;
+        }
+
+        // Build defer workload
+        m_deferWorkload.pPayloads = pPayloadMem;
+        m_deferWorkload.pEvent = VK_PLACEMENT_NEW(Util::VoidPtrInc(pPayloadMem, memOffset))(Util::Event);
+        memOffset += sizeof(Util::Event);
+        VK_ASSERT(memOffset == payloadSize);
+
+        EventCreateFlags  flags = {};
+        flags.manualReset = true;
+        m_deferWorkload.pEvent->Init(flags);
+        m_deferWorkload.Execute = ExecuteDeferCreateOptimizedPipeline;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+void GraphicsPipeline::ExecuteDeferCreateOptimizedPipeline(
+    void *pPayload)
+{
+    DeferGraphicsPipelineCreateInfo* pCreateInfo = static_cast<DeferGraphicsPipelineCreateInfo*>(pPayload);
+    pCreateInfo->pPipeline->DeferCreateOptimizedPipeline(pCreateInfo->pDevice,
+                                                         pCreateInfo->pPipelineCache,
+                                                         &pCreateInfo->binaryCreateInfo,
+                                                         &pCreateInfo->shaderStageInfo,
+                                                         &pCreateInfo->objectCreateInfo);
+}
+
+// =====================================================================================================================
+VkResult GraphicsPipeline::DeferCreateOptimizedPipeline(
+    Device*                           pDevice,
+    PipelineCache*                    pPipelineCache,
+    GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
+    GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
+    GraphicsPipelineObjectCreateInfo* pObjectCreateInfo)
+{
+    VkResult              result = VK_SUCCESS;
+    size_t                pipelineBinarySizes[MaxPalDevices] = {};
+    const void*           pPipelineBinaries[MaxPalDevices]   = {};
+    Util::MetroHash::Hash cacheId[MaxPalDevices]             = {};
+    Pal::IPipeline*       pPalPipeline[MaxPalDevices]        = {};
+
+    Pal::Result           palResult                          = Pal::Result::Success;
+    size_t palSize =
+        pDevice->PalDevice(DefaultDeviceIndex)->GetGraphicsPipelineSize(pObjectCreateInfo->pipeline, &palResult);
+    VK_ASSERT(palResult == Pal::Result::Success);
+
+    uint32_t numPalDevices = pDevice->NumPalDevices();
+    void* pSystemMem = pDevice->VkInstance()->AllocMem(
+        palSize, VK_DEFAULT_MEM_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    if (pSystemMem == nullptr)
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        result = CreatePipelineBinaries(pDevice,
+            nullptr,
+            pShaderStageInfo,
+            nullptr,
+            pBinaryCreateInfo,
+            pPipelineCache,
+            nullptr,
+            cacheId,
+            pipelineBinarySizes,
+            pPipelineBinaries);
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        result = CreatePalPipelineObjects(pDevice,
+            pPipelineCache,
+            pObjectCreateInfo,
+            pipelineBinarySizes,
+            pPipelineBinaries,
+            cacheId,
+            pSystemMem,
+            pPalPipeline);
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        VK_ASSERT(pSystemMem == pPalPipeline[0]);
+        SetOptimizedPipeline(pPalPipeline);
+    }
+
+    pDevice->GetCompiler(DefaultDeviceIndex)->FreeGraphicsPipelineCreateInfo(pBinaryCreateInfo, false);
+
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+    {
+        if (pPipelineBinaries[deviceIdx] != nullptr)
+        {
+            pDevice->GetCompiler(deviceIdx)->FreeGraphicsPipelineBinary(
+                pBinaryCreateInfo, pPipelineBinaries[deviceIdx], pipelineBinarySizes[deviceIdx]);
+        }
+    }
+    return result;
+}
+
+// =====================================================================================================================
+void GraphicsPipeline::SetOptimizedPipeline(
+    Pal::IPipeline* pPalPipeline[MaxPalDevices])
+{
+    const bool optimizedPipeline = true;
+    Util::MetroHash::Hash hash = {};
+    Util::MetroHash64 palPipelineHasher;
+    palPipelineHasher.Update(PalPipelineHash());
+    palPipelineHasher.Update(optimizedPipeline);
+    palPipelineHasher.Finalize(hash.bytes);
+
+    Util::MutexAuto pipelineSwitchLock(&m_pipelineSwitchLock);
+    memcpy(m_pOptimizedPipeline, pPalPipeline, sizeof(m_pOptimizedPipeline));
+    m_optimizedPipelineHash = hash.qwords[0];
+}
+
+// =====================================================================================================================
 GraphicsPipeline::GraphicsPipeline(
     Device* const                          pDevice,
     Pal::IPipeline**                       pPalPipeline,
@@ -515,7 +914,8 @@ GraphicsPipeline::GraphicsPipeline(
     bool                                   bindInputAssemblyState,
     bool                                   force1x1ShaderRate,
     bool                                   customSampleLocations,
-    const VbInfo&                          vbInfo,
+    const VbBindingInfo&                   vbInfo,
+    const PipelineInternalBufferInfo*      pInternalBuffer,
     Pal::IMsaaState**                      pPalMsaa,
     Pal::IColorBlendState**                pPalColorBlend,
     Pal::IDepthStencilState**              pPalDepthStencil,
@@ -529,6 +929,10 @@ GraphicsPipeline::GraphicsPipeline(
         pDevice),
     m_info(immedInfo),
     m_vbInfo(vbInfo),
+    m_internalBufferInfo(*pInternalBuffer),
+    m_pOptimizedPipeline{},
+    m_optimizedPipelineHash(0),
+    m_deferWorkload{},
     m_flags()
 {
     Pipeline::Init(pPalPipeline, pLayout, pBinary, staticStateMask, apiHash);
@@ -689,7 +1093,32 @@ VkResult GraphicsPipeline::Destroy(
     Device*                      pDevice,
     const VkAllocationCallbacks* pAllocator)
 {
+    if (m_deferWorkload.pEvent != nullptr)
+    {
+        auto result = m_deferWorkload.pEvent->Wait(10);
+        if (result == Util::Result::Success)
+        {
+            Util::Destructor(m_deferWorkload.pEvent);
+            pDevice->VkInstance()->FreeMem(m_deferWorkload.pPayloads);
+        }
+        m_deferWorkload.pEvent = nullptr;
+        m_deferWorkload.pPayloads = nullptr;
+    }
+
     DestroyStaticState(pAllocator);
+
+    if (m_pOptimizedPipeline[0] != nullptr)
+    {
+        void* pBaseMem = m_pOptimizedPipeline[0];
+        for (uint32_t deviceIdx = 0;
+            (deviceIdx < m_pDevice->NumPalDevices()) && (m_pPalPipeline[deviceIdx] != nullptr);
+            deviceIdx++)
+        {
+            m_pOptimizedPipeline[deviceIdx]->Destroy();
+            m_pOptimizedPipeline[deviceIdx] = nullptr;
+        }
+        pDevice->VkInstance()->FreeMem(pBaseMem);
+    }
 
     return Pipeline::Destroy(pDevice, pAllocator);
 }
@@ -920,8 +1349,9 @@ void GraphicsPipeline::BindToCmdBuffer(
         pRenderState->inputAssemblyState = m_info.inputAssemblyState;
     }
 
+    const bool useOptimizedPipeline = UseOptimizedPipeline();
     const uint64_t oldHash = pRenderState->boundGraphicsPipelineHash;
-    const uint64_t newHash = PalPipelineHash();
+    const uint64_t newHash = useOptimizedPipeline ? m_optimizedPipelineHash : PalPipelineHash();
 
     utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
     do
@@ -939,7 +1369,7 @@ void GraphicsPipeline::BindToCmdBuffer(
                 Pal::PipelineBindParams params = {};
 
                 params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
-                params.pPipeline         = m_pPalPipeline[deviceIdx];
+                params.pPipeline         = useOptimizedPipeline ? m_pOptimizedPipeline[deviceIdx] : m_pPalPipeline[deviceIdx];
                 params.graphics          = graphicsShaderInfos;
                 params.apiPsoHash        = m_apiHash;
 
@@ -975,9 +1405,9 @@ void GraphicsPipeline::BindToCmdBuffer(
             Pal::PipelineBindParams params = {};
 
             params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
-            params.pPipeline         = m_pPalPipeline[deviceIdx];
+            params.pPipeline         = useOptimizedPipeline ? m_pOptimizedPipeline[deviceIdx] : m_pPalPipeline[deviceIdx];
             params.graphics          = graphicsShaderInfos;
-            params.apiPsoHash = m_apiHash;
+            params.apiPsoHash        = m_apiHash;
 
             pPalCmdBuf->CmdBindPipeline(params);
         }
@@ -1079,16 +1509,21 @@ void GraphicsPipeline::BindToCmdBuffer(
             pRenderState->dirtyGraphics.vrs = 0;
         }
 
-        if (m_vbInfo.uberFetchShaderBuffer.bufferSize > 0)
+        if ((useOptimizedPipeline == false) && (m_internalBufferInfo.dataSize > 0))
         {
-            VK_ASSERT(m_vbInfo.uberFetchShaderBuffer.userDataOffset > 0);
+            VK_ASSERT(m_internalBufferInfo.internalBufferCount > 0);
             Pal::gpusize gpuAddress = {};
-            uint32_t* pCpuAddr = pPalCmdBuf->CmdAllocateEmbeddedData(m_vbInfo.uberFetchShaderBuffer.bufferSize, 1, &gpuAddress);
-            memcpy(pCpuAddr, m_vbInfo.uberFetchShaderBuffer.bufferData, m_vbInfo.uberFetchShaderBuffer.bufferSize);
-            pPalCmdBuf->CmdSetUserData(Pal::PipelineBindPoint::Graphics,
-                                       m_vbInfo.uberFetchShaderBuffer.userDataOffset,
-                                       2,
-                                       reinterpret_cast<uint32_t*>(&gpuAddress));
+            uint32_t* pCpuAddr = pPalCmdBuf->CmdAllocateEmbeddedData(m_internalBufferInfo.dataSize, 1, &gpuAddress);
+            memcpy(pCpuAddr, m_internalBufferInfo.pData, m_internalBufferInfo.dataSize);
+            for (uint32_t i = 0; i < m_internalBufferInfo.internalBufferCount; i++)
+            {
+                Pal::gpusize bufferAddress = gpuAddress;
+                bufferAddress += m_internalBufferInfo.internalBufferEntries[i].bufferOffset;
+                pPalCmdBuf->CmdSetUserData(Pal::PipelineBindPoint::Graphics,
+                    m_internalBufferInfo.internalBufferEntries[i].userDataOffset,
+                    2,
+                    reinterpret_cast<uint32_t*>(&bufferAddress));
+            }
         }
     }
     while (deviceGroup.IterateNext());

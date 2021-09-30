@@ -406,10 +406,6 @@ VkResult Memory::Create(
                 &bindData,
                 sizeof(Pal::GpuMemoryResourceBindEventData));
         }
-        else
-        {
-             VK_NEVER_CALLED();
-        }
 
         // When share a dedicated image, metadata(width/height/mips/...) info is necessary in handle,
         // so driver calls bindMemory here to update metadata at allocation time.
@@ -1175,18 +1171,27 @@ void Memory::ElevatePriority(
     // the new given priority.
     if (m_priority < priority)
     {
-        Util::MutexAuto lock(m_pDevice->GetMemoryMutex());
+        SetPriority(priority, true);
+    }
+}
 
-        if (m_priority < priority)
+// =====================================================================================================================
+// This function set new priority of this memory's allocation.
+void Memory::SetPriority(
+    const MemoryPriority    priority,
+    const bool              mustBeLower)
+{
+    Util::MutexAuto lock(m_pDevice->GetMemoryMutex());
+    if (((mustBeLower == false) && (m_priority != priority)) ||
+        ((mustBeLower == true)  && (m_priority < priority)))
+    {
+        for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
         {
-            for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+            if ((PalMemory(deviceIdx) != nullptr) &&
+                (PalMemory(deviceIdx)->SetPriority(priority.PalPriority(), priority.PalOffset()) ==
+                    Pal::Result::Success))
             {
-                if ((PalMemory(deviceIdx) != nullptr) &&
-                    (PalMemory(deviceIdx)->SetPriority(priority.PalPriority(), priority.PalOffset()) ==
-                        Pal::Result::Success))
-                {
-                    m_priority = priority;
-                }
+                m_priority = priority;
             }
         }
     }
@@ -1360,11 +1365,9 @@ VKAPI_ATTR void VKAPI_CALL vkFreeMemory(
         Device* pDevice = ApiDevice::ObjectFromHandle(device);
         Memory* pMemory = Memory::ObjectFromHandle(memory);
 
-        {
-            const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+        const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
-            pMemory->Free(pDevice, pAllocCB);
-        }
+        pMemory->Free(pDevice, pAllocCB);
     }
 }
 

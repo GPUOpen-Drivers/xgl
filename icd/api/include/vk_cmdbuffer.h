@@ -519,8 +519,8 @@ public:
         VkPrimitiveTopology                         primitiveTopology);
 
     void SetLineStippleEXT(
-        const Pal::LineStippleStateParams&          params,
-        uint32_t                                    staticToken);
+        uint32_t                                    lineStippleFactor,
+        uint16_t                                    lineStipplePattern);
 
     void SetColorWriteEnableEXT(
         uint32_t                                    attachmentCount,
@@ -706,10 +706,6 @@ public:
         VkDeviceSize    counterBufferOffset,
         uint32_t        counterOffset,
         uint32_t        vertexStride);
-
-    void SetLineStippleEXT(
-        uint32_t        lineStippleFactor,
-        uint16_t        lineStipplePattern);
 
     void CmdSetPerDrawVrsRate(
         const VkExtent2D*                        pFragmentSize,
@@ -950,7 +946,7 @@ public:
         const Pal::IDepthStencilState* pState);
 
     void PalCmdSetMsaaQuadSamplePattern(
-        uint32_t numSamplesPerPixel,
+        uint32_t                           numSamplesPerPixel,
         const  Pal::MsaaQuadSamplePattern& quadSamplePattern);
 
     inline void PalCmdBufferSetUserData(

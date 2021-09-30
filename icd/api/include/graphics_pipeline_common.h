@@ -65,19 +65,19 @@ struct VbBindingInfo
     } bindings[Pal::MaxVertexBuffers];
 };
 
-struct UberFetchShaderBufferInfo
+constexpr uint32_t MaxPipelineInternalBufferCount = 4;
+struct InternalBufferEntry
 {
-    bool requirePerIntanceFetch;
-    bool requirePerCompFetch;
     uint32_t userDataOffset;
-    uint32_t bufferSize;
-    uint32_t bufferData[Vkgc::MaxFetchShaderInternalBufferSize];
+    uint32_t bufferOffset;
 };
 
-struct VbInfo
+struct PipelineInternalBufferInfo
 {
-    VbBindingInfo bindingInfo;
-    UberFetchShaderBufferInfo uberFetchShaderBuffer;
+    uint32_t            internalBufferCount;
+    InternalBufferEntry internalBufferEntries[MaxPipelineInternalBufferCount];
+    uint32_t            dataSize;
+    void*               pData;
 };
 
 // =====================================================================================================================
@@ -100,6 +100,7 @@ struct GraphicsPipelineObjectImmedInfo
     Pal::VrsRateParams                    vrsRateParams;
     Pal::DepthStencilStateCreateInfo      depthStencilCreateInfo;
     bool                                  rasterizerDiscardEnable;
+    bool                                  checkDeferCompilePipeline;
 
     // Static pipeline parameter token values.  These can be used to efficiently redundancy check static pipeline
     // state programming during pipeline binds.
@@ -200,14 +201,15 @@ protected:
         const PipelineLayout*               pPipelineLayout,
         GraphicsPipelineBinaryCreateInfo*   pBinInfo,
         GraphicsPipelineShaderStageInfo*    pShaderInfo,
-        VbInfo*                             pVbInfo,
+        VbBindingInfo*                      pVbInfo,
+        PipelineInternalBufferInfo*         pInternalBufferInfo,
         ShaderModuleHandle*                 pTempModules);
 
     // Convert API information into internal create info used to create internal pipeline object
     static void BuildPipelineObjectCreateInfo(
         const Device*                       pDevice,
         const VkGraphicsPipelineCreateInfo* pIn,
-        const VbInfo*                       pVbInfo,
+        const VbBindingInfo*                pVbInfo,
         const GraphicsPipelineBinaryInfo*   pBinInfo,
         const PipelineLayout*               pPipelineLayout,
         GraphicsPipelineObjectCreateInfo*   pObjInfo);

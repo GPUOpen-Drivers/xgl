@@ -347,7 +347,7 @@ VkResult Instance::Init(
 
     createInfo.pLogInfo = &callbackInfo;
 
-#if defined(__unix__)
+#if   defined(__unix__)
     createInfo.pSettingsPath = "/etc/amd";
 #else
     createInfo.pSettingsPath = "Vulkan";

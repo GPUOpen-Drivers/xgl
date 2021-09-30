@@ -652,6 +652,34 @@
       "Type": "enum"
     },
     {
+      "Name": "PipelineLayoutMode",
+      "Description": "Control the pipeline descriptor layout for early compile",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": "PipelineLayoutDefault"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "PipelineLayoutDefault",
+            "Value": 0,
+            "Description": "Build descritptor layout with default layout"
+          },
+          {
+            "Name": "PipelineLayoutAngle",
+            "Value": 1,
+            "Description": "Build descriptor layout compatible with angle base app"
+          }
+        ],
+        "Name": "PipelineLayoutMode"
+      },
+      "Scope": "Driver",
+      "Type": "enum"
+    },
+    {
       "Name": "PipelineBinningMode",
       "Description": "Specifies whether to override binning setting for pipeline.",
       "Tags": [
@@ -973,6 +1001,45 @@
       "Type": "bool"
     },
     {
+      "Name": "EnableEarlyCompile",
+      "Description": "Enable pipeline early compile.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
+      "Name": "DeferCompileOptimizedPipeline",
+      "Description": "Whether enable defer compile optimized pipeline, it only affects option EnableUberFetchShader and EnableEarlyCompile",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
+      "Name": "DeferCompileThreadCount",
+      "Description": "Assistant thread count for deferred compile operation, if count is greater than the internal limitation, the real thread count will be clamped to the limitation.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": "0xFFFFFFFF"
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "Flags": {
+        "IsHex": true
+      }
+    },
+    {
       "Name": "DisablePerCompFetch",
       "Description": "Disable per component fetch in uber fetch shader.",
       "Tags": [
@@ -1154,6 +1221,11 @@
             "Name": "ShaderReplaceShaderISA",
             "Value": 4,
             "Description": "Enable replace ISA shader in the pipeline, For every pipeline in the ShaderReplacementPipelineHashs, would find if there is a file named 0xAAA_replace.txt under ShaderReplacementDir, would be loaded for the replacement the replace shader look like this  *----offset: ISACODE----* 848:0x7E120303   1480:0x7E1E0303  2592:0x7E0E030E"
+          },
+          {
+            "Name": "ShaderReplaceShaderHashPipelineBinaryHash",
+            "Value": 5,
+            "Description": "Enable both shader hash based shader replacement and pipeline binary hash based pipeline binary replacement. In cases where both a pipeline and one or more of its shaders are replaced, the replacement shader will take precedence and will potentially change the hash of the pipeline. The pipeline will only be replaced if the pipeline replacement file has the new hash."
           }
         ],
         "Name": "ShaderReplaceMode"
@@ -2089,6 +2161,18 @@
       "Scope": "Driver",
       "Type": "bool",
       "Name": "DumpDuplicatePipelines"
+    },
+    {
+      "Description": "Re-routes all compute work to a universal queue internally.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "UseUniversalAsComputeQueue",
+      "Scope": "Driver"
     },
     {
       "Name": "DbgBarrierPostCmdEnable",
@@ -3311,18 +3395,6 @@
       "Name": "TransferGranularityDmaOverride"
     },
     {
-      "Description": "If this option is enabled, the following changes are introduced:  (1) Images with VK_IMAGE_TILING_OPTIMAL may not be bound to memory types with VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT.  (2) For each memory type that was previously host visible and usable with optimal images, an another memory type is created that is not host visible and can be used with optimally tiled images.",
-      "Tags": [
-        "Memory"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "AddHostInvisibleMemoryTypesForOptimalImages"
-    },
-    {
       "Description": "If this option is enabled, the driver returns an extra image memory requirement. The amount of memory is determined by memoryPaddingFactorForImageMemoryRequirements.This can be used while capturing GFXR traces and can be helpful for DCC tuning",
       "Tags": [
         "Memory"
@@ -3621,6 +3693,18 @@
       "Scope": "Driver",
       "Type": "bool",
       "Name": "OverrideHeapGartCacheableToUswc"
+    },
+    {
+      "Description": "for APU, set local and local invisibl heap size to 0, Force to use system memory.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "ForceUMA"
     },
     {
       "Description": "Forces a particular AppProfile value.  The profile selected is the value of ForceAppProfileValue. ",
@@ -4401,30 +4485,6 @@
       },
       "Scope": "Driver",
       "Type": "enum"
-    },
-    {
-      "Description": "Enable async compile for shader module and pipelines.",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "EnableAsyncCompile"
-    },
-    {
-      "Description": "Enable partial pipeline compile.",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "EnablePartialPipelineCompile"
     },
     {
       "Description": "Specifies the maximum threshold in bytes for linear transfer commands to use CP DMA, which have less overhead than CS/Gfx copies, but also less throughput for large copies.",
@@ -5415,6 +5475,18 @@
     {
       "Name": "ImplicitExternalSynchronization",
       "Description": "Allow for modified barrier for Implicit External Synchronization",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnableDumbTransitionSync",
+      "Description": "Enable synchronizing cache by adding dumb transition in the barrier",
       "Tags": [
         "General"
       ],

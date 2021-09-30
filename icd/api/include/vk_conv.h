@@ -3405,8 +3405,25 @@ struct UberFetchShaderFormatInfo
     };
 };
 
-typedef Util::HashMap<VkFormat, UberFetchShaderFormatInfo, PalAllocator, Util::JenkinsHashFunc>
-    UberFetchShaderFormatInfoMap;
+// =====================================================================================================================
+class UberFetchShaderFormatInfoMap :
+    public Util::HashMap<VkFormat, UberFetchShaderFormatInfo, PalAllocator, Util::JenkinsHashFunc>
+{
+public:
+    explicit UberFetchShaderFormatInfoMap(uint32 numBuckets, PalAllocator* const pAllocator)
+        :
+        Util::HashMap<VkFormat, UberFetchShaderFormatInfo, PalAllocator, Util::JenkinsHashFunc>(numBuckets, pAllocator),
+        m_bufferFormatMask(0)
+    { }
+
+    void SetBufferFormatMask(uint32_t mask) { m_bufferFormatMask = mask; }
+
+    uint32_t GetBufferFormatMask() const { return m_bufferFormatMask; }
+
+private:
+    uint32_t m_bufferFormatMask;
+};
+
 class PhysicalDevice;
 
 // =====================================================================================================================
@@ -3416,7 +3433,8 @@ VkResult InitializeUberFetchShaderFormatTable(
 
 UberFetchShaderFormatInfo GetUberFetchShaderFormatInfo(
     UberFetchShaderFormatInfoMap* pFormatInfoMap,
-    VkFormat                      vkFormat);
+    VkFormat                      vkFormat,
+    bool                          isZeroStride);
 
 } // namespace vk
 

@@ -688,6 +688,12 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
     pOptionBuffer += optionLength;
     bufSize -= optionLength;
 
+    if ((m_gfxIp.major == 10) && (m_gfxIp.minor >= 3))
+    {
+        // Enable flat scratch for gfx10.3+
+        llpcOptions[numOptions++] = "-amdgpu-enable-flat-scratch";
+    }
+
     if (settings.llpcOptions[0] != '\0')
     {
         const char* pOptions = &settings.llpcOptions[0];

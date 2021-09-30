@@ -90,6 +90,27 @@ void DescriptorSet<numPalDevices>::Reassign(
 }
 
 // =====================================================================================================================
+// Writes the immutable samplers in the layout to memory.
+template <uint32_t numPalDevices>
+void DescriptorSet<numPalDevices>::WriteImmutableSamplers()
+{
+    for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
+    {
+        for (uint32_t bindingIndex = 0; bindingIndex < Layout()->Info().count; ++bindingIndex)
+        {
+            const DescriptorSetLayout::BindingInfo& bindingInfo = Layout()->Binding(bindingIndex);
+
+            if (bindingInfo.imm.dwSize != 0)
+            {
+                uint32_t* pSamplerDesc = Layout()->Info().imm.pImmutableSamplerData + bindingInfo.imm.dwOffset;
+                uint32_t* pDestAddr = StaticCpuAddress(deviceIdx) + Layout()->GetDstStaOffset(bindingInfo, 0);
+                memcpy(pDestAddr, pSamplerDesc, sizeof(uint32)*bindingInfo.imm.dwSize);
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
 // Resets a DescriptorSet to an intial state
 template <uint32_t numPalDevices>
 void DescriptorSet<numPalDevices>::Reset()
@@ -1049,6 +1070,9 @@ template
 void DescriptorSet<1>::Reset();
 
 template
+void DescriptorSet<1>::WriteImmutableSamplers();
+
+template
 DescriptorSet<2>::DescriptorSet(uint32_t heapIndex);
 
 template
@@ -1060,6 +1084,9 @@ void DescriptorSet<2>::Reassign(
 
 template
 void DescriptorSet<2>::Reset();
+
+template
+void DescriptorSet<2>::WriteImmutableSamplers();
 
 template
 DescriptorSet<3>::DescriptorSet(uint32_t heapIndex);
@@ -1075,6 +1102,9 @@ template
 void DescriptorSet<3>::Reset();
 
 template
+void DescriptorSet<3>::WriteImmutableSamplers();
+
+template
 DescriptorSet<4>::DescriptorSet(uint32_t heapIndex);
 
 template
@@ -1086,5 +1116,8 @@ void DescriptorSet<4>::Reassign(
 
 template
 void DescriptorSet<4>::Reset();
+
+template
+void DescriptorSet<4>::WriteImmutableSamplers();
 
 } // namespace vk

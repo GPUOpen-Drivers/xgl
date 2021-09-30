@@ -376,13 +376,36 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // WWZ performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
             {
-                m_settings.forceEnableDcc = ForceDccDefault;
+                m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage |
+                    ForceDccForNonColorAttachmentShaderStorage |
+                    ForceDccForColorAttachments |
+                    ForceDccFor2DShaderStorage);
+
             }
 
             // Mall no alloc setting gives a ~0.82% gain
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
-                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+                m_settings.csWaveSize = 64;
+                m_settings.fsWaveSize = 64;
+
+                if (pInfo->revision == Pal::AsicRevision::Navi21)
+                {
+                    m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage |
+                        ForceDccFor32BppShaderStorage |
+                        ForceDccForColorAttachments |
+                        ForceDccFor3DShaderStorage);
+
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                }
+
+                if (pInfo->revision == Pal::AsicRevision::Navi23)
+                {
+                    m_settings.forceEnableDcc = (ForceDccFor32BppShaderStorage |
+                        ForceDccForNonColorAttachmentShaderStorage |
+                        ForceDccForColorAttachments |
+                        ForceDccFor3DShaderStorage);
+                }
             }
 
             m_settings.implicitExternalSynchronization = false;

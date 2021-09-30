@@ -43,7 +43,6 @@ namespace vk
 // =====================================================================================================================
 Buffer::Buffer(
     Device*                      pDevice,
-    const VkAllocationCallbacks* pAllocator,
     const VkBufferCreateInfo*    pCreateInfo,
     Pal::IGpuMemory**            pGpuMemory,
     BufferFlags                  internalFlags)
@@ -72,7 +71,6 @@ Buffer::Buffer(
             m_perGpu[deviceIdx].gpuVirtAddr = 0;
         }
     }
-
 }
 
 // =====================================================================================================================
@@ -83,16 +81,15 @@ VkResult Buffer::Create(
     const VkAllocationCallbacks*    pAllocator,
     VkBuffer*                       pBuffer)
 {
-    void*            pMemory   = nullptr;
-    Pal::IGpuMemory* pGpuMemory[MaxPalDevices] = {};
+    Pal::IGpuMemory*         pGpuMemory[MaxPalDevices] = {};
+    Pal::GpuMemoryCreateInfo gpuMemoryCreateInfo       = {};
 
-    Pal::Result palResult = Pal::Result::Success;
+    VkResult result     = VK_SUCCESS;
+    size_t   apiSize    = ObjectSize(pDevice);
+    size_t   palMemSize = 0;
+    bool     isSparse   = (pCreateInfo->flags & SparseEnablingFlags) != 0;
 
-    size_t apiSize = ObjectSize(pDevice);
-
-    bool isSparse = (pCreateInfo->flags & SparseEnablingFlags) != 0;
-
-    if (isSparse && (pCreateInfo->size != 0))
+    if (isSparse)
     {
         // We need virtual remapping support for all sparse resources
         VK_ASSERT(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->IsVirtualRemappingSupported());
@@ -103,72 +100,68 @@ VkResult Buffer::Create(
             VK_ASSERT(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetPrtFeatures() & Pal::PrtFeatureBuffer);
         }
 
-        size_t                   palMemSize;
-        Pal::GpuMemoryCreateInfo info = { };
-
-        info.alignment          = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().
-                                                                gpuMemoryProperties.virtualMemAllocGranularity;
-        info.size               = Util::Pow2Align(pCreateInfo->size, info.alignment);
-        info.flags.u32All       = 0;
-        info.flags.virtualAlloc = 1;
-        info.flags.globalGpuVa  = pDevice->IsGlobalGpuVaEnabled();
-        info.heapAccess         = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
+        gpuMemoryCreateInfo.alignment          = pDevice->GetProperties().virtualMemAllocGranularity;
+        gpuMemoryCreateInfo.size               = Util::Pow2Align(pCreateInfo->size, gpuMemoryCreateInfo.alignment);
+        gpuMemoryCreateInfo.flags.virtualAlloc = 1;
+        gpuMemoryCreateInfo.flags.globalGpuVa  = pDevice->IsGlobalGpuVaEnabled();
+        gpuMemoryCreateInfo.heapAccess         = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
 
         // Virtual resource should return 0 on unmapped read if residencyNonResidentStrict is set.
         if (pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetPrtFeatures() & Pal::PrtFeatureStrictNull)
         {
-            info.virtualAccessMode = Pal::VirtualGpuMemAccessMode::ReadZero;
+            gpuMemoryCreateInfo.virtualAccessMode = Pal::VirtualGpuMemAccessMode::ReadZero;
         }
 
-        palMemSize = pDevice->PalDevice(DefaultDeviceIndex)->GetGpuMemorySize(info, &palResult);
-        VK_ASSERT(palResult == Pal::Result::Success);
+        Pal::Result palResult;
 
-        // Allocate enough system memory to also store the VA-only memory object
-        pMemory = pDevice->AllocApiObject(
+        palMemSize = pDevice->PalDevice(DefaultDeviceIndex)->GetGpuMemorySize(gpuMemoryCreateInfo, &palResult);
+        VK_ASSERT(palResult == Pal::Result::Success);
+    }
+
+    // Allocate memory for the dispatchable object and for sparse buffers, the VA-only memory object
+    void* pMemory = pDevice->AllocApiObject(
                         pAllocator,
                         apiSize + (palMemSize * pDevice->NumPalDevices()));
 
-        if (pMemory == nullptr)
-        {
-            return VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
-
-        void* pPalMemory = Util::VoidPtrInc(pMemory, apiSize);
+    if (pMemory == nullptr)
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    else if (isSparse)
+    {
+        void*       pPalMemory = Util::VoidPtrInc(pMemory, apiSize);
+        Pal::Result palResult  = Pal::Result::Success;
 
         for (uint32_t deviceIdx = 0;
             (deviceIdx < pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
             deviceIdx++)
         {
+            if (deviceIdx != DefaultDeviceIndex)
+            {
+                VK_ASSERT(palMemSize == pDevice->PalDevice(deviceIdx)->GetGpuMemorySize(gpuMemoryCreateInfo,
+                                                                                        &palResult));
+                VK_ASSERT(palResult == Pal::Result::Success);
+            }
+
             // Create the VA-only memory object needed for sparse buffer support
             palResult = pDevice->PalDevice(deviceIdx)->CreateGpuMemory(
-                info,
-                (uint8_t*)pPalMemory,
+                gpuMemoryCreateInfo,
+                pPalMemory,
                 &pGpuMemory[deviceIdx]);
 
             pPalMemory = Util::VoidPtrInc(pPalMemory, palMemSize);
         }
-    }
-    else
-    {
-        // Allocate memory only for the dispatchable object
-        pMemory = pDevice->AllocApiObject(
-                        pAllocator,
-                        apiSize);
 
-        if (pMemory == nullptr)
-        {
-            return VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
+        result = PalToVkResult(palResult);
     }
 
-    if (palResult == Pal::Result::Success)
+    if (result == VK_SUCCESS)
     {
         BufferFlags bufferFlags;
         CalculateBufferFlags(pDevice, pCreateInfo, &bufferFlags);
 
         // Construct API buffer object.
         VK_PLACEMENT_NEW (pMemory) Buffer (pDevice,
-                                           pAllocator,
                                            pCreateInfo,
                                            pGpuMemory,
                                            bufferFlags);
@@ -178,7 +171,7 @@ VkResult Buffer::Create(
         LogBufferCreate(pCreateInfo, *pBuffer, pDevice);
     }
 
-    return PalToVkResult(palResult);
+    return result;
 }
 
 // =====================================================================================================================
@@ -289,7 +282,6 @@ VkResult Buffer::Destroy(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
-
     Pal::ResourceDestroyEventData data = {};
     data.pObj = this;
 
@@ -376,20 +368,6 @@ void Buffer::GetMemoryRequirements(
     VkMemoryRequirements* pMemoryRequirements)
 {
     GetBufferMemoryRequirements(pDevice, &m_internalFlags, m_size, pMemoryRequirements);
-}
-
-// =====================================================================================================================
-// Get the buffer's memory requirements from VkBufferCreateInfo
-void Buffer::CalculateMemoryRequirements(
-    const Device*             pDevice,
-    const VkBufferCreateInfo* pCreateInfo,
-    VkMemoryRequirements*     pMemoryRequirements)
-{
-    BufferFlags bufferFlags;
-
-    CalculateBufferFlags(pDevice, pCreateInfo, &bufferFlags);
-
-    GetBufferMemoryRequirements(pDevice, &bufferFlags, pCreateInfo->size, pMemoryRequirements);
 }
 
 // =====================================================================================================================
@@ -569,36 +547,19 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2(
     VkMemoryRequirements2*                      pMemoryRequirements)
 {
     const Device* pDevice = ApiDevice::ObjectFromHandle(device);
-    VK_ASSERT((pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
-              pDevice->IsExtensionEnabled(DeviceExtensions::KHR_GET_MEMORY_REQUIREMENTS2));
 
-    union
+    Buffer* pBuffer = Buffer::ObjectFromHandle(pInfo->buffer);
+    VkMemoryRequirements* pRequirements = &pMemoryRequirements->memoryRequirements;
+    pBuffer->GetMemoryRequirements(pDevice, pRequirements);
+
+    VkMemoryDedicatedRequirements* pMemDedicatedRequirements =
+        static_cast<VkMemoryDedicatedRequirements*>(pMemoryRequirements->pNext);
+
+    if ((pMemDedicatedRequirements != nullptr) &&
+        (pMemDedicatedRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS))
     {
-        const VkStructHeader*                  pHeader;
-        const VkBufferMemoryRequirementsInfo2* pRequirementsInfo2;
-    };
-
-    pRequirementsInfo2 = pInfo;
-    pHeader = utils::GetExtensionStructure(pHeader, VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2);
-    VK_ASSERT(pHeader != nullptr);
-    if (pHeader != nullptr)
-    {
-        Buffer* pBuffer = Buffer::ObjectFromHandle(pRequirementsInfo2->buffer);
-        VkMemoryRequirements* pRequirements = &pMemoryRequirements->memoryRequirements;
-        pBuffer->GetMemoryRequirements(pDevice, pRequirements);
-
-        if (pMemoryRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2)
-        {
-            VkMemoryDedicatedRequirements* pMemDedicatedRequirements =
-                static_cast<VkMemoryDedicatedRequirements*>(pMemoryRequirements->pNext);
-
-            if ((pMemDedicatedRequirements != nullptr) &&
-                (pMemDedicatedRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS))
-            {
-                pMemDedicatedRequirements->prefersDedicatedAllocation  = pBuffer->DedicatedMemoryRequired();
-                pMemDedicatedRequirements->requiresDedicatedAllocation = pBuffer->DedicatedMemoryRequired();
-            }
-        }
+        pMemDedicatedRequirements->prefersDedicatedAllocation  = pBuffer->DedicatedMemoryRequired();
+        pMemDedicatedRequirements->requiresDedicatedAllocation = pBuffer->DedicatedMemoryRequired();
     }
 }
 
