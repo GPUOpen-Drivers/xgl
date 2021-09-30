@@ -34,8 +34,10 @@
 
 namespace Pal { enum class ResourceMappingNodeType : Pal::uint32; }
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 50
 // NOTE: Internal shader module create flag, please modify it if it conflict with vulkan header files.
 #define VK_SHADER_MODULE_ENABLE_OPT_BIT    0x40000000u
+#endif
 
 namespace vk
 {
