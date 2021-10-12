@@ -83,6 +83,8 @@ uint64_t Sampler::BuildApiHash(
                 hasher.Update(pSamplerYCbCrConversionMetaData->word1.u32All);
                 hasher.Update(pSamplerYCbCrConversionMetaData->word2.u32All);
                 hasher.Update(pSamplerYCbCrConversionMetaData->word3.u32All);
+                hasher.Update(pSamplerYCbCrConversionMetaData->word4.u32All);
+                hasher.Update(pSamplerYCbCrConversionMetaData->word5.u32All);
 
                 break;
             case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO:
@@ -258,9 +260,10 @@ VkResult Sampler::Create(
     uint32_t multiPlaneCount = pSamplerYCbCrConversionMetaData != nullptr ? pSamplerYCbCrConversionMetaData->word1.planes : 1;
 
     VK_PLACEMENT_NEW (pMemory) Sampler(apiHash,
-                                      (pSamplerYCbCrConversionMetaData != nullptr),
-                                      multiPlaneCount,
-                                      samplerInfo.borderColorPaletteIndex);
+                                       (pSamplerYCbCrConversionMetaData != nullptr),
+                                       multiPlaneCount,
+                                       samplerInfo.borderColorPaletteIndex,
+                                       pSamplerYCbCrConversionMetaData);
 
     *pSampler = Sampler::HandleFromVoidPointer(pMemory);
 
