@@ -310,7 +310,7 @@ Device::Device(
         m_enabledFeatures.robustBufferAccess = false;
     }
 
-    if (RuntimeSettings().enableRelocatableShaders)
+    if (m_settings.enableRelocatableShaders)
     {
         m_enabledFeatures.mustWriteImmutableSamplers = true;
     }
