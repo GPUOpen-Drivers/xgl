@@ -209,6 +209,21 @@ SamplerYcbcrConversion::SamplerYcbcrConversion(
     m_metaData.word2.bitCounts.yBitCount = yuvFormatInfo.bitCount[1];
     m_metaData.word2.bitCounts.zBitCount = yuvFormatInfo.bitCount[2];
     m_metaData.word2.bitCounts.wBitCount = yuvFormatInfo.bitCount[3];
+
+    m_metaData.word4.lumaWidth  = 0;
+    m_metaData.word4.lumaHeight = 0;
+    m_metaData.word5.lumaDepth  = 0;
+}
+
+// =====================================================================================================================
+void SamplerYcbcrConversion::SetExtent(
+    uint32 width,
+    uint32 height,
+    uint32 depth)
+{
+    m_metaData.word4.lumaWidth  = width;
+    m_metaData.word4.lumaHeight = height;
+    m_metaData.word5.lumaDepth  = depth;
 }
 
 namespace entry

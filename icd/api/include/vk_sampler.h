@@ -31,6 +31,7 @@
 #include "include/vk_defines.h"
 #include "include/vk_dispatch.h"
 #include "include/vk_utils.h"
+#include "include/vk_sampler_ycbcr_conversion.h"
 
 #include "palUtil.h"
 
@@ -70,27 +71,41 @@ public:
         return m_multiPlaneCount;
     }
 
+    Vkgc::SamplerYCbCrConversionMetaData* GetYCbCrConversionMetaData()
+    {
+        return m_pYcbcrConversionMetaData;
+    }
+
+    bool IsYCbCrConversionMetaDataUpdated(const Vkgc::SamplerYCbCrConversionMetaData* pMetaData)
+    {
+        return ((m_pYcbcrConversionMetaData->word4.u32All != pMetaData->word4.u32All) ||
+                (m_pYcbcrConversionMetaData->word5.u32All != pMetaData->word5.u32All));
+    }
+
 protected:
     Sampler(
-        uint64_t apiHash,
-        bool     isYCbCrSampler,
-        uint32_t multiPlaneCount,
-        uint32_t borderColorPaletteIndex)
+        uint64_t                              apiHash,
+        bool                                  isYCbCrSampler,
+        uint32_t                              multiPlaneCount,
+        uint32_t                              borderColorPaletteIndex,
+        Vkgc::SamplerYCbCrConversionMetaData* pYcbcrConversionMetaData)
         :
         m_apiHash(apiHash),
         m_isYCbCrSampler(isYCbCrSampler),
         m_multiPlaneCount(multiPlaneCount),
-        m_borderColorPaletteIndex(borderColorPaletteIndex)
+        m_borderColorPaletteIndex(borderColorPaletteIndex),
+        m_pYcbcrConversionMetaData(pYcbcrConversionMetaData)
     {
     }
 
     static uint64_t BuildApiHash(
         const VkSamplerCreateInfo* pCreateInfo);
 
-    const uint64_t          m_apiHash;
-    const bool              m_isYCbCrSampler;
-    const uint32_t          m_multiPlaneCount;
-    const uint32_t          m_borderColorPaletteIndex;
+    const uint64_t                        m_apiHash;
+    const bool                            m_isYCbCrSampler;
+    const uint32_t                        m_multiPlaneCount;
+    const uint32_t                        m_borderColorPaletteIndex;
+    Vkgc::SamplerYCbCrConversionMetaData* m_pYcbcrConversionMetaData;
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Sampler);
