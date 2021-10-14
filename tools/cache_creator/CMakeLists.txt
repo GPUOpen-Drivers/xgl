@@ -53,6 +53,16 @@ target_compile_definitions(cache_creator_lib INTERFACE
     ${XGL_COMPILE_DEFINITIONS}
 )
 target_compile_options(cache_creator_lib INTERFACE ${XGL_COMPILE_OPTIONS})
+if(NOT LLVM_ENABLE_EH)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(cache_creator_lib INTERFACE  $<$<COMPILE_LANGUAGE:CXX>: -fno-exceptions>)
+    endif()
+endif()
+if(NOT LLVM_ENABLE_RTTI)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(cache_creator_lib INTERFACE  $<$<COMPILE_LANGUAGE:CXX>: -fno-rtti>)
+    endif()
+endif()
 
 target_sources(cache_creator_lib INTERFACE cache_creator.cpp cache_info.cpp)
 
