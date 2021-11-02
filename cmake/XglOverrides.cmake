@@ -22,6 +22,7 @@
  #  SOFTWARE.
  #
  #######################################################################################################################
+
 include_guard()
 
 macro(xgl_get_version)
@@ -149,8 +150,6 @@ macro(xgl_overrides_pal)
     set(PAL_BUILD_RENOIR ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
     set(PAL_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-
-    set(PAL_BUILD_GFX10 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
     set(PAL_BUILD_NAVI12 ${XGL_BUILD_NAVI12} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 

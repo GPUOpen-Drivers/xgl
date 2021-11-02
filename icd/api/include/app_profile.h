@@ -102,6 +102,7 @@ enum class AppProfile : uint32_t
     UnityEngine,           // Unity Engine by Unity Technologies (Default)
     SaschaWillemsExamples, // Vulkan Examples by Sascha Willems
     Maxon,                       // Maxon
+    AngleEngine,                 // Angle Engine
 };
 
 struct ProfileSettings

@@ -1301,12 +1301,12 @@ VkResult InitializeUberFetchShaderFormatTable(
 
     VK_ASSERT(pPhysicalDevice->PalProperties().gfxipProperties.srdSizes.bufferView == 4 * sizeof(uint32_t));
 
-    uint32_t defaultSrd[4] = {};
-    uint32_t zeroStrideSrd[4] = {};
+    uint32_t defaultSrd[4]         = {};
+    uint32_t zeroStrideSrd[4]      = {};
     Pal::BufferViewInfo bufferInfo = {};
-    bufferInfo.gpuAddr = 0x300000000ull;
-    bufferInfo.swizzledFormat = PalFmt_RGBA(32, 32, 32, 32, Float);
-    bufferInfo.range = UINT32_MAX;
+    bufferInfo.gpuAddr             = 0x300000000ull;
+    bufferInfo.swizzledFormat      = PalFmt_Undefined;
+    bufferInfo.range               = UINT32_MAX;
 
     // Build SRD with non-zero stride
     bufferInfo.stride = 16;

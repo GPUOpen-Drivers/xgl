@@ -1541,7 +1541,7 @@ void VkToPalImageScaledCopyRegion(
     region.dstExtent = VkToPalSignedExtent3d(imageBlit.dstOffsets);
 
     VK_ASSERT(imageBlit.srcSubresource.layerCount == imageBlit.dstSubresource.layerCount);
-    VK_ASSERT(region.srcExtent.depth == region.srcExtent.depth);
+    VK_ASSERT(region.srcExtent.depth == region.dstExtent.depth);
 
     region.numSlices = imageBlit.srcSubresource.layerCount;
 
@@ -1597,7 +1597,7 @@ inline Pal::ColorSpaceConversionRegion VkToPalImageColorSpaceConversionRegion(
     region.yuvStartSlice        = yuvSubresource.baseArrayLayer;
 
     VK_ASSERT(imageBlit.srcSubresource.layerCount == imageBlit.dstSubresource.layerCount);
-    VK_ASSERT(srcExtent.depth == srcExtent.depth);
+    VK_ASSERT(srcExtent.depth == dstExtent.depth);
 
     region.sliceCount = Util::Max<uint32_t>(srcExtent.depth, imageBlit.srcSubresource.layerCount);
 
@@ -1732,7 +1732,7 @@ constexpr Pal::SwizzledFormat PalFmt(
     Pal::ChannelSwizzle b,
     Pal::ChannelSwizzle a)
 {
-    return{ chNumFormat,{ r, g, b, a } };
+    return { chNumFormat, Pal::ChannelMapping{{{ r, g, b, a }}} };
 }
 
 #if (VKI_GPU_DECOMPRESS)
@@ -1900,16 +1900,20 @@ inline Pal::ScreenColorSpace VkToPalScreenSpace(VkSurfaceFormatKHR colorFormat)
 // =====================================================================================================================
 // Converts Vulkan source pipeline stage flags to PAL HW pipe point.
 // Selects a source pipe point that matches all stage flags to use for setting/resetting events.
-inline Pal::HwPipePoint VkToPalSrcPipePoint(PipelineStageFlags flags)
+inline Pal::HwPipePoint VkToPalSrcPipePoint(
+    PipelineStageFlags flags)
 {
     // Flags that only require signaling at top-of-pipe.
     static const PipelineStageFlags srcTopOfPipeFlags =
+        VK_PIPELINE_STAGE_HOST_BIT                           |
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
     // Flags that only require signaling post-index-fetch.
     static const PipelineStageFlags srcPostIndexFetchFlags =
         srcTopOfPipeFlags                                    |
-        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT                  |
+        VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT_KHR              |
+        VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT;
 
     // Flags that only require signaling pre-rasterization.
     static const PipelineStageFlags srcPreRasterizationFlags =
@@ -1918,21 +1922,23 @@ inline Pal::HwPipePoint VkToPalSrcPipePoint(PipelineStageFlags flags)
         VK_PIPELINE_STAGE_VERTEX_SHADER_BIT                  |
         VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT    |
         VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT |
-        VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT_KHR              |
         VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT_KHR   |
-        VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
+        VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT                |
+        VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT         |
+        VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR;
 
     // Flags that only require signaling post-PS.
     static const PipelineStageFlags srcPostPsFlags =
         srcPreRasterizationFlags                             |
         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT           |
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT                |
+        VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
 
     // Flags that only require signaling post-CS.
     static const PipelineStageFlags srcPostCsFlags =
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 
-    // fixme correct?
+    // Flags that only require signaling post-BLT operations.
     static const PipelineStageFlags srcPostBltFlags =
         VK_PIPELINE_STAGE_2_COPY_BIT_KHR                     |
         VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR                  |
@@ -1983,7 +1989,8 @@ inline Pal::HwPipePoint VkToPalSrcPipePoint(PipelineStageFlags flags)
 
 // =====================================================================================================================
 // Converts Vulkan source pipeline stage flags to PAL HW top or bottom pipe point.
-inline Pal::HwPipePoint VkToPalSrcPipePointForTimestampWrite(PipelineStageFlags flags)
+inline Pal::HwPipePoint VkToPalSrcPipePointForTimestampWrite(
+    PipelineStageFlags flags)
 {
     // Flags that require signaling at top-of-pipe.
     static const PipelineStageFlags srcTopOfPipeFlags =
@@ -2048,23 +2055,26 @@ static const HwPipePointMappingEntry hwPipePointMappingTable[] =
         Pal::HwPipePostIndexFetch,
         VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT                |
         VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT_KHR            |
-        VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT_KHR
+        VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT
     },
     // Flags that require flushing pre-rasterization workload.
     {
         Pal::HwPipePreRasterization,
         VK_PIPELINE_STAGE_VERTEX_INPUT_BIT                      |
+        VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT_KHR      |
         VK_PIPELINE_STAGE_VERTEX_SHADER_BIT                     |
         VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT       |
         VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT    |
         VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT                   |
-        VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR
+        VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR   |
+        VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT
     },
     // Flags that require flushing PS workload.
     {
         Pal::HwPipePostPs,
         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT      |
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT           |
+        VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR
     },
 
     // Flags that require flushing all workload.
@@ -2074,8 +2084,7 @@ static const HwPipePointMappingEntry hwPipePointMappingTable[] =
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT           |
         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT                    |
         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT                      |
-        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT                      |
-        VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
     },
 
     // Flags that require flushing CS workload.
@@ -2104,7 +2113,9 @@ static const size_t MaxHwPipePoints = sizeof(hwPipePointMappingTable) / sizeof(h
 // By having the flexibility to specify multiple pipe points for barriers we can avoid going with the least common
 // denominator like in case of event sets/resets.
 // The function returns the number of pipe points set in the return value.
-inline uint32_t VkToPalSrcPipePoints(PipelineStageFlags flags, Pal::HwPipePoint* pPalPipePoints)
+inline uint32_t VkToPalSrcPipePoints(
+    PipelineStageFlags flags,
+    Pal::HwPipePoint*  pPalPipePoints)
 {
     uint32_t pipePointCount = 0;
 
@@ -2128,12 +2139,19 @@ inline Pal::HwPipePoint VkToPalWaitPipePoint(PipelineStageFlags flags)
     static_assert((Pal::HwPipePostIndexFetch == Pal::HwPipePreCs) && (Pal::HwPipePostIndexFetch == Pal::HwPipePreBlt),
         "The code here assumes pre-CS and pre-blit match post-index-fetch.");
 
+    // Flags that only require waiting bottom-of-pipe.
+    static const PipelineStageFlags dstBottomOfPipeFlags =
+        VK_PIPELINE_STAGE_HOST_BIT                              |
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+
     // Flags that only require waiting pre-rasterization.
     static const PipelineStageFlags dstPreRasterizationFlags =
+        dstBottomOfPipeFlags                                    |
         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT              |
         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT                   |
         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT               |
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT           |
+        VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
 
     // Flags that only require waiting post-index-fetch.
     static const PipelineStageFlags dstPostIndexFetchFlags =
@@ -2148,12 +2166,13 @@ inline Pal::HwPipePoint VkToPalWaitPipePoint(PipelineStageFlags flags)
         VK_PIPELINE_STAGE_2_BLIT_BIT_KHR                        |
         VK_PIPELINE_STAGE_2_CLEAR_BIT_KHR                       |
         VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR   |
-        VK_PIPELINE_STAGE_TRANSFER_BIT;
+        VK_PIPELINE_STAGE_TRANSFER_BIT                          |
+        VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT;
 
     Pal::HwPipePoint dstPipePoint;
 
-    // If flags is exclusively set to VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
-    if (flags == VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT)
+    // Check if bottom-of-pipe waiting is enough.
+    if ((flags & ~dstBottomOfPipeFlags) == 0)
     {
         dstPipePoint = Pal::HwPipeBottom;
     }
@@ -3375,11 +3394,40 @@ inline DescriptorBindingFlags VkToInternalDescriptorBindingFlag(
 // =====================================================================================================================
 inline uint32_t VkToVkgcShaderStageMask(VkShaderStageFlags vkShaderStageFlags)
 {
-    // The graphics and compute bits map directly
-    uint32_t vkgcShaderMask = (VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT) & vkShaderStageFlags;
+    uint32_t vkgcShaderMask = 0;
+    uint32_t expectedShaderStageCount = 6;
 
-    static_assert(Vkgc::ShaderStageCount == 6, "Please update VkToVkgcShaderStageFlags.");
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_VERTEX_BIT) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageVertexBit;
+    }
 
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageTessControlBit;
+    }
+
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageTessEvalBit;
+    }
+
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_GEOMETRY_BIT) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageGeometryBit;
+    }
+
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_FRAGMENT_BIT) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageFragmentBit;
+    }
+
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_COMPUTE_BIT) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageComputeBit;
+    }
+
+    VK_ASSERT(expectedShaderStageCount == Vkgc::ShaderStageCount); // Need update this function if mismatch
     return vkgcShaderMask;
 }
 

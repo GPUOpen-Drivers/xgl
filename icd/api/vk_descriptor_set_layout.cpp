@@ -345,7 +345,6 @@ void DescriptorSetLayout::ConvertBindingInfo(
         {
             pSectionInfo->numRsrcMapNodes++;
         }
-
     }
 }
 

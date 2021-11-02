@@ -549,6 +549,16 @@ public:
         return m_RtCuHighComputeSubEngineIndex;
     }
 
+    uint32_t GetTunnelComputeSubEngineIndex() const
+    {
+        return m_tunnelComputeSubEngineIndex;
+    }
+
+    uint32_t GetTunnelPrioritySupport() const
+    {
+        return m_tunnelPriorities;
+    }
+
     uint32_t GetSubgroupSize() const
     {
         uint32_t subgroupSize = m_properties.gfxipProperties.shaderCore.maxWavefrontSize;
@@ -725,6 +735,8 @@ protected:
                                                                     static_cast<uint32_t>(sizeof(uint32_t) << 3))];
     uint32_t                         m_vrHighPrioritySubEngineIndex;
     uint32_t                         m_RtCuHighComputeSubEngineIndex;
+    uint32_t                         m_tunnelComputeSubEngineIndex;
+    uint32_t                         m_tunnelPriorities;
     uint32_t                         m_queueFamilyCount;
     struct
     {

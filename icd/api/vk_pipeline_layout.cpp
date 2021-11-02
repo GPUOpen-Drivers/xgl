@@ -623,7 +623,7 @@ Vkgc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
         break;
     case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
-        nodeType = Vkgc::ResourceMappingNodeType::PushConst;
+        nodeType = Vkgc::ResourceMappingNodeType::InlineBuffer;
         break;
     default:
         VK_NEVER_CALLED();

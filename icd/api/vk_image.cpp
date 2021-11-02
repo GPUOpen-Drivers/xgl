@@ -1643,14 +1643,15 @@ VkResult Image::GetMemoryRequirements(
     if (isSparse)
     {
         pReqs->alignment = Util::RoundUpToMultiple(virtualGranularity, palReqs.alignment);
+        pReqs->size      = Util::RoundUpToMultiple(palReqs.size, virtualGranularity);
     }
     else
     {
         pReqs->alignment = palReqs.alignment;
+        pReqs->size      = palReqs.size;
     }
 
     pReqs->memoryTypeBits = 0;
-    pReqs->size           = palReqs.size;
 
     for (uint32_t i = 0; i < palReqs.heapCount; ++i)
     {

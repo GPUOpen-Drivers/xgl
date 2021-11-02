@@ -22,6 +22,7 @@
  #  SOFTWARE.
  #
  #######################################################################################################################
+
 cmake_minimum_required(VERSION 3.13.4)
 
 # This part set before "project(XGL VERSION 1 LANGUAGES C CXX)".

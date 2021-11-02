@@ -330,6 +330,8 @@ PhysicalDevice::PhysicalDevice(
     m_sampleLocationSampleCounts(0),
     m_vrHighPrioritySubEngineIndex(UINT32_MAX),
     m_RtCuHighComputeSubEngineIndex(UINT32_MAX),
+    m_tunnelComputeSubEngineIndex(UINT32_MAX),
+    m_tunnelPriorities(),
     m_queueFamilyCount(0),
     m_appProfile(appProfile),
     m_prtOnDmaSupported(true),
@@ -1341,7 +1343,6 @@ size_t PhysicalDevice::GetFeatures(
 {
     if (pFeatures != nullptr)
     {
-
         const RuntimeSettings& settings = GetRuntimeSettings();
 
         pFeatures->robustBufferAccess                       = VK_TRUE;
@@ -1370,13 +1371,13 @@ size_t PhysicalDevice::GetFeatures(
         pFeatures->textureCompressionETC2                   = VerifyEtc2FormatSupport(*this);
         pFeatures->textureCompressionASTC_LDR               = VerifyAstcLdrFormatSupport(*this);
 
-    #if VKI_GPU_DECOMPRESS
+#if VKI_GPU_DECOMPRESS
         if (settings.enableShaderDecode)
         {
             pFeatures->textureCompressionETC2               = VK_TRUE;
             pFeatures->textureCompressionASTC_LDR           = VK_TRUE;
         }
-    #endif
+#endif
         pFeatures->textureCompressionBC                     = VerifyBCFormatSupport(*this);
         pFeatures->occlusionQueryPrecise                    = VK_TRUE;
         pFeatures->pipelineStatisticsQuery                  = VK_TRUE;
@@ -3668,9 +3669,14 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_INTEGER_DOT_PRODUCT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COPY_COMMANDS2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW));
-
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_ATOMIC_FLOAT));
-    if ((pPhysicalDevice == nullptr) || (pPhysicalDevice->PalProperties().gfxLevel > Pal::GfxIpLevel::GfxIp9))
+    bool supportFloatAtomics = ((pPhysicalDevice == nullptr) ||
+                                 pPhysicalDevice->PalProperties().gfxipProperties.flags.supportFloatAtomics);
+    if (supportFloatAtomics)
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_ATOMIC_FLOAT));
+    }
+    if ((pPhysicalDevice == nullptr) ||
+        ((pPhysicalDevice->PalProperties().gfxLevel > Pal::GfxIpLevel::GfxIp9) && supportFloatAtomics))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_ATOMIC_FLOAT2));
     }
@@ -3776,6 +3782,7 @@ static bool IsNormalQueue(const T& engineCapabilities)
 // - We dynamically don't expose PAL queue types that don't have any queues present on the device
 void PhysicalDevice::PopulateQueueFamilies()
 {
+
     static uint32_t vkQueueFlags[] =
     {
         // Pal::EngineTypeUniversal
@@ -3792,6 +3799,7 @@ void PhysicalDevice::PopulateQueueFamilies()
         VK_QUEUE_SPARSE_BINDING_BIT,
         // Pal::EngineTypeTimer
         0,
+        // This featurization is required to match Pal::EngineTypeCount which is checked using static_assert below
     };
 
     // While it's possible for an engineType to support multiple queueTypes,
@@ -3839,8 +3847,16 @@ void PhysicalDevice::PopulateQueueFamilies()
         {
             if (computeProps.capabilities[subEngineIndex].flags.exclusive == 1)
             {
-                if (computeProps.capabilities[subEngineIndex].queuePrioritySupport &
-                         Pal::QueuePrioritySupport::SupportQueuePriorityRealtime)
+                if ((computeProps.capabilities[subEngineIndex].dispatchTunnelingPrioritySupport != 0) ||
+                    (computeProps.capabilities[subEngineIndex].flags.mustUseDispatchTunneling))
+                {
+                    m_tunnelComputeSubEngineIndex = subEngineIndex;
+                    m_tunnelPriorities =
+                     computeProps.capabilities[subEngineIndex].dispatchTunnelingPrioritySupport;
+                }
+                else if ((computeProps.maxNumDedicatedCu != 0) &&
+                         (computeProps.capabilities[subEngineIndex].queuePrioritySupport &
+                          Pal::QueuePrioritySupport::SupportQueuePriorityRealtime))
                 {
                     m_RtCuHighComputeSubEngineIndex = subEngineIndex;
                 }

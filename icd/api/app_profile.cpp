@@ -421,6 +421,12 @@ constexpr AppProfilePatternEntry AppEngineUnity =
     "unity"
 };
 
+constexpr AppProfilePatternEntry AppEngineAngle =
+{
+    PatternEngineNameLower,
+    "angle"
+};
+
 constexpr AppProfilePatternEntry AppNameValheim =
 {
     PatternExeNameLower,
@@ -850,6 +856,14 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::UnityEngine,
         {
             AppEngineUnity,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::AngleEngine,
+        {
+            AppEngineAngle,
             PatternEnd
         }
     },

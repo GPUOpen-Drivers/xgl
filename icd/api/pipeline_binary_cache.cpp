@@ -784,7 +784,15 @@ VkResult PipelineBinaryCache::InitMemoryCacheLayer(
     Util::MemoryCacheCreateInfo createInfo = {};
     createInfo.baseInfo.pCallbacks = &allocCallbacks;
     createInfo.maxObjectCount      = SIZE_MAX;
+
+    // Reason: CTS generates a large number of cache applications and cause insufficient memory in 32-bit system.
+    // Purpose: To limit the maximun value of MemorySize in 32-bit system.
+#ifdef ICD_X86_BUILD
+    createInfo.maxMemorySize       = 192 * 1024 * 1024;
+#else
     createInfo.maxMemorySize       = SIZE_MAX;
+#endif
+
     createInfo.evictOnFull         = true;
     createInfo.evictDuplicates     = true;
 

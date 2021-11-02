@@ -145,14 +145,6 @@ public:
 
     virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) = 0;
 
-    virtual VkResult CreatePartialPipelineBinary(
-        uint32_t                             deviceIdx,
-        void*                                pShaderModuleData,
-        Vkgc::ShaderModuleEntryData*         pShaderModuleEntryData,
-        const Vkgc::ResourceMappingRootNode* pResourceMappingNode,
-        uint32_t                             mappingNodeCount,
-        Vkgc::ColorTarget*                   pColorTarget) = 0;
-
     virtual VkResult CreateGraphicsPipelineBinary(
         Device*                           pDevice,
         uint32_t                          deviceIdx,

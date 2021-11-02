@@ -226,9 +226,14 @@ static VkFormat GetDepthFormat(
     const uint32_t                          subpassIndex
     )
 {
-    return (pRenderPass != nullptr) ?
-        pRenderPass->GetDepthStencilAttachmentFormat(subpassIndex) :
-        VK_FORMAT_UNDEFINED;
+    VkFormat format = VK_FORMAT_UNDEFINED;
+
+    if (pRenderPass != nullptr)
+    {
+        format = pRenderPass->GetDepthStencilAttachmentFormat(subpassIndex);
+    }
+
+    return format;
 }
 
 // =====================================================================================================================
@@ -1003,7 +1008,6 @@ static void BuildRenderingState(
             pInfo->pipeline.viewInstancingDesc.viewId[viewIndex] = viewIndex;
         }
     }
-
 }
 
 // =====================================================================================================================

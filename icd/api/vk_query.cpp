@@ -482,12 +482,12 @@ VkResult QueryPoolWithStorageView::Initialize(
             {
                 Pal::SwizzledFormat QueryCopyFormat = {
                     Pal::ChNumFormat::X32Y32_Uint,
-                    {
+                    Pal::ChannelMapping{{{
                         Pal::ChannelSwizzle::X,
                         Pal::ChannelSwizzle::Y,
                         Pal::ChannelSwizzle::Zero,
                         Pal::ChannelSwizzle::Zero
-                    },
+                    }}},
                 };
 
                 if ((GetQueryType() == VK_QUERY_TYPE_TIMESTAMP)

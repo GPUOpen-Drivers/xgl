@@ -69,14 +69,6 @@ public:
 
     virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) override;
 
-    virtual VkResult CreatePartialPipelineBinary(
-        uint32_t                             deviceIdx,
-        void*                                pShaderModuleData,
-        Vkgc::ShaderModuleEntryData*         pShaderModuleEntryData,
-        const Vkgc::ResourceMappingRootNode* pResourceMappingNode,
-        uint32_t                             mappingNodeCount,
-        Vkgc::ColorTarget*                   pColorTarget) override;
-
     virtual VkResult CreateGraphicsPipelineBinary(
         Device*                           pDevice,
         uint32_t                          deviceIdx,
@@ -109,6 +101,7 @@ public:
     virtual void FreeComputePipelineBinary(
         const void*                 pPipelineBinary,
         size_t                      binarySize) override;
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(CompilerSolutionLlpc);
 
