@@ -496,6 +496,13 @@ VkResult ImageView::Create(
             imageViewUsage = pUsageInfo->usage;
             break;
         }
+        case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
+        {
+            const auto* pSamplerYcbcrConversionInfo = reinterpret_cast<const VkSamplerYcbcrConversionInfo*>(pHeader);
+            SamplerYcbcrConversion::ObjectFromHandle(pSamplerYcbcrConversionInfo->conversion)->SetExtent(
+                imageInfo.extent.width, imageInfo.extent.height, imageInfo.arraySize);
+            break;
+        }
         default:
             // Skip any unknown extension structures
             break;

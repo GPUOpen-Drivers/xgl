@@ -65,6 +65,8 @@ public:
 
     Vkgc::SamplerYCbCrConversionMetaData* GetMetaData() {return &m_metaData;}
 
+    void SetExtent(uint32 width, uint32 height, uint32 depth);
+
 protected:
     SamplerYcbcrConversion(const VkSamplerYcbcrConversionCreateInfo* pCreateInfo, const RuntimeSettings& settings);
 

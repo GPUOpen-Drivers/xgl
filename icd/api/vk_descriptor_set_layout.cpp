@@ -415,7 +415,20 @@ void DescriptorSetLayout::ConvertImmutableInfo(
                         // Copy the YCbCrMetaData
                         const void* pYCbCrMetaData = Util::VoidPtrInc(pSamplerDesc, descSizeInDw * sizeof(uint32_t));
                         void* pImmutableYCbCrMetaDataDestAddr = Util::VoidPtrInc(pDestAddr, descSizeInDw * sizeof(uint32_t));
-                        memcpy(pImmutableYCbCrMetaDataDestAddr, pYCbCrMetaData, yCbCrMetaDataSizeInDW * sizeof(uint32_t));
+                        Sampler* pSampler = Sampler::ObjectFromHandle(pBindingInfo->pImmutableSamplers[i]);
+                        Vkgc::SamplerYCbCrConversionMetaData* pCurrentYCbCrMetaData = pSampler->GetYCbCrConversionMetaData();
+
+                        if (pSampler->IsYCbCrConversionMetaDataUpdated(
+                                              static_cast<const Vkgc::SamplerYCbCrConversionMetaData*>(pYCbCrMetaData)))
+                        {
+                            memcpy(pImmutableYCbCrMetaDataDestAddr, pCurrentYCbCrMetaData,
+                                                                    yCbCrMetaDataSizeInDW * sizeof(uint32_t));
+                        }
+                        else
+                        {
+                            memcpy(pImmutableYCbCrMetaDataDestAddr, pYCbCrMetaData,
+                                                                    yCbCrMetaDataSizeInDW * sizeof(uint32_t));
+                        }
                     }
                 }
             }
