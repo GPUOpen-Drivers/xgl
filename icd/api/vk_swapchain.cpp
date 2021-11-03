@@ -115,26 +115,6 @@ VkResult SwapChain::Create(
 
     result = PhysicalDevice::UnpackDisplayableSurface(pSurface, &properties.displayableInfo);
 
-    if (pDevice->VkInstance()->GetProperties().supportExplicitPresentMode)
-    {
-        properties.imagePresentSupport = Pal::PresentMode::Windowed;
-    }
-    else
-    {
-        // According to the design, when explicitPresentModes is not supported by platform,
-        // the present mode set by client is just a hint.
-        // The fullscreen present mode is always a preferred mode but platform would make the final call.
-        // To be fixed! The dota2 1080p + ultra mode noticed a performance drop.
-        // Dislabe the flip mode for now.
-        if (pDevice->GetRuntimeSettings().useFlipHint)
-        {
-            properties.imagePresentSupport = Pal::PresentMode::Fullscreen;
-        }
-        else
-        {
-            properties.imagePresentSupport = Pal::PresentMode::Windowed;
-        }
-    }
     // The swap chain is stereo if imageArraySize is 2
     properties.flags.stereo                       = (pCreateInfo->imageArrayLayers == 2) ? 1 : 0;
 
@@ -337,6 +317,38 @@ VkResult SwapChain::Create(
 
     properties.queueFamilyIndexCount =    ((pCreateInfo->imageSharingMode == VK_SHARING_MODE_CONCURRENT) ?
                                            pCreateInfo->queueFamilyIndexCount : 0u);
+
+    bool isPreferWindowedModeOnly = false;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 684
+    Pal::SwapChainProperties swapChainProperties = {};
+    if (result == VK_SUCCESS)
+    {
+        result = PalToVkResult(pPalDevice->GetSwapChainInfo(
+                properties.displayableInfo.displayHandle,
+                properties.displayableInfo.windowHandle,
+                properties.displayableInfo.palPlatform,
+                &swapChainProperties));
+
+        if (pDevice->GetRuntimeSettings().ignorePreferredPresentMode == false)
+        {
+            isPreferWindowedModeOnly =
+                (swapChainProperties.preferredPresentModes ==
+                static_cast<uint32_t>(Pal::PreferredPresentModeFlags::PreferWindowedPresentMode)) ?
+                true : false;
+        }
+    }
+#endif
+
+    if (isPreferWindowedModeOnly ||
+        (pDevice->VkInstance()->GetProperties().supportExplicitPresentMode) ||
+        (pDevice->GetRuntimeSettings().useFlipHint == false))
+    {
+        properties.imagePresentSupport = Pal::PresentMode::Windowed;
+    }
+    else
+    {
+        properties.imagePresentSupport = Pal::PresentMode::Fullscreen;
+    }
 
     // If imageSharingMode is VK_SHARING_MODE_CONCURRENT, queueFamilyIndexCount must be greater than 1.
     VK_ASSERT((pCreateInfo->imageSharingMode != VK_SHARING_MODE_CONCURRENT) || (properties.queueFamilyIndexCount > 1));
@@ -1505,7 +1517,7 @@ SwCompositor* SwCompositor::Create(
                     size_t assertPalMemorySize;
                     pPalDevice->GetPeerImageSizes(peerInfo, &assertPalImageSize, &assertPalMemorySize, nullptr);
                     VK_ASSERT((assertPalImageSize == palPeerImageSize) &&
-                              (assertPalMemorySize == assertPalMemorySize));
+                              (assertPalMemorySize == palPeerMemorySize));
 
                     palResult = pPalDevice->OpenPeerImage(peerInfo,
                         pPeerImageMemory,

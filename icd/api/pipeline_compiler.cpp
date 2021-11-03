@@ -818,7 +818,7 @@ Util::Result PipelineCompiler::GetCachedPipelineBinary(
     FreeCompilerBinary*          pFreeCompilerBinary,
     PipelineCreationFeedback*    pPipelineFeedback)
 {
-    Util::Result cacheResult = Util::Result::Success;
+    Util::Result cacheResult = Util::Result::NotFound;
 
     if (pPipelineBinaryCache != nullptr)
     {
@@ -860,24 +860,36 @@ Util::Result PipelineCompiler::GetCachedPipelineBinary(
 }
 
 // =====================================================================================================================
-// Creates partial pipeline binary.
-VkResult PipelineCompiler::CreatePartialPipelineBinary(
-    uint32_t                             deviceIdx,
-    void*                                pShaderModuleData,
-    Vkgc::ShaderModuleEntryData*         pShaderModuleEntryData,
-    const Vkgc::ResourceMappingRootNode* pResourceMappingNode,
-    uint32_t                             mappingNodeCount,
-    Vkgc::ColorTarget*                   pColorTarget)
+// Store a pipeline binary to the PAL Pipeline cache
+void PipelineCompiler::CachePipelineBinary(
+    const Util::MetroHash::Hash* pCacheId,
+    PipelineBinaryCache*         pPipelineBinaryCache,
+    size_t                       pipelineBinarySize,
+    const void*                  pPipelineBinary,
+    bool                         isUserCacheHit,
+    bool                         isInternalCacheHit)
 {
-    uint32_t compilerMask = GetCompilerCollectionMask();
-    VkResult result = VK_SUCCESS;
-    if (compilerMask & (1 << PipelineCompilerTypeLlpc))
+    Util::Result cacheResult;
+
+    if ((pPipelineBinaryCache != nullptr) && (isUserCacheHit == false))
     {
-        result = m_compilerSolutionLlpc.CreatePartialPipelineBinary(deviceIdx, pShaderModuleData, pShaderModuleEntryData,
-                pResourceMappingNode, mappingNodeCount, pColorTarget);
+        cacheResult = pPipelineBinaryCache->StorePipelineBinary(
+            pCacheId,
+            pipelineBinarySize,
+            pPipelineBinary);
+
+        VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
     }
 
-    return result;
+    if ((m_pBinaryCache != nullptr) && (isInternalCacheHit == false))
+    {
+        cacheResult = m_pBinaryCache->StorePipelineBinary(
+            pCacheId,
+            pipelineBinarySize,
+            pPipelineBinary);
+
+        VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
+    }
 }
 
 // =====================================================================================================================
@@ -958,19 +970,15 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     }
 
     // PAL Pipeline caching
-    Util::Result                 cacheResult = Util::Result::Success;
+    Util::Result cacheResult = Util::Result::Success;
 
     int64_t cacheTime   = 0;
 
     bool isUserCacheHit     = false;
     bool isInternalCacheHit = false;
 
-    PipelineBinaryCache* pPipelineBinaryCache = nullptr;
-
-    if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
-    {
-        pPipelineBinaryCache = pPipelineCache->GetPipelineCache();
-    }
+    PipelineBinaryCache* pPipelineBinaryCache = (pPipelineCache != nullptr) ? pPipelineCache->GetPipelineCache()
+                                                                            : nullptr;
 
     int64_t startTime = 0;
     if (shouldCompile && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr)))
@@ -1074,28 +1082,15 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         }
     }
 
-    if ((pPipelineBinaryCache != nullptr) &&
-        (isUserCacheHit == false) &&
-        (result == VK_SUCCESS))
+    if (result == VK_SUCCESS)
     {
-        cacheResult = pPipelineBinaryCache->StorePipelineBinary(
+        CachePipelineBinary(
             pCacheId,
+            pPipelineBinaryCache,
             *pPipelineBinarySize,
-            *ppPipelineBinary);
-
-        VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
-    }
-
-    if ((m_pBinaryCache != nullptr) &&
-        (isInternalCacheHit == false) &&
-        (result == VK_SUCCESS))
-    {
-        cacheResult = m_pBinaryCache->StorePipelineBinary(
-            pCacheId,
-            *pPipelineBinarySize,
-            *ppPipelineBinary);
-
-        VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
+            *ppPipelineBinary,
+            isUserCacheHit,
+            isInternalCacheHit);
     }
 
     m_totalTimeSpent += shouldCompile ? compileTime : cacheTime;
@@ -1197,19 +1192,15 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     }
 
     // PAL Pipeline caching
-    Util::Result                 cacheResult = Util::Result::Success;
+    Util::Result cacheResult = Util::Result::Success;
 
-    int64_t cacheTime   = 0;
+    int64_t cacheTime = 0;
 
     bool isUserCacheHit     = false;
     bool isInternalCacheHit = false;
 
-    PipelineBinaryCache* pPipelineBinaryCache = nullptr;
-
-    if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
-    {
-        pPipelineBinaryCache = pPipelineCache->GetPipelineCache();
-    }
+    PipelineBinaryCache* pPipelineBinaryCache = (pPipelineCache != nullptr) ? pPipelineCache->GetPipelineCache()
+                                                                            : nullptr;
 
     if (shouldCompile && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr)))
     {
@@ -1258,28 +1249,15 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         }
     }
 
-    if ((pPipelineBinaryCache != nullptr) &&
-        (isUserCacheHit == false) &&
-        (result == VK_SUCCESS))
+    if (result == VK_SUCCESS)
     {
-        cacheResult = pPipelineBinaryCache->StorePipelineBinary(
+        CachePipelineBinary(
             pCacheId,
+            pPipelineBinaryCache,
             *pPipelineBinarySize,
-            *ppPipelineBinary);
-
-        VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
-    }
-
-    if ((m_pBinaryCache != nullptr) &&
-        (isInternalCacheHit == false) &&
-        (result == VK_SUCCESS))
-    {
-        cacheResult = m_pBinaryCache->StorePipelineBinary(
-            pCacheId,
-            *pPipelineBinarySize,
-            *ppPipelineBinary);
-
-        VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
+            *ppPipelineBinary,
+            isUserCacheHit,
+            isInternalCacheHit);
     }
 
     m_totalTimeSpent += shouldCompile ? compileTime : cacheTime;
@@ -2492,12 +2470,8 @@ Util::Result PipelineCompiler::RegisterAndLoadReinjectionBinary(
 {
     Util::Result result = Util::Result::NotFound;
 
-    PipelineBinaryCache* pPipelineBinaryCache = m_pBinaryCache;
-
-    if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
-    {
-        pPipelineBinaryCache = pPipelineCache->GetPipelineCache();
-    }
+    PipelineBinaryCache* pPipelineBinaryCache = (pPipelineCache != nullptr) ? pPipelineCache->GetPipelineCache()
+                                                                            : nullptr;
 
     if (pPipelineBinaryCache != nullptr)
     {

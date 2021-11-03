@@ -1173,6 +1173,19 @@ void GraphicsPipeline::BindToCmdBuffer(
         while (deviceGroup.IterateNext());
     }
 
+    // We can just check DefaultDeviceIndex as the value can't vary between GPUs.
+    if (pCmdBuffer->PerGpuState(DefaultDeviceIndex)->viewport.depthRange != m_info.viewportParams.depthRange)
+    {
+        utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
+        do
+        {
+            pCmdBuffer->PerGpuState(deviceGroup.Index())->viewport.depthRange = m_info.viewportParams.depthRange;
+        }
+        while (deviceGroup.IterateNext());
+
+        pRenderState->dirtyGraphics.viewport = 1;
+    }
+
     if (ContainsStaticState(DynamicStatesInternal::Scissor))
     {
         if (CmdBuffer::IsStaticStateDifferent(oldTokens.scissorRect, newTokens.scissorRect))

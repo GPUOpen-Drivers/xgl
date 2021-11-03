@@ -183,7 +183,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (pPipelineCacheEnvVar != nullptr)
         {
-            m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) >= 0);
+            m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) != 0);
         }
 
         if (pInfo->gfxLevel <= Pal::GfxIpLevel::GfxIp9)
@@ -807,6 +807,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             // A larger minImageCount can get a huge performance gain for game WarThunder.
             m_settings.forceMinImageCount = 3;
+
+            m_settings.enableDumbTransitionSync = false;
         }
 
         if (appProfile == AppProfile::Valheim)
@@ -924,6 +926,13 @@ VkResult VulkanSettingsLoader::ProcessSettings(
 
         // We need to override debug file paths settings to absolute paths as per system info
         OverrideSettingsBySystemInfo();
+
+        // Modify defaults based on application profile and panel settings
+        if ((*pAppProfile == AppProfile::AngleEngine) && m_settings.deferCompileOptimizedPipeline)
+        {
+            m_settings.enableEarlyCompile = true;
+            m_settings.pipelineLayoutMode = PipelineLayoutMode::PipelineLayoutAngle;
+        }
 
         DumpAppProfileChanges(*pAppProfile);
 

@@ -3839,6 +3839,23 @@
       "Name": "UseFlipHint"
     },
     {
+      "Description": "If this is true, The PAL prefered present mode is ignored.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "DependsOn": {
+        "OS": [
+          "Linux"
+        ]
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "IgnorePreferredPresentMode"
+    },
+    {
       "ValidValues": {
         "IsEnum": true,
         "Values": [

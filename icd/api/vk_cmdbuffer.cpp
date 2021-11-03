@@ -56,6 +56,7 @@
 #include "palGpuUtil.h"
 #include "palFormatInfo.h"
 #include "palVectorImpl.h"
+#include "palAutoBuffer.h"
 
 #include <float.h>
 
@@ -1124,7 +1125,7 @@ VkResult CmdBuffer::Begin(
     const PhysicalDevice*        pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
     const Pal::DeviceProperties& deviceProps     = pPhysicalDevice->PalProperties();
 
-    Pal::CmdBufferBuildInfo   cmdInfo = { 0 };
+    Pal::CmdBufferBuildInfo   cmdInfo = {};
 
     RenderPass*  pRenderPass  = nullptr;
     Framebuffer* pFramebuffer = nullptr;
@@ -4858,7 +4859,7 @@ void CmdBuffer::FillTimestampQueryPool(
         Pal::CoherTimestamp;  // vkCmdWriteTimestamp (CmdWriteTimestamp)
 
     static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
-    static const Pal::BarrierFlags flags = { 0 };
+    static const Pal::BarrierFlags flags = {};
 
     // Wait for any timestamp query pool events to complete prior to filling memory
     {
@@ -5170,7 +5171,7 @@ void CmdBuffer::CopyQueryPoolResults(
             };
 
             static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
-            static const Pal::BarrierFlags PalBarrierFlags = {0};
+            static const Pal::BarrierFlags PalBarrierFlags = {};
 
             static const Pal::BarrierInfo WriteWaitIdle =
             {

@@ -55,25 +55,14 @@ struct ShaderModuleHandle;
 class PipelineBinaryCache;
 
 // =====================================================================================================================
-// Make sure that our internal values are the same as the VK values
-static_assert((1 << ShaderStage::ShaderStageVertex) == VK_SHADER_STAGE_VERTEX_BIT,
-              "Internal vertex shader stage value is different from that defined in Vulkan.");
-static_assert((1 << ShaderStage::ShaderStageTessControl) == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
-              "Internal tessellation control shader stage value is different from that defined in Vulkan.");
-static_assert((1 << ShaderStage::ShaderStageTessEval) == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
-              "Internal tessellation evaluation stage value is different from that defined in Vulkan.");
-static_assert((1 << ShaderStage::ShaderStageGeometry) == VK_SHADER_STAGE_GEOMETRY_BIT,
-              "Internal geometry shader stage value is different from that defined in Vulkan.");
-static_assert((1 << ShaderStage::ShaderStageFragment) == VK_SHADER_STAGE_FRAGMENT_BIT,
-              "Internal fragment shader stage value is different from that defined in Vulkan.");
-
-// =====================================================================================================================
 // The shader stages of Pre-Rasterization Shaders section
-constexpr uint32_t PrsShaderMask = 0
-    | ((1 << ShaderStage::ShaderStageVertex)
-    |  (1 << ShaderStage::ShaderStageTessControl)
-    |  (1 << ShaderStage::ShaderStageTessEval)
-    |  (1 << ShaderStage::ShaderStageGeometry));
+constexpr uint32_t PrsShaderMask =
+    (0
+    | (1 << ShaderStage::ShaderStageVertex)
+    | (1 << ShaderStage::ShaderStageTessControl)
+    | (1 << ShaderStage::ShaderStageTessEval)
+    | (1 << ShaderStage::ShaderStageGeometry)
+    );
 
 // =====================================================================================================================
 // The shader stages of Fragment Shader (Post-Rasterization) section
@@ -144,14 +133,6 @@ public:
 
     void FreeShaderModule(
         ShaderModuleHandle* pShaderModule);
-
-    virtual VkResult CreatePartialPipelineBinary(
-        uint32_t                             deviceIdx,
-        void*                                pShaderModuleData,
-        Vkgc::ShaderModuleEntryData*         pShaderModuleEntryData,
-        const Vkgc::ResourceMappingRootNode* pResourceMappingNode,
-        uint32_t                             mappingNodeCount,
-        Vkgc::ColorTarget*                   pColorTarget);
 
     VkResult CreateGraphicsPipelineBinary(
         Device*                           pDevice,
@@ -318,6 +299,14 @@ private:
         bool*                        pIsInternalCacheHit,
         FreeCompilerBinary*          pFreeCompilerBinary,
         PipelineCreationFeedback*    pPipelineFeedback);
+
+    void CachePipelineBinary(
+        const Util::MetroHash::Hash* pCacheId,
+        PipelineBinaryCache*         pPipelineBinaryCache,
+        size_t                       pipelineBinarySize,
+        const void*                  pPipelineBinary,
+        bool                         isUserCacheHit,
+        bool                         isInternalCacheHit);
 
     VkResult LoadShaderModuleFromCache(
         const Device*             pDevice,

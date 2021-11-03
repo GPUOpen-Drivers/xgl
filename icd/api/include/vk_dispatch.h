@@ -277,11 +277,11 @@ public:
 private:
     inline static uint64_t IntValueFromHandle(const ApiType& handle)
     {
-    #ifdef ICD_X64_BUILD
+#ifdef ICD_X64_BUILD
         return reinterpret_cast<uint64_t>(handle);
-    #else
+#else
         return handle;
-    #endif
+#endif
     }
 };
 

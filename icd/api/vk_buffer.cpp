@@ -101,7 +101,7 @@ VkResult Buffer::Create(
         }
 
         gpuMemoryCreateInfo.alignment          = pDevice->GetProperties().virtualMemAllocGranularity;
-        gpuMemoryCreateInfo.size               = Util::Pow2Align(pCreateInfo->size, gpuMemoryCreateInfo.alignment);
+        gpuMemoryCreateInfo.size               = Util::RoundUpToMultiple(pCreateInfo->size, gpuMemoryCreateInfo.alignment);
         gpuMemoryCreateInfo.flags.virtualAlloc = 1;
         gpuMemoryCreateInfo.flags.globalGpuVa  = pDevice->IsGlobalGpuVaEnabled();
         gpuMemoryCreateInfo.heapAccess         = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
@@ -379,23 +379,25 @@ void Buffer::GetBufferMemoryRequirements(
     VkMemoryRequirements* pMemoryRequirements)
 {
     pMemoryRequirements->alignment = 4;
+    pMemoryRequirements->size      = size;
 
     // In case of sparse buffers the alignment and granularity is the page size
     if (pBufferFlags->createSparseBinding)
     {
-        pMemoryRequirements->alignment = Util::Max(pMemoryRequirements->alignment,
-                                                   pDevice->GetProperties().virtualMemPageSize);
+        const VkDeviceSize sparseAllocGranularity = pDevice->GetProperties().virtualMemAllocGranularity;
+
+        pMemoryRequirements->alignment = Util::Max(pMemoryRequirements->alignment, sparseAllocGranularity);
+
+        pMemoryRequirements->size = Util::RoundUpToMultiple(pMemoryRequirements->size, sparseAllocGranularity);
     }
 
     if (pBufferFlags->usageUniformBuffer)
     {
-        constexpr VkDeviceSize UniformBufferAlignment = static_cast<VkDeviceSize>(sizeof(float) * 4);
+        const VkPhysicalDeviceLimits& limits = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetLimits();
 
         pMemoryRequirements->alignment = Util::Max(pMemoryRequirements->alignment,
-                                                   UniformBufferAlignment);
+                                                   limits.minUniformBufferOffsetAlignment);
     }
-
-    pMemoryRequirements->size = Util::RoundUpToMultiple(size, pMemoryRequirements->alignment);
 
     // MemoryRequirements cannot return smaller size than buffer size.
     // MAX_UINT64 can be used as buffer size.

@@ -351,10 +351,18 @@ static void ConstructQueueCreateInfo(
     const Pal::QueuePriority palQueuePriority =
         VkToPalGlobalPriority(queuePriority);
 
+    // Some configs can use this feature with any priority, but it's not useful for
+    // lower priorities.
+    constexpr uint32_t ReasonableTunnelPriorities = Pal::SupportQueuePriorityHigh |
+                                                    Pal::SupportQueuePriorityRealtime;
+
     // Get the sub engine index of vr high priority
     // UINT32_MAX is returned if the required vr high priority sub engine is not available
     const uint32_t vrHighPriorityIndex           = pPhysicalDevices[deviceIdx]->GetVrHighPrioritySubEngineIndex();
     const uint32_t rtCuHighComputeSubEngineIndex = pPhysicalDevices[deviceIdx]->GetRtCuHighComputeSubEngineIndex();
+    const uint32_t tunnelComputeSubEngineIndex   = pPhysicalDevices[deviceIdx]->GetTunnelComputeSubEngineIndex();
+    const uint32_t tunnelPriorities              = (pPhysicalDevices[deviceIdx]->GetTunnelPrioritySupport() &
+                                                    ReasonableTunnelPriorities);
 
     Pal::QueueType palQueueType =
         pPhysicalDevices[deviceIdx]->GetQueueFamilyPalQueueType(queueFamilyIndex);
@@ -384,8 +392,19 @@ static void ConstructQueueCreateInfo(
     {
         pQueueCreateInfo->engineType = Pal::EngineType::EngineTypeCompute;
 
-        if ((palQueuePriority > Pal::QueuePriority::Idle) &&
-            (vrHighPriorityIndex != UINT32_MAX))
+        constexpr uint32_t VrHighPriority = Pal::SupportQueuePriorityMedium |
+                                            Pal::SupportQueuePriorityHigh   |
+                                            Pal::SupportQueuePriorityRealtime;
+        const uint32_t queuePriorityMask = (1 << static_cast<uint8>(palQueuePriority));
+
+        if (TestAnyFlagSet(tunnelPriorities, queuePriorityMask) &&
+            (tunnelComputeSubEngineIndex != UINT32_MAX))
+        {
+            pQueueCreateInfo->engineIndex       = tunnelComputeSubEngineIndex;
+            pQueueCreateInfo->dispatchTunneling = 1;
+        }
+        else if (TestAnyFlagSet(VrHighPriority, queuePriorityMask) &&
+                 (vrHighPriorityIndex != UINT32_MAX))
         {
             pQueueCreateInfo->engineIndex    = vrHighPriorityIndex;
         }
@@ -447,7 +466,7 @@ VkResult Device::Create(
 
     // Dedicated Compute Units
     static constexpr uint32_t MaxEngineCount = 8;
-    uint32_t dedicatedComputeUnits[Queue::MaxQueueFamilies][MaxEngineCount] = { 0 };
+    uint32_t dedicatedComputeUnits[Queue::MaxQueueFamilies][MaxEngineCount] = {};
 
     VkResult vkResult = VK_SUCCESS;
     void*    pMemory  = nullptr;

@@ -22,6 +22,7 @@
  #  SOFTWARE.
  #
  #######################################################################################################################
+
 include_guard()
 
 macro(xgl_use_clang_compiler)
@@ -216,6 +217,8 @@ function(xgl_compiler_options TARGET)
             # -Wunused-const-variable
             # -Wunused-value
             -Wno-unused
+            # This is part of -Wextra in clang, so we need to disable it explicitly
+            -Wno-unused-parameter
         )
 
         if(ICD_ANALYSIS_WARNINGS_AS_ERRORS)

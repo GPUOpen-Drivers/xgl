@@ -266,7 +266,7 @@ def parseJsonProfileEntryAction(action):
 
             result['success'] |= success
 
-            if actionKey in ["vs",
+            if actionKey in [ "vs",
                               "hs",
                               "ds",
                               "gs",

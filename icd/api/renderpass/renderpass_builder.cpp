@@ -933,6 +933,9 @@ void RenderPassBuilder::PostProcessSyncPoint(
         (pSyncPoint->barrier.pipePointCount < (MaxHwPipePoints - 1)) &&
         m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings().implicitExternalSynchronization)
     {
+        // Since there is no handling of implicitExternalIncoming today, make this visible immediately.
+        IncludeWaitPoint(&pSyncPoint->barrier, Pal::HwPipeTop);
+
         pSyncPoint->barrier.pipePoints[pSyncPoint->barrier.pipePointCount] = Pal::HwPipeBottom;
         pSyncPoint->barrier.pipePointCount++;
 
