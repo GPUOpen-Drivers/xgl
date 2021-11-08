@@ -166,6 +166,6 @@ amdpal.pipelines:
 
   EXPECT_EQ(elfLlpcInfo.cacheHash.qwords[0], 17226562260713912943u);
   EXPECT_EQ(elfLlpcInfo.cacheHash.qwords[1], 15513868906143827149u);
-  EXPECT_EQ(elfLlpcInfo.llpcVersion.getMajor(), 46);
-  EXPECT_EQ(elfLlpcInfo.llpcVersion.getMinor().getValue(), 1);
+  EXPECT_EQ(elfLlpcInfo.llpcVersion.getMajor(), 46u);
+  EXPECT_EQ(elfLlpcInfo.llpcVersion.getMinor().getValue(), 1u);
 }
