@@ -24,8 +24,14 @@
  **********************************************************************************************************************/
 #include "cache_creator.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
+#include "llvm/Testing/Support/Error.h"
 #include "gmock/gmock.h"
 #include <array>
+
+namespace {
+
+using llvm::Failed;
+using llvm::Succeeded;
 
 TEST(CacheCreatorTest, PlaceholderTestPass) {
   EXPECT_TRUE(true);
@@ -135,11 +141,7 @@ TEST(CacheCreatorTest, GetCacheInfoFromInvalidPalMetadataBlob) {
 
   llvm::StringRef noteBlob(badMetadata, sizeof(badMetadata));
   llvm::Expected<cc::ElfLlpcCacheInfo> cacheInfoOrErr = cc::getCacheInfoFromMetadataBlob(noteBlob);
-
-  llvm::Error err = cacheInfoOrErr.takeError();
-  EXPECT_TRUE(err.isA<llvm::StringError>());
-
-  llvm::consumeError(std::move(err));
+  EXPECT_THAT_EXPECTED(cacheInfoOrErr, Failed());
 }
 
 TEST(CacheCreatorTest, GetCacheInfoFromValidPalMetadataBlob) {
@@ -154,18 +156,20 @@ amdpal.pipelines:
 )";
 
   llvm::msgpack::Document document;
-  document.fromYAML(sampleMetadata);
+  const bool parsingSucceeded = document.fromYAML(sampleMetadata);
+  ASSERT_TRUE(parsingSucceeded) << "Failed to parse sample metadata";
   std::string noteBlob;
   document.writeToBlob(noteBlob);
 
   llvm::Expected<cc::ElfLlpcCacheInfo> cacheInfoOrErr = cc::getCacheInfoFromMetadataBlob(noteBlob);
+  ASSERT_THAT_EXPECTED(cacheInfoOrErr, Succeeded());
 
-  EXPECT_TRUE((bool)cacheInfoOrErr);
-
-  cc::ElfLlpcCacheInfo elfLlpcInfo = cacheInfoOrErr.get();
-
+  cc::ElfLlpcCacheInfo &elfLlpcInfo = *cacheInfoOrErr;
   EXPECT_EQ(elfLlpcInfo.cacheHash.qwords[0], 17226562260713912943u);
   EXPECT_EQ(elfLlpcInfo.cacheHash.qwords[1], 15513868906143827149u);
   EXPECT_EQ(elfLlpcInfo.llpcVersion.getMajor(), 46u);
-  EXPECT_EQ(elfLlpcInfo.llpcVersion.getMinor().getValue(), 1u);
+  ASSERT_TRUE(elfLlpcInfo.llpcVersion.getMinor().hasValue());
+  EXPECT_EQ(*elfLlpcInfo.llpcVersion.getMinor(), 1u);
 }
+
+} // namespace

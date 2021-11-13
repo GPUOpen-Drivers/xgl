@@ -31,8 +31,10 @@
 find_package(Python3 ${LLVM_MINIMUM_PYTHON_VERSION} REQUIRED
   COMPONENTS Interpreter)
 
-# Find all the LLVM libraries necessary to use the LLVM components in gtest/gmock.
-set(LLVM_GTEST_LIBS gtest gtest_main)
+# Find the TestingSupport library name that we will link with.
+llvm_map_components_to_libnames(llvm_testing_support_lib TestingSupport)
+
+set(LLVM_GTEST_LIBS gtest gtest_main ${llvm_testing_support_lib})
 if(LLVM_PTHREAD_LIB)
   list(APPEND LLVM_GTEST_LIBS pthread)
 endif()
