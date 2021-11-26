@@ -9,16 +9,16 @@ on:
 
 jobs:
   build-and-test:
-    name: "Features: ${{ matrix.feature-set }}, assertions: ${{ matrix.assertions }}"
+    name: "Features: ${{ matrix.feature-set }}"
     runs-on: ${{ matrix.host-os }}
     strategy:
       fail-fast: false
       matrix:
         host-os:             ["ubuntu-20.04"]
-        base-image-template: ["gcr.io/stadia-open-source/amdvlk_%s%s_%s:nightly"]
+        base-image-template: ["gcr.io/stadia-open-source/amdvlk_%s%s:nightly"]
         config:              [Release]
-        assertions:          ["OFF", "ON"]
-        feature-set:         ["+gcc", "+clang"]
+        feature-set:         ["+gcc", "+clang",
+                              "+gcc+assertions", "+clang+assertions"]
     steps:
       - name: Checkout XGL
         run: |
@@ -29,8 +29,7 @@ jobs:
         run: |
           CONFIG_LOWER=$(echo "${{ matrix.config }}" | tr "[:upper:]" "[:lower:]")
           FEATURES_LOWER=$(echo "${{ matrix.feature-set }}" | tr "+" "_")
-          ASSERTS_LOWER=$(echo "${{ matrix.assertions }}" | tr "[:upper:]" "[:lower:]")
-          TAG=$(printf "${{ matrix.base-image-template }}" "$CONFIG_LOWER" "$FEATURES_LOWER" "$ASSERTS_LOWER")
+          TAG=$(printf "${{ matrix.base-image-template }}" "$CONFIG_LOWER" "$FEATURES_LOWER")
           echo "IMAGE_TAG=$TAG" | tee -a $GITHUB_ENV
       - name: Fetch the latest prebuilt AMDVLK
         run: docker pull "$IMAGE_TAG"
