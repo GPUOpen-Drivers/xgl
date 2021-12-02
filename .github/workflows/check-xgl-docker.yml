@@ -17,8 +17,8 @@ jobs:
         host-os:             ["ubuntu-20.04"]
         base-image-template: ["gcr.io/stadia-open-source/amdvlk_%s%s:nightly"]
         config:              [Release]
-        feature-set:         ["+gcc", "+clang",
-                              "+gcc+assertions", "+clang+assertions"]
+        feature-set:         ["+gcc", "+gcc+assertions",
+                              "+clang"]
     steps:
       - name: Checkout XGL
         run: |
