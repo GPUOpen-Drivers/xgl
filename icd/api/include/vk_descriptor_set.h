@@ -125,7 +125,8 @@ protected:
         DescriptorAddr*             pBaseAddrs,
         void*                       pAllocHandle);
 
-    void WriteImmutableSamplers();
+    void WriteImmutableSamplers(
+        uint32_t imageDescSizeInBytes);
 
     void Reset();
 
