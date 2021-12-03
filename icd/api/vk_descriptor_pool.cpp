@@ -349,7 +349,7 @@ VkResult DescriptorPool::AllocDescriptorSets(
                         pSetAllocHandle);
                     if (m_pDevice->MustWriteImmutableSamplers())
                     {
-                        pSet->WriteImmutableSamplers();
+                        pSet->WriteImmutableSamplers(m_pDevice->GetProperties().descriptorSizes.imageView);
                     }
                 }
                 else

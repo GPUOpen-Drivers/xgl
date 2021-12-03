@@ -92,7 +92,8 @@ void DescriptorSet<numPalDevices>::Reassign(
 // =====================================================================================================================
 // Writes the immutable samplers in the layout to memory.
 template <uint32_t numPalDevices>
-void DescriptorSet<numPalDevices>::WriteImmutableSamplers()
+void DescriptorSet<numPalDevices>::WriteImmutableSamplers(
+    uint32_t imageDescSizeInBytes)
 {
     for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
     {
@@ -104,6 +105,10 @@ void DescriptorSet<numPalDevices>::WriteImmutableSamplers()
             {
                 uint32_t* pSamplerDesc = Layout()->Info().imm.pImmutableSamplerData + bindingInfo.imm.dwOffset;
                 uint32_t* pDestAddr = StaticCpuAddress(deviceIdx) + Layout()->GetDstStaOffset(bindingInfo, 0);
+                if (bindingInfo.info.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                {
+                    pDestAddr += (imageDescSizeInBytes / sizeof(uint32_t));
+                }
                 memcpy(pDestAddr, pSamplerDesc, sizeof(uint32)*bindingInfo.imm.dwSize);
             }
         }
@@ -1070,7 +1075,8 @@ template
 void DescriptorSet<1>::Reset();
 
 template
-void DescriptorSet<1>::WriteImmutableSamplers();
+void DescriptorSet<1>::WriteImmutableSamplers(
+        uint32_t imageDescSizeInBytes);
 
 template
 DescriptorSet<2>::DescriptorSet(uint32_t heapIndex);
@@ -1086,7 +1092,8 @@ template
 void DescriptorSet<2>::Reset();
 
 template
-void DescriptorSet<2>::WriteImmutableSamplers();
+void DescriptorSet<2>::WriteImmutableSamplers(
+        uint32_t imageDescSizeInBytes);
 
 template
 DescriptorSet<3>::DescriptorSet(uint32_t heapIndex);
@@ -1102,7 +1109,8 @@ template
 void DescriptorSet<3>::Reset();
 
 template
-void DescriptorSet<3>::WriteImmutableSamplers();
+void DescriptorSet<3>::WriteImmutableSamplers(
+        uint32_t imageDescSizeInBytes);
 
 template
 DescriptorSet<4>::DescriptorSet(uint32_t heapIndex);
@@ -1118,6 +1126,7 @@ template
 void DescriptorSet<4>::Reset();
 
 template
-void DescriptorSet<4>::WriteImmutableSamplers();
+void DescriptorSet<4>::WriteImmutableSamplers(
+        uint32_t imageDescSizeInBytes);
 
 } // namespace vk
