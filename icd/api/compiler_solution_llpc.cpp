@@ -140,9 +140,6 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
 
     auto pPipelineCompiler = m_pPhysicalDevice->GetCompiler();
     pPipelineCompiler->ApplyPipelineOptions(pDevice, 0, &moduleInfo.options.pipelineOptions);
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 50
-    moduleInfo.options.enableOpt = (flags & VK_SHADER_MODULE_ENABLE_OPT_BIT) ? true : false;
-#endif
 
     Vkgc::Result llpcResult = m_pLlpc->BuildShaderModule(&moduleInfo, &buildOut);
 

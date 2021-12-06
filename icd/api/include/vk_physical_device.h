@@ -257,6 +257,10 @@ public:
         return VK_SUCCESS;
     }
 
+    VkResult GetExtendedFormatProperties(
+        VkFormat                format,
+        VkFormatProperties3KHR* pFormatProperties) const;
+
     bool FormatSupportsMsaa(VkFormat format) const
     {
         uint32_t formatIndex = Formats::GetIndex(format);
@@ -416,6 +420,10 @@ public:
     VkResult GetPhysicalDeviceCalibrateableTimeDomainsEXT(
         uint32_t*                           pTimeDomainCount,
         VkTimeDomainEXT*                    pTimeDomains);
+
+    VkResult GetPhysicalDeviceToolPropertiesEXT(
+        uint32_t*                           pToolCount,
+        VkPhysicalDeviceToolPropertiesEXT*  pToolProperties);
 
     void GetExternalBufferProperties(
         const VkPhysicalDeviceExternalBufferInfo*   pExternalBufferInfo,
@@ -1064,6 +1072,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pTimeDomainCount,
     VkTimeDomainEXT*                            pTimeDomains);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceToolPropertiesEXT(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pToolCount,
+    VkPhysicalDeviceToolPropertiesEXT*          pToolProperties);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceFragmentShadingRatesKHR(
     VkPhysicalDevice                        physicalDevice,

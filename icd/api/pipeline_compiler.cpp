@@ -556,6 +556,21 @@ VkResult PipelineCompiler::BuildShaderModule(
 }
 
 // =====================================================================================================================
+// Try to early compile shader if possible
+void PipelineCompiler::TryEarlyCompileShaderModule(
+    const Device*       pDevice,
+    ShaderModuleHandle* pModule)
+{
+    const uint32_t compilerMask = GetCompilerCollectionMask();
+
+    if (compilerMask & (1 << PipelineCompilerTypeLlpc))
+    {
+        m_compilerSolutionLlpc.TryEarlyCompileShaderModule(pDevice, pModule);
+    }
+
+}
+
+// =====================================================================================================================
 // Check whether the shader module is valid
 bool PipelineCompiler::IsValidShaderModule(
     const ShaderModuleHandle* pShaderModule) const
@@ -1128,6 +1143,32 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 }
 
 // =====================================================================================================================
+// Create ISA/relocable shader for a specific shader based on pipeline information
+VkResult PipelineCompiler::CreateGraphicsShaderBinary(
+    const Device*                           pDevice,
+    const ShaderStage                       stage,
+    const GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    ShaderModuleHandle*                     pModule)
+{
+    VkResult result = VK_SUCCESS;
+    const uint32_t compilerMask = GetCompilerCollectionMask();
+
+    if (compilerMask & (1 << PipelineCompilerTypeLlpc))
+    {
+        result = m_compilerSolutionLlpc.CreateGraphicsShaderBinary(pDevice, stage, pCreateInfo, pModule);
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Free and only free early compiled shader in ShaderModuleHandle
+void PipelineCompiler::FreeGraphicsShaderBinary(
+    ShaderModuleHandle* pShaderModule)
+{
+}
+
+// =====================================================================================================================
 // Creates compute pipeline binary.
 VkResult PipelineCompiler::CreateComputePipelineBinary(
     Device*                          pDevice,
@@ -1471,16 +1512,6 @@ static void BuildRasterizationState(
 
         pCreateInfo->pipelineInfo.vpState.depthClipEnable         = (pRs->depthClampEnable == VK_FALSE);
         pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = (pRs->rasterizerDiscardEnable != VK_FALSE);
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 48
-        pCreateInfo->pipelineInfo.rsState.polygonMode             = pRs->polygonMode;
-#endif
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 47
-        pCreateInfo->pipelineInfo.rsState.cullMode                = pRs->cullMode;
-        pCreateInfo->pipelineInfo.rsState.frontFace               = pRs->frontFace;
-#endif
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 46
-        pCreateInfo->pipelineInfo.rsState.depthBiasEnable         = pRs->depthBiasEnable;
-#endif
 
         if (pPipelineRasterizationDepthClipStateCreateInfoEXT != nullptr)
         {
@@ -1513,42 +1544,21 @@ static void BuildRasterizationState(
 }
 
 // =====================================================================================================================
-static void BuildMultisampleState(
+static void BuildMultisampleStateInFgs(
     const Device*                               pDevice,
     const VkPipelineMultisampleStateCreateInfo* pMs,
     const RenderPass*                           pRenderPass,
     const uint32_t                              subpass,
-    const uint32_t                              dynamicStateFlags,
     GraphicsPipelineBinaryCreateInfo*           pCreateInfo)
 {
     if (pMs != nullptr)
     {
-        EXTRACT_VK_STRUCTURES_0(
-            SampleLocations,
-            PipelineSampleLocationsStateCreateInfoEXT,
-            static_cast<const VkPipelineSampleLocationsStateCreateInfoEXT*>(pMs->pNext),
-            PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT);
-
         if (pMs->rasterizationSamples != 1)
         {
-            uint32_t rasterizationSampleCount = pMs->rasterizationSamples;
-
-            uint32_t subpassCoverageSampleCount = (pRenderPass != nullptr) ?
-                pRenderPass->GetSubpassMaxSampleCount(subpass) :
-                rasterizationSampleCount;
-
-            uint32_t subpassColorSampleCount = (pRenderPass != nullptr) ?
-                pRenderPass->GetSubpassColorSampleCount(subpass) :
-                rasterizationSampleCount;
-
-            // subpassCoverageSampleCount would be equal to zero if there are zero attachments.
-            subpassCoverageSampleCount = (subpassCoverageSampleCount == 0) ?
-                rasterizationSampleCount :
-                subpassCoverageSampleCount;
-
-            subpassColorSampleCount = (subpassColorSampleCount == 0) ?
-                subpassCoverageSampleCount :
-                subpassColorSampleCount;
+            uint32_t subpassCoverageSampleCount;
+            uint32_t subpassColorSampleCount;
+            GraphicsPipelineCommon::GetSubpassSampleCount(
+                pMs, pRenderPass, subpass, &subpassCoverageSampleCount, &subpassColorSampleCount, nullptr);
 
             if (pMs->sampleShadingEnable && (pMs->minSampleShading > 0.0f))
             {
@@ -1560,7 +1570,7 @@ static void BuildMultisampleState(
                 pCreateInfo->pipelineInfo.rsState.perSampleShading = false;
             }
 
-            pCreateInfo->pipelineInfo.rsState.numSamples = rasterizationSampleCount;
+            pCreateInfo->pipelineInfo.rsState.numSamples = pMs->rasterizationSamples;
 
             // NOTE: The sample pattern index here is actually the offset of sample position pair. This is
             // different from the field of creation info of image view. For image view, the sample pattern
@@ -1569,18 +1579,24 @@ static void BuildMultisampleState(
                 Device::GetDefaultSamplePatternIndex(subpassCoverageSampleCount) * Pal::MaxMsaaRasterizerSamples;
         }
 
-        pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable = (pMs->alphaToCoverageEnable == VK_TRUE);
-        if (pPipelineSampleLocationsStateCreateInfoEXT != nullptr)
-        {
-            pCreateInfo->sampleLocationGridSize =
-                pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo.sampleLocationGridSize;
-        }
+        pCreateInfo->pipelineInfo.options.enableInterpModePatch = false;
 
         if (pCreateInfo->pipelineInfo.rsState.perSampleShading)
         {
-            const RuntimeSettings&       settings   = pDevice->GetRuntimeSettings();
-            if (!(pCreateInfo->sampleLocationGridSize.width > 1 || pCreateInfo->sampleLocationGridSize.height > 1
-               ))
+            EXTRACT_VK_STRUCTURES_0(
+                SampleLocations,
+                PipelineSampleLocationsStateCreateInfoEXT,
+                static_cast<const VkPipelineSampleLocationsStateCreateInfoEXT*>(pMs->pNext),
+                PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT);
+
+            VkExtent2D gridSize = {};
+            if (pPipelineSampleLocationsStateCreateInfoEXT != nullptr)
+            {
+                gridSize = pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo.sampleLocationGridSize;
+            }
+
+            if ((gridSize.width <= 1) && (gridSize.height <= 1)
+               )
             {
                 pCreateInfo->pipelineInfo.options.enableInterpModePatch = true;
             }
@@ -1589,6 +1605,17 @@ static void BuildMultisampleState(
     else
     {
         pCreateInfo->pipelineInfo.rsState.numSamples = 1;
+    }
+}
+
+// =====================================================================================================================
+static void BuildMultisampleStateInFoi(
+    const VkPipelineMultisampleStateCreateInfo* pMs,
+    GraphicsPipelineBinaryCreateInfo*           pCreateInfo)
+{
+    if (pMs != nullptr)
+    {
+        pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable = (pMs->alphaToCoverageEnable == VK_TRUE);
     }
 }
 
@@ -1628,20 +1655,10 @@ void PipelineCompiler::BuildNggState(
         pCreateInfo->pipelineInfo.nggState.enableGsUse = Util::TestAnyFlagSet(
             settings.enableNgg,
             GraphicsPipelineTypeGs | GraphicsPipelineTypeTessGs);
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 44
-        pCreateInfo->pipelineInfo.nggState.forceNonPassthrough   = settings.nggForceCullingMode;
-#else
         pCreateInfo->pipelineInfo.nggState.forceCullingMode         = settings.nggForceCullingMode;
-#endif
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 47
-        pCreateInfo->pipelineInfo.nggState.alwaysUsePrimShaderTable = settings.nggAlwaysUsePrimShaderTable;
-#endif
         pCreateInfo->pipelineInfo.nggState.compactMode              =
             static_cast<Vkgc::NggCompactMode>(settings.nggCompactionMode);
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 45
-        pCreateInfo->pipelineInfo.nggState.enableFastLaunch       = false;
-#endif
         pCreateInfo->pipelineInfo.nggState.enableVertexReuse         = false;
         pCreateInfo->pipelineInfo.nggState.enableBackfaceCulling     = (isConservativeOverestimation ?
                                                                         false : settings.nggEnableBackfaceCulling);
@@ -1696,6 +1713,12 @@ static void BuildDepthStencilState(
 {
     if (pDs != nullptr)
     {
+        pCreateInfo->pipelineInfo.dsState.depthTestEnable   = pDs->depthTestEnable;
+        pCreateInfo->pipelineInfo.dsState.depthWriteEnable  = pDs->depthWriteEnable;
+        pCreateInfo->pipelineInfo.dsState.depthCompareOp    = pDs->depthCompareOp;
+        pCreateInfo->pipelineInfo.dsState.front             = pDs->front;
+        pCreateInfo->pipelineInfo.dsState.back              = pDs->back;
+        pCreateInfo->pipelineInfo.dsState.stencilTestEnable = pDs->stencilTestEnable;
     }
 }
 
@@ -1780,8 +1803,8 @@ static VkResult BuildPipelineResourceMapping(
             // LLPC can understand.
             result = pLayout->BuildLlpcPipelineMapping(stageMask,
                                                        pVbInfo,
-                                                       pCreateInfo->pTempBuffer,
                                                        pCreateInfo->pipelineInfo.enableUberFetchShader,
+                                                       pCreateInfo->pTempBuffer,
                                                        &pCreateInfo->pipelineInfo.resourceMapping);
         }
     }
@@ -1826,8 +1849,6 @@ static void BuildPipelineShadersInfo(
     GraphicsPipelineBinaryCreateInfo*      pCreateInfo)
 {
 
-    pCreateInfo->flags = pIn->flags;
-
     pDevice->GetCompiler(DefaultDeviceIndex)->ApplyPipelineOptions(pDevice, pIn->flags, &pCreateInfo->pipelineInfo.options);
 
     Vkgc::PipelineShaderInfo* ppShaderInfoOut[] =
@@ -1858,6 +1879,7 @@ static void BuildPipelineShadersInfo(
 static void BuildColorBlendState(
     const Device*                              pDevice,
     const VkPipelineColorBlendStateCreateInfo* pCb,
+    const VkPipelineRenderingCreateInfoKHR*    pRendering,
     const RenderPass*                          pRenderPass,
     const uint32_t                             subpass,
     GraphicsPipelineBinaryCreateInfo*          pCreateInfo)
@@ -1878,6 +1900,11 @@ static void BuildColorBlendState(
             if (pRenderPass != nullptr)
             {
                 cbFormat = pRenderPass->GetColorAttachmentFormat(subpass, i);
+            }
+            else if ((pRendering != nullptr) &&
+                     (i < pRendering->colorAttachmentCount))
+            {
+                cbFormat = pRendering->pColorAttachmentFormats[i];
             }
 
             // If the sub pass attachment format is UNDEFINED, then it means that that subpass does not
@@ -1913,6 +1940,11 @@ static void BuildColorBlendState(
     if (pRenderPass != nullptr)
     {
         dbFormat = pRenderPass->GetDepthStencilAttachmentFormat(subpass);
+    }
+    else if (pRendering != nullptr)
+    {
+        dbFormat = (pRendering->depthAttachmentFormat != VK_FORMAT_UNDEFINED) ?
+            pRendering->depthAttachmentFormat : pRendering->stencilAttachmentFormat;
     }
 
     pCreateInfo->dbFormat = dbFormat;
@@ -2004,12 +2036,11 @@ static void BuildFragmentShaderState(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
     const GraphicsPipelineShaderStageInfo* pShaderInfo,
-    const uint32_t                         dynamicStateFlags,
     GraphicsPipelineBinaryCreateInfo*      pCreateInfo)
 {
     const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
 
-    BuildMultisampleState(pDevice, pIn->pMultisampleState, pRenderPass, pIn->subpass, dynamicStateFlags, pCreateInfo);
+    BuildMultisampleStateInFgs(pDevice, pIn->pMultisampleState, pRenderPass, pIn->subpass, pCreateInfo);
 
     BuildDepthStencilState(pIn->pDepthStencilState, pCreateInfo);
 
@@ -2026,37 +2057,43 @@ static void BuildFragmentOutputInterfaceState(
 {
     const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
 
+    EXTRACT_VK_STRUCTURES_0(
+        dynamicRendering,
+        PipelineRenderingCreateInfoKHR,
+        reinterpret_cast<const VkPipelineRenderingCreateInfoKHR*>(pIn->pNext),
+        PIPELINE_RENDERING_CREATE_INFO_KHR)
+
+    BuildMultisampleStateInFoi(pIn->pMultisampleState, pCreateInfo);
+
     BuildColorBlendState(pDevice,
                          pIn->pColorBlendState,
+                         pPipelineRenderingCreateInfoKHR,
                          pRenderPass, pIn->subpass, pCreateInfo);
 
     pCreateInfo->pipelineInfo.iaState.enableMultiView =
         (pRenderPass != nullptr) ? pRenderPass->IsMultiviewEnabled() :
-                                   false;
+                                   ((pPipelineRenderingCreateInfoKHR != nullptr) &&
+                                    (Util::CountSetBits(pPipelineRenderingCreateInfoKHR->viewMask) != 0));
 }
 
 // =====================================================================================================================
-static VkResult BuildPipelineInternalBufferData(
+static void BuildPipelineInternalBufferData(
     const Device*                     pDevice,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
     PipelineInternalBufferInfo*       pInternalBufferInfo)
 {
     PipelineCompiler* pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
     VK_ASSERT(pCreateInfo->pipelineInfo.enableUberFetchShader);
-    auto result =  pDefaultCompiler->BuildPipelineInternalBufferData(pCreateInfo,
-                                                                     pInternalBufferInfo);
-    return result;
+    pDefaultCompiler->BuildPipelineInternalBufferData(pCreateInfo, pInternalBufferInfo);
 }
 
 // =====================================================================================================================
-static VkResult BuildExecutablePipelineState(
+static void BuildExecutablePipelineState(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
     const GraphicsPipelineShaderStageInfo* pShaderInfo,
-    const PipelineLayout*                  pPipelineLayout,
     const uint32_t                         dynamicStateFlags,
     GraphicsPipelineBinaryCreateInfo*      pCreateInfo,
-    VbBindingInfo*                         pVbInfo,
     PipelineInternalBufferInfo*            pInternalBufferInfo)
 {
     const RuntimeSettings& settings         = pDevice->GetRuntimeSettings();
@@ -2075,53 +2112,28 @@ static VkResult BuildExecutablePipelineState(
         pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable = false;
     }
 
-    Vkgc::PipelineShaderInfo* shaderInfos[] =
-    {
-        &pCreateInfo->pipelineInfo.vs,
-        &pCreateInfo->pipelineInfo.tcs,
-        &pCreateInfo->pipelineInfo.tes,
-        &pCreateInfo->pipelineInfo.gs,
-        &pCreateInfo->pipelineInfo.fs,
-    };
+    // Compiler info is required to be re-built here since we may need to change the compiler when all the states
+    // of an executable graphics pipeline are available. The shader mask here refers to the shader stages which
+    // are valid in this pipeline.
+    const Vkgc::GraphicsPipelineBuildInfo& pipelineInfo = pCreateInfo->pipelineInfo;
+    uint32_t shaderMask = 0;
+    shaderMask |= (pipelineInfo.vs.pModuleData  != nullptr) ? (1 << ShaderStage::ShaderStageVertex)      : 0;
+    shaderMask |= (pipelineInfo.tcs.pModuleData != nullptr) ? (1 << ShaderStage::ShaderStageTessControl) : 0;
+    shaderMask |= (pipelineInfo.tes.pModuleData != nullptr) ? (1 << ShaderStage::ShaderStageTessEval)    : 0;
+    shaderMask |= (pipelineInfo.gs.pModuleData  != nullptr) ? (1 << ShaderStage::ShaderStageGeometry)    : 0;
+    shaderMask |= (pipelineInfo.fs.pModuleData  != nullptr) ? (1 << ShaderStage::ShaderStageFragment)    : 0;
+    BuildCompilerInfo(pDevice, pShaderInfo, shaderMask, pCreateInfo);
 
-    uint32_t availableStageMask = 0;
-
-    for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
+    if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
     {
-        if (shaderInfos[stage]->pModuleData != nullptr)
-        {
-            availableStageMask |= (1 << stage);
-        }
+        pCreateInfo->pipelineInfo.enableUberFetchShader = false;
     }
 
-    VkResult result = BuildPipelineResourceMapping(pDevice, pPipelineLayout, availableStageMask, pVbInfo, pCreateInfo);
-
-    if (result == VK_SUCCESS)
+    if (pCreateInfo->pipelineInfo.enableUberFetchShader)
     {
-        // Compiler info is required to be re-built here since we may need to change the compiler when all the states
-        // of an executable graphics pipeline are available. The shader mask here refers to the shader stages which
-        // are valid in this pipeline.
-        const Vkgc::GraphicsPipelineBuildInfo& pipelineInfo = pCreateInfo->pipelineInfo;
-        uint32_t shaderMask = 0;
-        shaderMask |= (pipelineInfo.vs.pModuleData  != nullptr) ? (1 << ShaderStage::ShaderStageVertex)      : 0;
-        shaderMask |= (pipelineInfo.tcs.pModuleData != nullptr) ? (1 << ShaderStage::ShaderStageTessControl) : 0;
-        shaderMask |= (pipelineInfo.tes.pModuleData != nullptr) ? (1 << ShaderStage::ShaderStageTessEval)    : 0;
-        shaderMask |= (pipelineInfo.gs.pModuleData  != nullptr) ? (1 << ShaderStage::ShaderStageGeometry)    : 0;
-        shaderMask |= (pipelineInfo.fs.pModuleData  != nullptr) ? (1 << ShaderStage::ShaderStageFragment)    : 0;
-        BuildCompilerInfo(pDevice, pShaderInfo, shaderMask, pCreateInfo);
-
-        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
-        {
-            pCreateInfo->pipelineInfo.enableUberFetchShader = false;
-        }
-
-        if (pCreateInfo->pipelineInfo.enableUberFetchShader)
-        {
-            result = BuildPipelineInternalBufferData(pDevice, pCreateInfo, pInternalBufferInfo);
-        }
+        BuildPipelineInternalBufferData(pDevice, pCreateInfo, pInternalBufferInfo);
     }
 
-    return result;
 }
 
 // =====================================================================================================================
@@ -2147,6 +2159,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                                      pIn->pDynamicState
                                      );
 
+    pCreateInfo->flags = pIn->flags;
+
     BuildVertexInputInterfaceState(pDevice, pIn, dynamicStateFlags, pCreateInfo, pVbInfo);
 
     BuildPreRasterizationShaderState(pDevice, pIn, pShaderInfo, dynamicStateFlags, activeStages, pCreateInfo);
@@ -2157,17 +2171,49 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     if (enableRasterization)
     {
-        BuildFragmentShaderState(pDevice, pIn, pShaderInfo, dynamicStateFlags, pCreateInfo);
+        BuildFragmentShaderState(pDevice, pIn, pShaderInfo, pCreateInfo);
 
         BuildFragmentOutputInterfaceState(pDevice, pIn, pCreateInfo);
     }
 
     {
-        result = BuildExecutablePipelineState(
-            pDevice, pIn, pShaderInfo, pPipelineLayout, dynamicStateFlags, pCreateInfo, pVbInfo, pInternalBufferInfo);
+        const Vkgc::PipelineShaderInfo* shaderInfos[] =
+        {
+            &pCreateInfo->pipelineInfo.vs,
+            &pCreateInfo->pipelineInfo.tcs,
+            &pCreateInfo->pipelineInfo.tes,
+            &pCreateInfo->pipelineInfo.gs,
+            &pCreateInfo->pipelineInfo.fs,
+        };
+
+        uint32_t availableStageMask = 0;
+
+        for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
+        {
+            if (shaderInfos[stage]->pModuleData != nullptr)
+            {
+                availableStageMask |= (1 << stage);
+            }
+        }
+        result = BuildPipelineResourceMapping(pDevice, pPipelineLayout, availableStageMask, pVbInfo, pCreateInfo);
+    }
+
+    if ((result == VK_SUCCESS)
+        )
+    {
+        BuildExecutablePipelineState(pDevice, pIn, pShaderInfo, dynamicStateFlags, pCreateInfo, pInternalBufferInfo);
     }
 
     return result;
+}
+
+// =====================================================================================================================
+// Fill partial pipeline binary info in GraphicsPipelineBinaryCreateInfo
+void PipelineCompiler::SetPartialGraphicsPipelineBinaryInfo(
+    const ShaderModuleHandle*         pShaderModuleHandle,
+    const ShaderStage                 stage,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo)
+{
 }
 
 // =====================================================================================================================
@@ -2323,8 +2369,8 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
             // LLPC can understand.
             result = pLayout->BuildLlpcPipelineMapping(Vkgc::ShaderStageComputeBit,
                                                        nullptr,
-                                                       pCreateInfo->pTempBuffer,
                                                        false,
+                                                       pCreateInfo->pTempBuffer,
                                                        &pCreateInfo->pipelineInfo.resourceMapping);
         }
     }
@@ -2599,18 +2645,15 @@ void PipelineCompiler::GetGraphicsPipelineCacheId(
 }
 
 // =====================================================================================================================
-VkResult PipelineCompiler::BuildPipelineInternalBufferData(
+void PipelineCompiler::BuildPipelineInternalBufferData(
     GraphicsPipelineBinaryCreateInfo*           pCreateInfo,
     PipelineInternalBufferInfo*                 pInternalBufferInfo)
 {
-
-    VkResult result = VK_SUCCESS;
     if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
     {
         VK_NOT_IMPLEMENTED;
     }
 
-    return result;
 }
 
 // =====================================================================================================================

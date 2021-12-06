@@ -71,6 +71,9 @@
 #include <climits>
 #include <type_traits>
 
+#include "devmode/devmode_mgr.h"
+#include "protocols/rgpProtocol.h"
+
 namespace vk
 {
 // DisplayModeObject should be returned as a VkDisplayModeKHR, since in some cases we need to retrieve Pal::IScreen from
@@ -1467,6 +1470,51 @@ size_t PhysicalDevice::GetFeatures(
 }
 
 // =====================================================================================================================
+VkResult PhysicalDevice::GetExtendedFormatProperties(
+    VkFormat                format,
+    VkFormatProperties3KHR* pFormatProperties
+    ) const
+{
+    Pal::MergedFormatPropertiesTable fmtProperties = {};
+    m_pPalDevice->GetFormatProperties(&fmtProperties);
+
+    const Pal::SwizzledFormat palFormat       = VkToPalFormat(format, GetRuntimeSettings());
+    const Pal::FormatFeatureFlags* formatBits = fmtProperties.features[static_cast<size_t>(palFormat.format)];
+
+    if (formatBits[Pal::IsLinear] & Pal::FormatFeatureImageShaderWrite)
+    {
+        pFormatProperties->linearTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT_KHR;
+    }
+
+    if (formatBits[Pal::IsLinear] & Pal::FormatFeatureImageShaderRead)
+    {
+        pFormatProperties->linearTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT_KHR;
+
+        if (Formats::IsDepthStencilFormat(format))
+        {
+            pFormatProperties->linearTilingFeatures |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT_KHR;
+        }
+    }
+
+    if (formatBits[Pal::IsNonLinear] & Pal::FormatFeatureImageShaderWrite)
+    {
+        pFormatProperties->optimalTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT_KHR;
+    }
+
+    if (formatBits[Pal::IsNonLinear] & Pal::FormatFeatureImageShaderRead)
+    {
+        pFormatProperties->optimalTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT_KHR;
+
+        if (Formats::IsDepthStencilFormat(format))
+        {
+            pFormatProperties->optimalTilingFeatures |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT_KHR;
+        }
+    }
+
+    return VK_SUCCESS;
+}
+
+// =====================================================================================================================
 // Retrieve format properites. Called in response to vkGetPhysicalDeviceImageFormatProperties
 VkResult PhysicalDevice::GetImageFormatProperties(
     VkFormat                 format,
@@ -1981,6 +2029,64 @@ VkResult PhysicalDevice::GetPhysicalDeviceCalibrateableTimeDomainsEXT(
         }
 
         result = ((timeDomainCount == *pTimeDomainCount) ? VK_SUCCESS : VK_INCOMPLETE);
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+VkResult PhysicalDevice::GetPhysicalDeviceToolPropertiesEXT(
+    uint32_t*                                   pToolCount,
+    VkPhysicalDeviceToolPropertiesEXT*          pToolProperties)
+{
+    bool isProfilingEnabled = false;
+    VkResult result = VK_SUCCESS;
+
+    DevModeMgr* devModeMgr = VkInstance()->GetDevModeMgr();
+
+    if (devModeMgr != nullptr)
+    {
+        isProfilingEnabled = devModeMgr->IsTracingEnabled();
+    }
+
+    if (pToolProperties == nullptr)
+    {
+        if (isProfilingEnabled)
+        {
+            *pToolCount = 1;
+        }
+        else
+        {
+            *pToolCount = 0;
+        }
+    }
+    else
+    {
+
+        if (isProfilingEnabled)
+        {
+            if (*pToolCount == 0)
+            {
+                result = VK_INCOMPLETE;
+            }
+            else
+            {
+                VkPhysicalDeviceToolPropertiesEXT& properties = pToolProperties[0];
+
+                const std::string versionString = std::to_string(RGP_PROTOCOL_VERSION);
+
+                properties.sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES_EXT;
+                properties.pNext    = nullptr;
+                strncpy(properties.name, "Radeon GPU Profiler", VK_MAX_EXTENSION_NAME_SIZE);
+                strncpy(properties.version, versionString.c_str(), VK_MAX_EXTENSION_NAME_SIZE);
+                properties.purposes = VK_TOOL_PURPOSE_PROFILING_BIT_EXT | VK_TOOL_PURPOSE_TRACING_BIT_EXT;
+                strncpy(properties.description, "Radeon GPU Profiler, a low-level optimization tool \
+                    that provides detailed timing and occupancy information on Radeon GPUs.", VK_MAX_DESCRIPTION_SIZE);
+                strncpy(properties.layer, "", VK_MAX_EXTENSION_NAME_SIZE);
+
+                *pToolCount = 1;
+            }
+        }
     }
 
     return result;
@@ -3129,6 +3235,7 @@ VkResult PhysicalDevice::GetSurfaceFormats(
     uint32_t numPresentFormats = 0;
     const uint32_t maxBufferCount = (pSurfaceFormats != nullptr) ? *pSurfaceFormatCount : 0;
 
+    const RuntimeSettings& settings = GetRuntimeSettings();
     DisplayableSurfaceInfo displayableInfo = {};
 
     if (pSurface != nullptr)
@@ -3155,8 +3262,6 @@ VkResult PhysicalDevice::GetSurfaceFormats(
     bool needsWorkaround = pScreen == nullptr ? isWindowed :
                            (palColorCaps.supportedColorSpaces == Pal::ScreenColorSpace::TfUndefined);
 
-    // This workaround is needed on Windows in cases where we get a valid screen object but it has
-    // no valid display properties. This scenario can happen when running apps without a display connected.
     if (needsWorkaround)
     {
         // The w/a here will be removed once more presentable format is supported on base driver side.
@@ -3242,7 +3347,7 @@ VkResult PhysicalDevice::GetSurfaceFormats(
         for (uint32_t vkFmtIdx = VK_FORMAT_BEGIN_RANGE; vkFmtIdx <= VK_FORMAT_END_RANGE; vkFmtIdx++)
         {
             bool isFullscreenFormat = false;
-            const Pal::SwizzledFormat cmpFormat = VkToPalFormat(static_cast<VkFormat>(vkFmtIdx), GetRuntimeSettings());
+            const Pal::SwizzledFormat cmpFormat = VkToPalFormat(static_cast<VkFormat>(vkFmtIdx), settings);
 
             for (uint32_t fmtIndx = 0; fmtIndx < numImgFormats; fmtIndx++)
             {
@@ -3271,7 +3376,6 @@ VkResult PhysicalDevice::GetSurfaceFormats(
 
         ColorSpaceHelper::GetSupportedFormats(palColorCaps.supportedColorSpaces, &colorSpaceCount, pColorSpaces);
 
-        const RuntimeSettings& settings = GetSettingsLoader()->GetSettings();
         // Report HDR in windowed mode only if OS is in HDR mode. Always report on fullscreen
         bool reportHdrSupport = (isWindowed == false) || palColorCaps.isHdrEnabled || settings.alwaysReportHdrFormats;
 
@@ -3603,6 +3707,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SCALAR_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MEMORY_BUDGET));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MEMORY_PRIORITY));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PAGEABLE_DEVICE_LOCAL_MEMORY));
 
     if ((pPhysicalDevice == nullptr) || pPhysicalDevice->PalProperties().gfxipProperties.flags.supportPostDepthCoverage)
     {
@@ -3641,6 +3746,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PRIVATE_DATA));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_TOOLING_INFO));
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE));
 
 #if defined(__unix__)
@@ -3665,6 +3772,10 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ROBUSTNESS2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_TERMINATE_INVOCATION));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE2));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_FORMAT_FEATURE_FLAGS2));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PRIMITIVE_TOPOLOGY_LIST_RESTART));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DYNAMIC_RENDERING));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_INTEGER_DOT_PRODUCT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COPY_COMMANDS2));
@@ -3687,6 +3798,22 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_COLOR_WRITE_ENABLE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_LOAD_STORE_OP_NONE));
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 52
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_YCBCR_IMAGE_ARRAYS));
+#else
+#endif
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 1500
+    if ((pPhysicalDevice == nullptr) ||
+        ((pPhysicalDevice->PalProperties().gfxLevel != Pal::GfxIpLevel::GfxIp9) &&
+         (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportBorderColorSwizzle)))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_BORDER_COLOR_SWIZZLE));
+    }
+#endif
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INDEX_TYPE_UINT8));
 
     bool disableAMDVendorExtensions = false;
     if (pPhysicalDevice != nullptr)
@@ -3770,8 +3897,7 @@ template<class T>
 static bool IsNormalQueue(const T& engineCapabilities)
 {
     return ((engineCapabilities.flags.exclusive == 0) &&
-            (((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityNormal) != 0) ||
-             (engineCapabilities.queuePrioritySupport == 0)));
+            ((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityNormal) != 0));
 }
 
 // =====================================================================================================================
@@ -4056,7 +4182,7 @@ VkResult PhysicalDevice::EnumerateExtensionProperties(
         // If this extension is supported then report it
         if (supportedExtensions.IsExtensionSupported(id))
         {
-            *pProperties = supportedExtensions.GetExtensionInfo(id);
+            supportedExtensions.GetExtensionInfo(id, pProperties);
             pProperties++;
             copyCount--;
         }
@@ -5523,6 +5649,33 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BORDER_COLOR_SWIZZLE_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceBorderColorSwizzleFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->borderColorSwizzle = VK_TRUE;
+                    pExtInfo->borderColorSwizzleFromImage = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDynamicRenderingFeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->dynamicRendering              = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceColorWriteEnableFeaturesEXT*>(pHeader);
@@ -5557,7 +5710,7 @@ size_t PhysicalDevice::GetFeatures2(
 
                 if (updateFeatures)
                 {
-                    pExtInfo->ycbcrImageArrays = VK_FALSE;
+                    pExtInfo->ycbcrImageArrays = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -5652,6 +5805,19 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceMaintenance4FeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->maintenance4 = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT*>(pHeader);
@@ -5659,6 +5825,19 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     pExtInfo->pageableDeviceLocalMemory = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceIndexTypeUint8FeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->indexTypeUint8 = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6288,6 +6467,13 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES_KHR:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceMaintenance4PropertiesKHR*>(pNext);
+            pProps->maxBufferSize = 2u * 1024u * 1024u * 1024u; // TODO: replace with actual size
+            break;
+        }
+
         default:
             break;
         }
@@ -6304,6 +6490,36 @@ void PhysicalDevice::GetFormatProperties2(
     VK_ASSERT(pFormatProperties->sType == VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2);
     GetFormatProperties(format, &pFormatProperties->formatProperties);
 
+    void* pNext = pFormatProperties->pNext;
+
+    while (pNext != nullptr)
+    {
+        auto* pHeader = static_cast<VkStructHeaderNonConst*>(pNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
+        {
+        case VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3_KHR:
+        {
+            auto* pFormatPropertiesExtended = static_cast<VkFormatProperties3KHR*>(pNext);
+
+            // Replicate flags from pFormatProperties
+            pFormatPropertiesExtended->linearTilingFeatures  =
+                static_cast<VkFlags64>(pFormatProperties->formatProperties.linearTilingFeatures);
+            pFormatPropertiesExtended->optimalTilingFeatures =
+                static_cast<VkFlags64>(pFormatProperties->formatProperties.optimalTilingFeatures);
+            pFormatPropertiesExtended->bufferFeatures        =
+                static_cast<VkFlags64>(pFormatProperties->formatProperties.bufferFeatures);
+
+            // Query for extended format properties
+            GetExtendedFormatProperties(format, pFormatPropertiesExtended);
+            break;
+        }
+        default:
+            break;
+        }
+
+        pNext = pHeader->pNext;
+    }
 }
 
 // =====================================================================================================================
@@ -8035,6 +8251,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(
 {
     return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetPhysicalDeviceCalibrateableTimeDomainsEXT(pTimeDomainCount,
                                                                                                              pTimeDomains);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceToolPropertiesEXT(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pToolCount,
+    VkPhysicalDeviceToolPropertiesEXT*          pToolProperties)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetPhysicalDeviceToolPropertiesEXT(pToolCount,
+                                                                                                   pToolProperties);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceFragmentShadingRatesKHR(

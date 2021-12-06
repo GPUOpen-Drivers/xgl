@@ -244,12 +244,9 @@ VkResult Memory::Create(
                     pBoundImage       = Image::ObjectFromHandle(pExtInfo->image);
                     createInfo.pImage = pBoundImage->PalImage(DefaultDeviceIndex);
 
-                    VkMemoryRequirements reqs = {};
-                    if (pBoundImage->GetMemoryRequirements(pDevice, &reqs) == VK_SUCCESS)
-                    {
-                        VK_ASSERT(pAllocInfo->allocationSize >= reqs.size);
-                        createInfo.alignment = reqs.alignment;
-                    }
+                    VkMemoryRequirements reqs = pBoundImage->GetMemoryRequirements();
+                    VK_ASSERT(pAllocInfo->allocationSize >= reqs.size);
+                    createInfo.alignment = reqs.alignment;
                 }
                 dedicatedImage  = pExtInfo->image;
                 dedicatedBuffer = pExtInfo->buffer;

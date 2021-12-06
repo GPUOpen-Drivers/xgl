@@ -186,11 +186,12 @@ VkResult Event::Initialize(
     Pal::GpuMemoryRequirements gpuMemReqs = {};
     m_pPalEvents[0]->GetGpuMemoryRequirements(&gpuMemReqs);
 
-    InternalMemCreateInfo allocInfo = {};
-    allocInfo.pal.size = gpuMemReqs.size;
-    allocInfo.pal.alignment = gpuMemReqs.alignment;
-    allocInfo.pal.priority = Pal::GpuMemPriority::Normal;
-    allocInfo.pal.flags.shareable = (numDeviceEvents > 1) ? 1 : 0;
+    InternalMemCreateInfo allocInfo  = {};
+    allocInfo.pal.size               = gpuMemReqs.size;
+    allocInfo.pal.alignment          = gpuMemReqs.alignment;
+    allocInfo.pal.priority           = Pal::GpuMemPriority::Normal;
+    allocInfo.pal.flags.shareable    = (numDeviceEvents > 1) ? 1 : 0;
+    allocInfo.pal.flags.cpuInvisible = (gpuMemReqs.flags.cpuAccess ? 0 : 1);
 
     InternalSubAllocPool pool = InternalPoolCpuCacheableGpuUncached;
 

@@ -53,8 +53,6 @@
 
 namespace vk
 {
-    // Default to true
-    bool SwapChain::s_forceTurboSyncEnable         = true;
 
 static bool EnableFullScreen(
     const Device*                   pDevice,
@@ -103,7 +101,14 @@ VkResult SwapChain::Create(
 
     VkResult result = VK_SUCCESS;
 
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
     Properties properties = {};
+
+    // the old swapchain should be flaged as deprecated no matter whether the new swapchain is created successfully.
+    if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
+    {
+        SwapChain::ObjectFromHandle(pCreateInfo->oldSwapchain)->MarkAsDeprecated(pAllocator);
+    }
 
     uint32          viewFormatCount = 0;
     const VkFormat* pViewFormats    = nullptr;
@@ -118,8 +123,7 @@ VkResult SwapChain::Create(
     // The swap chain is stereo if imageArraySize is 2
     properties.flags.stereo                       = (pCreateInfo->imageArrayLayers == 2) ? 1 : 0;
 
-    properties.imageCreateInfo.swizzledFormat     = VkToPalFormat(pCreateInfo->imageFormat,
-                                                                  pDevice->GetRuntimeSettings());
+    properties.imageCreateInfo.swizzledFormat     = VkToPalFormat(pCreateInfo->imageFormat, settings);
     properties.imageCreateInfo.flags.stereo       = properties.flags.stereo;
     properties.imageCreateInfo.flags.peerWritable = (pDevice->NumPalDevices() > 1) ? 1 : 0;
 
@@ -141,8 +145,8 @@ VkResult SwapChain::Create(
     // The swapchain image can be used as a blit source for driver post processing on present.
     properties.imageCreateInfo.usage.shaderRead = 1;
 
-    if ((pDevice->GetRuntimeSettings().disableDisplayDcc == DisplayableDcc::DisplayableDccDisabled) ||
-        ((pDevice->GetRuntimeSettings().disableDisplayDcc == DisplayableDcc::DisplayableDccDisabledForMgpu) &&
+    if ((settings.disableDisplayDcc == DisplayableDcc::DisplayableDccDisabled) ||
+        ((settings.disableDisplayDcc == DisplayableDcc::DisplayableDccDisabledForMgpu) &&
             (pDevice->IsMultiGpu())))
     {
         properties.imageCreateInfo.usage.disableOptimizedDisplay = 1;
@@ -202,8 +206,7 @@ VkResult SwapChain::Create(
             // expects that to be excluded from the list.
             if (pViewFormats[i] != pCreateInfo->imageFormat)
             {
-                palFormatList[properties.imageCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i],
-                                                                                pDevice->GetRuntimeSettings());
+                palFormatList[properties.imageCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i], settings);
             }
         }
     }
@@ -244,8 +247,12 @@ VkResult SwapChain::Create(
     swapChainCreateInfo.compositeAlpha      = VkToPalCompositeAlphaMode(pCreateInfo->compositeAlpha);
     swapChainCreateInfo.imageArraySize      = 1;
     swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(pCreateInfo->presentMode);
+    swapChainCreateInfo.colorSpace          = VkToPalScreenSpace(VkSurfaceFormatKHR{ pCreateInfo->imageFormat,
+                                                                                     pCreateInfo->imageColorSpace });
 
-    swapChainCreateInfo.flags.canAcquireBeforeSignaling = pDevice->GetRuntimeSettings().enableAcquireBeforeSignal;
+    swapChainCreateInfo.flags.canAcquireBeforeSignaling = settings.enableAcquireBeforeSignal;
+
+    Pal::IDevice* pPalDevice = pDevice->PalDevice(properties.presentationDeviceIdx);
 
     if (properties.displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
     {
@@ -266,7 +273,6 @@ VkResult SwapChain::Create(
     const FullscreenMgr::Mode mode =
                        FullscreenMgr::Implicit;
     // Find the monitor is associated with the given window handle
-    Pal::IDevice* pPalDevice = pDevice->PalDevice(properties.presentationDeviceIdx);
     Pal::IScreen* pScreen    = pDevice->VkInstance()->FindScreen(pPalDevice,
                                                                  swapChainCreateInfo.hWindow,
                                                                  properties.imageCreateInfo.hDisplay);
@@ -536,12 +542,6 @@ VkResult SwapChain::Create(
         pDevice->FreeApiObject(pAllocator, pMemory);
     }
 
-    // the old swapchain should be flaged as deprecated no matter whether the new swapchain is created successfully.
-    if (pCreateInfo->oldSwapchain != 0)
-    {
-        SwapChain::ObjectFromHandle(pCreateInfo->oldSwapchain)->MarkAsDeprecated();
-    }
-
     return result;
 }
 
@@ -599,11 +599,14 @@ VkResult SwapChain::Destroy(const VkAllocationCallbacks* pAllocator)
         m_pSwCompositor->Destroy(m_pDevice, pAllocator);
     }
 
-    for (uint32_t i = 0; i < m_properties.imageCount; ++i)
+    if (m_pPalSwapChain != nullptr)
     {
-        // Remove memory references to presentable image memory and destroy the images and image memory.
-        Memory::ObjectFromHandle(m_properties.imageMemory[i])->Free(m_pDevice, pAllocator);
-        Image::ObjectFromHandle(m_properties.images[i])->Destroy(m_pDevice, pAllocator);
+        for (uint32_t i = 0; i < m_properties.imageCount; ++i)
+        {
+            // Remove memory references to presentable image memory and destroy the images and image memory.
+            Memory::ObjectFromHandle(m_properties.imageMemory[i])->Free(m_pDevice, pAllocator);
+            Image::ObjectFromHandle(m_properties.images[i])->Destroy(m_pDevice, pAllocator);
+        }
     }
 
     if (m_pPalSwapChain != nullptr)
@@ -781,9 +784,10 @@ VkResult SwapChain::GetSwapchainImagesKHR(
 // =====================================================================================================================
 // Fills in the PAL swap chain present info with the appropriate image to present and returns its GPU memory.
 Pal::IGpuMemory* SwapChain::UpdatePresentInfo(
-    uint32_t                   deviceIdx,
-    uint32_t                   imageIndex,
-    Pal::PresentSwapChainInfo* pPresentInfo)
+    uint32_t                    deviceIdx,
+    uint32_t                    imageIndex,
+    Pal::PresentSwapChainInfo*  pPresentInfo,
+    const Pal::FlipStatusFlags& flipFlags)
 {
     Pal::IGpuMemory* pSrcImageGpuMemory = nullptr;
 
@@ -803,7 +807,7 @@ Pal::IGpuMemory* SwapChain::UpdatePresentInfo(
     if (m_pFullscreenMgr != nullptr)
     {
 
-        m_pFullscreenMgr->UpdatePresentInfo(this, pPresentInfo);
+        m_pFullscreenMgr->UpdatePresentInfo(this, pPresentInfo, flipFlags);
 
     }
 
@@ -905,9 +909,30 @@ bool SwapChain::IsSuboptimal(uint32_t deviceIdx)
 }
 
 // =====================================================================================================================
-void SwapChain::MarkAsDeprecated()
+void SwapChain::MarkAsDeprecated(
+    const VkAllocationCallbacks* pAllocator)
 {
     m_deprecated = true;
+
+    // DXGI and the Vulkan spec enforce that only one swapchain may be tied to a HWND. We never cared about it before
+    // but we should now. Call into PAL to free the swapchain in DXGI mode.
+    if (IsDxgiEnabled() && (m_pPalSwapChain != nullptr))
+    {
+        m_pPalSwapChain->WaitIdle();
+
+        for (uint32_t i = 0; i < m_properties.imageCount; ++i)
+        {
+            // Remove memory references to presentable image memory and destroy the images and image memory.
+            Memory::ObjectFromHandle(m_properties.imageMemory[i])->Free(m_pDevice, pAllocator);
+            Image::ObjectFromHandle(m_properties.images[i])->Destroy(m_pDevice, pAllocator);
+        }
+
+        m_pPalSwapChain->Destroy();
+
+        // Set to null to avoid double deleting when the actual object gets destroyed.
+        m_pPalSwapChain = nullptr;
+    }
+
 }
 
 // =====================================================================================================================
@@ -1059,7 +1084,7 @@ bool FullscreenMgr::TryExitExclusive(
     }
 
     // if we acquired full screen ownership before with this fullscreenmanager.
-    if ((m_pScreen != nullptr))
+    if (m_pScreen != nullptr)
     {
         Pal::Result palResult = m_pScreen->ReleaseFullscreenOwnership();
 
@@ -1275,6 +1300,12 @@ void FullscreenMgr::PostPresent(
         VK_ASSERT(presentInfo.presentMode != Pal::PresentMode::Fullscreen);
     }
 
+    // If DXGI reports this error, try to force swapchain recreation to fix it.
+    if ((*pPresentResult == Pal::Result::ErrorInvalidValue) && pSwapChain->IsDxgiEnabled())
+    {
+        *pPresentResult = Pal::Result::ErrorIncompatibleDisplayMode;
+    }
+
     // There are cases under extreme alt-tabbing when DWM may return a null shared window handle (the windowed
     // blit destination surface).  This will then subsequently cause PAL to fail that windowed present.
     //
@@ -1309,15 +1340,37 @@ void FullscreenMgr::PostPresent(
 // This can only happen if the screen is currently compatible with fullscreen presents and we have successfully
 // acquired exclusive access to the screen.
 void FullscreenMgr::UpdatePresentInfo(
-    SwapChain*                 pSwapChain,
-    Pal::PresentSwapChainInfo* pPresentInfo)
+    SwapChain*                  pSwapChain,
+    Pal::PresentSwapChainInfo*  pPresentInfo,
+    const Pal::FlipStatusFlags& flipFlags)
 {
-    // Try to enter (or remain in) exclusive access mode on this swap chain's screen for this present
-    TryEnterExclusive(pSwapChain);
+    // Present mode does not matter in DXGI as it is completely OS handled. This is for our internal tracking only
+    if (pSwapChain->IsDxgiEnabled())
+    {
+        const auto& imageInfo = m_pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
 
-    // Always fallback to windowed if FSE is not acquired to avoid missing presents.
-    pPresentInfo->presentMode =
+        Pal::Extent2d imageExtent;
+
+        imageExtent.width  = imageInfo.extent.width;
+        imageExtent.height = imageInfo.extent.height;
+
+        Pal::Result isFsePossible = m_pScreen->IsImplicitFullscreenOwnershipSafe(m_hDisplay, m_hWindow, imageExtent);
+
+        // If KMD reported we're in Indpendent Flip and our window is fullscreen compatible, it is safe to assume
+        // that DXGI acquired FSE.
+        bool isFullscreen = (isFsePossible == Pal::Result::Success) && flipFlags.iFlip;
+
+        pPresentInfo->presentMode = isFullscreen ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
+    }
+    // Try to enter (or remain in) exclusive access mode on this swap chain's screen for this present
+    else
+    {
+        TryEnterExclusive(pSwapChain);
+
+        // Always fallback to windowed if FSE is not acquired to avoid missing presents.
+        pPresentInfo->presentMode =
             m_exclusiveModeFlags.acquired ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
+    }
 }
 
 // =====================================================================================================================

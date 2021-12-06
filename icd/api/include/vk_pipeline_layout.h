@@ -36,17 +36,73 @@
 
 #include "include/khronos/vulkan.h"
 #include "include/vk_device.h"
-#include "include/vk_graphics_pipeline.h"
-#include "include/vk_shader_code.h"
-
-#include "palPipeline.h"
 
 namespace vk
 {
 
 class DescriptorSetLayout;
 
-class ShaderModule;
+// Determine mapping layout of the resouces used in shaders
+enum class PipelineLayoutScheme : uint32_t
+{
+    // Compact scheme make full use of all the user data registers and can achieve best performance in theory.
+    // See PipelineLayout::BuildCompactSchemeInfo() for more details
+    Compact = 0,
+    // The searching path of resouce belongs to a specific binding is fixed in indirect scheme.
+    // See PipelineLayout::BuildIndirectSchemeInfo() for more details
+    Indirect
+};
+
+// The top-level user data layout is portioned into different sections based on the value type (push constant,
+// descriptor set addresses, etc.).  This structure describes the offsets and sizes of those regions.
+struct UserDataLayout
+{
+    PipelineLayoutScheme scheme;
+
+    union
+    {
+        struct
+        {
+            // Base user data register index to use for the descriptor set binding data
+            // (including registers for dynamic descriptor offsets)
+            uint32_t setBindingRegBase;
+            // Number of user data registers used for the set binding points
+            uint32_t setBindingRegCount;
+
+            // Base user data register index to use for push constants
+            uint32_t pushConstRegBase;
+            // Number of user data registers used for push constants
+            uint32_t pushConstRegCount;
+
+            // Base user data register index to use for transform feedback.
+            uint32_t transformFeedbackRegBase;
+            // Number of user data registers used for transform feedback
+            uint32_t transformFeedbackRegCount;
+
+        } compact;
+
+        struct
+        {
+            // Base user data register index to use for transform feedback.
+            // The number of user data register used is always 1
+            uint32_t transformFeedbackRegBase;
+
+            // Base user data register index to use for the pointers pointing to the buffers
+            // storing descriptor set bingding data.
+            // Each set occupy 2 entries: one for static and one for descriptor descriptors
+            // The total number of user data registers used is always MaxDescriptorSets * 2 * SetPtrRegCount
+            uint32_t setBindingPtrRegBase;
+
+            // Base user data register index to use for buffer storing push constant data
+            // The number of user data register used is always 1
+            uint32_t pushConstPtrRegBase;
+
+            // The size of buffer required to store push constants
+            uint32_t pushConstSizeInDword;
+
+        } indirect;
+    };
+};
 
 // =====================================================================================================================
 // API implementation of Vulkan pipeline layout objects.
@@ -117,9 +173,9 @@ public:
 
     VkResult BuildLlpcPipelineMapping(
         const uint32_t             stageMask,
-        VbBindingInfo*             pVbInfo,
+        const VbBindingInfo*       pVbInfo,
+        const bool                 appendFetchShaderCb,
         void*                      pBuffer,
-        bool                       appendFetchShaderCb,
         Vkgc::ResourceMappingData* pResourceMapping) const;
 
     static VkResult Create(
@@ -149,20 +205,23 @@ public:
     const Info& GetInfo() const
         { return m_info; }
 
+    PipelineLayoutScheme GetScheme() const
+        { return m_info.userDataLayout.scheme; }
+
     // Descriptor set layouts in this pipeline layout
-    const SetUserDataLayout& GetSetUserData(uint32_t setIndex) const
+    const SetUserDataLayout& GetSetUserData(const uint32_t setIndex) const
     {
         return static_cast<const SetUserDataLayout*>(Util::VoidPtrInc(this, sizeof(*this)))[setIndex];
     }
 
     // Original descriptor set layout pointers
-    const DescriptorSetLayout* GetSetLayouts(uint32_t setIndex) const
+    const DescriptorSetLayout* GetSetLayouts(const uint32_t setIndex) const
     {
         return static_cast<const DescriptorSetLayout* const*>(
             Util::VoidPtrInc(this, sizeof(*this) + SetUserDataLayoutSize()))[setIndex];
     }
 
-    DescriptorSetLayout* GetSetLayouts(uint32_t setIndex)
+    DescriptorSetLayout* GetSetLayouts(const uint32_t setIndex)
     {
         return static_cast<DescriptorSetLayout**>(
             Util::VoidPtrInc(this, sizeof(*this) + SetUserDataLayoutSize()))[setIndex];
@@ -176,6 +235,33 @@ protected:
         PipelineInfo*                     pPipelineInfo,
         SetUserDataLayout*                pSetUserDataLayouts);
 
+    static void ProcessPushConstantsInfo(
+        const VkPipelineLayoutCreateInfo* pIn,
+        uint32_t*                         pPushConstantsSizeInBytes,
+        uint32_t*                         pPushConstantsUserDataNodeCount
+    );
+
+    static VkResult BuildCompactSchemeInfo(
+        const Device*                     pDevice,
+        const VkPipelineLayoutCreateInfo* pIn,
+        const uint32_t                    pushConstantsSizeInBytes,
+        const uint32_t                    pushConstantsUserDataNodeCount,
+        Info*                             pInfo,
+        PipelineInfo*                     pPipelineInfo,
+        SetUserDataLayout*                pSetUserDataLayouts);
+
+    static VkResult BuildIndirectSchemeInfo(
+        const Device*                     pDevice,
+        const VkPipelineLayoutCreateInfo* pIn,
+        const uint32_t                    pushConstantsSizeInBytes,
+        Info*                             pInfo,
+        PipelineInfo*                     pPipelineInfo,
+        SetUserDataLayout*                pSetUserDataLayouts);
+
+    static PipelineLayoutScheme DeterminePipelineLayoutScheme(
+        const Device*                     pDevice,
+        const VkPipelineLayoutCreateInfo* pIn);
+
     PipelineLayout(
         const Device*       pDevice,
         const Info&         info,
@@ -183,6 +269,62 @@ protected:
         uint64_t            apiHash);
 
     ~PipelineLayout() { }
+
+    VkResult BuildCompactSchemeLlpcPipelineMapping(
+        const uint32_t             stageMask,
+        const VbBindingInfo*       pVbInfo,
+        const bool                 appendFetchShaderCb,
+        void*                      pBuffer,
+        Vkgc::ResourceMappingData* pResourceMapping) const;
+
+    void BuildIndirectSchemeLlpcPipelineMapping(
+        const uint32_t             stageMask,
+        const VbBindingInfo*       pVbInfo,
+        void*                      pBuffer,
+        Vkgc::ResourceMappingData* pResourceMapping) const;
+
+    void BuildLlpcStaticSetMapping(
+        const DescriptorSetLayout*   pLayout,
+        const uint32_t               visibility,
+        const uint32_t               setIndex,
+        Vkgc::ResourceMappingNode*   pNodes,
+        uint32_t*                    pNodeCount,
+        Vkgc::StaticDescriptorValue* pDescriptorRangeValue,
+        uint32_t*                    pDescriptorRangeCount) const;
+
+    template <typename NodeType>
+    void FillDynamicSetNode(
+        const Vkgc::ResourceMappingNodeType type,
+        const uint32_t                      visibility,
+        const uint32_t                      setIndex,
+        const uint32_t                      bindingIndex,
+        const uint32_t                      offsetInDwords,
+        const uint32_t                      sizeInDwords,
+        const uint32_t                      userDataRegBase,
+        NodeType*                           pNode) const;
+
+    template <typename NodeType>
+    void BuildLlpcDynamicSetMapping(
+        const DescriptorSetLayout* pLayout,
+        const uint32_t             visibility,
+        const uint32_t             setIndex,
+        const uint32_t             userDataRegBase,
+        NodeType*                  pNodes,
+        uint32_t*                  pNodeCount) const;
+
+    void BuildLlpcVertexBufferTableMapping(
+        const VbBindingInfo*           pVbInfo,
+        const uint32_t                 offsetInDwords,
+        const uint32_t                 sizeInDwords,
+        Vkgc::ResourceMappingRootNode* pNode,
+        uint32_t*                      pNodeCount) const;
+
+    void BuildLlpcTransformFeedbackMapping(
+        const uint32_t                 stageMask,
+        const uint32_t                 offsetInDwords,
+        const uint32_t                 sizeInDwords,
+        Vkgc::ResourceMappingRootNode* pNode,
+        uint32_t*                      pNodeCount) const;
 
     VkResult BuildLlpcSetMapping(
         uint32_t                       visibility,

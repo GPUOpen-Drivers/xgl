@@ -102,33 +102,28 @@
           "Description": "Scissor rect state (only when marked static)"
         },
         {
-          "Name": "OptRenderStateCacheStaticSamplePattern",
-          "Value": 2048,
-          "Description": "Sample patern state (only when marked static)"
-        },
-        {
           "Name": "OptRenderStateCacheStaticGraphicsWaveLimits",
-          "Value": 4096,
+          "Value": 2048,
           "Description": "Graphics wave limits state (only when marked static)"
         },
         {
           "Name": "OptRenderStateCacheStaticComputeWaveLimits",
-          "Value": 8192,
+          "Value": 4096,
           "Description": "Compute wave limits state (only when marked static)"
         },
         {
           "Name": "OptRenderStateCacheStaticAnisoLodCompensation",
-          "Value": 16384,
+          "Value": 8192,
           "Description": "Aniso LOD compensation state (only when marked static)"
         },
         {
           "Name": "OptRenderStateCacheStaticLineStipple",
-          "Value": 32768,
+          "Value": 16384,
           "Description": "Line stipple state (only when marked static)"
         },
         {
           "Name": "OptRenderStateFragmentShadingRate",
-          "Value": 65536,
+          "Value": 32768,
           "Description": "Variable Rate Shading"
         }
       ]
@@ -225,10 +220,6 @@
           "Description": "Tess pipeline with GS"
         }
       ]
-    },
-    {
-      "Name": "BvhBuildMode",
-      "Values": []
     },
     {
       "Name": "ThreadGroupSwizzleMode",
@@ -675,6 +666,39 @@
           }
         ],
         "Name": "PipelineLayoutMode"
+      },
+      "Scope": "Driver",
+      "Type": "enum"
+    },
+    {
+      "Name": "PipelineLayoutSchemeSelectionStrategy",
+      "Description": "Decide how to choose the scheme of pipeline layout",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": "AppControlled"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "AppControlled",
+            "Value": 0,
+            "Description": "The scheme is decided by user"
+          },
+          {
+            "Name": "ForceCompact",
+            "Value": 1,
+            "Description": "Always use compact scheme"
+          },
+          {
+            "Name": "ForceIndirect",
+            "Value": 2,
+            "Description": "Always use indirect scheme"
+          }
+        ],
+        "Name": "PipelineLayoutSchemeSelectionStrategy"
       },
       "Scope": "Driver",
       "Type": "enum"
@@ -3994,6 +4018,40 @@
       "Scope": "Driver",
       "Type": "enum",
       "Name": "ImageTilingOptMode"
+    },
+    {
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "StrictImageSizeOff",
+            "Value": 0,
+            "Description": "Disable strictImageSizeRequirements always"
+          },
+          {
+            "Name": "StrictImageSizeOn",
+            "Value": 1,
+            "Description": "Enable strictImageSizeRequirements always"
+          },
+          {
+            "Name": "StrictImageSizeAppControlled",
+            "Value": 2,
+            "Description": "App enables strictImageSizeRequirements when KHR_maintenance4 is enabled"
+          }
+        ],
+        "Name": "StrictImageSizeRequirements"
+      },
+      "Description": "Controls driver adherence to the KHR_maintenance4 requirement that a VkImage's size memory requirement is never greater than that of another VkImage created with a greater or equal value in each of extent.width, extent.height, and extent.depth; all other creation parameters being identical.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 2
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "strictImageSizeRequirements",
+      "Name": "StrictImageSizeRequirements"
     },
     {
       "ValidValues": {

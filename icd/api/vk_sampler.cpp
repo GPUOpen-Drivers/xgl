@@ -63,10 +63,11 @@ uint64_t Sampler::BuildApiHash(
     {
         union
         {
-            const VkStructHeader*                          pInfo;
-            const VkSamplerYcbcrConversionInfo*            pYCbCrConversionInfo;
-            const VkSamplerReductionModeCreateInfo*        pReductionModeCreateInfo;
-            const VkSamplerCustomBorderColorCreateInfoEXT* pVkSamplerCustomBorderColorCreateInfoEXT;
+            const VkStructHeader*                                       pInfo;
+            const VkSamplerYcbcrConversionInfo*                         pYCbCrConversionInfo;
+            const VkSamplerReductionModeCreateInfo*                     pReductionModeCreateInfo;
+            const VkSamplerCustomBorderColorCreateInfoEXT*              pVkSamplerCustomBorderColorCreateInfoEXT;
+            const VkSamplerBorderColorComponentMappingCreateInfoEXT*    pVkSamplerBorderColorComponentMappingCreateInfoEXT;
         };
 
         pInfo = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
@@ -96,6 +97,11 @@ uint64_t Sampler::BuildApiHash(
                 hasher.Update(pVkSamplerCustomBorderColorCreateInfoEXT->sType);
                 hasher.Update(pVkSamplerCustomBorderColorCreateInfoEXT->customBorderColor);
                 hasher.Update(pVkSamplerCustomBorderColorCreateInfoEXT->format);
+                break;
+            case VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT:
+                hasher.Update(pVkSamplerBorderColorComponentMappingCreateInfoEXT->sType);
+                hasher.Update(pVkSamplerBorderColorComponentMappingCreateInfoEXT->components);
+                hasher.Update(pVkSamplerBorderColorComponentMappingCreateInfoEXT->srgb);
                 break;
             default:
                 break;

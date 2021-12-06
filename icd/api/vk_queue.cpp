@@ -1056,7 +1056,10 @@ VkResult Queue::Present(
         }
 
         // Fill in present information and obtain the PAL memory of the presentable image.
-        Pal::IGpuMemory* pGpuMemory = pSwapChain->UpdatePresentInfo(presentationDeviceIdx, imageIndex, &presentInfo);
+        Pal::IGpuMemory* pGpuMemory = pSwapChain->UpdatePresentInfo(presentationDeviceIdx,
+                                                                    imageIndex,
+                                                                    &presentInfo,
+                                                                    m_flipStatus.flipFlags);
 
         CmdBufState* pCmdBufState = AcquireInternalCmdBuf(presentationDeviceIdx);
 

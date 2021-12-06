@@ -67,6 +67,10 @@ public:
         ShaderModuleHandle*          pShaderModule,
         const Util::MetroHash::Hash& hash) override;
 
+    virtual void TryEarlyCompileShaderModule(
+        const Device*       pDevice,
+        ShaderModuleHandle* pModule) override { }
+
     virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) override;
 
     virtual VkResult CreateGraphicsPipelineBinary(
@@ -81,6 +85,12 @@ public:
         uint64_t                          pipelineHash,
         Util::MetroHash::Hash*            pCacheId,
         int64_t*                          pCompileTime) override;
+
+    virtual VkResult CreateGraphicsShaderBinary(
+        const Device*                           pDevice,
+        const ShaderStage                       stage,
+        const GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        ShaderModuleHandle*                     pShaderModule) override { return VK_SUCCESS; }
 
     virtual VkResult CreateComputePipelineBinary(
         Device*                          pDevice,

@@ -371,6 +371,33 @@ void Buffer::GetMemoryRequirements(
 }
 
 // =====================================================================================================================
+// Get the buffer's memory requirements from VkBufferCreateInfo
+void Buffer::CalculateMemoryRequirements(
+    const Device*                              pDevice,
+    const VkDeviceBufferMemoryRequirementsKHR* pInfo,
+    VkMemoryRequirements2*                     pMemoryRequirements)
+{
+    BufferFlags bufferFlags;
+
+    CalculateBufferFlags(pDevice, pInfo->pCreateInfo, &bufferFlags);
+
+    VkMemoryDedicatedRequirements* pMemDedicatedRequirements =
+        static_cast<VkMemoryDedicatedRequirements*>(pMemoryRequirements->pNext);
+
+    if ((pMemDedicatedRequirements != nullptr) &&
+        (pMemDedicatedRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS))
+    {
+        pMemDedicatedRequirements->prefersDedicatedAllocation  = bufferFlags.dedicatedRequired;
+        pMemDedicatedRequirements->requiresDedicatedAllocation = bufferFlags.dedicatedRequired;
+    }
+
+    GetBufferMemoryRequirements(pDevice,
+                                &bufferFlags,
+                                pInfo->pCreateInfo->size,
+                                &pMemoryRequirements->memoryRequirements);
+}
+
+// =====================================================================================================================
 // Get the buffer's memory requirements
 void Buffer::GetBufferMemoryRequirements(
     const Device*         pDevice,

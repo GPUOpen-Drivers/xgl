@@ -85,6 +85,7 @@ public:
         {
             for (int32_t i = 0; i < T::Count; ++i)
             {
+                m_supported[i].pName       = nullptr;
                 m_supported[i].specVersion = 0;
             }
         }
@@ -94,21 +95,24 @@ public:
             return m_supported[id].specVersion != 0;
         }
 
-        void AddExtension(typename T::ExtensionId id, const char* name, uint32_t specVersion)
+        void AddExtension(typename T::ExtensionId id, const char* pName, uint32_t specVersion)
         {
             // Don't allow adding extensions redundantly.
             VK_ASSERT(!IsExtensionSupported(id));
 
-            strncpy(m_supported[id].extensionName, name, VK_MAX_EXTENSION_NAME_SIZE);
-            m_supported[id].specVersion     = specVersion;
+            m_supported[id].pName       = pName;
+            m_supported[id].specVersion = specVersion;
 
             m_supportedCount++;
         }
 
-        const VkExtensionProperties& GetExtensionInfo(typename T::ExtensionId id) const
+        void GetExtensionInfo(typename T::ExtensionId id, VkExtensionProperties* pProperties) const
         {
             VK_ASSERT(IsExtensionSupported(id));
-            return m_supported[id];
+
+            strncpy(pProperties->extensionName, m_supported[id].pName, VK_MAX_EXTENSION_NAME_SIZE);
+
+            pProperties->specVersion = m_supported[id].specVersion;
         }
 
         uint32_t GetExtensionCount() const
@@ -117,8 +121,14 @@ public:
         }
 
     protected:
-        VkExtensionProperties   m_supported[T::Count];
-        uint32_t                m_supportedCount;
+        /// Array of an internal VkExtensionProperties struct that uses a pointer for the name for a smaller size
+        struct ExtensionProperties
+        {
+            const char* pName;
+            uint32_t    specVersion;
+        } m_supported[T::Count];
+
+        uint32_t m_supportedCount;
     };
 
     class Enabled
@@ -156,6 +166,8 @@ public:
 
         for (uint32_t i = 0; i < extensionNameCount && !invalidExtensionRequested; ++i)
         {
+            VkExtensionProperties ext = {};
+
             int32_t j;
 
             for (j = 0; j < T::Count; ++j)
@@ -164,7 +176,7 @@ public:
 
                 if (supported.IsExtensionSupported(id))
                 {
-                    const VkExtensionProperties& ext = supported.GetExtensionInfo(id);
+                    supported.GetExtensionInfo(id, &ext);
 
                     if (strcmp(extensionNames[i], ext.extensionName) == 0)
                     {
@@ -248,6 +260,7 @@ public:
         KHR_DEVICE_GROUP,
         KHR_DRAW_INDIRECT_COUNT,
         KHR_DRIVER_PROPERTIES,
+        KHR_DYNAMIC_RENDERING,
         KHR_EXTERNAL_FENCE,
         KHR_EXTERNAL_FENCE_FD,
         KHR_EXTERNAL_FENCE_WIN32,
@@ -257,6 +270,7 @@ public:
         KHR_EXTERNAL_SEMAPHORE,
         KHR_EXTERNAL_SEMAPHORE_FD,
         KHR_EXTERNAL_SEMAPHORE_WIN32,
+        KHR_FORMAT_FEATURE_FLAGS2,
         KHR_FRAGMENT_SHADING_RATE,
         KHR_GET_MEMORY_REQUIREMENTS2,
         KHR_IMAGELESS_FRAMEBUFFER,
@@ -265,6 +279,7 @@ public:
         KHR_MAINTENANCE1,
         KHR_MAINTENANCE2,
         KHR_MAINTENANCE3,
+        KHR_MAINTENANCE4,
         KHR_MULTIVIEW,
         KHR_PIPELINE_EXECUTABLE_PROPERTIES,
         KHR_RELAXED_BLOCK_LAYOUT,
@@ -295,6 +310,7 @@ public:
 
         // EXT Extensions
         EXT_4444_FORMATS,
+        EXT_BORDER_COLOR_SWIZZLE,
         EXT_CALIBRATED_TIMESTAMPS,
         EXT_COLOR_WRITE_ENABLE,
         EXT_CONDITIONAL_RENDERING,
@@ -312,6 +328,7 @@ public:
         EXT_HDR_METADATA,
         EXT_HOST_QUERY_RESET,
         EXT_IMAGE_ROBUSTNESS,
+        EXT_INDEX_TYPE_UINT8,
         EXT_INLINE_UNIFORM_BLOCK,
         EXT_LINE_RASTERIZATION,
         EXT_LOAD_STORE_OP_NONE,
@@ -340,6 +357,7 @@ public:
         EXT_SHADER_VIEWPORT_INDEX_LAYER,
         EXT_SUBGROUP_SIZE_CONTROL,
         EXT_TEXEL_BUFFER_ALIGNMENT,
+        EXT_TOOLING_INFO,
         EXT_TRANSFORM_FEEDBACK,
         EXT_VERTEX_ATTRIBUTE_DIVISOR,
         EXT_YCBCR_IMAGE_ARRAYS,

@@ -32,6 +32,7 @@
 #include "include/vk_utils.h"
 #include "include/vk_defines.h"
 #include "include/vk_dispatch.h"
+#include "include/vk_pipeline_layout.h"
 #include "include/internal_mem_mgr.h"
 
 #include "palFile.h"
@@ -62,27 +63,6 @@ class  PipelineLayout;
 struct RuntimeSettings;
 struct ShaderStageInfo;
 struct ShaderModuleHandle;
-
-// The top-level user data layout is portioned into different sections based on the value type (push constant,
-// descriptor set addresses, etc.).  This structure describes the offsets and sizes of those regions.
-struct UserDataLayout
-{
-    // Base user data register index to use for the descriptor set binding data (including registers for
-    // dynamic descriptor offsets)
-    uint32_t setBindingRegBase;
-    // Number of user data registers used for the set binding points
-    uint32_t setBindingRegCount;
-
-    // Base user data register index to use for push constants
-    uint32_t pushConstRegBase;
-    // Number of user data registers used for push constants
-    uint32_t pushConstRegCount;
-
-    // Base user data register index to use for transform feedback.
-    uint32_t transformFeedbackRegBase;
-    // Number of user data registers used for transform feedback
-    uint32_t transformFeedbackRegCount;
-};
 
 // Structure containing information about a retrievable pipeline binary.  These are only retained by Pipeline objects
 // when specific device extensions (VK_AMD_shader_info/VK_KHR_pipeline_executable_properties) that can query them are

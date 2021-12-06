@@ -433,6 +433,18 @@ constexpr AppProfilePatternEntry AppNameValheim =
     "valheim"
 };
 
+constexpr AppProfilePatternEntry AppExeKnockoutcity =
+{
+    PatternExeNameLower,
+    "knockoutcity"
+};
+
+constexpr AppProfilePatternEntry AppNameEvilGenius2 =
+{
+    PatternAppNameLower,
+    "evil genius 2"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -797,6 +809,20 @@ AppProfilePattern AppPatternTable[] =
             AppEngineScimitar,
             PatternEnd
         }
+    },
+    {
+       AppProfile::KnockoutCity,
+       {
+           AppExeKnockoutcity,
+           PatternEnd
+       }
+    },
+    {
+       AppProfile::EvilGenius2,
+       {
+           AppNameEvilGenius2,
+           PatternEnd
+       }
     },
 
     {

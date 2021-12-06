@@ -399,6 +399,15 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                     m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
                 }
 
+                if (pInfo->revision == Pal::AsicRevision::Navi22)
+                {
+                    m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                        ForceDccForColorAttachments |
+                        ForceDccForNonColorAttachmentShaderStorage |
+                        ForceDccFor64BppShaderStorage);
+
+                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                }
                 if (pInfo->revision == Pal::AsicRevision::Navi23)
                 {
                     m_settings.forceEnableDcc = (ForceDccFor32BppShaderStorage |
@@ -604,6 +613,16 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
                     ForceDccForColorAttachments |
                     ForceDccForNonColorAttachmentShaderStorage);
+            }
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.nggEnableBackfaceCulling = false;
+                m_settings.nggEnableSmallPrimFilter = false;
+
+            }
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
+            {
+                m_settings.imageTilingOptMode = Pal::TilingOptMode::OptForSpeed;
             }
 
         }

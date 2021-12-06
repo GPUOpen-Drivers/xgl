@@ -607,6 +607,11 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdWriteBufferMarker2AMD                      );
     INIT_DISPATCH_ENTRY(vkQueueSubmit2KHR                               );
 
+    INIT_DISPATCH_ENTRY(vkCmdBeginRenderingKHR                          );
+    INIT_DISPATCH_ENTRY(vkCmdEndRenderingKHR                            );
+
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceToolPropertiesEXT            );
+
     INIT_DISPATCH_ENTRY(vkCmdSetCullModeEXT                             );
     INIT_DISPATCH_ENTRY(vkCmdSetFrontFaceEXT                            );
     INIT_DISPATCH_ENTRY(vkCmdSetPrimitiveTopologyEXT                    );
@@ -641,6 +646,9 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdCopyImage2KHR                              );
     INIT_DISPATCH_ENTRY(vkCmdCopyImageToBuffer2KHR                      );
     INIT_DISPATCH_ENTRY(vkCmdResolveImage2KHR                           );
+    INIT_DISPATCH_ENTRY(vkGetDeviceBufferMemoryRequirementsKHR          );
+    INIT_DISPATCH_ENTRY(vkGetDeviceImageMemoryRequirementsKHR           );
+    INIT_DISPATCH_ENTRY(vkGetDeviceImageSparseMemoryRequirementsKHR     );
 }
 
 // =====================================================================================================================

@@ -899,9 +899,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutablePropertiesKHR(
     constexpr char             shaderPreName[] = "ShaderProperties";
 
     // Return the name / description for the pExecutableCount number of executables.
-    for (uint32 i = 0;
-          Util::BitMaskScanForward(&i, hwStageMask);
-          (hwStageMask &= ~(1 << i)) && (outputCount < *pExecutableCount))
+    uint32 i = 0;
+    while (Util::BitMaskScanForward(&i, hwStageMask) && (outputCount < *pExecutableCount))
     {
         // Get an api shader type for the corresponding HW Shader
         Pal::ShaderType shaderType = GetApiShaderFromHwShader(static_cast<Util::Abi::HardwareStage>(i), apiToHwShader);
@@ -936,6 +935,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutablePropertiesKHR(
                                                      vkShaderStats.computeWorkGroupSize[2];
          }
 
+         hwStageMask &= ~(1 << i);
          outputCount++;
      }
 

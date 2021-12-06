@@ -729,7 +729,9 @@ VkResult InternalMemMgr::AllocAndBindGpuMem(
         }
     }
 
-    createInfo.pal.heapCount = memReqs.heapCount;
+    createInfo.pal.flags.cpuInvisible = (memReqs.flags.cpuAccess ? 0 : 1);
+    createInfo.pal.heapCount          = memReqs.heapCount;
+
     for (uint32_t h = 0; h < memReqs.heapCount; ++h)
     {
         createInfo.pal.heaps[h] = memReqs.heaps[h];

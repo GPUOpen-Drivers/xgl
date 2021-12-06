@@ -383,6 +383,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
             pObjectCreateInfo->flags.bindInputAssemblyState,
             pObjectCreateInfo->flags.force1x1ShaderRate,
             pObjectCreateInfo->flags.customSampleLocations,
+            pObjectCreateInfo->flags.isPointSizeUsed,
             *pVbInfo,
             &internalBuffer,
             pPalMsaa,
@@ -498,7 +499,6 @@ VkResult GraphicsPipeline::Create(
         objectCreateInfo.immedInfo.checkDeferCompilePipeline =
             pDevice->GetRuntimeSettings().deferCompileOptimizedPipeline &&
             (binaryCreateInfo.pipelineInfo.enableEarlyCompile || binaryCreateInfo.pipelineInfo.enableUberFetchShader);
-
         // 5. Create pipeline objects
         result = CreatePipelineObjects(
             pDevice,
@@ -914,6 +914,7 @@ GraphicsPipeline::GraphicsPipeline(
     bool                                   bindInputAssemblyState,
     bool                                   force1x1ShaderRate,
     bool                                   customSampleLocations,
+    bool                                   isPointSizeUsed,
     const VbBindingInfo&                   vbInfo,
     const PipelineInternalBufferInfo*      pInternalBuffer,
     Pal::IMsaaState**                      pPalMsaa,
@@ -948,6 +949,7 @@ GraphicsPipeline::GraphicsPipeline(
     m_flags.bindInputAssemblyState   = bindInputAssemblyState;
     m_flags.customSampleLocations    = customSampleLocations;
     m_flags.force1x1ShaderRate       = force1x1ShaderRate;
+    m_flags.isPointSizeUsed          = isPointSizeUsed;
     CreateStaticState();
 
     pPalPipelineHasher->Update(m_palPipelineHash);
@@ -970,7 +972,6 @@ void GraphicsPipeline::CreateStaticState()
     pStaticTokens->depthBounds                = DynamicRenderStateToken;
     pStaticTokens->viewport                   = DynamicRenderStateToken;
     pStaticTokens->scissorRect                = DynamicRenderStateToken;
-    pStaticTokens->samplePattern              = DynamicRenderStateToken;
     pStaticTokens->lineStippleState           = DynamicRenderStateToken;
 
     pStaticTokens->fragmentShadingRate        = DynamicRenderStateToken;
@@ -1014,11 +1015,6 @@ void GraphicsPipeline::CreateStaticState()
     if (ContainsStaticState(DynamicStatesInternal::Scissor))
     {
         pStaticTokens->scissorRect = pCache->CreateScissorRect(m_info.scissorRectParams);
-    }
-
-    if (ContainsStaticState(DynamicStatesInternal::SampleLocationsExt))
-    {
-        pStaticTokens->samplePattern = pCache->CreateSamplePattern(m_info.samplePattern);
     }
 
     if (ContainsStaticState(DynamicStatesInternal::LineStippleExt))
@@ -1077,9 +1073,6 @@ void GraphicsPipeline::DestroyStaticState(
 
     pCache->DestroyScissorRect(m_info.scissorRectParams,
                                m_info.staticTokens.scissorRect);
-
-    pCache->DestroySamplePattern(m_info.samplePattern,
-                                 m_info.staticTokens.samplePattern);
 
     pCache->DestroyLineStipple(m_info.lineStippleParams,
                                m_info.staticTokens.lineStippleState);
@@ -1493,11 +1486,12 @@ void GraphicsPipeline::BindToCmdBuffer(
         }
 
         if (ContainsStaticState(DynamicStatesInternal::SampleLocationsExt) &&
-            CmdBuffer::IsStaticStateDifferent(oldTokens.samplePattern, newTokens.samplePattern))
+            (memcmp(&pRenderState->samplePattern, &m_info.samplePattern, sizeof(SamplePattern)) != 0))
         {
             pCmdBuffer->PalCmdSetMsaaQuadSamplePattern(
                 m_info.samplePattern.sampleCount, m_info.samplePattern.locations);
-            pRenderState->staticTokens.samplePattern = newTokens.samplePattern;
+            pRenderState->samplePattern = m_info.samplePattern;
+            pRenderState->dirtyGraphics.samplePattern = 0;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::ColorWriteEnableExt))

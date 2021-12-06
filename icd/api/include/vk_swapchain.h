@@ -147,9 +147,10 @@ public:
         { return m_colorParams; }
 
     Pal::IGpuMemory* UpdatePresentInfo(
-        uint32_t                   deviceIdx,
-        uint32_t                   imageIndex,
-        Pal::PresentSwapChainInfo* pPresentInfo);
+        uint32_t                    deviceIdx,
+        uint32_t                    imageIndex,
+        Pal::PresentSwapChainInfo*  pPresentInfo,
+        const Pal::FlipStatusFlags& flipFlags);
 
     Pal::IQueue* PrePresent(
         uint32_t                   deviceIdx,
@@ -170,7 +171,13 @@ public:
     void SetHdrMetadata(
         const VkHdrMetadataEXT* pMetadata);
 
-    void MarkAsDeprecated();
+    void MarkAsDeprecated(
+        const VkAllocationCallbacks* pAllocator);
+
+    bool IsDxgiEnabled() const
+    {
+        return (m_properties.displayableInfo.palPlatform == Pal::WsiPlatform::Dxgi);
+    }
 
     bool IsSuboptimal(uint32_t  deviceIdx);
 
@@ -199,8 +206,6 @@ protected:
                                                // oldSwapChain when creating a new SwapChain.
 
     uint32_t                m_queueFamilyIndex;                    // Queue family index of the last present
-
-    static bool             s_forceTurboSyncEnable; // Force turbosync enable when synchronizing across swapchains
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(SwapChain);
@@ -259,8 +264,9 @@ public:
     void Destroy(const VkAllocationCallbacks* pAllocator);
 
     void UpdatePresentInfo(
-        SwapChain*                 pSwapChain,
-        Pal::PresentSwapChainInfo* pPresentInfo);
+        SwapChain*                  pSwapChain,
+        Pal::PresentSwapChainInfo*  pPresentInfo,
+        const Pal::FlipStatusFlags& flipFlags);
 
     ExclusiveModeFlags GetExclusiveModeFlags() const
         { return m_exclusiveModeFlags; }
