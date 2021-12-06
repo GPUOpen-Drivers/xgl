@@ -91,7 +91,6 @@ struct GraphicsPipelineBinaryCreateInfo
     size_t                                 mappingBufferSize;
     VkPipelineCreateFlags                  flags;
     VkFormat                               dbFormat;
-    VkExtent2D                             sampleLocationGridSize;
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
     FreeCompilerBinary                     freeCompilerBinary;
@@ -143,6 +142,10 @@ public:
         ShaderModuleHandle*          pShaderModule,
         const Util::MetroHash::Hash& hash) = 0;
 
+    virtual void TryEarlyCompileShaderModule(
+        const Device*       pDevice,
+        ShaderModuleHandle* pShaderModule) = 0;
+
     virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) = 0;
 
     virtual VkResult CreateGraphicsPipelineBinary(
@@ -157,6 +160,12 @@ public:
         uint64_t                          pipelineHash,
         Util::MetroHash::Hash*            pCacheId,
         int64_t*                          pCompileTime) = 0;
+
+    virtual VkResult CreateGraphicsShaderBinary(
+        const Device*                           pDevice,
+        const ShaderStage                       stage,
+        const GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        ShaderModuleHandle*                     pShaderModule) = 0;
 
     virtual VkResult CreateComputePipelineBinary(
         Device*                     pDevice,

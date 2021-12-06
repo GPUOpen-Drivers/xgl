@@ -334,35 +334,27 @@ inline Pal::FillMode VkToPalFillMode(VkPolygonMode fillMode)
     return convert::FillMode(fillMode);
 }
 
-// No range size and begin range in VkCullModeFlagBits, so no direct macro mapping here
-namespace convert
-{
-    inline Pal::CullMode CullMode(VkCullModeFlags cullMode)
-    {
-        switch (cullMode)
-        {
-            case VK_CULL_MODE_NONE:
-                return Pal::CullMode::None;
-            case VK_CULL_MODE_FRONT_BIT:
-                return Pal::CullMode::Front;
-            case VK_CULL_MODE_BACK_BIT:
-                return Pal::CullMode::Back;
-            case VK_CULL_MODE_FRONT_AND_BACK:
-                return Pal::CullMode::FrontAndBack;
-            default:
-            {
-                VK_ASSERT(!"Unknown Cull Mode!");
-                return Pal::CullMode::None;
-            }
-        }
-    }
-}
-
 // =====================================================================================================================
 // Converts Vulkan cull mode to PAL equivalent
-inline Pal::CullMode VkToPalCullMode(VkCullModeFlags cullMode)
+inline Pal::CullMode VkToPalCullMode(
+    VkCullModeFlags cullMode)
 {
-    return convert::CullMode(cullMode);
+    switch (cullMode)
+    {
+        case VK_CULL_MODE_NONE:
+            return Pal::CullMode::None;
+        case VK_CULL_MODE_FRONT_BIT:
+            return Pal::CullMode::Front;
+        case VK_CULL_MODE_BACK_BIT:
+            return Pal::CullMode::Back;
+        case VK_CULL_MODE_FRONT_AND_BACK:
+            return Pal::CullMode::FrontAndBack;
+        default:
+        {
+            VK_ASSERT(!"Unknown Cull Mode!");
+            return Pal::CullMode::None;
+        }
+    }
 }
 
 // =====================================================================================================================
@@ -500,18 +492,23 @@ inline Pal::CompareFunc VkToPalCompareFunc(VkCompareOp compareOp)
     return convert::CompareFunc(compareOp);
 }
 
-VK_TO_PAL_TABLE_X(  INDEX_TYPE, IndexType,                  IndexType,
-// =====================================================================================================================
-VK_TO_PAL_ENTRY_X(  INDEX_TYPE_UINT16,                      IndexType::Idx16                                           )
-VK_TO_PAL_ENTRY_X(  INDEX_TYPE_UINT32,                      IndexType::Idx32                                           )
-// =====================================================================================================================
-)
-
 // =====================================================================================================================
 // Converts Vulkan index type to PAL equivalent.
-inline Pal::IndexType VkToPalIndexType(VkIndexType indexType)
+inline Pal::IndexType VkToPalIndexType(
+    VkIndexType indexType)
 {
-    return convert::IndexType(indexType);
+    switch (indexType)
+    {
+    case VK_INDEX_TYPE_UINT8_EXT:
+        return Pal::IndexType::Idx8;
+    case VK_INDEX_TYPE_UINT16:
+        return Pal::IndexType::Idx16;
+    case VK_INDEX_TYPE_UINT32:
+        return Pal::IndexType::Idx32;
+    default:
+        VK_ASSERT(!"Unknown VkIndexType");
+        return Pal::IndexType::Idx32;
+    }
 }
 
 // =====================================================================================================================
@@ -1797,6 +1794,65 @@ inline Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings&
 }
 
 // =====================================================================================================================
+// Pal to Vulkan swapchain format, for use with formats returned from IDevice::GetSwapChainProperties only.
+inline VkFormat PalToVkSwapChainFormat(Pal::SwizzledFormat palFormat)
+{
+    VkFormat format = VK_FORMAT_UNDEFINED;
+
+    switch (palFormat.format)
+    {
+    case Pal::ChNumFormat::X8Y8Z8W8_Unorm:
+    {
+        if ((palFormat.swizzle.r == Pal::ChannelSwizzle::X) &&
+            (palFormat.swizzle.g == Pal::ChannelSwizzle::Y) &&
+            (palFormat.swizzle.b == Pal::ChannelSwizzle::Z) &&
+            (palFormat.swizzle.a == Pal::ChannelSwizzle::W))
+        {
+            format = VK_FORMAT_R8G8B8A8_UNORM;
+        }
+        else if ((palFormat.swizzle.r == Pal::ChannelSwizzle::Z) &&
+                 (palFormat.swizzle.g == Pal::ChannelSwizzle::Y) &&
+                 (palFormat.swizzle.b == Pal::ChannelSwizzle::X) &&
+                 (palFormat.swizzle.a == Pal::ChannelSwizzle::W))
+        {
+            format = VK_FORMAT_B8G8R8A8_UNORM;
+        }
+        break;
+    }
+    case Pal::ChNumFormat::X16Y16Z16W16_Float:
+    {
+        if ((palFormat.swizzle.r == Pal::ChannelSwizzle::X) &&
+            (palFormat.swizzle.g == Pal::ChannelSwizzle::Y) &&
+            (palFormat.swizzle.b == Pal::ChannelSwizzle::Z) &&
+            (palFormat.swizzle.a == Pal::ChannelSwizzle::W))
+        {
+            format = VK_FORMAT_R16G16B16A16_SFLOAT;
+        }
+        break;
+    }
+    case Pal::ChNumFormat::X10Y10Z10W2_Unorm:
+    {
+        if ((palFormat.swizzle.r == Pal::ChannelSwizzle::X) &&
+            (palFormat.swizzle.g == Pal::ChannelSwizzle::Y) &&
+            (palFormat.swizzle.b == Pal::ChannelSwizzle::Z) &&
+            (palFormat.swizzle.a == Pal::ChannelSwizzle::W))
+        {
+            format = VK_FORMAT_A2B10G10R10_UNORM_PACK32;
+        }
+        break;
+    }
+    default:
+    {
+        break;
+    }
+    }
+
+    VK_ASSERT_MSG(format != VK_FORMAT_UNDEFINED, "Unknown swapchain format, consider adding it here");
+
+    return format;
+}
+
+// =====================================================================================================================
 // TODO: VK_EXT_swapchain_colorspace combines the concept of a transfer function and a color space, which is
 // insufficient. For now,  map the capabilities of Pal using either the transfer function OR color space
 // settings to support the current revision of VK_EXT_swapchain_colorspace.
@@ -2426,39 +2482,6 @@ inline Pal::SwapChainMode VkToPalSwapChainMode(VkPresentModeKHR presentMode)
     return convert::SwapChainMode(presentMode);
 }
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 610
-namespace convert
-{
-    inline Pal::CompositeAlphaMode CompositeAlpha(VkCompositeAlphaFlagBitsKHR compositeAlpha)
-    {
-        switch (compositeAlpha)
-        {
-            case VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR:
-                return Pal::CompositeAlphaMode::Opaque;
-
-            case VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR:
-                return Pal::CompositeAlphaMode::PreMultiplied;
-
-            case VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR:
-                return Pal::CompositeAlphaMode::PostMultiplied;
-
-            case VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR:
-                return Pal::CompositeAlphaMode::Inherit;
-
-            default:
-                VK_ASSERT(!"Unknown CompositeAlphaFlag!");
-                return Pal::CompositeAlphaMode::Opaque;
-        }
-    }
-}
-
-// =====================================================================================================================
-// Converts Vulkan composite alpha flag to PAL equivalent.
-inline Pal::CompositeAlphaMode VkToPalCompositeAlphaMode(VkCompositeAlphaFlagBitsKHR compositeAlpha)
-{
-    return convert::CompositeAlpha(compositeAlpha);
-}
-#else
 // =====================================================================================================================
 // Converts Vulkan composite alpha flag to PAL equivalent.
 inline Pal::CompositeAlphaMode VkToPalCompositeAlphaMode(VkCompositeAlphaFlagBitsKHR compositeAlpha)
@@ -2482,7 +2505,6 @@ inline VkCompositeAlphaFlagsKHR PalToVkSupportedCompositeAlphaMode(uint32 compos
 
     return static_cast<VkCompositeAlphaFlagsKHR>(compositeAlpha);
 }
-#endif
 
 // =====================================================================================================================
 // Converts Vulkan image creation flags to PAL image creation flags (unfortunately, PAL doesn't define a dedicated type
@@ -3168,23 +3190,50 @@ inline void VkToPalScissorRect(
 }
 
 // =====================================================================================================================
+template<class T>
 inline Pal::QueuePriority VkToPalGlobalPriority(
-    VkQueueGlobalPriorityEXT vkPriority)
+    VkQueueGlobalPriorityEXT vkPriority,
+    const T& engineCapabilities)
 {
     Pal::QueuePriority palPriority = Pal::QueuePriority::Normal;
     switch (static_cast<int32_t>(vkPriority))
     {
     case VK_QUEUE_GLOBAL_PRIORITY_LOW_EXT:
-        palPriority = Pal::QueuePriority::Idle;
+        if ((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityIdle) != 0)
+        {
+            palPriority = Pal::QueuePriority::Idle;
+        }
+        else
+        {
+            palPriority = Pal::QueuePriority::Normal;
+        }
         break;
     case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT:
         palPriority = Pal::QueuePriority::Normal;
         break;
     case VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT:
-        palPriority = Pal::QueuePriority::High;
+        if ((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityHigh) != 0)
+        {
+            palPriority = Pal::QueuePriority::High;
+        }
+        else
+        {
+            palPriority = Pal::QueuePriority::Normal;
+        }
         break;
     case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT:
-        palPriority = Pal::QueuePriority::Realtime;
+        if ((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityRealtime) != 0)
+        {
+            palPriority = Pal::QueuePriority::Realtime;
+        }
+        else if ((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityHigh) != 0)
+        {
+            palPriority = Pal::QueuePriority::High;
+        }
+        else
+        {
+            palPriority = Pal::QueuePriority::Normal;
+        }
         break;
     default:
         palPriority = Pal::QueuePriority::Normal;

@@ -308,6 +308,7 @@ function(xgl_compiler_options TARGET)
                     # add global definition to enable LTO here since some components have no option
                     # to enable it.
                     add_definitions("-flto=thin")
+                    add_link_options("-flto=thin")
                     message(WARNING "LTO enabled for ${TARGET}")
                 endif()
             endif()

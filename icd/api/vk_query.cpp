@@ -37,6 +37,7 @@
 
 #include "palAutoBuffer.h"
 #include "palQueryPool.h"
+#include "palSysUtil.h"
 
 namespace vk
 {

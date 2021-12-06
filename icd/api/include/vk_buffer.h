@@ -82,6 +82,11 @@ public:
         const Device*         pDevice,
         VkMemoryRequirements* pMemoryRequirements);
 
+    static void CalculateMemoryRequirements(
+        const Device*                              pDevice,
+        const VkDeviceBufferMemoryRequirementsKHR* pInfo,
+        VkMemoryRequirements2*                     pMemoryRequirements);
+
     VkDeviceSize GetSize() const
         { return m_size; }
 
@@ -116,8 +121,8 @@ private:
             uint32_t createSparseBinding   : 1;   // VK_BUFFER_CREATE_SPARSE_BINDING_BIT
             uint32_t createSparseResidency : 1;   // VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT
             uint32_t createProtected       : 1;   // VK_BUFFER_CREATE_PROTECTED_BIT
-
-            uint32_t reserved              : 23;
+            uint32_t reserved2             : 1;
+            uint32_t reserved              : 22;
         };
         uint32_t     u32All;
     };

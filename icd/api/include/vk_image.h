@@ -101,12 +101,17 @@ public:
         Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
-    VkResult GetMemoryRequirements(
-        const Device*         pDevice,
-        VkMemoryRequirements* pMemoryRequirements);
+    const VkMemoryRequirements& GetMemoryRequirements()
+        { return m_memoryRequirements; }
+
+    void SetMemoryRequirements(const VkMemoryRequirements& memoryRequirements)
+        { m_memoryRequirements = memoryRequirements; }
+
+    void SetMemoryRequirementsAtCreate(
+        const Device*         pDevice);
 
     VkResult BindMemory(
-        const Device*      pDevice,
+        Device*            pDevice,
         VkDeviceMemory     mem,
         VkDeviceSize       memOffset,
         uint32_t           deviceIndexCount,
@@ -129,9 +134,25 @@ public:
         VkSubresourceLayout*                    pLayout) const;
 
     void GetSparseMemoryRequirements(
-        const Device*                                       pDevice,
+        Device*                                             pDevice,
         uint32_t*                                           pNumRequirements,
         utils::ArrayView<VkSparseImageMemoryRequirements>   sparseMemoryRequirements);
+
+    static void CalculateMemoryRequirements(
+        Device*                                   pDevice,
+        const VkDeviceImageMemoryRequirementsKHR* pInfo,
+        VkMemoryRequirements2*                    pMemoryRequirements);
+
+    static void CalculateAlignedMemoryRequirements(
+        Device*                                   pDevice,
+        const VkImageCreateInfo*                  pCreateInfo,
+        Image*                                    pImage);
+
+    static void CalculateSparseMemoryRequirements(
+        Device*                                   pDevice,
+        const VkDeviceImageMemoryRequirementsKHR* pInfo,
+        uint32_t*                                 pSparseMemoryRequirementCount,
+        VkSparseImageMemoryRequirements2*         pSparseMemoryRequirements);
 
     VK_FORCEINLINE Pal::IImage* PalImage(int32_t idx) const
        { return m_perGpu[idx].pPalImage; }
@@ -355,6 +376,8 @@ private:
                                                   // which swap chain the image belongs to
 
     ResourceOptimizerKey    m_ResourceKey;
+
+    VkMemoryRequirements    m_memoryRequirements; // Image's memory requirements, including strict size if used
 
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.

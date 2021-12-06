@@ -209,6 +209,21 @@ void Framebuffer::SetImageViews(
 }
 
 // =====================================================================================================================
+// Set ImageViews for a Framebuffer attachment
+void Framebuffer::SetImageViews(
+    const VkRenderingInfoKHR* pRenderingInfo)
+{
+    Attachment* pAttachments = static_cast<Attachment*>(Util::VoidPtrInc(this, GetAttachmentsOffset()));
+
+    for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; i++)
+    {
+        SetImageViews(
+            pRenderingInfo->pColorAttachments[i].imageView,
+            &(pAttachments[i]));
+     }
+}
+
+// =====================================================================================================================
 // Update the subrange for framebuffer attachments
 void Framebuffer::SetSubresRanges(
     const Image* pImage,

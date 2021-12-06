@@ -1117,6 +1117,7 @@ VkResult CmdBuffer::Begin(
     VK_ASSERT(pBeginInfo->sType == VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
     VK_ASSERT(!m_flags.isRecording);
 
+    m_flags.isRenderingSuspended = false;
     m_flags.wasBegun = true;
 
     // Beginning a command buffer implicitly resets its state
@@ -1129,6 +1130,8 @@ VkResult CmdBuffer::Begin(
 
     RenderPass*  pRenderPass  = nullptr;
     Framebuffer* pFramebuffer = nullptr;
+
+    const VkCommandBufferInheritanceRenderingInfoKHR* pInheritanceRenderingInfoKHR = nullptr;
 
     m_cbBeginDeviceMask = m_pDevice->GetPalDeviceMask();
 
@@ -1190,6 +1193,24 @@ VkResult CmdBuffer::Begin(
 
                 inheritedStateParams.stateFlags.predication = pExtInfo->conditionalRenderingEnable;
                 m_flags.hasConditionalRendering             = pExtInfo->conditionalRenderingEnable;
+            }
+            else if (pHeader->sType == VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO_KHR)
+            {
+                VK_ASSERT(m_flags.is2ndLvl);
+
+                pInheritanceRenderingInfoKHR = static_cast<const VkCommandBufferInheritanceRenderingInfoKHR*>(pNext);
+
+                inheritedStateParams.colorTargetCount = pInheritanceRenderingInfoKHR->colorAttachmentCount;
+                inheritedStateParams.stateFlags.targetViewState = 1;
+
+                for (uint32_t i = 0; i < inheritedStateParams.colorTargetCount; i++)
+                {
+                    inheritedStateParams.colorTargetSwizzledFormats[i] =
+                        VkToPalFormat(pInheritanceRenderingInfoKHR->pColorAttachmentFormats[i],
+                                      m_pDevice->GetRuntimeSettings());
+
+                    inheritedStateParams.sampleCount[i] = pInheritanceRenderingInfoKHR->rasterizationSamples;
+                }
             }
 
             pNext = pHeader->pNext;
@@ -1270,6 +1291,31 @@ VkResult CmdBuffer::Begin(
             m_renderPassInstance.subpass = currentSubPass;
         }
 
+        if (pInheritanceRenderingInfoKHR != nullptr)
+        {
+            m_allGpuState.dynamicRenderingInstance.viewMask =
+                pInheritanceRenderingInfoKHR->viewMask;
+
+            m_allGpuState.dynamicRenderingInstance.colorAttachmentCount =
+                pInheritanceRenderingInfoKHR->colorAttachmentCount;
+
+            for (uint32_t i = 0; i < m_allGpuState.dynamicRenderingInstance.colorAttachmentCount; ++i)
+            {
+                DynamicRenderingAttachments& dynamicAttachment =
+                    m_allGpuState.dynamicRenderingInstance.colorAttachments[i];
+
+                dynamicAttachment.attachmentFormat     = pInheritanceRenderingInfoKHR->pColorAttachmentFormats[i];
+                dynamicAttachment.rasterizationSamples = pInheritanceRenderingInfoKHR->rasterizationSamples;
+            }
+            m_allGpuState.dynamicRenderingInstance.depthAttachment.attachmentFormat     =
+                (pInheritanceRenderingInfoKHR->depthAttachmentFormat != VK_FORMAT_UNDEFINED) ?
+                pInheritanceRenderingInfoKHR->depthAttachmentFormat :
+                pInheritanceRenderingInfoKHR->stencilAttachmentFormat;
+
+            m_allGpuState.dynamicRenderingInstance.depthAttachment.rasterizationSamples =
+                pInheritanceRenderingInfoKHR->rasterizationSamples;
+        }
+
         // if input frame buffer object pointer is NULL, it means
         // either this is for a primary command buffer, or this is a secondary command buffer
         // and the command buffer will get the frame buffer object and execution time from
@@ -1282,8 +1328,8 @@ VkResult CmdBuffer::Begin(
 
     m_flags.isRecording = true;
 
-    if (pRenderPass
-        ) // secondary VkCommandBuffer will be used inside VkRenderPass
+    if ((pRenderPass != nullptr) || (pInheritanceRenderingInfoKHR != nullptr))
+    // secondary VkCommandBuffer will be used inside VkRenderPass
     {
         VK_ASSERT(m_flags.is2ndLvl);
 
@@ -1420,6 +1466,8 @@ void CmdBuffer::ResetPipelineState()
 
     memset(&m_allGpuState.depthStencilCreateInfo, 0u, sizeof(m_allGpuState.depthStencilCreateInfo));
 
+    memset(&m_allGpuState.samplePattern, 0u, sizeof(m_allGpuState.samplePattern));
+
     uint32_t bindIdx = 0;
 
     do
@@ -1436,10 +1484,9 @@ void CmdBuffer::ResetPipelineState()
     }
     while (bindIdx < PipelineBindCount);
 
-    static_assert(VK_ARRAY_SIZE(m_allGpuState.palToApiPipeline) == 2, "");
-
-    m_allGpuState.palToApiPipeline[uint32_t(Pal::PipelineBindPoint::Compute)]  = PipelineBindCompute;
-    m_allGpuState.palToApiPipeline[uint32_t(Pal::PipelineBindPoint::Graphics)] = PipelineBindGraphics;
+    m_allGpuState.palToApiPipeline[uint32_t(Pal::PipelineBindPoint::Compute)]   = PipelineBindCompute;
+    m_allGpuState.palToApiPipeline[uint32_t(Pal::PipelineBindPoint::Graphics)]  = PipelineBindGraphics;
+    static_assert(VK_ARRAY_SIZE(m_allGpuState.palToApiPipeline) == 2, "PAL PipelineBindPoint not handled");
 
     const uint32_t numPalDevices = m_numPalDevices;
     uint32_t deviceIdx           = 0;
@@ -1564,9 +1611,7 @@ void CmdBuffer::RebindPipeline()
 
     Pal::PipelineBindPoint palBindPoint;
 
-    switch (bindPoint)
-    {
-    case PipelineBindCompute:
+    if (bindPoint == PipelineBindCompute)
     {
         const ComputePipeline* pPipeline = m_allGpuState.pComputePipeline;
 
@@ -1597,10 +1642,8 @@ void CmdBuffer::RebindPipeline()
         }
 
         palBindPoint = Pal::PipelineBindPoint::Compute;
-        break;
     }
-
-    case PipelineBindGraphics:
+    else if (bindPoint == PipelineBindGraphics)
     {
         const GraphicsPipeline* pPipeline = m_allGpuState.pGraphicsPipeline;
 
@@ -1621,40 +1664,47 @@ void CmdBuffer::RebindPipeline()
         }
 
         palBindPoint = Pal::PipelineBindPoint::Graphics;
-        break;
-    };
+    }
 
-    default:
+    else
     {
         VK_NEVER_CALLED();
-    }
-    break;
     }
 
     RebindUserDataFlags rebindFlags = 0;
 
-    // Update the current owner of the compute PAL pipeline binding if we bound a pipeline
-    if ((fromBindPipeline == false) &&
-        (palBindPoint == Pal::PipelineBindPoint::Compute))
+    // In compact scheme, the top-level user data layout of two compatible pipeline layout may be different.
+    // Thus, pipeline layout needs to be checked and rebind the user data if needed.
+    // In indirect scheme, the top-level user data layout is always the same for all the pipeline layouts built
+    // in this scheme. So user data doesn't require to be rebind in this case.
+    // Pipeline layouts in different scheme can never be compatible. In this case, calling vkCmdBindDescriptorSets()
+    // to rebind descirptor sets is mandatory for user.
+    if ((pNewUserDataLayout->scheme == m_allGpuState.pipelineState[bindPoint].userDataLayout.scheme) &&
+        (pNewUserDataLayout->scheme == PipelineLayoutScheme::Compact))
     {
-        // If the ownership of the PAL binding is changing, the current user data belongs to the old binding and must
-        // be reloaded.
-        if (PalPipelineBindingOwnedBy(palBindPoint, bindPoint) == false)
+        // Update the current owner of the compute PAL pipeline binding if we bound a pipeline
+        if ((fromBindPipeline == false) &&
+            (palBindPoint == Pal::PipelineBindPoint::Compute))
         {
-            rebindFlags |= RebindUserDataAll;
+            // If the ownership of the PAL binding is changing, the current user data belongs to the old binding and must
+            // be reloaded.
+            if (PalPipelineBindingOwnedBy(palBindPoint, bindPoint) == false)
+            {
+                rebindFlags |= RebindUserDataAll;
+            }
+
+            m_allGpuState.palToApiPipeline[size_t(Pal::PipelineBindPoint::Compute)] = bindPoint;
         }
 
-        m_allGpuState.palToApiPipeline[size_t(Pal::PipelineBindPoint::Compute)] = bindPoint;
-    }
+        // Graphics pipeline owner should always remain fixed, so we don't have to worry about reloading
+        // user data (for that reason) or ownership updates.
+        VK_ASSERT(PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Graphics, PipelineBindGraphics));
 
-    // Graphics pipeline owner should always remain fixed, so we don't have to worry about reloading
-    // user data (for that reason) or ownership updates.
-    VK_ASSERT(PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Graphics, PipelineBindGraphics));
-
-    // A user data layout switch may also require some user data to be reloaded (for both gfx and compute).
-    if (pNewUserDataLayout != nullptr)
-    {
-        rebindFlags |= SwitchUserDataLayouts(bindPoint, pNewUserDataLayout);
+        // A user data layout switch may also require some user data to be reloaded (for both gfx and compute).
+        if (pNewUserDataLayout != nullptr)
+        {
+            rebindFlags |= SwitchUserDataLayouts(bindPoint, pNewUserDataLayout);
+        }
     }
 
     // Reprogram the user data if necessary
@@ -1727,13 +1777,15 @@ CmdBuffer::RebindUserDataFlags CmdBuffer::SwitchUserDataLayouts(
     const UserDataLayout*  pNewUserDataLayout)
 {
     VK_ASSERT(pNewUserDataLayout != nullptr);
+    VK_ASSERT(pNewUserDataLayout->scheme == PipelineLayoutScheme::Compact);
+    VK_ASSERT(m_allGpuState.pipelineState[apiBindPoint].userDataLayout.scheme == PipelineLayoutScheme::Compact);
 
     PipelineBindState* pBindState = &m_allGpuState.pipelineState[apiBindPoint];
 
     RebindUserDataFlags flags = 0;
 
-    const UserDataLayout& newUserDataLayout = *pNewUserDataLayout;
-    const UserDataLayout& curUserDataLayout = pBindState->userDataLayout;
+    const auto& newUserDataLayout = pNewUserDataLayout->compact;
+    const auto& curUserDataLayout = pBindState->userDataLayout.compact;
 
     // Rebind descriptor set bindings if necessary
     if ((newUserDataLayout.setBindingRegBase  != curUserDataLayout.setBindingRegBase) |
@@ -1750,7 +1802,7 @@ CmdBuffer::RebindUserDataFlags CmdBuffer::SwitchUserDataLayouts(
     }
 
     // Cache the new user data layout information
-    pBindState->userDataLayout = newUserDataLayout;
+    pBindState->userDataLayout = *pNewUserDataLayout;
 
     return flags;
 }
@@ -1764,9 +1816,10 @@ void CmdBuffer::RebindUserData(
     RebindUserDataFlags    flags)
 {
     VK_ASSERT(flags != 0);
+    VK_ASSERT(m_allGpuState.pipelineState[apiBindPoint].userDataLayout.scheme == PipelineLayoutScheme::Compact);
 
-    const PipelineBindState& bindState   = m_allGpuState.pipelineState[apiBindPoint];
-    const UserDataLayout& userDataLayout = bindState.userDataLayout;
+    const PipelineBindState& bindState = m_allGpuState.pipelineState[apiBindPoint];
+    const auto& userDataLayout         = bindState.userDataLayout.compact;
 
     if ((flags & RebindUserDataDescriptorSets) != 0)
     {
@@ -1993,42 +2046,101 @@ void CmdBuffer::BindDescriptorSets(
             }
         }
 
-        // Figure out the total range of user data registers written by this sequence of descriptor set binds
-        const PipelineLayout::SetUserDataLayout& firstSetLayout = pLayout->GetSetUserData(firstSet);
-        const PipelineLayout::SetUserDataLayout& lastSetLayout = pLayout->GetSetUserData(firstSet + setCount - 1);
-
-        const uint32_t rangeOffsetBegin = firstSetLayout.firstRegOffset;
-        const uint32_t rangeOffsetEnd = lastSetLayout.firstRegOffset + lastSetLayout.totalRegCount;
-
-        // Update the high watermark of number of user data entries written for currently bound descriptor sets and
-        // their dynamic offsets in the current command buffer state.
-        pBindState->boundSetCount = Util::Max(pBindState->boundSetCount, rangeOffsetEnd);
-
-        // Descriptor set with zero resource binding is allowed in spec, so we need to check this and only proceed when
-        // there are at least 1 user data to update.
-        const uint32_t rangeRegCount = rangeOffsetEnd - rangeOffsetBegin;
-
-        if (rangeRegCount > 0)
+        if (pLayout->GetScheme() == PipelineLayoutScheme::Compact)
         {
-            // Program the user data register only if the current user data layout base matches that of the given
-            // layout.  Otherwise, what's happening is that the application is binding descriptor sets for a future
-            // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant.  A
-            // future vkCmdBindPipeline will reprogram the user data register.
-            if (PalPipelineBindingOwnedBy(palBindPoint, apiBindPoint) &&
-                (pBindState->userDataLayout.setBindingRegBase == layoutInfo.userDataLayout.setBindingRegBase))
+            // Figure out the total range of user data registers written by this sequence of descriptor set binds
+            const PipelineLayout::SetUserDataLayout& firstSetLayout = pLayout->GetSetUserData(firstSet);
+            const PipelineLayout::SetUserDataLayout& lastSetLayout  = pLayout->GetSetUserData(firstSet + setCount - 1);
+
+            const uint32_t rangeOffsetBegin = firstSetLayout.firstRegOffset;
+            const uint32_t rangeOffsetEnd   = lastSetLayout.firstRegOffset + lastSetLayout.totalRegCount;
+
+            // Update the high watermark of number of user data entries written for currently bound descriptor sets and
+            // their dynamic offsets in the current command buffer state.
+            pBindState->boundSetCount = Util::Max(pBindState->boundSetCount, rangeOffsetEnd);
+
+            // Descriptor set with zero resource binding is allowed in spec, so we need to check this and only proceed
+            // when there are at least 1 user data to update.
+            const uint32_t rangeRegCount = rangeOffsetEnd - rangeOffsetBegin;
+
+            if (rangeRegCount > 0)
             {
+                // Program the user data register only if the current user data layout base matches that of the given
+                // layout.  Otherwise, what's happening is that the application is binding descriptor sets for a future
+                // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant.
+                // A future vkCmdBindPipeline will reprogram the user data register.
+                if (PalPipelineBindingOwnedBy(palBindPoint, apiBindPoint) &&
+                    (pBindState->userDataLayout.compact.setBindingRegBase ==
+                     layoutInfo.userDataLayout.compact.setBindingRegBase))
+                {
+                    utils::IterateMask deviceGroup(m_curDeviceMask);
+                    do
+                    {
+                        const uint32_t deviceIdx = deviceGroup.Index();
+
+                        PalCmdBuffer(deviceIdx)->CmdSetUserData(
+                            palBindPoint,
+                            pBindState->userDataLayout.compact.setBindingRegBase + rangeOffsetBegin,
+                            rangeRegCount,
+                            &(PerGpuState(deviceIdx)->setBindingData[apiBindPoint][rangeOffsetBegin]));
+                    }
+                    while (deviceGroup.IterateNext());
+                }
+            }
+        }
+        else if (pLayout->GetScheme() == PipelineLayoutScheme::Indirect)
+        {
+            const auto& userDataLayout = layoutInfo.userDataLayout.indirect;
+
+            for (uint32_t setIdx = firstSet; setIdx < firstSet + setCount; ++setIdx)
+            {
+                const PipelineLayout::SetUserDataLayout& setLayoutInfo = pLayout->GetSetUserData(setIdx);
+
                 utils::IterateMask deviceGroup(m_curDeviceMask);
                 do
                 {
                     const uint32_t deviceIdx = deviceGroup.Index();
 
-                    PalCmdBuffer(deviceIdx)->CmdSetUserData(
-                        palBindPoint,
-                        pBindState->userDataLayout.setBindingRegBase + rangeOffsetBegin,
-                        rangeRegCount,
-                        &(PerGpuState(deviceIdx)->setBindingData[apiBindPoint][rangeOffsetBegin]));
-                } while (deviceGroup.IterateNext());
+                    if (setLayoutInfo.dynDescCount > 0)
+                    {
+                        const uint32_t dynBufferSizeDw =
+                            setLayoutInfo.dynDescCount * DescriptorSetLayout::GetDynamicBufferDescDwSize(m_pDevice);
+
+                        Pal::gpusize gpuAddr;
+
+                        void* pCpuAddr = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(
+                            dynBufferSizeDw,
+                            m_pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32_t),
+                            &gpuAddr);
+
+                        const uint32_t gpuAddrLow = static_cast<uint32_t>(gpuAddr);
+
+                        memcpy(pCpuAddr,
+                               &(PerGpuState(deviceIdx)->setBindingData[apiBindPoint][setLayoutInfo.dynDescDataRegOffset]),
+                               dynBufferSizeDw * sizeof(uint32_t));
+
+                        PalCmdBuffer(deviceIdx)->CmdSetUserData(
+                            palBindPoint,
+                            userDataLayout.setBindingPtrRegBase + 2 * setIdx * PipelineLayout::SetPtrRegCount,
+                            PipelineLayout::SetPtrRegCount,
+                            &gpuAddrLow);
+                    }
+
+                    if (setLayoutInfo.setPtrRegOffset != PipelineLayout::InvalidReg)
+                    {
+                        PalCmdBuffer(deviceIdx)->CmdSetUserData(
+                            palBindPoint,
+                            userDataLayout.setBindingPtrRegBase + (2 * setIdx + 1) * PipelineLayout::SetPtrRegCount,
+                            PipelineLayout::SetPtrRegCount,
+                            &(PerGpuState(deviceIdx)->setBindingData[apiBindPoint][setLayoutInfo.setPtrRegOffset]));
+                    }
+                }
+                while (deviceGroup.IterateNext());
             }
+        }
+        else
+        {
+            VK_NEVER_CALLED();
         }
     }
 
@@ -2308,11 +2420,13 @@ void CmdBuffer::Draw(
 
     ValidateStates();
 
-    PalCmdDraw(firstVertex,
-        vertexCount,
-        firstInstance,
-        instanceCount,
-        0u);
+    {
+        PalCmdDraw(firstVertex,
+            vertexCount,
+            firstInstance,
+            instanceCount,
+            0u);
+    }
 
     DbgBarrierPostCmd(DbgBarrierDrawNonIndexed);
 }
@@ -2989,6 +3103,8 @@ void CmdBuffer::ClearDepthStencilImage(
         const Pal::ImageLayout layout = pImage->GetBarrierPolicy().GetTransferLayout(
             imageLayout, GetQueueFamilyIndex());
 
+        ValidateSamplePattern(pImage->GetImageSamples(), nullptr);
+
         for (uint32_t rangeIdx = 0; rangeIdx < rangeCount;)
         {
             uint32_t palRangeCount = 0;
@@ -3041,6 +3157,19 @@ void CmdBuffer::ClearAttachments(
     uint32_t                 rectCount,
     const VkClearRect*       pRects)
 {
+    // if pRenderPass is null, than dynamic rendering is being used
+    if (m_allGpuState.pRenderPass == nullptr)
+    {
+        if (m_flags.is2ndLvl == false)
+        {
+            ClearDynamicRenderingImages(attachmentCount, pAttachments, rectCount, pRects);
+        }
+        else
+        {
+            ClearDynamicRenderingBoundAttachments(attachmentCount, pAttachments, rectCount, pRects);
+        }
+    }
+    else
     {
         if ((m_flags.is2ndLvl == false) && (m_allGpuState.pFramebuffer != nullptr))
         {
@@ -3049,6 +3178,292 @@ void CmdBuffer::ClearAttachments(
         else
         {
             ClearBoundAttachments(attachmentCount, pAttachments, rectCount, pRects);
+        }
+    }
+}
+
+// =====================================================================================================================
+// Clears a set of attachments in the current dynamic rendering pass.
+void CmdBuffer::ClearDynamicRenderingImages(
+    uint32_t                 attachmentCount,
+    const VkClearAttachment* pAttachments,
+    uint32_t                 rectCount,
+    const VkClearRect*       pRects)
+{
+    // Note: Bound target clears are pipelined by the HW, so we do not have to insert any barriers
+    VirtualStackFrame virtStackFrame(m_pStackAllocator);
+
+    const auto maxRects = EstimateMaxObjectsOnVirtualStack(sizeof(*pRects));
+
+    for (uint32_t idx = 0; idx < attachmentCount; ++idx)
+    {
+        const VkClearAttachment& clearInfo = pAttachments[idx];
+
+        // Detect if color clear or depth clear
+        if ((clearInfo.aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) != 0)
+        {
+            DynamicRenderingAttachments& attachment =
+                m_allGpuState.dynamicRenderingInstance.colorAttachments[clearInfo.colorAttachment];
+
+            // Clear only if the referenced attachment index is active
+            if ((attachment.pImageView != nullptr) && (attachment.pImageView->GetImage() != nullptr))
+            {
+                const Image* pImage = attachment.pImageView->GetImage();
+
+                Util::Vector<Pal::Box, 8, VirtualStackFrame> clearBoxes{ &virtStackFrame };
+                Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges{ &virtStackFrame };
+
+                auto       rectBatch  = Util::Min(rectCount, maxRects);
+                const auto palResult1 = clearBoxes.Reserve(rectBatch);
+                const auto palResult2 = clearSubresRanges.Reserve(rectBatch);
+
+                if ((palResult1 == Pal::Result::Success) &&
+                    (palResult2 == Pal::Result::Success))
+                {
+                    for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
+                    {
+                        // Obtain the baseArrayLayer of the image view to apply it when clearing the image itself.
+                        const uint32_t zOffset = static_cast<uint32_t>(attachment.pImageView->GetZRange().offset);
+
+                        rectBatch = Util::Min(rectCount - rectIdx, maxRects);
+
+                        CreateClearRegions(
+                            rectCount,
+                            (pRects + rectIdx),
+                            m_allGpuState.dynamicRenderingInstance.viewMask,
+                            zOffset,
+                            &clearBoxes);
+
+                        CreateClearSubresRanges(
+                            attachment.pImageView,
+                            clearInfo,
+                            rectCount,
+                            pRects + rectIdx,
+                            m_allGpuState.dynamicRenderingInstance.viewMask,
+                            &clearSubresRanges);
+
+                         PalCmdClearColorImage(
+                             *pImage,
+                             attachment.imageLayout,
+                             VkToPalClearColor(&clearInfo.clearValue.color,
+                                               VkToPalFormat(pImage->GetFormat(), m_pDevice->GetRuntimeSettings())),
+                             clearSubresRanges.NumElements(),
+                             clearSubresRanges.Data(),
+                             clearBoxes.NumElements(),
+                             clearBoxes.Data(),
+                             Pal::ClearColorImageFlags::ColorClearAutoSync);
+                    }
+                }
+                else
+                {
+                    m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
+            }
+        }
+        else
+        {
+            DynamicRenderingAttachments& depthAttachment   = m_allGpuState.dynamicRenderingInstance.depthAttachment;
+            DynamicRenderingAttachments& stencilAttachment = m_allGpuState.dynamicRenderingInstance.stencilAttachment;
+
+            // Depth and Stencil Views are the same if both exist
+            Pal::ImageLayout imageLayout       = {};
+            const ImageView* pDepthStencilView = nullptr;
+
+            if ((depthAttachment.pImageView != nullptr) &&
+                ((clearInfo.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0))
+            {
+                pDepthStencilView = depthAttachment.pImageView;
+                imageLayout       = depthAttachment.imageLayout;
+            }
+            else if ((stencilAttachment.pImageView != nullptr) &&
+                     ((clearInfo.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) != 0))
+            {
+                pDepthStencilView = stencilAttachment.pImageView;
+                imageLayout       = stencilAttachment.imageLayout;
+            }
+
+            // Clear only if the referenced attachment index is active
+            if (pDepthStencilView != nullptr)
+            {
+                Util::Vector<Pal::Rect, 8, VirtualStackFrame> clearRects{ &virtStackFrame };
+                Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges{ &virtStackFrame };
+
+                auto       rectBatch = Util::Min((rectCount * MaxPalDepthAspectsPerMask), maxRects);
+                const auto palResult1 = clearRects.Reserve(rectBatch);
+                const auto palResult2 = clearSubresRanges.Reserve(rectBatch);
+
+                if ((palResult1 == Pal::Result::Success) &&
+                    (palResult2 == Pal::Result::Success))
+                {
+                    ValidateSamplePattern(pDepthStencilView->GetImage()->GetImageSamples(), nullptr);
+
+                    for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
+                    {
+                        // Obtain the baseArrayLayer of the image view to apply it when clearing the image itself.
+                        const uint32_t zOffset = static_cast<uint32_t>(pDepthStencilView->GetZRange().offset);
+
+                        rectBatch = Util::Min(rectCount - rectIdx, maxRects);
+
+                        CreateClearRects(
+                            rectCount,
+                            (pRects + rectIdx),
+                            &clearRects);
+
+                        CreateClearSubresRanges(
+                            pDepthStencilView,
+                            clearInfo,
+                            rectCount,
+                            pRects + rectIdx,
+                            m_allGpuState.dynamicRenderingInstance.viewMask,
+                            &clearSubresRanges);
+
+                        PalCmdClearDepthStencil(
+                            *pDepthStencilView->GetImage(),
+                            imageLayout,
+                            imageLayout,
+                            VkToPalClearDepth(clearInfo.clearValue.depthStencil.depth),
+                            clearInfo.clearValue.depthStencil.stencil,
+                            clearSubresRanges.NumElements(),
+                            clearSubresRanges.Data(),
+                            clearRects.NumElements(),
+                            clearRects.Data(),
+                            Pal::ClearDepthStencilFlags::DsClearAutoSync);
+                    }
+                }
+                else
+                {
+                    m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
+// Clears a set of attachments in the current renderpass using PAL's CmdClearBound*Targets commands.
+void CmdBuffer::ClearDynamicRenderingBoundAttachments(
+    uint32_t                 attachmentCount,
+    const VkClearAttachment* pAttachments,
+    uint32_t                 rectCount,
+    const VkClearRect*       pRects)
+{
+    // Note: Bound target clears are pipelined by the HW, so we do not have to insert any barriers
+    VirtualStackFrame virtStackFrame(m_pStackAllocator);
+
+    Util::Vector<Pal::ClearBoundTargetRegion, 8, VirtualStackFrame> clearRegions{ &virtStackFrame };
+    Util::Vector<Pal::BoundColorTarget, 8, VirtualStackFrame> colorTargets{ &virtStackFrame };
+
+    const auto maxRects   = EstimateMaxObjectsOnVirtualStack(sizeof(*pRects));
+    auto       rectBatch  = Util::Min(rectCount, maxRects);
+    const auto palResult1 = clearRegions.Reserve(rectBatch);
+    const auto palResult2 = colorTargets.Reserve(attachmentCount);
+
+    m_recordingResult = ((palResult1 == Pal::Result::Success) &&
+                         (palResult2 == Pal::Result::Success)) ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
+
+    if (m_recordingResult == VK_SUCCESS)
+    {
+        for (uint32_t idx = 0; idx < attachmentCount; ++idx)
+        {
+            const VkClearAttachment& clearInfo = pAttachments[idx];
+
+            // Detect if color clear or depth clear
+            if ((clearInfo.aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) != 0)
+            {
+                DynamicRenderingAttachments& attachment =
+                    m_allGpuState.dynamicRenderingInstance.colorAttachments[clearInfo.colorAttachment];
+
+                // Fill in bound target information for this target, but don't clear yet
+                const uint32_t tgtIdx = clearInfo.colorAttachment;
+
+                // Clear only if the attachment reference is active
+                if (tgtIdx != VK_ATTACHMENT_UNUSED)
+                {
+                    Pal::BoundColorTarget target = {};
+                    target.targetIndex           = tgtIdx;
+                    const ImageView* pImageView  =
+                        m_allGpuState.dynamicRenderingInstance.colorAttachments[tgtIdx].pImageView;
+                    target.swizzledFormat        = VkToPalFormat(
+                        ((pImageView != nullptr)    ?
+                        pImageView->GetViewFormat() :
+                        m_allGpuState.dynamicRenderingInstance.colorAttachments[tgtIdx].attachmentFormat),
+                        m_pDevice->GetRuntimeSettings());
+                    target.samples =
+                        m_allGpuState.dynamicRenderingInstance.colorAttachments[tgtIdx].rasterizationSamples;
+
+                    target.fragments =
+                        m_allGpuState.dynamicRenderingInstance.colorAttachments[tgtIdx].rasterizationSamples;
+
+                    target.clearValue =
+                        VkToPalClearColor(&clearInfo.clearValue.color, target.swizzledFormat);
+
+                    colorTargets.PushBack(target);
+                }
+            }
+            else // Depth-stencil clear
+            {
+                Pal::DepthStencilSelectFlags selectFlags = {};
+
+                selectFlags.depth   = ((clearInfo.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0);
+                selectFlags.stencil = ((clearInfo.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) != 0);
+
+                DbgBarrierPreCmd(DbgBarrierClearDepth);
+
+                for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
+                {
+                    rectBatch = Util::Min(rectCount - rectIdx, maxRects);
+
+                    uint32_t viewMask = m_allGpuState.dynamicRenderingInstance.viewMask;
+
+                    CreateClearRegions(
+                        rectBatch,
+                        pRects + rectIdx,
+                        viewMask,
+                        0u,
+                        &clearRegions);
+
+                    // Clear the bound depth stencil target immediately
+                    PalCmdBuffer(DefaultDeviceIndex)->CmdClearBoundDepthStencilTargets(
+                        VkToPalClearDepth(clearInfo.clearValue.depthStencil.depth),
+                        clearInfo.clearValue.depthStencil.stencil,
+                        StencilWriteMaskFull,
+                        m_allGpuState.dynamicRenderingInstance.depthAttachment.rasterizationSamples,
+                        m_allGpuState.dynamicRenderingInstance.depthAttachment.rasterizationSamples,
+                        selectFlags,
+                        clearRegions.NumElements(),
+                        clearRegions.Data());
+                }
+
+                DbgBarrierPostCmd(DbgBarrierClearDepth);
+            }
+        }
+
+        if (colorTargets.NumElements() > 0)
+        {
+            DbgBarrierPreCmd(DbgBarrierClearColor);
+
+            for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
+            {
+                rectBatch = Util::Min(rectCount - rectIdx, maxRects);
+
+                uint32_t viewMask = m_allGpuState.dynamicRenderingInstance.viewMask;
+
+                CreateClearRegions(
+                    rectBatch,
+                    pRects + rectIdx,
+                    viewMask,
+                    0u,
+                    &clearRegions);
+
+                // Clear the bound color targets
+                PalCmdBuffer(DefaultDeviceIndex)->CmdClearBoundColorTargets(
+                    colorTargets.NumElements(),
+                    colorTargets.Data(),
+                    clearRegions.NumElements(),
+                    clearRegions.Data());
+            }
+
+            DbgBarrierPostCmd(DbgBarrierClearColor);
         }
     }
 }
@@ -3452,6 +3867,8 @@ void CmdBuffer::ClearImageAttachments(
                 if ((palResult1 == Pal::Result::Success) &&
                     (palResult2 == Pal::Result::Success))
                 {
+                    ValidateSamplePattern(attachment.pImage->GetImageSamples(), nullptr);
+
                     for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
                     {
                         rectBatch = Util::Min(rectCount - rectIdx, maxRects);
@@ -3530,6 +3947,11 @@ void CmdBuffer::ResolveImage(
             srcImageLayout, GetQueueFamilyIndex());
         const Pal::ImageLayout palDestImageLayout = pDstImage->GetBarrierPolicy().GetTransferLayout(
             destImageLayout, GetQueueFamilyIndex());
+
+        if (pSrcImage->IsDepthStencilFormat())
+        {
+            ValidateSamplePattern(pSrcImage->GetImageSamples(), nullptr);
+        }
 
         for (uint32_t rectIdx = 0; rectIdx < rectCount;)
         {
@@ -3626,6 +4048,477 @@ void CmdBuffer::SetEvent2(
     }
 
     DbgBarrierPostCmd(DbgBarrierSetResetEvent);
+}
+
+// =====================================================================================================================
+// Returns attachment's PAL subresource ranges defined by clearInfo for Dynamic Rendering LoadOp Clear.
+// When multiview is enabled, layer ranges are modified according active views during a renderpass.
+Util::Vector<Pal::SubresRange, MaxPalAspectsPerMask * Pal::MaxViewInstanceCount, Util::GenericAllocator>
+LoadOpClearSubresRanges(
+    const uint32_t&         viewMask,
+    const Pal::SubresRange& subresRange)
+{
+    // Note that no allocation will be performed, so Util::Vector allocator is nullptr.
+    Util::Vector<Pal::SubresRange, MaxPalAspectsPerMask * Pal::MaxViewInstanceCount, Util::GenericAllocator> clearSubresRanges{ nullptr };
+
+    if (viewMask > 0)
+    {
+        const auto layerRanges = RangesOfOnesInBitMask(viewMask);
+
+        for (auto layerRangeIt = layerRanges.Begin(); layerRangeIt.IsValid(); layerRangeIt.Next())
+        {
+            clearSubresRanges.PushBack(subresRange);
+            clearSubresRanges.Back().startSubres.arraySlice += layerRangeIt.Get().offset;
+            clearSubresRanges.Back().numSlices               = layerRangeIt.Get().extent;
+        }
+    }
+    else
+    {
+        clearSubresRanges.PushBack(subresRange);
+    }
+
+    return clearSubresRanges;
+}
+
+// =====================================================================================================================
+// Clear Color for VK_KHR_dynamic_rendering
+void CmdBuffer::LoadOpClearColor(
+    const Pal::Rect*          pDeviceGroupRenderArea,
+    const VkRenderingInfoKHR* pRenderingInfo)
+{
+    for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; ++i)
+    {
+        const VkRenderingAttachmentInfoKHR& attachmentInfo = pRenderingInfo->pColorAttachments[i];
+
+        if (attachmentInfo.loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
+        {
+            // Get the image view from the attachment info
+            const ImageView* const pImageView = ImageView::ObjectFromHandle(attachmentInfo.imageView);
+
+            // Get the attachment image
+            const Image* pImage = pImageView->GetImage();
+
+            // Convert the clear color to the format of the attachment view
+            Pal::ClearColor clearColor = VkToPalClearColor(
+                &(attachmentInfo.clearValue.color),
+                VkToPalFormat(pImageView->GetViewFormat(), m_pDevice->GetRuntimeSettings()));
+
+             // Get subres range from the image view
+             Pal::SubresRange subresRange = {};
+             pImageView->GetFrameBufferAttachmentSubresRange(&subresRange);
+
+            const auto clearSubresRanges = LoadOpClearSubresRanges(
+                pRenderingInfo->viewMask,
+                subresRange);
+
+            // Clear Layout
+            const Pal::ImageLayout clearLayout = pImage->GetBarrierPolicy().GetAspectLayout(
+                attachmentInfo.imageLayout,
+                subresRange.startSubres.plane,
+                GetQueueFamilyIndex(),
+                pImage->GetFormat());
+
+            utils::IterateMask deviceGroup(GetDeviceMask());
+
+            do
+            {
+                const uint32_t deviceIdx = deviceGroup.Index();
+
+                // Clear Box
+                Pal::Box clearBox = BuildClearBox(
+                    pDeviceGroupRenderArea[deviceIdx],
+                    *pImageView);
+
+                PalCmdBuffer(deviceIdx)->CmdClearColorImage(
+                    *pImage->PalImage(deviceIdx),
+                    clearLayout,
+                    clearColor,
+                    clearSubresRanges.NumElements(),
+                    clearSubresRanges.Data(),
+                    1,
+                    &clearBox,
+                    Pal::ColorClearAutoSync);
+            }
+            while (deviceGroup.IterateNext());
+        }
+    }
+}
+
+// =====================================================================================================================
+// Clear Depth Stencil for VK_KHR_dynamic_rendering
+void CmdBuffer::LoadOpClearDepthStencil(
+    const Pal::Rect*          pDeviceGroupRenderArea,
+    const VkRenderingInfoKHR* pRenderingInfo)
+{
+    // Note that no allocation will be performed, so Util::Vector allocator is nullptr.
+    Util::Vector<Pal::SubresRange, MaxPalAspectsPerMask * Pal::MaxViewInstanceCount, Util::GenericAllocator> clearSubresRanges{ nullptr };
+
+    const Image* pDepthStencilImage = nullptr;
+
+    Pal::SubresRange subresRange   = {};
+    Pal::ImageLayout depthLayout   = {};
+    Pal::ImageLayout stencilLayout = {};
+
+    float clearDepth   = 0.0f;
+    uint8 clearStencil = 0;
+
+    const VkRenderingAttachmentInfoKHR* pDepthAttachmentInfo   = pRenderingInfo->pDepthAttachment;
+    const VkRenderingAttachmentInfoKHR* pStencilAttachmentInfo = pRenderingInfo->pStencilAttachment;
+
+    if ((pDepthAttachmentInfo != nullptr) &&
+        (pDepthAttachmentInfo->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR))
+    {
+        const ImageView* const pDepthImageView = ImageView::ObjectFromHandle(pDepthAttachmentInfo->imageView);
+
+        pDepthStencilImage = pDepthImageView->GetImage();
+
+        GetImageLayout(
+            pDepthAttachmentInfo->imageView,
+            pDepthAttachmentInfo->imageLayout,
+            VK_IMAGE_ASPECT_DEPTH_BIT,
+            &subresRange,
+            &depthLayout);
+
+        clearSubresRanges.PushBack(subresRange);
+
+        clearDepth = pDepthAttachmentInfo->clearValue.depthStencil.depth;
+    }
+
+    if ((pStencilAttachmentInfo != nullptr) &&
+        (pStencilAttachmentInfo->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR))
+    {
+        const ImageView* const pStencilImageView = ImageView::ObjectFromHandle(pStencilAttachmentInfo->imageView);
+
+        pDepthStencilImage = pStencilImageView->GetImage();
+
+        GetImageLayout(
+            pStencilAttachmentInfo->imageView,
+            pStencilAttachmentInfo->imageLayout,
+            VK_IMAGE_ASPECT_STENCIL_BIT,
+            &subresRange,
+            &stencilLayout);
+
+        clearSubresRanges.PushBack(subresRange);
+
+        clearStencil = pStencilAttachmentInfo->clearValue.depthStencil.stencil;
+    }
+
+    if (pDepthStencilImage != nullptr)
+    {
+        ValidateSamplePattern(pDepthStencilImage->GetImageSamples(), nullptr);
+
+        utils::IterateMask deviceGroup(GetDeviceMask());
+
+        do
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
+
+            PalCmdBuffer(deviceIdx)->CmdClearDepthStencil(
+                *pDepthStencilImage->PalImage(deviceIdx),
+                depthLayout,
+                stencilLayout,
+                clearDepth,
+                clearStencil,
+                StencilWriteMaskFull,
+                clearSubresRanges.NumElements(),
+                clearSubresRanges.Data(),
+                1,
+                &(pDeviceGroupRenderArea[deviceIdx]),
+                Pal::DsClearAutoSync);
+        }
+        while (deviceGroup.IterateNext());
+    }
+}
+
+// =====================================================================================================================
+// StoreAttachment for VK_KHR_dynamic_rendering
+void CmdBuffer::StoreAttachmentInfo(
+    const VkRenderingAttachmentInfoKHR& renderingAttachmentInfo,
+    DynamicRenderingAttachments*        pDynamicRenderingAttachement)
+{
+    const ImageView* const pImageView = ImageView::ObjectFromHandle(renderingAttachmentInfo.imageView);
+
+    if(pImageView != nullptr)
+    {
+        const Image*           pColorImage = pImageView->GetImage();
+
+        Pal::ImageLayout colorImageLayout = pColorImage->GetAttachmentLayout(
+            { renderingAttachmentInfo.imageLayout, 0 },
+            0,
+            this);
+
+        pDynamicRenderingAttachement->resolveMode        = renderingAttachmentInfo.resolveMode;
+        pDynamicRenderingAttachement->pImageView         = pImageView;
+        pDynamicRenderingAttachement->imageLayout        = colorImageLayout;
+        pDynamicRenderingAttachement->pResolveImageView  = ImageView::ObjectFromHandle(
+                                                            renderingAttachmentInfo.resolveImageView);
+
+        if (pDynamicRenderingAttachement->pResolveImageView != nullptr)
+        {
+            const Image* pResolveImage = pDynamicRenderingAttachement->pResolveImageView->GetImage();
+
+            if (pResolveImage != nullptr)
+            {
+                pDynamicRenderingAttachement->resolveImageLayout =
+                    pResolveImage->GetAttachmentLayout(
+                        { renderingAttachmentInfo.resolveImageLayout, Pal::LayoutResolveDst }, 0, this);
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
+// vkCmdBeginRendering for VK_KHR_dynamic_rendering
+void CmdBuffer::BeginRendering(
+    const VkRenderingInfoKHR* pRenderingInfo)
+{
+    VK_ASSERT(pRenderingInfo != nullptr);
+
+    DbgBarrierPreCmd(DbgBarrierBeginRendering);
+
+    bool isResuming  = (pRenderingInfo->flags & VK_RENDERING_RESUMING_BIT_KHR);
+    bool isSuspended = (pRenderingInfo->flags & VK_RENDERING_SUSPENDING_BIT_KHR);
+
+    bool skipEverything = isResuming && m_flags.isRenderingSuspended;
+    bool skipClears     = isResuming && (m_flags.isRenderingSuspended == false);
+
+    if (!skipEverything)
+    {
+        EXTRACT_VK_STRUCTURES_2(
+            RENDERING_INFO_KHR,
+            RenderingInfoKHR,
+            DeviceGroupRenderPassBeginInfo,
+            RenderingFragmentShadingRateAttachmentInfoKHR,
+            pRenderingInfo,
+            RENDER_PASS_BEGIN_INFO,
+            DEVICE_GROUP_RENDER_PASS_BEGIN_INFO,
+            RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR)
+
+        bool replicateRenderArea = true;
+
+        if (pDeviceGroupRenderPassBeginInfo != nullptr)
+        {
+            SetDeviceMask(pDeviceGroupRenderPassBeginInfo->deviceMask);
+
+            m_allGpuState.dynamicRenderingInstance.renderAreaCount =
+                pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount;
+
+            VK_ASSERT(m_allGpuState.dynamicRenderingInstance.renderAreaCount <= MaxPalDevices);
+
+            VK_ASSERT(m_renderPassInstance.renderAreaCount <= MaxPalDevices);
+
+            if (pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount > 0)
+            {
+                utils::IterateMask deviceGroup(pDeviceGroupRenderPassBeginInfo->deviceMask);
+
+                VK_ASSERT(m_numPalDevices == pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount);
+
+                do
+                {
+                    const uint32_t deviceIdx = deviceGroup.Index();
+
+                    const VkRect2D& srcRect  = pDeviceGroupRenderPassBeginInfo->pDeviceRenderAreas[deviceIdx];
+                    auto*           pDstRect = &m_allGpuState.dynamicRenderingInstance.renderArea[deviceIdx];
+
+                    *pDstRect = VkToPalRect(srcRect);
+                }
+                while (deviceGroup.IterateNext());
+
+                replicateRenderArea = false;
+            }
+        }
+
+        if (replicateRenderArea)
+        {
+            m_allGpuState.dynamicRenderingInstance.renderAreaCount = m_numPalDevices;
+
+            const auto& srcRect = pRenderingInfo->renderArea;
+
+            for (uint32_t deviceIdx = 0; deviceIdx < m_numPalDevices; deviceIdx++)
+            {
+                auto* pDstRect = &m_allGpuState.dynamicRenderingInstance.renderArea[deviceIdx];
+
+                *pDstRect = VkToPalRect(srcRect);
+            }
+        }
+
+        Pal::GlobalScissorParams scissorParams    = {};
+        scissorParams.scissorRegion = VkToPalRect(pRenderingInfo->renderArea);
+
+        utils::IterateMask deviceGroup(GetDeviceMask());
+        do
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
+            PalCmdBuffer(deviceIdx)->CmdSetGlobalScissor(scissorParams);
+        }
+        while (deviceGroup.IterateNext());
+
+        if (!skipClears)
+        {
+            LoadOpClearColor(
+                m_allGpuState.dynamicRenderingInstance.renderArea,
+                pRenderingInfo);
+
+            LoadOpClearDepthStencil(
+                m_allGpuState.dynamicRenderingInstance.renderArea,
+                pRenderingInfo);
+        }
+
+        BindTargets(
+            pRenderingInfo,
+            pRenderingFragmentShadingRateAttachmentInfoKHR);
+
+        uint32_t numMultiViews = Util::CountSetBits(pRenderingInfo->viewMask);
+        uint32_t viewInstanceMask = (numMultiViews > 0) ? pRenderingInfo->viewMask : GetDeviceMask();
+        PalCmdBuffer(DefaultDeviceIndex)->CmdSetViewInstanceMask(viewInstanceMask);
+    }
+
+    m_allGpuState.dynamicRenderingInstance.viewMask = pRenderingInfo->viewMask;
+    m_allGpuState.dynamicRenderingInstance.colorAttachmentCount = pRenderingInfo->colorAttachmentCount;
+
+    for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; ++i)
+    {
+        const VkRenderingAttachmentInfoKHR& colorAttachmentInfo = pRenderingInfo->pColorAttachments[i];
+
+        StoreAttachmentInfo(
+            colorAttachmentInfo,
+            &m_allGpuState.dynamicRenderingInstance.colorAttachments[i]);
+    }
+
+    if (pRenderingInfo->pDepthAttachment != nullptr)
+    {
+        const VkRenderingAttachmentInfoKHR& depthAttachmentInfo = *pRenderingInfo->pDepthAttachment;
+
+        StoreAttachmentInfo(
+            depthAttachmentInfo,
+            &m_allGpuState.dynamicRenderingInstance.depthAttachment);
+    }
+
+    if (pRenderingInfo->pStencilAttachment != nullptr)
+    {
+        const VkRenderingAttachmentInfoKHR& stencilAttachmentInfo = *pRenderingInfo->pStencilAttachment;
+
+        StoreAttachmentInfo(
+            stencilAttachmentInfo,
+            &m_allGpuState.dynamicRenderingInstance.stencilAttachment);
+    }
+
+    m_flags.isRenderingSuspended = isSuspended;
+
+    DbgBarrierPostCmd(DbgBarrierBeginRendering);
+}
+
+// =====================================================================================================================
+// Call resolve image for VK_KHR_dynamic_rendering
+void CmdBuffer::ResolveImage(
+    const DynamicRenderingAttachments& dynamicRenderingAttachments)
+{
+    // Save PAL Resolve Region
+    VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+    Pal::ImageResolveRegion regions[MaxPalDevices] = {};
+
+    for (uint32_t idx = 0; idx < m_allGpuState.dynamicRenderingInstance.renderAreaCount; idx++)
+    {
+        const Pal::Rect& renderArea  = m_allGpuState.dynamicRenderingInstance.renderArea[idx];
+        Pal::SubresRange subresRangeSrc = {};
+        Pal::SubresRange subresRangeDst = {};
+
+        dynamicRenderingAttachments.pResolveImageView->GetFrameBufferAttachmentSubresRange(&subresRangeDst);
+        dynamicRenderingAttachments.pImageView->GetFrameBufferAttachmentSubresRange(&subresRangeSrc);
+
+        const uint32_t sliceCount = Util::Min(subresRangeSrc.numSlices,
+                                              subresRangeDst.numSlices);
+
+        regions[idx].swizzledFormat = Pal::UndefinedSwizzledFormat;
+        regions[idx].extent.width   = renderArea.extent.width;
+        regions[idx].extent.height  = renderArea.extent.height;
+        regions[idx].extent.depth   = 1;
+        regions[idx].numSlices      = 1;
+        regions[idx].srcOffset.x    = renderArea.offset.x;
+        regions[idx].srcOffset.y    = renderArea.offset.y;
+        regions[idx].srcOffset.z    = 0;
+        regions[idx].dstOffset.x    = renderArea.offset.x;
+        regions[idx].dstOffset.y    = renderArea.offset.y;
+        regions[idx].dstOffset.z    = 0;
+        regions[idx].dstMipLevel    = subresRangeDst.startSubres.mipLevel;
+        regions[idx].dstSlice       = subresRangeDst.startSubres.arraySlice;
+        regions[idx].numSlices      = sliceCount;
+    }
+
+    PalCmdResolveImage(
+        *dynamicRenderingAttachments.pImageView->GetImage(),
+        dynamicRenderingAttachments.imageLayout,
+        *dynamicRenderingAttachments.pResolveImageView->GetImage(),
+        dynamicRenderingAttachments.resolveImageLayout,
+        VkToPalResolveMode(dynamicRenderingAttachments.resolveMode),
+        m_allGpuState.dynamicRenderingInstance.renderAreaCount,
+        regions,
+        m_curDeviceMask);
+
+    if (dynamicRenderingAttachments.pResolveImageView->GetImage()->IsDepthStencilFormat() &&
+        dynamicRenderingAttachments.pImageView->GetImage()->IsDepthStencilFormat())
+    {
+        for (uint32_t idx = 0; idx < m_allGpuState.dynamicRenderingInstance.renderAreaCount; idx++)
+        {
+            regions[idx].srcPlane = 1;
+            regions[idx].dstPlane = 1;
+        }
+
+        ValidateSamplePattern(dynamicRenderingAttachments.pImageView->GetImage()->GetImageSamples(), nullptr);
+
+        PalCmdResolveImage(
+            *dynamicRenderingAttachments.pImageView->GetImage(),
+            dynamicRenderingAttachments.imageLayout,
+            *dynamicRenderingAttachments.pResolveImageView->GetImage(),
+            dynamicRenderingAttachments.resolveImageLayout,
+            VkToPalResolveMode(dynamicRenderingAttachments.resolveMode),
+            m_allGpuState.dynamicRenderingInstance.renderAreaCount,
+            regions,
+            m_curDeviceMask);
+    }
+}
+
+// =====================================================================================================================
+// vkCmdEndRendering for VK_KHR_dynamic_rendering
+void CmdBuffer::EndRendering()
+{
+    DbgBarrierPreCmd(DbgBarrierEndRenderPass);
+
+    // Only do resolves if renderpass isn't suspended
+    if (m_flags.isRenderingSuspended == false)
+    {
+        // Resolve Color Images
+        for (uint32_t i = 0; i < m_allGpuState.dynamicRenderingInstance.colorAttachmentCount; ++i)
+        {
+            DynamicRenderingAttachments& renderingAttachmentInfo =
+                m_allGpuState.dynamicRenderingInstance.colorAttachments[i];
+
+            if (renderingAttachmentInfo.pResolveImageView != nullptr)
+            {
+                ResolveImage(renderingAttachmentInfo);
+            }
+        }
+
+        // Resolve Depth Image
+        if (m_allGpuState.dynamicRenderingInstance.depthAttachment.pResolveImageView != nullptr)
+        {
+            ResolveImage(m_allGpuState.dynamicRenderingInstance.depthAttachment);
+        }
+
+        // Resolve Stencil Image
+        if (m_allGpuState.dynamicRenderingInstance.stencilAttachment.pResolveImageView != nullptr)
+        {
+            ResolveImage(m_allGpuState.dynamicRenderingInstance.stencilAttachment);
+        }
+    }
+
+    // Reset attachment counts at End of Rendering
+    m_allGpuState.dynamicRenderingInstance.colorAttachmentCount = 0;
+    m_allGpuState.dynamicRenderingInstance.depthAttachment      = {};
+    m_allGpuState.dynamicRenderingInstance.stencilAttachment    = {};
+
+    DbgBarrierPostCmd(DbgBarrierEndRenderPass);
 }
 
 // =====================================================================================================================
@@ -4778,11 +5671,11 @@ void CmdBuffer::BeginQueryIndexed(
     //
     // Implementations may write the total result to the first query and
     // write zero to the other queries.
-    if (((pRenderPass != nullptr) && pRenderPass->IsMultiviewEnabled())
-       )
+    if (((pRenderPass != nullptr) && pRenderPass->IsMultiviewEnabled()) ||
+        (m_allGpuState.dynamicRenderingInstance.viewMask != 0))
     {
         const auto viewMask  = (pRenderPass != nullptr) ? pRenderPass->GetViewMask(m_renderPassInstance.subpass) :
-            0;
+            m_allGpuState.dynamicRenderingInstance.viewMask;
 
         const auto viewCount = Util::CountSetBits(viewMask);
 
@@ -5319,11 +6212,11 @@ void CmdBuffer::WriteTimestamp(
         //
         // The first query is a timestamp value and (if more than one bit is set in the view mask)
         // zero is written to the remaining queries.
-        if (((pRenderPass != nullptr) && pRenderPass->IsMultiviewEnabled())
-            )
+        if (((pRenderPass != nullptr) && pRenderPass->IsMultiviewEnabled()) ||
+            (m_allGpuState.dynamicRenderingInstance.viewMask != 0))
         {
             const auto viewMask = (pRenderPass != nullptr) ? pRenderPass->GetViewMask(m_renderPassInstance.subpass) :
-                0;
+                m_allGpuState.dynamicRenderingInstance.viewMask;
             const auto viewCount = Util::CountSetBits(viewMask);
 
             VK_ASSERT(viewCount > 0);
@@ -5363,28 +6256,11 @@ void CmdBuffer::SetSampleLocations(
     uint32_t sampleLocationsPerPixel = (uint32_t)pSampleLocationsInfo->sampleLocationsPerPixel;
 
     ConvertToPalMsaaQuadSamplePattern(pSampleLocationsInfo, &locations);
-    PalCmdSetMsaaQuadSamplePattern(sampleLocationsPerPixel, locations);
 
-    m_allGpuState.staticTokens.samplePattern = DynamicRenderStateToken;
-}
+    m_allGpuState.samplePattern.sampleCount = sampleLocationsPerPixel;
+    m_allGpuState.samplePattern.locations = locations;
 
-// =====================================================================================================================
-// Programs the current GPU sample pattern to the one belonging to the given subpass in a current render pass instance
-void CmdBuffer::RPInitSamplePattern()
-{
-    const RenderPass* pRenderPass = m_allGpuState.pRenderPass;
-
-    if (pRenderPass->GetAttachmentCount() > 0)
-    {
-        const SamplePattern* pSamplePattern = &m_renderPassInstance.pSamplePatterns[0];
-
-        if (pSamplePattern->sampleCount > 0)
-        {
-            PalCmdSetMsaaQuadSamplePattern(
-                pSamplePattern->sampleCount,
-                pSamplePattern->locations);
-        }
-    }
+    m_allGpuState.dirtyGraphics.samplePattern = 1;
 }
 
 // =====================================================================================================================
@@ -5496,6 +6372,8 @@ void CmdBuffer::BeginRenderPass(
         if (m_renderPassInstance.pAttachments != nullptr)
         {
             m_renderPassInstance.maxAttachmentCount = maxAttachmentCount;
+            memset(m_renderPassInstance.pAttachments, 0,
+                maxAttachmentCount * sizeof(RenderPassInstanceState::AttachmentState));
         }
         else
         {
@@ -5599,26 +6477,6 @@ void CmdBuffer::BeginRenderPass(
             }
         }
 
-        for (uint32_t subpassIndex = 0; subpassIndex < subpassCount; subpassIndex++)
-        {
-            const uint32_t subpassMaxSampleCount =
-                m_allGpuState.pRenderPass->GetSubpassMaxSampleCount(m_renderPassInstance.subpass);
-
-            if (subpassMaxSampleCount > 0)
-            {
-                // If sample patterns are set in a bound pipeline, use those as the defaults
-                const Pal::MsaaQuadSamplePattern* pipelineSampleLocations =
-                    ((m_allGpuState.pGraphicsPipeline != nullptr) &&
-                      m_allGpuState.pGraphicsPipeline->CustomSampleLocationsEnabled()) ?
-                        m_allGpuState.pGraphicsPipeline->GetSampleLocations() : nullptr;
-
-                // Set render pass instance sample patterns
-                m_renderPassInstance.pSamplePatterns[subpassIndex].sampleCount = subpassMaxSampleCount;
-                m_renderPassInstance.pSamplePatterns[subpassIndex].locations   = (pipelineSampleLocations != nullptr) ?
-                    *pipelineSampleLocations : *Device::GetDefaultQuadSamplePattern(subpassMaxSampleCount);
-            }
-        }
-
         if (pRenderPassSampleLocationsBeginInfoEXT != nullptr)
         {
             uint32_t attachmentInitialSampleLocationCount =
@@ -5666,9 +6524,6 @@ void CmdBuffer::BeginRenderPass(
                     &m_renderPassInstance.pSamplePatterns[psIndex].locations);
             }
         }
-
-        // Initialize sample pattern
-        RPInitSamplePattern();
 
         // Begin the first subpass
         m_renderPassInstance.pExecuteInfo = m_allGpuState.pRenderPass->GetExecuteInfo();
@@ -5826,6 +6681,7 @@ void CmdBuffer::RPBeginSubpass()
             // Bind targets
             RPBindTargets(subpass.begin.bindTargets);
         }
+
         RPLoadOpClearDepthStencil(subpass.begin.loadOps.dsClearCount, subpass.begin.loadOps.pDsClears);
     }
 
@@ -6163,6 +7019,10 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
         Pal::SubresRange subresRange;
         attachment.pView->GetFrameBufferAttachmentSubresRange(&subresRange);
 
+        ValidateSamplePattern(
+            attachment.pImage->GetImageSamples(),
+            &m_renderPassInstance.pAttachments[clear.attachment].initialSamplePattern);
+
         do
         {
             const uint32_t deviceIdx = deviceGroup.Index();
@@ -6319,6 +7179,13 @@ void CmdBuffer::RPResolveAttachments(
             }
         }
 
+        if (srcAttachment.pImage->IsDepthStencilFormat())
+        {
+            ValidateSamplePattern(
+                srcAttachment.pImage->GetImageSamples(),
+                &m_renderPassInstance.pSamplePatterns[m_renderPassInstance.subpass]);
+        }
+
         // Depth and stencil might have different resolve mode, so allowing resolve each aspect independently.
         for (uint32_t aspectRegionIndex = 0; aspectRegionIndex < aspectRegionCount; ++aspectRegionIndex)
         {
@@ -6441,6 +7308,161 @@ void CmdBuffer::RPBindTargets(
 }
 
 // =====================================================================================================================
+// Get Pal Image aspect layout from imageView
+void CmdBuffer::GetImageLayout(
+    VkImageView        imageView,
+    VkImageLayout      imageLayout,
+    VkImageAspectFlags aspectMask,
+    Pal::SubresRange*  palSubresRange,
+    Pal::ImageLayout*  palImageLayout)
+{
+    // Get the image view from the attachment info
+    const ImageView* const pImageView = ImageView::ObjectFromHandle(imageView);
+
+    // Get the attachment image
+    const Image* pImage = pImageView->GetImage();
+
+    // Get subres range from the image view
+    pImageView->GetFrameBufferAttachmentSubresRange(palSubresRange);
+
+    palSubresRange->startSubres.plane = VkToPalImagePlaneSingle(
+        pImage->GetFormat(),
+        aspectMask,
+        m_pDevice->GetRuntimeSettings());
+
+    // Get the Depth Layout from the view image
+    *palImageLayout = pImage->GetBarrierPolicy().GetAspectLayout(
+        imageLayout,
+        palSubresRange->startSubres.plane,
+        GetQueueFamilyIndex(),
+        pImage->GetFormat());
+}
+
+// =====================================================================================================================
+// Binds color/depth targets for VK_KHR_dynamic_rendering
+void CmdBuffer::BindTargets(
+    const VkRenderingInfoKHR*                              pRenderingInfo,
+    const VkRenderingFragmentShadingRateAttachmentInfoKHR* pRenderingFragmentShadingRateAttachmentInfoKHR)
+{
+    Pal::BindTargetParams params = {};
+
+    params.colorTargetCount = pRenderingInfo->colorAttachmentCount;
+
+    static constexpr Pal::ImageLayout NullLayout = {};
+
+    utils::IterateMask deviceGroup(GetDeviceMask());
+    do
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        for (uint32_t i = 0; i < params.colorTargetCount; ++i)
+        {
+            const VkRenderingAttachmentInfoKHR& renderingAttachmentInfo = pRenderingInfo->pColorAttachments[i];
+
+            if (renderingAttachmentInfo.imageView != VK_NULL_HANDLE)
+            {
+                // Get the image view from the attachment info
+                const ImageView* const pImageView = ImageView::ObjectFromHandle(renderingAttachmentInfo.imageView);
+
+                // Get the attachment image
+                const Image* pImage = pImageView->GetImage();
+
+                params.colorTargets[i].pColorTargetView = pImageView->PalColorTargetView(deviceIdx);
+
+                RPImageLayout imageLayout =
+                {
+                    renderingAttachmentInfo.imageLayout,
+                    0
+                };
+
+                params.colorTargets[i].imageLayout =
+                    pImage->GetAttachmentLayout(
+                        imageLayout,
+                        0,
+                        this);
+
+            }
+            else
+            {
+                params.colorTargets[i].pColorTargetView = nullptr;
+                params.colorTargets[i].imageLayout = NullLayout;
+
+            }
+        }
+
+        const VkRenderingAttachmentInfoKHR* pStencilAttachmentInfo = pRenderingInfo->pStencilAttachment;
+
+        if ((pStencilAttachmentInfo != nullptr) &&
+            (pStencilAttachmentInfo->imageView != VK_NULL_HANDLE))
+        {
+            const ImageView* const pStencilImageView =
+                ImageView::ObjectFromHandle(pStencilAttachmentInfo->imageView);
+
+            Pal::SubresRange subresRange = {};
+            Pal::ImageLayout stencilLayout = {};
+
+            GetImageLayout(
+                pStencilAttachmentInfo->imageView,
+                pStencilAttachmentInfo->imageLayout,
+                VK_IMAGE_ASPECT_STENCIL_BIT,
+                &subresRange,
+                &stencilLayout);
+
+            params.depthTarget.pDepthStencilView = pStencilImageView->PalDepthStencilView(deviceIdx);
+            params.depthTarget.stencilLayout = stencilLayout;
+        }
+        else
+        {
+            params.depthTarget.pDepthStencilView = nullptr;
+            params.depthTarget.stencilLayout     = NullLayout;
+        }
+
+        const VkRenderingAttachmentInfoKHR* pDepthAttachmentInfo = pRenderingInfo->pDepthAttachment;
+
+        if ((pDepthAttachmentInfo != nullptr) &&
+            (pDepthAttachmentInfo->imageView != VK_NULL_HANDLE))
+        {
+            const ImageView* const pDepthImageView =
+                ImageView::ObjectFromHandle(pDepthAttachmentInfo->imageView);
+
+            Pal::SubresRange subresRange = {};
+            Pal::ImageLayout depthLayout = {};
+
+            GetImageLayout(
+                pDepthAttachmentInfo->imageView,
+                pDepthAttachmentInfo->imageLayout,
+                VK_IMAGE_ASPECT_DEPTH_BIT,
+                &subresRange,
+                &depthLayout);
+
+            params.depthTarget.pDepthStencilView = pDepthImageView->PalDepthStencilView(deviceIdx);
+            params.depthTarget.depthLayout       = depthLayout;
+        }
+        else
+        {
+            // Set the depthLayout for stencil only formats to avoid incorrect PAL asserts.
+            params.depthTarget.depthLayout       = params.depthTarget.stencilLayout;
+        }
+
+        PalCmdBuffer(deviceIdx)->CmdBindTargets(params);
+
+        if (pRenderingFragmentShadingRateAttachmentInfoKHR != nullptr)
+        {
+            // Get the image view from the attachment info
+            const ImageView* const pImageView =
+                ImageView::ObjectFromHandle(pRenderingFragmentShadingRateAttachmentInfoKHR->imageView);
+
+            // Get the attachment image
+            const Image* pImage = pImageView->GetImage();
+
+            PalCmdBuffer(deviceIdx)->CmdBindSampleRateImage(pImage->PalImage(deviceIdx));
+        }
+
+    }
+    while (deviceGroup.IterateNext());
+}
+
+// =====================================================================================================================
 // Sets view instance mask for a subpass during a render pass instance (on devices within passed in device mask).
 void CmdBuffer::SetViewInstanceMask(
     uint32_t deviceMask)
@@ -6450,6 +7472,10 @@ void CmdBuffer::SetViewInstanceMask(
     if (m_allGpuState.pRenderPass != nullptr)
     {
         subpassViewMask = m_allGpuState.pRenderPass->GetViewMask(m_renderPassInstance.subpass);
+    }
+    else if (m_allGpuState.dynamicRenderingInstance.viewMask > 0)
+    {
+        subpassViewMask = m_allGpuState.dynamicRenderingInstance.viewMask;
     }
 
     utils::IterateMask deviceGroup(deviceMask);
@@ -6549,26 +7575,60 @@ void CmdBuffer::WritePushConstants(
 
     const UserDataLayout& userDataLayout = pLayout->GetInfo().userDataLayout;
 
-    // Program the user data register only if the current user data layout base matches that of the given
-    // layout.  Otherwise, what's happening is that the application is pushing constants for a future
-    // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant because
-    // a future vkCmdBindPipeline will reprogram the user data registers during the rebase.
-    if (PalPipelineBindingOwnedBy(palBindPoint, apiBindPoint) &&
-        (pBindState->userDataLayout.pushConstRegBase == userDataLayout.pushConstRegBase) &&
-        (pBindState->userDataLayout.pushConstRegCount >= (startInDwords + lengthInDwords)))
+    if (userDataLayout.scheme == PipelineLayoutScheme::Compact)
+    {
+        // Program the user data register only if the current user data layout base matches that of the given
+        // layout.  Otherwise, what's happening is that the application is pushing constants for a future
+        // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant because
+        // a future vkCmdBindPipeline will reprogram the user data registers during the rebase.
+        if (PalPipelineBindingOwnedBy(palBindPoint, apiBindPoint) &&
+            (pBindState->userDataLayout.compact.pushConstRegBase == userDataLayout.compact.pushConstRegBase) &&
+            (pBindState->userDataLayout.compact.pushConstRegCount >= (startInDwords + lengthInDwords)))
+        {
+            utils::IterateMask deviceGroup(m_curDeviceMask);
+            do
+            {
+                const uint32_t deviceIdx = deviceGroup.Index();
+
+                PalCmdBuffer(deviceIdx)->CmdSetUserData(
+                    palBindPoint,
+                    pBindState->userDataLayout.compact.pushConstRegBase + startInDwords,
+                    lengthInDwords,
+                    pUserDataPtr);
+            }
+            while (deviceGroup.IterateNext());
+        }
+    }
+    else if (userDataLayout.scheme == PipelineLayoutScheme::Indirect)
     {
         utils::IterateMask deviceGroup(m_curDeviceMask);
+
         do
         {
             const uint32_t deviceIdx = deviceGroup.Index();
 
+            Pal::gpusize gpuAddr;
+
+            void* pCpuAddr = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(
+                userDataLayout.indirect.pushConstSizeInDword,
+                m_pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32_t),
+                &gpuAddr);
+
+            memcpy(pCpuAddr, pUserData, userDataLayout.indirect.pushConstSizeInDword * sizeof(uint32_t));
+
+            const uint32_t gpuAddrLow = static_cast<uint32_t>(gpuAddr);
+
             PalCmdBuffer(deviceIdx)->CmdSetUserData(
                 palBindPoint,
-                pBindState->userDataLayout.pushConstRegBase + startInDwords,
-                lengthInDwords,
-                pUserDataPtr);
+                userDataLayout.indirect.pushConstPtrRegBase,
+                PipelineLayout::SetPtrRegCount,
+                &gpuAddrLow);
         }
         while (deviceGroup.IterateNext());
+    }
+    else
+    {
+        VK_NEVER_CALLED();
     }
 }
 
@@ -7293,7 +8353,19 @@ void CmdBuffer::ValidateStates()
             {
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
-                PalCmdBuffer(deviceIdx)->CmdSetViewports(PerGpuState(deviceIdx)->viewport);
+                const GraphicsPipeline* pGraphicsPipeline = m_allGpuState.pGraphicsPipeline;
+
+                const bool isPointSizeUsed = pGraphicsPipeline->IsPointSizeUsed();
+                Pal::ViewportParams    viewport = PerGpuState(deviceIdx)->viewport;
+                if (isPointSizeUsed)
+                {
+                    // The default vaule is 1.0f which means the guardband is disabled.
+                    // Values more than 1.0f enable guardband.
+                    viewport.horzDiscardRatio = 10.0f;
+                    viewport.vertDiscardRatio = 10.0f;
+                }
+
+                PalCmdBuffer(deviceIdx)->CmdSetViewports(viewport);
 
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
             }
@@ -7433,11 +8505,69 @@ void CmdBuffer::ValidateStates()
 
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
             }
+
+            if (m_allGpuState.dirtyGraphics.samplePattern && (m_allGpuState.samplePattern.sampleCount != 0))
+            {
+                PalCmdBuffer(deviceGroup.Index())->CmdSetMsaaQuadSamplePattern(
+                    m_allGpuState.samplePattern.sampleCount,
+                    m_allGpuState.samplePattern.locations);
+            }
         }
         while (deviceGroup.IterateNext());
 
         // Clear the dirty bits
         m_allGpuState.dirtyGraphics.u32All = 0;
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::ValidateSamplePattern(
+    uint32_t       sampleCount,
+    SamplePattern* pSamplePattern)
+{
+    if (m_palQueueType == Pal::QueueTypeUniversal)
+    {
+        // if the current sample count is different than the current state,
+        // use the sample pattern passed in or the default one
+        if (sampleCount != m_allGpuState.samplePattern.sampleCount)
+        {
+            const Pal::MsaaQuadSamplePattern* pLocations;
+
+            if (pSamplePattern != nullptr && (pSamplePattern->sampleCount > 0))
+            {
+                VK_ASSERT(sampleCount == pSamplePattern->sampleCount);
+
+                PalCmdSetMsaaQuadSamplePattern(pSamplePattern->sampleCount, pSamplePattern->locations);
+                pLocations = &pSamplePattern->locations;
+            }
+            else
+            {
+                pLocations = Device::GetDefaultQuadSamplePattern(sampleCount);
+                PalCmdSetMsaaQuadSamplePattern(sampleCount, *pLocations);
+            }
+
+            // If the current state doesn't have a valid sample count/pattern, update to this and clear the dirty bit.
+            // Otherwise, we have to assume that a draw may be issued next depending on the previous sample pattern.
+            if (m_allGpuState.samplePattern.sampleCount == 0)
+            {
+                m_allGpuState.samplePattern.sampleCount = sampleCount;
+                m_allGpuState.samplePattern.locations = *pLocations;
+                m_allGpuState.dirtyGraphics.samplePattern = 0;
+            }
+            else
+            {
+                m_allGpuState.dirtyGraphics.samplePattern = 1;
+            }
+        }
+        // set current sample pattern in the hardware if it hasn't been set yet
+        else if (m_allGpuState.dirtyGraphics.samplePattern)
+        {
+            PalCmdSetMsaaQuadSamplePattern(
+                m_allGpuState.samplePattern.sampleCount,
+                m_allGpuState.samplePattern.locations);
+
+            m_allGpuState.dirtyGraphics.samplePattern = 0;
+        }
     }
 }
 
@@ -8649,6 +9779,21 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarker2AMD(
     uint32_t                                    marker)
 {
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->WriteBufferMarker(stage, dstBuffer, dstOffset, marker);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderingKHR(
+    VkCommandBuffer           commandBuffer,
+    const VkRenderingInfoKHR* pRenderingInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BeginRendering(pRenderingInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderingKHR(
+    VkCommandBuffer           commandBuffer)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->EndRendering();
 }
 
 // =====================================================================================================================

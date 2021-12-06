@@ -288,12 +288,13 @@ VkResult Fence::RestoreFence(
     if ((m_flags.isPermanence == 0) && m_flags.isOpened)
     {
         m_pPalTemporaryFences->Destroy();
-        m_pPalTemporaryFences = nullptr;
+
         m_flags.isPermanence  = 1;
         m_flags.isOpened      = 0;
 
         VkAllocationCallbacks* pAllocator = pDevice->VkInstance()->GetAllocCallbacks();
         pAllocator->pfnFree(pAllocator->pUserData, m_pPalTemporaryFences);
+        m_pPalTemporaryFences = nullptr;
     }
 
     return ret;

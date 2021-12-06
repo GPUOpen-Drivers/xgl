@@ -376,6 +376,8 @@ vkSignalSemaphoreKHR                                @device     @dext(KHR_timeli
 vkCmdBeginConditionalRenderingEXT                   @device     @dext(EXT_conditional_rendering)
 vkCmdEndConditionalRenderingEXT                     @device     @dext(EXT_conditional_rendering)
 
+vkGetPhysicalDeviceToolPropertiesEXT                @device     @dext(EXT_tooling_info)
+
 vkCmdSetEvent2KHR                                   @device     @dext(KHR_synchronization2)
 vkCmdResetEvent2KHR                                 @device     @dext(KHR_synchronization2)
 vkCmdWaitEvents2KHR                                 @device     @dext(KHR_synchronization2)
@@ -383,6 +385,9 @@ vkCmdPipelineBarrier2KHR                            @device     @dext(KHR_synchr
 vkCmdWriteTimestamp2KHR                             @device     @dext(KHR_synchronization2)
 vkQueueSubmit2KHR                                   @device     @dext(KHR_synchronization2)
 vkCmdWriteBufferMarker2AMD                          @device     @dext(KHR_synchronization2)
+
+vkCmdBeginRenderingKHR                              @device     @dext(KHR_dynamic_rendering)
+vkCmdEndRenderingKHR                                @device     @dext(KHR_dynamic_rendering)
 
 vkCmdSetCullModeEXT                                 @device     @dext(EXT_extended_dynamic_state)
 vkCmdSetFrontFaceEXT                                @device     @dext(EXT_extended_dynamic_state)
@@ -411,4 +416,8 @@ vkCmdCopyBufferToImage2KHR                          @device     @dext(KHR_copy_c
 vkCmdCopyImage2KHR                                  @device     @dext(KHR_copy_commands2)
 vkCmdCopyImageToBuffer2KHR                          @device     @dext(KHR_copy_commands2)
 vkCmdResolveImage2KHR                               @device     @dext(KHR_copy_commands2)
+
+vkGetDeviceBufferMemoryRequirementsKHR              @device     @dext(KHR_maintenance4)
+vkGetDeviceImageMemoryRequirementsKHR               @device     @dext(KHR_maintenance4)
+vkGetDeviceImageSparseMemoryRequirementsKHR         @device     @dext(KHR_maintenance4)
 

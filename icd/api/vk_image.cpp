@@ -198,7 +198,8 @@ Image::Image(
         barrierPolicyFormat,
         extraLayoutUsages),
     m_pSwapChain(nullptr),
-    m_ResourceKey(resourceKey)
+    m_ResourceKey(resourceKey),
+    m_memoryRequirements{}
 {
     m_internalFlags.u32All = internalFlags.u32All;
 
@@ -289,7 +290,7 @@ static void ConvertImageCreateInfo(
     pPalCreateInfo->samples          = pCreateInfo->samples;
     pPalCreateInfo->fragments        = pCreateInfo->samples;
     pPalCreateInfo->tiling           = VkToPalImageTiling(pCreateInfo->tiling);
-    pPalCreateInfo->tilingOptMode    = settings.imageTilingOptMode;
+    pPalCreateInfo->tilingOptMode    = pDevice->GetTilingOptMode();
 
     if ((pCreateInfo->imageType == VK_IMAGE_TYPE_3D) &&
         (pCreateInfo->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT)))
@@ -349,6 +350,7 @@ static VkResult InitSparseVirtualMemory(
 
     pSparseMemCreateInfo->flags.globalGpuVa  = pDevice->IsGlobalGpuVaEnabled();
     pSparseMemCreateInfo->flags.virtualAlloc = 1;
+    pSparseMemCreateInfo->flags.cpuInvisible = (palReqs.flags.cpuAccess ? 0 : 1);
     pSparseMemCreateInfo->alignment          = Util::RoundUpToMultiple(sparseAllocGranularity, palReqs.alignment);
     pSparseMemCreateInfo->size               = Util::RoundUpToMultiple(palReqs.size, pSparseMemCreateInfo->alignment);
     pSparseMemCreateInfo->heapCount          = 0;
@@ -1219,7 +1221,7 @@ void GenerateBindIndices(
 // =====================================================================================================================
 // Binds memory to this image.
 VkResult Image::BindMemory(
-    const Device*      pDevice,
+    Device*            pDevice,
     VkDeviceMemory     mem,
     VkDeviceSize       memOffset,
     uint32_t           deviceIndexCount,
@@ -1243,80 +1245,73 @@ VkResult Image::BindMemory(
         m_internalFlags.boundToExternalMemory = 1;
     }
 
-    VkMemoryRequirements reqs = {};
+    VkMemoryRequirements reqs = GetMemoryRequirements();
 
-    if (GetMemoryRequirements(pDevice, &reqs) == VK_SUCCESS)
+    Pal::Result result = Pal::Result::Success;
+
+    const uint32_t numDevices = pDevice->NumPalDevices();
+
+    uint8_t bindIndices[MaxPalDevices];
+    GenerateBindIndices(numDevices,
+        bindIndices,
+        deviceIndexCount,
+        pDeviceIndices,
+        rectCount,
+        pRects,
+        ((pMemory == nullptr) ? false : pMemory->IsMultiInstance()));
+
+    for (uint32_t localDeviceIdx = 0; localDeviceIdx < numDevices; localDeviceIdx++)
     {
-        Pal::Result result = Pal::Result::Success;
+        const uint32_t sourceMemInst = bindIndices[localDeviceIdx];
 
-        const uint32_t numDevices = pDevice->NumPalDevices();
+        Pal::IImage*     pPalImage      = m_perGpu[localDeviceIdx].pPalImage;
+        Pal::IGpuMemory* pGpuMem        = nullptr;
+        Pal::gpusize     baseAddrOffset = 0;
 
-        uint8_t bindIndices[MaxPalDevices];
-        GenerateBindIndices(numDevices,
-            bindIndices,
-            deviceIndexCount,
-            pDeviceIndices,
-            rectCount,
-            pRects,
-            ((pMemory == nullptr) ? false : pMemory->IsMultiInstance()));
-
-        for (uint32_t localDeviceIdx = 0; localDeviceIdx < numDevices; localDeviceIdx++)
+        if (pMemory != nullptr)
         {
-            const uint32_t sourceMemInst = bindIndices[localDeviceIdx];
+            pGpuMem = pMemory->PalMemory(localDeviceIdx, sourceMemInst);
 
-            Pal::IImage*     pPalImage      = m_perGpu[localDeviceIdx].pPalImage;
-            Pal::IGpuMemory* pGpuMem        = nullptr;
-            Pal::gpusize     baseAddrOffset = 0;
+            // The bind offset within the memory should already be pre-aligned
+            VK_ASSERT(Util::IsPow2Aligned(memOffset, reqs.alignment));
 
-            if (pMemory != nullptr)
+            VkDeviceSize baseGpuAddr = pGpuMem->Desc().gpuVirtAddr;
+
+            // If the base address of the VkMemory is not already aligned
+            if ((Util::IsPow2Aligned(baseGpuAddr, reqs.alignment) == false) &&
+                (m_internalFlags.externalD3DHandle == false))
             {
-                pGpuMem = pMemory->PalMemory(localDeviceIdx, sourceMemInst);
+                // This should only happen in situations where the image's alignment is extremely larger than
+                // the VkMemory object.
+                VK_ASSERT(pGpuMem->Desc().alignment < reqs.alignment);
 
-                // The bind offset within the memory should already be pre-aligned
-                VK_ASSERT(Util::IsPow2Aligned(memOffset, reqs.alignment));
+                // Calculate the necessary offset to make the base address align to the image's requirements.
+                baseAddrOffset = Util::Pow2Align(baseGpuAddr, reqs.alignment) - baseGpuAddr;
 
-                VkDeviceSize baseGpuAddr = pGpuMem->Desc().gpuVirtAddr;
-
-                // If the base address of the VkMemory is not already aligned
-                if ((Util::IsPow2Aligned(baseGpuAddr, reqs.alignment) == false) &&
-                    (m_internalFlags.externalD3DHandle == false))
-                {
-                    // This should only happen in situations where the image's alignment is extremely larger than
-                    // the VkMemory object.
-                    VK_ASSERT(pGpuMem->Desc().alignment < reqs.alignment);
-
-                    // Calculate the necessary offset to make the base address align to the image's requirements.
-                    baseAddrOffset = Util::Pow2Align(baseGpuAddr, reqs.alignment) - baseGpuAddr;
-
-                    // Verify that we allocated sufficient padding to account for this offset
-                    VK_ASSERT(baseAddrOffset <= CalcBaseAddrSizePadding(*pDevice, reqs));
-                }
-
-                // After applying any necessary base address offset, the full GPU address should be aligned
-                VK_ASSERT(Util::IsPow2Aligned(baseGpuAddr + baseAddrOffset + memOffset, reqs.alignment));
-
-                if (pDevice->GetEnabledFeatures().appControlledMemPriority == false)
-                {
-                    pMemory->ElevatePriority(m_priority);
-                }
+                // Verify that we allocated sufficient padding to account for this offset
+                VK_ASSERT(baseAddrOffset <= CalcBaseAddrSizePadding(*pDevice, reqs));
             }
 
-            result = pPalImage->BindGpuMemory(pGpuMem, baseAddrOffset + memOffset);
+            // After applying any necessary base address offset, the full GPU address should be aligned
+            VK_ASSERT(Util::IsPow2Aligned(baseGpuAddr + baseAddrOffset + memOffset, reqs.alignment));
 
-            if (result == Pal::Result::Success)
+            if (pDevice->GetEnabledFeatures().appControlledMemPriority == false)
             {
-                // Record the private base address offset.  This is necessary for things like subresource layout
-                // calculation for linear images.
-                m_perGpu[localDeviceIdx].baseAddrOffset = baseAddrOffset;
+                pMemory->ElevatePriority(m_priority);
             }
         }
 
-        return PalToVkResult(result);
+        result = pPalImage->BindGpuMemory(pGpuMem, baseAddrOffset + memOffset);
+
+        if (result == Pal::Result::Success)
+        {
+            // Record the private base address offset.  This is necessary for things like subresource layout
+            // calculation for linear images.
+            m_perGpu[localDeviceIdx].baseAddrOffset = baseAddrOffset;
+        }
     }
-    else
-    {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
+
+    return PalToVkResult(result);
 }
 
 // =====================================================================================================================
@@ -1450,7 +1445,7 @@ VkResult Image::GetSubresourceLayout(
 // =====================================================================================================================
 // Implementation of vkGetImageSparseMemoryRequirements
 void Image::GetSparseMemoryRequirements(
-    const Device*                                       pDevice,
+    Device*                                             pDevice,
     uint32_t*                                           pNumRequirements,
     utils::ArrayView<VkSparseImageMemoryRequirements>   sparseMemoryRequirements)
 {
@@ -1501,10 +1496,7 @@ void Image::GetSparseMemoryRequirements(
     {
         const uint32_t       aspectsToReportCount = Util::Min(*pNumRequirements, usedAspectsCount);
         uint32_t             reportedAspectsCount = 0;
-        VkMemoryRequirements memReqs = {};
-
-        VkResult result = GetMemoryRequirements(pDevice, &memReqs);
-        VK_ASSERT(result == VK_SUCCESS);
+        VkMemoryRequirements memReqs = GetMemoryRequirements();
 
         // Get the memory layout of the sparse image
 
@@ -1620,9 +1612,8 @@ void Image::GetSparseMemoryRequirements(
 
 // =====================================================================================================================
 // Get the image's memory requirements
-VkResult Image::GetMemoryRequirements(
-    const Device*         pDevice,
-    VkMemoryRequirements* pReqs)
+void Image::SetMemoryRequirementsAtCreate(
+    const Device*         pDevice)
 {
     const bool                 isSparse           = IsSparse();
     Pal::GpuMemoryRequirements palReqs            = {};
@@ -1642,16 +1633,16 @@ VkResult Image::GetMemoryRequirements(
 
     if (isSparse)
     {
-        pReqs->alignment = Util::RoundUpToMultiple(virtualGranularity, palReqs.alignment);
-        pReqs->size      = Util::RoundUpToMultiple(palReqs.size, virtualGranularity);
+        m_memoryRequirements.alignment = Util::RoundUpToMultiple(virtualGranularity, palReqs.alignment);
+        m_memoryRequirements.size      = Util::RoundUpToMultiple(palReqs.size, virtualGranularity);
     }
     else
     {
-        pReqs->alignment = palReqs.alignment;
-        pReqs->size      = palReqs.size;
+        m_memoryRequirements.alignment = palReqs.alignment;
+        m_memoryRequirements.size      = palReqs.size;
     }
 
-    pReqs->memoryTypeBits = 0;
+    m_memoryRequirements.memoryTypeBits = 0;
 
     for (uint32_t i = 0; i < palReqs.heapCount; ++i)
     {
@@ -1659,59 +1650,193 @@ VkResult Image::GetMemoryRequirements(
 
         if (pDevice->GetVkTypeIndexBitsFromPalHeap(palReqs.heaps[i], &typeIndexBits))
         {
-            pReqs->memoryTypeBits |= typeIndexBits;
+            m_memoryRequirements.memoryTypeBits |= typeIndexBits;
         }
     }
 
     // Limit heaps to those compatible with pinned system memory
     if (m_internalFlags.externalPinnedHost)
     {
-        pReqs->memoryTypeBits &= pDevice->GetPinnedSystemMemoryTypes();
+        m_memoryRequirements.memoryTypeBits &= pDevice->GetPinnedSystemMemoryTypes();
 
-        VK_ASSERT(pReqs->memoryTypeBits != 0);
+        VK_ASSERT(m_memoryRequirements.memoryTypeBits != 0);
     }
 
     if (m_internalFlags.externallyShareable)
     {
-        pReqs->memoryTypeBits &= pDevice->GetMemoryTypeMaskForExternalSharing();
+        m_memoryRequirements.memoryTypeBits &= pDevice->GetMemoryTypeMaskForExternalSharing();
     }
 
     if (m_internalFlags.isProtected)
     {
         // If the image is protected only keep the protected type
-        pReqs->memoryTypeBits &= pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_PROTECTED_BIT);
+        m_memoryRequirements.memoryTypeBits &= pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_PROTECTED_BIT);
     }
     else
     {
         // If the image isn't protected remove the protected types
-        pReqs->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_PROTECTED_BIT);
+        m_memoryRequirements.memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_PROTECTED_BIT);
     }
 
     if (pDevice->GetEnabledFeatures().deviceCoherentMemory == false)
     {
-        // If the state of the device coherent memory feature (defined by the extension VK_AMD_device_coherent_memory) is disabled,
-        // remove the device coherent memory type
-        pReqs->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD);
+        // If the state of the device coherent memory feature (defined by the extension VK_AMD_device_coherent_memory)
+        // is disabled, remove the device coherent memory type
+        m_memoryRequirements.memoryTypeBits &=
+            ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD);
     }
 
-    // Add an extra memory padding. This can be enabled while capturing GFXR traces and disabled later. Capturing with this setting
-    // enabled helps in replaying GFXR traces. When this setting is not used while capture, GFXR might return a fatal error while replaying
-    // with different DCC threshold values. This is caused because gfxreconstruct (just like vktrace used to) records the memory sizes and
-    // offsets at the time of capture and always resends the same values during replay.
+    // Add an extra memory padding. This can be enabled while capturing GFXR traces and disabled later. Capturing with
+    // this setting enabled helps in replaying GFXR traces. When this setting is not used while capture, GFXR might
+    // return a fatal error while replaying with different DCC threshold values. This is caused because gfxreconstruct
+    // (just like vktrace used to) records the memory sizes and offsets at the time of capture and always resends the
+    // same values during replay.
     if (pDevice->GetRuntimeSettings().addMemoryPaddingToImageMemoryRequirements)
     {
-        pReqs->size += (uint64_t)((pDevice->GetRuntimeSettings().memoryPaddingFactorForImageMemoryRequirements) * (pReqs->size));
+        m_memoryRequirements.size +=
+            (uint64_t)((pDevice->GetRuntimeSettings().memoryPaddingFactorForImageMemoryRequirements) *
+            (m_memoryRequirements.size));
     }
 
     // Adjust the size to account for internal padding required to align the base address
-    pReqs->size += CalcBaseAddrSizePadding(*pDevice, *pReqs);
+    m_memoryRequirements.size += CalcBaseAddrSizePadding(*pDevice, m_memoryRequirements);
 
     if (isSparse)
     {
-        pReqs->size = Util::RoundUpToMultiple(palReqs.size, pReqs->alignment);
+        m_memoryRequirements.size = Util::RoundUpToMultiple(palReqs.size, m_memoryRequirements.alignment);
+    }
+}
+
+// =====================================================================================================================
+// Calculate image's memory requirements from VkImageCreateInfo
+void Image::CalculateMemoryRequirements(
+    Device*                                   pDevice,
+    const VkDeviceImageMemoryRequirementsKHR* pInfo,
+    VkMemoryRequirements2*                    pMemoryRequirements)
+{
+    VkImage image;
+    const VkAllocationCallbacks* pAllocCallbacks = pDevice->VkInstance()->GetAllocCallbacks();
+
+    VkResult result = Image::Create(pDevice, pInfo->pCreateInfo, pAllocCallbacks, &image);
+
+    if (result == VK_SUCCESS)
+    {
+        Image* pImage = Image::ObjectFromHandle(image);
+
+        pImage->SetMemoryRequirementsAtCreate(pDevice);
+
+        VkMemoryDedicatedRequirements* pMemDedicatedRequirements =
+            static_cast<VkMemoryDedicatedRequirements*>(pMemoryRequirements->pNext);
+
+        if ((pMemDedicatedRequirements != nullptr) &&
+            (pMemDedicatedRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS))
+        {
+            pMemDedicatedRequirements->prefersDedicatedAllocation  = pImage->DedicatedMemoryRequired();
+            pMemDedicatedRequirements->requiresDedicatedAllocation = pImage->DedicatedMemoryRequired();
+        }
+
+        if (pDevice->GetEnabledFeatures().strictImageSizeRequirements &&
+            Formats::IsDepthStencilFormat(pInfo->pCreateInfo->format))
+        {
+            CalculateAlignedMemoryRequirements(
+                pDevice,
+                pInfo->pCreateInfo,
+                pImage);
+        }
+
+        pMemoryRequirements->memoryRequirements = pImage->GetMemoryRequirements();
+
+        pImage->Destroy(pDevice, pAllocCallbacks);
+    }
+}
+
+// =====================================================================================================================
+// Calculate image's memory requirements from VkImageCreateInfo for depth/stencil formats
+void Image::CalculateAlignedMemoryRequirements(
+    Device*                                   pDevice,
+    const VkImageCreateInfo*                  pCreateInfo,
+    Image*                                    pImage)
+{
+    VkImage image;
+    const VkAllocationCallbacks* pAllocCallbacks = pDevice->VkInstance()->GetAllocCallbacks();
+    VkImageCreateInfo createInfo = *pCreateInfo;
+    VkMemoryRequirements memoryRequirements = pImage->GetMemoryRequirements();
+
+    if (!IsPowerOfTwo(pCreateInfo->extent.width))
+    {
+        // Round width down to the nearest power of 2.
+        createInfo.extent.width = Pow2Pad(pCreateInfo->extent.width) >> 1;
+
+        VkResult createResult = Image::Create(pDevice, &createInfo, pAllocCallbacks, &image);
+
+        if (createResult == VK_SUCCESS)
+        {
+            Image* pPow2AlignedImage = Image::ObjectFromHandle(image);
+
+            pPow2AlignedImage->SetMemoryRequirementsAtCreate(pDevice);
+
+            VkMemoryRequirements pow2MemoryRequirements = pPow2AlignedImage->GetMemoryRequirements();
+
+            pPow2AlignedImage->Destroy(pDevice, pAllocCallbacks);
+
+            if (pow2MemoryRequirements.size > memoryRequirements.size)
+            {
+                memoryRequirements.size = pow2MemoryRequirements.size;
+            }
+        }
+
+        createInfo.extent.width = pCreateInfo->extent.width;
     }
 
-    return VK_SUCCESS;
+    if (!IsPowerOfTwo(pCreateInfo->extent.height))
+    {
+        // Round height down to the nearest power of 2.
+        createInfo.extent.height = Pow2Pad(pCreateInfo->extent.height) >> 1;
+
+        VkResult createResult = Image::Create(pDevice, &createInfo, pAllocCallbacks, &image);
+
+        if (createResult == VK_SUCCESS)
+        {
+            Image* pPow2AlignedImage = Image::ObjectFromHandle(image);
+
+            pPow2AlignedImage->SetMemoryRequirementsAtCreate(pDevice);
+
+            VkMemoryRequirements pow2MemoryRequirements = pPow2AlignedImage->GetMemoryRequirements();
+
+            pPow2AlignedImage->Destroy(pDevice, pAllocCallbacks);
+
+            if (pow2MemoryRequirements.size > memoryRequirements.size)
+            {
+                memoryRequirements.size = pow2MemoryRequirements.size;
+            }
+        }
+
+        createInfo.extent.height = pCreateInfo->extent.height;
+    }
+
+    pImage->SetMemoryRequirements(memoryRequirements);
+}
+
+// =====================================================================================================================
+// Calculate sparse image's memory requirements from VkImageCreateInfo
+void Image::CalculateSparseMemoryRequirements(
+    Device*                                   pDevice,
+    const VkDeviceImageMemoryRequirementsKHR* pInfo,
+    uint32_t*                                 pSparseMemoryRequirementCount,
+    VkSparseImageMemoryRequirements2*         pSparseMemoryRequirements)
+{
+    VkImage image;
+
+    VkResult result = pDevice->CreateImage(pInfo->pCreateInfo, pDevice->VkInstance()->GetAllocCallbacks(), &image);
+
+    if (result == VK_SUCCESS)
+    {
+        Image::ObjectFromHandle(image)->GetSparseMemoryRequirements(
+            pDevice,
+            pSparseMemoryRequirementCount,
+            utils::ArrayView<VkSparseImageMemoryRequirements>(&pSparseMemoryRequirements->memoryRequirements));
+        Image::ObjectFromHandle(image)->Destroy(pDevice, pDevice->VkInstance()->GetAllocCallbacks());
+    }
 }
 
 // =====================================================================================================================
@@ -1786,7 +1911,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory(
     VkDeviceMemory                              memory,
     VkDeviceSize                                memoryOffset)
 {
-    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
 
     return Image::ObjectFromHandle(image)->BindMemory(pDevice, memory, memoryOffset, 0, nullptr, 0, nullptr);
 }
@@ -1797,9 +1922,9 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements(
     VkImage                                     image,
     VkMemoryRequirements*                       pMemoryRequirements)
 {
-    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
 
-    Image::ObjectFromHandle(image)->GetMemoryRequirements(pDevice, pMemoryRequirements);
+    *pMemoryRequirements = Image::ObjectFromHandle(image)->GetMemoryRequirements();
 }
 
 // =====================================================================================================================
@@ -1809,7 +1934,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements(
     uint32_t*                                   pSparseMemoryRequirementCount,
     VkSparseImageMemoryRequirements*            pSparseMemoryRequirements)
 {
-    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
 
     Image::ObjectFromHandle(image)->GetSparseMemoryRequirements(
         pDevice,
@@ -1838,11 +1963,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements2(
     const VkImageMemoryRequirementsInfo2*       pInfo,
     VkMemoryRequirements2*                      pMemoryRequirements)
 {
-    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
 
-    VkMemoryRequirements* pMemReq = &pMemoryRequirements->memoryRequirements;
     Image* pImage = Image::ObjectFromHandle(pInfo->image);
-    pImage->GetMemoryRequirements(pDevice, pMemReq);
+    pMemoryRequirements->memoryRequirements = pImage->GetMemoryRequirements();
 
     VkMemoryDedicatedRequirements* pMemDedicatedRequirements =
         static_cast<VkMemoryDedicatedRequirements*>(pMemoryRequirements->pNext);
@@ -1862,7 +1986,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements2(
     uint32_t*                                       pSparseMemoryRequirementCount,
     VkSparseImageMemoryRequirements2*               pSparseMemoryRequirements)
 {
-    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
 
     Image* pImage = Image::ObjectFromHandle(pInfo->image);
     auto memReqsView = utils::ArrayView<VkSparseImageMemoryRequirements>(

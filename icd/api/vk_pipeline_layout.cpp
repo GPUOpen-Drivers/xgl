@@ -28,8 +28,10 @@
  * @brief Contains implementation of Vulkan pipeline layout objects.
  ***********************************************************************************************************************
  */
-#include "include/vk_pipeline_layout.h"
+
+#include "include/graphics_pipeline_common.h"
 #include "include/vk_descriptor_set_layout.h"
+#include "include/vk_pipeline_layout.h"
 #include "include/vk_shader.h"
 #include "include/vk_sampler.h"
 #include "include/vk_utils.h"
@@ -112,6 +114,81 @@ VkResult PipelineLayout::ConvertCreateInfo(
     PipelineInfo*                     pPipelineInfo,
     SetUserDataLayout*                pSetUserDataLayouts)
 {
+    VkResult                   result                         = VK_SUCCESS;
+    uint32_t                   pushConstantsSizeInBytes       = 0;
+    uint32_t                   pushConstantsUserDataNodeCount = 0;
+    const PipelineLayoutScheme scheme                         = DeterminePipelineLayoutScheme(pDevice, pIn);
+
+    pInfo->setCount = pIn->setLayoutCount;
+
+    ProcessPushConstantsInfo(
+        pIn,
+        &pushConstantsSizeInBytes,
+        &pushConstantsUserDataNodeCount);
+
+    if (scheme == PipelineLayoutScheme::Indirect)
+    {
+        result = BuildIndirectSchemeInfo(
+            pDevice,
+            pIn,
+            pushConstantsSizeInBytes,
+            pInfo,
+            pPipelineInfo,
+            pSetUserDataLayouts);
+    }
+    else if (scheme == PipelineLayoutScheme::Compact)
+    {
+        result = BuildCompactSchemeInfo(
+            pDevice,
+            pIn,
+            pushConstantsSizeInBytes,
+            pushConstantsUserDataNodeCount,
+            pInfo,
+            pPipelineInfo,
+            pSetUserDataLayouts);
+    }
+    else
+    {
+        VK_NEVER_CALLED();
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+void PipelineLayout::ProcessPushConstantsInfo(
+    const VkPipelineLayoutCreateInfo* pIn,
+    uint32_t*                         pPushConstantsSizeInBytes,
+    uint32_t*                         pPushConstantsUserDataNodeCount)
+{
+    uint32_t pushConstantsSizeInBytes       = 0;
+    uint32_t pushConstantsUserDataNodeCount = 1;
+
+    for (uint32_t i = 0; i < pIn->pushConstantRangeCount; ++i)
+    {
+        const VkPushConstantRange* pRange = &pIn->pPushConstantRanges[i];
+
+        // Test if this push constant range is active in at least one stage
+        if (pRange->stageFlags != 0)
+        {
+            pushConstantsSizeInBytes = Util::Max(pushConstantsSizeInBytes, pRange->offset + pRange->size);
+        }
+    }
+
+    *pPushConstantsSizeInBytes       = pushConstantsSizeInBytes;
+    *pPushConstantsUserDataNodeCount = pushConstantsUserDataNodeCount;
+}
+
+// =====================================================================================================================
+VkResult PipelineLayout::BuildCompactSchemeInfo(
+    const Device*                     pDevice,
+    const VkPipelineLayoutCreateInfo* pIn,
+    const uint32_t                    pushConstantsSizeInBytes,
+    const uint32_t                    pushConstantsUserDataNodeCount,
+    Info*                             pInfo,
+    PipelineInfo*                     pPipelineInfo,
+    SetUserDataLayout*                pSetUserDataLayouts)
+{
     // We currently allocate user data registers for various resources in the following fashion:
     // First user data registers will hold the descriptor set bindings in increasing order by set index.
     // For each descriptor set binding we first store the dynamic descriptor data (if there's dynamic section data)
@@ -120,39 +197,28 @@ VkResult PipelineLayout::ConvertCreateInfo(
     // Finally, the vertex buffer table pointer is in the last user data register when applicable.
     // This allocation allows the descriptor set bindings to easily persist across pipeline switches.
 
-    VkResult result = VK_SUCCESS;
+    VkResult      result          = VK_SUCCESS;
+    auto*         pUserDataLayout = &pInfo->userDataLayout.compact;
 
-    pPipelineInfo->numRsrcMapNodes        = 0;
-    pPipelineInfo->numDescRangeValueNodes = 0;
+    memset(pPipelineInfo,            0, sizeof(PipelineInfo));
+    memset(&(pInfo->userDataLayout), 0, sizeof(UserDataLayout));
+    pInfo->userDataLayout.scheme = PipelineLayoutScheme::Compact;
 
-    // Always allocates:
-    // 1 extra user data node for the vertex buffer table pointer
-    // 1 extra user data node for push constant
-    pPipelineInfo->numUserDataNodes   = 2;
-
-    pInfo->setCount = pIn->setLayoutCount;
-
-    pInfo->userDataRegCount      = 0;
-
-    pInfo->userDataLayout.transformFeedbackRegBase  = 0;
-    pInfo->userDataLayout.transformFeedbackRegCount = 0;
-    pInfo->userDataLayout.pushConstRegBase          = 0;
-    pInfo->userDataLayout.pushConstRegCount         = 0;
-    pInfo->userDataLayout.setBindingRegCount        = 0;
-    pInfo->userDataLayout.setBindingRegBase         = 0;
+    // Always allocates 1 extra user data node for the vertex buffer table pointer
+    pPipelineInfo->numUserDataNodes = 1;
 
     if (pDevice->GetRuntimeSettings().enableEarlyCompile)
     {
         // Early compile mode will enable uber-fetch shader and spec constant buffer on vertex shader and
         // fragment shader implicitly. so we need three reserved node.
         pPipelineInfo->numUserDataNodes += 3;
-        pInfo->userDataRegCount += 6; // Each buffer consume 2 user data register now.
+        pInfo->userDataRegCount         += 6; // Each buffer consume 2 user data register now.
     }
     else if (pDevice->GetRuntimeSettings().enableUberFetchShader)
     {
         // Reserve one user data nodes for uber-fetch shader.
         pPipelineInfo->numUserDataNodes += 1;
-        pInfo->userDataRegCount += 2;
+        pInfo->userDataRegCount         += 2;
     }
 
     VK_ASSERT(pIn->setLayoutCount <= MaxDescriptorSets);
@@ -161,9 +227,9 @@ VkResult PipelineLayout::ConvertCreateInfo(
     uint32_t totalDynDescCount = 0;
 
     // Populate user data layouts for each descriptor set that is active
-    pInfo->userDataLayout.setBindingRegBase = pInfo->userDataRegCount;
+    pUserDataLayout->setBindingRegBase = pInfo->userDataRegCount;
 
-    for (uint32_t i = 0; i < pInfo->setCount; ++i)
+    for (uint32_t i = 0; i < pIn->setLayoutCount; ++i)
     {
         SetUserDataLayout* pSetUserData = &pSetUserDataLayouts[i];
 
@@ -173,7 +239,7 @@ VkResult PipelineLayout::ConvertCreateInfo(
         pSetUserData->setPtrRegOffset      = InvalidReg;
         pSetUserData->dynDescDataRegOffset = 0;
         pSetUserData->dynDescCount         = setLayoutInfo.numDynamicDescriptors;
-        pSetUserData->firstRegOffset       = pInfo->userDataRegCount - pInfo->userDataLayout.setBindingRegBase;
+        pSetUserData->firstRegOffset       = pInfo->userDataRegCount - pUserDataLayout->setBindingRegBase;
         pSetUserData->totalRegCount        = 0;
 
         // Test if this set is active in at least one stage
@@ -208,7 +274,7 @@ VkResult PipelineLayout::ConvertCreateInfo(
 
                 // In this case we also reserve the user data for the set pointer
                 pSetUserData->setPtrRegOffset = pSetUserData->firstRegOffset + pSetUserData->totalRegCount;
-                pSetUserData->totalRegCount   += SetPtrRegCount;
+                pSetUserData->totalRegCount  += SetPtrRegCount;
             }
         }
 
@@ -228,37 +294,26 @@ VkResult PipelineLayout::ConvertCreateInfo(
     }
 
     // Calculate total number of user data regs used for active descriptor set data
-    pInfo->userDataLayout.setBindingRegCount = pInfo->userDataRegCount - pInfo->userDataLayout.setBindingRegBase;
+    pUserDataLayout->setBindingRegCount = pInfo->userDataRegCount - pUserDataLayout->setBindingRegBase;
 
     VK_ASSERT(totalDynDescCount <= MaxDynamicDescriptors);
 
-    // Calculate the number of bytes needed for push constants
-    uint32_t pushConstantsSizeInBytes = 0;
-
-    for (uint32_t i = 0; i < pIn->pushConstantRangeCount; ++i)
-    {
-        const VkPushConstantRange* pRange = &pIn->pPushConstantRanges[i];
-
-        // Test if this push constant range is active in at least one stage
-        if (pRange->stageFlags != 0)
-        {
-            pushConstantsSizeInBytes = Util::Max(pushConstantsSizeInBytes, pRange->offset + pRange->size);
-        }
-    }
+    // Allocate user data for push constants
+    pPipelineInfo->numUserDataNodes += pushConstantsUserDataNodeCount;
 
     uint32_t pushConstRegCount = pushConstantsSizeInBytes / sizeof(uint32_t);
 
-    pInfo->userDataLayout.pushConstRegBase = pInfo->userDataRegCount;
-    pInfo->userDataLayout.pushConstRegCount = pushConstRegCount;
-    pInfo->userDataRegCount += pushConstRegCount;
+    pUserDataLayout->pushConstRegBase  = pInfo->userDataRegCount;
+    pUserDataLayout->pushConstRegCount = pushConstRegCount;
+    pInfo->userDataRegCount           += pushConstRegCount;
 
     // Reserve an user-data to store the VA of buffer for transform feedback.
     if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK))
     {
-        pInfo->userDataLayout.transformFeedbackRegBase = pInfo->userDataRegCount;
-        pInfo->userDataLayout.transformFeedbackRegCount = 1;
-        pInfo->userDataRegCount += pInfo->userDataLayout.transformFeedbackRegCount;
-        pPipelineInfo->numUserDataNodes += 1;
+        pUserDataLayout->transformFeedbackRegBase  = pInfo->userDataRegCount;
+        pUserDataLayout->transformFeedbackRegCount = 1;
+        pInfo->userDataRegCount                   += pUserDataLayout->transformFeedbackRegCount;
+        pPipelineInfo->numUserDataNodes           += 1;
     }
 
     // In case we need an internal vertex buffer table, add nodes required for its entries, and its set pointer.
@@ -278,6 +333,173 @@ VkResult PipelineLayout::ConvertCreateInfo(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+VkResult PipelineLayout::BuildIndirectSchemeInfo(
+    const Device*                     pDevice,
+    const VkPipelineLayoutCreateInfo* pIn,
+    const uint32_t                    pushConstantsSizeInBytes,
+    Info*                             pInfo,
+    PipelineInfo*                     pPipelineInfo,
+    SetUserDataLayout*                pSetUserDataLayouts)
+{
+    // Indirect mode is designed for the case that the pipeline layout only contains part of layout information of the
+    // final executable pipeline. So that user data is used in a conservative way to make sure that this pipeline layout
+    // is always compatible with other layouts which may contain the descriptor which is not known currently.
+    //
+    // The user data registers for various resources is allocated in the following fashion:
+    // 1. one user data entry for the vertex buffer table pointer
+    // 2. one user data entry for the push constant buffer pointer
+    // 3. one user data entry for transform feedback buffer (if extension is enabled)
+    // 5. MaxDescriptorSets sets of user data entries which store the information for each descriptor set. Each set
+    //    contains 2 user data entry: the 1st is for the dynamic descriptors and the 2nd is for static descriptors.
+    //
+    // TODO: The following features have not been supported by indirect scheme:
+    //       1. Uber-fetch shader
+    //       2. PipelineLayoutAngle mode
+
+    VK_ASSERT(pIn->setLayoutCount <= MaxDescriptorSets);
+    VK_ASSERT(pDevice->GetRuntimeSettings().pipelineLayoutMode != PipelineLayoutAngle);
+    VK_ASSERT(pDevice->GetRuntimeSettings().enableEarlyCompile == false);
+
+    VkResult      result            = VK_SUCCESS;
+    auto*         pUserDataLayout   = &pInfo->userDataLayout.indirect;
+    uint32_t      totalDynDescCount = 0;
+
+    memset(pPipelineInfo,            0, sizeof(PipelineInfo));
+    memset(&(pInfo->userDataLayout), 0, sizeof(UserDataLayout));
+    pInfo->userDataLayout.scheme = PipelineLayoutScheme::Indirect;
+
+    VK_ASSERT(totalDynDescCount <= MaxDynamicDescriptors);
+
+    // Allocate user data for vertex buffer table
+    pPipelineInfo->numUserDataNodes += 1;
+    pPipelineInfo->numRsrcMapNodes  += Pal::MaxVertexBuffers;
+    pInfo->userDataRegCount         += 1;
+
+    // Allocate user data for push constant buffer pointer
+    pUserDataLayout->pushConstPtrRegBase  = pInfo->userDataRegCount;
+    pUserDataLayout->pushConstSizeInDword = pushConstantsSizeInBytes / sizeof(uint32_t);
+    pPipelineInfo->numUserDataNodes      += 1;
+    pPipelineInfo->numRsrcMapNodes       += 1;
+    pInfo->userDataRegCount              += 1;
+
+    // Allocate user data for transform feedback buffer
+    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK))
+    {
+        pUserDataLayout->transformFeedbackRegBase = pInfo->userDataRegCount;
+        pPipelineInfo->numUserDataNodes          += 1;
+        pInfo->userDataRegCount                  += 1;
+    }
+
+    // Allocate user data for descriptor sets
+    pUserDataLayout->setBindingPtrRegBase = pInfo->userDataRegCount;
+    pInfo->userDataRegCount              += 2 * SetPtrRegCount * MaxDescriptorSets;
+
+    // This simulate the descriptor set user data register layout of compact scheme
+    // so as to fill pSetUserDataLayouts[]
+    // Indirect scheme also need to fill pSetUserDataLayouts[] because we need the data
+    // in this array to locate the descriptor set data managed by vk::CmdBuffer
+    uint32_t setBindingCompactRegBase = pUserDataLayout->setBindingPtrRegBase;
+
+    for (uint32_t i = 0; i < pIn->setLayoutCount; ++i)
+    {
+        SetUserDataLayout* pSetUserData = &pSetUserDataLayouts[i];
+
+        const DescriptorSetLayout::CreateInfo& setLayoutInfo =
+            DescriptorSetLayout::ObjectFromHandle(pIn->pSetLayouts[i])->Info();
+
+        pSetUserData->setPtrRegOffset      = InvalidReg;
+        pSetUserData->dynDescDataRegOffset = 0;
+        pSetUserData->dynDescCount         = setLayoutInfo.numDynamicDescriptors;
+        pSetUserData->firstRegOffset       = setBindingCompactRegBase - pUserDataLayout->setBindingPtrRegBase;
+        pSetUserData->totalRegCount        = 0;
+
+        if (setLayoutInfo.activeStageMask != 0)
+        {
+            // Add space for static descriptors
+            if (setLayoutInfo.sta.numRsrcMapNodes > 0)
+            {
+                pPipelineInfo->numUserDataNodes += 1;
+                pPipelineInfo->numRsrcMapNodes  += setLayoutInfo.sta.numRsrcMapNodes;
+
+                // Add count for FMASK nodes
+                if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
+                {
+                    pPipelineInfo->numRsrcMapNodes += setLayoutInfo.sta.numRsrcMapNodes;
+                }
+            }
+
+            // Add space for immutable sampler descriptor storage needed by the set
+            pPipelineInfo->numDescRangeValueNodes += setLayoutInfo.imm.numDescriptorValueNodes;
+
+            // Add space for dynamic descriptors
+            if (setLayoutInfo.dyn.numRsrcMapNodes > 0)
+            {
+                pPipelineInfo->numUserDataNodes += 1;
+                pPipelineInfo->numRsrcMapNodes  += setLayoutInfo.dyn.numRsrcMapNodes;
+                totalDynDescCount               += setLayoutInfo.numDynamicDescriptors;
+            }
+
+            // Fill set user data layout
+            pSetUserData->dynDescDataRegOffset = pSetUserData->firstRegOffset + pSetUserData->totalRegCount;
+            pSetUserData->totalRegCount +=
+                pSetUserData->dynDescCount * DescriptorSetLayout::GetDynamicBufferDescDwSize(pDevice);
+            if (setLayoutInfo.sta.numRsrcMapNodes > 0)
+            {
+                pSetUserData->setPtrRegOffset = pSetUserData->firstRegOffset + pSetUserData->totalRegCount;
+                pSetUserData->totalRegCount += SetPtrRegCount;
+            }
+        }
+
+        setBindingCompactRegBase += pSetUserData->totalRegCount;
+    }
+
+    // Calculate the buffer size necessary for all resource mapping
+    pPipelineInfo->mappingBufferSize =
+        (pPipelineInfo->numUserDataNodes       * GetMaxResMappingRootNodeSize()) +
+        (pPipelineInfo->numRsrcMapNodes        * GetMaxResMappingNodeSize()    ) +
+        (pPipelineInfo->numDescRangeValueNodes * GetMaxStaticDescValueSize()   );
+
+    // If we go past our user data limit, we can't support this pipeline
+    if (pInfo->userDataRegCount >=
+        pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.maxUserDataEntries)
+    {
+        result = VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+PipelineLayoutScheme PipelineLayout::DeterminePipelineLayoutScheme(
+    const Device*                     pDevice,
+    const VkPipelineLayoutCreateInfo* pIn)
+{
+    PipelineLayoutScheme scheme = PipelineLayoutScheme::Compact;
+
+    const RuntimeSettings&     settings     = pDevice->GetRuntimeSettings();
+
+    switch (settings.pipelineLayoutSchemeSelectionStrategy)
+    {
+    case AppControlled:
+        {
+            scheme = PipelineLayoutScheme::Compact;
+        }
+        break;
+    case ForceCompact:
+        scheme = PipelineLayoutScheme::Compact;
+        break;
+    case ForceIndirect:
+        scheme = PipelineLayoutScheme::Indirect;
+        break;
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+
+    return scheme;
 }
 
 // =====================================================================================================================
@@ -447,7 +669,7 @@ VkResult PipelineLayout::Create(
 
             pushConstantRange.size =
                 Util::Max<uint32_t>(pushConstantRange.size,
-                                    layoutInfo.userDataLayout.pushConstRegCount * sizeof(uint32_t));
+                                    layoutInfo.userDataLayout.compact.pushConstRegCount * sizeof(uint32_t));
 
         }
     }
@@ -585,7 +807,6 @@ Vkgc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorResource;
         break;
     case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 49
     case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorImage;
         break;
@@ -598,21 +819,6 @@ Vkgc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact;
         break;
-#else
-    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-        nodeType = Vkgc::ResourceMappingNodeType::DescriptorResource;
-        break;
-    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-        nodeType = Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
-        break;
-    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-        nodeType = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
-        break;
-    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-        nodeType = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
-        break;
-#endif
-
     case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
         break;
@@ -709,15 +915,9 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
             }
             else
             {
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 49
                 pNode->node.type = (binding.dyn.dwArrayStride == 2) ?
                     Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact:
                     Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
-#else
-                pNode->node.type = (binding.dyn.dwArrayStride == 2) ?
-                    Vkgc::ResourceMappingNodeType::DescriptorBufferCompact :
-                    Vkgc::ResourceMappingNodeType::DescriptorBuffer;
-#endif
             }
             pNode->node.offsetInDwords      = userDataRegBase + binding.dyn.dwOffset;
             pNode->node.sizeInDwords        = binding.dyn.dwSize;
@@ -732,16 +932,240 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
 }
 
 // =====================================================================================================================
-// This function populates the resource mapping node details to the shader-stage specific pipeline info structure.
-VkResult PipelineLayout::BuildLlpcPipelineMapping(
+// Builds the VKGC resource mapping nodes for the static descriptors in a descriptor set
+void PipelineLayout::BuildLlpcStaticSetMapping(
+    const DescriptorSetLayout*   pLayout,
+    const uint32_t               visibility,
+    const uint32_t               setIndex,
+    Vkgc::ResourceMappingNode*   pNodes,
+    uint32_t*                    pNodeCount,
+    Vkgc::StaticDescriptorValue* pDescriptorRangeValue,
+    uint32_t*                    pDescriptorRangeCount
+    ) const
+{
+    *pNodeCount            = 0;
+    *pDescriptorRangeCount = 0;
+
+    for (uint32_t bindingIndex = 0; bindingIndex < pLayout->Info().count; ++bindingIndex)
+    {
+        const DescriptorSetLayout::BindingInfo& binding = pLayout->Binding(bindingIndex);
+
+        if (binding.sta.dwSize > 0)
+        {
+            Vkgc::ResourceMappingNode* pNode = pNodes + *pNodeCount;
+
+            pNode->type             = MapLlpcResourceNodeType(binding.info.descriptorType);
+            pNode->offsetInDwords   = binding.sta.dwOffset;
+            pNode->sizeInDwords     = binding.sta.dwSize;
+            pNode->srdRange.binding = binding.info.binding;
+            pNode->srdRange.set     =
+                setIndex;
+            (*pNodeCount)++;
+
+            if (binding.imm.dwSize > 0)
+            {
+                const uint32_t  arraySize             = binding.imm.dwSize / binding.imm.dwArrayStride;
+                const uint32_t* pImmutableSamplerData = pLayout->Info().imm.pImmutableSamplerData +
+                                                        binding.imm.dwOffset;
+
+                if (binding.bindingFlags.ycbcrConversionUsage == 0)
+                {
+                    pDescriptorRangeValue->type = Vkgc::ResourceMappingNodeType::DescriptorSampler;
+                }
+                else
+                {
+                    pNode->type = Vkgc::ResourceMappingNodeType::DescriptorYCbCrSampler;
+                    pDescriptorRangeValue->type = Vkgc::ResourceMappingNodeType::DescriptorYCbCrSampler;
+                }
+
+                pDescriptorRangeValue->set         = setIndex;
+                pDescriptorRangeValue->binding     = binding.info.binding;
+                pDescriptorRangeValue->pValue      = pImmutableSamplerData;
+                pDescriptorRangeValue->arraySize   = arraySize;
+                pDescriptorRangeValue->visibility  = visibility;
+                ++pDescriptorRangeValue;
+                ++(*pDescriptorRangeCount);
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
+// Fill a root resource mapping node for a dynamic descriptor node
+template <>
+void PipelineLayout::FillDynamicSetNode(
+    const Vkgc::ResourceMappingNodeType type,
+    const uint32_t                      visibility,
+    const uint32_t                      setIndex,
+    const uint32_t                      bindingIndex,
+    const uint32_t                      offsetInDwords,
+    const uint32_t                      sizeInDwords,
+    const uint32_t                      userDataRegBase,
+    Vkgc::ResourceMappingRootNode*      pNode
+    ) const
+{
+    pNode->node.type             = type;
+    pNode->node.offsetInDwords   = userDataRegBase + offsetInDwords;
+    pNode->node.sizeInDwords     = sizeInDwords;
+    pNode->node.srdRange.binding = bindingIndex;
+    pNode->node.srdRange.set     = setIndex;
+    pNode->visibility            = visibility;
+}
+
+// =====================================================================================================================
+// Fill a normal resource mapping node for a dynamic descriptor node
+template <>
+void PipelineLayout::FillDynamicSetNode(
+    const Vkgc::ResourceMappingNodeType type,
+    const uint32_t                      visibility,
+    const uint32_t                      setIndex,
+    const uint32_t                      bindingIndex,
+    const uint32_t                      offsetInDwords,
+    const uint32_t                      sizeInDwords,
+    const uint32_t                      userDataRegBase,
+    Vkgc::ResourceMappingNode*          pNode
+    ) const
+{
+    pNode->type             = type;
+    pNode->offsetInDwords   = offsetInDwords;
+    pNode->sizeInDwords     = sizeInDwords;
+    pNode->srdRange.binding = bindingIndex;
+    pNode->srdRange.set     = setIndex;
+}
+
+// =====================================================================================================================
+// Builds the VKGC resource mapping nodes for the dynamic descriptors in a descriptor set
+template <typename NodeType>
+void PipelineLayout::BuildLlpcDynamicSetMapping(
+    const DescriptorSetLayout* pLayout,
+    const uint32_t             visibility,
+    const uint32_t             setIndex,
+    const uint32_t             userDataRegBase,
+    NodeType*                  pNodes,
+    uint32_t*                  pNodeCount
+    ) const
+{
+    static_assert(std::is_same<NodeType, Vkgc::ResourceMappingRootNode>::value ||
+                  std::is_same<NodeType, Vkgc::ResourceMappingNode>::value,
+                  "Unexpected resouce mapping node type!");
+
+    *pNodeCount = 0;
+
+    for (uint32_t bindingIndex = 0; bindingIndex < pLayout->Info().count; ++bindingIndex)
+    {
+        const DescriptorSetLayout::BindingInfo& binding = pLayout->Binding(bindingIndex);
+
+        if (binding.dyn.dwSize > 0)
+        {
+            VK_ASSERT((binding.info.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
+                      (binding.info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC));
+
+            Vkgc::ResourceMappingNodeType nodeType = Vkgc::ResourceMappingNodeType::Unknown;
+            if (binding.info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+            {
+                nodeType = (binding.dyn.dwArrayStride == 2) ?
+                    Vkgc::ResourceMappingNodeType::DescriptorBufferCompact :
+                    Vkgc::ResourceMappingNodeType::DescriptorBuffer;
+
+            }
+            else
+            {
+                nodeType = (binding.dyn.dwArrayStride == 2) ?
+                    Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact :
+                    Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
+            }
+
+            FillDynamicSetNode(
+                nodeType,
+                visibility,
+                setIndex,
+                binding.info.binding,
+                binding.dyn.dwOffset,
+                binding.dyn.dwSize,
+                userDataRegBase,
+                pNodes + *pNodeCount);
+
+            (*pNodeCount)++;
+        }
+    }
+}
+
+// =====================================================================================================================
+// Builds the VKGC resource mapping nodes for vertex buffer table
+void PipelineLayout::BuildLlpcVertexBufferTableMapping(
+    const VbBindingInfo*           pVbInfo,
+    const uint32_t                 offsetInDwords,
+    const uint32_t                 sizeInDwords,
+    Vkgc::ResourceMappingRootNode* pNode,
+    uint32_t*                      pNodeCount
+    ) const
+{
+    *pNodeCount = 0;
+
+    if (pVbInfo != nullptr)
+    {
+        // Build the table description itself
+        const uint32_t srdDwSize = m_pDevice->GetProperties().descriptorSizes.bufferView / sizeof(uint32_t);
+        const uint32_t vbTableSize = pVbInfo->bindingTableSize * srdDwSize;
+
+        // Add the set pointer node pointing to this table
+        pNode->node.type                     = Vkgc::ResourceMappingNodeType::IndirectUserDataVaPtr;
+        pNode->node.offsetInDwords           = offsetInDwords;
+        pNode->node.sizeInDwords             = sizeInDwords;
+        pNode->node.userDataPtr.sizeInDwords = vbTableSize;
+        pNode->visibility                    = Vkgc::ShaderStageVertexBit;
+
+        *pNodeCount = 1;
+    }
+}
+
+// =====================================================================================================================
+// Builds the VKGC resource mapping nodes for transform feedback buffer
+void PipelineLayout::BuildLlpcTransformFeedbackMapping(
+    const uint32_t                 stageMask,
+    const uint32_t                 offsetInDwords,
+    const uint32_t                 sizeInDwords,
+    Vkgc::ResourceMappingRootNode* pNode,
+    uint32_t*                      pNodeCount
+    ) const
+{
+    uint32_t xfbStages         = (stageMask & (Vkgc::ShaderStageFragmentBit - 1)) >> 1;
+    uint32_t lastXfbStageBit   = Vkgc::ShaderStageVertexBit;
+
+    *pNodeCount = 0;
+
+    while (xfbStages > 0)
+    {
+        lastXfbStageBit <<= 1;
+        xfbStages >>= 1;
+    }
+
+    if (lastXfbStageBit != 0)
+    {
+        pNode->node.type           = Vkgc::ResourceMappingNodeType::StreamOutTableVaPtr;
+        pNode->node.offsetInDwords = offsetInDwords;
+        pNode->node.sizeInDwords   = sizeInDwords;
+        pNode->visibility          = lastXfbStageBit;
+
+        *pNodeCount = 1;
+    }
+}
+
+// =====================================================================================================================
+// Populates the resouce mapping nodes in compact scheme
+VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
     const uint32_t             stageMask,
-    VbBindingInfo*             pVbInfo,
+    const VbBindingInfo*       pVbInfo,
+    const bool                 appendFetchShaderCb,
     void*                      pBuffer,
-    bool                       appendFetchShaderCb,
     Vkgc::ResourceMappingData* pResourceMapping
     ) const
 {
-    VkResult result = VK_SUCCESS;
+    VK_ASSERT(m_info.userDataLayout.scheme == PipelineLayoutScheme::Compact);
+
+    VkResult            result         = VK_SUCCESS;
+    const auto&         userDataLayout = m_info.userDataLayout.compact;
+
     Vkgc::ResourceMappingRootNode* pUserDataNodes = static_cast<Vkgc::ResourceMappingRootNode*>(pBuffer);
     Vkgc::ResourceMappingNode* pResourceNodes =
         reinterpret_cast<Vkgc::ResourceMappingNode*>(pUserDataNodes + m_pipelineInfo.numUserDataNodes);
@@ -798,7 +1222,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     }
 
     // Build descriptor for each set
-    for (uint32_t setIndex = 0; (setIndex < m_info.setCount) && (result == VK_SUCCESS); ++setIndex)
+    for (uint32_t setIndex = 0; setIndex < m_info.setCount; ++setIndex)
     {
         const auto pSetUserData = &GetSetUserData(setIndex);
         const auto pSetLayout   = GetSetLayouts(setIndex);
@@ -816,17 +1240,22 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
             uint32_t staNodeCount   = 0;
             uint32_t descRangeCount = 0;
 
-            result = BuildLlpcSetMapping(
+            BuildLlpcDynamicSetMapping(
+                pSetLayout,
                 visibility,
                 setIndex,
-                pSetLayout,
+                userDataLayout.setBindingRegBase + pSetUserData->dynDescDataRegOffset,
                 pDynNodes,
-                &dynNodeCount,
+                &dynNodeCount);
+
+            BuildLlpcStaticSetMapping(
+                pSetLayout,
+                visibility,
+                setIndex,
                 pStaNodes,
                 &staNodeCount,
                 pDescValues,
-                &descRangeCount,
-                m_info.userDataLayout.setBindingRegBase + pSetUserData->dynDescDataRegOffset);
+                &descRangeCount);
 
             // Increase the number of mapping nodes used by the number of static section nodes added.
             mappingNodeCount += staNodeCount;
@@ -843,7 +1272,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
                 auto pSetPtrNode = &pUserDataNodes[userDataNodeCount];
 
                 pSetPtrNode->node.type               = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
-                pSetPtrNode->node.offsetInDwords     = m_info.userDataLayout.setBindingRegBase +
+                pSetPtrNode->node.offsetInDwords     = userDataLayout.setBindingRegBase +
                                                        pSetUserData->setPtrRegOffset;
                 pSetPtrNode->node.sizeInDwords       = SetPtrRegCount;
                 pSetPtrNode->node.tablePtr.nodeCount = staNodeCount;
@@ -855,41 +1284,33 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     }
 
     // TODO: Build the internal push constant resource mapping
-        if (m_info.userDataLayout.pushConstRegCount > 0)
+        if (userDataLayout.pushConstRegCount > 0)
         {
             auto pPushConstNode = &pUserDataNodes[userDataNodeCount];
             pPushConstNode->node.type = Vkgc::ResourceMappingNodeType::PushConst;
-            pPushConstNode->node.offsetInDwords = m_info.userDataLayout.pushConstRegBase;
-            pPushConstNode->node.sizeInDwords = m_info.userDataLayout.pushConstRegCount;
+            pPushConstNode->node.offsetInDwords = userDataLayout.pushConstRegBase;
+            pPushConstNode->node.sizeInDwords = userDataLayout.pushConstRegCount;
             pPushConstNode->node.srdRange.set = Vkgc::InternalDescriptorSetId;
             pPushConstNode->visibility = stageMask;
 
             userDataNodeCount += 1;
         }
 
-    if (m_info.userDataLayout.transformFeedbackRegCount > 0)
+    if (userDataLayout.transformFeedbackRegCount > 0)
     {
-        uint32_t xfbStages = (stageMask & (Vkgc::ShaderStageFragmentBit - 1)) >> 1;
-        uint32_t lastXfbStageBit = Vkgc::ShaderStageVertexBit;
+        uint32_t nodeCount;
 
-        while (xfbStages > 0)
-        {
-            lastXfbStageBit <<= 1;
-            xfbStages >>= 1;
-        }
+        BuildLlpcTransformFeedbackMapping(
+            stageMask,
+            userDataLayout.transformFeedbackRegBase,
+            userDataLayout.transformFeedbackRegCount,
+            &pUserDataNodes[userDataNodeCount],
+            &nodeCount);
 
-        if (lastXfbStageBit != 0)
-        {
-            auto pTransformFeedbackNode = &pUserDataNodes[userDataNodeCount];
-            pTransformFeedbackNode->node.type = Vkgc::ResourceMappingNodeType::StreamOutTableVaPtr;
-            pTransformFeedbackNode->node.offsetInDwords = m_info.userDataLayout.transformFeedbackRegBase;
-            pTransformFeedbackNode->node.sizeInDwords = m_info.userDataLayout.transformFeedbackRegCount;
-            pTransformFeedbackNode->visibility = lastXfbStageBit;
-
-            userDataNodeCount += 1;
-        }
+        userDataNodeCount += nodeCount;
     }
-    if ((result == VK_SUCCESS) && (pVbInfo != nullptr))
+
+    if (pVbInfo != nullptr)
     {
         // Build the internal vertex buffer table mapping
         constexpr uint32_t VbTablePtrRegCount = 1; // PAL requires all indirect user data tables to be 1DW
@@ -897,22 +1318,12 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
         if ((m_info.userDataRegCount + VbTablePtrRegCount) <=
             m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.maxUserDataEntries)
         {
-            VK_ASSERT(pVbInfo != nullptr);
+            uint32_t nodeCount;
 
-            // Build the table description itself
-            const uint32_t srdDwSize = m_pDevice->GetProperties().descriptorSizes.bufferView / sizeof(uint32_t);
-            uint32_t vbTableSize = pVbInfo->bindingTableSize * srdDwSize;
+            BuildLlpcVertexBufferTableMapping(
+                pVbInfo, m_info.userDataRegCount, VbTablePtrRegCount, &pUserDataNodes[userDataNodeCount], &nodeCount);
 
-            // Add the set pointer node pointing to this table
-            auto pVbTblPtrNode = &pUserDataNodes[userDataNodeCount];
-
-            pVbTblPtrNode->node.type                     = Vkgc::ResourceMappingNodeType::IndirectUserDataVaPtr;
-            pVbTblPtrNode->node.offsetInDwords           = m_info.userDataRegCount;
-            pVbTblPtrNode->node.sizeInDwords             = VbTablePtrRegCount;
-            pVbTblPtrNode->node.userDataPtr.sizeInDwords = vbTableSize;
-            pVbTblPtrNode->visibility                    = Vkgc::ShaderStageVertexBit;
-
-            userDataNodeCount += 1;
+            userDataNodeCount += nodeCount;
         }
         else
         {
@@ -921,8 +1332,8 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     }
 
     // If you hit these assert, we precomputed an insufficient amount of scratch space during layout creation.
-    VK_ASSERT(userDataNodeCount <= m_pipelineInfo.numUserDataNodes);
-    VK_ASSERT(mappingNodeCount <= m_pipelineInfo.numRsrcMapNodes);
+    VK_ASSERT(userDataNodeCount    <= m_pipelineInfo.numUserDataNodes);
+    VK_ASSERT(mappingNodeCount     <= m_pipelineInfo.numRsrcMapNodes);
     VK_ASSERT(descriptorRangeCount <= m_pipelineInfo.numDescRangeValueNodes);
 
     pResourceMapping->pUserDataNodes             = pUserDataNodes;
@@ -930,7 +1341,201 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     pResourceMapping->pStaticDescriptorValues    = pDescriptorRangeValues;
     pResourceMapping->staticDescriptorValueCount = descriptorRangeCount;
 
-    return VK_SUCCESS;
+    return result;
+}
+
+// =====================================================================================================================
+// Populates the resouce mapping nodes in indirect scheme
+void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
+    const uint32_t             stageMask,
+    const VbBindingInfo*       pVbInfo,
+    void*                      pBuffer,
+    Vkgc::ResourceMappingData* pResourceMapping
+    ) const
+{
+    VK_ASSERT(m_info.userDataLayout.scheme == PipelineLayoutScheme::Indirect);
+
+    constexpr uint32_t VbTablePtrRegCount         = 1; // PAL requires all indirect user data tables to be 1DW
+    constexpr uint32_t PushConstPtrRegCount       = 1;
+    constexpr uint32_t TransformFeedbackRegCount  = 1;
+    constexpr uint32_t DescSetsPtrRegCount        = 2 * SetPtrRegCount * MaxDescriptorSets;
+
+    const bool transformFeedbackEnabled =
+        m_pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK);
+
+    const uint32_t vbTablePtrRegBase        = 0;
+    const uint32_t pushConstPtrRegBase      = vbTablePtrRegBase + VbTablePtrRegCount;
+    const uint32_t transformFeedbackRegBase =
+        (transformFeedbackEnabled == false) ? InvalidReg : (pushConstPtrRegBase + PushConstPtrRegCount);
+    const uint32_t setBindingPtrRegBase =
+        transformFeedbackEnabled ? (transformFeedbackRegBase + TransformFeedbackRegCount) :
+                                   (pushConstPtrRegBase + PushConstPtrRegCount);
+
+    const auto& userDataLayout = m_info.userDataLayout.indirect;
+
+    Vkgc::ResourceMappingRootNode* pUserDataNodes = static_cast<Vkgc::ResourceMappingRootNode*>(pBuffer);
+    Vkgc::ResourceMappingNode* pResourceNodes =
+        reinterpret_cast<Vkgc::ResourceMappingNode*>(pUserDataNodes + m_pipelineInfo.numUserDataNodes);
+    Vkgc::StaticDescriptorValue* pDescriptorRangeValues =
+        reinterpret_cast<Vkgc::StaticDescriptorValue*>(pResourceNodes + m_pipelineInfo.numRsrcMapNodes);
+
+    uint32_t userDataNodeCount    = 0; // Number of consumed ResourceMappingRootNodes
+    uint32_t mappingNodeCount     = 0; // Number of consumed ResourceMappingNodes (only sub-nodes)
+    uint32_t descriptorRangeCount = 0; // Number of consumed StaticResourceValues
+
+    // Build the internal vertex buffer table mapping
+    if (pVbInfo != nullptr)
+    {
+        uint32_t nodeCount;
+
+        BuildLlpcVertexBufferTableMapping(
+            pVbInfo, vbTablePtrRegBase, VbTablePtrRegCount, &pUserDataNodes[userDataNodeCount], &nodeCount);
+
+        userDataNodeCount += nodeCount;
+    }
+
+    // Build push constants mapping
+    if (userDataLayout.pushConstSizeInDword > 0)
+    {
+        // Build mapping for push constant resouce
+        Vkgc::ResourceMappingNode* pPushConstNode = &pResourceNodes[mappingNodeCount];
+
+        pPushConstNode->type           = Vkgc::ResourceMappingNodeType::PushConst;
+        pPushConstNode->offsetInDwords = 0;
+        pPushConstNode->sizeInDwords   = userDataLayout.pushConstSizeInDword;
+        pPushConstNode->srdRange.set   = Vkgc::InternalDescriptorSetId;
+
+        ++mappingNodeCount;
+
+        // Build mapping for the pointer pointing to push constants buffer
+        Vkgc::ResourceMappingRootNode* pPushConstPtrNode = &pUserDataNodes[userDataNodeCount];
+
+        pPushConstPtrNode->node.type               = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
+        pPushConstPtrNode->node.offsetInDwords     = pushConstPtrRegBase;
+        pPushConstPtrNode->node.sizeInDwords       = PushConstPtrRegCount;
+        pPushConstPtrNode->node.tablePtr.nodeCount = 1;
+        pPushConstPtrNode->node.tablePtr.pNext     = pPushConstNode;
+        pPushConstPtrNode->visibility              = stageMask;
+
+        userDataNodeCount += 1;
+    }
+
+    // Build transform feedback buffer mapping
+    if (transformFeedbackEnabled)
+    {
+        uint32_t nodeCount;
+
+        BuildLlpcTransformFeedbackMapping(
+            stageMask,
+            transformFeedbackRegBase,
+            TransformFeedbackRegCount,
+            &pUserDataNodes[userDataNodeCount],
+            &nodeCount);
+
+        userDataNodeCount += nodeCount;
+    }
+
+    // Build mapping for each set of descriptors
+    VK_ASSERT(setBindingPtrRegBase == userDataLayout.setBindingPtrRegBase);
+
+    for (uint32_t setIndex = 0; setIndex < m_info.setCount; ++setIndex)
+    {
+        const DescriptorSetLayout* pSetLayout = GetSetLayouts(setIndex);
+
+        const uint32_t visibility = stageMask & VkToVkgcShaderStageMask(pSetLayout->Info().activeStageMask);
+
+        if (visibility != 0)
+        {
+            uint32_t dynNodeCount   = 0;
+            uint32_t staNodeCount   = 0;
+            uint32_t descRangeCount = 0;
+
+            Vkgc::ResourceMappingNode* pDynNodes = &pResourceNodes[mappingNodeCount];
+            BuildLlpcDynamicSetMapping(
+                pSetLayout, visibility, setIndex, 0, pDynNodes, &dynNodeCount);
+
+            Vkgc::ResourceMappingNode*   pStaNodes   = &pResourceNodes[mappingNodeCount + dynNodeCount];
+            Vkgc::StaticDescriptorValue* pDescValues = &pDescriptorRangeValues[descriptorRangeCount];
+            BuildLlpcStaticSetMapping(
+                pSetLayout, visibility, setIndex, pStaNodes, &staNodeCount, pDescValues, &descRangeCount);
+
+            // Increase the number of mapping nodes used by the number of static section nodes added.
+            mappingNodeCount += (dynNodeCount + staNodeCount);
+
+            // Increase the number of descriptor range value nodes used by immutable samplers
+            descriptorRangeCount += descRangeCount;
+
+            // Add a top-level user data node entry for dynamic nodes.
+            if (pSetLayout->Info().dyn.numRsrcMapNodes > 0)
+            {
+                Vkgc::ResourceMappingRootNode* pSetPtrNode = &pUserDataNodes[userDataNodeCount];
+
+                pSetPtrNode->node.type               = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
+                pSetPtrNode->node.offsetInDwords     = 2 * setIndex * SetPtrRegCount + setBindingPtrRegBase;
+                pSetPtrNode->node.sizeInDwords       = SetPtrRegCount;
+                pSetPtrNode->node.tablePtr.nodeCount = dynNodeCount;
+                pSetPtrNode->node.tablePtr.pNext     = pDynNodes;
+                pSetPtrNode->visibility              = visibility;
+
+                ++userDataNodeCount;
+            }
+
+            // Add a top-level user data node entry for static nodes.
+            if (pSetLayout->Info().sta.numRsrcMapNodes > 0)
+            {
+                Vkgc::ResourceMappingRootNode* pSetPtrNode = &pUserDataNodes[userDataNodeCount];
+
+                pSetPtrNode->node.type               = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
+                pSetPtrNode->node.offsetInDwords     = (2 * setIndex + 1) * SetPtrRegCount + setBindingPtrRegBase;
+                pSetPtrNode->node.sizeInDwords       = SetPtrRegCount;
+                pSetPtrNode->node.tablePtr.nodeCount = staNodeCount;
+                pSetPtrNode->node.tablePtr.pNext     = pStaNodes;
+                pSetPtrNode->visibility              = visibility;
+
+                ++userDataNodeCount;
+            }
+        }
+    }
+
+    // If you hit these assert, we precomputed an insufficient amount of scratch space during layout creation.
+    VK_ASSERT(userDataNodeCount    <= m_pipelineInfo.numUserDataNodes);
+    VK_ASSERT(mappingNodeCount     <= m_pipelineInfo.numRsrcMapNodes);
+    VK_ASSERT(descriptorRangeCount <= m_pipelineInfo.numDescRangeValueNodes);
+
+    pResourceMapping->pUserDataNodes             = pUserDataNodes;
+    pResourceMapping->userDataNodeCount          = userDataNodeCount;
+    pResourceMapping->pStaticDescriptorValues    = pDescriptorRangeValues;
+    pResourceMapping->staticDescriptorValueCount = descriptorRangeCount;
+}
+
+// =====================================================================================================================
+// This function populates the resource mapping node details to the shader-stage specific pipeline info structure.
+VkResult PipelineLayout::BuildLlpcPipelineMapping(
+    const uint32_t             stageMask,
+    const VbBindingInfo*       pVbInfo,
+    const bool                 appendFetchShaderCb,
+    void*                      pBuffer,
+    Vkgc::ResourceMappingData* pResourceMapping
+    ) const
+{
+    VkResult result = VK_SUCCESS;
+
+    if (m_info.userDataLayout.scheme == PipelineLayoutScheme::Compact)
+    {
+        result = BuildCompactSchemeLlpcPipelineMapping(
+            stageMask, pVbInfo, appendFetchShaderCb, pBuffer, pResourceMapping);
+    }
+    else if (m_info.userDataLayout.scheme == PipelineLayoutScheme::Indirect)
+    {
+        BuildIndirectSchemeLlpcPipelineMapping(
+            stageMask, pVbInfo, pBuffer, pResourceMapping);
+    }
+    else
+    {
+        VK_NEVER_CALLED();
+    }
+
+    return result;
 }
 
 // =====================================================================================================================

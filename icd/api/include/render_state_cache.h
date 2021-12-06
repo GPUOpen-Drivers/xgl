@@ -37,7 +37,6 @@
 
 #include "include/khronos/vulkan.h"
 #include "include/vk_alloccb.h"
-#include "include/vk_graphics_pipeline.h"
 
 #include "palHashMap.h"
 #include "palColorBlendState.h"
@@ -136,9 +135,6 @@ public:
 
     uint32_t CreateScissorRect(const Pal::ScissorRectParams& params);
     void DestroyScissorRect(const Pal::ScissorRectParams& params, uint32_t token);
-
-    uint32_t CreateSamplePattern(const SamplePattern& samplePattern);
-    void DestroySamplePattern(const SamplePattern& samplePattern, uint32_t token);
 
     uint32_t CreateFragmentShadingRate(const Pal::VrsRateParams& params);
     void DestroyFragmentShadingRate(const Pal::VrsRateParams& params, uint32_t token);
@@ -336,17 +332,6 @@ private:
     Util::HashMap<Pal::IMsaaState*,
                   StaticMsaaState*,
                   PalAllocator>                      m_msaaRefs;
-
-    static const size_t SamplePatternHashGroupSize = (sizeof(SamplePattern) + sizeof(StaticParamState)) * 8;
-
-    Util::HashMap<SamplePattern,
-        StaticParamState,
-        PalAllocator,
-        Util::JenkinsHashFunc,
-        Util::DefaultEqualFunc,
-        Util::HashAllocator<PalAllocator>,
-        SamplePatternHashGroupSize>               m_samplePattern;
-    uint32_t                                      m_samplePatternNextId;
 
     Util::HashMap<Pal::ColorBlendStateCreateInfo,
         StaticColorBlendState*,

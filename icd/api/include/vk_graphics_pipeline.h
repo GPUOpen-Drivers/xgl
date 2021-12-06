@@ -30,7 +30,6 @@
 
 #include <cmath>
 
-#include "include/vk_pipeline.h"
 #include "include/vk_device.h"
 #include "include/vk_shader_code.h"
 #include "include/graphics_pipeline_common.h"
@@ -189,6 +188,9 @@ public:
     bool Force1x1ShaderRateEnabled() const
         { return m_flags.force1x1ShaderRate; }
 
+    bool IsPointSizeUsed() const
+        { return m_flags.isPointSizeUsed; }
+
     static void BindNullPipeline(CmdBuffer* pCmdBuffer);
 
     // Returns value of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
@@ -209,6 +211,7 @@ protected:
         bool                                   bindInputAssemblyState,
         bool                                   force1x1ShaderRate,
         bool                                   customSampleLocations,
+        bool                                   isPointSizeUsed,
         const VbBindingInfo&                   vbInfo,
         const PipelineInternalBufferInfo*      pInternalBuffer,
         Pal::IMsaaState**                      pPalMsaa,
@@ -321,7 +324,7 @@ private:
             uint8 bindInputAssemblyState   : 1;
             uint8 customSampleLocations    : 1;
             uint8 force1x1ShaderRate       : 1;
-            uint8 reserved                 : 1;
+            uint8 isPointSizeUsed          : 1;
         };
     } m_flags;
 };

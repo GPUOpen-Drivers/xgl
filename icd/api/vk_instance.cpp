@@ -832,7 +832,7 @@ VkResult Instance::EnumerateExtensionProperties(
         // If this extension is supported then report it
         if (supportedExtensions.IsExtensionSupported(id))
         {
-            *pProperties = supportedExtensions.GetExtensionInfo(id);
+            supportedExtensions.GetExtensionInfo(id, pProperties);
             pProperties++;
             copyCount--;
         }

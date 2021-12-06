@@ -38,6 +38,7 @@ namespace vk
 {
 
 class PipelineCache;
+class RenderPass;
 struct PipelineOptimizerKey;
 struct GraphicsPipelineBinaryCreateInfo;
 struct GraphicsPipelineShaderStageInfo;
@@ -128,7 +129,6 @@ struct GraphicsPipelineObjectCreateInfo
     Pal::GraphicsPipelineCreateInfo             pipeline;
     Pal::MsaaStateCreateInfo                    msaa;
     Pal::ColorBlendStateCreateInfo              blend;
-    Pal::DepthStencilStateCreateInfo            ds;
     GraphicsPipelineObjectImmedInfo             immedInfo;
     uint32_t                                    staticStateMask;
     uint32_t                                    sampleCoverage;
@@ -148,7 +148,8 @@ struct GraphicsPipelineObjectCreateInfo
             uint32_t   customSampleLocations   : 1;
             uint32_t   force1x1ShaderRate      : 1;
             uint32_t   sampleShadingEnable     : 1;
-            uint32_t   reserved                : 23;
+            uint32_t   isPointSizeUsed         : 1;
+            uint32_t   reserved                : 22;
         };
         uint32_t value;
     } flags;
@@ -187,6 +188,15 @@ public:
 
     // Returns true if src alpha is used in blending
     static bool IsSrcAlphaUsedInBlend(VkBlendFactor blend);
+
+    // Get sample count from multisample state or render pass
+    static void GetSubpassSampleCount(
+        const VkPipelineMultisampleStateCreateInfo* pMs,
+        const RenderPass*                           pRenderPass,
+        const uint32_t                              subpass,
+        uint32_t*                                   pCoverageSampleCount,
+        uint32_t*                                   pColorSampleCount,
+        uint32_t*                                   pDepthSampleCount);
 
     // Get the dynamics states specified by API info
     static uint32_t GetDynamicStateFlags(

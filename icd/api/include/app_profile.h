@@ -87,6 +87,8 @@ enum class AppProfile : uint32_t
     Quake2RTX,             // Quake2 RTX
     Valheim,               // Valheim by Coffee Stain Studios
     WolfensteinCyberpilot, // Wolfenstein Cyberpilot by Machine Games
+    EvilGenius2,           // Evil Genius 2
+    KnockoutCity,          // Knockout City
 
     IdTechEngine,          // id Tech Engine (Default)
     Feral3DEngine,         // Feral3D Engine (Default)

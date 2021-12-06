@@ -385,7 +385,6 @@ VK_TO_PAL_DECL_LOOKUP_TABLE(PRIMITIVE_TOPOLOGY,             PrimitiveTopology   
 VK_TO_PAL_DECL_LOOKUP_TABLE(FORMAT,                         SwizzledFormat                                             )
 VK_TO_PAL_DECL_LOOKUP_TABLE(PRIMITIVE_TOPOLOGY,             PrimitiveType                                              )
 VK_TO_PAL_DECL_LOOKUP_TABLE_COMPLEX(QUERY_TYPE,             PalQueryTypePool,     QueryTypePool                        )
-VK_TO_PAL_DECL_LOOKUP_TABLE(INDEX_TYPE,                     IndexType                                                  )
 VK_TO_PAL_DECL_LOOKUP_TABLE(IMAGE_VIEW_TYPE,                ImageViewType                                              )
 VK_TO_PAL_DECL_LOOKUP_TABLE(LOGIC_OP,                       LogicOp                                                    )
 VK_TO_PAL_DECL_LOOKUP_TABLE(SAMPLER_ADDRESS_MODE,           TexAddressMode                                             )

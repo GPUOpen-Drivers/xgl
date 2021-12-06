@@ -144,7 +144,8 @@ public:
             // True if EXT_MEMORY_PRIORITY or EXT_PAGEABLE_DEVICE_LOCAL_MEMORY is enabled.
             uint32                appControlledMemPriority      : 1;
             uint32                mustWriteImmutableSamplers    : 1;
-            uint32                reserved                      : 22;
+            uint32                strictImageSizeRequirements   : 1;
+            uint32                reserved                      : 21;
         };
 
         uint32 u32All;
@@ -367,7 +368,8 @@ public:
         bool                                        scalarBlockLayoutEnabled,
         const ExtendedRobustness&                   extendedRobustnessEnabled,
         bool                                        bufferDeviceAddressMultiDeviceEnabled,
-        bool                                        pageableDeviceLocalMemory);
+        bool                                        pageableDeviceLocalMemory,
+        bool                                        maintenance4Enabled);
 
     void InitDispatchTable();
 
@@ -482,7 +484,7 @@ public:
 
     VkResult BindImageMemory(
         uint32_t                     bindInfoCount,
-        const VkBindImageMemoryInfo* pBindInfos) const;
+        const VkBindImageMemoryInfo* pBindInfos);
 
     const DeviceFeatures& GetEnabledFeatures() const
         { return m_enabledFeatures; }
@@ -721,6 +723,8 @@ public:
         wchar_t*                   executablePath,
         bool                       useComputeAsTransferQueue,
         bool                       isTmzQueue);
+
+    Pal::TilingOptMode GetTilingOptMode() const;
 
 protected:
     Device(
@@ -1147,6 +1151,22 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
 VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectTagEXT(
     VkDevice                                    device,
     const VkDebugUtilsObjectTagInfoEXT*         pTagInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceBufferMemoryRequirementsKHR(
+    VkDevice                                    device,
+    const VkDeviceBufferMemoryRequirementsKHR*  pInfo,
+    VkMemoryRequirements2*                      pMemoryRequirements);
+
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageMemoryRequirementsKHR(
+    VkDevice                                    device,
+    const VkDeviceImageMemoryRequirementsKHR*   pInfo,
+    VkMemoryRequirements2*                      pMemoryRequirements);
+
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSparseMemoryRequirementsKHR(
+    VkDevice                                    device,
+    const VkDeviceImageMemoryRequirementsKHR*   pInfo,
+    uint32_t*                                   pSparseMemoryRequirementCount,
+    VkSparseImageMemoryRequirements2*           pSparseMemoryRequirements);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStippleEXT(
     VkCommandBuffer                             commandBuffer,

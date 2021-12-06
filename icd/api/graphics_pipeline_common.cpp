@@ -24,9 +24,9 @@
  **********************************************************************************************************************/
 
 #include "include/app_shader_optimizer.h"
-#include "include/graphics_pipeline_common.h"
 #include "include/vk_cmdbuffer.h"
 #include "include/vk_device.h"
+#include "include/vk_graphics_pipeline.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_render_pass.h"
 
@@ -221,9 +221,63 @@ bool GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(VkBlendFactor blend)
 }
 
 // =====================================================================================================================
+void GraphicsPipelineCommon::GetSubpassSampleCount(
+    const VkPipelineMultisampleStateCreateInfo* pMs,
+    const RenderPass*                           pRenderPass,
+    const uint32_t                              subpass,
+    uint32_t*                                   pCoverageSampleCount,
+    uint32_t*                                   pColorSampleCount,
+    uint32_t*                                   pDepthSampleCount)
+{
+    const uint32_t rasterizationSampleCount   = pMs->rasterizationSamples;
+
+    uint32_t coverageSampleCount = (pRenderPass != VK_NULL_HANDLE) ?
+        pRenderPass->GetSubpassMaxSampleCount(subpass) : rasterizationSampleCount;
+
+    // subpassCoverageSampleCount would be equal to zero if there are zero attachments.
+    coverageSampleCount = (coverageSampleCount == 0) ? rasterizationSampleCount : coverageSampleCount;
+
+    VK_ASSERT(rasterizationSampleCount == coverageSampleCount);
+
+    if (pCoverageSampleCount != nullptr)
+    {
+        *pCoverageSampleCount = coverageSampleCount;
+    }
+
+    // In case we are rendering to color only, we make sure to set the DepthSampleCount to CoverageSampleCount.
+    // CoverageSampleCount is really the ColorSampleCount in this case. This makes sure we have a consistent
+    // sample count and that we get correct MSAA behavior.
+    // Similar thing for when we are rendering to depth only. The expectation in that case is that all
+    // sample counts should match.
+    // This shouldn't interfere with EQAA. For EQAA, if ColorSampleCount is not equal to DepthSampleCount
+    // and they are both greater than one, then we do not force them to match.
+
+    if (pColorSampleCount != nullptr)
+    {
+        uint32_t colorSampleCount = (pRenderPass != VK_NULL_HANDLE) ?
+            pRenderPass->GetSubpassColorSampleCount(subpass) : rasterizationSampleCount;
+
+        colorSampleCount = (colorSampleCount == 0) ? coverageSampleCount : colorSampleCount;
+
+        *pColorSampleCount = colorSampleCount;
+    }
+
+    if (pDepthSampleCount != nullptr)
+    {
+        uint32_t depthSampleCount = (pRenderPass != VK_NULL_HANDLE) ?
+            pRenderPass->GetSubpassDepthSampleCount(subpass) : rasterizationSampleCount;
+
+        depthSampleCount = (depthSampleCount == 0) ? coverageSampleCount : depthSampleCount;
+
+        *pDepthSampleCount = depthSampleCount;
+    }
+}
+
+// =====================================================================================================================
 static VkFormat GetDepthFormat(
     const RenderPass*                       pRenderPass,
-    const uint32_t                          subpassIndex
+    const uint32_t                          subpassIndex,
+    const VkPipelineRenderingCreateInfoKHR* pPipelineRenderingCreateInfoKHR
     )
 {
     VkFormat format = VK_FORMAT_UNDEFINED;
@@ -232,6 +286,12 @@ static VkFormat GetDepthFormat(
     {
         format = pRenderPass->GetDepthStencilAttachmentFormat(subpassIndex);
     }
+    else if (pPipelineRenderingCreateInfoKHR != nullptr)
+    {
+        format = (pPipelineRenderingCreateInfoKHR->depthAttachmentFormat != VK_FORMAT_UNDEFINED) ?
+                   pPipelineRenderingCreateInfoKHR->depthAttachmentFormat :
+                   pPipelineRenderingCreateInfoKHR->stencilAttachmentFormat;
+    }
 
     return format;
 }
@@ -239,10 +299,12 @@ static VkFormat GetDepthFormat(
 // =====================================================================================================================
 static uint32_t GetColorAttachmentCount(
     const RenderPass*                       pRenderPass,
-    const uint32_t                          subpassIndex
+    const uint32_t                          subpassIndex,
+    const VkPipelineRenderingCreateInfoKHR* pPipelineRenderingCreateInfoKHR
 )
 {
     return (pRenderPass != nullptr) ? pRenderPass->GetSubpassColorReferenceCount(subpassIndex) :
+           (pPipelineRenderingCreateInfoKHR != nullptr) ? pPipelineRenderingCreateInfoKHR->colorAttachmentCount :
            0u;
 }
 
@@ -288,6 +350,15 @@ uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
         {
             switch (static_cast<uint32_t>(pDy->pDynamicStates[i]))
             {
+            case VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT:
+                dynamicState |= viiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::PrimitiveTopologyExt));
+                break;
+            case VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT:
+                dynamicState |= viiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::VertexInputBindingStrideExt));
+                break;
+            case VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE_EXT:
+                dynamicState |= viiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::PrimitiveRestartEnableExt));
+                break;
             case VK_DYNAMIC_STATE_VIEWPORT:
                 dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::Viewport));
                 break;
@@ -300,11 +371,25 @@ uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
             case VK_DYNAMIC_STATE_DEPTH_BIAS:
                 dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthBias));
                 break;
-            case  VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE_EXT:
-                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthBiasEnableExt));
+            case VK_DYNAMIC_STATE_LINE_STIPPLE_EXT:
+                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::LineStippleExt));
                 break;
-            case VK_DYNAMIC_STATE_BLEND_CONSTANTS:
-                dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::BlendConstants));
+            case VK_DYNAMIC_STATE_CULL_MODE_EXT:
+                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::CullModeExt));
+                break;
+            case VK_DYNAMIC_STATE_FRONT_FACE_EXT:
+                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::FrontFaceExt));
+                break;
+            case VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT:
+                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::ViewportCount));
+                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::Viewport));
+                break;
+            case VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT_EXT:
+                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::ScissorCount));
+                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::Scissor));
+                break;
+            case VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE_EXT:
+                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthBiasEnableExt));
                 break;
             case VK_DYNAMIC_STATE_DEPTH_BOUNDS:
                 dynamicState |= fgsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthBounds));
@@ -321,34 +406,8 @@ uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
             case VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT:
                 dynamicState |= fgsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt));
                 break;
-            case VK_DYNAMIC_STATE_LINE_STIPPLE_EXT:
-                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::LineStippleExt));
-                break;
             case VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR:
                 dynamicState |= fgsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr));
-                break;
-            case VK_DYNAMIC_STATE_CULL_MODE_EXT:
-                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::CullModeExt));
-                break;
-            case VK_DYNAMIC_STATE_FRONT_FACE_EXT:
-                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::FrontFaceExt));
-                break;
-            case VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT:
-                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::ViewportCount));
-                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::Viewport));
-                break;
-            case VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT_EXT:
-                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::ScissorCount));
-                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::Scissor));
-                break;
-            case VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT:
-                dynamicState |= viiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::PrimitiveTopologyExt));
-                break;
-            case VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT:
-                dynamicState |= viiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::VertexInputBindingStrideExt));
-                break;
-            case VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE_EXT:
-                dynamicState |= viiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::PrimitiveRestartEnableExt));
                 break;
             case VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT:
                 dynamicState |= fgsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthTestEnableExt));
@@ -368,14 +427,17 @@ uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
             case VK_DYNAMIC_STATE_STENCIL_OP_EXT:
                 dynamicState |= fgsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::StencilOpExt));
                 break;
-            case VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT:
-                dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt));
+            case VK_DYNAMIC_STATE_BLEND_CONSTANTS:
+                dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::BlendConstants));
                 break;
             case VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT:
                 dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::RasterizerDiscardEnableExt));
                 break;
+            case VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT:
+                dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt));
+                break;
             default:
-                // skip unknown dynamic state
+                VK_ASSERT(!"Unknown dynamic state");
                 break;
             }
         }
@@ -574,6 +636,7 @@ static void BuildRasterizationState(
             pNext = pHeader->pNext;
         }
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 691
         // For optimal performance, depth clamping should be enabled by default. Only disable it if dealing
         // with depth values outside of [0.0, 1.0] range.
         // Note that this is the opposite of the default Vulkan setting which is depthClampEnable = false.
@@ -590,6 +653,30 @@ static void BuildRasterizationState(
             // Clipping is updated in pipeline compiler.
             pInfo->pipeline.rsState.depthClampDisable = false;
         }
+#else
+        if (pRs->depthClampEnable == VK_FALSE)
+        {
+            // For optimal performance, depth clamping should be enabled by default, even if API says otherwise.
+            // Only disable it if dealing with depth values outside of [0.0, 1.0] range.
+            // Otherwise clamp to [0.0, 1.0] interval.
+            if(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_DEPTH_RANGE_UNRESTRICTED) ||
+              ((pInfo->pipeline.viewportInfo.depthClipNearEnable == false) &&
+               (pInfo->pipeline.viewportInfo.depthClipFarEnable == false)))
+            {
+                pInfo->pipeline.rsState.DepthClampMode = Pal::DepthClampMode::None;
+            }
+            else
+            {
+                pInfo->pipeline.rsState.DepthClampMode = Pal::DepthClampMode::ZeroToOne;
+            }
+        }
+        else
+        {
+            // When depth clamping is enabled, depth clipping should be disabled, and vice versa.
+            // Clipping is updated in pipeline compiler.
+            pInfo->pipeline.rsState.DepthClampMode = Pal::DepthClampMode::Viewport;
+        }
+#endif
 
         pInfo->pipeline.rsState.pointCoordOrigin       = Pal::PointOrigin::UpperLeft;
         pInfo->pipeline.rsState.shadeMode              = Pal::ShadeMode::Flat;
@@ -733,33 +820,12 @@ static void BuildMultisampleState(
         pInfo->flags.customSampleLocations = ((pPipelineSampleLocationsStateCreateInfoEXT != nullptr) &&
                                               (pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsEnable));
 
-        uint32_t rasterizationSampleCount   = pMs->rasterizationSamples;
-
-        uint32_t subpassCoverageSampleCount = rasterizationSampleCount;
-        uint32_t subpassColorSampleCount    = rasterizationSampleCount;
-        uint32_t subpassDepthSampleCount    = rasterizationSampleCount;
-
-        if (pRenderPass != VK_NULL_HANDLE)
-        {
-            subpassCoverageSampleCount = pRenderPass->GetSubpassMaxSampleCount(subpass);
-            subpassColorSampleCount    = pRenderPass->GetSubpassColorSampleCount(subpass);
-            subpassDepthSampleCount    = pRenderPass->GetSubpassDepthSampleCount(subpass);
-        }
-
-        // subpassCoverageSampleCount would be equal to zero if there are zero attachments.
-        subpassCoverageSampleCount = subpassCoverageSampleCount == 0 ? rasterizationSampleCount : subpassCoverageSampleCount;
-
-        // In case we are rendering to color only, we make sure to set the DepthSampleCount to CoverageSampleCount.
-        // CoverageSampleCount is really the ColorSampleCount in this case. This makes sure we have a consistent
-        // sample count and that we get correct MSAA behavior.
-        // Similar thing for when we are rendering to depth only. The expectation in that case is that all
-        // sample counts should match.
-        // This shouldn't interfere with EQAA. For EQAA, if ColorSampleCount is not equal to DepthSampleCount
-        // and they are both greater than one, then we do not force them to match.
-        subpassColorSampleCount = subpassColorSampleCount == 0 ? subpassCoverageSampleCount : subpassColorSampleCount;
-        subpassDepthSampleCount = subpassDepthSampleCount == 0 ? subpassCoverageSampleCount : subpassDepthSampleCount;
-
-        VK_ASSERT(rasterizationSampleCount == subpassCoverageSampleCount);
+        uint32_t subpassCoverageSampleCount;
+        uint32_t subpassColorSampleCount;
+        uint32_t subpassDepthSampleCount;
+        GraphicsPipelineCommon::GetSubpassSampleCount(
+            pMs, pRenderPass, subpass,
+            &subpassCoverageSampleCount, &subpassColorSampleCount, &subpassDepthSampleCount);
 
         pInfo->msaa.coverageSamples = subpassCoverageSampleCount;
         pInfo->msaa.exposedSamples  = subpassCoverageSampleCount;
@@ -803,7 +869,8 @@ static void BuildMultisampleState(
                     &pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo,
                     &pInfo->immedInfo.samplePattern.locations);
 
-                VK_ASSERT(pInfo->immedInfo.samplePattern.sampleCount == rasterizationSampleCount);
+                VK_ASSERT(pInfo->immedInfo.samplePattern.sampleCount ==
+                          static_cast<uint32_t>(pMs->rasterizationSamples));
 
                 pInfo->staticStateMask |=
                     (1 << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt));
@@ -812,9 +879,9 @@ static void BuildMultisampleState(
         else
         {
             // We store the standard sample locations if custom sample locations are not enabled.
-            pInfo->immedInfo.samplePattern.sampleCount = rasterizationSampleCount;
+            pInfo->immedInfo.samplePattern.sampleCount = pMs->rasterizationSamples;
             pInfo->immedInfo.samplePattern.locations =
-                *Device::GetDefaultQuadSamplePattern(rasterizationSampleCount);
+                *Device::GetDefaultQuadSamplePattern(pMs->rasterizationSamples);
 
             pInfo->staticStateMask |=
                 1 << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt);
@@ -888,6 +955,7 @@ static void BuildDepthStencilState(
 // =====================================================================================================================
 static void BuildColorBlendState(
     const Device*                              pDevice,
+    const VkPipelineRenderingCreateInfoKHR*    pRendering,
     const VkPipelineColorBlendStateCreateInfo* pCb,
     const RenderPass*                          pRenderPass,
     const uint32_t                             subpass,
@@ -944,6 +1012,11 @@ static void BuildColorBlendState(
                 const VkFormat cbFormat = pRenderPass->GetColorAttachmentFormat(subpass, i);
                 pCbDst->swizzledFormat  = VkToPalFormat(cbFormat, pDevice->GetRuntimeSettings());
             }
+            else if (pRendering != nullptr)
+            {
+                const VkFormat cbFormat = pRendering->pColorAttachmentFormats[i];
+                pCbDst->swizzledFormat  = VkToPalFormat(cbFormat, pDevice->GetRuntimeSettings());
+            }
             // If the sub pass attachment format is UNDEFINED, then it means that that subpass does not
             // want to write to any attachment for that output (VK_ATTACHMENT_UNUSED).  Under such cases,
             // disable shader writes through that target.
@@ -991,14 +1064,15 @@ static void BuildColorBlendState(
 // =====================================================================================================================
 static void BuildRenderingState(
     const Device*                                 pDevice,
+    const VkPipelineRenderingCreateInfoKHR*       pRendering,
+    const VkPipelineColorBlendStateCreateInfo*    pCb,
     const RenderPass*                             pRenderPass,
     GraphicsPipelineObjectCreateInfo*             pInfo)
 {
     pInfo->pipeline.viewInstancingDesc = {};
 
-    if (((pRenderPass != nullptr) &&
-         pRenderPass->IsMultiviewEnabled())
-       )
+    if (((pRenderPass != nullptr) && pRenderPass->IsMultiviewEnabled()) ||
+        ((pRendering != nullptr) && (Util::CountSetBits(pRendering->viewMask)!= 0)))
     {
         pInfo->pipeline.viewInstancingDesc.viewInstanceCount = Pal::MaxViewInstanceCount;
         pInfo->pipeline.viewInstancingDesc.enableMasking     = true;
@@ -1101,14 +1175,8 @@ static void BuildFragmentShaderState(
     const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
     const uint32_t    subpass     = pIn->subpass;
 
-    // Build states via VkPipelineMultisampleStateCreateInfo
-    BuildMultisampleState(pIn->pMultisampleState, pRenderPass, subpass, dynamicStateFlags, pInfo);
-
-    if (GetDepthFormat(pRenderPass, subpass) != VK_FORMAT_UNDEFINED)
-    {
-        // Build states via VkPipelineDepthStencilStateCreateInfo
-        BuildDepthStencilState(pIn->pDepthStencilState, dynamicStateFlags, pInfo);
-    }
+    // Build states via VkPipelineDepthStencilStateCreateInfo
+    BuildDepthStencilState(pIn->pDepthStencilState, dynamicStateFlags, pInfo);
 
     if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthTestEnableExt) == false)
     {
@@ -1142,13 +1210,24 @@ static void BuildFragmentOutputInterfaceState(
     const RenderPass* pRenderPass      = RenderPass::ObjectFromHandle(pIn->renderPass);
     const uint32_t    subpass          = pIn->subpass;
 
-    pInfo->dbFormat = GetDepthFormat(pRenderPass, subpass);
+    // Build states via VkPipelineMultisampleStateCreateInfo
+    BuildMultisampleState(pIn->pMultisampleState, pRenderPass, subpass, dynamicStateFlags, pInfo);
 
-    if (GetColorAttachmentCount(pRenderPass, subpass) != 0)
+    // Extract VkPipelineRenderingFormatCreateInfoKHR for VK_KHR_dynamic_rendering extension
+    EXTRACT_VK_STRUCTURES_0(
+        renderingCreateInfo,
+        PipelineRenderingCreateInfoKHR,
+        static_cast<const VkPipelineRenderingCreateInfoKHR*>(pIn->pNext),
+        PIPELINE_RENDERING_CREATE_INFO_KHR);
+
+    pInfo->dbFormat = GetDepthFormat(pRenderPass, subpass, pPipelineRenderingCreateInfoKHR);
+
+    if (GetColorAttachmentCount(pRenderPass, subpass, pPipelineRenderingCreateInfoKHR) != 0)
     {
         // Build states via VkPipelineColorBlendStateCreateInfo
         BuildColorBlendState(
-            pDevice,
+        pDevice,
+        pPipelineRenderingCreateInfoKHR,
         pIn->pColorBlendState,
         pRenderPass,
         subpass,
@@ -1157,6 +1236,8 @@ static void BuildFragmentOutputInterfaceState(
     }
 
     BuildRenderingState(pDevice,
+                        pPipelineRenderingCreateInfoKHR,
+                        pIn->pColorBlendState,
                         pRenderPass,
                         pInfo);
 
@@ -1887,8 +1968,14 @@ void GraphicsPipelineCommon::GenerateHashForFragmentShaderState(
 
     const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pCreateInfo->renderPass);
 
+    EXTRACT_VK_STRUCTURES_0(
+        renderingCreateInfo,
+        PipelineRenderingCreateInfoKHR,
+        static_cast<const VkPipelineRenderingCreateInfoKHR*>(pCreateInfo->pNext),
+        PIPELINE_RENDERING_CREATE_INFO_KHR);
+
     if ((pCreateInfo->pDepthStencilState != nullptr) &&
-        (GetDepthFormat(pRenderPass, pCreateInfo->subpass) != VK_FORMAT_UNDEFINED))
+        (GetDepthFormat(pRenderPass, pCreateInfo->subpass, pPipelineRenderingCreateInfoKHR) != VK_FORMAT_UNDEFINED))
     {
         GenerateHashFromDepthStencilStateCreateInfo(*pCreateInfo->pDepthStencilState, pApiHasher);
     }
@@ -1914,11 +2001,28 @@ void GraphicsPipelineCommon::GenerateHashForFragmentOutputInterfaceState(
     Util::MetroHash128*                 pBaseHasher,
     Util::MetroHash128*                 pApiHasher)
 {
+    EXTRACT_VK_STRUCTURES_0(
+        renderingCreateInfo,
+        PipelineRenderingCreateInfoKHR,
+        static_cast<const VkPipelineRenderingCreateInfoKHR*>(pCreateInfo->pNext),
+        PIPELINE_RENDERING_CREATE_INFO_KHR);
+
+    if (pPipelineRenderingCreateInfoKHR != nullptr)
+    {
+        pApiHasher->Update(pPipelineRenderingCreateInfoKHR->viewMask);
+        pApiHasher->Update(pPipelineRenderingCreateInfoKHR->colorAttachmentCount);
+        for (uint32_t i = 0; i < pPipelineRenderingCreateInfoKHR->colorAttachmentCount; ++i)
+        {
+            pApiHasher->Update(pPipelineRenderingCreateInfoKHR->pColorAttachmentFormats[i]);
+        }
+        pApiHasher->Update(pPipelineRenderingCreateInfoKHR->depthAttachmentFormat);
+        pApiHasher->Update(pPipelineRenderingCreateInfoKHR->stencilAttachmentFormat);
+    }
 
     const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pCreateInfo->renderPass);
 
     if ((pCreateInfo->pColorBlendState != nullptr) &&
-        (GetColorAttachmentCount(pRenderPass, pCreateInfo->subpass) != 0))
+        (GetColorAttachmentCount(pRenderPass, pCreateInfo->subpass, pPipelineRenderingCreateInfoKHR) != 0))
 
     {
         GenerateHashFromColorBlendStateCreateInfo(*pCreateInfo->pColorBlendState, pBaseHasher, pApiHasher);

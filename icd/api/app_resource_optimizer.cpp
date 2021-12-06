@@ -447,6 +447,7 @@ void ResourceOptimizer::BuildAppProfile()
 #if ICD_RUNTIME_APP_PROFILE
 void ResourceOptimizer::BuildRuntimeProfile()
 {
+    memset(&m_runtimeProfile, 0, sizeof(m_runtimeProfile));
     // TODO: JSON parsing should go here
 }
 #endif

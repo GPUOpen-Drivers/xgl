@@ -128,6 +128,10 @@ public:
         const void*               pCode,
         ShaderModuleHandle*       pModule);
 
+    void TryEarlyCompileShaderModule(
+        const Device*       pDevice,
+        ShaderModuleHandle* pModule);
+
     bool IsValidShaderModule(
         const ShaderModuleHandle* pShaderModule) const;
 
@@ -142,6 +146,15 @@ public:
         size_t*                           pPipelineBinarySize,
         const void**                      ppPipelineBinary,
         Util::MetroHash::Hash*            pCacheId);
+
+    VkResult CreateGraphicsShaderBinary(
+        const Device*                           pDevice,
+        const ShaderStage                       stage,
+        const GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        ShaderModuleHandle*                     pModule);
+
+    static void FreeGraphicsShaderBinary(
+        ShaderModuleHandle* pShaderModule);
 
     VkResult CreateComputePipelineBinary(
         Device*                           pDevice,
@@ -175,6 +188,11 @@ public:
         GraphicsPipelineBinaryCreateInfo*               pCreateInfo,
         VbBindingInfo*                                  pVbInfo,
         PipelineInternalBufferInfo*                     pInternalBufferInfo);
+
+    static void SetPartialGraphicsPipelineBinaryInfo(
+        const ShaderModuleHandle*         pShaderModuleHandle,
+        const ShaderStage                 stage,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo);
 
     VkResult ConvertComputePipelineInfo(
         const Device*                                   pDevice,
@@ -221,8 +239,8 @@ public:
 
     void DestroyPipelineBinaryCache();
 
-    VkResult BuildPipelineInternalBufferData(GraphicsPipelineBinaryCreateInfo*     pCreateInfo,
-                                             PipelineInternalBufferInfo*           pInternalBufferInfo);
+    void BuildPipelineInternalBufferData(GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+                                         PipelineInternalBufferInfo*       pInternalBufferInfo);
 
     void GetComputePipelineCacheId(
         uint32_t                         deviceIdx,

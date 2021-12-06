@@ -348,8 +348,9 @@ static void ConstructQueueCreateInfo(
     bool                        useComputeAsTransferQueue,
     bool                        isTmzQueue)
 {
+    const auto& palProperties = (*pPhysicalDevices)->PalProperties();
     const Pal::QueuePriority palQueuePriority =
-        VkToPalGlobalPriority(queuePriority);
+        VkToPalGlobalPriority(queuePriority, palProperties.engineProperties[queueFamilyIndex].capabilities[queueIndex]);
 
     // Some configs can use this feature with any priority, but it's not useful for
     // lower priorities.
@@ -510,6 +511,7 @@ VkResult Device::Create(
     bool                              privateDataEnabled                    = false;
     size_t                            privateDataSize                       = 0;
     bool                              bufferDeviceAddressMultiDeviceEnabled = false;
+    bool                              maintenance4Enabled                   = false;
 
     const VkStructHeader* pHeader = nullptr;
 
@@ -680,12 +682,23 @@ VkResult Device::Create(
                 break;
             }
 
-           case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT:
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT:
             {
                if (reinterpret_cast<const VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT*>(
                    pHeader)->pageableDeviceLocalMemory)
                {
                    pageableDeviceLocalMemory = true;
+               }
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES_KHR:
+            {
+               if (reinterpret_cast<const VkPhysicalDeviceMaintenance4FeaturesKHR*>(
+                   pHeader)->maintenance4)
+               {
+                   maintenance4Enabled = true;
                }
 
                 break;
@@ -715,8 +728,12 @@ VkResult Device::Create(
                 pCreateInfo->pEnabledFeatures,
                 true);
         }
+    }
 
-        // Release the stack allocator
+    if (palResult == Pal::Result::Success)
+    {
+        // Don't free pStackAllocator before virtStackFrame's destructor
+        // Otherwise memory corruption when multi-threads are using same linear allocator
         pInstance->StackMgr()->ReleaseAllocator(pStackAllocator);
     }
     else
@@ -1117,7 +1134,8 @@ VkResult Device::Create(
                 scalarBlockLayoutEnabled,
                 extendedRobustnessEnabled,
                 bufferDeviceAddressMultiDeviceEnabled,
-                pageableDeviceLocalMemory);
+                pageableDeviceLocalMemory,
+                maintenance4Enabled);
 
             // If we've failed to Initialize, make sure we destroy anything we might have allocated.
             if (vkResult != VK_SUCCESS)
@@ -1152,7 +1170,8 @@ VkResult Device::Initialize(
     bool                                    scalarBlockLayoutEnabled,
     const ExtendedRobustness&               extendedRobustnessEnabled,
     bool                                    bufferDeviceAddressMultiDeviceEnabled,
-    bool                                    pageableDeviceLocalMemory)
+    bool                                    pageableDeviceLocalMemory,
+    bool                                    maintenance4Enabled)
 {
     // Initialize the internal memory manager
     VkResult result = m_internalMemMgr.Init();
@@ -1268,6 +1287,17 @@ VkResult Device::Initialize(
         (IsExtensionEnabled(DeviceExtensions::EXT_PAGEABLE_DEVICE_LOCAL_MEMORY) && pageableDeviceLocalMemory))
     {
         m_enabledFeatures.appControlledMemPriority = true;
+    }
+
+    if ((m_settings.strictImageSizeRequirements == StrictImageSizeOn) ||
+        ((m_settings.strictImageSizeRequirements == StrictImageSizeAppControlled) &&
+         maintenance4Enabled))
+    {
+        m_enabledFeatures.strictImageSizeRequirements = true;
+    }
+    else
+    {
+        m_enabledFeatures.strictImageSizeRequirements = false;
     }
 
     // If VkPhysicalDeviceBufferDeviceAddressFeaturesEXT.bufferDeviceAddressMultiDevice is enabled
@@ -2427,7 +2457,21 @@ VkResult Device::CreateImage(
     const VkAllocationCallbacks*                pAllocator,
     VkImage*                                    pImage)
 {
-    return Image::Create(this, pCreateInfo, pAllocator, pImage);
+    VkResult result = Image::Create(this, pCreateInfo, pAllocator, pImage);
+
+    if (result == VK_SUCCESS)
+    {
+        Image* pCreatedImage = Image::ObjectFromHandle(*pImage);
+
+        pCreatedImage->SetMemoryRequirementsAtCreate(this);
+
+        if (m_enabledFeatures.strictImageSizeRequirements && Formats::IsDepthStencilFormat(pCreateInfo->format))
+        {
+            Image::CalculateAlignedMemoryRequirements(this, pCreateInfo, pCreatedImage);
+        }
+    }
+
+    return result;
 }
 
 // =====================================================================================================================
@@ -2512,12 +2556,14 @@ VkResult Device::CreateComputePipelines(
     {
         const VkComputePipelineCreateInfo* pCreateInfo = &pCreateInfos[i];
 
-        VkResult result = ComputePipeline::Create(
-            this,
-            pPipelineCache,
-            pCreateInfo,
-            pAllocator,
-            &pPipelines[i]);
+        VkResult result = VK_SUCCESS;
+
+            result = ComputePipeline::Create(
+                this,
+                pPipelineCache,
+                pCreateInfo,
+                pAllocator,
+                &pPipelines[i]);
 
         if (result != VK_SUCCESS)
         {
@@ -2666,7 +2712,7 @@ VkResult Device::BindBufferMemory(
 // =====================================================================================================================
 VkResult Device::BindImageMemory(
     uint32_t                          bindInfoCount,
-    const VkBindImageMemoryInfo*      pBindInfos) const
+    const VkBindImageMemoryInfo*      pBindInfos)
 {
     for (uint32 bindIdx = 0; bindIdx < bindInfoCount; bindIdx++)
     {
@@ -3588,6 +3634,13 @@ Pal::Result Device::CreatePalQueue(
     return palResult;
 }
 
+Pal::TilingOptMode Device::GetTilingOptMode() const
+{
+    return m_enabledFeatures.strictImageSizeRequirements ?
+        Pal::TilingOptMode::OptForSpace :
+        m_settings.imageTilingOptMode;
+}
+
 /**
  ***********************************************************************************************************************
  * C-Callable entry points start here. These entries go in the dispatch table(s).
@@ -4247,6 +4300,44 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceBufferMemoryRequirementsKHR(
+    VkDevice                                   device,
+    const VkDeviceBufferMemoryRequirementsKHR* pInfo,
+    VkMemoryRequirements2*                     pMemoryRequirements)
+{
+    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    Buffer::CalculateMemoryRequirements(pDevice,
+                                        pInfo,
+                                        pMemoryRequirements);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageMemoryRequirementsKHR(
+    VkDevice                                  device,
+    const VkDeviceImageMemoryRequirementsKHR* pInfo,
+    VkMemoryRequirements2*                    pMemoryRequirements)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    Image::CalculateMemoryRequirements(pDevice,
+                                       pInfo,
+                                       pMemoryRequirements);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSparseMemoryRequirementsKHR(
+    VkDevice                                  device,
+    const VkDeviceImageMemoryRequirementsKHR* pInfo,
+    uint32_t*                                 pSparseMemoryRequirementCount,
+    VkSparseImageMemoryRequirements2*         pSparseMemoryRequirements)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    Image::CalculateSparseMemoryRequirements(pDevice,
+                                             pInfo,
+                                             pSparseMemoryRequirementCount,
+                                             pSparseMemoryRequirements);
 }
 
 // =====================================================================================================================

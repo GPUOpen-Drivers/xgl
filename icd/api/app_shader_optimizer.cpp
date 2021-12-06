@@ -174,13 +174,6 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                     options.pNggState->enableNgg = false;
                 }
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 45
-                if (shaderCreate.apply.nggFasterLaunchRate)
-                {
-                    options.pNggState->enableFastLaunch = true;
-                }
-#endif
-
                 if (shaderCreate.apply.nggVertexReuse)
                 {
                     options.pNggState->enableVertexReuse = true;

@@ -44,9 +44,10 @@
 #include "include/vk_render_pass.h"
 #include "include/vk_utils.h"
 
+#include "include/barrier_policy.h"
+#include "include/graphics_pipeline_common.h"
 #include "include/internal_mem_mgr.h"
 #include "include/virtual_stack_mgr.h"
-#include "include/barrier_policy.h"
 
 #include "renderpass/renderpass_builder.h"
 
@@ -131,7 +132,8 @@ union DirtyGraphicsState
         uint32 vrs                     :  1;
         uint32 colorWriteEnable        :  1;
         uint32 rasterizerDiscardEnable :  1;
-        uint32 reserved                : 23;
+        uint32 samplePattern           :  1;
+        uint32 reserved                : 22;
     };
 
     uint32 u32All;
@@ -162,6 +164,28 @@ struct PerGpuRenderState
     uint32_t maxPipelineStackSize;
 };
 
+struct DynamicRenderingAttachments
+{
+    VkResolveModeFlagBits resolveMode;
+    const ImageView*      pImageView;
+    Pal::ImageLayout      imageLayout;
+    const ImageView*      pResolveImageView;
+    Pal::ImageLayout      resolveImageLayout;
+    VkFormat              attachmentFormat;
+    VkSampleCountFlagBits rasterizationSamples;
+};
+
+struct DynamicRenderingInstance
+{
+    uint32_t                    viewMask;
+    uint32_t                    renderAreaCount;
+    Pal::Rect                   renderArea[MaxPalDevices];
+    uint32_t                    colorAttachmentCount;
+    DynamicRenderingAttachments colorAttachments[Pal::MaxColorTargets];
+    DynamicRenderingAttachments depthAttachment;
+    DynamicRenderingAttachments stencilAttachment;
+};
+
 // Members of CmdBufferRenderState that are the same for each GPU
 struct AllGpuRenderState
 {
@@ -188,7 +212,6 @@ struct AllGpuRenderState
         uint32_t depthBounds;
         uint32_t viewports;
         uint32_t scissorRect;
-        uint32_t samplePattern;
         uint32_t fragmentShadingRate;
     } staticTokens;
 
@@ -208,6 +231,8 @@ struct AllGpuRenderState
     bool lastColorWriteEnableDynamic;
 
     bool rasterizerDiscardEnable;
+
+    DynamicRenderingInstance         dynamicRenderingInstance;
 
 // =====================================================================================================================
 // The first part of the structure will be cleared with a memset in CmdBuffer::ResetState().
@@ -229,6 +254,7 @@ struct AllGpuRenderState
     Pal::DepthStencilStateCreateInfo depthStencilCreateInfo;
     Pal::VrsRateParams               vrsRate;
     Pal::ColorWriteMaskParams        colorWriteMaskParams;
+    SamplePattern                    samplePattern;
 };
 
 // State tracked during a render pass instance when building a command buffer.
@@ -452,6 +478,18 @@ public:
         uint32_t                                    rectCount,
         const VkClearRect*                          pRects);
 
+    void ClearDynamicRenderingImages(
+        uint32_t                 attachmentCount,
+        const VkClearAttachment* pAttachments,
+        uint32_t                 rectCount,
+        const VkClearRect*       pRects);
+
+    void ClearDynamicRenderingBoundAttachments(
+        uint32_t                                    attachmentCount,
+        const VkClearAttachment*                    pAttachments,
+        uint32_t                                    rectCount,
+        const VkClearRect*                          pRects);
+
     template<typename ImageResolveType>
     void ResolveImage(
         VkImage                                     srcImage,
@@ -624,6 +662,11 @@ public:
 
     void PipelineBarrierSync2ToSync1(
         const VkDependencyInfoKHR*                  pDependencyInfo);
+
+    void BeginRendering(
+        const VkRenderingInfoKHR*                   pRenderingInfo);
+
+    void EndRendering();
 
     void BeginQueryIndexed(
         VkQueryPool                                 queryPool,
@@ -1035,6 +1078,8 @@ private:
 
     void ValidateStates();
 
+    void ValidateSamplePattern(uint32_t sampleCount, SamplePattern* pSamplePattern);
+
     CmdBuffer(
         Device*                         pDevice,
         CmdPool*                        pCmdPool,
@@ -1102,7 +1147,31 @@ private:
     void RPBindTargets(const RPBindTargetsInfo& targets);
     void RPSyncPostLoadOpColorClear();
 
-    void RPInitSamplePattern();
+    void BindTargets(
+        const VkRenderingInfoKHR*                              pRenderingInfo,
+        const VkRenderingFragmentShadingRateAttachmentInfoKHR* pRenderingFragmentShadingRateAttachmentInfoKHR);
+
+    void ResolveImage(
+        const DynamicRenderingAttachments& dynamicRenderingAttachments);
+
+    void LoadOpClearColor(
+        const Pal::Rect*          pDeviceGroupRenderArea,
+        const VkRenderingInfoKHR* pRenderingInfo);
+
+    void LoadOpClearDepthStencil(
+        const Pal::Rect*          pDeviceGroupRenderArea,
+        const VkRenderingInfoKHR* pRenderingInfo);
+
+    void GetImageLayout(
+        VkImageView        imageView,
+        VkImageLayout      imageLayout,
+        VkImageAspectFlags aspectMask,
+        Pal::SubresRange*  palSubresRange,
+        Pal::ImageLayout*  palImageLayout);
+
+    void StoreAttachmentInfo(
+        const VkRenderingAttachmentInfoKHR& renderingAttachmentInfo,
+        DynamicRenderingAttachments*        pDynamicRenderingAttachement);
 
     Pal::ImageLayout RPGetAttachmentLayout(
         uint32_t attachment,
@@ -1209,7 +1278,7 @@ private:
             uint32_t hasReleaseAcquire                   :  1;
             uint32_t useSplitReleaseAcquire              :  1;
             uint32_t reserved2                           :  3;
-            uint32_t reserved3                           :  1;
+            uint32_t isRenderingSuspended                :  1;
             uint32_t reserved4                           :  1;
             uint32_t reserved                            : 15;
         };
@@ -1816,6 +1885,13 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarker2AMD(
     VkBuffer                                    dstBuffer,
     VkDeviceSize                                dstOffset,
     uint32_t                                    marker);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderingKHR(
+    VkCommandBuffer           commandBuffer,
+    const VkRenderingInfoKHR* pRenderingInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderingKHR(
+    VkCommandBuffer           commandBuffer);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetCullModeEXT(
     VkCommandBuffer                             commandBuffer,

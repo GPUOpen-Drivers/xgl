@@ -66,8 +66,6 @@ RenderStateCache::RenderStateCache(
     m_scissorRectNextId(FirstStaticRenderStateToken),
     m_msaaStates(NumStateBuckets, pDevice->VkInstance()->Allocator()),
     m_msaaRefs(NumStateBuckets, pDevice->VkInstance()->Allocator()),
-    m_samplePattern(NumStateBuckets, pDevice->VkInstance()->Allocator()),
-    m_samplePatternNextId(FirstStaticRenderStateToken),
     m_colorBlendStates(NumStateBuckets, pDevice->VkInstance()->Allocator()),
     m_colorBlendRefs(NumStateBuckets, pDevice->VkInstance()->Allocator()),
     m_depthStencilStates(NumStateBuckets, pDevice->VkInstance()->Allocator()),
@@ -132,11 +130,6 @@ VkResult RenderStateCache::Init()
     if (result == Pal::Result::Success)
     {
         result = m_msaaRefs.Init();
-    }
-
-    if (result == Pal::Result::Success)
-    {
-        result = m_samplePattern.Init();
     }
 
     if (result == Pal::Result::Success)
@@ -1032,29 +1025,6 @@ void RenderStateCache::DestroyScissorRect(
         params,
         token,
         &m_scissorRect);
-}
-
-// =====================================================================================================================
-uint32_t RenderStateCache::CreateSamplePattern(
-    const SamplePattern& samplePattern)
-{
-    return CreateStaticParamsState(
-        OptRenderStateCacheStaticSamplePattern,
-        samplePattern,
-        &m_samplePattern,
-        &m_samplePatternNextId);
-}
-
-// =====================================================================================================================
-void RenderStateCache::DestroySamplePattern(
-    const SamplePattern& samplePattern,
-    uint32_t             token)
-{
-    return DestroyStaticParamsState(
-        OptRenderStateCacheStaticSamplePattern,
-        samplePattern,
-        token,
-        &m_samplePattern);
 }
 
 // =====================================================================================================================
