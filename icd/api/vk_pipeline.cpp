@@ -371,10 +371,6 @@ VkResult Pipeline::GetShaderDisassembly(
 {
     const PipelineBinaryInfo* pPipelineBinary = GetBinary();
 
-    // To extract the shader code, we can re-parse the saved ELF binary and lookup the shader's program
-    // instructions by examining the symbol table entry for that shader's entrypoint.
-    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(), pPipelineBinary->pBinary);
-
     if (pPipelineBinary == nullptr)
     {
         // The pipelineBinary will be null if the pipeline wasn't created with
@@ -383,6 +379,10 @@ VkResult Pipeline::GetShaderDisassembly(
 
         return VK_ERROR_UNKNOWN;
     }
+
+    // To extract the shader code, we can re-parse the saved ELF binary and lookup the shader's program
+    // instructions by examining the symbol table entry for that shader's entrypoint.
+    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(), pPipelineBinary->pBinary);
 
     VkResult    result    = VK_SUCCESS;
     Pal::Result palResult = abiReader.Init();
