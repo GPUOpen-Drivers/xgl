@@ -142,7 +142,7 @@ cc::MD5DigestStr calculateMD5Sum(llvm::ArrayRef<uint8_t> data) {
   return result.digest();
 }
 
-TEST(CacheInfoTest, ValidBlobOneEntry) {
+TEST(CacheInfoTest, DISABLED_ValidBlobOneEntry) {
   const size_t trailingSpace = 16;
   const size_t entrySize = sizeof(uint32_t);
   const size_t bufferSize = vk::VkPipelineCacheHeaderDataSize + trailingSpace +
