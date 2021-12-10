@@ -50,7 +50,7 @@ llvm::Error createBlobError(llvm::MemoryBufferRef blob, llvm::Error err) {
 // @param vals : Values for the format specifier
 // @returns : Error annotated with the blob identifier
 template <typename... Ts>
-llvm::Error createBlobError(llvm::MemoryBufferRef blob, const char *format, const Ts &... vals) {
+llvm::Error createBlobError(llvm::MemoryBufferRef blob, const char *format, const Ts &...vals) {
   return createBlobError(blob, llvm::createStringError(std::errc::state_not_recoverable, format, vals...));
 }
 
@@ -170,10 +170,11 @@ CacheBlobInfo::readBinaryCacheEntriesInfo(llvm::SmallVectorImpl<BinaryCacheEntry
     }
 
     BinaryCacheEntryInfo currEntryInfo = {};
-    currEntryInfo.entryHeader = reinterpret_cast<const vk::BinaryCacheEntry *>(currData);
+    currEntryInfo.entryHeader = currData;
+    memcpy(&currEntryInfo.entryHeaderData, currData, EntrySize);
     currEntryInfo.idx = entryIdx;
 
-    const size_t currEntryBlobSize = currEntryInfo.entryHeader->dataSize;
+    const size_t currEntryBlobSize = currEntryInfo.entryHeaderData.dataSize;
     if (currData + EntrySize + currEntryBlobSize > blobEnd) {
       return createBlobError(m_cacheBlob, "Insufficient buffer size for cache entry content #%zu at offset %zu",
                              entryIdx, currEntryOffset);
@@ -222,12 +223,12 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const BinaryCachePrivateHea
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const BinaryCacheEntryInfo &info) {
   assert(info.entryHeader);
-  const vk::BinaryCacheEntry &header = *info.entryHeader;
+  const vk::BinaryCacheEntry &header = info.entryHeaderData;
 
   os << "\t*** Entry " << info.idx << " ***\n"
      << "\thash ID:\t\t"
-     << "0x" << llvm::format_hex_no_prefix(header.hashId.qwords[0], sizeof(uint64_t) * 2)
-     << " 0x" << llvm::format_hex_no_prefix(header.hashId.qwords[1], sizeof(uint64_t) * 2) << '\n'
+     << "0x" << llvm::format_hex_no_prefix(header.hashId.qwords[0], sizeof(uint64_t) * 2) << " 0x"
+     << llvm::format_hex_no_prefix(header.hashId.qwords[1], sizeof(uint64_t) * 2) << '\n'
      << "\tdata size:\t\t" << header.dataSize << "\n"
      << "\tcalculated MD5 sum:\t" << info.entryMD5Sum << "\n";
   return os;

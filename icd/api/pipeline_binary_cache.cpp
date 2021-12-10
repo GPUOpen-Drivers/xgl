@@ -136,6 +136,11 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
         else if ((pInitData != nullptr) &&
                  (initDataSize > (sizeof(BinaryCacheEntry) + sizeof(PipelineBinaryCachePrivateHeader))))
         {
+            // The pipeline binary cache data format is as follows:
+            // ```
+            // | Public Header | Private Header (20B) | BinaryCacheEntry (24B) | Blob (n) | BinaryCacheEntry (24B) | ...
+            // ```
+            //
             const void* pBlob           = pInitData;
             size_t   blobSize           = initDataSize;
             constexpr size_t EntrySize  = sizeof(BinaryCacheEntry);
@@ -144,14 +149,18 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
             blobSize     -= sizeof(PipelineBinaryCachePrivateHeader);
             while (blobSize > EntrySize)
             {
-                const BinaryCacheEntry* pEntry  = static_cast<const BinaryCacheEntry*>(pBlob);
-                const void*             pData   = Util::VoidPtrInc(pBlob, sizeof(BinaryCacheEntry));
-                const size_t entryAndDataSize   = pEntry->dataSize + sizeof(BinaryCacheEntry);
+                // `BinaryCacheEntry` headers require the alignment of 8 bytes, which is not guaranteed with this data
+                // format. Therefore we cannot use `reinterpret_cast` to read cache entry headers. We use memcpy to
+                // avoid unaligned memory accesses.
+                BinaryCacheEntry entry;
+                memcpy(&entry, pBlob, EntrySize);
+                const void*             pData   = Util::VoidPtrInc(pBlob, EntrySize);
+                const size_t entryAndDataSize   = entry.dataSize + EntrySize;
 
                 if (blobSize >= entryAndDataSize)
                 {
                     //add to cache
-                    Util::Result result = pObj->StorePipelineBinary(&pEntry->hashId, pEntry->dataSize, pData);
+                    Util::Result result = pObj->StorePipelineBinary(&entry.hashId, entry.dataSize, pData);
                     if (result != Util::Result::Success)
                     {
                         break;
