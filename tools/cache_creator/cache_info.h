@@ -79,7 +79,9 @@ using MD5DigestStr = llvm::SmallString<32>;
 // Represents printable information about a Pipeline Binary Cache entry, its location within the cache blob, and
 // calculated MD5 sum of the entry content.
 struct BinaryCacheEntryInfo {
-  const vk::BinaryCacheEntry *entryHeader;
+  // We do not store the header as `vk::BinaryCacheEntry *` because the address may not be properly aligned.
+  const uint8_t *entryHeader;
+  vk::BinaryCacheEntry entryHeaderData;
   size_t idx;
   llvm::ArrayRef<uint8_t> entryBlob;
   MD5DigestStr entryMD5Sum;

@@ -28,6 +28,9 @@
 #include "llvm/Testing/Support/Error.h"
 #include "gmock/gmock.h"
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <type_traits>
 
 namespace {
 
@@ -142,27 +145,47 @@ cc::MD5DigestStr calculateMD5Sum(llvm::ArrayRef<uint8_t> data) {
   return result.digest();
 }
 
+// =====================================================================================================================
+// Copies the contents of `value` to the buffer and returns the next position in the buffer. The caller must ensure that
+// the buffer sufficiently large to fit `value`.
+//
+// @param value : Value to add to the buffer.
+// @param [out] currData : Current position in the buffer. This does *not* have to be aligned to `alignof(T)`.
+// @returns : Next position in the buffer.
+template <typename T> uint8_t *appendRawData(T value, uint8_t *currData) {
+  static_assert(std::is_standard_layout<T>::value, "Incompatible type");
+  assert(currData);
+  memcpy(currData, &value, sizeof(T)); // Use memcpy instead of reinterpret_cast<T *> to avoid unaligned writes.
+  return currData + sizeof(T);
+}
+
 TEST(CacheInfoTest, ValidBlobOneEntry) {
   const size_t trailingSpace = 16;
   const size_t entrySize = sizeof(uint32_t);
   const size_t bufferSize = vk::VkPipelineCacheHeaderDataSize + trailingSpace +
                             sizeof(vk::PipelineBinaryCachePrivateHeader) + sizeof(vk::BinaryCacheEntry) + entrySize;
-  llvm::SmallVector<uint8_t> buffer(bufferSize);
+  std::vector<uint8_t> buffer(bufferSize);
   uint8_t *currData = buffer.data();
 
-  auto *publicHeader = new (currData) vk::PipelineCacheHeaderData();
-  publicHeader->headerLength = vk::VkPipelineCacheHeaderDataSize + trailingSpace;
-  currData += publicHeader->headerLength;
+  uint8_t *const publicHeader = currData;
+  vk::PipelineCacheHeaderData publicHeaderData = {};
+  publicHeaderData.headerLength = vk::VkPipelineCacheHeaderDataSize + trailingSpace;
+  currData = appendRawData(publicHeaderData, currData) + trailingSpace;
 
-  auto *privateHeader = new (currData) vk::PipelineBinaryCachePrivateHeader();
-  currData += sizeof(vk::PipelineBinaryCachePrivateHeader);
+  uint8_t *const privateHeader = currData;
+  currData = appendRawData(vk::PipelineBinaryCachePrivateHeader{}, currData);
 
-  auto *entryHeader = new (currData) vk::BinaryCacheEntry();
-  entryHeader->dataSize = entrySize;
-  currData += sizeof(vk::BinaryCacheEntry);
+  uint8_t *const entryHeader = currData;
+  vk::BinaryCacheEntry cacheEntry = {};
+  cacheEntry.dataSize = entrySize;
+  currData = appendRawData(cacheEntry, currData);
 
-  auto *entryContent = new (currData) uint32_t(42);
-  llvm::ArrayRef<uint8_t> entryBlob(currData, entrySize);
+  const uint32_t content = 42;
+  uint8_t *entryContent = currData;
+  currData = appendRawData(content, currData);
+  llvm::ArrayRef<uint8_t> entryBlob(entryContent, entrySize);
+
+  EXPECT_EQ(currData, buffer.data() + bufferSize);
 
   auto blobPtr = llvm::MemoryBuffer::getMemBuffer(llvm::toStringRef(buffer), "valid_one_entry", false);
   assert(blobPtr);
@@ -173,12 +196,13 @@ TEST(CacheInfoTest, ValidBlobOneEntry) {
   // These should all succeed as both headers can be fully parsed and there's one valid entry.
   auto publicHeaderInfoOrErr = blobInfoOrErr->readPublicVkHeaderInfo();
   ASSERT_THAT_EXPECTED(publicHeaderInfoOrErr, Succeeded());
-  EXPECT_EQ(publicHeaderInfoOrErr->publicHeader, publicHeader);
+  EXPECT_EQ(reinterpret_cast<const uint8_t *>(publicHeaderInfoOrErr->publicHeader), publicHeader);
+  EXPECT_EQ(publicHeaderInfoOrErr->publicHeader->headerLength, publicHeaderData.headerLength);
   EXPECT_EQ(publicHeaderInfoOrErr->trailingSpaceBeforePrivateBlob, trailingSpace);
 
   auto privateHeaderInfoOrErr = blobInfoOrErr->readBinaryCachePrivateHeaderInfo();
   ASSERT_THAT_EXPECTED(privateHeaderInfoOrErr, Succeeded());
-  EXPECT_EQ(privateHeaderInfoOrErr->privateHeader, privateHeader);
+  EXPECT_EQ(reinterpret_cast<const uint8_t *>(privateHeaderInfoOrErr->privateHeader), privateHeader);
   EXPECT_EQ(privateHeaderInfoOrErr->contentBlobSize, sizeof(vk::BinaryCacheEntry) + entrySize);
 
   llvm::SmallVector<cc::BinaryCacheEntryInfo, 1> entries;
@@ -188,6 +212,7 @@ TEST(CacheInfoTest, ValidBlobOneEntry) {
 
   cc::BinaryCacheEntryInfo &entry = entries.front();
   EXPECT_EQ(entry.entryHeader, entryHeader);
+  EXPECT_EQ(entry.entryHeaderData.dataSize, cacheEntry.dataSize);
   EXPECT_EQ(entry.idx, 0u);
   EXPECT_EQ(entry.entryBlob.data(), entryBlob.data());
   EXPECT_EQ(entry.entryBlob.size(), entryBlob.size());
