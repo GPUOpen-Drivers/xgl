@@ -18,7 +18,7 @@ jobs:
         base-image-template: ["gcr.io/stadia-open-source/amdvlk_%s%s:nightly"]
         config:              [Release]
         feature-set:         ["+gcc", "+gcc+assertions",
-                              "+clang"]
+                              "+clang", "+clang+shadercache+ubsan+asan+assertions"]
     steps:
       - name: Checkout XGL
         run: |
