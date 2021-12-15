@@ -186,6 +186,7 @@ function(generatePackageTarget)
     set(CPACK_RPM_PACKAGE_DESCRIPTION "${PACKAGE_DESCRIPTION}")
     set(CPACK_RPM_PACKAGE_GROUP "System Environment/Libraries")
     set(CPACK_RPM_PACKAGE_LICENSE "MIT")
+    set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/etc/vulkan;/etc/vulkan/icd.d;/etc/vulkan/implicit_layer.d")
     execute_process(COMMAND ${lsb_release_exec} -rs
                    OUTPUT_VARIABLE lsb_release_number
                    OUTPUT_STRIP_TRAILING_WHITESPACE)
