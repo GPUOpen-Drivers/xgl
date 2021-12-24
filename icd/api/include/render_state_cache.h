@@ -359,7 +359,11 @@ private:
 
     Util::HashMap<Pal::VrsRateParams,
         StaticParamState,
-        PalAllocator>                                 m_fragmentShadingRate;
+        PalAllocator,
+        Util::JenkinsHashFunc,
+        Util::DefaultEqualFunc,
+        Util::HashAllocator<PalAllocator>,
+        1024>                                         m_fragmentShadingRate;
     uint32_t                                          m_fragmentShadingRateNextId;
 };
 

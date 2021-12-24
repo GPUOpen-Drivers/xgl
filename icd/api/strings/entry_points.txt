@@ -376,7 +376,7 @@ vkSignalSemaphoreKHR                                @device     @dext(KHR_timeli
 vkCmdBeginConditionalRenderingEXT                   @device     @dext(EXT_conditional_rendering)
 vkCmdEndConditionalRenderingEXT                     @device     @dext(EXT_conditional_rendering)
 
-vkGetPhysicalDeviceToolPropertiesEXT                @device     @dext(EXT_tooling_info)
+vkGetPhysicalDeviceToolPropertiesEXT                @instance   @dext(EXT_tooling_info)
 
 vkCmdSetEvent2KHR                                   @device     @dext(KHR_synchronization2)
 vkCmdResetEvent2KHR                                 @device     @dext(KHR_synchronization2)

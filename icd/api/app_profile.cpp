@@ -181,6 +181,12 @@ constexpr AppProfilePatternEntry AppNameSeriousSamFusionLinux =
     "serious sam fusion 2017 - linux - 64bit"
 };
 
+constexpr AppProfilePatternEntry AppNameSeriousSam4Win =
+{
+    PatternAppNameLower,
+    "serious sam 4 - 64bit"
+};
+
 constexpr AppProfilePatternEntry AppEngineSedp =
 {
     PatternEngineNameLower,
@@ -301,6 +307,18 @@ constexpr AppProfilePatternEntry AppEngineDagorEngine =
     "dagor"
 };
 
+constexpr AppProfilePatternEntry AppNameMetroExodus =
+{
+    PatternAppNameLower,
+    "metroexodus"
+};
+
+constexpr AppProfilePatternEntry AppEngineMetroExodus =
+{
+    PatternEngineNameLower,
+    "metroexodus"
+};
+
 constexpr AppProfilePatternEntry AppEngineXSystem =
 {
     PatternEngineNameLower,
@@ -341,6 +359,12 @@ constexpr AppProfilePatternEntry AppNameRainbowSixSiege =
 {
     PatternAppNameLower,
     "rainbow six siege"
+};
+
+constexpr AppProfilePatternEntry AppNameHyperscape =
+{
+    PatternAppNameLower,
+    "hyperscape"
 };
 
 constexpr AppProfilePatternEntry AppEngineScimitar =
@@ -611,6 +635,15 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::SeriousSam4,
+        {
+            AppNameSeriousSam4Win,
+            AppEngineSedp,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::SedpEngine,
         {
             AppEngineSedp,
@@ -734,6 +767,15 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::MetroExodus,
+        {
+            AppNameMetroExodus,
+            AppEngineMetroExodus,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::AshesOfTheSingularity,
         {
             AppNameAshesOfTheSingularity,
@@ -823,6 +865,15 @@ AppProfilePattern AppPatternTable[] =
            AppNameEvilGenius2,
            PatternEnd
        }
+    },
+
+    {
+        AppProfile::Hyperscape,
+        {
+            AppNameHyperscape,
+            AppEngineScimitar,
+            PatternEnd
+        }
     },
 
     {

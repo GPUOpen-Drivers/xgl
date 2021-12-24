@@ -870,8 +870,7 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
             pNode->offsetInDwords       = binding.sta.dwOffset;
             pNode->sizeInDwords         = binding.sta.dwSize;
             pNode->srdRange.binding     = binding.info.binding;
-            pNode->srdRange.set         =
-                setIndex;
+            pNode->srdRange.set         = setIndex;
             (*pStaNodeCount)++;
 
             if (binding.imm.dwSize > 0)
@@ -958,8 +957,7 @@ void PipelineLayout::BuildLlpcStaticSetMapping(
             pNode->offsetInDwords   = binding.sta.dwOffset;
             pNode->sizeInDwords     = binding.sta.dwSize;
             pNode->srdRange.binding = binding.info.binding;
-            pNode->srdRange.set     =
-                setIndex;
+            pNode->srdRange.set     = setIndex;
             (*pNodeCount)++;
 
             if (binding.imm.dwSize > 0)

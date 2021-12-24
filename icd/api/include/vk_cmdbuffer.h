@@ -1009,20 +1009,21 @@ public:
         uint32_t                index,
         uint32_t                stride) const;
 
+    VK_FORCEINLINE uint32_t NumPalDevices() const
+        { return m_numPalDevices; }
+
     uint32_t NumDeviceEvents(uint32_t numEvents) const
-    {
-        return m_numPalDevices * numEvents;
-    }
+        { return m_numPalDevices * numEvents; }
 
 #if VK_ENABLE_DEBUG_BARRIERS
-    void DbgBarrierPreCmd(uint32_t cmd)
+    void DbgBarrierPreCmd(uint64_t cmd)
     {
         if (m_dbgBarrierPreCmdMask & (cmd))
         {
             DbgCmdBarrier(true);
         }
     }
-    void DbgBarrierPostCmd(uint32_t cmd)
+    void DbgBarrierPostCmd(uint64_t cmd)
     {
         if (m_dbgBarrierPostCmdMask & (cmd))
         {
@@ -1030,8 +1031,8 @@ public:
         }
     }
 #else
-    void DbgBarrierPreCmd(uint32_t cmd) {}
-    void DbgBarrierPostCmd(uint32_t cmd) {}
+    void DbgBarrierPreCmd(uint64_t cmd) {}
+    void DbgBarrierPostCmd(uint64_t cmd) {}
 #endif
 
     SqttCmdBufferState* GetSqttState()
@@ -1311,8 +1312,8 @@ private:
     TransformFeedbackState*       m_pTransformFeedbackState;
 
 #if VK_ENABLE_DEBUG_BARRIERS
-    uint32_t                      m_dbgBarrierPreCmdMask;
-    uint32_t                      m_dbgBarrierPostCmdMask;
+    uint64_t                      m_dbgBarrierPreCmdMask;
+    uint64_t                      m_dbgBarrierPostCmdMask;
 #endif
 
     Util::Vector<DynamicDepthStencil, 16, PalAllocator> m_palDepthStencilState;

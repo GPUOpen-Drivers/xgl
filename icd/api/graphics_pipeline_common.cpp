@@ -627,7 +627,21 @@ static void BuildRasterizationState(
                     pInfo->pipeline.viewportInfo.depthClipFarEnable  = (pRsDepthClip->depthClipEnable == VK_TRUE);
                 }
                 break;
+            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT:
+                {
+                    const auto* pRsProvokingVertex =
+                        static_cast<const VkPipelineRasterizationProvokingVertexStateCreateInfoEXT*>(pNext);
+                    pInfo->immedInfo.triangleRasterState.provokingVertex =
+                        static_cast<Pal::ProvokingVertex>(pRsProvokingVertex->provokingVertexMode);
 
+                    static_assert(static_cast<Pal::ProvokingVertex>(VK_PROVOKING_VERTEX_MODE_FIRST_VERTEX_EXT) ==
+                                  Pal::ProvokingVertex::First,
+                                  "VK and PAL enums don't match");
+                    static_assert(static_cast<Pal::ProvokingVertex>(VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT) ==
+                                  Pal::ProvokingVertex::Last,
+                                  "VK and PAL enums don't match");
+                }
+                break;
             default:
                 // Skip any unknown extension structures
                 break;
@@ -636,7 +650,7 @@ static void BuildRasterizationState(
             pNext = pHeader->pNext;
         }
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 691
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 693
         // For optimal performance, depth clamping should be enabled by default. Only disable it if dealing
         // with depth values outside of [0.0, 1.0] range.
         // Note that this is the opposite of the default Vulkan setting which is depthClampEnable = false.
@@ -663,18 +677,18 @@ static void BuildRasterizationState(
               ((pInfo->pipeline.viewportInfo.depthClipNearEnable == false) &&
                (pInfo->pipeline.viewportInfo.depthClipFarEnable == false)))
             {
-                pInfo->pipeline.rsState.DepthClampMode = Pal::DepthClampMode::None;
+                pInfo->pipeline.rsState.depthClampMode = Pal::DepthClampMode::_None;
             }
             else
             {
-                pInfo->pipeline.rsState.DepthClampMode = Pal::DepthClampMode::ZeroToOne;
+                pInfo->pipeline.rsState.depthClampMode = Pal::DepthClampMode::ZeroToOne;
             }
         }
         else
         {
             // When depth clamping is enabled, depth clipping should be disabled, and vice versa.
             // Clipping is updated in pipeline compiler.
-            pInfo->pipeline.rsState.DepthClampMode = Pal::DepthClampMode::Viewport;
+            pInfo->pipeline.rsState.depthClampMode = Pal::DepthClampMode::Viewport;
         }
 #endif
 
@@ -708,6 +722,20 @@ static void BuildViewportState(
 {
     if (pVp != nullptr)
     {
+        EXTRACT_VK_STRUCTURES_0(
+            viewportDepthClipControl,
+            PipelineViewportDepthClipControlCreateInfoEXT,
+            static_cast<const VkPipelineViewportDepthClipControlCreateInfoEXT*>(pVp->pNext),
+            PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT);
+
+        // Default Vulkan depth range is [0, 1]
+        // Check if VK_EXT_depth_clip_control overrides depth to [-1, 1]
+        pInfo->pipeline.viewportInfo.depthRange =
+            ((pPipelineViewportDepthClipControlCreateInfoEXT != nullptr) &&
+            (pPipelineViewportDepthClipControlCreateInfoEXT->negativeOneToOne == VK_TRUE)) ?
+            Pal::DepthRange::NegativeOneToOne : Pal::DepthRange::ZeroToOne;
+
+        pInfo->immedInfo.viewportParams.depthRange = pInfo->pipeline.viewportInfo.depthRange;
 
         // From the spec, "scissorCount is the number of scissors and must match the number of viewports."
         VK_ASSERT(pVp->viewportCount <= Pal::MaxViewports);

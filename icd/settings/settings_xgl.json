@@ -222,6 +222,10 @@
       ]
     },
     {
+      "Name": "MinimizeVgprUsageStrategy",
+      "Values": []
+    },
+    {
       "Name": "ThreadGroupSwizzleMode",
       "IsEnum": true,
       "Values": [
@@ -2187,6 +2191,82 @@
       "Name": "DumpDuplicatePipelines"
     },
     {
+      "Description": "BVH Builder NodeSort Type",
+      "Tags": [],
+      "Defaults": {
+        "Default": "BvhBuilderNodeSortOff"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "BvhBuilderNodeSortType",
+        "Values": [
+          {
+            "Name": "BvhBuilderNodeSortOff",
+            "Value": 0
+          },
+          {
+            "Name": "BvhBuilderNodeSortFourWaySortOnTLAS",
+            "Value": 1
+          },
+          {
+            "Name": "BvhBuilderNodeSortFourWaySortOnBLAS",
+            "Value": 2
+          },
+          {
+            "Name": "BvhBuilderNodeSortFourWaySortOnBoth",
+            "Value": 3
+          },
+          {
+            "Name": "BvhBuilderNodeSortTwoLevelSortOnTLAS",
+            "Value": 4
+          },
+          {
+            "Name": "BvhBuilderNodeSortTwoLevelSortOnBLAS",
+            "Value": 5
+          },
+          {
+            "Name": "BvhBuilderNodeSortTwoLevelSortOnBoth",
+            "Value": 6
+          }
+        ]
+      },
+      "Type": "enum",
+      "Name": "BvhBuilderNodeSortType",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "BVH Builder NodeSort Heurstic. Currently only work when NodeSortType is set to be NodeSort4WaySort.",
+      "Tags": [],
+      "Defaults": {
+        "Default": "BvhBuilderNodeSortHeuristicSurfaceAreaLargestFirst"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "BvhBuilderNodeSortHeuristic",
+        "Values": [
+          {
+            "Name": "BvhBuilderNodeSortHeuristicSurfaceAreaLargestFirst",
+            "Value": 0
+          },
+          {
+            "Name": "BvhBuilderNodeSortHeuristicSurfaceAreaSmallestFirst",
+            "Value": 1
+          },
+          {
+            "Name": "BvhBuilderNodeSortHeuristicDensityLargestFirst",
+            "Value": 2
+          },
+          {
+            "Name": "BvhBuilderNodeSortHeuristicDensitySmallestFirst",
+            "Value": 3
+          }
+        ]
+      },
+      "Type": "enum",
+      "Name": "BvhBuilderNodeSortHeuristic",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Re-routes all compute work to a universal queue internally.",
       "Tags": [
         "General"
@@ -2196,6 +2276,46 @@
       },
       "Type": "bool",
       "Name": "UseUniversalAsComputeQueue",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "DispatchRaysThreadGroupSize",
+      "Type": "uint32",
+      "Description": "Thread Group size to use when calling DispatchRays",
+      "Scope": "Driver",
+      "Tags": [],
+      "Defaults": {
+        "Default": 32
+      }
+    },
+    {
+      "Description": "Override the thread group size in x dimension for compute shaders using ray query.",
+      "Tags": [],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "RayQueryCsThreadGroupSizeX",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Override the thread group size in y dimension for compute shaders using ray query.",
+      "Tags": [],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "RayQueryCsThreadGroupSizeY",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Override the thread group size in z dimension for compute shaders using ray query.",
+      "Tags": [],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "RayQueryCsThreadGroupSizeZ",
       "Scope": "Driver"
     },
     {
@@ -2351,19 +2471,19 @@
           },
           {
             "Name": "DbgBarrierBeginRendering",
-            "Value": 1073741824,
+            "Value": 4294967296,
             "Description": "Begin rendering"
           },
           {
             "Name": "DbgBarrierOther",
-            "Value": 2147483648,
+            "Value": 8589934592,
             "Description": "Any other command not listed above"
           }
         ],
         "Name": "DbgBarrierCmd"
       },
       "Scope": "Driver",
-      "Type": "uint32"
+      "Type": "uint64"
     },
     {
       "Description": "For post-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier will wait.",
@@ -2640,7 +2760,7 @@
         "Default": 0
       },
       "Scope": "Driver",
-      "Type": "uint32",
+      "Type": "uint64",
       "Name": "DbgBarrierPreCmdEnable"
     },
     {
@@ -3013,6 +3133,16 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Max number of VGPRs for indirect shaders (0xFFFFFFFF = uses indirectCallTargetOccupancyPerSimd)",
+      "Tags": [],
+      "Defaults": {
+        "Default": "0xFFFFFFFF"
+      },
+      "Type": "uint32",
+      "Name": "RtIndirectVgprLimit",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Allows instance-level functions to be queried using vkGetDeviceProcAddr.",
       "Tags": [
         "General"
@@ -3145,6 +3275,18 @@
     {
       "Name": "ExposeLinearShadingRateImage",
       "Description": "Specify whether shading rate image can be created as a linear image. For Navi2x+ IPs, the HW requires that shading rate source images must be tiled.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
+      "Name": "IgnoreDeviceQueuePriorityFailures",
+      "Description": "Specify whether to skip queue creation priority failures",
       "Tags": [
         "General"
       ],
@@ -3336,18 +3478,6 @@
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "HeapBudgetRatioOfHeapSizeNonlocal"
-    },
-    {
-      "Description": "Whether driver should perform sparse resource unmap at resource destroy time under wddm1.",
-      "Tags": [
-        "Memory"
-      ],
-      "Defaults": {
-        "Default": true
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "IsSparseUnmapBeforeDestroyEnabled"
     },
     {
       "Description": "Override reported minImageTransferGranularity field for graphics queue families.  This is encoded as a hex string of the form 0xb000zzyyxx, where 'xx', 'yy', and 'zz' are the reported transfer granularities in the X, Y and Z extents respectively, and 'b' is a control flag: if 'b' is non-zero, this override is applies; otherwise the standard transfer granularity is used. ",

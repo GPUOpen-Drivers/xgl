@@ -358,6 +358,114 @@ private:
     size_t  m_stride;
 };
 
+// =====================================================================================================================
+// PlacementHelper is a utility to lay out objects in a block of memory.
+//
+// Example usage:
+//
+//   int*     pMyInts   = nullptr;
+//   float*   pMyFloats = nullptr;
+//   IObject* pMyObject = nullptr;
+//
+//   auto placement = PlacementHelper<3>(               // number of elements
+//     nullptr,                                         // placement base pointer, use nullptr to determine size first
+//     PlacementElement<int>    {&pMyInts,   6},        // place 6 integers at pMyInts
+//     PlacementElement<float>  {&pMyFloats, 4},        // place 4 floats at pMyFloats
+//     PlacementElement<IObject>{&pMyObject, 2, 64});   // place a block of memory with 2 * 64 size (see note below)
+//
+//   auto pMemory = malloc(placement.SizeOf());         // allocate memory of required size
+//
+//   placement.FixupPtrs(pMemory);                      // assign correct values to pMy* pointers
+//
+// NOTE: If an explicit size is given, as in the pMyObject example, remember that the pointer can no longer be treated
+//       as an array of IObject. It's just a pointer to a block of memory with IObject* type and 128 bytes of storage.
+//       If the assumption is that a second IObject is placed at the offset 64, then that pointer must be computed
+//       manually, e.g. by the use of Util::VoidPtrInc().
+//
+//       If the correct alignment is important, make sure that the pointer passed to FixupPtrs() is itself aligned
+//       to the largest required alignment among the placed objects.
+//
+template<class T>
+struct PlacementElement
+{
+    using Type = T;
+
+    T**    outPtr    = nullptr;    // destination pointer where the objects are placed
+    size_t count     = 1;          // number of objects to place at the pointer
+    size_t size      = 0;          // optional object size, otherwise 0 means sizeof(T)
+    size_t alignment = 0;          // optional object alignment (must be power of 2), otherwise 0 means alignof(T)
+};
+
+template<size_t ElementCount>
+class PlacementHelper
+{
+public:
+    template<class... Element>
+    PlacementHelper(void* basePtr, Element... elements)
+    {
+        // sizeof ... (type) counts the number of types in the parameter pack (not byte size).
+        static_assert(ElementCount == (sizeof ... (Element)), "Wrong number of elements");
+
+        // Start unpacking the arguments recursively.
+        ExpandCtorArguments(basePtr, 0, 0, elements...);
+    }
+
+    size_t SizeOf() const
+    {
+        return m_totalSize;
+    }
+
+    void FixupPtrs(void* basePtr) const
+    {
+        // If the layout has been done with a basePtr == nullptr, the pointers will be offsets from zero.
+        // Here we can move them relative to the correct memory base offset.
+        // This is typically needed if we allocate memory after determining the layout and size requirements.
+        for (uint32_t ndx = 0; ndx < ElementCount; ++ndx)
+        {
+            *m_outPtrs[ndx] = Util::VoidPtrInc(basePtr, reinterpret_cast<uintptr_t>(*m_outPtrs[ndx]));
+        }
+    }
+
+private:
+    template<class FirstElement, class... Element>
+    void ExpandCtorArguments(void* basePtr, size_t idx, size_t offset, FirstElement head, Element... tail)
+    {
+        using HeadType = typename FirstElement::Type;
+
+        // basePtr *may* be a nullptr.
+        // head.count *may* be 0
+        VK_ASSERT(head.outPtr != nullptr);
+
+        // If no explicit size is given, we derive the size from the element type. Keep track of the total size.
+        size_t size = (head.size != 0) ? head.size : sizeof(HeadType);
+        size *= head.count;
+        m_totalSize += size;
+
+        // Ensure the placement offset is aligned for this type
+        const size_t alignment = (head.alignment != 0) ? head.alignment : alignof(HeadType);
+        const size_t offsetMisalignment = Util::Pow2Align(offset, alignment) - offset;
+
+        m_totalSize += offsetMisalignment;
+        offset += offsetMisalignment;
+
+        // Save the output pointer in case we need to modify it later.
+        // Then write the output pointer anyway (we need to save the offsets somewhere at least).
+        m_outPtrs[idx] = reinterpret_cast<void**>(head.outPtr);
+        *head.outPtr = static_cast<HeadType*>(Util::VoidPtrInc(basePtr, offset));
+
+        // Process the next element.
+        ExpandCtorArguments(basePtr, idx + 1, offset + size, tail...);
+    }
+
+    void ExpandCtorArguments(const void* basePtr, size_t idx, size_t offset)
+    {
+        // All elements have been already consumed.
+    }
+
+    size_t  m_totalSize = 0;
+    void**  m_outPtrs[ElementCount] = {};
+};
+
 template<typename T>
 constexpr T StaticMax(T a, T b) { return (a > b) ? a : b; };
 

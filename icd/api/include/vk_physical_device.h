@@ -295,6 +295,68 @@ public:
         VkSubgroupFeatureFlags*  pSupportedOperations,
         VkBool32*                pQuadOperationsInAllStages) const;
 
+    void GetPhysicalDeviceSubgroupSizeControlProperties(
+        uint32_t*           pMinSubgroupSize,
+        uint32_t*           pMaxSubgroupSize,
+        uint32_t*           pMaxComputeWorkgroupSubgroups,
+        VkShaderStageFlags* pQuadOperationsInAllStages) const;
+
+    void GetPhysicalDeviceUniformBlockProperties(
+        uint32_t* pMaxInlineUniformBlockSize,
+        uint32_t* pMaxPerStageDescriptorInlineUniformBlocks,
+        uint32_t* pMaxPerStageDescriptorUpdateAfterBindInlineUniformBlocks,
+        uint32_t* pMaxDescriptorSetInlineUniformBlocks,
+        uint32_t* pMaxDescriptorSetUpdateAfterBindInlineUniformBlocks) const;
+
+    void GetPhysicalDeviceDotProduct8Properties(
+        VkBool32* pIntegerDotProduct8BitUnsignedAccelerated,
+        VkBool32* pIntegerDotProduct8BitSignedAccelerated,
+        VkBool32* pIntegerDotProduct8BitMixedSignednessAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating8BitUnsignedAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating8BitSignedAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated) const;
+
+    void GetPhysicalDeviceDotProduct4x8Properties(
+        VkBool32* pIntegerDotProduct4x8BitPackedUnsignedAccelerated,
+        VkBool32* pIntegerDotProduct4x8BitPackedSignedAccelerated,
+        VkBool32* pIntegerDotProduct4x8BitPackedMixedSignednessAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated) const;
+
+    void GetPhysicalDeviceDotProduct16Properties(
+        VkBool32* pIntegerDotProduct16BitUnsignedAccelerated,
+        VkBool32* pIntegerDotProduct16BitSignedAccelerated,
+        VkBool32* pIntegerDotProduct16BitMixedSignednessAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating16BitUnsignedAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating16BitSignedAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated) const;
+
+    void GetPhysicalDeviceDotProduct32Properties(
+        VkBool32* pIntegerDotProduct32BitUnsignedAccelerated,
+        VkBool32* pIntegerDotProduct32BitSignedAccelerated,
+        VkBool32* pIntegerDotProduct32BitMixedSignednessAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating32BitUnsignedAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating32BitSignedAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated) const;
+
+    void GetPhysicalDeviceDotProduct64Properties(
+        VkBool32* pIntegerDotProduct64BitUnsignedAccelerated,
+        VkBool32* pIntegerDotProduct64BitSignedAccelerated,
+        VkBool32* pIntegerDotProduct64BitMixedSignednessAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating64BitUnsignedAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating64BitSignedAccelerated,
+        VkBool32* pIntegerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated) const;
+
+    void GetPhysicalDeviceTexelBufferAlignmentProperties(
+        VkDeviceSize* pStorageTexelBufferOffsetAlignmentBytes,
+        VkBool32*     pStorageTexelBufferOffsetSingleTexelAlignment,
+        VkDeviceSize* pUniformTexelBufferOffsetAlignmentBytes,
+        VkBool32*     pUniformTexelBufferOffsetSingleTexelAlignment) const;
+
+    void GetDevicePropertiesMaxBufferSize(
+        VkDeviceSize* pMaxBufferSize) const;
+
     void GetPhysicalDeviceDriverProperties(
         VkDriverId*              pDriverID,
         char*                    pDriverName,

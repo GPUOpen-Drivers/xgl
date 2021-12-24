@@ -22,33 +22,20 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+/**
+ ***********************************************************************************************************************
+ * @file  vulkan_video_codec_h265std_encode.h
+ * @brief Proxy to the real Khronos Vulkan video header.
+ ***********************************************************************************************************************
+ */
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
+#ifndef __VULKAN_VIDEO_CODEC_H265STD_ENCODE_H_PROXY__
+#define __VULKAN_VIDEO_CODEC_H265STD_ENCODE_H_PROXY__
 
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
+#if EXTERNAL_VULKAN_HEADERS
+#include "vk_video/vulkan_video_codec_h265std_encode.h"
+#else
+#include "sdk-1.2/vk_video/vulkan_video_codec_h265std_encode.h"
+#endif
 
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
-
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
-
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   210
-
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
-
-// These values specify the driver ID and driver info string
-#define VULKAN_DRIVER_ID            VK_DRIVER_ID_AMD_OPEN_SOURCE_KHR  // "AMDOPEN"
-#define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
-#define VULKAN_DRIVER_INFO_STR      "2021.Q4.3"
-
-// These values tell which version of the conformance test the driver is compliant against
-#define CTS_VERSION_MAJOR           1
-#define CTS_VERSION_MINOR           2
-#define CTS_VERSION_SUBMINOR        5
-#define CTS_VERSION_PATCH           2
+#endif /* __VULKAN_VIDEO_CODEC_H265STD_ENCODE_H_PROXY__*/

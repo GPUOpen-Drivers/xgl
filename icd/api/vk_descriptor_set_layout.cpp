@@ -513,9 +513,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
     for (uint32 inIndex = 0; inIndex < pIn->bindingCount; ++inIndex)
     {
         const VkDescriptorSetLayoutBinding & currentBinding = pIn->pBindings[inIndex];
-        {
-            pOutBindings[currentBinding.binding].info = currentBinding;
-        }
+        pOutBindings[currentBinding.binding].info = currentBinding;
 
         if (currentBinding.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
         {
@@ -625,9 +623,7 @@ VkResult DescriptorSetLayout::Create(
             }
         }
 
-        {
-            bindingCount = Util::Max(bindingCount, desc.binding + 1);
-        }
+        bindingCount = Util::Max(bindingCount, desc.binding + 1);
     }
 
     const size_t bindingInfoAuxSize     = bindingCount          * sizeof(BindingInfo);
@@ -736,7 +732,6 @@ void DescriptorSetLayout::Merge(
             if ((activeStages != 0) && (refBinding.info.descriptorCount > 0))
             {
                 uint32_t bindingIdx = refBinding.info.binding;
-
                 BindingInfo& mergedBinding = pBindingInfo[bindingIdx];
 
                 if (mergedBinding.info.stageFlags == 0)

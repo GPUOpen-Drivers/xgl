@@ -164,15 +164,19 @@ VkResult Sampler::Create(
         break;
     }
 
-    samplerInfo.flags.useAnisoThreshold        = (settings.useAnisoThreshold == true) ? 1 : 0;
-    samplerInfo.anisoThreshold                 = settings.anisoThreshold;
-    samplerInfo.perfMip                        = settings.samplerPerfMip;
-    samplerInfo.flags.unnormalizedCoords       = (pCreateInfo->unnormalizedCoordinates == VK_TRUE) ? 1 : 0;
-    samplerInfo.flags.prtBlendZeroMode         = 0;
-    samplerInfo.flags.seamlessCubeMapFiltering = 1;
-    samplerInfo.flags.truncateCoords           = ((pCreateInfo->magFilter == VK_FILTER_NEAREST) &&
-                                                  (pCreateInfo->minFilter == VK_FILTER_NEAREST))
-                                                  ? 1 : 0;
+    // disableSingleMipAnisoOverride=1 ensure properly sampling with single mipmap level and anisotropic filtering.
+    samplerInfo.flags.disableSingleMipAnisoOverride = 1;
+
+    samplerInfo.flags.useAnisoThreshold             = (settings.useAnisoThreshold == true) ? 1 : 0;
+    samplerInfo.anisoThreshold                      = settings.anisoThreshold;
+    samplerInfo.perfMip                             = settings.samplerPerfMip;
+    samplerInfo.flags.unnormalizedCoords            = (pCreateInfo->unnormalizedCoordinates == VK_TRUE) ? 1 : 0;
+    samplerInfo.flags.prtBlendZeroMode              = 0;
+    samplerInfo.flags.seamlessCubeMapFiltering      = 1;
+    samplerInfo.flags.truncateCoords                = ((pCreateInfo->magFilter == VK_FILTER_NEAREST) &&
+                                                       (pCreateInfo->minFilter == VK_FILTER_NEAREST) &&
+                                                       (samplerInfo.compareFunc == Pal::CompareFunc::Never))
+                                                      ? 1 : 0;
 
     // Parse the creation info.
     const void* pNext = pCreateInfo->pNext;

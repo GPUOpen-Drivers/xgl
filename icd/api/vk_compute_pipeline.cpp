@@ -90,8 +90,6 @@ void ComputePipeline::ConvertComputePipelineInfo(
         pOutInfo->pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
     }
 
-    pOutInfo->staticStateMask = 0;
-
 }
 
 // =====================================================================================================================

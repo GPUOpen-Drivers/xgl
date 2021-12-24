@@ -84,6 +84,7 @@ enum class AppProfile : uint32_t
     ShadowOfTheTombRaider, // ShadowOfTheTombRaider by Feral3D
     XPlane,                // XPlane by Laminar Research
     WarThunder,            // WarThunder by Gaijin Distribution Kft
+    MetroExodus,           // Metro Exodus
     Quake2RTX,             // Quake2 RTX
     Valheim,               // Valheim by Coffee Stain Studios
     WolfensteinCyberpilot, // Wolfenstein Cyberpilot by Machine Games
@@ -103,6 +104,8 @@ enum class AppProfile : uint32_t
     XSystemEngine,         // XSystem Engine by Laminar Research
     UnityEngine,           // Unity Engine by Unity Technologies (Default)
     SaschaWillemsExamples, // Vulkan Examples by Sascha Willems
+    Hyperscape,            // Hyperscape by Ubisoft
+    SeriousSam4,           // Serious Sam 4 by Croteam
     Maxon,                       // Maxon
     AngleEngine,                 // Angle Engine
 };
