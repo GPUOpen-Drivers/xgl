@@ -245,17 +245,20 @@ VkResult PipelineCompiler::Initialize()
         result = m_compilerSolutionLlpc.Initialize(m_gfxIp, info.gfxLevel, pCacheAdapter);
     }
 
-    if (result == VK_SUCCESS)
+    if (settings.enableUberFetchShader || settings.enableEarlyCompile)
     {
-        result = PalToVkResult(m_shaderModuleHandleMap.Init());
-    }
-
-    if (result == VK_SUCCESS)
-    {
-        if (settings.enableUberFetchShader || settings.enableEarlyCompile)
+        if (result == VK_SUCCESS)
         {
-            m_uberFetchShaderInfoFormatMap.Init();
+            result = PalToVkResult(m_shaderModuleHandleMap.Init());
+        }
 
+        if (result == VK_SUCCESS)
+        {
+            result = PalToVkResult(m_uberFetchShaderInfoFormatMap.Init());
+        }
+
+        if (result == VK_SUCCESS)
+        {
             result = InitializeUberFetchShaderFormatTable(m_pPhysicalDevice, &m_uberFetchShaderInfoFormatMap);
         }
     }
@@ -277,6 +280,7 @@ void PipelineCompiler::Destroy()
 
     DestroyPipelineBinaryCache();
 
+    if (m_pPhysicalDevice->GetRuntimeSettings().enableEarlyCompile)
     {
         Util::MutexAuto mutexLock(&m_shaderModuleCacheLock);
         for (auto it = m_shaderModuleHandleMap.Begin(); it.Get() != nullptr; it.Next())
@@ -392,7 +396,7 @@ VkResult PipelineCompiler::LoadShaderModuleFromCache(
     Util::MetroHash::Hash&    uniqueHash,
     ShaderModuleHandle*       pShaderModule)
 {
-    bool supportModuleCache = true;
+    bool supportModuleCache = m_pPhysicalDevice->GetRuntimeSettings().enableEarlyCompile;
 
 #if ICD_X86_BUILD
     supportModuleCache = false;
@@ -453,7 +457,7 @@ void PipelineCompiler::StoreShaderModuleToCache(
 
     VK_ASSERT(pShaderModule->pRefCount == nullptr);
 
-    bool supportModuleCache = true;
+    bool supportModuleCache = m_pPhysicalDevice->GetRuntimeSettings().enableEarlyCompile;
 
 #if ICD_X86_BUILD
     supportModuleCache = false;
@@ -2285,6 +2289,8 @@ void PipelineCompiler::ApplyPipelineOptions(
                                             Vkgc::ShadowDescriptorTableUsage::Disable);
     pOptions->shadowDescriptorTablePtrHigh =
           static_cast<uint32_t>(info.gpuMemoryProperties.shadowDescTableVaStart >> 32);
+
+    pOptions->pageMigrationEnabled = info.gpuMemoryProperties.flags.pageMigrationEnabled;
 
     // Apply runtime settings from device
     const auto& settings = m_pPhysicalDevice->GetRuntimeSettings();

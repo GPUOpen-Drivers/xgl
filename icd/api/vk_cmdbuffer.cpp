@@ -4165,27 +4165,8 @@ void CmdBuffer::LoadOpClearDepthStencil(
     const VkRenderingAttachmentInfoKHR* pDepthAttachmentInfo   = pRenderingInfo->pDepthAttachment;
     const VkRenderingAttachmentInfoKHR* pStencilAttachmentInfo = pRenderingInfo->pStencilAttachment;
 
-    if ((pDepthAttachmentInfo != nullptr) &&
-        (pDepthAttachmentInfo->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR))
-    {
-        const ImageView* const pDepthImageView = ImageView::ObjectFromHandle(pDepthAttachmentInfo->imageView);
-
-        pDepthStencilImage = pDepthImageView->GetImage();
-
-        GetImageLayout(
-            pDepthAttachmentInfo->imageView,
-            pDepthAttachmentInfo->imageLayout,
-            VK_IMAGE_ASPECT_DEPTH_BIT,
-            &subresRange,
-            &depthLayout);
-
-        clearSubresRanges.PushBack(subresRange);
-
-        clearDepth = pDepthAttachmentInfo->clearValue.depthStencil.depth;
-    }
-
     if ((pStencilAttachmentInfo != nullptr) &&
-        (pStencilAttachmentInfo->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR))
+        (pStencilAttachmentInfo->imageView != VK_NULL_HANDLE))
     {
         const ImageView* const pStencilImageView = ImageView::ObjectFromHandle(pStencilAttachmentInfo->imageView);
 
@@ -4198,9 +4179,36 @@ void CmdBuffer::LoadOpClearDepthStencil(
             &subresRange,
             &stencilLayout);
 
-        clearSubresRanges.PushBack(subresRange);
+        if (pStencilAttachmentInfo->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
+        {
+            clearSubresRanges.PushBack(subresRange);
+            clearStencil = pStencilAttachmentInfo->clearValue.depthStencil.stencil;
+        }
+    }
 
-        clearStencil = pStencilAttachmentInfo->clearValue.depthStencil.stencil;
+    if ((pDepthAttachmentInfo != nullptr) &&
+        (pDepthAttachmentInfo->imageView != VK_NULL_HANDLE))
+    {
+        const ImageView* const pDepthImageView = ImageView::ObjectFromHandle(pDepthAttachmentInfo->imageView);
+
+        pDepthStencilImage = pDepthImageView->GetImage();
+
+        GetImageLayout(
+            pDepthAttachmentInfo->imageView,
+            pDepthAttachmentInfo->imageLayout,
+            VK_IMAGE_ASPECT_DEPTH_BIT,
+            &subresRange,
+            &depthLayout);
+
+        if (pDepthAttachmentInfo->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
+        {
+            clearSubresRanges.PushBack(subresRange);
+            clearDepth = pDepthAttachmentInfo->clearValue.depthStencil.depth;
+        }
+    }
+    else
+    {
+        depthLayout = stencilLayout;
     }
 
     if (pDepthStencilImage != nullptr)

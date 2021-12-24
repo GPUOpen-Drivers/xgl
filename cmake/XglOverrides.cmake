@@ -183,7 +183,7 @@ macro(xgl_overrides_vkgc)
 ### For LLPC ##########################################################################################################
     set(LLPC_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_LLPC_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 
-    if(ICD_BUILD_LLPC)
+    if(ICD_BUILD_LLPC OR ICD_BUILD_SPVONLY)
         set(LLPC_BUILD_TESTS ${XGL_BUILD_TESTS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
         set(LLPC_BUILD_LIT ${XGL_BUILD_LIT} CACHE BOOL "${PROJECT_NAME} override." FORCE)

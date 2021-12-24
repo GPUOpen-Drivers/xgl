@@ -290,7 +290,9 @@ function(xgl_compiler_options TARGET)
         endif()
 
         if(TARGET_ARCHITECTURE_BITS EQUAL 32)
-            target_compile_options(${TARGET} PRIVATE -msse -msse2)
+            if(NOT (CMAKE_CXX_COMPILER MATCHES ".*arm-linux-gnueabi.*"))
+                target_compile_options(${TARGET} PRIVATE -msse -msse2)
+            endif()
         endif()
 
         if(CMAKE_BUILD_TYPE_RELEASE)

@@ -1178,6 +1178,11 @@ void PhysicalDevice::PopulateFormatProperties()
         optimalFlags &= AllImgFeatures;
         bufferFlags  &= AllBufFeatures;
 
+        if (Formats::IsDepthStencilFormat(format))
+        {
+            bufferFlags = 0;
+        }
+
         if ((format == VK_FORMAT_R64_SINT) || (format == VK_FORMAT_R64_UINT))
         {
             memset(&m_formatFeaturesTable[i], 0, sizeof(VkFormatProperties));
@@ -1326,6 +1331,43 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
 
             switch (static_cast<uint32>(pHeader->sType))
             {
+                case VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES_EXT:
+                {
+                    auto* pProperties = static_cast<VkQueueFamilyGlobalPriorityPropertiesEXT*>(pNext);
+                    pProperties->priorityCount = 0;
+
+                    uint32 queuePrioritySupportMask = 0;
+                    for (uint32 engineNdx = 0u; engineNdx < m_properties.engineProperties[i].engineCount; ++engineNdx)
+                    {
+                        const auto& engineCapabilities = m_properties.engineProperties[i].capabilities[engineNdx];
+
+                        // Leave out High Priority for Universal Queue
+                        if ((i != Pal::EngineTypeUniversal) || IsNormalQueue(engineCapabilities))
+                        {
+                            queuePrioritySupportMask |= engineCapabilities.queuePrioritySupport;
+                        }
+                    }
+
+                    if ((queuePrioritySupportMask & Pal::QueuePrioritySupport::SupportQueuePriorityIdle) != 0)
+                    {
+                        pProperties->priorities[pProperties->priorityCount++] = VK_QUEUE_GLOBAL_PRIORITY_LOW_EXT;
+                    }
+
+                    // Everything gets Normal
+                    pProperties->priorities[pProperties->priorityCount++] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT;
+
+                    if ((queuePrioritySupportMask & Pal::QueuePrioritySupport::SupportQueuePriorityHigh) != 0)
+                    {
+                        pProperties->priorities[pProperties->priorityCount++] = VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT;
+                    }
+
+                    if ((queuePrioritySupportMask & Pal::QueuePrioritySupport::SupportQueuePriorityRealtime) != 0)
+                    {
+                        pProperties->priorities[pProperties->priorityCount++] = VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT;
+                    }
+
+                    break;
+                }
                 default:
                     // Skip any unknown extension structures
                     break;
@@ -3662,6 +3704,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         (pPhysicalDevice->PalProperties().osProperties.supportQueuePriority))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_GLOBAL_PRIORITY));
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_GLOBAL_PRIORITY_QUERY));
+
     }
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_FENCE));
@@ -3798,20 +3842,16 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_COLOR_WRITE_ENABLE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_LOAD_STORE_OP_NONE));
-
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 52
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_YCBCR_IMAGE_ARRAYS));
-#else
-#endif
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 1500
     if ((pPhysicalDevice == nullptr) ||
         ((pPhysicalDevice->PalProperties().gfxLevel != Pal::GfxIpLevel::GfxIp9) &&
          (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportBorderColorSwizzle)))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_BORDER_COLOR_SWIZZLE));
     }
-#endif
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE4));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INDEX_TYPE_UINT8));
 
@@ -3889,15 +3929,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     }
 
     return availableExtensions;
-}
-
-// =====================================================================================================================
-// Is the queue suitable for normal use (i.e. non-exclusive and no elevated priority).
-template<class T>
-static bool IsNormalQueue(const T& engineCapabilities)
-{
-    return ((engineCapabilities.flags.exclusive == 0) &&
-            ((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityNormal) != 0));
 }
 
 // =====================================================================================================================
@@ -4382,6 +4413,169 @@ void PhysicalDevice::GetPhysicalDeviceSubgroupProperties(
                             VK_SUBGROUP_FEATURE_QUAD_BIT;
 
     *pQuadOperationsInAllStages = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceSubgroupSizeControlProperties(
+    uint32_t*           pMinSubgroupSize,
+    uint32_t*           pMaxSubgroupSize,
+    uint32_t*           pMaxComputeWorkgroupSubgroups,
+    VkShaderStageFlags* pRequiredSubgroupSizeStages
+) const
+{
+    *pMinSubgroupSize  = m_properties.gfxipProperties.shaderCore.minWavefrontSize;
+    *pMaxSubgroupSize  = m_properties.gfxipProperties.shaderCore.maxWavefrontSize;
+
+    // No limits on the maximum number of subgroups allowed within a workgroup.
+    *pMaxComputeWorkgroupSubgroups = UINT32_MAX;
+
+    // Do not support setting a required subgroup size in any stage.
+    *pRequiredSubgroupSizeStages = 0;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceUniformBlockProperties(
+    uint32_t* pMaxInlineUniformBlockSize,
+    uint32_t* pMaxPerStageDescriptorInlineUniformBlocks,
+    uint32_t* pMaxPerStageDescriptorUpdateAfterBindInlineUniformBlocks,
+    uint32_t* pMaxDescriptorSetInlineUniformBlocks,
+    uint32_t* pMaxDescriptorSetUpdateAfterBindInlineUniformBlocks
+) const
+{
+    *pMaxInlineUniformBlockSize                               = 64 * 1024;
+    *pMaxPerStageDescriptorInlineUniformBlocks                = 16;
+    *pMaxPerStageDescriptorUpdateAfterBindInlineUniformBlocks = 16;
+    *pMaxDescriptorSetInlineUniformBlocks                     = 16;
+    *pMaxDescriptorSetUpdateAfterBindInlineUniformBlocks      = 16;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceDotProduct8Properties(
+    VkBool32* pIntegerDotProduct8BitUnsignedAccelerated,
+    VkBool32* pIntegerDotProduct8BitSignedAccelerated,
+    VkBool32* pIntegerDotProduct8BitMixedSignednessAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating8BitUnsignedAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating8BitSignedAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated
+) const
+{
+    const VkBool32 int8DotSupport = PalProperties().gfxipProperties.flags.supportInt8Dot ? VK_TRUE :
+        VK_FALSE;
+
+    *pIntegerDotProduct8BitUnsignedAccelerated                              = int8DotSupport;
+    *pIntegerDotProduct8BitSignedAccelerated                                = int8DotSupport;
+    *pIntegerDotProductAccumulatingSaturating8BitUnsignedAccelerated        = VK_FALSE;
+    *pIntegerDotProductAccumulatingSaturating8BitSignedAccelerated          = VK_FALSE;
+    *pIntegerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated = VK_FALSE;
+
+    {
+        *pIntegerDotProduct8BitMixedSignednessAccelerated = VK_FALSE;
+    }
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceDotProduct4x8Properties(
+    VkBool32* pIntegerDotProduct4x8BitPackedUnsignedAccelerated,
+    VkBool32* pIntegerDotProduct4x8BitPackedSignedAccelerated,
+    VkBool32* pIntegerDotProduct4x8BitPackedMixedSignednessAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated
+) const
+{
+    const VkBool32 int8DotSupport = PalProperties().gfxipProperties.flags.supportInt8Dot ? VK_TRUE :
+        VK_FALSE;
+
+    *pIntegerDotProduct4x8BitPackedUnsignedAccelerated                              = int8DotSupport;
+    *pIntegerDotProduct4x8BitPackedSignedAccelerated                                = int8DotSupport;
+    *pIntegerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated        = VK_FALSE;
+    *pIntegerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated          = VK_FALSE;
+    *pIntegerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated = VK_FALSE;
+
+    {
+        *pIntegerDotProduct4x8BitPackedMixedSignednessAccelerated = VK_FALSE;
+    }
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceDotProduct16Properties(
+    VkBool32* pIntegerDotProduct16BitUnsignedAccelerated,
+    VkBool32* pIntegerDotProduct16BitSignedAccelerated,
+    VkBool32* pIntegerDotProduct16BitMixedSignednessAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating16BitUnsignedAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating16BitSignedAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated
+) const
+{
+    const VkBool32 int16DotSupport = ((PalProperties().gfxipProperties.flags.support16BitInstructions) &&
+        ((GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
+            (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))
+        ) ? VK_TRUE : VK_FALSE;
+
+    *pIntegerDotProduct16BitUnsignedAccelerated                              = int16DotSupport;
+    *pIntegerDotProduct16BitSignedAccelerated                                = int16DotSupport;
+    *pIntegerDotProductAccumulatingSaturating16BitUnsignedAccelerated        = int16DotSupport;
+    *pIntegerDotProductAccumulatingSaturating16BitSignedAccelerated          = int16DotSupport;
+    *pIntegerDotProduct16BitMixedSignednessAccelerated                       = VK_FALSE;
+    *pIntegerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated = VK_FALSE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceDotProduct32Properties(
+    VkBool32* pIntegerDotProduct32BitUnsignedAccelerated,
+    VkBool32* pIntegerDotProduct32BitSignedAccelerated,
+    VkBool32* pIntegerDotProduct32BitMixedSignednessAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating32BitUnsignedAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating32BitSignedAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated
+) const
+{
+    *pIntegerDotProduct32BitUnsignedAccelerated                              = VK_FALSE;
+    *pIntegerDotProduct32BitSignedAccelerated                                = VK_FALSE;
+    *pIntegerDotProduct32BitMixedSignednessAccelerated                       = VK_FALSE;
+    *pIntegerDotProductAccumulatingSaturating32BitUnsignedAccelerated        = VK_FALSE;
+    *pIntegerDotProductAccumulatingSaturating32BitSignedAccelerated          = VK_FALSE;
+    *pIntegerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated = VK_FALSE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceDotProduct64Properties(
+    VkBool32* pIntegerDotProduct64BitUnsignedAccelerated,
+    VkBool32* pIntegerDotProduct64BitSignedAccelerated,
+    VkBool32* pIntegerDotProduct64BitMixedSignednessAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating64BitUnsignedAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating64BitSignedAccelerated,
+    VkBool32* pIntegerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated
+) const
+{
+    *pIntegerDotProduct64BitUnsignedAccelerated                              = VK_FALSE;
+    *pIntegerDotProduct64BitSignedAccelerated                                = VK_FALSE;
+    *pIntegerDotProduct64BitMixedSignednessAccelerated                       = VK_FALSE;
+    *pIntegerDotProductAccumulatingSaturating64BitUnsignedAccelerated        = VK_FALSE;
+    *pIntegerDotProductAccumulatingSaturating64BitSignedAccelerated          = VK_FALSE;
+    *pIntegerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated = VK_FALSE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceTexelBufferAlignmentProperties(
+    VkDeviceSize* pStorageTexelBufferOffsetAlignmentBytes,
+    VkBool32*     pStorageTexelBufferOffsetSingleTexelAlignment,
+    VkDeviceSize* pUniformTexelBufferOffsetAlignmentBytes,
+    VkBool32*     pUniformTexelBufferOffsetSingleTexelAlignment
+) const
+{
+    *pStorageTexelBufferOffsetAlignmentBytes       = m_limits.minTexelBufferOffsetAlignment;
+    *pStorageTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
+    *pUniformTexelBufferOffsetAlignmentBytes       = m_limits.minTexelBufferOffsetAlignment;
+    *pUniformTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetDevicePropertiesMaxBufferSize(
+    VkDeviceSize* pMaxBufferSize
+) const
+{
+    *pMaxBufferSize = 2u * 1024u * 1024u * 1024u; // TODO: replace with actual size
 }
 
 // =====================================================================================================================
@@ -5129,6 +5323,19 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDepthClipControlFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                   pExtInfo->depthClipControl = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVE_TOPOLOGY_LIST_RESTART_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT*>(pHeader);
@@ -5831,6 +6038,20 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceProvokingVertexFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->provokingVertexLast                       = VK_TRUE;
+                    pExtInfo->transformFeedbackPreservesProvokingVertex = VK_FALSE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceIndexTypeUint8FeaturesEXT*>(pHeader);
@@ -5838,6 +6059,19 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     pExtInfo->indexTypeUint8 = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GLOBAL_PRIORITY_QUERY_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceGlobalPriorityQueryFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->globalPriorityQuery = PalProperties().osProperties.supportQueuePriority;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6199,11 +6433,12 @@ void PhysicalDevice::GetDeviceProperties2(
         {
             auto* pProps = static_cast<VkPhysicalDeviceInlineUniformBlockPropertiesEXT*>(pNext);
 
-            pProps->maxInlineUniformBlockSize                                = 64*1024;
-            pProps->maxPerStageDescriptorInlineUniformBlocks                 = 16;
-            pProps->maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks  = 16;
-            pProps->maxDescriptorSetInlineUniformBlocks                      = 16;
-            pProps->maxDescriptorSetUpdateAfterBindInlineUniformBlocks       = 16;
+            GetPhysicalDeviceUniformBlockProperties(
+                &pProps->maxInlineUniformBlockSize,
+                &pProps->maxPerStageDescriptorInlineUniformBlocks,
+                &pProps->maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks,
+                &pProps->maxDescriptorSetInlineUniformBlocks,
+                &pProps->maxDescriptorSetUpdateAfterBindInlineUniformBlocks);
 
             break;
         }
@@ -6252,14 +6487,11 @@ void PhysicalDevice::GetDeviceProperties2(
         {
             auto* pProps = static_cast<VkPhysicalDeviceSubgroupSizeControlPropertiesEXT*>(pNext);
 
-            pProps->minSubgroupSize = m_properties.gfxipProperties.shaderCore.minWavefrontSize;
-            pProps->maxSubgroupSize = m_properties.gfxipProperties.shaderCore.maxWavefrontSize;
-
-            // No limits on the maximum number of subgroups allowed within a workgroup.
-            pProps->maxComputeWorkgroupSubgroups = UINT32_MAX;
-
-            // Do not support setting a required subgroup size in any stage.
-            pProps->requiredSubgroupSizeStages = 0;
+            GetPhysicalDeviceSubgroupSizeControlProperties(
+                &pProps->minSubgroupSize,
+                &pProps->maxSubgroupSize,
+                &pProps->maxComputeWorkgroupSubgroups,
+                &pProps->requiredSubgroupSizeStages);
 
             break;
         }
@@ -6394,60 +6626,56 @@ void PhysicalDevice::GetDeviceProperties2(
         {
             auto* pProps = static_cast<VkPhysicalDeviceShaderIntegerDotProductPropertiesKHR*>(pNext);
 
-            const VkBool32 int8DotSupport = PalProperties().gfxipProperties.flags.supportInt8Dot ? VK_TRUE :
-                                                                                                    VK_FALSE;
-            pProps->integerDotProduct8BitUnsignedAccelerated         = int8DotSupport;
-            pProps->integerDotProduct8BitSignedAccelerated           = int8DotSupport;
-            pProps->integerDotProduct4x8BitPackedUnsignedAccelerated = int8DotSupport;
-            pProps->integerDotProduct4x8BitPackedSignedAccelerated   = int8DotSupport;
+            GetPhysicalDeviceDotProduct8Properties(
+                &pProps->integerDotProduct8BitUnsignedAccelerated,
+                &pProps->integerDotProduct8BitSignedAccelerated,
+                &pProps->integerDotProduct8BitMixedSignednessAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating8BitUnsignedAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating8BitSignedAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated);
 
-            {
-                pProps->integerDotProduct8BitMixedSignednessAccelerated         = VK_FALSE;
-                pProps->integerDotProduct4x8BitPackedMixedSignednessAccelerated = VK_FALSE;
-            }
+            GetPhysicalDeviceDotProduct4x8Properties(
+                &pProps->integerDotProduct4x8BitPackedUnsignedAccelerated,
+                &pProps->integerDotProduct4x8BitPackedSignedAccelerated,
+                &pProps->integerDotProduct4x8BitPackedMixedSignednessAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated);
 
-            const VkBool32 int16DotSupport = ((PalProperties().gfxipProperties.flags.support16BitInstructions) &&
-                                                ((GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
-                                                (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))
-                                                ) ? VK_TRUE : VK_FALSE;
+            GetPhysicalDeviceDotProduct16Properties(
+                &pProps->integerDotProduct16BitUnsignedAccelerated,
+                &pProps->integerDotProduct16BitSignedAccelerated,
+                &pProps->integerDotProduct16BitMixedSignednessAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating16BitUnsignedAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating16BitSignedAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated);
 
-            pProps->integerDotProduct16BitUnsignedAccelerated                       = int16DotSupport;
-            pProps->integerDotProduct16BitSignedAccelerated                         = int16DotSupport;
-            pProps->integerDotProductAccumulatingSaturating16BitUnsignedAccelerated = int16DotSupport;
-            pProps->integerDotProductAccumulatingSaturating16BitSignedAccelerated   = int16DotSupport;
+            GetPhysicalDeviceDotProduct32Properties(
+                &pProps->integerDotProduct32BitUnsignedAccelerated,
+                &pProps->integerDotProduct32BitSignedAccelerated,
+                &pProps->integerDotProduct32BitMixedSignednessAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating32BitUnsignedAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating32BitSignedAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated);
 
-            pProps->integerDotProduct16BitMixedSignednessAccelerated                              = VK_FALSE;
-            pProps->integerDotProduct32BitUnsignedAccelerated                                     = VK_FALSE;
-            pProps->integerDotProduct32BitSignedAccelerated                                       = VK_FALSE;
-            pProps->integerDotProduct32BitMixedSignednessAccelerated                              = VK_FALSE;
-            pProps->integerDotProduct64BitUnsignedAccelerated                                     = VK_FALSE;
-            pProps->integerDotProduct64BitSignedAccelerated                                       = VK_FALSE;
-            pProps->integerDotProduct64BitMixedSignednessAccelerated                              = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating8BitUnsignedAccelerated                = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating8BitUnsignedAccelerated                = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating8BitSignedAccelerated                  = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated         = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated        = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated          = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated        = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating32BitUnsignedAccelerated               = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating32BitSignedAccelerated                 = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated        = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating64BitUnsignedAccelerated               = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating64BitSignedAccelerated                 = VK_FALSE;
-            pProps->integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated        = VK_FALSE;
+            GetPhysicalDeviceDotProduct64Properties(
+                &pProps->integerDotProduct64BitUnsignedAccelerated,
+                &pProps->integerDotProduct64BitSignedAccelerated,
+                &pProps->integerDotProduct64BitMixedSignednessAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating64BitUnsignedAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating64BitSignedAccelerated,
+                &pProps->integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated);
         }
         break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES_EXT:
         {
             auto* pProps = static_cast<VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT*>(pNext);
 
-            // Properties are guaranteed by the comment for PAL's definition of CreateTypedBufferViewSrds().
-            pProps->storageTexelBufferOffsetAlignmentBytes       = m_limits.minTexelBufferOffsetAlignment;
-            pProps->storageTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
-            pProps->uniformTexelBufferOffsetAlignmentBytes       = m_limits.minTexelBufferOffsetAlignment;
-            pProps->uniformTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
+            GetPhysicalDeviceTexelBufferAlignmentProperties(
+                &pProps->storageTexelBufferOffsetAlignmentBytes,
+                &pProps->storageTexelBufferOffsetSingleTexelAlignment,
+                &pProps->uniformTexelBufferOffsetAlignmentBytes,
+                &pProps->uniformTexelBufferOffsetSingleTexelAlignment);
             break;
         }
 
@@ -6470,7 +6698,16 @@ void PhysicalDevice::GetDeviceProperties2(
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES_KHR:
         {
             auto* pProps = static_cast<VkPhysicalDeviceMaintenance4PropertiesKHR*>(pNext);
-            pProps->maxBufferSize = 2u * 1024u * 1024u * 1024u; // TODO: replace with actual size
+
+            GetDevicePropertiesMaxBufferSize(&pProps->maxBufferSize);
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_PROPERTIES_EXT:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceProvokingVertexPropertiesEXT*>(pNext);
+            pProps->provokingVertexModePerPipeline                       = VK_TRUE;
+            pProps->transformFeedbackPreservesTriangleFanProvokingVertex = VK_FALSE;
             break;
         }
 
@@ -7206,6 +7443,7 @@ static void VerifyExtensions(
                && dev.IsExtensionSupported(DeviceExtensions::KHR_VULKAN_MEMORY_MODEL)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_BUFFER_DEVICE_ADDRESS));
     }
+
 }
 
 // =====================================================================================================================

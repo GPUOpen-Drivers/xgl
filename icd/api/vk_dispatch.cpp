@@ -624,6 +624,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdSetDepthBoundsTestEnableEXT                );
     INIT_DISPATCH_ENTRY(vkCmdSetStencilTestEnableEXT                    );
     INIT_DISPATCH_ENTRY(vkCmdSetStencilOpEXT                            );
+
     INIT_DISPATCH_ENTRY(vkCmdSetFragmentShadingRateKHR                  );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceFragmentShadingRatesKHR      );
 
@@ -646,9 +647,11 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdCopyImage2KHR                              );
     INIT_DISPATCH_ENTRY(vkCmdCopyImageToBuffer2KHR                      );
     INIT_DISPATCH_ENTRY(vkCmdResolveImage2KHR                           );
+
     INIT_DISPATCH_ENTRY(vkGetDeviceBufferMemoryRequirementsKHR          );
     INIT_DISPATCH_ENTRY(vkGetDeviceImageMemoryRequirementsKHR           );
     INIT_DISPATCH_ENTRY(vkGetDeviceImageSparseMemoryRequirementsKHR     );
+
 }
 
 // =====================================================================================================================

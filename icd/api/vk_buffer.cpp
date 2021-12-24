@@ -456,8 +456,7 @@ void Buffer::GetBufferMemoryRequirements(
 
         VK_ASSERT(pMemoryRequirements->memoryTypeBits != 0);
     }
-
-    if (pBufferFlags->externallyShareable)
+    else if (pBufferFlags->externallyShareable)
     {
         pMemoryRequirements->memoryTypeBits &= pDevice->GetMemoryTypeMaskForExternalSharing();
     }

@@ -292,6 +292,13 @@ static void ConvertImageCreateInfo(
     pPalCreateInfo->tiling           = VkToPalImageTiling(pCreateInfo->tiling);
     pPalCreateInfo->tilingOptMode    = pDevice->GetTilingOptMode();
 
+    if ((pPalCreateInfo->tilingOptMode == Pal::TilingOptMode::OptForSpace) &&
+        Pal::Formats::IsBlockCompressed(pPalCreateInfo->swizzledFormat.format) &&
+        (pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel > Pal::GfxIpLevel::GfxIp9))
+    {
+        pPalCreateInfo->tilingOptMode = Pal::TilingOptMode::Balanced;
+    }
+
     if ((pCreateInfo->imageType == VK_IMAGE_TYPE_3D) &&
         (pCreateInfo->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT)))
     {
@@ -1661,8 +1668,7 @@ void Image::SetMemoryRequirementsAtCreate(
 
         VK_ASSERT(m_memoryRequirements.memoryTypeBits != 0);
     }
-
-    if (m_internalFlags.externallyShareable)
+    else if (m_internalFlags.externallyShareable)
     {
         m_memoryRequirements.memoryTypeBits &= pDevice->GetMemoryTypeMaskForExternalSharing();
     }

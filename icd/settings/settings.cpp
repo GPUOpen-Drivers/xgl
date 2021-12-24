@@ -830,6 +830,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.enableDumbTransitionSync = false;
         }
 
+        if (appProfile == AppProfile::MetroExodus)
+        {
+            // A larger minImageCount can get a performance gain for game Metro Exodus.
+            m_settings.forceMinImageCount = 3;
+        }
+
         if (appProfile == AppProfile::Valheim)
         {
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)

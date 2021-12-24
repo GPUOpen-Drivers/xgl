@@ -363,13 +363,8 @@ public:
         DispatchableQueue**                         pQueues,
         const DeviceExtensions::Enabled&            enabled,
         const VkMemoryOverallocationBehaviorAMD     overallocationBehavior,
-        const bool                                  deviceCoherentMemoryEnabled,
-        const bool                                  attachmentFragmentShadingRate,
-        bool                                        scalarBlockLayoutEnabled,
-        const ExtendedRobustness&                   extendedRobustnessEnabled,
         bool                                        bufferDeviceAddressMultiDeviceEnabled,
-        bool                                        pageableDeviceLocalMemory,
-        bool                                        maintenance4Enabled);
+        bool                                        pageableDeviceLocalMemory);
 
     void InitDispatchTable();
 
@@ -736,7 +731,8 @@ protected:
         const VkPhysicalDeviceFeatures*  pFeatures,
         bool                             useComputeAsTransferQueue,
         uint32                           privateDataSlotRequestCount,
-        size_t                           privateDataSize);
+        size_t                           privateDataSize,
+        const DeviceFeatures&            deviceFeatures);
 
     VkResult CreateInternalPipelines();
 
@@ -792,7 +788,7 @@ protected:
     Util::Mutex                         m_memoryMutex;             // Shared mutex used occasionally by memory objects
 
     // The states of m_enabledFeatures are provided by application
-    DeviceFeatures                      m_enabledFeatures;
+    const DeviceFeatures                m_enabledFeatures;
 
     // The count of allocations that has been created from the logical device.
     uint32_t                            m_allocatedCount;

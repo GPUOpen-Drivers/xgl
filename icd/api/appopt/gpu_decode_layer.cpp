@@ -98,9 +98,11 @@ namespace GpuTexDecoder
         };
 
         Vkgc::ResourceMappingRootNode rootNode = {};
+        // use the max node type here, ASTC has 6 nodes which is the maximum right now
+        Vkgc::ResourceMappingNode nodes[GpuTexDecoder::AstcInternalPipelineNodes] = {};
+
         if (buildInfo.shaderType == GpuTexDecoder::InternalTexConvertCsType::ConvertASTCToRGBA8)
         {
-            Vkgc::ResourceMappingNode nodes[GpuTexDecoder::AstcInternalPipelineNodes] = {};
             GpuTexDecoder::GpuDecodeMappingNode* pDecodeNode = buildInfo.pUserDataNodes;
             for (size_t index = 0; index < GpuTexDecoder::AstcInternalPipelineNodes; index++)
             {
@@ -136,7 +138,6 @@ namespace GpuTexDecoder
 
         if (buildInfo.shaderType == GpuTexDecoder::InternalTexConvertCsType::ConvertETC2ToRGBA8)
         {
-            Vkgc::ResourceMappingNode nodes[GpuTexDecoder::Etc2InternalPipelineNodes] = {};
             GpuTexDecoder::GpuDecodeMappingNode* pDecodeNode = buildInfo.pUserDataNodes;
             for (size_t index = 0; index < GpuTexDecoder::Etc2InternalPipelineNodes; index++)
             {

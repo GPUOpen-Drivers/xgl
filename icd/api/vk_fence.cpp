@@ -212,15 +212,27 @@ VkResult Fence::ImportFenceFd(
     }
     else
     {
-        const size_t palSize = pDevice->PalDevice(DefaultDeviceIndex)->GetFenceSize(nullptr);
-        VkAllocationCallbacks* pAllocator = pDevice->VkInstance()->GetAllocCallbacks();
+        void* pMemory = nullptr;
 
-        // Allocate system memory
-        void* pMemory = pAllocator->pfnAllocation(
-                pAllocator->pUserData,
-                palSize,
-                VK_DEFAULT_MEM_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+        if (m_pPalTemporaryFences != nullptr)
+        {
+            m_pPalTemporaryFences->Destroy();
+
+            // Reuse the existing memory
+            pMemory = m_pPalTemporaryFences;
+        }
+        else
+        {
+            const size_t palSize = pDevice->PalDevice(DefaultDeviceIndex)->GetFenceSize(nullptr);
+            VkAllocationCallbacks* pAllocator = pDevice->VkInstance()->GetAllocCallbacks();
+
+            // Allocate system memory
+            pMemory = pAllocator->pfnAllocation(
+                    pAllocator->pUserData,
+                    palSize,
+                    VK_DEFAULT_MEM_ALIGN,
+                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+        }
 
         if (pMemory != nullptr)
         {

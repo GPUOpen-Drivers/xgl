@@ -998,8 +998,8 @@ inline Pal::SwizzledFormat RemapFormatComponents(
     uint32_t tilingIdx         = (imageTiling == Pal::ImageTiling::Linear) ? 0 : 1;
     uint32_t x8MmformatIdx     = static_cast<uint32_t>(Pal::ChNumFormat::X8_MM_Unorm);
     uint32_t x8Y8MmformatIdx   = static_cast<uint32_t>(Pal::ChNumFormat::X8Y8_MM_Unorm);
-    uint32_t x16MmformatIdx    = static_cast<uint32_t>(Pal::ChNumFormat::X16_MM_Unorm);
-    uint32_t x16Y16MmformatIdx = static_cast<uint32_t>(Pal::ChNumFormat::X16Y16_MM_Unorm);
+    uint32_t x16MmformatIdx    = static_cast<uint32_t>(Pal::ChNumFormat::X16_MM10_Unorm);
+    uint32_t x16Y16MmformatIdx = static_cast<uint32_t>(Pal::ChNumFormat::X16Y16_MM10_Unorm);
 
     // As spec says, the remapping must be identity for any VkImageView used with a combined image sampler that
     // enables sampler YCbCr conversion, thus we could totally ignore the setting in VkComponentMapping.
@@ -1116,7 +1116,7 @@ inline Pal::SwizzledFormat RemapFormatComponents(
             if (subresRange.startSubres.plane == 0)
             {
                 newFormat.format = (formatProperties.features[x16MmformatIdx][tilingIdx] != 0) ?
-                                   Pal::ChNumFormat::X16_MM_Unorm : Pal::ChNumFormat::X16_Unorm;
+                                   Pal::ChNumFormat::X16_MM10_Unorm : Pal::ChNumFormat::X16_Unorm;
                 newFormat.swizzle.r = ChannelSwizzle::Zero;
                 newFormat.swizzle.g = ChannelSwizzle::X;
                 newFormat.swizzle.b = ChannelSwizzle::Zero;
@@ -1125,7 +1125,7 @@ inline Pal::SwizzledFormat RemapFormatComponents(
             else if (subresRange.startSubres.plane == 1)
             {
                 newFormat.format = (formatProperties.features[x16Y16MmformatIdx][tilingIdx] != 0) ?
-                                   Pal::ChNumFormat::X16Y16_MM_Unorm : Pal::ChNumFormat::X16Y16_Unorm;
+                                   Pal::ChNumFormat::X16Y16_MM10_Unorm : Pal::ChNumFormat::X16Y16_Unorm;
                 newFormat.swizzle.r = ChannelSwizzle::Y;
                 newFormat.swizzle.g = ChannelSwizzle::Zero;
                 newFormat.swizzle.b = ChannelSwizzle::X;
@@ -3244,6 +3244,40 @@ inline Pal::QueuePriority VkToPalGlobalPriority(
 }
 
 // =====================================================================================================================
+inline Pal::QueuePrioritySupport VkToPalGlobaPrioritySupport(
+    VkQueueGlobalPriorityEXT vkPriority)
+{
+    Pal::QueuePrioritySupport palPrioritySupport = Pal::QueuePrioritySupport::SupportQueuePriorityNormal;
+    switch (static_cast<int32_t>(vkPriority))
+    {
+    case VK_QUEUE_GLOBAL_PRIORITY_LOW_EXT:
+        palPrioritySupport = Pal::QueuePrioritySupport::SupportQueuePriorityIdle;
+        break;
+    case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT:
+        palPrioritySupport = Pal::QueuePrioritySupport::SupportQueuePriorityNormal;
+        break;
+    case VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT:
+        palPrioritySupport = Pal::QueuePrioritySupport::SupportQueuePriorityHigh;
+        break;
+    case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT:
+        palPrioritySupport = Pal::QueuePrioritySupport::SupportQueuePriorityRealtime;
+        break;
+    default:
+        break;
+    }
+
+    return palPrioritySupport;
+}
+
+// =====================================================================================================================
+// Is the queue suitable for normal use (i.e. non-exclusive and no elevated priority).
+template<class T>
+static bool IsNormalQueue(const T& engineCapabilities)
+{
+    return ((engineCapabilities.flags.exclusive == 0) &&
+        ((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityNormal) != 0));
+}
+
 inline Pal::ResolveMode VkToPalResolveMode(
     VkResolveModeFlagBits vkResolveMode)
 {
@@ -3478,6 +3512,46 @@ inline uint32_t VkToVkgcShaderStageMask(VkShaderStageFlags vkShaderStageFlags)
 
     VK_ASSERT(expectedShaderStageCount == Vkgc::ShaderStageCount); // Need update this function if mismatch
     return vkgcShaderMask;
+}
+
+// =====================================================================================================================
+inline VkShaderStageFlags VkgcToVkShaderStageMask(uint32_t vkgcShaderStageFlags)
+{
+    VkShaderStageFlags vkShaderMask   = 0;
+    uint32_t expectedShaderStageCount = 6;
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageVertexBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_VERTEX_BIT;
+    }
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageTessControlBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+    }
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageTessEvalBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+    }
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageGeometryBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_GEOMETRY_BIT;
+    }
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageFragmentBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_FRAGMENT_BIT;
+    }
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageComputeBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_COMPUTE_BIT;
+    }
+
+    VK_ASSERT(expectedShaderStageCount == Vkgc::ShaderStageCount); // Need update this function if mismatch
+    return vkShaderMask;
 }
 
 // =====================================================================================================================
