@@ -113,6 +113,10 @@ llvm::Expected<size_t> CacheBlobInfo::getPrivateHeaderOffset() const {
   if (privateHeaderOffset + sizeof(vk::PipelineBinaryCachePrivateHeader) > m_cacheBlob.getBufferSize())
     return createBlobError(m_cacheBlob, "Insufficient buffer size for the Pipeline Binary Cache private header");
 
+  // Make sure that this is an AMD pipeline cache blob. If not, we cannot read the private header.
+  if (publicHeader->vendorID != AMDVendorId)
+    return createBlobError(m_cacheBlob, "Vendor is not AMD. Unknown cache blob format.");
+
   return privateHeaderOffset;
 }
 
