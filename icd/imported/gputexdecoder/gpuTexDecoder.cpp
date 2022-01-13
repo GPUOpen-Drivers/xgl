@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -30,6 +30,9 @@
  */
 #include "gpuTexDecoder.h"
 #include "shaders.h"
+#include "palMetroHash.h"
+#include "palHashMapImpl.h"
+#include "palMemTrackerImpl.h"
 
 namespace GpuTexDecoder
 {
@@ -333,7 +336,8 @@ Device::Device()
     :
     m_info({}),
     m_pTableMemory(nullptr),
-    m_pPalCmdBuffer (nullptr)
+    m_pPalCmdBuffer (nullptr),
+    m_pipelineMap(64, &m_allocator)
 {
 }
 
@@ -345,6 +349,11 @@ Device::~Device()
         m_info.pPalDevice->RemoveGpuMemoryReferences(1, &m_pTableMemory, nullptr);
         m_pTableMemory->Destroy();
         PAL_SAFE_FREE(m_pTableMemory, m_info.pPlatform);
+    }
+
+    for (InternalPipelineMap::Iterator itr = m_pipelineMap.Begin(); itr.Get(); itr.Next())
+    {
+        ClientDestroyInternalComputePipeline(m_info, itr.Get()->value.pPipeline, itr.Get()->value.pMemory);
     }
 }
 
@@ -362,6 +371,10 @@ void Device::Init(
     // 1 Image resource for output and 1 TexBuffer for Input
     m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertETC2ToRGBA8)]
         =  2 * m_imageViewSizeInDwords;
+
+    Pal::Result result = m_pipelineMap.Init();
+
+    PAL_ASSERT(result == Pal::Result::Success);
 }
 
 // =====================================================================================================================
@@ -606,92 +619,123 @@ uint32* Device::CreateAndBindEmbeddedUserData(
 // =====================================================================================================================
 Pal::IPipeline* Device::GetInternalPipeline(
     InternalTexConvertCsType    type,
-    const CompileTimeConstants& constInfo) const
+    const CompileTimeConstants& constInfo)
 {
     Pal::IPipeline* pPipeline = nullptr;
     void* pMemory = nullptr;
     PipelineBuildInfo buildInfo = {};
     GpuDecodeMappingNode resourceNodes[AstcInternalPipelineNodes];
+    Util::RWLock* pPipelineLock = const_cast<Util::RWLock*>(&m_internalPipelineLock);
 
-    if (type == InternalTexConvertCsType::ConvertASTCToRGBA8)
+    Util::MetroHash::Hash hash = {};
+    Util::MetroHash64::Hash((uint8*)(constInfo.pConstants), sizeof(uint32) * constInfo.numConstants , &hash.bytes[0]);
+
+    InternalPipelineKey key = {};
+    key.shaderType   = type;
+    key.constInfoHash = Util::MetroHash::Compact32(&hash);
+
+    InternalPipelineMemoryPair* pPipelinePair = nullptr;
+
     {
-        uint32 offset       = 0;
-        buildInfo.nodeCount = 1;
-
-        // 1.Color UnQuantization Buffer View
-        resourceNodes[0].nodeType       = NodeType::Buffer;
-        resourceNodes[0].sizeInDwords   = m_bufferViewSizeInDwords;
-        resourceNodes[0].offsetInDwords = 0;
-        resourceNodes[0].binding        = 0;
-        resourceNodes[0].set            = 0;
-
-        // 2.Trits Quints Buffer View
-        resourceNodes[1].nodeType       = NodeType::Buffer;
-        resourceNodes[1].sizeInDwords   = m_bufferViewSizeInDwords;
-        resourceNodes[1].offsetInDwords = 1 * m_bufferViewSizeInDwords;
-        resourceNodes[1].binding        = 1;
-        resourceNodes[1].set            = 0;
-
-        // 3.Quant and Transfer Buffer View
-        resourceNodes[2].nodeType       = NodeType::Buffer;
-        resourceNodes[2].sizeInDwords   = m_bufferViewSizeInDwords;
-        resourceNodes[2].offsetInDwords = 2 * m_bufferViewSizeInDwords;
-        resourceNodes[2].binding        = 2;
-        resourceNodes[2].set            = 0;
-
-        // 4. TexBuffer View for Src Image Buffer
-        resourceNodes[3].nodeType       = NodeType::TexBuffer;
-        resourceNodes[3].sizeInDwords   = m_bufferViewSizeInDwords;
-        resourceNodes[3].offsetInDwords = 3 * m_bufferViewSizeInDwords;
-        resourceNodes[3].binding        = 3;
-        resourceNodes[3].set            = 0;
-
-        // 5. Image View for Src Image
-        resourceNodes[4].nodeType       = NodeType::Image;
-        resourceNodes[4].sizeInDwords   = m_imageViewSizeInDwords;
-        resourceNodes[4].offsetInDwords = 4 * m_bufferViewSizeInDwords;
-        resourceNodes[4].binding        = 4;
-        resourceNodes[4].set            = 0;
-
-        // 6. Image View for Dst Image
-        resourceNodes[5].nodeType       = NodeType::Image;
-        resourceNodes[5].sizeInDwords   = m_imageViewSizeInDwords;
-        resourceNodes[5].offsetInDwords = 4 * m_bufferViewSizeInDwords + m_imageViewSizeInDwords;
-        resourceNodes[5].binding        = 5;
-        resourceNodes[5].set            = 0;
-
-        buildInfo.pUserDataNodes = resourceNodes;
-        buildInfo.shaderType     = InternalTexConvertCsType::ConvertASTCToRGBA8;
-        GetSpvCode(buildInfo.shaderType, &(buildInfo.code.pSpvCode), &(buildInfo.code.spvSize));
-    }
-    else
-    {
-        PAL_ASSERT(type == InternalTexConvertCsType::ConvertETC2ToRGBA8);
-        uint32 offset       = 0;
-        buildInfo.nodeCount = 1;
-
-        // 1. output
-        resourceNodes[0].nodeType       = NodeType::Image;
-        resourceNodes[0].sizeInDwords   = m_imageViewSizeInDwords;
-        resourceNodes[0].offsetInDwords = 0;
-        resourceNodes[0].binding        = 0;
-        resourceNodes[0].set            = 0;
-
-        //2. input
-        resourceNodes[1].nodeType       = NodeType::Image;
-        resourceNodes[1].sizeInDwords   = m_imageViewSizeInDwords;
-        resourceNodes[1].offsetInDwords = 1 * m_imageViewSizeInDwords;
-        resourceNodes[1].binding        = 1;
-        resourceNodes[1].set            = 0;
-
-        buildInfo.pUserDataNodes = resourceNodes;
-        buildInfo.shaderType     = InternalTexConvertCsType::ConvertETC2ToRGBA8;
-        GetSpvCode(buildInfo.shaderType, &(buildInfo.code.pSpvCode), &(buildInfo.code.spvSize));
+        Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> lock(pPipelineLock);
+        pPipelinePair = m_pipelineMap.FindKey(key);
     }
 
-    ClientCreateInternalComputePipeline(m_info, constInfo, buildInfo, &pPipeline, &pMemory);
+    if (pPipelinePair == nullptr)
+    {
+        Util::RWLockAuto<Util::RWLock::LockType::ReadWrite> lock(pPipelineLock);
 
-    return pPipeline;
+        bool existed = false;
+        Pal::Result result = m_pipelineMap.FindAllocate(key, &existed, &pPipelinePair);
+
+        if ((existed == false) && (result == Pal::Result::Success) && (pPipelinePair != nullptr))
+        {
+            if (type == InternalTexConvertCsType::ConvertASTCToRGBA8)
+            {
+                buildInfo.nodeCount = 1;
+
+                // 1.Color UnQuantization Buffer View
+                resourceNodes[0].nodeType       = NodeType::Buffer;
+                resourceNodes[0].sizeInDwords   = m_bufferViewSizeInDwords;
+                resourceNodes[0].offsetInDwords = 0;
+                resourceNodes[0].binding        = 0;
+                resourceNodes[0].set            = 0;
+
+                // 2.Trits Quints Buffer View
+                resourceNodes[1].nodeType       = NodeType::Buffer;
+                resourceNodes[1].sizeInDwords   = m_bufferViewSizeInDwords;
+                resourceNodes[1].offsetInDwords = 1 * m_bufferViewSizeInDwords;
+                resourceNodes[1].binding        = 1;
+                resourceNodes[1].set            = 0;
+
+                // 3.Quant and Transfer Buffer View
+                resourceNodes[2].nodeType       = NodeType::Buffer;
+                resourceNodes[2].sizeInDwords   = m_bufferViewSizeInDwords;
+                resourceNodes[2].offsetInDwords = 2 * m_bufferViewSizeInDwords;
+                resourceNodes[2].binding        = 2;
+                resourceNodes[2].set            = 0;
+
+                // 4. TexBuffer View for Src Image Buffer
+                resourceNodes[3].nodeType       = NodeType::TexBuffer;
+                resourceNodes[3].sizeInDwords   = m_bufferViewSizeInDwords;
+                resourceNodes[3].offsetInDwords = 3 * m_bufferViewSizeInDwords;
+                resourceNodes[3].binding        = 3;
+                resourceNodes[3].set            = 0;
+
+                // 5. Image View for Src Image
+                resourceNodes[4].nodeType       = NodeType::Image;
+                resourceNodes[4].sizeInDwords   = m_imageViewSizeInDwords;
+                resourceNodes[4].offsetInDwords = 4 * m_bufferViewSizeInDwords;
+                resourceNodes[4].binding        = 4;
+                resourceNodes[4].set            = 0;
+
+                // 6. Image View for Dst Image
+                resourceNodes[5].nodeType       = NodeType::Image;
+                resourceNodes[5].sizeInDwords   = m_imageViewSizeInDwords;
+                resourceNodes[5].offsetInDwords = 4 * m_bufferViewSizeInDwords + m_imageViewSizeInDwords;
+                resourceNodes[5].binding        = 5;
+                resourceNodes[5].set            = 0;
+
+                buildInfo.shaderType     = InternalTexConvertCsType::ConvertASTCToRGBA8;
+            }
+            else
+            {
+                PAL_ASSERT(type == InternalTexConvertCsType::ConvertETC2ToRGBA8);
+                buildInfo.nodeCount = 1;
+
+                // 1. output
+                resourceNodes[0].nodeType       = NodeType::Image;
+                resourceNodes[0].sizeInDwords   = m_imageViewSizeInDwords;
+                resourceNodes[0].offsetInDwords = 0;
+                resourceNodes[0].binding        = 0;
+                resourceNodes[0].set            = 0;
+
+                //2. input
+                resourceNodes[1].nodeType       = NodeType::Image;
+                resourceNodes[1].sizeInDwords   = m_imageViewSizeInDwords;
+                resourceNodes[1].offsetInDwords = 1 * m_imageViewSizeInDwords;
+                resourceNodes[1].binding        = 1;
+                resourceNodes[1].set            = 0;
+
+                buildInfo.shaderType     = InternalTexConvertCsType::ConvertETC2ToRGBA8;
+            }
+
+            buildInfo.pUserDataNodes = resourceNodes;
+
+            GetSpvCode(buildInfo.shaderType, &(buildInfo.code.pSpvCode), &(buildInfo.code.spvSize));
+
+            result = ClientCreateInternalComputePipeline(m_info,
+                                                         constInfo,
+                                                         buildInfo,
+                                                         &pPipelinePair->pPipeline,
+                                                         &pPipelinePair->pMemory);
+
+            PAL_ASSERT(result == Pal::Result::Success);
+        }
+    }
+
+    PAL_ASSERT(pPipelinePair->pPipeline);
+    return pPipelinePair->pPipeline;
 }
 
 // =====================================================================================================================

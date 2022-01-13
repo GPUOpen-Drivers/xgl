@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -116,6 +116,11 @@ VkResult Memory::Create(
     if (pDevice->ShouldAddRemoteBackupHeap(DefaultDeviceIndex, pAllocInfo->memoryTypeIndex, createInfo.heaps[0]))
     {
         createInfo.heaps[createInfo.heapCount++] = Pal::GpuHeapGartUswc;
+
+        if (createInfo.heaps[0] != Pal::GpuHeapLocal)
+        {
+            createInfo.heaps[createInfo.heapCount++] = Pal::GpuHeapLocal;
+        }
     }
 
     if (pDevice->NumPalDevices() > 1)
@@ -207,9 +212,7 @@ VkResult Memory::Create(
                                ));
 #endif
                     createInfo.flags.interprocess = 1;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 657
                     createInfo.flags.explicitSync = 1;
-#endif
                     // Todo: we'd better to pass in the handleTypes to the Pal as well.
                     // The supported handleType should also be provided by Pal as Device Capabilities.
             }
@@ -753,9 +756,7 @@ VkResult Memory::OpenExternalSharedImage(
 
     Pal::ExternalImageOpenInfo palOpenInfo = {};
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 645
     palOpenInfo.extent          = pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().extent;
-#endif
     palOpenInfo.swizzledFormat  = VkToPalFormat(pBoundImage->GetFormat(), pDevice->GetRuntimeSettings());
     palOpenInfo.usage           = VkToPalImageUsageFlags(pBoundImage->GetImageUsage(),
                                                          1,

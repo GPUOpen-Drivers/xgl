@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -505,9 +505,8 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
 
     // Bindings numbers are allowed to come in out-of-order, as well as with gaps.
     // We compute offsets using the size we've seen so far as we iterate, so we need to handle
-    // the bindings in binding-number order, rather than array order.
-
-    VK_IGNORE(pIn->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT);
+    // the bindings in binding-number order, rather than array order. Hence we can ignore
+    //     - VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT
 
     // First, copy the binding info into our output array in order.
     for (uint32 inIndex = 0; inIndex < pIn->bindingCount; ++inIndex)

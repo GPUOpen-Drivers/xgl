@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -257,11 +257,6 @@ VkResult CmdPool::ResetCmdAllocator()
 VkResult CmdPool::Reset(VkCommandPoolResetFlags flags)
 {
     VkResult result = VK_SUCCESS;
-
-    // There's currently no way to tell to the PAL CmdAllocator that it should release the actual allocations used
-    // by the pool, it always just marks the allocations unused, so we currently ignore the
-    // VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT flag if present.
-    VK_IGNORE(flags & VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 
     // We first have to reset all the command buffers that use this pool (PAL doesn't do this automatically).
     for (auto it = m_cmdBufferRegistry.Begin(); (it.Get() != nullptr) && (result == VK_SUCCESS); it.Next())

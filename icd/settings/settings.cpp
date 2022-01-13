@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -175,6 +175,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         memset(pInfo, 0, sizeof(Pal::DeviceProperties));
         m_pDevice->GetProperties(pInfo);
 
+        Pal::GpuMemoryHeapProperties heapProperties[Pal::GpuHeapCount] = {};
+        Pal::Result gpuMemoryHeapPropertiesResult = m_pDevice->GetGpuMemoryHeapProperties(heapProperties);
+
         // By allowing the enable/disable to be set by environment variable, any third party platform owners
         // can enable or disable the feature based on their internal feedback and not have to wait for a driver
         // update to catch issues
@@ -213,10 +216,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         }
 
         // Put command buffers in local for large/resizable BAR systems
-        Pal::GpuMemoryHeapProperties heapProperties[Pal::GpuHeapCount] = {};
-        const gpusize                minLocalSize                      = 256 * 1024 * 1024;
+        const gpusize minLocalSize = 256 * 1024 * 1024;
 
-        if ((m_pDevice->GetGpuMemoryHeapProperties(heapProperties) == Pal::Result::Success) &&
+        if ((gpuMemoryHeapPropertiesResult == Pal::Result::Success) &&
             (heapProperties[Pal::GpuHeapLocal].heapSize > minLocalSize))
         {
             if ((appProfile != AppProfile::WorldWarZ)
@@ -619,6 +621,19 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.nggEnableBackfaceCulling = false;
                 m_settings.nggEnableSmallPrimFilter = false;
 
+                if (pInfo->revision == Pal::AsicRevision::Navi23)
+                {
+                    m_settings.overrideLocalHeapSizeInGBs = 8;
+
+                    if ((gpuMemoryHeapPropertiesResult == Pal::Result::Success) &&
+                        ((m_settings.overrideLocalHeapSizeInGBs * 1024 * 1024 *1024) >
+                            (heapProperties[Pal::GpuHeapLocal].heapSize +
+                             heapProperties[Pal::GpuHeapInvisible].heapSize)))
+                    {
+                        m_settings.memoryRemoteBackupHeapMinHeapSize = 0x220000000;
+                        m_settings.memoryDeviceOverallocationAllowed = true;
+                    }
+                }
             }
             else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
             {

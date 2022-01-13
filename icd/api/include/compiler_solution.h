@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -76,10 +76,7 @@ struct PipelineCreationFeedback
 // Represents pipeline metadata included in the pipeline ELF.
 struct PipelineMetadata
 {
-    bool     reservedForFutureHw1;
-    bool     reservedForFutureHw2;
-    uint16_t reservedForFutureHw3;
-    uint16_t reservedForFutureHw4;
+    bool     pointSizeUsed;
 };
 
 // =====================================================================================================================
@@ -97,6 +94,7 @@ struct GraphicsPipelineBinaryCreateInfo
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback[ShaderStage::ShaderStageGfxCount];
     uint32_t                               rasterizationStream;
+    PipelineMetadata                       pipelineMetadata;
 };
 
 // =====================================================================================================================

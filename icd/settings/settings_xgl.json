@@ -3849,6 +3849,18 @@
       "Name": "OverrideHeapGartCacheableToUswc"
     },
     {
+      "Description": "Forces local heap size to the value specified in GBs. The setting doesn't take affect unless the specified size is greater than actual heap size reported by PAL.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "Name": "OverrideLocalHeapSizeInGBs"
+    },
+    {
       "Description": "for APU, set local and local invisibl heap size to 0, Force to use system memory.",
       "Tags": [
         "Memory"

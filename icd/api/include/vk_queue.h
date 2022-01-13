@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -41,7 +41,6 @@
 #include "include/vk_utils.h"
 #include "include/virtual_stack_mgr.h"
 
-#include "palDeque.h"
 #include "palQueue.h"
 
 namespace Pal
@@ -54,6 +53,8 @@ class IQueue;
 namespace vk
 {
 
+struct CmdBufState;
+class  CmdBufferRing;
 class  Device;
 class  DevModeMgr;
 class  DispatchableQueue;
@@ -62,13 +63,6 @@ class  SwapChain;
 class  FrtcFramePacer;
 class  TurboSync;
 class  SqttQueueState;
-
-// State of a command buffer.
-struct CmdBufState
-{
-    Pal::ICmdBuffer*    pCmdBuf;     // Command buffer pointer
-    Pal::IFence*        pFence;      // Fence that will be signaled when this fence's submit completes
-};
 
 // =====================================================================================================================
 // A Vulkan queue.
@@ -85,7 +79,8 @@ public:
         Pal::IQueue**           pPalQueues,
         Pal::IQueue**           pPalTmzQueues,
         Pal::IQueueSemaphore**  pPalTmzSemaphores,
-        VirtualStackAllocator*  pStackAllocator);
+        VirtualStackAllocator*  pStackAllocator,
+        CmdBufferRing*          pCmdBufferRing);
 
     ~Queue();
 
@@ -237,22 +232,6 @@ protected:
 
     VkResult CreateDummyCmdBuffer();
 
-    void CreateCmdBufRing(
-        uint32_t                   deviceIdx);
-
-    void DestroyCmdBufRing(
-        uint32_t                   deviceIdx);
-
-    CmdBufState* CreateCmdBufState(
-        uint32_t                   deviceIdx);
-
-    void DestroyCmdBufState(
-        uint32_t                   deviceIdx,
-        CmdBufState*               pCmdBufState);
-
-    CmdBufState* AcquireInternalCmdBuf(
-        uint32_t                   deviceIdx);
-
     bool BuildPostProcessCommands(
         uint32_t                         deviceIdx,
         CmdBufState*                     pCmdBufState,
@@ -295,8 +274,7 @@ protected:
     Pal::PerSourceFrameMetadataControl m_palFrameMetadataControl;
     Pal::ICmdBuffer*                   m_pDummyCmdBuffer[MaxPalDevices];
     SqttQueueState*                    m_pSqttState; // Per-queue state for handling SQ thread-tracing annotations
-    typedef Util::Deque<CmdBufState*, PalAllocator> CmdBufRing;
-    CmdBufRing*                        m_pCmdBufRing[MaxPalDevices];
+    CmdBufferRing*                     m_pCmdBufferRing;
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Queue);

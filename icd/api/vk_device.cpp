@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -64,6 +64,7 @@
 #include "include/vk_swapchain.h"
 #include "include/vk_utils.h"
 #include "include/vk_conv.h"
+#include "include/cmd_buffer_ring.h"
 #include "include/graphics_pipeline_common.h"
 #include "include/internal_layer_hooks.h"
 
@@ -264,8 +265,8 @@ Device::Device(
     m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true),
     m_useComputeAsTransferQueue(useComputeAsTransferQueue),
     m_useUniversalAsComputeQueue(pPhysicalDevices[DefaultDeviceIndex]->GetRuntimeSettings().useUniversalAsComputeQueue),
-    m_useGlobalGpuVa(false)
-    , m_pBorderColorUsedIndexes(nullptr)
+    m_useGlobalGpuVa(false),
+    m_pBorderColorUsedIndexes(nullptr)
 {
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
 
@@ -285,7 +286,6 @@ Device::Device(
         m_perGpu[deviceIdx].pSwCompositingSemaphore = nullptr;
         m_perGpu[deviceIdx].pSwCompositingCmdBuffer = nullptr;
         m_perGpu[deviceIdx].pPalBorderColorPalette  = nullptr;
-
     }
 
     m_allocatedCount = 0;
@@ -846,19 +846,6 @@ VkResult Device::Create(
     {
         switch (static_cast<uint32>(pHeader->sType))
         {
-            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES:
-            {
-                const auto* pMultiviewFeatures = reinterpret_cast<const VkPhysicalDeviceMultiviewFeatures*>(pHeader);
-
-                // The implementation of multiview does not require special handling,
-                // therefore the multview features can be ignored.
-                VK_IGNORE(pMultiviewFeatures->multiview);
-                VK_IGNORE(pMultiviewFeatures->multiviewGeometryShader);
-                VK_IGNORE(pMultiviewFeatures->multiviewTessellationShader);
-
-                break;
-            }
-
             case VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO_EXT:
             {
                 const auto* pPrivateDataInfo = reinterpret_cast<const VkDevicePrivateDataCreateInfoEXT*>(pHeader);
@@ -866,6 +853,15 @@ VkResult Device::Create(
                 privateDataSlotRequestCount += pPrivateDataInfo->privateDataSlotRequestCount;
                 break;
             }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES:
+                // The implementation of multiview does not require special handling,
+                // therefore the following multview features can be ignored.
+                //    - pMultiviewFeatures->multiview
+                //    - pMultiviewFeatures->multiviewGeometryShader
+                //    - pMultiviewFeatures->multiviewTessellationShader
+                //
+                // Fall through to default.
 
             default:
                 // Skip any unknown extension structures
@@ -1095,6 +1091,21 @@ VkResult Device::Create(
                     palResult = pInstance->StackMgr()->AcquireAllocator(&pQueueStackAllocator);
                 }
 
+                CmdBufferRing* pCmdBufferRing = nullptr;
+
+                if (palResult == Pal::Result::Success)
+                {
+                    Pal::EngineType engineType = (*pDispatchableDevice)->GetQueueFamilyPalEngineType(queueFamilyIndex);
+                    Pal::QueueType  queueType  = (*pDispatchableDevice)->GetQueueFamilyPalQueueType(queueFamilyIndex);
+
+                    pCmdBufferRing = CmdBufferRing::Create(*pDispatchableDevice, engineType, queueType);
+
+                    if (pCmdBufferRing == nullptr)
+                    {
+                        palResult = Pal::Result::ErrorOutOfMemory;
+                    }
+                }
+
                 if (palResult == Pal::Result::Success)
                 {
                     // Create the vk::Queue object
@@ -1112,7 +1123,8 @@ VkResult Device::Create(
                         pPalQueues,
                         pPalTmzQueues,
                         pPalTmzSemaphores,
-                        pQueueStackAllocator));
+                        pQueueStackAllocator,
+                        pCmdBufferRing));
 
                     pDispatchableQueues[queueFamilyIndex][queueIndex] = static_cast<DispatchableQueue*>(pApiQueueMemory);
 
@@ -1144,6 +1156,11 @@ VkResult Device::Create(
                         {
                             pPalTmzSemaphores[deviceIdx]->Destroy();
                         }
+                    }
+
+                    if (pQueueStackAllocator != nullptr)
+                    {
+                        pInstance->StackMgr()->ReleaseAllocator(pQueueStackAllocator);
                     }
                 }
             }
@@ -1219,74 +1236,15 @@ VkResult Device::Initialize(
         result = m_renderStateCache.Init();
     }
 
-    if (result == VK_SUCCESS)
-    {
-        // Create a common CmdAllocator for internal use. For the driver setting, useSharedCmdAllocator,
-        // this CmdAllocator will be used by all command buffers created by this device.
-        // It must be thread safe because two threads could modify two command buffers at once
-        // which may cause those command buffers to access the allocator simultaneously.
-        Pal::CmdAllocatorCreateInfo createInfo = {};
-
-        createInfo.flags.threadSafe               = 1;
-        createInfo.flags.autoMemoryReuse          = 1;
-        createInfo.flags.disableBusyChunkTracking = 1;
-
-        // Initialize command data chunk allocation size
-        createInfo.allocInfo[Pal::CommandDataAlloc].allocHeap = m_settings.cmdAllocatorDataHeap;
-        createInfo.allocInfo[Pal::CommandDataAlloc].allocSize = m_settings.cmdAllocatorDataAllocSize;
-        createInfo.allocInfo[Pal::CommandDataAlloc].suballocSize = m_settings.cmdAllocatorDataSubAllocSize;
-
-        // Initialize embedded data chunk allocation size
-        createInfo.allocInfo[Pal::EmbeddedDataAlloc].allocHeap = m_settings.cmdAllocatorEmbeddedHeap;
-        createInfo.allocInfo[Pal::EmbeddedDataAlloc].allocSize = m_settings.cmdAllocatorEmbeddedAllocSize;
-        createInfo.allocInfo[Pal::EmbeddedDataAlloc].suballocSize = m_settings.cmdAllocatorEmbeddedSubAllocSize;
-
-        // Initialize GPU scratch memory chunk allocation size
-        createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocHeap = m_settings.cmdAllocatorScratchHeap;
-        createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocSize = m_settings.cmdAllocatorScratchAllocSize;
-        createInfo.allocInfo[Pal::GpuScratchMemAlloc].suballocSize = m_settings.cmdAllocatorScratchSubAllocSize;
-
-        Pal::Result  palResult = Pal::Result::Success;
-        const size_t allocatorSize = PalDevice(DefaultDeviceIndex)->GetCmdAllocatorSize(createInfo, &palResult);
-
-        if (palResult == Pal::Result::Success)
-        {
-            void* pAllocatorMem = m_pInstance->AllocMem(
-                allocatorSize * NumPalDevices(), VK_DEFAULT_MEM_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-
-            if (pAllocatorMem != NULL)
-            {
-                for (uint32_t deviceIdx = 0;
-                    (deviceIdx < NumPalDevices()) && (palResult == Pal::Result::Success);
-                    deviceIdx++)
-                {
-                    VK_ASSERT(allocatorSize == PalDevice(deviceIdx)->GetCmdAllocatorSize(createInfo, &palResult));
-
-                    palResult = PalDevice(deviceIdx)->CreateCmdAllocator(createInfo,
-                        Util::VoidPtrInc(pAllocatorMem, allocatorSize * deviceIdx),
-                        &m_perGpu[deviceIdx].pSharedPalCmdAllocator);
-                }
-                result = PalToVkResult(palResult);
-
-                if (result != VK_SUCCESS)
-                {
-                    m_pInstance->FreeMem(pAllocatorMem);
-                }
-            }
-            else
-            {
-                result = VK_ERROR_OUT_OF_HOST_MEMORY;
-            }
-        }
-        else
-        {
-            result = PalToVkResult(palResult);
-        }
-    }
-
     memcpy(&m_pQueues, pQueues, sizeof(m_pQueues));
     Pal::DeviceProperties deviceProps = {};
     result = PalToVkResult(PalDevice(DefaultDeviceIndex)->GetProperties(&deviceProps));
+
+    if (result == VK_SUCCESS)
+    {
+        result = CreateSharedPalCmdAllocator(
+        );
+    }
 
     m_properties.virtualMemAllocGranularity = deviceProps.gpuMemoryProperties.virtualMemAllocGranularity;
     m_properties.virtualMemPageSize         = deviceProps.gpuMemoryProperties.virtualMemPageSize;
@@ -1847,15 +1805,7 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 
     DestroyInternalPipelines();
 
-    for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
-    {
-        if (m_perGpu[deviceIdx].pSharedPalCmdAllocator != nullptr)
-        {
-            m_perGpu[deviceIdx].pSharedPalCmdAllocator->Destroy();
-        }
-    }
-
-    VkInstance()->FreeMem(m_perGpu[DefaultDeviceIndex].pSharedPalCmdAllocator);
+    DestroySharedPalCmdAllocator();
 
     for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
     {
@@ -1878,7 +1828,6 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 
             VkInstance()->FreeMem(m_perGpu[deviceIdx].pSwCompositingMemory);
         }
-
     }
 
     DestroyBorderColorPalette();
@@ -3250,6 +3199,94 @@ VkResult Device::InitSwCompositing(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+// Create a common CmdAllocator for internal use. For the driver setting, useSharedCmdAllocator, this CmdAllocator will
+// be used by all command buffers created by this device. It must be thread safe because two threads could modify two
+// command buffers at once which may cause those command buffers to access the allocator simultaneously.
+VkResult Device::CreateSharedPalCmdAllocator(
+    )
+{
+    VkResult result = VK_SUCCESS;
+
+    Pal::CmdAllocatorCreateInfo createInfo = {};
+
+    createInfo.flags.threadSafe               = 1;
+    createInfo.flags.autoMemoryReuse          = 1;
+    createInfo.flags.disableBusyChunkTracking = 1;
+
+    // Initialize command data chunk allocation size
+    createInfo.allocInfo[Pal::CommandDataAlloc].allocHeap    = m_settings.cmdAllocatorDataHeap;
+    createInfo.allocInfo[Pal::CommandDataAlloc].allocSize    = m_settings.cmdAllocatorDataAllocSize;
+    createInfo.allocInfo[Pal::CommandDataAlloc].suballocSize = m_settings.cmdAllocatorDataSubAllocSize;
+
+    // Initialize embedded data chunk allocation size
+    createInfo.allocInfo[Pal::EmbeddedDataAlloc].allocHeap    = m_settings.cmdAllocatorEmbeddedHeap;
+    createInfo.allocInfo[Pal::EmbeddedDataAlloc].allocSize    = m_settings.cmdAllocatorEmbeddedAllocSize;
+    createInfo.allocInfo[Pal::EmbeddedDataAlloc].suballocSize = m_settings.cmdAllocatorEmbeddedSubAllocSize;
+
+    // Initialize GPU scratch memory chunk allocation size
+    createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocHeap    = m_settings.cmdAllocatorScratchHeap;
+    createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocSize    = m_settings.cmdAllocatorScratchAllocSize;
+    createInfo.allocInfo[Pal::GpuScratchMemAlloc].suballocSize = m_settings.cmdAllocatorScratchSubAllocSize;
+
+    Pal::Result  palResult;
+    const size_t allocatorSize = PalDevice(DefaultDeviceIndex)->GetCmdAllocatorSize(createInfo, &palResult);
+    VK_ASSERT(palResult == Pal::Result::Success);
+
+    void* pAllocatorMem = m_pInstance->AllocMem(
+        allocatorSize * NumPalDevices(),
+        VK_DEFAULT_MEM_ALIGN,
+        VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+    if (pAllocatorMem != NULL)
+    {
+        for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); ++deviceIdx)
+        {
+            VK_ASSERT(allocatorSize == PalDevice(deviceIdx)->GetCmdAllocatorSize(createInfo, &palResult));
+
+            palResult = PalDevice(deviceIdx)->CreateCmdAllocator(
+                createInfo,
+                Util::VoidPtrInc(pAllocatorMem, allocatorSize * deviceIdx),
+                &m_perGpu[deviceIdx].pSharedPalCmdAllocator);
+
+            if (palResult != Pal::Result::Success)
+            {
+                if (m_perGpu[DefaultDeviceIndex].pSharedPalCmdAllocator != nullptr)
+                {
+                    DestroySharedPalCmdAllocator();
+                }
+                else
+                {
+                    m_pInstance->FreeMem(pAllocatorMem);
+                }
+
+                result = PalToVkError(palResult);
+                break;
+            }
+        }
+    }
+    else
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+void Device::DestroySharedPalCmdAllocator()
+{
+    for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
+    {
+        if (m_perGpu[deviceIdx].pSharedPalCmdAllocator != nullptr)
+        {
+            m_perGpu[deviceIdx].pSharedPalCmdAllocator->Destroy();
+        }
+    }
+
+    m_pInstance->FreeMem(m_perGpu[DefaultDeviceIndex].pSharedPalCmdAllocator);
 }
 
 // =====================================================================================================================

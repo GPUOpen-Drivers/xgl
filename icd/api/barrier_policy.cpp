@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -907,7 +907,6 @@ void ImageBarrierPolicy::InitImageLayoutUsagePolicy(
     }
 
     // We don't do anything special in case of transient attachment images
-    VK_IGNORE(VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT);
 }
 
 // =====================================================================================================================
@@ -1030,9 +1029,6 @@ void ImageBarrierPolicy::InitImageCachePolicy(
         supportedOutputCacheMask |= Pal::CoherDepthStencilTarget | Pal::CoherClear;
         supportedInputCacheMask  |= Pal::CoherDepthStencilTarget | Pal::CoherClear;
     }
-
-    // We don't do anything special in case of transient attachment images
-    VK_IGNORE(VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT);
 
     // Apply device specific supported cache masks to limit the scope.
     supportedOutputCacheMask &= pDevice->GetBarrierPolicy().GetSupportedOutputCacheMask();
@@ -1328,8 +1324,7 @@ void BufferBarrierPolicy::InitBufferCachePolicy(
         supportedOutputCacheMask |= Pal::CoherStreamOut;
     }
 
-    // Nothing to do since Pal::CoherMemory is already set
-    VK_IGNORE(usage & VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT);
+    // Nothing to do for VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT since Pal::CoherMemory is already set
 
     // Apply device specific supported cache masks to limit the scope.
     supportedOutputCacheMask &= pDevice->GetBarrierPolicy().GetSupportedOutputCacheMask();

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -47,6 +47,7 @@
 
 #include "palElfReader.h"
 #include "palPipelineAbiReader.h"
+#include "palPipelineAbiProcessorImpl.h"
 
 #include "llpc.h"
 
@@ -1097,8 +1098,63 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
             if (result == VK_SUCCESS)
             {
+                auto                   pInstance     = m_pPhysicalDevice->Manager()->VkInstance();
+                // Write PipelineMetadata to ELF section
+                Pal::Result palResult = Pal::Result::Success;
+
+                Util::Abi::PipelineAbiProcessor<PalAllocator> abiProcessor(pDevice->VkInstance()->Allocator());
+                palResult = abiProcessor.LoadFromBuffer(*ppPipelineBinary, *pPipelineBinarySize);
+                if (palResult == Pal::Result::Success)
+                {
+                    palResult = abiProcessor.SetGenericSection(".pipelinemetadata", &pCreateInfo->pipelineMetadata,
+                        sizeof(pCreateInfo->pipelineMetadata));
+                    if (palResult == Pal::Result::Success)
+                    {
+                        FreeGraphicsPipelineBinary(pCreateInfo, *ppPipelineBinary, *pPipelineBinarySize);
+                        *ppPipelineBinary = nullptr;
+
+                        *pPipelineBinarySize     = abiProcessor.GetRequiredBufferSizeBytes();
+                        void* pNewPipelineBinary = pInstance->AllocMem(*pPipelineBinarySize, VK_DEFAULT_MEM_ALIGN,
+                            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+                        if (pNewPipelineBinary == nullptr)
+                        {
+                            palResult = Pal::Result::ErrorOutOfMemory;
+                        }
+                        else
+                        {
+                            abiProcessor.SaveToBuffer(pNewPipelineBinary);
+                            *ppPipelineBinary = pNewPipelineBinary;
+                            pCreateInfo->freeCompilerBinary = FreeWithInstanceAllocator;
+                        }
+                    }
+                }
+
+                result = PalToVkResult(palResult);
             }
         }
+    }
+    else
+    {
+        // Read PipelineMetadata from ELF section
+        Pal::Result palResult                  = Pal::Result::Success;
+        const void* pPipelineMetadataSection   = nullptr;
+        size_t      pipelineMetadataSectionLen = 0;
+
+        Util::Abi::PipelineAbiProcessor<PalAllocator> abiProcessor(pDevice->VkInstance()->Allocator());
+        palResult = abiProcessor.LoadFromBuffer(*ppPipelineBinary, *pPipelineBinarySize);
+        if (palResult == Pal::Result::Success)
+        {
+            abiProcessor.GetGenericSection(".pipelinemetadata", &pPipelineMetadataSection, &pipelineMetadataSectionLen);
+
+            VK_ASSERT(pPipelineMetadataSection   != nullptr);
+            VK_ASSERT(pipelineMetadataSectionLen == sizeof(pCreateInfo->pipelineMetadata));
+
+            // Copy metadata
+            memcpy(&pCreateInfo->pipelineMetadata, pPipelineMetadataSection, pipelineMetadataSectionLen);
+        }
+
+        result = PalToVkResult(palResult);
     }
 
     if (result == VK_SUCCESS)
@@ -1915,14 +1971,9 @@ static void BuildColorBlendState(
             // want to write to any attachment for that output (VK_ATTACHMENT_UNUSED).  Under such cases,
             // disable shader writes through that target. There is one exception for alphaToCoverageEnable
             // and attachment zero, which can be set to VK_ATTACHMENT_UNUSED.
-            if ((cbFormat != VK_FORMAT_UNDEFINED) || (i == 0u))
+            if (cbFormat != VK_FORMAT_UNDEFINED)
             {
-                VkFormat renderPassFormat = ((pRenderPass != nullptr) ?
-                                                pRenderPass->GetAttachmentDesc(i).format :
-                                                VK_FORMAT_UNDEFINED);
-
-                pLlpcCbDst->format = (cbFormat != VK_FORMAT_UNDEFINED) ?
-                                      cbFormat : renderPassFormat;
+                pLlpcCbDst->format = cbFormat;
 
                 pLlpcCbDst->blendEnable = (src.blendEnable == VK_TRUE);
                 pLlpcCbDst->blendSrcAlphaToColor =
@@ -1931,6 +1982,36 @@ static void BuildColorBlendState(
                     GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.srcColorBlendFactor) ||
                     GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.dstColorBlendFactor);
                 pLlpcCbDst->channelWriteMask = src.colorWriteMask;
+            }
+            else if (i == 0)
+            {
+                // VK_FORMAT_UNDEFINED will cause the shader output to be dropped for alphaToCoverageEnable.
+                // Any supported format should be fine.
+                if ((pRenderPass != nullptr) && (pRenderPass->GetAttachmentCount() > 0))
+                {
+                    pLlpcCbDst->format = pRenderPass->GetAttachmentDesc(i).format;
+                }
+                else if (pRendering != nullptr)
+                {
+                    if (pRendering->colorAttachmentCount > 0)
+                    {
+                        // Pick any VK_FORMAT that is not VK_FORMAT_UNDEFINED.
+                        for (uint32_t j = 0; j < pRendering->colorAttachmentCount; ++j)
+                        {
+                            if (pRendering->pColorAttachmentFormats[j] != VK_FORMAT_UNDEFINED)
+                            {
+                                pLlpcCbDst->format = pRendering->pColorAttachmentFormats[j];
+                                break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // If the color attachment is not available.
+                        pLlpcCbDst->format = (pRendering->depthAttachmentFormat != VK_FORMAT_UNDEFINED) ?
+                            pRendering->depthAttachmentFormat : pRendering->stencilAttachmentFormat;
+                    }
+                }
             }
         }
 
@@ -2646,6 +2727,8 @@ void PipelineCompiler::GetGraphicsPipelineCacheId(
     hash.Update(pCreateInfo->pipelineInfo.nggState);
     hash.Update(pCreateInfo->dbFormat);
     hash.Update(pCreateInfo->pipelineInfo.dynamicVertexStride);
+
+    hash.Update(pCreateInfo->pipelineMetadata.pointSizeUsed);
 
     hash.Finalize(pCacheId->bytes);
 }

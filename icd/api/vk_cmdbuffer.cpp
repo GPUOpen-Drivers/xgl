@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -4871,8 +4871,8 @@ void CmdBuffer::WaitEvents(
         Pal::BarrierInfo barrier = {};
 
         // Tell PAL to wait at a specific point until the given set of GpuEvent objects is signaled.
-        // We intentionally ignore the source stage flags as they are irrelevant in the presence of event objects
-        VK_IGNORE(srcStageMask);
+        // We intentionally ignore the source stage flags (srcStagemask) as they are irrelevant in the
+        // presence of event objects
 
         barrier.flags.u32All          = 0;
         barrier.reason                = RgpBarrierExternalCmdWaitEvents;
@@ -6277,8 +6277,6 @@ void CmdBuffer::BeginRenderPass(
     const VkRenderPassBeginInfo* pRenderPassBegin,
     VkSubpassContents            contents)
 {
-    VK_IGNORE(contents);
-
     DbgBarrierPreCmd(DbgBarrierBeginRenderPass);
 
     m_allGpuState.pRenderPass  = RenderPass::ObjectFromHandle(pRenderPassBegin->renderPass);
@@ -6561,8 +6559,6 @@ void CmdBuffer::BeginRenderPass(
 void CmdBuffer::NextSubPass(
     VkSubpassContents      contents)
 {
-    VK_IGNORE(contents);
-
     DbgBarrierPreCmd(DbgBarrierNextSubpass);
 
     if (m_renderPassInstance.subpass != VK_SUBPASS_EXTERNAL)
@@ -7660,6 +7656,19 @@ void CmdBuffer::PushConstants(
 
     stageFlags &= m_validShaderStageFlags;
 
+    PushConstantsIssueWrites(pLayout, stageFlags, startInDwords, lengthInDwords, pInputValues);
+
+    DbgBarrierPostCmd(DbgBarrierBindSetsPushConstants);
+}
+
+// =====================================================================================================================
+void CmdBuffer::PushConstantsIssueWrites(
+    const PipelineLayout*  pLayout,
+    VkShaderStageFlags     stageFlags,
+    uint32_t               startInDwords,
+    uint32_t               lengthInDwords,
+    const uint32_t* const  pInputValues)
+{
     if ((stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) != 0)
     {
         WritePushConstants(PipelineBindCompute,
@@ -7668,6 +7677,7 @@ void CmdBuffer::PushConstants(
                            startInDwords,
                            lengthInDwords,
                            pInputValues);
+
     }
 
     if ((stageFlags & VK_SHADER_STAGE_ALL_GRAPHICS) != 0)
@@ -7679,8 +7689,6 @@ void CmdBuffer::PushConstants(
                            lengthInDwords,
                            pInputValues);
     }
-
-    DbgBarrierPostCmd(DbgBarrierBindSetsPushConstants);
 }
 
 // =====================================================================================================================
@@ -9270,8 +9278,6 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(
     uint32_t                                    imageMemoryBarrierCount,
     const VkImageMemoryBarrier*                 pImageMemoryBarriers)
 {
-    VK_IGNORE(dependencyFlags);
-
     ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->PipelineBarrier(
         srcStageMask,
         dstStageMask,

@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -87,6 +87,7 @@ target_sources(xgl PRIVATE
     api/app_resource_optimizer.cpp
     api/app_shader_optimizer.cpp
     api/barrier_policy.cpp
+    api/cmd_buffer_ring.cpp
     api/color_space_helper.cpp
     api/compiler_solution.cpp
     api/internal_mem_mgr.cpp

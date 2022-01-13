@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -61,7 +61,10 @@ static void* VKAPI_PTR
     alignment = Util::Pow2Align(alignment, sizeof(void*));
     pMemory = aligned_alloc(alignment, Util::Pow2Align(size, alignment));
 #elif _POSIX_VERSION >= 200112L
-    if (posix_memalign(&pMemory, Util::Pow2Align(alignment, sizeof(void*)), size)) pMemory = NULL;
+    if (posix_memalign(&pMemory, Util::Pow2Align(alignment, sizeof(void*)), size))
+    {
+        pMemory = NULL;
+    }
 #else
 #error "Unsupported platform"
 #endif

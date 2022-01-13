@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -706,6 +706,35 @@ VkResult PhysicalDevice::Initialize()
     if (result == Pal::Result::Success)
     {
         result = m_pPalDevice->GetGpuMemoryHeapProperties(heapProperties);
+
+        if (settings.overrideLocalHeapSizeInGBs > 0)
+        {
+            constexpr Pal::gpusize BytesInOneGB = (1024 * 1024 * 1024); // bytes
+
+            const Pal::gpusize forceMinLocalHeapSize = (settings.overrideLocalHeapSizeInGBs * BytesInOneGB);
+
+            const Pal::gpusize totalLocalHeapSize = heapProperties[Pal::GpuHeapLocal].heapSize +
+                                                    heapProperties[Pal::GpuHeapInvisible].heapSize;
+
+            if (forceMinLocalHeapSize > totalLocalHeapSize)
+            {
+                // If there's no local invisible heap, override the heapsize for Local visible heap,
+                // else, keep local visible heap size to whatever is reported by PAL (256 MBs) and
+                // adjust the Local invisible heap size accordingly.
+                if (heapProperties[Pal::GpuHeapInvisible].heapSize == 0)
+                {
+                    heapProperties[Pal::GpuHeapLocal].heapSize         = forceMinLocalHeapSize;
+                    heapProperties[Pal::GpuHeapLocal].physicalHeapSize = forceMinLocalHeapSize;
+                }
+                else
+                {
+                    heapProperties[Pal::GpuHeapInvisible].heapSize         = forceMinLocalHeapSize -
+                                                                             heapProperties[Pal::GpuHeapLocal].heapSize;
+                    heapProperties[Pal::GpuHeapInvisible].physicalHeapSize = forceMinLocalHeapSize -
+                                                                             heapProperties[Pal::GpuHeapLocal].heapSize;
+                }
+            }
+        }
     }
 
     if (result == Pal::Result::Success)
@@ -2144,7 +2173,7 @@ uint32_t PhysicalDevice::GetSupportedAPIVersion() const
 
 // =====================================================================================================================
 // Retrieve device properties. Called in response to vkGetPhysicalDeviceProperties.
-VkResult PhysicalDevice::GetDeviceProperties(
+void PhysicalDevice::GetDeviceProperties(
     VkPhysicalDeviceProperties* pProperties) const
 {
     VK_ASSERT(pProperties != nullptr);
@@ -2197,8 +2226,6 @@ VkResult PhysicalDevice::GetDeviceProperties(
 
     static_assert(sizeof(m_pipelineCacheUUID.raw) == VK_UUID_SIZE, "sizeof(Util::Uuid::Uuid) must be VK_UUID_SIZE");
     memcpy(pProperties->pipelineCacheUUID, m_pipelineCacheUUID.raw, VK_UUID_SIZE);
-
-    return VK_SUCCESS;
 }
 
 // =====================================================================================================================
@@ -2959,12 +2986,8 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
 
             pSurfaceCapabilities->maxImageCount = swapChainProperties.maxImageCount;
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 610
             pSurfaceCapabilities->supportedCompositeAlpha =
                 PalToVkSupportedCompositeAlphaMode(swapChainProperties.compositeAlphaMode);
-#else
-            pSurfaceCapabilities->supportedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-#endif
 
             pSurfaceCapabilities->supportedTransforms = swapChainProperties.supportedTransforms;
             pSurfaceCapabilities->currentTransform = PalToVkSurfaceTransform(swapChainProperties.currentTransforms);
@@ -7910,10 +7933,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties(
     VkPhysicalDeviceProperties*                 pProperties)
 {
     VK_ASSERT(pProperties != nullptr);
-
-    VkResult result = ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDeviceProperties(pProperties);
-
-    VK_IGNORE(result);
+    ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDeviceProperties(pProperties);
 }
 
 // =====================================================================================================================

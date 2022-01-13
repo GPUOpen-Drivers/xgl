@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -2512,22 +2512,19 @@ inline VkCompositeAlphaFlagsKHR PalToVkSupportedCompositeAlphaMode(uint32 compos
 inline uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
                                            VkFormat           format)
 {
-    Pal::ImageCreateInfo palImageCreateInfo;
-    palImageCreateInfo.flags.u32All         = 0;
+    Pal::ImageCreateFlags flags = {};
 
-    palImageCreateInfo.flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)   ? 1 : 0;
-    palImageCreateInfo.flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)  ? 1 : 0;
-    palImageCreateInfo.flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)             ? 1 : 0;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 616
-    palImageCreateInfo.flags.tmzProtected       = (imageCreateFlags & VK_IMAGE_CREATE_PROTECTED_BIT)         ? 1 : 0;
-#endif
+    flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)   ? 1 : 0;
+    flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)  ? 1 : 0;
+    flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)             ? 1 : 0;
+    flags.tmzProtected       = (imageCreateFlags & VK_IMAGE_CREATE_PROTECTED_BIT)         ? 1 : 0;
+
     // Always provide pQuadSamplePattern to PalCmdResolveImage for depth formats to allow optimizations
-    palImageCreateInfo.flags.sampleLocsAlwaysKnown = Formats::HasDepth(format) ? 1 : 0;
+    flags.sampleLocsAlwaysKnown = Formats::HasDepth(format) ? 1 : 0;
 
-    // Flag VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT is supported by default for all 3D images
-    VK_IGNORE(VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT);
+    // Ignore Flag VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT. It is supported by default for all 3D images
 
-    return palImageCreateInfo.flags.u32All;
+    return flags.u32All;
 }
 
 // =====================================================================================================================
@@ -2551,12 +2548,10 @@ inline VkImageCreateFlags PalToVkImageCreateFlags(Pal::ImageCreateFlags imageCre
         vkImageCreateFlags |= VK_IMAGE_CREATE_ALIAS_BIT;
     }
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 616
     if (imageCreateFlags.tmzProtected  == 1)
     {
         vkImageCreateFlags |= VK_IMAGE_CREATE_PROTECTED_BIT;
     }
-#endif
 
     return vkImageCreateFlags;
 }

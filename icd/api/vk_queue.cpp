@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +29,7 @@
  ***********************************************************************************************************************
  */
 
+#include "include/cmd_buffer_ring.h"
 #include "include/vk_buffer.h"
 #include "include/vk_cmdbuffer.h"
 #include "include/vk_conv.h"
@@ -48,7 +49,6 @@
 
 #include "sqtt/sqtt_layer.h"
 
-#include "palDequeImpl.h"
 #include "palQueue.h"
 
 namespace vk
@@ -63,7 +63,8 @@ Queue::Queue(
     Pal::IQueue**           pPalQueues,
     Pal::IQueue**           pPalTmzQueues,
     Pal::IQueueSemaphore**  pPalTmzSemaphores,
-    VirtualStackAllocator*  pStackAllocator)
+    VirtualStackAllocator*  pStackAllocator,
+    CmdBufferRing*          pCmdBufferRing)
     :
     m_lastSubmissionProtected(false),
     m_pDevice(pDevice),
@@ -71,7 +72,8 @@ Queue::Queue(
     m_queueIndex(queueIndex),
     m_queueFlags(queueFlags),
     m_pDevModeMgr(pDevice->VkInstance()->GetDevModeMgr()),
-    m_pStackAllocator(pStackAllocator)
+    m_pStackAllocator(pStackAllocator),
+    m_pCmdBufferRing(pCmdBufferRing)
 {
     if (pPalQueues != nullptr)
     {
@@ -98,7 +100,6 @@ Queue::Queue(
     for (uint32_t deviceIdx = 0; deviceIdx < MaxPalDevices; deviceIdx++)
     {
         m_pDummyCmdBuffer[deviceIdx] = nullptr;
-        m_pCmdBufRing[deviceIdx]     = nullptr;
     }
 
     const Pal::DeviceProperties& deviceProps = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
@@ -116,8 +117,11 @@ Queue::~Queue()
             m_pDummyCmdBuffer[deviceIdx]->Destroy();
             m_pDevice->VkInstance()->FreeMem(m_pDummyCmdBuffer[deviceIdx]);
         }
+    }
 
-        DestroyCmdBufRing(deviceIdx);
+    if (m_pCmdBufferRing != nullptr)
+    {
+        m_pCmdBufferRing->Destroy(m_pDevice);
     }
 
     if (m_pStackAllocator != nullptr)
@@ -204,8 +208,11 @@ VkResult Queue::NotifyFlipMetadata(
     if ((flags.frameBeginFlag == 1) || (flags.frameEndFlag == 1) || (flags.primaryHandle == 1) ||
         (pCmdBufState != nullptr) || forceSubmit)
     {
+        Pal::IQueue*    pPalQueue  = m_pPalQueues[deviceIdx];
         Pal::CmdBufInfo cmdBufInfo = {};
+
         cmdBufInfo.isValid = 1;
+
         if (flags.frameBeginFlag == 1)
         {
             cmdBufInfo.frameBegin = 1;
@@ -221,7 +228,7 @@ VkResult Queue::NotifyFlipMetadata(
         }
 
         // Submit the flip metadata to the appropriate device and present queue for the software compositing path.
-        if ((pPresentQueue != nullptr) && (pPresentQueue != m_pPalQueues[deviceIdx]))
+        if ((pPresentQueue != nullptr) && (pPresentQueue != pPalQueue))
         {
             result = m_pDevice->SwCompositingNotifyFlipMetadata(pPresentQueue, cmdBufInfo);
         }
@@ -230,7 +237,7 @@ VkResult Queue::NotifyFlipMetadata(
             // If there's already a command buffer that needs to be submitted, use it instead of a dummy one.
             if (pCmdBufState != nullptr)
             {
-                result = SubmitInternalCmdBuf(deviceIdx, cmdBufInfo, pCmdBufState);
+                result = m_pCmdBufferRing->SubmitCmdBuffer(m_pDevice, deviceIdx, pPalQueue, cmdBufInfo, pCmdBufState);
             }
             else
             {
@@ -250,7 +257,7 @@ VkResult Queue::NotifyFlipMetadata(
                     submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
                     submitInfo.perSubQueueInfoCount = 1;
 
-                    result = PalToVkResult(m_pPalQueues[deviceIdx]->Submit(submitInfo));
+                    result = PalToVkResult(pPalQueue->Submit(submitInfo));
                 }
             }
         }
@@ -1061,7 +1068,7 @@ VkResult Queue::Present(
                                                                     &presentInfo,
                                                                     m_flipStatus.flipFlags);
 
-        CmdBufState* pCmdBufState = AcquireInternalCmdBuf(presentationDeviceIdx);
+        CmdBufState* pCmdBufState = m_pCmdBufferRing->AcquireCmdBuffer(m_pDevice, presentationDeviceIdx);
 
         // Ensure metadata is available before post processing.
         if (pSwapChain->GetFullscreenMgr() != nullptr)
@@ -1655,202 +1662,6 @@ VkResult Queue::BindSparse(
 }
 
 // =====================================================================================================================
-// Initializes the command buffer ring
-void Queue::CreateCmdBufRing(
-    uint32_t                         deviceIdx)
-{
-    void* pMemory = m_pDevice->VkInstance()->AllocMem(sizeof(CmdBufRing), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-
-    if (pMemory != nullptr)
-    {
-        m_pCmdBufRing[deviceIdx] = VK_PLACEMENT_NEW(pMemory) CmdBufRing(m_pDevice->VkInstance()->Allocator());
-    }
-
-    VK_ASSERT(m_pCmdBufRing[deviceIdx] != nullptr);
-}
-
-// =====================================================================================================================
-// Destroys a ring buffer and frees any memory associated with it
-void Queue::DestroyCmdBufRing(
-    uint32_t                   deviceIdx)
-{
-    // Destroy the command buffer ring
-    if (m_pCmdBufRing[deviceIdx] != nullptr)
-    {
-        while (m_pCmdBufRing[deviceIdx]->NumElements() > 0)
-        {
-            CmdBufState* pCmdBufState = nullptr;
-            m_pCmdBufRing[deviceIdx]->PopFront(&pCmdBufState);
-            DestroyCmdBufState(deviceIdx, pCmdBufState);
-        }
-
-        Util::Destructor(m_pCmdBufRing[deviceIdx]);
-        m_pDevice->VkInstance()->FreeMem(m_pCmdBufRing[deviceIdx]);
-        m_pCmdBufRing[deviceIdx] = nullptr;
-    }
-}
-
-// =====================================================================================================================
-// Initializes the command buffer state
-CmdBufState* Queue::CreateCmdBufState(
-    uint32_t                         deviceIdx)
-{
-    CmdBufState* pCmdBufState = nullptr;
-
-    Pal::IDevice* pDevice = m_pDevice->PalDevice(deviceIdx);
-
-    Pal::CmdBufferCreateInfo cmdBufInfo = {};
-
-    cmdBufInfo.queueType     = m_pDevice->GetQueueFamilyPalQueueType(m_queueFamilyIndex);
-    cmdBufInfo.engineType    = m_pDevice->GetQueueFamilyPalEngineType(m_queueFamilyIndex);
-    cmdBufInfo.pCmdAllocator = m_pDevice->GetSharedCmdAllocator(deviceIdx);
-
-    Pal::FenceCreateInfo fenceInfo = {};
-
-    size_t cmdBufSize = 0;
-    size_t fenceSize = 0;
-
-    Pal::Result result;
-
-    cmdBufSize = pDevice->GetCmdBufferSize(cmdBufInfo, &result);
-
-    if (result == Pal::Result::Success)
-    {
-        fenceSize = pDevice->GetFenceSize(&result);
-    }
-
-    size_t totalSize = sizeof(CmdBufState) + cmdBufSize + fenceSize;
-
-    void* pStorage = nullptr;
-
-    if (result == Pal::Result::Success)
-    {
-        pStorage = m_pDevice->VkInstance()->AllocMem(totalSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-    }
-
-    if (pStorage != nullptr)
-    {
-        pCmdBufState = static_cast<CmdBufState*>(pStorage);
-        pStorage = Util::VoidPtrInc(pStorage, sizeof(CmdBufState));
-
-        void* pCmdBufStorage = pStorage;
-        pStorage = Util::VoidPtrInc(pStorage, cmdBufSize);
-
-        void* pFenceStorage = pStorage;
-        pStorage = Util::VoidPtrInc(pStorage, fenceSize);
-
-        if (result == Pal::Result::Success)
-        {
-            result = pDevice->CreateCmdBuffer(cmdBufInfo, pCmdBufStorage, &pCmdBufState->pCmdBuf);
-        }
-
-        if (result == Pal::Result::Success)
-        {
-            result = pDevice->CreateFence(fenceInfo, pFenceStorage, &pCmdBufState->pFence);
-        }
-
-        VK_ASSERT(Util::VoidPtrInc(pCmdBufState, totalSize) == pStorage);
-
-        if (result != Pal::Result::Success)
-        {
-            DestroyCmdBufState(deviceIdx, pCmdBufState);
-            pCmdBufState = nullptr;
-        }
-    }
-
-    return pCmdBufState;
-}
-
-// =====================================================================================================================
-// Destroys a command buffer state and frees any memory associated with it
-void Queue::DestroyCmdBufState(
-    uint32_t     deviceIdx,
-    CmdBufState* pCmdBufState)
-{
-    // Wait to finish in case still in flight
-    if (pCmdBufState->pFence->GetStatus() == Pal::Result::NotReady)
-    {
-        m_pDevice->PalDevice(deviceIdx)->WaitForFences(1, &pCmdBufState->pFence, true, ~0ULL);
-    }
-
-    // Destroy Fence
-    if (pCmdBufState->pFence != nullptr)
-    {
-        pCmdBufState->pFence->Destroy();
-    }
-
-    // Destroy CmdBuf
-    if (pCmdBufState->pCmdBuf != nullptr)
-    {
-        pCmdBufState->pCmdBuf->Destroy();
-    }
-
-    // Free all system memory
-    m_pDevice->VkInstance()->FreeMem(pCmdBufState);
-}
-
-// =====================================================================================================================
-// Gets a new command buffer from a ring buffer, the cmd of which can be redefined with new command data
-CmdBufState* Queue::AcquireInternalCmdBuf(
-    uint32_t                       deviceIdx)
-{
-    CmdBufState* pCmdBufState = nullptr;
-
-    // Initialize on first use
-    if (m_pCmdBufRing[deviceIdx] == nullptr)
-    {
-        CreateCmdBufRing(deviceIdx);
-    }
-
-    if (m_pCmdBufRing[deviceIdx] != nullptr)
-    {
-        // Create a new command buffer if the least recently used one is still busy.
-        if ((m_pCmdBufRing[deviceIdx]->NumElements() == 0) ||
-            (m_pCmdBufRing[deviceIdx]->Front()->pFence->GetStatus() == Pal::Result::NotReady))
-        {
-            pCmdBufState = CreateCmdBufState(deviceIdx);
-        }
-        else
-        {
-            m_pCmdBufRing[deviceIdx]->PopFront(&pCmdBufState);
-        }
-
-        // Immediately push this command buffer onto the back of the deque to avoid leaking memory.
-        if (pCmdBufState != nullptr)
-        {
-            Pal::Result result = m_pCmdBufRing[deviceIdx]->PushBack(pCmdBufState);
-
-            if (result != Pal::Result::Success)
-            {
-                // We failed to push this command buffer onto the deque. To avoid leaking memory we must delete it.
-                DestroyCmdBufState(deviceIdx, pCmdBufState);
-                pCmdBufState = nullptr;
-            }
-            else
-            {
-                Pal::CmdBufferBuildInfo buildInfo = {};
-
-                buildInfo.flags.optimizeOneTimeSubmit = 1;
-
-                result = pCmdBufState->pCmdBuf->Reset(m_pDevice->GetSharedCmdAllocator(deviceIdx), true);
-
-                if (result == Pal::Result::Success)
-                {
-                    result = pCmdBufState->pCmdBuf->Begin(buildInfo);
-                }
-
-                if (result != Pal::Result::Success)
-                {
-                    pCmdBufState = nullptr;
-                }
-            }
-        }
-    }
-
-    return pCmdBufState;
-}
-
-// =====================================================================================================================
 // Build post processing commands
 bool Queue::BuildPostProcessCommands(
     uint32_t                         deviceIdx,
@@ -1880,9 +1691,8 @@ bool Queue::BuildPostProcessCommands(
             frameInfo.presentMode = Pal::PresentMode::Unknown;
         }
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 625
         frameInfo.fullScreenFrameMetadataControlFlags.u32All = m_palFrameMetadataControl.flags.u32All;
-#endif
+
         bool wasGpuWorkAdded = false;
         pCmdBuf->CmdPostProcessFrame(frameInfo, &wasGpuWorkAdded);
 
@@ -1893,40 +1703,14 @@ bool Queue::BuildPostProcessCommands(
 }
 
 // =====================================================================================================================
-// Submit post processing commands
+// Submits an internally managed command buffer to this queue
 VkResult Queue::SubmitInternalCmdBuf(
     uint32_t                deviceIdx,
     const Pal::CmdBufInfo&  cmdBufInfo,
     CmdBufState*            pCmdBufState)
 {
-    Pal::Result result = pCmdBufState->pCmdBuf->End();
-
-    if (result == Pal::Result::Success)
-    {
-        result = m_pDevice->PalDevice(deviceIdx)->ResetFences(1, &pCmdBufState->pFence);
-
-        // Submit the command buffer
-        if (result == Pal::Result::Success)
-        {
-            Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
-            perSubQueueInfo.cmdBufferCount  = 1;
-            perSubQueueInfo.ppCmdBuffers    = &pCmdBufState->pCmdBuf;
-            perSubQueueInfo.pCmdBufInfoList = &cmdBufInfo;
-
-            Pal::SubmitInfo palSubmitInfo = {};
-
-            VK_ASSERT(cmdBufInfo.isValid == 1);
-
-            palSubmitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
-            palSubmitInfo.perSubQueueInfoCount = 1;
-            palSubmitInfo.ppFences             = &pCmdBufState->pFence;
-            palSubmitInfo.fenceCount           = 1;
-
-            result = m_pPalQueues[deviceIdx]->Submit(palSubmitInfo);
-        }
-    }
-
-    return PalToVkResult(result);
+    return m_pCmdBufferRing->SubmitCmdBuffer(
+                m_pDevice, deviceIdx, m_pPalQueues[deviceIdx], cmdBufInfo, pCmdBufState);
 }
 
 VkResult Queue::CreateSqttState(
