@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -143,7 +143,8 @@ VkResult Sampler::Create(
     samplerInfo.mipLodBias = pCreateInfo->mipLodBias;
 
     samplerInfo.maxAnisotropy           = static_cast<uint32_t>(pCreateInfo->maxAnisotropy);
-    samplerInfo.compareFunc             = VkToPalCompareFunc(pCreateInfo->compareOp);
+    samplerInfo.compareFunc             = (pCreateInfo->compareEnable == VK_FALSE) ?
+                                              Pal::CompareFunc::Never : VkToPalCompareFunc(pCreateInfo->compareOp);
     samplerInfo.minLod                  = pCreateInfo->minLod;
     samplerInfo.maxLod                  = pCreateInfo->maxLod;
     samplerInfo.borderColorType         = VkToPalBorderColorType(pCreateInfo->borderColor);

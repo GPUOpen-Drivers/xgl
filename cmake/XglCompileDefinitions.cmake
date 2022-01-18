@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -67,6 +67,10 @@ macro(xgl_set_compile_definitions)
 
     if(XGL_BUILD_NAVI23)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI23=1)
+    endif()
+
+    if(XGL_BUILD_NAVI24)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI24=1)
     endif()
 
 #if VKI_KHR_DISPLAY

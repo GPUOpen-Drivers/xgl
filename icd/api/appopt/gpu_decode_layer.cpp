@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2020-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2020-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -186,6 +186,23 @@ namespace GpuTexDecoder
 
         return result == VK_SUCCESS ? Pal::Result::Success : Pal::Result::ErrorUnknown;
     }
+
+    void ClientDestroyInternalComputePipeline(
+        const DeviceInitInfo& initInfo,
+        Pal::IPipeline*       pPipeline,
+        void*                 pMemory)
+    {
+        vk::Device* pDevice = reinterpret_cast<vk::Device*>(initInfo.pClientUserData);
+
+        if (pMemory == nullptr)
+        {
+            pMemory = pPipeline;
+        }
+
+        pPipeline->Destroy();
+        pPipeline = nullptr;
+        pDevice->VkInstance()->FreeMem(pMemory);
+    }
 }
 
 namespace vk
@@ -203,7 +220,7 @@ GpuDecoderLayer::~GpuDecoderLayer()
 {
     if(m_pGpuTexDecoder != nullptr)
     {
-        m_pDevice->VkInstance()->FreeMem(m_pGpuTexDecoder);
+        Util::Destructor(m_pGpuTexDecoder);
         m_pGpuTexDecoder = nullptr;
     }
 }

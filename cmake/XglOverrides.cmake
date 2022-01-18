@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -163,6 +163,8 @@ macro(xgl_overrides_pal)
 
     set(PAL_BUILD_NAVI23 ${XGL_BUILD_NAVI23} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
+    set(PAL_BUILD_NAVI24 ${XGL_BUILD_NAVI24} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
     # Wayland
     set(PAL_BUILD_WAYLAND ${BUILD_WAYLAND_SUPPORT} CACHE BOOL "Build PAL with Wayland support" FORCE)
 
@@ -196,6 +198,8 @@ macro(xgl_overrides_vkgc)
         set(LLPC_BUILD_NAVI22 ${XGL_BUILD_NAVI22} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
         set(LLPC_BUILD_NAVI23 ${XGL_BUILD_NAVI23} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
+        set(LLPC_BUILD_NAVI24 ${XGL_BUILD_NAVI24} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
         set(LLPC_BUILD_RAVEN2 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 

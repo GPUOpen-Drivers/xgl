@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -42,6 +42,8 @@ macro(xgl_options)
     option(XGL_BUILD_NAVI22 "Build open source vulkan for Navi22" ON)
 
     option(XGL_BUILD_NAVI23 "Build open source vulkan for Navi23" ON)
+
+    option(XGL_BUILD_NAVI24 "Build open source vulkan for Navi24" ON)
 
     option(XGL_BUILD_TESTS "Build all tests?" OFF)
 

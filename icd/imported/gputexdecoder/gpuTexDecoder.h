@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -37,6 +37,8 @@
 #include "palMutex.h"
 #include "palCmdBuffer.h"
 #include "palPlatform.h"
+#include "palHashMap.h"
+#include "palMutex.h"
 
 namespace Pal
 {
@@ -113,6 +115,28 @@ struct PipelineBuildInfo
     InternalTexConvertCsType             shaderType;
 };
 
+// Map key for map of internal pipelines
+struct InternalPipelineKey
+{
+    InternalTexConvertCsType shaderType;
+    uint32                   constInfoHash;
+};
+
+struct InternalPipelineMemoryPair
+{
+    Pal::IPipeline* pPipeline;
+    void*           pMemory;
+};
+
+using InternalPipelineMap = Util::HashMap<
+    InternalPipelineKey,
+    InternalPipelineMemoryPair,
+    Util::GenericAllocatorTracked,
+    Util::JenkinsHashFunc,
+    Util::DefaultEqualFunc,
+    Util::HashAllocator<Util::GenericAllocatorTracked>,
+    sizeof(InternalPipelineMemoryPair) * 16>;
+
 // Client-provided callback to build an internal compute pipeline.  This is called by gpuTexDecoder during initialization
 // of a gpuTexDecoder device.
 //
@@ -129,6 +153,18 @@ extern Pal::Result ClientCreateInternalComputePipeline(
     const PipelineBuildInfo&          buildInfo,         // Pipeline Layout, shader code..
     Pal::IPipeline**                  ppResultPipeline,  // Result PAL pipeline object pointer
     void**                            ppResultMemory);   // (Optional) Result PAL pipeline memory, if different from obj
+
+// Client-provided callback to destroy an internal compute pipeline.  This is called by gpuTexDecoder during device destroy.
+//
+// The client must implement this function to successfully initialize gpuTexDecoder.
+//
+// @param initInfo  [in] Information about the host device
+// @param pPipeline [in] Pipeline to be destroyed
+// @param pMemory   [in] Memory previously allocated to the pipeline (may be different based on client needs)
+extern void ClientDestroyInternalComputePipeline(
+    const DeviceInitInfo& initInfo,
+    Pal::IPipeline*       pPipeline,
+    void*                 pMemory);
 
 // =====================================================================================================================
 // GPUTEXDECODER device
@@ -211,13 +247,16 @@ private:
 
     Pal::IPipeline* GetInternalPipeline(
         InternalTexConvertCsType    type,
-        const CompileTimeConstants& constInfo) const;
+        const CompileTimeConstants& constInfo);
 
-    DeviceInitInfo      m_info;
-    Pal::IGpuMemory*    m_pTableMemory;
-    Pal::ICmdBuffer*    m_pPalCmdBuffer;      // The associated PAL cmdbuffer
-    uint32              m_bufferViewSizeInDwords{0};
-    uint32              m_imageViewSizeInDwords{0};
-    uint32              m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::Count)];
+    DeviceInitInfo                m_info;
+    Pal::IGpuMemory*              m_pTableMemory;
+    Pal::ICmdBuffer*              m_pPalCmdBuffer;      // The associated PAL cmdbuffer
+    uint32                        m_bufferViewSizeInDwords{0};
+    uint32                        m_imageViewSizeInDwords{0};
+    uint32                        m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::Count)];
+    Util::GenericAllocatorTracked m_allocator;
+    Util::RWLock                  m_internalPipelineLock;
+    InternalPipelineMap           m_pipelineMap;
 };
 }

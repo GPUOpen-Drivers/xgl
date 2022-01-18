@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -558,7 +558,6 @@ static void BuildRasterizationState(
                               VK_CONSERVATIVE_RASTERIZATION_MODE_BEGIN_RANGE_EXT);
                     VK_ASSERT(pRsConservative->conservativeRasterizationMode <=
                               VK_CONSERVATIVE_RASTERIZATION_MODE_END_RANGE_EXT);
-                    VK_IGNORE(pRsConservative->extraPrimitiveOverestimationSize);
 
                     switch (pRsConservative->conservativeRasterizationMode)
                     {
@@ -650,24 +649,6 @@ static void BuildRasterizationState(
             pNext = pHeader->pNext;
         }
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 693
-        // For optimal performance, depth clamping should be enabled by default. Only disable it if dealing
-        // with depth values outside of [0.0, 1.0] range.
-        // Note that this is the opposite of the default Vulkan setting which is depthClampEnable = false.
-        if ((pRs->depthClampEnable == VK_FALSE) &&
-            (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_DEPTH_RANGE_UNRESTRICTED) ||
-            ((pInfo->pipeline.viewportInfo.depthClipNearEnable == false) &&
-            (pInfo->pipeline.viewportInfo.depthClipFarEnable == false))))
-        {
-            pInfo->pipeline.rsState.depthClampDisable = true;
-        }
-        else
-        {
-            // When depth clamping is enabled, depth clipping should be disabled, and vice versa.
-            // Clipping is updated in pipeline compiler.
-            pInfo->pipeline.rsState.depthClampDisable = false;
-        }
-#else
         if (pRs->depthClampEnable == VK_FALSE)
         {
             // For optimal performance, depth clamping should be enabled by default, even if API says otherwise.
@@ -690,7 +671,6 @@ static void BuildRasterizationState(
             // Clipping is updated in pipeline compiler.
             pInfo->pipeline.rsState.depthClampMode = Pal::DepthClampMode::Viewport;
         }
-#endif
 
         pInfo->pipeline.rsState.pointCoordOrigin       = Pal::PointOrigin::UpperLeft;
         pInfo->pipeline.rsState.shadeMode              = Pal::ShadeMode::Flat;

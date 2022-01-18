@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -325,7 +325,7 @@ VkResult SwapChain::Create(
                                            pCreateInfo->queueFamilyIndexCount : 0u);
 
     bool isPreferWindowedModeOnly = false;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 684
+
     Pal::SwapChainProperties swapChainProperties = {};
     if (result == VK_SUCCESS)
     {
@@ -343,7 +343,6 @@ VkResult SwapChain::Create(
                 true : false;
         }
     }
-#endif
 
     if (isPreferWindowedModeOnly ||
         (pDevice->VkInstance()->GetProperties().supportExplicitPresentMode) ||

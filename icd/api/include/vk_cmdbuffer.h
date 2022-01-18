@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1241,6 +1241,13 @@ private:
         VkPipelineBindPoint     pipelineBindPoint,
         Pal::PipelineBindPoint* pPalBindPoint,
         PipelineBindPoint*      pApiBind);
+
+    void PushConstantsIssueWrites(
+        const PipelineLayout*  pLayout,
+        VkShaderStageFlags     stageFlags,
+        uint32_t               startInDwords,
+        uint32_t               lengthInDwords,
+        const uint32_t* const  pInputValues);
 
     void WritePushConstants(
         PipelineBindPoint      apiBindPoint,

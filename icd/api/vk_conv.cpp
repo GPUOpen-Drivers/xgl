@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -729,11 +729,9 @@ const char* PalResultName(
     case Pal::Result::ErrorPermissionDenied:
         resultName = "ErrorPermissionDenied";
         break;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 645
     case Pal::Result::ErrorInvalidExternalHandle:
         resultName = "ErrorInvalidExternalHandle";
         break;
-#endif
     default:
         VK_NOT_IMPLEMENTED;
         resultName = "??";
@@ -936,11 +934,9 @@ VkResult PalToVkError(
     case Pal::Result::ErrorNotMappable:
         vkResult = VK_ERROR_MEMORY_MAP_FAILED;
         break;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 645
     case Pal::Result::ErrorInvalidExternalHandle:
         vkResult = VK_ERROR_INVALID_EXTERNAL_HANDLE;
         break;
-#endif
     case Pal::Result::ErrorUnknown:
     case Pal::Result::ErrorUnavailable:
     case Pal::Result::ErrorInvalidPointer:

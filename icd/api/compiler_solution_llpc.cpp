@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019-2021 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2022 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -107,8 +107,6 @@ VkResult CompilerSolutionLlpc::CreateShaderCache(
     void*        pShaderCacheMem,
     ShaderCache* pShaderCache)
 {
-    VK_IGNORE(pShaderCacheMem);
-
     return VK_ERROR_INITIALIZATION_FAILED;
 }
 
@@ -122,8 +120,6 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     ShaderModuleHandle*          pShaderModule,
     const Util::MetroHash::Hash& hash)
 {
-    VK_IGNORE(pDevice);
-    VK_IGNORE(hash);
     VkResult result = VK_SUCCESS;
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
@@ -189,9 +185,6 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     Util::MetroHash::Hash*            pCacheId,
     int64_t*                          pCompileTime)
 {
-    VK_IGNORE(pDevice);
-    VK_IGNORE(pipelineHash);
-    VK_IGNORE(pCacheId);
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
@@ -314,10 +307,6 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     Util::MetroHash::Hash*           pCacheId,
     int64_t*                         pCompileTime)
 {
-    VK_IGNORE(pDevice);
-    VK_IGNORE(pipelineHash);
-    VK_IGNORE(pCacheId);
-
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
     AppProfile             appProfile = m_pPhysicalDevice->GetAppProfile();
@@ -431,7 +420,6 @@ void CompilerSolutionLlpc::FreeGraphicsPipelineBinary(
     const void*                 pPipelineBinary,
     size_t                      binarySize)
 {
-    VK_IGNORE(binarySize);
     m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
 }
 
@@ -440,7 +428,6 @@ void CompilerSolutionLlpc::FreeComputePipelineBinary(
     const void*                 pPipelineBinary,
     size_t                      binarySize)
 {
-    VK_IGNORE(binarySize);
     m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
 }
 
