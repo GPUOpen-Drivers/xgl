@@ -417,6 +417,15 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                         ForceDccForColorAttachments |
                         ForceDccFor3DShaderStorage);
                 }
+                if (pInfo->revision == Pal::AsicRevision::Navi24)
+                {
+                    m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage |
+                        ForceDccForNonColorAttachmentShaderStorage |
+                        ForceDccForColorAttachments |
+                        ForceDccFor3DShaderStorage);
+
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                }
             }
 
             m_settings.implicitExternalSynchronization = false;
@@ -633,6 +642,17 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                         m_settings.memoryRemoteBackupHeapMinHeapSize = 0x220000000;
                         m_settings.memoryDeviceOverallocationAllowed = true;
                     }
+                }
+                if (pInfo->revision == Pal::AsicRevision::Navi24)
+                {
+                    m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                        ForceDccForColorAttachments |
+                        ForceDccForNonColorAttachmentShaderStorage |
+                        ForceDccFor32BppShaderStorage);
+
+                    m_settings.overrideLocalHeapSizeInGBs = 8;
+                    m_settings.memoryRemoteBackupHeapMinHeapSize = 0x220000000;
+                    m_settings.memoryDeviceOverallocationAllowed = true;
                 }
             }
             else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)

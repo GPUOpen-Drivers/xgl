@@ -43,6 +43,8 @@ macro(xgl_options)
 
     option(XGL_BUILD_NAVI23 "Build open source vulkan for Navi23" ON)
 
+    option(XGL_BUILD_NAVI24 "Build open source vulkan for Navi24" ON)
+
     option(XGL_BUILD_TESTS "Build all tests?" OFF)
 
     # Deprecated, use XGL_BUILD_TESTS instead.
