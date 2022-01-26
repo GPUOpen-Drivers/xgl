@@ -2097,12 +2097,12 @@ uint64_t GraphicsPipelineCommon::BuildApiHash(
 
     apiHasher.Update(pCreateInfo->basePipelineIndex);
 
-    baseHasher.Finalize(reinterpret_cast<uint8_t* const>(&baseHash));
+    baseHasher.Finalize(reinterpret_cast<uint8_t*>(&baseHash));
 
     uint64_t              apiHash;
     Util::MetroHash::Hash apiHashFull;
     apiHasher.Update(baseHash);
-    apiHasher.Finalize(reinterpret_cast<uint8_t* const>(&apiHashFull));
+    apiHasher.Finalize(reinterpret_cast<uint8_t*>(&apiHashFull));
     apiHash = Util::MetroHash::Compact64(&apiHashFull);
 
     return apiHash;

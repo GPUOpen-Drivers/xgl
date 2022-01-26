@@ -2114,6 +2114,11 @@ static void BuildPreRasterizationShaderState(
     BuildPipelineShadersInfo<PrsShaderMask>(pDevice, pIn, pShaderInfo, pCreateInfo);
 
     BuildCompilerInfo(pDevice, pShaderInfo, PrsShaderMask, pCreateInfo);
+
+    if (pCreateInfo->pipelineInfo.options.enableRelocatableShaderElf)
+    {
+        CompilerSolution::DisableNggCulling(&pCreateInfo->pipelineInfo.nggState);
+    }
 }
 
 // =====================================================================================================================

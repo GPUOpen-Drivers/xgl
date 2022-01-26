@@ -1705,12 +1705,14 @@ bool Queue::BuildPostProcessCommands(
 // =====================================================================================================================
 // Submits an internally managed command buffer to this queue
 VkResult Queue::SubmitInternalCmdBuf(
+    CmdBufferRing*          pCmdBufferRing,
     uint32_t                deviceIdx,
     const Pal::CmdBufInfo&  cmdBufInfo,
     CmdBufState*            pCmdBufState)
 {
-    return m_pCmdBufferRing->SubmitCmdBuffer(
-                m_pDevice, deviceIdx, m_pPalQueues[deviceIdx], cmdBufInfo, pCmdBufState);
+    CmdBufferRing* pRing = (pCmdBufferRing != nullptr) ? pCmdBufferRing : m_pCmdBufferRing;
+
+    return pRing->SubmitCmdBuffer(m_pDevice, deviceIdx, m_pPalQueues[deviceIdx], cmdBufInfo, pCmdBufState);
 }
 
 VkResult Queue::CreateSqttState(

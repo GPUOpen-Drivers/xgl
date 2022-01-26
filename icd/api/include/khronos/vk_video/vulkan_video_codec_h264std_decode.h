@@ -35,7 +35,11 @@
 #if EXTERNAL_VULKAN_HEADERS
 #include "vk_video/vulkan_video_codec_h264std_decode.h"
 #else
+#if VKI_SDK_NEXT
+#include "sdk-1.3/vk_video/vulkan_video_codec_h264std_decode.h"
+#else
 #include "sdk-1.2/vk_video/vulkan_video_codec_h264std_decode.h"
+#endif
 #endif
 
 #endif /* __vulkan_video_codec_h264std_decode_H_PROXY__*/

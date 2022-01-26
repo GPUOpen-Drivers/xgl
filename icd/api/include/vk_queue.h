@@ -165,6 +165,7 @@ public:
         { return m_pSqttState; }
 
     VkResult SubmitInternalCmdBuf(
+        CmdBufferRing*             pCmdBufferRing,
         uint32_t                   deviceIdx,
         const Pal::CmdBufInfo&     cmdBufInfo,
         CmdBufState*               pCmdBufState);

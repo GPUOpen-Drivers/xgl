@@ -607,10 +607,37 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdWriteBufferMarker2AMD                      );
     INIT_DISPATCH_ENTRY(vkQueueSubmit2KHR                               );
 
+#if VKI_SDK_NEXT
+    INIT_DISPATCH_ALIAS(vkCmdSetEvent2,
+                        vkCmdSetEvent2KHR                               );
+    INIT_DISPATCH_ALIAS(vkCmdResetEvent2,
+                        vkCmdResetEvent2KHR                             );
+    INIT_DISPATCH_ALIAS(vkCmdWaitEvents2,
+                        vkCmdWaitEvents2KHR                             );
+    INIT_DISPATCH_ALIAS(vkCmdPipelineBarrier2,
+                        vkCmdPipelineBarrier2KHR                        );
+    INIT_DISPATCH_ALIAS(vkCmdWriteTimestamp2,
+                        vkCmdWriteTimestamp2KHR                         );
+    INIT_DISPATCH_ALIAS(vkQueueSubmit2,
+                        vkQueueSubmit2KHR                               );
+#endif
+
     INIT_DISPATCH_ENTRY(vkCmdBeginRenderingKHR                          );
     INIT_DISPATCH_ENTRY(vkCmdEndRenderingKHR                            );
 
+#if VKI_SDK_NEXT
+    INIT_DISPATCH_ALIAS(vkCmdBeginRendering,
+                        vkCmdBeginRenderingKHR                          );
+    INIT_DISPATCH_ALIAS(vkCmdEndRendering,
+                        vkCmdEndRenderingKHR                            );
+#endif
+
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceToolPropertiesEXT            );
+
+#if VKI_SDK_NEXT
+    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceToolProperties,
+                        vkGetPhysicalDeviceToolPropertiesEXT            );
+#endif
 
     INIT_DISPATCH_ENTRY(vkCmdSetCullModeEXT                             );
     INIT_DISPATCH_ENTRY(vkCmdSetFrontFaceEXT                            );
@@ -624,6 +651,32 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdSetDepthBoundsTestEnableEXT                );
     INIT_DISPATCH_ENTRY(vkCmdSetStencilTestEnableEXT                    );
     INIT_DISPATCH_ENTRY(vkCmdSetStencilOpEXT                            );
+#if VKI_SDK_NEXT
+    INIT_DISPATCH_ALIAS(vkCmdSetCullMode,
+                        vkCmdSetCullModeEXT                             );
+    INIT_DISPATCH_ALIAS(vkCmdSetFrontFace,
+                        vkCmdSetFrontFaceEXT                            );
+    INIT_DISPATCH_ALIAS(vkCmdSetPrimitiveTopology,
+                        vkCmdSetPrimitiveTopologyEXT                    );
+    INIT_DISPATCH_ALIAS(vkCmdSetViewportWithCount,
+                        vkCmdSetViewportWithCountEXT                    );
+    INIT_DISPATCH_ALIAS(vkCmdSetScissorWithCount,
+                        vkCmdSetScissorWithCountEXT                     );
+    INIT_DISPATCH_ALIAS(vkCmdBindVertexBuffers2,
+                        vkCmdBindVertexBuffers2EXT                      );
+    INIT_DISPATCH_ALIAS(vkCmdSetDepthTestEnable,
+                        vkCmdSetDepthTestEnableEXT                      );
+    INIT_DISPATCH_ALIAS(vkCmdSetDepthWriteEnable,
+                        vkCmdSetDepthWriteEnableEXT                     );
+    INIT_DISPATCH_ALIAS(vkCmdSetDepthCompareOp,
+                        vkCmdSetDepthCompareOpEXT                       );
+    INIT_DISPATCH_ALIAS(vkCmdSetDepthBoundsTestEnable,
+                        vkCmdSetDepthBoundsTestEnableEXT                );
+    INIT_DISPATCH_ALIAS(vkCmdSetStencilTestEnable,
+                        vkCmdSetStencilTestEnableEXT                    );
+    INIT_DISPATCH_ALIAS(vkCmdSetStencilOp,
+                        vkCmdSetStencilOpEXT                            );
+#endif
 
     INIT_DISPATCH_ENTRY(vkCmdSetFragmentShadingRateKHR                  );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceFragmentShadingRatesKHR      );
@@ -633,6 +686,17 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkSetPrivateDataEXT                             );
     INIT_DISPATCH_ENTRY(vkGetPrivateDataEXT                             );
 
+#if VKI_SDK_NEXT
+    INIT_DISPATCH_ALIAS(vkCreatePrivateDataSlot,
+                        vkCreatePrivateDataSlotEXT                      );
+    INIT_DISPATCH_ALIAS(vkDestroyPrivateDataSlot,
+                        vkDestroyPrivateDataSlotEXT                     );
+    INIT_DISPATCH_ALIAS(vkSetPrivateData,
+                        vkSetPrivateDataEXT                             );
+    INIT_DISPATCH_ALIAS(vkGetPrivateData,
+                        vkGetPrivateDataEXT                             );
+#endif
+
     INIT_DISPATCH_ENTRY(vkCmdSetColorWriteEnableEXT                     );
 
     INIT_DISPATCH_ENTRY(vkCmdSetRasterizerDiscardEnableEXT              );
@@ -641,6 +705,15 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdSetLogicOpEXT                              );
     INIT_DISPATCH_ENTRY(vkCmdSetPatchControlPointsEXT                   );
 
+#if VKI_SDK_NEXT
+    INIT_DISPATCH_ALIAS(vkCmdSetRasterizerDiscardEnable,
+                        vkCmdSetRasterizerDiscardEnableEXT              );
+    INIT_DISPATCH_ALIAS(vkCmdSetPrimitiveRestartEnable,
+                        vkCmdSetPrimitiveRestartEnableEXT               );
+    INIT_DISPATCH_ALIAS(vkCmdSetDepthBiasEnable,
+                        vkCmdSetDepthBiasEnableEXT                      );
+#endif
+
     INIT_DISPATCH_ENTRY(vkCmdBlitImage2KHR                              );
     INIT_DISPATCH_ENTRY(vkCmdCopyBuffer2KHR                             );
     INIT_DISPATCH_ENTRY(vkCmdCopyBufferToImage2KHR                      );
@@ -648,9 +721,33 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdCopyImageToBuffer2KHR                      );
     INIT_DISPATCH_ENTRY(vkCmdResolveImage2KHR                           );
 
+#if VKI_SDK_NEXT
+    INIT_DISPATCH_ALIAS(vkCmdBlitImage2,
+                        vkCmdBlitImage2KHR                              );
+    INIT_DISPATCH_ALIAS(vkCmdCopyBuffer2,
+                        vkCmdCopyBuffer2KHR                             );
+    INIT_DISPATCH_ALIAS(vkCmdCopyBufferToImage2,
+                        vkCmdCopyBufferToImage2KHR                      );
+    INIT_DISPATCH_ALIAS(vkCmdCopyImage2,
+                        vkCmdCopyImage2KHR                              );
+    INIT_DISPATCH_ALIAS(vkCmdCopyImageToBuffer2,
+                        vkCmdCopyImageToBuffer2KHR                      );
+    INIT_DISPATCH_ALIAS(vkCmdResolveImage2,
+                        vkCmdResolveImage2KHR                           );
+#endif
+
     INIT_DISPATCH_ENTRY(vkGetDeviceBufferMemoryRequirementsKHR          );
     INIT_DISPATCH_ENTRY(vkGetDeviceImageMemoryRequirementsKHR           );
     INIT_DISPATCH_ENTRY(vkGetDeviceImageSparseMemoryRequirementsKHR     );
+
+#ifdef VKI_SDK_NEXT
+    INIT_DISPATCH_ALIAS(vkGetDeviceBufferMemoryRequirements,
+                        vkGetDeviceBufferMemoryRequirementsKHR          );
+    INIT_DISPATCH_ALIAS(vkGetDeviceImageMemoryRequirements,
+                        vkGetDeviceImageMemoryRequirementsKHR           );
+    INIT_DISPATCH_ALIAS(vkGetDeviceImageSparseMemoryRequirements,
+                        vkGetDeviceImageSparseMemoryRequirementsKHR     );
+#endif
 
 }
 

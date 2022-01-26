@@ -35,7 +35,11 @@
 #if EXTERNAL_VULKAN_HEADERS
 #include "vulkan/vk_platform.h"
 #else
+#if VKI_SDK_NEXT
+#include "sdk-1.3/vulkan/vk_platform.h"
+#else
 #include "sdk-1.2/vulkan/vk_platform.h"
+#endif
 #endif
 
 #ifdef VK_USE_PLATFORM_XLIB_KHR

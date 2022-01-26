@@ -2167,8 +2167,13 @@ VkResult PhysicalDevice::GetPhysicalDeviceToolPropertiesEXT(
 // Returns the API version supported by this device.
 uint32_t PhysicalDevice::GetSupportedAPIVersion() const
 {
+#if VKI_SDK_NEXT
+    // Currently all of our HW supports Vulkan 1.3
+    return (VK_API_VERSION_1_3 | VK_HEADER_VERSION);
+#else
     // Currently all of our HW supports Vulkan 1.2
     return (VK_API_VERSION_1_2 | VK_HEADER_VERSION);
+#endif
 }
 
 // =====================================================================================================================
@@ -3753,6 +3758,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CONSERVATIVE_RASTERIZATION));
     }
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PROVOKING_VERTEX));
+
 #if defined(__unix__)
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PCI_BUS_INFO));
 #endif
@@ -3841,6 +3848,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_FORMAT_FEATURE_FLAGS2));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_CLIP_CONTROL));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PRIMITIVE_TOPOLOGY_LIST_RESTART));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DYNAMIC_RENDERING));
 
@@ -5713,6 +5721,36 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+#if VKI_SDK_NEXT
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceVulkan13Features*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->robustImageAccess                                  = VK_TRUE;
+                    pExtInfo->inlineUniformBlock                                 = VK_TRUE;
+                    pExtInfo->descriptorBindingInlineUniformBlockUpdateAfterBind = VK_TRUE;
+                    pExtInfo->pipelineCreationCacheControl                       = VK_TRUE;
+                    pExtInfo->privateData                                        = VK_TRUE;
+                    pExtInfo->shaderDemoteToHelperInvocation                     = VK_TRUE;
+                    pExtInfo->shaderTerminateInvocation                          = VK_TRUE;
+                    pExtInfo->subgroupSizeControl                                = VK_TRUE;
+                    pExtInfo->computeFullSubgroups                               = VK_TRUE;
+                    pExtInfo->synchronization2                                   = VK_TRUE;
+                    pExtInfo->textureCompressionASTC_HDR                         = VK_FALSE;
+                    pExtInfo->shaderZeroInitializeWorkgroupMemory                = VK_TRUE;
+                    pExtInfo->dynamicRendering                                   = VK_TRUE;
+                    pExtInfo->shaderIntegerDotProduct                            = VK_TRUE;
+                    pExtInfo->maintenance4                                       = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+
+                break;
+            }
+#endif
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceFragmentShadingRateFeaturesKHR *>(pHeader);
@@ -6068,7 +6106,7 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     pExtInfo->provokingVertexLast                       = VK_TRUE;
-                    pExtInfo->transformFeedbackPreservesProvokingVertex = VK_FALSE;
+                    pExtInfo->transformFeedbackPreservesProvokingVertex = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6101,6 +6139,20 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+#if VKI_SDK_NEXT
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXTURE_COMPRESSION_ASTC_HDR_FEATURES:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceTextureCompressionASTCHDRFeatures*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->textureCompressionASTC_HDR = VK_FALSE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+#endif
             default:
             {
                 // skip any unsupported extension structures
@@ -6598,6 +6650,78 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+#if VKI_SDK_NEXT
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES:
+        {
+            auto* pVulkan13Properties = static_cast<VkPhysicalDeviceVulkan13Properties*>(pNext);
+
+            GetPhysicalDeviceSubgroupSizeControlProperties(
+                &pVulkan13Properties->minSubgroupSize,
+                &pVulkan13Properties->maxSubgroupSize,
+                &pVulkan13Properties->maxComputeWorkgroupSubgroups,
+                &pVulkan13Properties->requiredSubgroupSizeStages);
+
+            GetPhysicalDeviceUniformBlockProperties(
+                &pVulkan13Properties->maxInlineUniformBlockSize,
+                &pVulkan13Properties->maxPerStageDescriptorInlineUniformBlocks,
+                &pVulkan13Properties->maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks,
+                &pVulkan13Properties->maxDescriptorSetInlineUniformBlocks,
+                &pVulkan13Properties->maxDescriptorSetUpdateAfterBindInlineUniformBlocks);
+
+            pVulkan13Properties->maxInlineUniformTotalSize = UINT_MAX;
+
+            GetPhysicalDeviceDotProduct8Properties(
+                &pVulkan13Properties->integerDotProduct8BitUnsignedAccelerated,
+                &pVulkan13Properties->integerDotProduct8BitSignedAccelerated,
+                &pVulkan13Properties->integerDotProduct8BitMixedSignednessAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating8BitUnsignedAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating8BitSignedAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated);
+
+            GetPhysicalDeviceDotProduct4x8Properties(
+                &pVulkan13Properties->integerDotProduct4x8BitPackedUnsignedAccelerated,
+                &pVulkan13Properties->integerDotProduct4x8BitPackedSignedAccelerated,
+                &pVulkan13Properties->integerDotProduct4x8BitPackedMixedSignednessAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated);
+
+            GetPhysicalDeviceDotProduct16Properties(
+                &pVulkan13Properties->integerDotProduct16BitUnsignedAccelerated,
+                &pVulkan13Properties->integerDotProduct16BitSignedAccelerated,
+                &pVulkan13Properties->integerDotProduct16BitMixedSignednessAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating16BitUnsignedAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating16BitSignedAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated);
+
+            GetPhysicalDeviceDotProduct32Properties(
+                &pVulkan13Properties->integerDotProduct32BitUnsignedAccelerated,
+                &pVulkan13Properties->integerDotProduct32BitSignedAccelerated,
+                &pVulkan13Properties->integerDotProduct32BitMixedSignednessAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating32BitUnsignedAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating32BitSignedAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated);
+
+            GetPhysicalDeviceDotProduct64Properties(
+                &pVulkan13Properties->integerDotProduct64BitUnsignedAccelerated,
+                &pVulkan13Properties->integerDotProduct64BitSignedAccelerated,
+                &pVulkan13Properties->integerDotProduct64BitMixedSignednessAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating64BitUnsignedAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating64BitSignedAccelerated,
+                &pVulkan13Properties->integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated);
+
+            GetPhysicalDeviceTexelBufferAlignmentProperties(
+                &pVulkan13Properties->storageTexelBufferOffsetAlignmentBytes,
+                &pVulkan13Properties->storageTexelBufferOffsetSingleTexelAlignment,
+                &pVulkan13Properties->uniformTexelBufferOffsetAlignmentBytes,
+                &pVulkan13Properties->uniformTexelBufferOffsetSingleTexelAlignment);
+
+            GetDevicePropertiesMaxBufferSize(&pVulkan13Properties->maxBufferSize);
+
+            break;
+        }
+#endif
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR:
         {
             auto* pProps = static_cast<VkPhysicalDeviceFragmentShadingRatePropertiesKHR*>(pNext);
@@ -6730,7 +6854,7 @@ void PhysicalDevice::GetDeviceProperties2(
         {
             auto* pProps = static_cast<VkPhysicalDeviceProvokingVertexPropertiesEXT*>(pNext);
             pProps->provokingVertexModePerPipeline                       = VK_TRUE;
-            pProps->transformFeedbackPreservesTriangleFanProvokingVertex = VK_FALSE;
+            pProps->transformFeedbackPreservesTriangleFanProvokingVertex = VK_TRUE;
             break;
         }
 
@@ -7467,6 +7591,34 @@ static void VerifyExtensions(
                && dev.IsExtensionSupported(DeviceExtensions::KHR_BUFFER_DEVICE_ADDRESS));
     }
 
+#if VKI_SDK_NEXT
+    if (apiVersion >= VK_API_VERSION_1_3)
+    {
+        VK_ASSERT(dev.IsExtensionSupported(DeviceExtensions::EXT_4444_FORMATS)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_EXTENDED_DYNAMIC_STATE)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_EXTENDED_DYNAMIC_STATE2)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_IMAGE_ROBUSTNESS)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_INLINE_UNIFORM_BLOCK)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_PIPELINE_CREATION_CACHE_CONTROL)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_PIPELINE_CREATION_FEEDBACK)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_PRIVATE_DATA)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_SUBGROUP_SIZE_CONTROL)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_TEXEL_BUFFER_ALIGNMENT)
+//             && dev.IsExtensionSupported(DeviceExtensions::VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_TOOLING_INFO)
+//             && dev.IsExtensionSupported(DeviceExtensions::VK_EXT_YCBCR_2PLANE_444_FORMATS)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_COPY_COMMANDS2)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_DYNAMIC_RENDERING)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_FORMAT_FEATURE_FLAGS2)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_MAINTENANCE4)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SHADER_INTEGER_DOT_PRODUCT)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SHADER_NON_SEMANTIC_INFO)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SHADER_TERMINATE_INVOCATION)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SYNCHRONIZATION2)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY));
+    }
+#endif
 }
 
 // =====================================================================================================================

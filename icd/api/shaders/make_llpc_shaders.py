@@ -77,5 +77,6 @@ def GenerateSpvHeaderFile(inFile, outFile, marcoDef):
 
     return #GenerateSpvHeaderFile
 
-GenerateSpvHeaderFile("copy_timestamp_query_pool.comp", "copy_timestamp_query_pool", " ")
-GenerateSpvHeaderFile("copy_timestamp_query_pool.comp", "copy_timestamp_query_pool_strided", "-DSTRIDED_COPY")
+GenerateSpvHeaderFile("copy_query_pool.comp", "copy_timestamp_query_pool", " ")
+GenerateSpvHeaderFile("copy_query_pool.comp", "copy_timestamp_query_pool_strided", "-DSTRIDED_COPY")
+GenerateSpvHeaderFile("copy_query_pool.comp", "copy_acceleration_structure_query_pool", "-DACCELERATION_STRUCTURE_SERIALIZATION")

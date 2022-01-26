@@ -954,7 +954,7 @@ GraphicsPipeline::GraphicsPipeline(
     CreateStaticState();
 
     pPalPipelineHasher->Update(m_palPipelineHash);
-    pPalPipelineHasher->Finalize(reinterpret_cast<uint8* const>(&m_palPipelineHash));
+    pPalPipelineHasher->Finalize(reinterpret_cast<uint8*>(&m_palPipelineHash));
 }
 
 // =====================================================================================================================

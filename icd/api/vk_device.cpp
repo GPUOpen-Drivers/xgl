@@ -595,6 +595,28 @@ VkResult Device::Create(
                 break;
             }
 
+#if VKI_SDK_NEXT
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES:
+            {
+                if (reinterpret_cast<const VkPhysicalDeviceVulkan13Features*>(pHeader)->maintenance4)
+                {
+                    maintenance4Enabled = true;
+                }
+
+                if (reinterpret_cast<const VkPhysicalDeviceVulkan13Features*>(pHeader)->privateData)
+                {
+                    privateDataEnabled = true;
+                }
+
+                if (reinterpret_cast<const VkPhysicalDeviceVulkan13Features*>(pHeader)->robustImageAccess)
+                {
+                    deviceFeatures.robustImageAccessExtended = true;
+                }
+
+                break;
+            }
+#endif
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
             {
 
@@ -2021,7 +2043,12 @@ VkResult Device::CreateInternalPipelines()
     #include "shaders/copy_timestamp_query_pool_strided_spv.h"
     };
 
-    const uint8_t* pSpvCode  = useStridedShader ? CopyTimestampQueryPoolStridedSpv : CopyTimestampQueryPoolSpv;
+    static constexpr uint8_t AccelerationStructureQueryPoolSpv[] =
+    {
+    #include "shaders/copy_acceleration_structure_query_pool_spv.h"
+    };
+
+    const uint8_t* pSpvCode = useStridedShader ? CopyTimestampQueryPoolStridedSpv : CopyTimestampQueryPoolSpv;
     const size_t spvCodeSize = useStridedShader ?
         sizeof(CopyTimestampQueryPoolStridedSpv) : sizeof(CopyTimestampQueryPoolSpv);
 

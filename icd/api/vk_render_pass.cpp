@@ -160,7 +160,7 @@ static uint64_t GenerateRenderPassHash(
     }
 
     uint64_t hash;
-    hasher.Finalize(reinterpret_cast<uint8_t* const>(&hash));
+    hasher.Finalize(reinterpret_cast<uint8_t*>(&hash));
 
     return hash;
 }

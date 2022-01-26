@@ -499,10 +499,12 @@ VkResult QueryPoolWithStorageView::Initialize(
 
                 // Stride should be 8 if query type is VK_QUERY_TYPE_TIMESTAMP
                 // BufferView is used just to query first 32 or 64 bits of the corresponding structure
-                // Compute shader expects rg32ui if not strided copy.
-                const uint32_t queryStride = 8;
-                bufferViewInfo.stride = queryStride;
-                bufferViewInfo.swizzledFormat = QueryCopyFormat;
+
+                {
+                    // Compute shader expects rg32ui if not strided copy.
+                    bufferViewInfo.stride = 8;
+                    bufferViewInfo.swizzledFormat = QueryCopyFormat;
+                }
 
                 for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
                 {

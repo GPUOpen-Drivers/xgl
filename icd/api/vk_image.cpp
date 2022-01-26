@@ -116,7 +116,7 @@ void Image::BuildResourceKey(
             pCreateInfo->queueFamilyIndexCount * sizeof(uint32_t));
     }
 
-    hasher.Finalize(reinterpret_cast<uint8_t* const>(&pResourceKey->apiHash));
+    hasher.Finalize(reinterpret_cast<uint8_t*>(&pResourceKey->apiHash));
 
     pResourceKey->width = pCreateInfo->extent.width;
     pResourceKey->height = pCreateInfo->extent.height;
