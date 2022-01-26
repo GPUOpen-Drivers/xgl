@@ -86,6 +86,7 @@ class Queue;
 class RenderPass;
 class TimestampQueryPool;
 class SqttCmdBufferState;
+class QueryPool;
 
 constexpr uint8_t DefaultStencilOpValue = 1;
 
@@ -1093,6 +1094,15 @@ private:
     void ResetPipelineState();
 
     void ResetState();
+
+    void QueryCopy(
+        const QueryPool*   pBasePool,
+        const Buffer*      pDestBuffer,
+        uint32_t           firstQuery,
+        uint32_t           queryCount,
+        VkDeviceSize       destOffset,
+        VkDeviceSize       destStride,
+        VkQueryResultFlags flags);
 
     void CalcCounterBufferAddrs(
         uint32_t            firstCounterBuffer,

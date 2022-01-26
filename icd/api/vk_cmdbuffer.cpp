@@ -6056,139 +6056,161 @@ void CmdBuffer::CopyQueryPoolResults(
     }
     else
     {
-        const QueryPoolWithStorageView* pPool = pBasePool->AsQueryPoolWithStorageView();
-
-        const Device::InternalPipeline& pipeline = m_pDevice->GetTimestampQueryCopyPipeline();
-
-        // Wait for all previous query timestamps to complete.  For now we have to do a full pipeline idle but once
-        // we have a PAL interface for doing a 64-bit WAIT_REG_MEM, we only have to wait on the queries being copied
-        // here
-        if ((flags & VK_QUERY_RESULT_WAIT_BIT) != 0)
-        {
-            static const Pal::BarrierTransition transition =
-            {
-                pBasePool->GetQueryType() == VK_QUERY_TYPE_TIMESTAMP ? Pal::CoherTimestamp : Pal::CoherMemory,
-                Pal::CoherShader
-            };
-
-            static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
-            static const Pal::BarrierFlags PalBarrierFlags = {};
-
-            static const Pal::BarrierInfo WriteWaitIdle =
-            {
-                PalBarrierFlags,                                // flags
-                Pal::HwPipePreCs,                               // waitPoint
-                1,                                              // pipePointWaitCount
-                &pipePoint,                                     // pPipePoints
-                0,                                              // gpuEventWaitCount
-                nullptr,                                        // ppGpuEvents
-                0,                                              // rangeCheckedTargetWaitCount
-                nullptr,                                        // ppTargets
-                1,                                              // transitionCount
-                &transition,                                    // pTransitions
-                0,                                              // globalSrcCacheMask
-                0,                                              // globalDstCacheMask
-                nullptr,                                        // pSplitBarrierGpuEvent
-                RgpBarrierInternalPreCopyQueryPoolResultsSync   // reason
-            };
-
-            PalCmdBarrier(WriteWaitIdle, m_curDeviceMask);
-        }
-
-        uint32_t userData[16];
-
-        // Figure out which user data registers should contain what compute constants
-        const uint32_t storageViewSize     = m_pDevice->GetProperties().descriptorSizes.bufferView;
-        const uint32_t storageViewDwSize   = storageViewSize / sizeof(uint32_t);
-        const uint32_t viewOffset = 0;
-        const uint32_t bufferViewOffset    = storageViewDwSize;
-        const uint32_t queryCountOffset    = bufferViewOffset + storageViewDwSize;
-        const uint32_t copyFlagsOffset     = queryCountOffset + 1;
-        const uint32_t copyStrideOffset    = copyFlagsOffset  + 1;
-        const uint32_t firstQueryOffset    = copyStrideOffset + 1;
-        const uint32_t userDataCount       = firstQueryOffset + 1;
-
-        // Make sure they agree with pipeline mapping
-        VK_ASSERT(viewOffset        == pipeline.userDataNodeOffsets[0]);
-        VK_ASSERT(bufferViewOffset  == pipeline.userDataNodeOffsets[1]);
-        VK_ASSERT(queryCountOffset  == pipeline.userDataNodeOffsets[2]);
-        VK_ASSERT(userDataCount <= VK_ARRAY_SIZE(userData));
-
-        // Create and set a raw storage view into the destination buffer (shader will choose to either write 32-bit or
-        // 64-bit values)
-        Pal::BufferViewInfo bufferViewInfo = {};
-
-        bufferViewInfo.range          = destStride * queryCount;
-        bufferViewInfo.stride         = 0; // Raw buffers have a zero byte stride
-        bufferViewInfo.swizzledFormat = Pal::UndefinedSwizzledFormat;
-
-        // Set query count
-        userData[queryCountOffset] = queryCount;
-
-        // These are magic numbers that match literal values in the shader
-        constexpr uint32_t Copy64Bit                  = 0x1;
-        constexpr uint32_t CopyIncludeAvailabilityBit = 0x2;
-
-        // Set copy flags
-        userData[copyFlagsOffset]  = 0;
-        userData[copyFlagsOffset] |= (flags & VK_QUERY_RESULT_64_BIT) ? Copy64Bit : 0x0;
-        userData[copyFlagsOffset] |= (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) ? CopyIncludeAvailabilityBit : 0x0;
-
-        // Set destination stride
-        VK_ASSERT(destStride <= UINT_MAX); // TODO: Do we really need to handle this?
-
-        userData[copyStrideOffset] = static_cast<uint32_t>(destStride);
-
-        // Set start query index
-        userData[firstQueryOffset] = firstQuery;
-
-        utils::IterateMask deviceGroup(m_curDeviceMask);
-        do
-        {
-            const uint32_t deviceIdx = deviceGroup.Index();
-
-            // Backup PAL compute state
-            PalCmdBuffer(deviceIdx)->CmdSaveComputeState(Pal::ComputeStatePipelineAndUserData);
-
-            Pal::PipelineBindParams bindParams = {};
-            bindParams.pipelineBindPoint = Pal::PipelineBindPoint::Compute;
-            bindParams.pPipeline         = pipeline.pPipeline[deviceIdx];
-            bindParams.apiPsoHash        = Pal::InternalApiPsoHash;
-
-            // Bind the copy compute pipeline
-            PalCmdBuffer(deviceIdx)->CmdBindPipeline(bindParams);
-
-            // Set the query buffer SRD (copy source) as typed 64-bit storage view
-            memcpy(&userData[viewOffset], pPool->GetStorageView(deviceIdx), storageViewSize);
-
-            bufferViewInfo.gpuAddr = pDestBuffer->GpuVirtAddr(deviceIdx) + destOffset;
-            m_pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &bufferViewInfo, &userData[bufferViewOffset]);
-
-            // Write user data registers
-            PalCmdBuffer(deviceIdx)->CmdSetUserData(
-                Pal::PipelineBindPoint::Compute,
-                0,
-                userDataCount,
-                userData);
-
-            // Figure out how many thread groups we need to dispatch and dispatch
-            constexpr uint32_t ThreadsPerGroup = 64;
-
-            uint32_t threadGroupCount = Util::Max(1U, (queryCount + ThreadsPerGroup - 1) / ThreadsPerGroup);
-
-            PalCmdBuffer(deviceIdx)->CmdDispatch(threadGroupCount, 1, 1);
-
-            // Restore compute state
-            PalCmdBuffer(deviceIdx)->CmdRestoreComputeState(Pal::ComputeStatePipelineAndUserData);
-
-            // Note that the application is responsible for doing a post-copy sync using a barrier.
-        }
-        while (deviceGroup.IterateNext());
+        QueryCopy(
+            pBasePool,
+            pDestBuffer,
+            firstQuery,
+            queryCount,
+            destOffset,
+            destStride,
+            flags);
     }
 
     PalCmdSuspendPredication(false);
 
     DbgBarrierPostCmd(DbgBarrierCopyBuffer | DbgBarrierCopyQueryPool);
+}
+
+// ===================================================================================================================
+// Command to write a timestamp value to a location in a Timestamp query pool
+void CmdBuffer::QueryCopy(
+    const QueryPool*   pBasePool,
+    const Buffer*      pDestBuffer,
+    uint32_t           firstQuery,
+    uint32_t           queryCount,
+    VkDeviceSize       destOffset,
+    VkDeviceSize       destStride,
+    VkQueryResultFlags flags)
+{
+    const QueryPoolWithStorageView* pPool = pBasePool->AsQueryPoolWithStorageView();
+
+    const Device::InternalPipeline& pipeline =
+        m_pDevice->GetTimestampQueryCopyPipeline();
+
+    // Wait for all previous query timestamps to complete.  For now we have to do a full pipeline idle but once
+    // we have a PAL interface for doing a 64-bit WAIT_REG_MEM, we only have to wait on the queries being copied
+    // here
+    if ((flags & VK_QUERY_RESULT_WAIT_BIT) != 0)
+    {
+        static const Pal::BarrierTransition transition =
+        {
+            pBasePool->GetQueryType() == VK_QUERY_TYPE_TIMESTAMP ? Pal::CoherTimestamp : Pal::CoherMemory,
+            Pal::CoherShader
+        };
+
+        static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
+        static const Pal::BarrierFlags PalBarrierFlags = {};
+
+        static const Pal::BarrierInfo WriteWaitIdle =
+        {
+            PalBarrierFlags,                                // flags
+            Pal::HwPipePreCs,                               // waitPoint
+            1,                                              // pipePointWaitCount
+            &pipePoint,                                     // pPipePoints
+            0,                                              // gpuEventWaitCount
+            nullptr,                                        // ppGpuEvents
+            0,                                              // rangeCheckedTargetWaitCount
+            nullptr,                                        // ppTargets
+            1,                                              // transitionCount
+            &transition,                                    // pTransitions
+            0,                                              // globalSrcCacheMask
+            0,                                              // globalDstCacheMask
+            nullptr,                                        // pSplitBarrierGpuEvent
+            RgpBarrierInternalPreCopyQueryPoolResultsSync   // reason
+        };
+
+        PalCmdBarrier(WriteWaitIdle, m_curDeviceMask);
+    }
+
+    uint32_t userData[16];
+
+    // Figure out which user data registers should contain what compute constants
+    const uint32_t storageViewSize = m_pDevice->GetProperties().descriptorSizes.bufferView;
+    const uint32_t storageViewDwSize = storageViewSize / sizeof(uint32_t);
+    const uint32_t viewOffset = 0;
+    const uint32_t bufferViewOffset = storageViewDwSize;
+    const uint32_t queryCountOffset = bufferViewOffset + storageViewDwSize;
+    const uint32_t copyFlagsOffset = queryCountOffset + 1;
+    const uint32_t copyStrideOffset = copyFlagsOffset + 1;
+    const uint32_t firstQueryOffset = copyStrideOffset + 1;
+    const uint32_t ptrQueryOffset = firstQueryOffset + 1;
+    const uint32_t userDataCount = ptrQueryOffset + 1;
+
+    // Make sure they agree with pipeline mapping
+    VK_ASSERT(viewOffset == pipeline.userDataNodeOffsets[0]);
+    VK_ASSERT(bufferViewOffset == pipeline.userDataNodeOffsets[1]);
+    VK_ASSERT(queryCountOffset == pipeline.userDataNodeOffsets[2]);
+    VK_ASSERT(userDataCount <= VK_ARRAY_SIZE(userData));
+
+    // Create and set a raw storage view into the destination buffer (shader will choose to either write 32-bit or
+    // 64-bit values)
+    Pal::BufferViewInfo bufferViewInfo = {};
+
+    bufferViewInfo.range = destStride * queryCount;
+    bufferViewInfo.stride = 0; // Raw buffers have a zero byte stride
+    bufferViewInfo.swizzledFormat = Pal::UndefinedSwizzledFormat;
+
+    // Set query count
+    userData[queryCountOffset] = queryCount;
+
+    // These are magic numbers that match literal values in the shader
+    constexpr uint32_t Copy64Bit = 0x1;
+    constexpr uint32_t CopyIncludeAvailabilityBit = 0x2;
+
+    // Set copy flags
+    userData[copyFlagsOffset] = 0;
+    userData[copyFlagsOffset] |= (flags & VK_QUERY_RESULT_64_BIT) ? Copy64Bit : 0x0;
+    userData[copyFlagsOffset] |= (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) ? CopyIncludeAvailabilityBit : 0x0;
+
+    // Set destination stride
+    VK_ASSERT(destStride <= UINT_MAX); // TODO: Do we really need to handle this?
+
+    userData[copyStrideOffset] = static_cast<uint32_t>(destStride);
+
+    // Set start query index
+    userData[firstQueryOffset] = firstQuery;
+
+    utils::IterateMask deviceGroup(m_curDeviceMask);
+    do
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        // Backup PAL compute state
+        PalCmdBuffer(deviceIdx)->CmdSaveComputeState(Pal::ComputeStatePipelineAndUserData);
+
+        Pal::PipelineBindParams bindParams = {};
+        bindParams.pipelineBindPoint = Pal::PipelineBindPoint::Compute;
+        bindParams.pPipeline = pipeline.pPipeline[deviceIdx];
+        bindParams.apiPsoHash = Pal::InternalApiPsoHash;
+
+        // Bind the copy compute pipeline
+        PalCmdBuffer(deviceIdx)->CmdBindPipeline(bindParams);
+
+        // Set the query buffer SRD (copy source) as typed 64-bit storage view
+        memcpy(&userData[viewOffset], pPool->GetStorageView(deviceIdx), storageViewSize);
+
+        bufferViewInfo.gpuAddr = pDestBuffer->GpuVirtAddr(deviceIdx) + destOffset;
+        m_pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &bufferViewInfo, &userData[bufferViewOffset]);
+
+        // Write user data registers
+        PalCmdBuffer(deviceIdx)->CmdSetUserData(
+            Pal::PipelineBindPoint::Compute,
+            0,
+            userDataCount,
+            userData);
+
+        // Figure out how many thread groups we need to dispatch and dispatch
+        constexpr uint32_t ThreadsPerGroup = 64;
+
+        uint32_t threadGroupCount = Util::Max(1U, (queryCount + ThreadsPerGroup - 1) / ThreadsPerGroup);
+
+        PalCmdBuffer(deviceIdx)->CmdDispatch(threadGroupCount, 1, 1);
+
+        // Restore compute state
+        PalCmdBuffer(deviceIdx)->CmdRestoreComputeState(Pal::ComputeStatePipelineAndUserData);
+
+        // Note that the application is responsible for doing a post-copy sync using a barrier.
+    } while (deviceGroup.IterateNext());
 }
 
 // =====================================================================================================================

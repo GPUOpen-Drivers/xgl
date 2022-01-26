@@ -847,7 +847,7 @@ Pal::IQueue* SwapChain::PrePresent(
 
                 cmdBufInfo.isValid = 1;
 
-                VkResult result = pPresentQueue->SubmitInternalCmdBuf(deviceIdx, cmdBufInfo, pCmdBufState);
+                VkResult result = pPresentQueue->SubmitInternalCmdBuf(nullptr, deviceIdx, cmdBufInfo, pCmdBufState);
 
                 // Don't fail the present if driver post processing or overlays are dropped.
                 VK_ASSERT(result == VK_SUCCESS);

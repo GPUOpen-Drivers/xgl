@@ -1749,6 +1749,10 @@ static VkFormat convertCompressedFormat(VkFormat format)
 }
 #endif
 
+namespace convert
+{
+}
+
 // =====================================================================================================================
 // Converts Vulkan format to PAL equivalent.
 inline Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings& settings)
@@ -2050,13 +2054,13 @@ inline Pal::HwPipePoint VkToPalSrcPipePointForTimestampWrite(
 {
     // Flags that require signaling at top-of-pipe.
     static const PipelineStageFlags srcTopOfPipeFlags =
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
 
     Pal::HwPipePoint srcPipePoint;
 
-    if ((flags & ~srcTopOfPipeFlags) == 0)
+    if ((flags & srcTopOfPipeFlags) != 0)
     {
-        srcPipePoint = Pal::HwPipeTop;
+        srcPipePoint = Pal::HwPipePostIndexFetch;
     }
     else
     {

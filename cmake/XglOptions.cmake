@@ -29,6 +29,12 @@ macro(xgl_options)
 
 ### Cached Project Options #############################################################################################
 
+#if VKI_SDK_NEXT
+    option(VKI_SDK_NEXT "Build with Vulkan 1.3 support" ON)
+#endif
+
+    option(XGL_ENABLE_PRINTS_ASSERTS "Build with debug print enabled?" OFF)
+
     option(XGL_ENABLE_LTO "Build with LTO enabled?" ON)
 
     option(XGL_ENABLE_GCOV "Build with gcov source code coverage?" OFF)
@@ -69,7 +75,7 @@ macro(xgl_options)
 #endif
 
 #if VKI_SPIRV_1_6
-    option(VKI_SPIRV_1_6 "Build vulkan with VKI_SPIRV_1_6" OFF)
+    option(VKI_SPIRV_1_6 "Build vulkan with VKI_SPIRV_1_6" ON)
 #endif
 
     option(ICD_BUILD_LLPC "Build LLPC?" ON)

@@ -65,12 +65,12 @@ uint64_t ComputePipeline::BuildApiHash(
 
     apiHasher.Update(pCreateInfo->basePipelineIndex);
 
-    baseHasher.Finalize(reinterpret_cast<uint8_t* const>(&bashHash));
+    baseHasher.Finalize(reinterpret_cast<uint8_t*>(&bashHash));
 
     uint64_t              apiHash;
     Util::MetroHash::Hash apiHashFull;
     apiHasher.Update(bashHash);
-    apiHasher.Finalize(reinterpret_cast<uint8_t* const>(&apiHashFull));
+    apiHasher.Finalize(reinterpret_cast<uint8_t*>(&apiHashFull));
     apiHash = Util::MetroHash::Compact64(&apiHashFull);
 
     return apiHash;

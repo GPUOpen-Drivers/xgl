@@ -4704,6 +4704,18 @@
       "Type": "enum"
     },
     {
+      "Description": "Disable DCC for video images with image usage flag VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_AMD and VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_AMD.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "DisableDccForVideoImages"
+    },
+    {
       "Description": "Specifies the maximum threshold in bytes for linear transfer commands to use CP DMA, which have less overhead than CS/Gfx copies, but also less throughput for large copies.",
       "Tags": [
         "Optimization"
@@ -5217,35 +5229,43 @@
         "Shader Tuning"
       ],
       "Defaults": {
-        "Default": 4
+        "Default": "FragmentShader"
       },
       "ValidValues": {
+        "IsEnum": true,
         "Values": [
           {
-            "Value": 0,
+            "Name": "VertexShader",
+            "Value": 1,
             "Description": "Vertex Shader"
           },
           {
-            "Value": 1,
+            "Name": "TessellationControlShader",
+            "Value": 2,
             "Description": "Tessellation Control Shader"
           },
           {
-            "Value": 2,
+            "Name": "TessellationEvaluationShader",
+            "Value": 3,
             "Description": "Tessellation Evaluation Shader"
           },
           {
-            "Value": 3,
+            "Name": "GeometryShader",
+            "Value": 4,
             "Description": "Geometry Shader"
           },
           {
-            "Value": 4,
+            "Name": "FragmentShader",
+            "Value": 6,
             "Description": "Fragment Shader"
           },
           {
-            "Value": 5,
+            "Name": "ComputeShader",
+            "Value": 7,
             "Description": "Compute Shader"
           }
-        ]
+        ],
+        "Name": "ShaderMode"
       },
       "Type": "uint32",
       "Scope": "Driver"

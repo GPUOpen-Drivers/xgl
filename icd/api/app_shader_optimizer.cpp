@@ -503,7 +503,31 @@ void ShaderOptimizer::BuildTuningProfile()
         entry.pattern.match.always = 1;
     }
 
-    const uint32_t shaderStage = m_settings.overrideShaderStage;
+    // Assign ShaderStage type according to setting file
+    uint32_t shaderStage = ShaderStage::ShaderStageFragment;
+    switch (m_settings.overrideShaderStage)
+    {
+    case ShaderMode::VertexShader:
+        shaderStage = ShaderStage::ShaderStageVertex;
+        break;
+    case ShaderMode::TessellationControlShader:
+        shaderStage = ShaderStage::ShaderStageTessControl;
+        break;
+    case ShaderMode::TessellationEvaluationShader:
+        shaderStage = ShaderStage::ShaderStageTessEval;
+        break;
+    case ShaderMode::GeometryShader:
+        shaderStage = ShaderStage::ShaderStageGeometry;
+        break;
+    case ShaderMode::FragmentShader:
+        shaderStage = ShaderStage::ShaderStageFragment;
+        break;
+    case ShaderMode::ComputeShader:
+        shaderStage = ShaderStage::ShaderStageCompute;
+        break;
+    default:
+        VK_NEVER_CALLED();
+    }
 
     VK_ASSERT(shaderStage < ShaderStage::ShaderStageCount);
 

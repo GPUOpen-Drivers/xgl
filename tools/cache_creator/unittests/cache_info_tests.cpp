@@ -22,7 +22,9 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+#include "cache_creator.h"
 #include "cache_info.h"
+#include "include/binary_cache_serialization.h"
 #include "llvm/Support/MD5.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Testing/Support/Error.h"
@@ -35,7 +37,10 @@
 namespace {
 
 using llvm::Failed;
+using llvm::FailedWithMessage;
 using llvm::Succeeded;
+
+using ::testing::HasSubstr;
 
 TEST(CacheInfoTest, EmptyCacheBlob) {
   auto blobPtr = llvm::MemoryBuffer::getMemBuffer(llvm::StringRef{}, "empty", false);
@@ -99,11 +104,33 @@ TEST(CacheInfoTest, PublicHeaderLengthTooLong) {
   EXPECT_THAT_EXPECTED(privateHeaderInfoOrErr, Failed());
 }
 
+TEST(CacheInfoTest, PrivateBlobWrongVendorId) {
+  llvm::SmallVector<uint8_t> buffer(vk::VkPipelineCacheHeaderDataSize + sizeof(vk::PipelineBinaryCachePrivateHeader));
+  auto *publicHeader = new (buffer.data()) vk::PipelineCacheHeaderData();
+  publicHeader->vendorID = 0x14u;
+  publicHeader->headerLength = vk::VkPipelineCacheHeaderDataSize;
+
+  auto blobPtr = llvm::MemoryBuffer::getMemBuffer(llvm::toStringRef(buffer), "wrong_vendor_id", false);
+  assert(blobPtr);
+
+  auto blobInfoOrErr = cc::CacheBlobInfo::create(*blobPtr);
+  ASSERT_THAT_EXPECTED(blobInfoOrErr, Succeeded());
+
+  auto publicHeaderInfoOrErr = blobInfoOrErr->readPublicVkHeaderInfo();
+  ASSERT_THAT_EXPECTED(publicHeaderInfoOrErr, Succeeded());
+  EXPECT_EQ(publicHeaderInfoOrErr->publicHeader, publicHeader);
+  EXPECT_EQ(publicHeaderInfoOrErr->trailingSpaceBeforePrivateBlob, 0u);
+
+  auto privateHeaderOffsetOrErr = blobInfoOrErr->getPrivateHeaderOffset();
+  EXPECT_THAT_EXPECTED(privateHeaderOffsetOrErr, FailedWithMessage(HasSubstr("Vendor is not AMD")));
+}
+
 TEST(CacheInfoTest, ValidBlobNoEntries) {
   llvm::SmallVector<uint8_t> buffer(vk::VkPipelineCacheHeaderDataSize + sizeof(vk::PipelineBinaryCachePrivateHeader));
   auto *publicHeader = new (buffer.data()) vk::PipelineCacheHeaderData();
-  auto *privateHeader = new (buffer.data() + vk::VkPipelineCacheHeaderDataSize) vk::PipelineBinaryCachePrivateHeader();
+  publicHeader->vendorID = cc::AMDVendorId;
   publicHeader->headerLength = vk::VkPipelineCacheHeaderDataSize;
+  auto *privateHeader = new (buffer.data() + vk::VkPipelineCacheHeaderDataSize) vk::PipelineBinaryCachePrivateHeader();
 
   auto blobPtr = llvm::MemoryBuffer::getMemBuffer(llvm::toStringRef(buffer), "valid_no_entries", false);
   assert(blobPtr);
@@ -170,6 +197,7 @@ TEST(CacheInfoTest, ValidBlobOneEntry) {
   uint8_t *const publicHeader = currData;
   vk::PipelineCacheHeaderData publicHeaderData = {};
   publicHeaderData.headerLength = vk::VkPipelineCacheHeaderDataSize + trailingSpace;
+  publicHeaderData.vendorID = cc::AMDVendorId;
   currData = appendRawData(publicHeaderData, currData) + trailingSpace;
 
   uint8_t *const privateHeader = currData;
