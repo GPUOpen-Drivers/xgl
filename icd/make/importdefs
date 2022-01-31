@@ -36,7 +36,7 @@ ICD_GPUOPEN_CLIENT_MINOR_VERSION = 0
 
 # This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION if ICD_BUILD_LLPC=1.  It describes the version of the
 # interface version of LLPC that the ICD supports.
-ICD_LLPC_CLIENT_MAJOR_VERSION = 52
+ICD_LLPC_CLIENT_MAJOR_VERSION = 53
 
 # When ICD_LLPC_CLIENT_MAJOR_VERSION >= 39, Set ENABLE_VKGC to 1 to use Vkgc namespace instead of Llpc namespace in ICD
 ENABLE_VKGC=1
