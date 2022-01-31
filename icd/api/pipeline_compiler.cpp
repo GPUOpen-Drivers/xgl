@@ -2632,6 +2632,8 @@ void PipelineCompiler::ApplyPipelineOptions(
         pOptions->includeIr = true;
     }
 
+    pOptions->optimizationLevel = ((flags & VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT) != 0 ? 0 : 2);
+
     if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT) ||
         pDevice->GetEnabledFeatures().scalarBlockLayout)
     {
