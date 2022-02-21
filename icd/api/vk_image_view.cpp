@@ -503,6 +503,12 @@ VkResult ImageView::Create(
                 imageInfo.extent.width, imageInfo.extent.height, imageInfo.arraySize);
             break;
         }
+        case VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT:
+        {
+            const auto* pMinLodStruct = reinterpret_cast<const VkImageViewMinLodCreateInfoEXT*>(pHeader);
+
+            minLod = pMinLodStruct->minLod;
+        }
         default:
             // Skip any unknown extension structures
             break;

@@ -2,7 +2,7 @@
 #define VULKAN_VIDEO_CODEC_H264STD_H_ 1
 
 /*
-** Copyright 2015-2021 The Khronos Group Inc.
+** Copyright 2015-2022 The Khronos Group Inc.
 **
 ** SPDX-License-Identifier: Apache-2.0
 */
@@ -17,7 +17,6 @@
 extern "C" {
 #endif
 
-#include "vk_video/vulkan_video_codecs_common.h"
 
 
 #define vulkan_video_codec_h264std 1

@@ -536,6 +536,12 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
         llpcOptions[numOptions++] = "-amdgpu-max-memory-clause=1";
     }
 
+    if ((appProfile == AppProfile::CSGO) &&
+        (m_gfxIpLevel == Pal::GfxIpLevel::GfxIp10_3))
+    {
+        llpcOptions[numOptions++] = "-spirv-gen-fast-math-flags=0x10";
+    }
+
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-executable-name=%s", pExecutablePtr);
     ++optionLength;
     llpcOptions[numOptions++] = pOptionBuffer;

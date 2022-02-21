@@ -79,16 +79,24 @@ Pal::Box BuildClearBox(
     box.extent.width  = renderArea.extent.width;
     box.extent.height = renderArea.extent.height;
 
-    if (attachment.pImage->Is2dArrayCompatible())
+    if (attachment.pImage->GetImageType() == VK_IMAGE_TYPE_3D)
     {
-        box.offset.z     = attachment.zRange.offset;
-        box.extent.depth = attachment.zRange.extent;
+        if (attachment.pImage->Is2dArrayCompatible())
+        {
+            box.offset.z     = attachment.zRange.offset;
+            box.extent.depth = attachment.zRange.extent;
+        }
+        else
+        {
+            // Whole slice range (these are offset relative to subresrange)
+            box.offset.z     = attachment.subresRange[0].startSubres.arraySlice;
+            box.extent.depth = attachment.subresRange[0].numSlices;
+        }
     }
     else
     {
-        // Whole slice range (these are offset relative to subresrange)
-        box.offset.z     = attachment.subresRange[0].startSubres.arraySlice;
-        box.extent.depth = attachment.subresRange[0].numSlices;
+        box.offset.z     = 0;
+        box.extent.depth = 1;
     }
 
     return box;
@@ -111,19 +119,27 @@ Pal::Box BuildClearBox(
     // Get the attachment image
     const Image* pImage = imageView.GetImage();
 
-    if (pImage->Is2dArrayCompatible())
+    if (pImage->GetImageType() == VK_IMAGE_TYPE_3D)
     {
-        box.offset.z     = imageView.GetZRange().offset;
-        box.extent.depth = imageView.GetZRange().extent;
+        if (pImage->Is2dArrayCompatible())
+        {
+            box.offset.z     = imageView.GetZRange().offset;
+            box.extent.depth = imageView.GetZRange().extent;
+        }
+        else
+        {
+            Pal::SubresRange subresRange;
+            imageView.GetFrameBufferAttachmentSubresRange(&subresRange);
+
+            // Whole slice range (these are offset relative to subresrange)
+            box.offset.z     = subresRange.startSubres.arraySlice;
+            box.extent.depth = subresRange.numSlices;
+        }
     }
     else
     {
-        Pal::SubresRange subresRange;
-        imageView.GetFrameBufferAttachmentSubresRange(&subresRange);
-
-        // Whole slice range (these are offset relative to subresrange)
-        box.offset.z     = subresRange.startSubres.arraySlice;
-        box.extent.depth = subresRange.numSlices;
+        box.offset.z     = 0;
+        box.extent.depth = 1;
     }
 
     return box;
@@ -537,11 +553,30 @@ VkResult CmdBuffer::Create(
 
     const uint32    numGroupedCmdBuffers = pDevice->NumPalDevices();
     const size_t    apiSize              = sizeof(ApiCmdBuffer);
-    const size_t    perGpuSize           = sizeof(PerGpuRenderState)* numGroupedCmdBuffers;
+    const size_t    perGpuSize           = sizeof(PerGpuRenderState) * numGroupedCmdBuffers;
     const size_t    palSize              = pDevice->PalDevice(DefaultDeviceIndex)->
                                                GetCmdBufferSize(palCreateInfo, &palResult) * numGroupedCmdBuffers;
+    size_t          inaccessibleSize     = 0;
 
-    const size_t cmdBufSize = apiSize + perGpuSize + palSize;
+    // Accumulate the setBindingData size that will not be accessed based on available pipeline bind points.
+    {
+        {
+            static_assert(PipelineBindCompute + 1 == PipelineBindGraphics, "This code relies on the enum order!");
+
+            if (palCreateInfo.queueType == Pal::QueueType::QueueTypeCompute)
+            {
+                inaccessibleSize += sizeof(uint32) * MaxBindingRegCount;
+            }
+        }
+    }
+
+    // Accumulate the setBindingData size that will not be accessed based on the dynamic descriptor data size
+    inaccessibleSize += (MaxDynDescRegCount -
+                         (MaxDynamicDescriptors * DescriptorSetLayout::GetDynamicBufferDescDwSize(pDevice)))
+                        * sizeof(uint32);
+
+    // The total object size less any inaccessible setBindingData (for the last device only to not disrupt MGPU indexing)
+    const size_t cmdBufSize = apiSize + palSize + perGpuSize - inaccessibleSize;
 
     VK_ASSERT(palResult == Pal::Result::Success);
 
@@ -556,7 +591,7 @@ VkResult CmdBuffer::Create(
         // Create the command buffer
         if (pMemory != nullptr)
         {
-            void* pPalMem = Util::VoidPtrInc(pMemory, apiSize + perGpuSize);
+            void* pPalMem = Util::VoidPtrInc(pMemory, apiSize + perGpuSize - inaccessibleSize);
 
             VK_INIT_API_OBJECT(CmdBuffer, pMemory, (pDevice,
                                                     pCmdPool,
@@ -2110,7 +2145,7 @@ void CmdBuffer::BindDescriptorSets(
 
                         void* pCpuAddr = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(
                             dynBufferSizeDw,
-                            m_pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32_t),
+                            m_pDevice->GetProperties().descriptorSizes.alignmentInDwords,
                             &gpuAddr);
 
                         const uint32_t gpuAddrLow = static_cast<uint32_t>(gpuAddr);
@@ -2443,12 +2478,14 @@ void CmdBuffer::DrawIndexed(
 
     ValidateStates();
 
-    PalCmdDrawIndexed(firstIndex,
-                      indexCount,
-                      vertexOffset,
-                      firstInstance,
-                      instanceCount,
-                      0u);
+    {
+        PalCmdDrawIndexed(firstIndex,
+                          indexCount,
+                          vertexOffset,
+                          firstInstance,
+                          instanceCount,
+                          0u);
+    }
 
     DbgBarrierPostCmd(DbgBarrierDrawIndexed);
 }
@@ -6125,16 +6162,16 @@ void CmdBuffer::QueryCopy(
     uint32_t userData[16];
 
     // Figure out which user data registers should contain what compute constants
-    const uint32_t storageViewSize = m_pDevice->GetProperties().descriptorSizes.bufferView;
+    const uint32_t storageViewSize   = m_pDevice->GetProperties().descriptorSizes.bufferView;
     const uint32_t storageViewDwSize = storageViewSize / sizeof(uint32_t);
-    const uint32_t viewOffset = 0;
-    const uint32_t bufferViewOffset = storageViewDwSize;
-    const uint32_t queryCountOffset = bufferViewOffset + storageViewDwSize;
-    const uint32_t copyFlagsOffset = queryCountOffset + 1;
-    const uint32_t copyStrideOffset = copyFlagsOffset + 1;
-    const uint32_t firstQueryOffset = copyStrideOffset + 1;
-    const uint32_t ptrQueryOffset = firstQueryOffset + 1;
-    const uint32_t userDataCount = ptrQueryOffset + 1;
+    const uint32_t viewOffset        = 0;
+    const uint32_t bufferViewOffset  = storageViewDwSize;
+    const uint32_t queryCountOffset  = bufferViewOffset + storageViewDwSize;
+    const uint32_t copyFlagsOffset   = queryCountOffset + 1;
+    const uint32_t copyStrideOffset  = copyFlagsOffset + 1;
+    const uint32_t firstQueryOffset  = copyStrideOffset + 1;
+    const uint32_t ptrQueryOffset    = firstQueryOffset + 1;
+    const uint32_t userDataCount     = ptrQueryOffset + 1;
 
     // Make sure they agree with pipeline mapping
     VK_ASSERT(viewOffset == pipeline.userDataNodeOffsets[0]);
@@ -7637,7 +7674,7 @@ void CmdBuffer::WritePushConstants(
 
             void* pCpuAddr = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(
                 userDataLayout.indirect.pushConstSizeInDword,
-                m_pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32_t),
+                m_pDevice->GetProperties().descriptorSizes.alignmentInDwords,
                 &gpuAddr);
 
             memcpy(pCpuAddr, pUserData, userDataLayout.indirect.pushConstSizeInDword * sizeof(uint32_t));
@@ -8262,12 +8299,14 @@ void CmdBuffer::DrawIndirectByteCount(
         const uint32_t deviceIdx   = deviceGroup.Index();
         uint64_t counterBufferAddr = pCounterBuffer->GpuVirtAddr(deviceIdx) + counterBufferOffset;
 
-        PalCmdBuffer(deviceIdx)->CmdDrawOpaque(
-            counterBufferAddr,
-            counterOffset,
-            vertexStride,
-            firstInstance,
-            instanceCount);
+        {
+            PalCmdBuffer(deviceIdx)->CmdDrawOpaque(
+                counterBufferAddr,
+                counterOffset,
+                vertexStride,
+                firstInstance,
+                instanceCount);
+        }
     }
     while (deviceGroup.IterateNext());
 }

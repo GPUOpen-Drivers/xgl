@@ -89,6 +89,10 @@ VkResult Buffer::Create(
     size_t   palMemSize = 0;
     bool     isSparse   = (pCreateInfo->flags & SparseEnablingFlags) != 0;
 
+    BufferExtStructs bufferExtStructs = {};
+
+    HandleExtensionStructs(pCreateInfo, &bufferExtStructs);
+
     if (isSparse)
     {
         // We need virtual remapping support for all sparse resources
@@ -158,7 +162,7 @@ VkResult Buffer::Create(
     if (result == VK_SUCCESS)
     {
         BufferFlags bufferFlags;
-        CalculateBufferFlags(pDevice, pCreateInfo, &bufferFlags);
+        CalculateBufferFlags(pDevice, pCreateInfo, bufferExtStructs, &bufferFlags);
 
         // Construct API buffer object.
         VK_PLACEMENT_NEW (pMemory) Buffer (pDevice,
@@ -377,9 +381,11 @@ void Buffer::CalculateMemoryRequirements(
     const VkDeviceBufferMemoryRequirementsKHR* pInfo,
     VkMemoryRequirements2*                     pMemoryRequirements)
 {
-    BufferFlags bufferFlags;
+    BufferExtStructs bufferExtStructs = {};
+    BufferFlags      bufferFlags;
 
-    CalculateBufferFlags(pDevice, pInfo->pCreateInfo, &bufferFlags);
+    HandleExtensionStructs(pInfo->pCreateInfo, &bufferExtStructs);
+    CalculateBufferFlags(pDevice, pInfo->pCreateInfo, bufferExtStructs, &bufferFlags);
 
     VkMemoryDedicatedRequirements* pMemDedicatedRequirements =
         static_cast<VkMemoryDedicatedRequirements*>(pMemoryRequirements->pNext);
@@ -483,6 +489,7 @@ void Buffer::GetBufferMemoryRequirements(
 void Buffer::CalculateBufferFlags(
     const Device*             pDevice,
     const VkBufferCreateInfo* pCreateInfo,
+    const BufferExtStructs&   pExtStructs,
     BufferFlags*              pBufferFlags)
 {
     pBufferFlags->u32All = 0;
@@ -495,17 +502,14 @@ void Buffer::CalculateBufferFlags(
 
     bool isSparse = (pCreateInfo->flags & SparseEnablingFlags) != 0;
 
-    const VkExternalMemoryBufferCreateInfo* pExternalInfo =
-        static_cast<const VkExternalMemoryBufferCreateInfo*>(pCreateInfo->pNext);
-    if ((pExternalInfo != nullptr) &&
-        (pExternalInfo->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO))
+    if (pExtStructs.pExternalMemoryBufferCreateInfo != nullptr)
     {
         VkExternalMemoryProperties externalMemoryProperties = {};
 
         pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetExternalMemoryProperties(
             isSparse,
             false,
-            static_cast<VkExternalMemoryHandleTypeFlagBits>(pExternalInfo->handleTypes),
+            static_cast<VkExternalMemoryHandleTypeFlagBits>(pExtStructs.pExternalMemoryBufferCreateInfo->handleTypes),
             &externalMemoryProperties);
 
         if (externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT)
@@ -518,7 +522,8 @@ void Buffer::CalculateBufferFlags(
         {
             pBufferFlags->externallyShareable = true;
 
-            if (pExternalInfo->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT)
+            if (pExtStructs.pExternalMemoryBufferCreateInfo->handleTypes &
+                VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT)
             {
                 pBufferFlags->externalPinnedHost = true;
             }
@@ -526,6 +531,35 @@ void Buffer::CalculateBufferFlags(
     }
 
      pBufferFlags->internalMemBound = isSparse;
+}
+
+// =====================================================================================================================
+void Buffer::HandleExtensionStructs(
+    const VkBufferCreateInfo*   pCreateInfo,
+    BufferExtStructs*           pExtStructs)
+{
+    const void* pNext = pCreateInfo->pNext;
+
+    while (pNext != nullptr)
+    {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
+        {
+        case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO:
+        {
+            pExtStructs->pExternalMemoryBufferCreateInfo =
+                static_cast<const VkExternalMemoryBufferCreateInfo*>(pNext);
+            break;
+        }
+        default:
+            // Skip any unknown extension structures.
+            break;
+        }
+
+        pNext = pHeader->pNext;
+    }
+
 }
 
 namespace entry

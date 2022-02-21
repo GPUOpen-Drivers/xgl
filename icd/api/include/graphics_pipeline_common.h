@@ -224,6 +224,13 @@ protected:
         const PipelineLayout*               pPipelineLayout,
         GraphicsPipelineObjectCreateInfo*   pObjInfo);
 
+    static VkResult AchievePipelineLayout(
+        const Device*                       pDevice,
+        const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        const VkAllocationCallbacks*        pAllocator,
+        PipelineLayout**                    ppPipelineLayout,
+        bool*                               pIsTemporary);
+
     // Generates the API PSO hash using the contents of the VkGraphicsPipelineCreateInfo struct
     static uint64_t BuildApiHash(
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,

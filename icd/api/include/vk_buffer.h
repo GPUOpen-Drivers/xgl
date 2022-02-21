@@ -104,7 +104,13 @@ public:
         { return m_barrierPolicy; }
 
 private:
+
     PAL_DISALLOW_COPY_AND_ASSIGN(Buffer);
+
+    struct BufferExtStructs
+    {
+        const VkExternalMemoryBufferCreateInfo* pExternalMemoryBufferCreateInfo;
+    };
 
     union BufferFlags
     {
@@ -161,7 +167,12 @@ private:
     static void CalculateBufferFlags(
         const Device*             pDevice,
         const VkBufferCreateInfo* pCreateInfo,
+        const BufferExtStructs&   pExtStructs,
         BufferFlags*              pBufferFlags);
+
+    static void HandleExtensionStructs(
+        const VkBufferCreateInfo*   pCreateInfo,
+        BufferExtStructs*           pExtStructs);
 
     const VkDeviceSize      m_size;
     VkDeviceSize            m_memOffset;

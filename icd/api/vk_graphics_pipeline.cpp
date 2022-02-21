@@ -51,27 +51,6 @@ namespace vk
 {
 
 // =====================================================================================================================
-// Achieve pipeline layout from VkGraphicsPipelineCreateInfo.
-// If the pipeline layout is temporary, callee must destroy it manually.
-VkResult GraphicsPipeline::AchievePipelineLayout(
-    const Device*                       pDevice,
-    const VkGraphicsPipelineCreateInfo* pCreateInfo,
-    const VkAllocationCallbacks*        pAllocator,
-    PipelineLayout**                    ppPipelineLayout,
-    bool*                               pIsTemporary)
-{
-    VkResult result = VK_SUCCESS;
-
-    *pIsTemporary = false;
-
-    {
-        *ppPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
-    }
-
-    return result;
-}
-
-// =====================================================================================================================
 // Create graphics pipeline binaries
 VkResult GraphicsPipeline::CreatePipelineBinaries(
     Device*                                        pDevice,
@@ -447,9 +426,9 @@ VkResult GraphicsPipeline::Create(
                                                   &pPipelineCreationFeedbackCreateInfo);
 
     // 1. Get pipeline layout
-    bool            isTempLayout      = false;
+    bool            isMergedLayout      = false;
     PipelineLayout* pPipelineLayout   = nullptr;
-    VkResult result = AchievePipelineLayout(pDevice, pCreateInfo, pAllocator, &pPipelineLayout, &isTempLayout);
+    VkResult result = AchievePipelineLayout(pDevice, pCreateInfo, pAllocator, &pPipelineLayout, &isMergedLayout);
 
     // 2. Build pipeline binary create info
     GraphicsPipelineBinaryCreateInfo binaryCreateInfo  = {};
@@ -520,7 +499,7 @@ VkResult GraphicsPipeline::Create(
     FreeTempModules(pDevice, ShaderStage::ShaderStageGfxCount, tempModules);
 
     // Free the temporary merged pipeline layout used only for current pipeline
-    if (isTempLayout)
+    if (isMergedLayout)
     {
         pPipelineLayout->Destroy(pDevice, pAllocator);
     }

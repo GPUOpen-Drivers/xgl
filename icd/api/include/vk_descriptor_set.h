@@ -188,9 +188,11 @@ void DescriptorSet<numPalDevices>::UserDataPtrValueFromHandle(
 
 // =====================================================================================================================
 // Returns the patched dynamic descriptor data for the specified descriptor set.
-// NOTE: This function assumes that we directly store the whole buffer SRDs in user data and treats the SRD data in a
-// white-box fashion. Probably would be better if we'd have a PAL function to do the patching of the dynamic offset,
-// but this is expected to be temporary anyways until we'll have proper support for dynamic descriptors in SC.
+// NOTE: This function assumes the descriptor format that will be written to user data in a white-box fashion. If the
+// format of the buffer address changes for either compact or uncompact descriptors, it needs to be updated here too.
+// PAL could provide a query for us to interpret the HW dependency, the implementation of a similar patching function,
+// or the descriptors could be written here instead of in UpdateDescriptorSets (though likely with some redundant work
+// on binds and poorly-packed intermediate data in the descriptor set).
 template <uint32_t numPalDevices>
 void DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
     VkDescriptorSet set,
@@ -200,7 +202,7 @@ void DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
     uint32_t        numDynamicDescriptors,
     bool            useCompactDescriptor)
 {
-    // This code expects 4 DW SRDs whose first 48 bits is the base address.
+    // This code expects descriptors whose first 48 bits is the base address.
     DescriptorSet<numPalDevices>* pSet = StateFromHandle(set);
     const uint64_t* pSrcQwords         = pSet->DynamicDescriptorDataQw(deviceIdx);
     const uint32_t  dynDataNumQwords   = useCompactDescriptor ? 1 : 2;

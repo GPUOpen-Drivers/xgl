@@ -176,7 +176,7 @@ public:
             uint32_t sampler;
             uint32_t bvh;
             uint32_t combinedImageSampler;
-            uint32_t alignment;
+            uint32_t alignmentInDwords;
         } descriptorSizes;
 
         struct

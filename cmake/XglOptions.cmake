@@ -74,10 +74,6 @@ macro(xgl_options)
     option(VKI_EXT_EXTENDED_DYNAMIC_STATE "Build vulkan with EXTENDED_DYNAMIC_STATE extention" OFF)
 #endif
 
-#if VKI_SPIRV_1_6
-    option(VKI_SPIRV_1_6 "Build vulkan with VKI_SPIRV_1_6" ON)
-#endif
-
     option(ICD_BUILD_LLPC "Build LLPC?" ON)
 
     option(ICD_BUILD_LLPCONLY "Build LLPC Only?" OFF)

@@ -469,6 +469,18 @@ constexpr AppProfilePatternEntry AppNameEvilGenius2 =
     "evil genius 2"
 };
 
+constexpr AppProfilePatternEntry AppNameCSGOLinux32Bit =
+{
+    PatternAppNameLower,
+    "csgo_linux"
+};
+
+constexpr AppProfilePatternEntry AppNameCSGOLinux64Bit =
+{
+    PatternAppNameLower,
+    "csgo_linux64"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -944,6 +956,22 @@ AppProfilePattern AppPatternTable[] =
             PatternEnd
         }
     },
+
+    {
+        AppProfile::CSGO,
+        {
+            AppNameCSGOLinux32Bit,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::CSGO,
+        {
+            AppNameCSGOLinux64Bit,
+            PatternEnd
+        }
+    }
 
 };
 

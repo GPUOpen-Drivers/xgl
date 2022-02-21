@@ -458,9 +458,7 @@ void DescriptorUpdateTemplate::UpdateEntryBuffer(
         if ((descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
             (descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC))
         {
-            // We need to treat dynamic buffer descriptors specially as we store the base buffer SRDs in
-            // client memory.
-            // NOTE: Nuke this once we have proper support for dynamic descriptors in SC.
+            // Dynamic buffer descriptors reside in client memory to be read when the descriptor set is bound.
             pDestAddr   = pDstSet->DynamicDescriptorData(deviceIdx) + entry.dstDynOffset;
             stride      = entry.dstBindDynDataDwArrayStride;
         }

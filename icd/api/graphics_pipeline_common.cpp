@@ -1103,28 +1103,30 @@ static void BuildVertexInputInterfaceState(
 {
     const VkPipelineInputAssemblyStateCreateInfo* pIa = pIn->pInputAssemblyState;
 
-    // According to the spec this should never be null
-    VK_ASSERT((pIa != nullptr) || (isLibrary == true));
-
-    pInfo->immedInfo.inputAssemblyState.primitiveRestartEnable = (pIa->primitiveRestartEnable != VK_FALSE);
-    pInfo->immedInfo.inputAssemblyState.primitiveRestartIndex  = 0xFFFFFFFF;
-    pInfo->immedInfo.inputAssemblyState.topology               = VkToPalPrimitiveTopology(pIa->topology);
-
-    pInfo->pipeline.iaState.vertexBufferCount                  = pVbInfo->bindingTableSize;
-
-    pInfo->pipeline.iaState.topologyInfo.primitiveType         = VkToPalPrimitiveType(pIa->topology);
-
-    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::PrimitiveTopologyExt) == false)
     {
-        pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::PrimitiveTopologyExt);
-    }
-    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInputBindingStrideExt) == false)
-    {
-        pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::VertexInputBindingStrideExt);
-    }
-    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::PrimitiveRestartEnableExt) == false)
-    {
-        pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::PrimitiveRestartEnableExt);
+        // According to the spec this should never be null except when mesh is enabled
+        VK_ASSERT((pIa != nullptr) || (isLibrary == true));
+
+        pInfo->immedInfo.inputAssemblyState.primitiveRestartEnable = (pIa->primitiveRestartEnable != VK_FALSE);
+        pInfo->immedInfo.inputAssemblyState.primitiveRestartIndex  = 0xFFFFFFFF;
+        pInfo->immedInfo.inputAssemblyState.topology               = VkToPalPrimitiveTopology(pIa->topology);
+
+        pInfo->pipeline.iaState.vertexBufferCount = pVbInfo->bindingTableSize;
+
+        pInfo->pipeline.iaState.topologyInfo.primitiveType = VkToPalPrimitiveType(pIa->topology);
+
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::PrimitiveTopologyExt) == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::PrimitiveTopologyExt);
+        }
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInputBindingStrideExt) == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::VertexInputBindingStrideExt);
+        }
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::PrimitiveRestartEnableExt) == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::PrimitiveRestartEnableExt);
+        }
     }
 }
 
@@ -1261,8 +1263,7 @@ static void BuildFragmentOutputInterfaceState(
 
 // =====================================================================================================================
 static void BuildExecutablePipelineState(
-    const Device*                       pDevice,
-    const VkGraphicsPipelineCreateInfo* pIn,
+    const GraphicsPipelineBinaryInfo*   pBinInfo,
     const uint32_t                      dynamicStateFlags,
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
@@ -1426,7 +1427,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     }
 
     {
-        BuildExecutablePipelineState(pDevice, pIn, dynamicStateFlags, pInfo);
+        BuildExecutablePipelineState(pBinInfo, dynamicStateFlags, pInfo);
 
         if ((pBinInfo != nullptr) && (pBinInfo->pOptimizerKey != nullptr))
         {
@@ -1437,6 +1438,27 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
                 &pInfo->immedInfo.graphicsShaderInfos);
         }
     }
+}
+
+// =====================================================================================================================
+// Achieve pipeline layout from VkGraphicsPipelineCreateInfo.
+// If the pipeline layout is merged, callee must destroy it manually.
+VkResult GraphicsPipelineCommon::AchievePipelineLayout(
+    const Device*                       pDevice,
+    const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks*        pAllocator,
+    PipelineLayout**                    ppPipelineLayout,
+    bool*                               pIsMerged)
+{
+    VkResult result = VK_SUCCESS;
+
+    *pIsMerged = false;
+
+    {
+        *ppPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
+    }
+
+    return result;
 }
 
 // =====================================================================================================================

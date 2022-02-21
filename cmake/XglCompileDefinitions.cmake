@@ -52,7 +52,6 @@ macro(xgl_set_compile_definitions)
 #if VKI_SDK_NEXT
     if(VKI_SDK_NEXT)
         target_compile_definitions(xgl PRIVATE VKI_SDK_NEXT=1)
-        target_compile_definitions(xgl PRIVATE VKI_SPIRV_1_6=1)
     endif()
 #endif
 

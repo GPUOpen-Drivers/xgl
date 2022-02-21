@@ -436,6 +436,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
                 m_settings.barrierFilterOptions = SkipImageLayoutUndefined;
+
             }
         }
 

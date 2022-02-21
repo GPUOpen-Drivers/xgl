@@ -168,55 +168,61 @@ static VkResult VerifyRequestedPhysicalDeviceFeatures(
     structSize = isPhysicalDeviceFeature ? pPhysicalDevice->GetFeatures(nullptr) :
                     pPhysicalDevice->GetFeatures2((&structSizeFeaturesHeader), false);
 
-    // allocate appropriate sized memory to pSupportedFeatures
-    pSupportedFeatures = pVirtStackFrame->AllocArray<VkBool32>(structSize/sizeof(VkBool32));
-
-    if ((pSupportedFeatures != nullptr) && (structSize != 0))
+    // unsupported feature header structures will return structSize 0, ignore unkown structs.
+    if (structSize != 0)
     {
-        // Start by making a copy of the requested features all so that uninitialized struct padding always matches below.
-        memcpy(pSupportedFeatures, pRequestedFeatures, structSize);
+        // allocate appropriate sized memory to pSupportedFeatures
+        pSupportedFeatures = pVirtStackFrame->AllocArray<VkBool32>(structSize / sizeof(VkBool32));
 
-        if (isPhysicalDeviceFeature)
+        if (pSupportedFeatures != nullptr)
         {
-            VkPhysicalDeviceFeatures* pPhysicalDeviceFeatures = reinterpret_cast<VkPhysicalDeviceFeatures*>(pSupportedFeatures);
+            // Start by making a copy of the requested features all so that uninitialized struct padding always matches below.
+            memcpy(pSupportedFeatures, pRequestedFeatures, structSize);
 
-            pPhysicalDevice->GetFeatures(pPhysicalDeviceFeatures);
+            if (isPhysicalDeviceFeature)
+            {
+                VkPhysicalDeviceFeatures* pPhysicalDeviceFeatures =
+                    reinterpret_cast<VkPhysicalDeviceFeatures*>(pSupportedFeatures);
 
-            // The original VkPhysicalDeviceFeatures struct doesn't contain a VkStructHeader
-            headerSize = 0;
+                pPhysicalDevice->GetFeatures(pPhysicalDeviceFeatures);
+
+                // The original VkPhysicalDeviceFeatures struct doesn't contain a VkStructHeader
+                headerSize = 0;
+            }
+            else
+            {
+                VkStructHeaderNonConst* pHeader = reinterpret_cast<VkStructHeaderNonConst*>(pSupportedFeatures);
+
+                pHeader->pNext = nullptr; // Make sure GetFeatures2 doesn't clobber the original requested features chain
+
+                // update the features using default true
+                pPhysicalDevice->GetFeatures2(pHeader, true);
+
+                headerSize = offsetof(VkPhysicalDeviceFeatures2, features);
+            }
+
+            // Struct padding may give us extra features
+            const size_t numFeatures = (structSize - headerSize) / sizeof(VkBool32);
+            const auto   supported = static_cast<const VkBool32*>(Util::VoidPtrInc(pSupportedFeatures, headerSize));
+            const auto   requested = static_cast<const VkBool32*>(Util::VoidPtrInc(pRequestedFeatures, headerSize));
+
+            for (size_t featureNdx = 0; featureNdx < numFeatures; ++featureNdx)
+            {
+                if (requested[featureNdx] && !supported[featureNdx])
+                {
+                    result = VK_ERROR_FEATURE_NOT_PRESENT;
+
+                    break;
+                }
+            }
+
+            pVirtStackFrame->FreeArray(pSupportedFeatures);
         }
         else
         {
-            VkStructHeaderNonConst* pHeader = reinterpret_cast<VkStructHeaderNonConst*>(pSupportedFeatures);
-
-            pHeader->pNext = nullptr; // Make sure GetFeatures2 doesn't clobber the original requested features chain
-
-            // update the features using default true
-            pPhysicalDevice->GetFeatures2(pHeader, true);
-
-            headerSize = offsetof(VkPhysicalDeviceFeatures2, features);
-        }
-
-        const size_t numFeatures = (structSize - headerSize) / sizeof(VkBool32); // Struct padding may give us extra features
-        const auto   supported   = static_cast<const VkBool32*>(Util::VoidPtrInc(pSupportedFeatures, headerSize));
-        const auto   requested   = static_cast<const VkBool32*>(Util::VoidPtrInc(pRequestedFeatures, headerSize));
-
-        for (size_t featureNdx = 0; featureNdx < numFeatures; ++featureNdx)
-        {
-            if (requested[featureNdx] && !supported[featureNdx])
-            {
-                result = VK_ERROR_FEATURE_NOT_PRESENT;
-
-                break;
-            }
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
         }
     }
-    else
-    {
-        result = VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-
-    pVirtStackFrame->FreeArray(pSupportedFeatures);
 
     return result;
 }
@@ -1282,7 +1288,7 @@ VkResult Device::Initialize(
 
     // The worst case alignment requirement of descriptors is always 2DWs. There's no way to query this from PAL yet,
     // but for now a hard coded value will do the job.
-    m_properties.descriptorSizes.alignment = 2 * sizeof(uint32_t);
+    m_properties.descriptorSizes.alignmentInDwords = 2;
 
     m_properties.palSizes.colorTargetView  = PalDevice(DefaultDeviceIndex)->GetColorTargetViewSize(nullptr);
     m_properties.palSizes.depthStencilView = PalDevice(DefaultDeviceIndex)->GetDepthStencilViewSize(nullptr);
@@ -2449,14 +2455,20 @@ VkResult Device::CreateImage(
 
     if (result == VK_SUCCESS)
     {
-        Image* pCreatedImage = Image::ObjectFromHandle(*pImage);
+        Image*               pCreatedImage      = Image::ObjectFromHandle(*pImage);
+        VkMemoryRequirements memoryRequirements = {};
 
-        pCreatedImage->SetMemoryRequirementsAtCreate(this);
+        pCreatedImage->CalculateMemoryRequirementsAtCreate(
+            this,
+            pCreateInfo,
+            &memoryRequirements);
 
         if (m_enabledFeatures.strictImageSizeRequirements && Formats::IsDepthStencilFormat(pCreateInfo->format))
         {
-            Image::CalculateAlignedMemoryRequirements(this, pCreateInfo, pCreatedImage);
+            Image::CalculateAlignedMemoryRequirements(this, pCreateInfo, &memoryRequirements);
         }
+
+        pCreatedImage->SetMemoryRequirements(memoryRequirements);
     }
 
     return result;

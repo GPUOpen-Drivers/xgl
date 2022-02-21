@@ -128,7 +128,9 @@ DescriptorSetLayout::DescriptorSetLayout(
 }
 // =====================================================================================================================
 // Returns the byte size for a particular type of descriptor.
-uint32_t DescriptorSetLayout::GetSingleDescStaticSize(const Device* pDevice, VkDescriptorType type)
+uint32_t DescriptorSetLayout::GetSingleDescStaticSize(
+    const Device*    pDevice,
+    VkDescriptorType type)
 {
     const Device::Properties& props = pDevice->GetProperties();
 
@@ -179,9 +181,9 @@ uint32_t DescriptorSetLayout::GetSingleDescStaticSize(const Device* pDevice, VkD
 // =====================================================================================================================
 // Returns the dword size required in the static section for a particular type of descriptor.
 uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(
-    const Device* pDevice,
-    const VkDescriptorSetLayoutBinding *descriptorInfo,
-    const DescriptorBindingFlags bindingFlags)
+    const Device*                       pDevice,
+    const VkDescriptorSetLayoutBinding* descriptorInfo,
+    const DescriptorBindingFlags        bindingFlags)
 {
     uint32_t size = GetSingleDescStaticSize(pDevice, descriptorInfo->descriptorType);
 
@@ -229,19 +231,21 @@ uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(
 
 // =====================================================================================================================
 // Returns the dword size of the dynamic descriptor
-uint32_t DescriptorSetLayout::GetDynamicBufferDescDwSize(const Device* pDevice)
+uint32_t DescriptorSetLayout::GetDynamicBufferDescDwSize(
+    const Device* pDevice)
 {
     // Currently we store the whole buffer SRD in the dynamic section (i.e. user data registers).
     uint32_t size = 0;
+
     if (pDevice->UseCompactDynamicDescriptors())
     {
         size = sizeof(Pal::gpusize);
     }
     else
     {
-        const Device::Properties& props = pDevice->GetProperties();
-        size = props.descriptorSizes.bufferView;
+        size = pDevice->GetProperties().descriptorSizes.bufferView;
     }
+
     VK_ASSERT(Util::IsPow2Aligned(size, sizeof(uint32_t)));
 
     return size / sizeof(uint32_t);
@@ -249,7 +253,9 @@ uint32_t DescriptorSetLayout::GetDynamicBufferDescDwSize(const Device* pDevice)
 
 // =====================================================================================================================
 // Returns the dword size required in the dynamic section for a particular type of descriptor.
-uint32_t DescriptorSetLayout::GetDescDynamicSectionDwSize(const Device* pDevice, VkDescriptorType type)
+uint32_t DescriptorSetLayout::GetDescDynamicSectionDwSize(
+    const Device*    pDevice,
+    VkDescriptorType type)
 {
     uint32_t size = 0;
 
@@ -258,7 +264,6 @@ uint32_t DescriptorSetLayout::GetDescDynamicSectionDwSize(const Device* pDevice,
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
         size = GetDynamicBufferDescDwSize(pDevice);
-
         break;
 
     default:
@@ -538,8 +543,8 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
         BindingInfo* pBinding = &pOutBindings[bindingNumber];
 
         // Determine the alignment requirement of descriptors in dwords.
-        uint32 descAlignmentInDw = pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32);
-        uint32_t staDescAlignmentInDw = descAlignmentInDw;
+        uint32 descAlignmentInDw    = pDevice->GetProperties().descriptorSizes.alignmentInDwords;
+        uint32 staDescAlignmentInDw = descAlignmentInDw;
         if (pDevice->GetRuntimeSettings().pipelineLayoutMode == PipelineLayoutAngle)
         {
             VK_ASSERT(AngleDescPattern::DescriptorSetBindingStride % descAlignmentInDw == 0);
@@ -764,7 +769,7 @@ void DescriptorSetLayout::Merge(
 
     for (uint32_t bindingIdx = 0; bindingIdx < mergedInfo.count; ++bindingIdx)
     {
-        const uint32 descAlignmentInDw = pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32);
+        const uint32 descAlignmentInDw = pDevice->GetProperties().descriptorSizes.alignmentInDwords;
 
         BindingInfo& binding = pBindingInfo[bindingIdx];
 

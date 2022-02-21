@@ -107,8 +107,10 @@ public:
     void SetMemoryRequirements(const VkMemoryRequirements& memoryRequirements)
         { m_memoryRequirements = memoryRequirements; }
 
-    void SetMemoryRequirementsAtCreate(
-        const Device*         pDevice);
+    void CalculateMemoryRequirementsAtCreate(
+        const Device*            pDevice,
+        const VkImageCreateInfo* pCreateInfo,
+        VkMemoryRequirements*    pMemoryRequirements);
 
     VkResult BindMemory(
         Device*            pDevice,
@@ -144,9 +146,9 @@ public:
         VkMemoryRequirements2*                    pMemoryRequirements);
 
     static void CalculateAlignedMemoryRequirements(
-        Device*                                   pDevice,
-        const VkImageCreateInfo*                  pCreateInfo,
-        Image*                                    pImage);
+        Device*                  pDevice,
+        const VkImageCreateInfo* pCreateInfo,
+        VkMemoryRequirements*    pMemoryRequirements);
 
     static void CalculateSparseMemoryRequirements(
         Device*                                   pDevice,
@@ -162,6 +164,9 @@ public:
 
     VkImageUsageFlags GetImageUsage() const
         { return m_imageUsage; }
+
+    VkImageType GetImageType() const
+        { return m_imageType; }
 
     VkImageUsageFlags GetImageStencilUsage() const
         { return m_imageStencilUsage; }
@@ -269,21 +274,18 @@ private:
             uint32_t boundToExternalMemory  : 1;  // If true, indicates the image is bound to an external memory, and
                                                   //   the m_pPalMemory is a pointer to an external Pal image (does
                                                   //   not include backing pinned system memory case).
-            uint32_t reservedBit            : 1;
             uint32_t externalPinnedHost     : 1;  // True if image backing memory is compatible with pinned sysmem.
             uint32_t externalD3DHandle      : 1;  // True if image is backed by a D3D11 image
             uint32_t isColorFormat          : 1;  // True if the image has a color format
             uint32_t isYuvFormat            : 1;  // True if the image has a yuv format
-            uint32_t isExternalFormat       : 1;  // True if the image has undefined external format.
             uint32_t hasDepth               : 1;  // True if the image has depth components
             uint32_t hasStencil             : 1;  // True if the image has stencil components
             uint32_t sparseBinding          : 1;  // VK_IMAGE_CREATE_SPARSE_BINDING_BIT
             uint32_t sparseResidency        : 1;  // VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT
             uint32_t is2DArrayCompat        : 1;  // VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT
             uint32_t sampleLocsCompatDepth  : 1;  // VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT
-            uint32_t linear                 : 1;  // True if the image has VK_IMAGE_TILING_LINEAR
             uint32_t isProtected            : 1;  // VK_IMAGE_CREATE_PROTECTED_BIT
-            uint32_t reserved               : 13;
+            uint32_t reserved               : 16;
         };
         uint32_t     u32All;
     };
@@ -298,24 +300,37 @@ private:
                                          // base address to harsher alignment requirements.
     };
 
+    struct ImageExtStructs
+    {
+        const VkExternalMemoryImageCreateInfo*  pExternalMemoryImageCreateInfo;
+        const VkImageFormatListCreateInfo*      pImageFormatListCreateInfo;
+        const VkImageStencilUsageCreateInfo*    pImageStencilUsageCreateInfo;
+    };
+
+    union ExternalMemoryFlags
+    {
+        struct
+        {
+            uint32_t dedicatedRequired   :  1; // Indicates if a dedicated memory is required.
+            uint32_t externallyShareable :  1; // True if the backing memory of this image may be shared externally.
+            uint32_t externalD3DHandle   :  1; // True if image is backed by a D3D11 image
+            uint32_t externalPinnedHost  :  1; // True if image backing memory is compatible with pinned sysmem.
+            uint32_t reserved            : 28;
+        };
+        uint32_t u32All;
+    };
+
     Image(
         Device*                      pDevice,
-        VkImageCreateFlags           flags,
+        const VkImageCreateInfo*     pCreateInfo,
         Pal::IImage**                pPalImage,
         Pal::IGpuMemory**            pPalMemory,
-        VkImageUsageFlags            imageUsage,
         VkSharingMode                sharingMode,
-        uint32_t                     queueFamilyIndexCount,
-        const uint32_t*              pQueueFamilyIndices,
-        bool                         multisampled,
-        VkFormat                     barrierPolicyFormat,
         uint32_t                     extraLayoutUsages,
         VkExtent3D                   tileSize,
         uint32_t                     mipLevels,
         uint32_t                     arraySize,
         VkFormat                     imageFormat,
-        VkSampleCountFlagBits        imageSamples,
-        VkImageUsageFlags            usage,
         VkImageUsageFlags            stencilUsage,
         ImageFlags                   internalFlags,
         const ResourceOptimizerKey&  resourceKey);
@@ -344,6 +359,45 @@ private:
         ResourceOptimizerKey*    pResourceKey,
         const RuntimeSettings&   settings);
 
+    static void HandleExtensionStructs(
+        const VkImageCreateInfo* pCreateInfo,
+        ImageExtStructs*         pExtStructs);
+
+    static void SetCommonFlags(
+        const VkImageCreateInfo* pCreateInfo,
+        const VkFormat           imageFormat,
+        ImageFlags*              pImageFlags);
+
+    static void ConvertImageCreateInfo(
+        Device*                      pDevice,
+        const VkImageCreateInfo*     pCreateInfo,
+        const VkAllocationCallbacks* pAllocator,
+        const ImageExtStructs&       extStructs,
+        const ResourceOptimizerKey&  resourceKey,
+        Pal::ImageCreateInfo*        pPalCreateInfo);
+
+    static VkFormat GetCreateInfoFormat(
+        const VkImageCreateInfo* pCreateInfo,
+        const ImageExtStructs&   extStructs);
+
+    static void GetExternalMemoryFlags(
+        const Device*          pDevice,
+        const ImageExtStructs& extStructs,
+        const bool             isSparse,
+        ExternalMemoryFlags*   pFlags);
+
+    static void CalculateMemoryRequirementsInternal(
+        const Device*             pDevice,
+        const VkImageCreateInfo*  pCreateInfo,
+        const ExternalMemoryFlags externalFlags,
+        Pal::IImage*              pImages[MaxPalDevices],
+        VkMemoryRequirements*     pMemoryRequirements);
+
+    static void GetPalImageMemoryRequirements(
+        Device*                  pDevice,
+        const VkImageCreateInfo* pCreateInfo,
+        VkMemoryRequirements2*   pMemoryRequirements);
+
     uint32_t                m_mipLevels;          // This is the amount of mip levels contained in the image.
                                                   // We need this to support VK_WHOLE_SIZE during
                                                   // memory barrier creation
@@ -362,6 +416,8 @@ private:
     VkSampleCountFlagBits   m_imageSamples;       // Number of samples in the image
 
     VkImageUsageFlags       m_imageUsage;         // Bitmask describing the intended image usage
+
+    VkImageType             m_imageType;          // Type of image  1D, 2D or 3D
 
     VkImageUsageFlags       m_imageStencilUsage;  // Bitmask describing the intended stencil usage for depth stencil image.
 

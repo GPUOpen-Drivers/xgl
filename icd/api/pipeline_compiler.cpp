@@ -101,6 +101,7 @@ static void ApplyProfileOptions(
     // Override the compile parameters based on any app profile
     const auto* pShaderOptimizer = pDevice->GetShaderOptimizer();
     pShaderOptimizer->OverrideShaderCreateInfo(*pProfileKey, stage, options);
+
 }
 
 // =====================================================================================================================
@@ -1560,15 +1561,23 @@ static void BuildRasterizationState(
 {
     if (pRs != nullptr)
     {
-        EXTRACT_VK_STRUCTURES_2(
+        EXTRACT_VK_STRUCTURES_3(
             rasterizationDepthClipState,
             PipelineRasterizationDepthClipStateCreateInfoEXT,
             PipelineRasterizationStateStreamCreateInfoEXT,
             PipelineRasterizationConservativeStateCreateInfoEXT,
+            PipelineRasterizationProvokingVertexStateCreateInfoEXT,
             static_cast<const VkPipelineRasterizationDepthClipStateCreateInfoEXT*>(pRs->pNext),
             PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT,
             PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT,
-            PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT);
+            PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT,
+            PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT);
+
+        if (pPipelineRasterizationProvokingVertexStateCreateInfoEXT != nullptr)
+        {
+            pCreateInfo->pipelineInfo.rsState.provokingVertexMode =
+                pPipelineRasterizationProvokingVertexStateCreateInfoEXT->provokingVertexMode;
+        }
 
         pCreateInfo->pipelineInfo.vpState.depthClipEnable         = (pRs->depthClampEnable == VK_FALSE);
         pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = (pRs->rasterizerDiscardEnable != VK_FALSE);
@@ -2040,26 +2049,30 @@ static void BuildVertexInputInterfaceState(
     const Device*                       pDevice,
     const VkGraphicsPipelineCreateInfo* pIn,
     const uint32_t                      dynamicStateFlags,
+    const VkShaderStageFlagBits         activeStages,
     GraphicsPipelineBinaryCreateInfo*   pCreateInfo,
     VbBindingInfo*                      pVbInfo)
 {
-    VK_ASSERT(pIn->pVertexInputState);
-
-    pCreateInfo->pipelineInfo.pVertexInput               = pIn->pVertexInputState;
-    pCreateInfo->pipelineInfo.iaState.topology           = pIn->pInputAssemblyState->topology;
-    pCreateInfo->pipelineInfo.iaState.disableVertexReuse = false;
-
-    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInputBindingStrideExt) == true)
     {
-        pCreateInfo->pipelineInfo.dynamicVertexStride = true;
-    }
+        // According to the spec this should never be null except when mesh is enabled
+        VK_ASSERT(pIn->pVertexInputState);
 
-    if (pDevice->GetRuntimeSettings().enableUberFetchShader || pDevice->GetRuntimeSettings().enableEarlyCompile)
-    {
-        pCreateInfo->pipelineInfo.enableUberFetchShader = true;
-    }
+        pCreateInfo->pipelineInfo.pVertexInput               = pIn->pVertexInputState;
+        pCreateInfo->pipelineInfo.iaState.topology           = pIn->pInputAssemblyState->topology;
+        pCreateInfo->pipelineInfo.iaState.disableVertexReuse = false;
 
-    BuildLlpcVertexInputDescriptors(pDevice, pIn->pVertexInputState, pVbInfo);
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInputBindingStrideExt) == true)
+        {
+            pCreateInfo->pipelineInfo.dynamicVertexStride = true;
+        }
+
+        if (pDevice->GetRuntimeSettings().enableUberFetchShader || pDevice->GetRuntimeSettings().enableEarlyCompile)
+        {
+            pCreateInfo->pipelineInfo.enableUberFetchShader = true;
+        }
+
+        BuildLlpcVertexInputDescriptors(pDevice, pIn->pVertexInputState, pVbInfo);
+    }
 }
 
 // =====================================================================================================================
@@ -2251,7 +2264,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     pCreateInfo->flags = pIn->flags;
 
-    BuildVertexInputInterfaceState(pDevice, pIn, dynamicStateFlags, pCreateInfo, pVbInfo);
+    BuildVertexInputInterfaceState(pDevice, pIn, dynamicStateFlags, activeStages, pCreateInfo, pVbInfo);
 
     BuildPreRasterizationShaderState(pDevice, pIn, pShaderInfo, dynamicStateFlags, activeStages, pCreateInfo);
 

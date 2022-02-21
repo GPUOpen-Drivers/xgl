@@ -86,7 +86,6 @@ void DescriptorSet<numPalDevices>::Reassign(
             VK_ASSERT(Util::IsPow2Aligned(reinterpret_cast<uint64_t>(m_addresses[deviceIdx].fmaskCpuAddr), sizeof(uint32_t)));
         }
     }
-
 }
 
 // =====================================================================================================================
@@ -608,9 +607,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             break;
 
         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-            // We need to treat dynamic buffer descriptors specially as we store the base buffer SRDs in
-            // client memory.
-            // NOTE: Nuke this once we have proper support for dynamic descriptors in SC.
+            // Dynamic buffer descriptors reside in client memory to be read when the descriptor set is bound.
             pDestAddr = pDestSet->DynamicDescriptorData(deviceIdx) +
                         pDestSet->Layout()->GetDstDynOffset(destBinding, params.dstArrayElement);
 
@@ -624,9 +621,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             break;
 
         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-            // We need to treat dynamic buffer descriptors specially as we store the base buffer SRDs in
-            // client memory.
-            // NOTE: Nuke this once we have proper support for dynamic descriptors in SC.
+            // Dynamic buffer descriptors reside in client memory to be read when the descriptor set is bound.
             pDestAddr = pDestSet->DynamicDescriptorData(deviceIdx) +
                         pDestSet->Layout()->GetDstDynOffset(destBinding, params.dstArrayElement);
 
@@ -704,9 +699,7 @@ void DescriptorUpdate::CopyDescriptorSets(
         if ((srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
             (srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC))
         {
-            // We need to treat dynamic buffer descriptors specially as we store the base buffer SRDs in
-            // client memory.
-            // NOTE: Nuke this once we have proper support for dynamic descriptors in SC.
+            // Dynamic buffer descriptors reside in client memory to be read when the descriptor set is bound.
             uint32_t* pSrcAddr  = pSrcSet->DynamicDescriptorData(deviceIdx) + srcBinding.dyn.dwOffset
                                 + params.srcArrayElement * srcBinding.dyn.dwArrayStride;
 

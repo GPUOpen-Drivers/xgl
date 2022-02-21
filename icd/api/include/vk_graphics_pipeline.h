@@ -226,13 +226,6 @@ protected:
     void CreateStaticState();
     void DestroyStaticState(const VkAllocationCallbacks* pAllocator);
 
-    static VkResult AchievePipelineLayout(
-        const Device*                       pDevice,
-        const VkGraphicsPipelineCreateInfo* pCreateInfo,
-        const VkAllocationCallbacks*        pAllocator,
-        PipelineLayout**                    ppPipelineLayout,
-        bool*                               pIsTemporary);
-
     static VkResult CreatePipelineBinaries(
         Device*                                        pDevice,
         const VkGraphicsPipelineCreateInfo*            pCreateInfo,

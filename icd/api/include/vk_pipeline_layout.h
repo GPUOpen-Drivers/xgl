@@ -119,8 +119,7 @@ public:
     // Number of user data registers consumed per descriptor set address (we use 32-bit addresses)
     static constexpr uint32_t SetPtrRegCount = 1;
 
-    // Number of user data registers consumed per dynamic descriptor (we supply whole buffer SRDs at the moment)
-    // NOTE: This should be changed once we have proper support for dynamic descriptors in SC
+    // Number of user data registers consumed per dynamic descriptor (compact descriptors only require 2 if used)
     static constexpr uint32_t DynDescRegCount = 4;
 
     // Magic number describing an invalid or unmapped user data entry
@@ -183,14 +182,6 @@ public:
         const VkPipelineLayoutCreateInfo*   pCreateInfo,
         const VkAllocationCallbacks*        pAllocator,
         VkPipelineLayout*                   pPipelineLayout);
-
-    static VkResult Create(
-        const Device*                pDevice,
-        const VkPipelineLayout*      pReference,
-        const VkShaderStageFlags*    pRefShaderMask,
-        const uint32_t               refCount,
-        const VkAllocationCallbacks* pAllocator,
-        VkPipelineLayout*            pPipelineLayout);
 
     VkResult Destroy(
         Device*                             pDevice,
@@ -294,14 +285,12 @@ protected:
 
     template <typename NodeType>
     void FillDynamicSetNode(
-        const Vkgc::ResourceMappingNodeType type,
-        const uint32_t                      visibility,
-        const uint32_t                      setIndex,
-        const uint32_t                      bindingIndex,
-        const uint32_t                      offsetInDwords,
-        const uint32_t                      sizeInDwords,
-        const uint32_t                      userDataRegBase,
-        NodeType*                           pNode) const;
+        const Vkgc::ResourceMappingNodeType     type,
+        const uint32_t                          visibility,
+        const uint32_t                          setIndex,
+        const DescriptorSetLayout::BindingInfo& binding,
+        const uint32_t                          userDataRegBase,
+        NodeType*                               pNode) const;
 
     template <typename NodeType>
     void BuildLlpcDynamicSetMapping(
@@ -325,18 +314,6 @@ protected:
         const uint32_t                 sizeInDwords,
         Vkgc::ResourceMappingRootNode* pNode,
         uint32_t*                      pNodeCount) const;
-
-    VkResult BuildLlpcSetMapping(
-        uint32_t                       visibility,
-        uint32_t                       setIndex,
-        const DescriptorSetLayout*     pLayout,
-        Vkgc::ResourceMappingRootNode* pStaNodes,
-        uint32_t*                      pStaNodeCount,
-        Vkgc::ResourceMappingNode*     pDynNodes,
-        uint32_t*                      pDynNodeCount,
-        Vkgc::StaticDescriptorValue*   pDescriptorRangeValue,
-        uint32_t*                      pDescriptorRangeCount,
-        uint32_t                       userDataRegBase) const;
 
     static uint64_t BuildApiHash(
         const VkPipelineLayoutCreateInfo* pCreateInfo);

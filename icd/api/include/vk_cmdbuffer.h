@@ -155,14 +155,19 @@ struct PerGpuRenderState
     const Pal::IMsaaState*          pMsaaState;
     const Pal::IColorBlendState*    pColorBlendState;
     const Pal::IDepthStencilState*  pDepthStencilState;
-    // Currently bound descriptor sets and dynamic offsets (relative to base = 00)
-    uint32_t setBindingData[PipelineBindCount][MaxBindingRegCount];
+
+    // The max stack size required by the pipelines referenced in this command buffer
+    uint32_t maxPipelineStackSize;
 
     // VB bindings in source non-SRD form
     Pal::BufferViewInfo vbBindings[Pal::MaxVertexBuffers];
 
-    // The max stack size required by the pipelines referenced in this command buffer
-    uint32_t maxPipelineStackSize;
+    // Currently bound descriptor sets and dynamic offsets (relative to base = 00).
+    // NOTE: Memory will not be allocated for all PipelineBindCount/MaxBindingRegCount if known to be inaccessible.
+    // This applies to the last GPU only in order to preserve PerGpu indexing of this render state struct.
+    uint32_t setBindingData[PipelineBindCount][MaxBindingRegCount];
+
+    // DO NOT ADD ANYTHING HERE! Additional members must be placed above setBindingData so it remains the last member.
 };
 
 struct DynamicRenderingAttachments

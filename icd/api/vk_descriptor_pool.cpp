@@ -467,7 +467,7 @@ VkResult DescriptorGpuMemHeap::Init(
         }
     }
 
-    m_gpuMemAddrAlignment = pDevice->GetProperties().descriptorSizes.alignment;
+    m_gpuMemAddrAlignment = pDevice->GetProperties().descriptorSizes.alignmentInDwords * sizeof(uint32_t);
 
     if (oneShot == false) //DYNAMIC USAGE
     {
@@ -994,15 +994,14 @@ VkResult DescriptorSetHeap::Init(
         }
     }
 
-    // NOTE: This is hopefully only needed temporarily until SC implements proper support for buffer descriptors
-    // with dynamic offsets. Until then we have to store the static portion of dynamic buffer descriptors in client
-    // memory together with the descriptor set so that we are able to supply the patched version of the descriptors.
-    // This field needs to be qword aligned because it is accessed as qwords in PatchedDynamicDataFromHandle().
-    constexpr size_t DynamicDataSize =
-        numPalDevices * MaxDynamicDescriptors * PipelineLayout::DynDescRegCount * sizeof(uint32);
+    // NOTE: Store the static portion of dynamic buffer descriptors in client memory together with the descriptor set
+    // so that we are able to supply the patched version of the descriptors. This field needs to be qword aligned
+    // because it is accessed as qwords in PatchedDynamicDataFromHandle().
+    size_t dynamicDataSize = numPalDevices * MaxDynamicDescriptors *
+        DescriptorSetLayout::GetDynamicBufferDescDwSize(pDevice) * sizeof(uint32);
 
     // Allocate memory for all sets
-    size_t rawSetSize = sizeof(DescriptorSet<numPalDevices>) + (hasDynamicData ? DynamicDataSize : 0);
+    size_t rawSetSize = sizeof(DescriptorSet<numPalDevices>) + (hasDynamicData ? dynamicDataSize : 0);
     m_setSize         = Util::Pow2Align(rawSetSize, VK_DEFAULT_MEM_ALIGN);
     m_privateDataSize = pDevice->GetPrivateDataSize();
 

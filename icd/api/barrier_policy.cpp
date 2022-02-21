@@ -233,7 +233,7 @@ protected:
         m_layoutUsageTable[2][usageIndex] = layoutUsage1;
     }
 
-    enum { LayoutUsageTableSize = VK_IMAGE_LAYOUT_RANGE_SIZE + 13 };
+    enum { LayoutUsageTableSize = VK_IMAGE_LAYOUT_RANGE_SIZE + 16 };
 
     uint32_t m_layoutUsageTable[MaxPalAspectsPerMask][LayoutUsageTableSize];
 };

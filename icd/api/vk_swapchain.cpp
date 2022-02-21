@@ -249,6 +249,9 @@ VkResult SwapChain::Create(
     swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(pCreateInfo->presentMode);
     swapChainCreateInfo.colorSpace          = VkToPalScreenSpace(VkSurfaceFormatKHR{ pCreateInfo->imageFormat,
                                                                                      pCreateInfo->imageColorSpace });
+#if VK_IS_PAL_VERSION_AT_LEAST(702,0)
+    swapChainCreateInfo.frameLatency        = swapImageCount; // Only matters for DXGI swapchain
+#endif
 
     swapChainCreateInfo.flags.canAcquireBeforeSignaling = settings.enableAcquireBeforeSignal;
 
@@ -1319,8 +1322,10 @@ void FullscreenMgr::PostPresent(
 
     // Report Fullscreen error if we had lost FSE while in Explicit mode.
     // This error will be reported until FSE is reacquired as per spec.
+    // DXGI fullscreen is OS controlled and may go in and out of fullscreen mode to deal with user interaction,
+    // display toasts etc. Ignore reporting fullscreen errors on this platform.
     if ((m_exclusiveModeFlags.acquired == 0) && (m_exclusiveModeFlags.mismatchedDisplayMode == 0) &&
-        (m_mode == Mode::Explicit))
+        (m_mode == Mode::Explicit) && (pSwapChain->IsDxgiEnabled() == false))
     {
         *pPresentResult = Pal::Result::ErrorFullscreenUnavailable;
     }

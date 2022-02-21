@@ -1715,6 +1715,14 @@ VkResult PhysicalDevice::GetImageFormatProperties(
          supportedFeatures &= ~VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
     }
 
+    if ((supportedFeatures == 0) ||
+        (((usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0)                 &&
+         ((supportedFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0))
+        )
+    {
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    }
+
     if ((supportedFeatures == 0)                                                        ||
         (((usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) != 0)                               &&
           (supportedFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) == 0)                ||
@@ -1726,12 +1734,17 @@ VkResult PhysicalDevice::GetImageFormatProperties(
          ((supportedFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) == 0))              ||
         (((usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0)                           &&
          ((supportedFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) == 0))           ||
-        (((usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0)                   &&
-         ((supportedFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0))   ||
         (((usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) != 0)                           &&
          ((supportedFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) == 0)))
     {
-        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        // If extended usage was set ignore the error. We do not know what format or usage is intended.
+        // However for Yuv and Depth images that do not have any compatible formats, report error always.
+        if (((flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT) == 0 )||
+              Formats::IsYuvFormat(format) ||
+              Formats::IsDepthStencilFormat(format))
+        {
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        }
     }
 
     // Calculate maxResourceSize
@@ -3884,6 +3897,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE4));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_VIEW_MIN_LOD));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INDEX_TYPE_UINT8));
 
     bool disableAMDVendorExtensions = false;
@@ -6099,6 +6113,19 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_MIN_LOD_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceImageViewMinLodFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->minLod = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceProvokingVertexFeaturesEXT*>(pHeader);
@@ -6153,6 +6180,7 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 #endif
+
             default:
             {
                 // skip any unsupported extension structures

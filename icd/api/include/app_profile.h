@@ -108,6 +108,7 @@ enum class AppProfile : uint32_t
     SeriousSam4,           // Serious Sam 4 by Croteam
     Maxon,                       // Maxon
     AngleEngine,                 // Angle Engine
+    CSGO,                        // Counter-Strike: Global Offensive
 };
 
 struct ProfileSettings

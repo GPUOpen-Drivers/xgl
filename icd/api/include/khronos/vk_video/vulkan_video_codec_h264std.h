@@ -32,6 +32,8 @@
 #ifndef __VULKAN_VIDEO_CODEC_H264STD_H_PROXY__
 #define __VULKAN_VIDEO_CODEC_H264STD_H_PROXY__
 
+#include "vulkan_video_codecs_common.h"
+
 #if EXTERNAL_VULKAN_HEADERS
 #include "vk_video/vulkan_video_codec_h264std.h"
 #else

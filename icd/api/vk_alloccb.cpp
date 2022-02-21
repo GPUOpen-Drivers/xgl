@@ -156,16 +156,16 @@ void* PAL_STDCALL PalAllocFuncDelegator(
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT     //mapping to AllocInternalShader
     };
 
-    const VkAllocationCallbacks* const pVkCallbacks =
-    reinterpret_cast<const VkAllocationCallbacks*>(pClientData);
+    const VkAllocationCallbacks* const pVkCallbacks = reinterpret_cast<const VkAllocationCallbacks*>(pClientData);
 
     VK_ASSERT(allocType >= Util::SystemAllocType::AllocObject);
     VK_ASSERT(allocType < (Util::SystemAllocType::AllocObject + VK_ARRAY_SIZE(allocTypes)));
 
-    return pVkCallbacks->pfnAllocation(pVkCallbacks->pUserData,
-                                size,
-                                alignment,
-                                allocTypes[allocType - Util::SystemAllocType::AllocObject]);
+    return pVkCallbacks->pfnAllocation(
+        pVkCallbacks->pUserData,
+        size,
+        alignment,
+        allocTypes[allocType - Util::SystemAllocType::AllocObject]);
 }
 
 // =====================================================================================================================
