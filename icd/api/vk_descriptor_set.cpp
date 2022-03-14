@@ -103,12 +103,22 @@ void DescriptorSet<numPalDevices>::WriteImmutableSamplers(
             if (bindingInfo.imm.dwSize != 0)
             {
                 uint32_t* pSamplerDesc = Layout()->Info().imm.pImmutableSamplerData + bindingInfo.imm.dwOffset;
-                uint32_t* pDestAddr = StaticCpuAddress(deviceIdx) + Layout()->GetDstStaOffset(bindingInfo, 0);
-                if (bindingInfo.info.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                const size_t srcArrayStrideInDW = bindingInfo.imm.dwArrayStride;
+                uint32_t numOfSamplers = bindingInfo.info.descriptorCount;
+
+                for (uint32_t descriptorIdx = 0; descriptorIdx < numOfSamplers; ++descriptorIdx)
                 {
+                  size_t destOffset = Layout()->GetDstStaOffset(bindingInfo, descriptorIdx);
+                  uint32_t* pDestAddr = StaticCpuAddress(deviceIdx) + destOffset;
+                  if (bindingInfo.info.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                  {
                     pDestAddr += (imageDescSizeInBytes / sizeof(uint32_t));
+                  }
+
+                  memcpy(pDestAddr, pSamplerDesc,(sizeof(uint32) * bindingInfo.imm.dwSize) / numOfSamplers);
+
+                  pSamplerDesc += srcArrayStrideInDW;
                 }
-                memcpy(pDestAddr, pSamplerDesc, sizeof(uint32)*bindingInfo.imm.dwSize);
             }
         }
     }
