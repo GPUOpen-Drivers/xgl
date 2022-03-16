@@ -34,7 +34,8 @@ find_package(Python3 ${LLVM_MINIMUM_PYTHON_VERSION} REQUIRED
 # Find the TestingSupport library name that we will link with.
 llvm_map_components_to_libnames(llvm_testing_support_lib TestingSupport)
 
-set(LLVM_GTEST_LIBS gtest gtest_main ${llvm_testing_support_lib})
+# Use the gtest support provided by llvm
+set(LLVM_GTEST_LIBS llvm_gtest llvm_gtest_main ${llvm_testing_support_lib})
 if(LLVM_PTHREAD_LIB)
   list(APPEND LLVM_GTEST_LIBS pthread)
 endif()
