@@ -107,6 +107,7 @@ public:
     VkResult CreateShaderCache(
         const void*                  pInitialData,
         size_t                       initialDataSize,
+        uint32_t                     expectedEntries,
         void*                        pShaderCacheMem,
         ShaderCache*                 pShaderCache);
 
@@ -122,11 +123,13 @@ public:
         Vkgc::PipelineOptions* pOptions);
 
     VkResult BuildShaderModule(
-        const Device*             pDevice,
-        VkShaderModuleCreateFlags flags,
-        size_t                    codeSize,
-        const void*               pCode,
-        ShaderModuleHandle*       pModule);
+        const Device*                   pDevice,
+        const VkShaderModuleCreateFlags flags,
+        size_t                          codeSize,
+        const void*                     pCode,
+        PipelineBinaryCache*            pBinaryCache,
+        PipelineCreationFeedback*       pFeedback,
+        ShaderModuleHandle*             pShaderModule);
 
     void TryEarlyCompileShaderModule(
         const Device*       pDevice,
@@ -327,23 +330,26 @@ private:
         bool                         isInternalCacheHit);
 
     VkResult LoadShaderModuleFromCache(
-        const Device*             pDevice,
-        VkShaderModuleCreateFlags flags,
-        uint32_t                  compilerMask,
-        Util::MetroHash::Hash&    uniqueHash,
-        ShaderModuleHandle*       pShaderModule);
+        const Device*                   pDevice,
+        const VkShaderModuleCreateFlags flags,
+        const uint32_t                  compilerMask,
+        const Util::MetroHash::Hash&    uniqueHash,
+        PipelineBinaryCache*            pBinaryCache,
+        PipelineCreationFeedback*       pFeedback,
+        ShaderModuleHandle*             pShaderModule);
 
     void StoreShaderModuleToCache(
-        const Device*             pDevice,
-        VkShaderModuleCreateFlags flags,
-        uint32_t                  compilerMask,
-        Util::MetroHash::Hash&    uniqueHash,
-        ShaderModuleHandle*       pShaderModule);
+        const Device*                   pDevice,
+        const VkShaderModuleCreateFlags flags,
+        const uint32_t                  compilerMask,
+        const Util::MetroHash::Hash&    uniqueHash,
+        PipelineBinaryCache*            pBinaryCache,
+        ShaderModuleHandle*             pShaderModule);
 
     Util::MetroHash::Hash GetShaderModuleCacheHash(
-        VkShaderModuleCreateFlags flags,
-        uint32_t                  compilerMask,
-        Util::MetroHash::Hash&    uniqueHash);
+        const VkShaderModuleCreateFlags flags,
+        const uint32_t                  compilerMask,
+        const Util::MetroHash::Hash&    uniqueHash);
 
     // -----------------------------------------------------------------------------------------------------------------
 

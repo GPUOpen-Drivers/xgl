@@ -294,7 +294,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
     const VkSubmitInfo*                         pSubmits,
     VkFence                                     fence);
 
-VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit2(
     VkQueue                                     queue,
     uint32_t                                    submitCount,
     const VkSubmitInfo2KHR*                     pSubmits,

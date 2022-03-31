@@ -706,6 +706,8 @@ void Image::HandleExtensionStructs(
     }
 }
 
+// =====================================================================================================================
+// Set ImageFlags flags during image creation
 void Image::SetCommonFlags(
     const VkImageCreateInfo* pCreateInfo,
     const VkFormat           imageFormat,
@@ -746,6 +748,8 @@ void Image::SetCommonFlags(
     }
 }
 
+// =====================================================================================================================
+// Get the image format from the VkImageCreateInfo
 VkFormat Image::GetCreateInfoFormat(
     const VkImageCreateInfo* pCreateInfo,
     const ImageExtStructs&   extStructs)
@@ -755,6 +759,8 @@ VkFormat Image::GetCreateInfoFormat(
     return format;
 }
 
+// =====================================================================================================================
+// Get the external memory flags from VkExternalMemoryImageCreateInfo, chained off the image create info's pNext
 void Image::GetExternalMemoryFlags(
     const Device*          pDevice,
     const ImageExtStructs& extStructs,

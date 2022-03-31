@@ -107,7 +107,12 @@ ComputePipeline::ComputePipeline(
         VK_PIPELINE_BIND_POINT_COMPUTE),
     m_info(immedInfo)
 {
-    Pipeline::Init(pPalPipeline, pPipelineLayout, pPipelineBinary, staticStateMask, apiHash);
+    Pipeline::Init(
+        pPalPipeline,
+        pPipelineLayout,
+        pPipelineBinary,
+        staticStateMask,
+        apiHash);
 }
 
 // =====================================================================================================================
@@ -152,7 +157,9 @@ VkResult ComputePipeline::Create(
                                                return 0u;
                                            },
                                            &shaderInfo.stage,
-                                           &tempModule);
+                                           &tempModule,
+                                           pPipelineCache,
+                                           &binaryCreateInfo.stageFeedback);
 
     if (result == VK_SUCCESS)
     {

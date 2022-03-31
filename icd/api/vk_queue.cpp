@@ -1775,7 +1775,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit2(
     VkQueue                                     queue,
     uint32_t                                    submitCount,
     const VkSubmitInfo2KHR*                     pSubmits,

@@ -108,6 +108,7 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
 #if ICD_GPUOPEN_DEVMODE_BUILD
     vk::DevModeMgr*           pDevModeMgr,
 #endif
+    uint32_t                  expectedEntries,
     size_t                    initDataSize,
     const void*               pInitData,
     bool                      createArchiveLayers
@@ -122,7 +123,7 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
                                                                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
     if (pMem != nullptr)
     {
-        pObj = VK_PLACEMENT_NEW(pMem) PipelineBinaryCache(pAllocationCallbacks, gfxIp);
+        pObj = VK_PLACEMENT_NEW(pMem) PipelineBinaryCache(pAllocationCallbacks, gfxIp, expectedEntries);
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
         pObj->m_pDevModeMgr = pDevModeMgr;
@@ -181,7 +182,8 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
 // =====================================================================================================================
 PipelineBinaryCache::PipelineBinaryCache(
     VkAllocationCallbacks*    pAllocationCallbacks,
-    const Vkgc::GfxIpVersion& gfxIp)
+    const Vkgc::GfxIpVersion& gfxIp,
+    uint32_t                  expectedEntries)
     :
     m_pAllocationCallbacks { pAllocationCallbacks },
     m_palAllocator         { pAllocationCallbacks },
@@ -193,6 +195,7 @@ PipelineBinaryCache::PipelineBinaryCache(
     m_hashMapping          { 32, &m_palAllocator },
 #endif
     m_pMemoryLayer         { nullptr },
+    m_expectedEntries      { expectedEntries },
     m_pArchiveLayer        { nullptr },
     m_openFiles            { &m_palAllocator },
     m_archiveLayers        { &m_palAllocator },
@@ -800,6 +803,10 @@ VkResult PipelineBinaryCache::InitMemoryCacheLayer(
     createInfo.maxMemorySize       = 192 * 1024 * 1024;
 #else
     createInfo.maxMemorySize       = SIZE_MAX;
+#endif
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 711
+    createInfo.expectedEntries     = m_expectedEntries;
 #endif
 
     createInfo.evictOnFull         = true;

@@ -185,9 +185,8 @@ public:
             size_t depthStencilView;
         } palSizes;
 
-        uint32_t timestampQueryPoolSlotSize;
-
-        bool connectThroughThunderBolt;
+        uint32_t               timestampQueryPoolSlotSize;
+        bool                   connectThroughThunderBolt;
     };
 
     static VkResult Create(
@@ -687,6 +686,10 @@ public:
     void ReleaseBorderColorIndex(
         uint32_t                 pBorderColor);
 
+    void ReserveBorderColorIndex(
+        uint32                   borderColorIndex,
+        const float*             pBorderColor);
+
     Pal::IBorderColorPalette* GetPalBorderColorPalette(uint32_t deviceIdx) const
     {
         return m_perGpu[deviceIdx].pPalBorderColorPalette;
@@ -1150,17 +1153,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectTagEXT(
     VkDevice                                    device,
     const VkDebugUtilsObjectTagInfoEXT*         pTagInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkGetDeviceBufferMemoryRequirementsKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceBufferMemoryRequirements(
     VkDevice                                    device,
     const VkDeviceBufferMemoryRequirementsKHR*  pInfo,
     VkMemoryRequirements2*                      pMemoryRequirements);
 
-VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageMemoryRequirementsKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageMemoryRequirements(
     VkDevice                                    device,
     const VkDeviceImageMemoryRequirementsKHR*   pInfo,
     VkMemoryRequirements2*                      pMemoryRequirements);
 
-VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSparseMemoryRequirementsKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSparseMemoryRequirements(
     VkDevice                                    device,
     const VkDeviceImageMemoryRequirementsKHR*   pInfo,
     uint32_t*                                   pSparseMemoryRequirementCount,

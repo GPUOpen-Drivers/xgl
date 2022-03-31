@@ -601,7 +601,6 @@ VkResult Device::Create(
                 break;
             }
 
-#if VKI_SDK_NEXT
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES:
             {
                 if (reinterpret_cast<const VkPhysicalDeviceVulkan13Features*>(pHeader)->maintenance4)
@@ -621,7 +620,6 @@ VkResult Device::Create(
 
                 break;
             }
-#endif
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
             {
@@ -997,6 +995,10 @@ VkResult Device::Create(
     if ((pCreateInfo != nullptr) && (pMemory != nullptr))
     {
         vkResult = VK_SUCCESS;
+
+        // Finalize the physical device settings before they are cached in the device
+        pPhysicalDevices[DefaultDeviceIndex]->GetSettingsLoader()->FinalizeSettings(
+            );
 
         // Construct API device object.
         VK_INIT_DISPATCHABLE(Device, pMemory, (
@@ -1513,10 +1515,6 @@ VkResult Device::Initialize(
 
     if (result == VK_SUCCESS)
     {
-        // Finalize the device settings after driver intitalization is done
-        // This essentially generates settings hash
-        pPhysicalDevice->GetSettingsLoader()->FinalizeSettings();
-
         // Get the current values of driver features, from an app profile or global settings.
         UpdateFeatureSettings();
     }
@@ -1936,6 +1934,8 @@ VkResult Device::CreateInternalComputePipeline(
         flags,
         codeByteSize,
         pCode,
+        nullptr,
+        nullptr,
         &shaderModule);
 
     Vkgc::BinaryData spvBin = { codeByteSize, pCode };
@@ -3601,6 +3601,21 @@ void Device::ReleaseBorderColorIndex(
 }
 
 // =====================================================================================================================
+void Device::ReserveBorderColorIndex(
+    uint32                   borderColorIndex,
+    const float*             pBorderColor)
+{
+    VK_ASSERT(m_pBorderColorUsedIndexes[borderColorIndex] == false);
+
+    for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
+    {
+        m_perGpu[deviceIdx].pPalBorderColorPalette->Update(borderColorIndex, 1, pBorderColor);
+    }
+
+    m_pBorderColorUsedIndexes[borderColorIndex] = true;
+}
+
+// =====================================================================================================================
 bool Device::ReserveFastPrivateDataSlot(
         uint64*                         pIndex)
 {
@@ -4391,7 +4406,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetDeviceBufferMemoryRequirementsKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceBufferMemoryRequirements(
     VkDevice                                   device,
     const VkDeviceBufferMemoryRequirementsKHR* pInfo,
     VkMemoryRequirements2*                     pMemoryRequirements)
@@ -4403,7 +4418,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceBufferMemoryRequirementsKHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageMemoryRequirementsKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageMemoryRequirements(
     VkDevice                                  device,
     const VkDeviceImageMemoryRequirementsKHR* pInfo,
     VkMemoryRequirements2*                    pMemoryRequirements)
@@ -4415,7 +4430,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageMemoryRequirementsKHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSparseMemoryRequirementsKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSparseMemoryRequirements(
     VkDevice                                  device,
     const VkDeviceImageMemoryRequirementsKHR* pInfo,
     uint32_t*                                 pSparseMemoryRequirementCount,

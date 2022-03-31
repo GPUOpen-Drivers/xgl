@@ -60,7 +60,8 @@ CmdPool::CmdPool(
     m_pAllocator(pAllocator),
     m_queueFamilyIndex(queueFamilyIndex),
     m_sharedCmdAllocator(sharedCmdAllocator),
-    m_cmdBufferRegistry(32, pDevice->VkInstance()->Allocator())
+    m_cmdBufferRegistry(32, pDevice->VkInstance()->Allocator()),
+    m_cmdBuffersAlreadyBegun(32, pDevice->VkInstance()->Allocator())
 {
     m_flags.u32All = 0;
 
@@ -77,6 +78,11 @@ CmdPool::CmdPool(
 VkResult CmdPool::Init()
 {
     Pal::Result palResult = m_cmdBufferRegistry.Init();
+
+    if (palResult == Pal::Result::Success)
+    {
+        palResult = m_cmdBuffersAlreadyBegun.Init();
+    }
 
     return PalToVkResult(palResult);
 }
@@ -258,8 +264,10 @@ VkResult CmdPool::Reset(VkCommandPoolResetFlags flags)
 {
     VkResult result = VK_SUCCESS;
 
-    // We first have to reset all the command buffers that use this pool (PAL doesn't do this automatically).
-    for (auto it = m_cmdBufferRegistry.Begin(); (it.Get() != nullptr) && (result == VK_SUCCESS); it.Next())
+    m_cmdPoolResetInProgress = true;
+
+    // First reset all command buffers that were begun and not already reset (PAL doesn't do this automatically).
+    for (auto it = m_cmdBuffersAlreadyBegun.Begin(); (it.Get() != nullptr) && (result == VK_SUCCESS); it.Next())
     {
         // Per-spec we always have to do a command buffer reset that also releases the used resources.
         result = it.Get()->key->Reset(VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
@@ -267,6 +275,14 @@ VkResult CmdPool::Reset(VkCommandPoolResetFlags flags)
 
     if (result == VK_SUCCESS)
     {
+        // Clear the set of command buffers to reset. Only done if all the buffers were reset successfully so it is
+        // possible that after an error this set will contain already reset command buffers. This is fine because we
+        // can reset command buffers twice.
+        if (m_cmdBuffersAlreadyBegun.GetNumEntries() > 0)
+        {
+            m_cmdBuffersAlreadyBegun.Reset();
+        }
+
         // After resetting the registered command buffers, reset the pool itself but only if we use per-pool
         // CmdAllocator objects, not a single shared one.
         if (m_sharedCmdAllocator == false)
@@ -275,7 +291,18 @@ VkResult CmdPool::Reset(VkCommandPoolResetFlags flags)
         }
     }
 
+    m_cmdPoolResetInProgress = false;
+
     return result;
+}
+
+// =====================================================================================================================
+void CmdPool::Trim()
+{
+    for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); ++deviceIdx)
+    {
+        m_pPalCmdAllocators[deviceIdx]->Trim(((1 << Pal::CmdAllocatorTypeCount) - 1), 0);
+    }
 }
 
 // =====================================================================================================================
@@ -289,7 +316,29 @@ Pal::Result CmdPool::RegisterCmdBuffer(CmdBuffer* pCmdBuffer)
 // Unregister a command buffer from this pool.
 void CmdPool::UnregisterCmdBuffer(CmdBuffer* pCmdBuffer)
 {
+    UnmarkCmdBufBegun(pCmdBuffer);
     m_cmdBufferRegistry.Erase(pCmdBuffer);
+}
+
+// =====================================================================================================================
+// Adds command buffer to the set of command buffers needing explicit reset when this cmd pool is reset.
+Pal::Result CmdPool::MarkCmdBufBegun(
+    CmdBuffer* pCmdBuffer)
+{
+    return m_cmdBuffersAlreadyBegun.Insert(pCmdBuffer);
+}
+
+// =====================================================================================================================
+// Removes command buffer from the set of command buffers needint explicit reset when this cmd pool is reset.
+void CmdPool::UnmarkCmdBufBegun(
+    CmdBuffer* pCmdBuffer)
+{
+    // Skip erasing individual command buffers during command pool reset as the command pool reset will instead reset
+    // the entire HashSet all at once after all individual command buffer resets are completed.
+    if (m_cmdPoolResetInProgress == false)
+    {
+        m_cmdBuffersAlreadyBegun.Erase(pCmdBuffer);
+    }
 }
 
 /**
@@ -324,6 +373,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkResetCommandPool(
     VkCommandPoolResetFlags                     flags)
 {
     return CmdPool::ObjectFromHandle(commandPool)->Reset(flags);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkTrimCommandPool(
+    VkDevice                                    device,
+    VkCommandPool                               commandPool,
+    VkCommandPoolTrimFlags                      flags)
+{
+    CmdPool::ObjectFromHandle(commandPool)->Trim();
 }
 
 } // namespace entry

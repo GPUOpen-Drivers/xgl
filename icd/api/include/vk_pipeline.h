@@ -153,6 +153,8 @@ public:
     bool ContainsDynamicState(DynamicStatesInternal dynamicState) const
         { return ((m_staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) == 0); }
 
+    uint32_t GetAvailableAmdIlSymbol() const { return m_availableAmdIlSymbol; }
+
     VkResult GetShaderDisassembly(
         const Device*                 pDevice,
         const Pal::IPipeline*         pPalPipeline,
@@ -195,7 +197,9 @@ protected:
         uint32_t                               (*pfnGetOutputIdx)(const uint32_t inputIdx,
                                                                   const uint32_t stageIdx),
         ShaderStageInfo*                       pShaderStageInfo,
-        ShaderModuleHandle*                    pTempModules);
+        ShaderModuleHandle*                    pTempModules,
+        PipelineCache*                         pCache,
+        PipelineCreationFeedback*              pFeedbacks);
 
     static void FreeTempModules(
         const Device*       pDevice,
@@ -214,7 +218,13 @@ protected:
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Pipeline);
 
+    uint32_t GetShaderSymbolAvailability(
+        const Device*                       pDevice,
+        const Pal::IPipeline*               pPalPipeline,
+        const Util::Abi::PipelineSymbolType pipelineSymbolType) const;
+
     PipelineBinaryInfo*                m_pBinary;
+    uint32_t                           m_availableAmdIlSymbol; // Bit mask for Pal::ShaderStageFlagBits
 };
 
 namespace entry

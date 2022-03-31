@@ -105,6 +105,26 @@ static void ApplyProfileOptions(
 }
 
 // =====================================================================================================================
+static bool SupportInternalModuleCache(
+    const PhysicalDevice* pDevice,
+    const uint32_t        compilerMask)
+{
+    bool supportInternalModuleCache = pDevice->GetRuntimeSettings().enableEarlyCompile;
+
+#if ICD_X86_BUILD
+    supportInternalModuleCache = false;
+#endif
+
+    if (compilerMask & (1 << PipelineCompilerTypeLlpc))
+    {
+        // LLPC always defers SPIRV conversion, we needn't cache the result
+        supportInternalModuleCache = false;
+    }
+
+    return supportInternalModuleCache;
+}
+
+// =====================================================================================================================
 PipelineCompiler::PipelineCompiler(
     PhysicalDevice* pPhysicalDevice)
     :
@@ -231,6 +251,7 @@ VkResult PipelineCompiler::Initialize()
                 m_pPhysicalDevice->VkInstance()->GetDevModeMgr(),
 #endif
                 0,
+                0,
                 nullptr,
                 settings.enableOnDiskInternalPipelineCaches);
 
@@ -311,6 +332,7 @@ void PipelineCompiler::Destroy()
 VkResult PipelineCompiler::CreateShaderCache(
     const void*   pInitialData,
     size_t        initialDataSize,
+    uint32_t      expectedEntries,
     void*         pShaderCacheMem,
     ShaderCache*  pShaderCache)
 {
@@ -375,9 +397,9 @@ bool PipelineCompiler::LoadReplaceShaderBinary(
 // =====================================================================================================================
 // Generates shader module cache hash ID
 Util::MetroHash::Hash PipelineCompiler::GetShaderModuleCacheHash(
-    VkShaderModuleCreateFlags flags,
-    uint32_t                  compilerMask,
-    Util::MetroHash::Hash&    uniqueHash)
+    const VkShaderModuleCreateFlags flags,
+    const uint32_t                  compilerMask,
+    const Util::MetroHash::Hash&    uniqueHash)
 {
     Util::MetroHash128 hasher;
     Util::MetroHash::Hash hash;
@@ -392,55 +414,89 @@ Util::MetroHash::Hash PipelineCompiler::GetShaderModuleCacheHash(
 // =====================================================================================================================
 // Loads shader module from cache, include both run-time cache and binary cache
 VkResult PipelineCompiler::LoadShaderModuleFromCache(
-    const Device*             pDevice,
-    VkShaderModuleCreateFlags flags,
-    uint32_t                  compilerMask,
-    Util::MetroHash::Hash&    uniqueHash,
-    ShaderModuleHandle*       pShaderModule)
+    const Device*                   pDevice,
+    const VkShaderModuleCreateFlags flags,
+    const uint32_t                  compilerMask,
+    const Util::MetroHash::Hash&    uniqueHash,
+    PipelineBinaryCache*            pBinaryCache,
+    PipelineCreationFeedback*       pFeedback,
+    ShaderModuleHandle*             pShaderModule)
 {
-    bool supportModuleCache = m_pPhysicalDevice->GetRuntimeSettings().enableEarlyCompile;
+    VkResult result = VK_ERROR_INITIALIZATION_FAILED;
 
-#if ICD_X86_BUILD
-    supportModuleCache = false;
-#endif
-
-    if (compilerMask & (1 << PipelineCompilerTypeLlpc))
-    {
-        // LLPC always defers SPIRV conversion, we needn't cache the result
-        supportModuleCache = false;
-    }
+    const bool supportInternalModuleCache = SupportInternalModuleCache(m_pPhysicalDevice, compilerMask);
 
     VK_ASSERT(pShaderModule->pRefCount == nullptr);
 
-    VkResult result = VK_ERROR_INITIALIZATION_FAILED;
-    if (supportModuleCache)
+    if ((pBinaryCache != nullptr) || supportInternalModuleCache)
     {
-        Util::MutexAuto mutexLock(&m_shaderModuleCacheLock);
+        const Util::MetroHash::Hash shaderModuleCacheHash =
+            GetShaderModuleCacheHash(flags, compilerMask, uniqueHash);
 
-        Util::MetroHash::Hash shaderModuleCacheHash = GetShaderModuleCacheHash(flags, compilerMask, uniqueHash);
-        auto pHandle = m_shaderModuleHandleMap.FindKey(shaderModuleCacheHash);
-        if (pHandle != nullptr)
+        const void*  pShaderModuleBinary = nullptr;
+        size_t       shaderModuleSize    = 0;
+        Util::Result cacheResult         = Util::Result::NotFound;
+        bool hitApplicationCache         = false;
+
+        // 1. Look up in internal cache m_shaderModuleHandleMap.
+        if (supportInternalModuleCache)
         {
-            VK_ASSERT(pHandle->pRefCount != nullptr);
-            (*(pHandle->pRefCount))++;
-            *pShaderModule = *pHandle;
-            result = VK_SUCCESS;
-        }
-        else if (m_pBinaryCache != nullptr)
-        {
-            if (result == VK_SUCCESS)
+            Util::MutexAuto mutexLock(&m_shaderModuleCacheLock);
+
+            ShaderModuleHandle* pHandle = m_shaderModuleHandleMap.FindKey(shaderModuleCacheHash);
+            if (pHandle != nullptr)
             {
-                auto pInstance = m_pPhysicalDevice->VkInstance();
+                VK_ASSERT(pHandle->pRefCount != nullptr);
+                (*(pHandle->pRefCount))++;
+                *pShaderModule = *pHandle;
+                result         = VK_SUCCESS;
+                cacheResult    = Util::Result::Success;
+            }
+        }
+
+        // 2. Look up in application cache pBinaryCache.  Only query availability when hits in m_shaderModuleHandleMap.
+        if (pBinaryCache != nullptr)
+        {
+
+            cacheResult = hitApplicationCache ? Util::Result::Success : cacheResult;
+        }
+
+        // 3. Look up in internal cache m_pBinaryCache
+        if ((cacheResult != Util::Result::Success) && (m_pBinaryCache != nullptr) && supportInternalModuleCache)
+        {
+        }
+
+        // 4. Relocate shader and setup reference counter if cache hits and not come from m_shaderModuleHandleMap.
+        if ((result != VK_SUCCESS) && (cacheResult == Util::Result::Success))
+        {
+
+            if ((result == VK_SUCCESS) && (supportInternalModuleCache))
+            {
+                Instance* pInstance = m_pPhysicalDevice->VkInstance();
                 pShaderModule->pRefCount = reinterpret_cast<uint32_t*>(
                     pInstance->AllocMem(sizeof(uint32_t), VK_DEFAULT_MEM_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_CACHE));
                 if (pShaderModule->pRefCount != nullptr)
                 {
+                    Util::MutexAuto mutexLock(&m_shaderModuleCacheLock);
+
                     // Initialize the reference count to two: one for the runtime cache and one for this shader module.
                     *pShaderModule->pRefCount = 2;
                     result = PalToVkResult(m_shaderModuleHandleMap.Insert(shaderModuleCacheHash, *pShaderModule));
                     VK_ASSERT(result == VK_SUCCESS);
                 }
             }
+        }
+
+        // 5. Set feedback info
+        if (pFeedback != nullptr)
+        {
+            pFeedback->hitApplicationCache = hitApplicationCache;
+        }
+
+        // 6. Store binary in application cache if cache hits but not hits in application cache here. This is because
+        //    PipelineCompiler::StoreShaderModuleToCache() would not be called if cache hits.
+        if ((cacheResult == Util::Result::Success) && (hitApplicationCache == false))
+        {
         }
     }
 
@@ -450,48 +506,49 @@ VkResult PipelineCompiler::LoadShaderModuleFromCache(
 // =====================================================================================================================
 // Stores shader module to cache, include both run-time cache and binary cache
 void PipelineCompiler::StoreShaderModuleToCache(
-    const Device*             pDevice,
-    VkShaderModuleCreateFlags flags,
-    uint32_t                  compilerMask,
-    Util::MetroHash::Hash&    uniqueHash,
-    ShaderModuleHandle*       pShaderModule)
+    const Device*                   pDevice,
+    const VkShaderModuleCreateFlags flags,
+    const uint32_t                  compilerMask,
+    const Util::MetroHash::Hash&    uniqueHash,
+    PipelineBinaryCache*            pBinaryCache,
+    ShaderModuleHandle*             pShaderModule)
 {
-
     VK_ASSERT(pShaderModule->pRefCount == nullptr);
 
-    bool supportModuleCache = m_pPhysicalDevice->GetRuntimeSettings().enableEarlyCompile;
+    const bool supportInternalModuleCache = SupportInternalModuleCache(m_pPhysicalDevice, compilerMask);
 
-#if ICD_X86_BUILD
-    supportModuleCache = false;
-#endif
-
-    if (compilerMask & (1 << PipelineCompilerTypeLlpc))
+    if ((pBinaryCache != nullptr) || supportInternalModuleCache)
     {
-        // LLPC alway defer SPIRV conversion, we nedn't cache the result
-        supportModuleCache = false;
-    }
+        const Util::MetroHash::Hash shaderModuleCacheHash =
+            GetShaderModuleCacheHash(flags, compilerMask, uniqueHash);
 
-    if (supportModuleCache)
-    {
-        Util::MetroHash::Hash shaderModuleCacheHash = GetShaderModuleCacheHash(flags, compilerMask, uniqueHash);
-        auto pInstance = m_pPhysicalDevice->VkInstance();
-        pShaderModule->pRefCount = reinterpret_cast<uint32_t*>(
-            pInstance->AllocMem(sizeof(uint32_t), VK_DEFAULT_MEM_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_CACHE));
-        if (pShaderModule->pRefCount != nullptr)
+        // 1. Store in application cache pBinaryCache.
+        if (pBinaryCache != nullptr)
         {
-            Util::MutexAuto mutexLock(&m_shaderModuleCacheLock);
-            // Initialize the reference count to two: one for the runtime cache and one for this shader module.
-            *pShaderModule->pRefCount = 2;
-            auto palResult = m_shaderModuleHandleMap.Insert(shaderModuleCacheHash, *pShaderModule);
-            if (palResult != Util::Result::Success)
-            {
-                // Reset refference count to one if fail to add it to runtime cache
-                *pShaderModule->pRefCount = 1;
-            }
         }
 
-        if (m_pBinaryCache != nullptr)
+        // 2. Store in internal cache m_shaderModuleHandleMap and m_pBinaryCache
+        if (supportInternalModuleCache)
         {
+            Instance* pInstance = m_pPhysicalDevice->VkInstance();
+            pShaderModule->pRefCount = reinterpret_cast<uint32_t*>(
+                pInstance->AllocMem(sizeof(uint32_t), VK_DEFAULT_MEM_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_CACHE));
+            if (pShaderModule->pRefCount != nullptr)
+            {
+                Util::MutexAuto mutexLock(&m_shaderModuleCacheLock);
+                // Initialize the reference count to two: one for the runtime cache and one for this shader module.
+                *pShaderModule->pRefCount = 2;
+                auto palResult = m_shaderModuleHandleMap.Insert(shaderModuleCacheHash, *pShaderModule);
+                if (palResult != Util::Result::Success)
+                {
+                    // Reset refference count to one if fail to add it to runtime cache
+                    *pShaderModule->pRefCount = 1;
+                }
+            }
+
+            if (m_pBinaryCache != nullptr)
+            {
+            }
         }
     }
 }
@@ -499,11 +556,13 @@ void PipelineCompiler::StoreShaderModuleToCache(
 // =====================================================================================================================
 // Builds shader module from SPIR-V binary code.
 VkResult PipelineCompiler::BuildShaderModule(
-    const Device*               pDevice,
-    VkShaderModuleCreateFlags   flags,
-    size_t                      codeSize,
-    const void*                 pCode,
-    ShaderModuleHandle*         pShaderModule)
+    const Device*                   pDevice,
+    const VkShaderModuleCreateFlags flags,
+    size_t                          codeSize,
+    const void*                     pCode,
+    PipelineBinaryCache*            pBinaryCache,
+    PipelineCreationFeedback*       pFeedback,
+    ShaderModuleHandle*             pShaderModule)
 {
     const RuntimeSettings* pSettings = &m_pPhysicalDevice->GetRuntimeSettings();
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
@@ -530,15 +589,17 @@ VkResult PipelineCompiler::BuildShaderModule(
         }
     }
 
-    result = LoadShaderModuleFromCache(pDevice,  flags, compilerMask, uniqueHash, pShaderModule);
+    result = LoadShaderModuleFromCache(
+        pDevice, flags, compilerMask, uniqueHash, pBinaryCache, pFeedback, pShaderModule);
     if (result != VK_SUCCESS)
     {
         if (compilerMask & (1 << PipelineCompilerTypeLlpc))
         {
-            result = m_compilerSolutionLlpc.BuildShaderModule(pDevice, flags, codeSize, pCode, pShaderModule, stableHash);
+            result = m_compilerSolutionLlpc.BuildShaderModule(
+                pDevice, flags, codeSize, pCode, pShaderModule, stableHash);
         }
 
-        StoreShaderModuleToCache(pDevice, flags, compilerMask, uniqueHash, pShaderModule);
+        StoreShaderModuleToCache(pDevice, flags, compilerMask, uniqueHash, pBinaryCache, pShaderModule);
     }
     else
     {
@@ -674,7 +735,7 @@ bool PipelineCompiler::ReplacePipelineShaderModule(
 
         if (LoadReplaceShaderBinary(hash64, &codeSize, &pCode))
         {
-            VkResult result = BuildShaderModule(pDevice, 0, codeSize, pCode, pShaderModule);
+            VkResult result = BuildShaderModule(pDevice, 0, codeSize, pCode, nullptr, nullptr, pShaderModule);
             if (result == VK_SUCCESS)
             {
                 pShaderInfo->pModuleData = ShaderModule::GetShaderData(compilerType, pShaderModule);
@@ -1457,11 +1518,11 @@ VkResult PipelineCompiler::SetPipelineCreationFeedbackInfo(
                                        pPipelineFeedback);
 
         auto *stageCreationFeedbacks = pPipelineCreationFeadbackCreateInfo->pPipelineStageCreationFeedbacks;
-        if (stageCount == 0)
+        if ((stageCount == 0) && (stageCreationFeedbacks != nullptr))
         {
             UpdatePipelineCreationFeedback(&stageCreationFeedbacks[0], pStageFeedback);
         }
-        else
+        else if (stageCount != 0)
         {
             VK_ASSERT(stageCount <= ShaderStage::ShaderStageGfxCount);
             for (uint32_t i = 0; i < stageCount; ++i)
@@ -1633,10 +1694,13 @@ static void BuildMultisampleStateInFgs(
             {
                 pCreateInfo->pipelineInfo.rsState.perSampleShading =
                     ((subpassColorSampleCount * pMs->minSampleShading) > 1.0f);
+                pCreateInfo->pipelineInfo.rsState.pixelShaderSamples =
+                    Pow2Pad(static_cast<uint32_t>(ceil(subpassColorSampleCount * pMs->minSampleShading)));
             }
             else
             {
                 pCreateInfo->pipelineInfo.rsState.perSampleShading = false;
+                pCreateInfo->pipelineInfo.rsState.pixelShaderSamples = 1;
             }
 
             pCreateInfo->pipelineInfo.rsState.numSamples = pMs->rasterizationSamples;
@@ -2220,11 +2284,11 @@ static void BuildExecutablePipelineState(
     // are valid in this pipeline.
     const Vkgc::GraphicsPipelineBuildInfo& pipelineInfo = pCreateInfo->pipelineInfo;
     uint32_t shaderMask = 0;
-    shaderMask |= (pipelineInfo.vs.pModuleData  != nullptr) ? (1 << ShaderStage::ShaderStageVertex)      : 0;
-    shaderMask |= (pipelineInfo.tcs.pModuleData != nullptr) ? (1 << ShaderStage::ShaderStageTessControl) : 0;
-    shaderMask |= (pipelineInfo.tes.pModuleData != nullptr) ? (1 << ShaderStage::ShaderStageTessEval)    : 0;
-    shaderMask |= (pipelineInfo.gs.pModuleData  != nullptr) ? (1 << ShaderStage::ShaderStageGeometry)    : 0;
-    shaderMask |= (pipelineInfo.fs.pModuleData  != nullptr) ? (1 << ShaderStage::ShaderStageFragment)    : 0;
+    shaderMask |= (pipelineInfo.vs.pModuleData  != nullptr) ? ShaderStageBit::ShaderStageVertexBit      : 0;
+    shaderMask |= (pipelineInfo.tcs.pModuleData != nullptr) ? ShaderStageBit::ShaderStageTessControlBit : 0;
+    shaderMask |= (pipelineInfo.tes.pModuleData != nullptr) ? ShaderStageBit::ShaderStageTessEvalBit    : 0;
+    shaderMask |= (pipelineInfo.gs.pModuleData  != nullptr) ? ShaderStageBit::ShaderStageGeometryBit    : 0;
+    shaderMask |= (pipelineInfo.fs.pModuleData  != nullptr) ? ShaderStageBit::ShaderStageFragmentBit    : 0;
     BuildCompilerInfo(pDevice, pShaderInfo, shaderMask, pCreateInfo);
 
     if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
@@ -2370,8 +2434,6 @@ void PipelineCompiler::ApplyPipelineOptions(
         pOptions->includeIr = true;
     }
 
-    pOptions->optimizationLevel = ((flags & VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT) != 0 ? 0 : 2);
-
     if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT) ||
         pDevice->GetEnabledFeatures().scalarBlockLayout)
     {
@@ -2383,20 +2445,20 @@ void PipelineCompiler::ApplyPipelineOptions(
         pOptions->robustBufferAccess = true;
     }
 
-    // Setup shadow descriptor table pointer
-    const auto& info = m_pPhysicalDevice->PalProperties();
-    pOptions->shadowDescriptorTableUsage = (info.gpuMemoryProperties.flags.shadowDescVaSupport ?
-                                            Vkgc::ShadowDescriptorTableUsage::Enable :
-                                            Vkgc::ShadowDescriptorTableUsage::Disable);
+    // Provide necessary runtime settings and PAL device properties
+    const auto& settings = m_pPhysicalDevice->GetRuntimeSettings();
+    const auto& info     = m_pPhysicalDevice->PalProperties();
+
+    pOptions->shadowDescriptorTableUsage   = settings.enableFmaskBasedMsaaRead ?
+                                             Vkgc::ShadowDescriptorTableUsage::Enable :
+                                             Vkgc::ShadowDescriptorTableUsage::Disable;
     pOptions->shadowDescriptorTablePtrHigh =
           static_cast<uint32_t>(info.gpuMemoryProperties.shadowDescTableVaStart >> 32);
 
     pOptions->pageMigrationEnabled = info.gpuMemoryProperties.flags.pageMigrationEnabled;
 
-    // Apply runtime settings from device
-    const auto& settings = m_pPhysicalDevice->GetRuntimeSettings();
     pOptions->enableRelocatableShaderElf = settings.enableRelocatableShaders;
-    pOptions->disableImageResourceCheck = settings.disableImageResourceTypeCheck;
+    pOptions->disableImageResourceCheck  = settings.disableImageResourceTypeCheck;
 
     if (pDevice->GetEnabledFeatures().robustBufferAccessExtended)
     {
@@ -2747,6 +2809,7 @@ void PipelineCompiler::GetGraphicsPipelineCacheId(
     hash.Update(pCreateInfo->pipelineInfo.nggState);
     hash.Update(pCreateInfo->dbFormat);
     hash.Update(pCreateInfo->pipelineInfo.dynamicVertexStride);
+    hash.Update(pCreateInfo->pipelineInfo.rsState);
 
     hash.Update(pCreateInfo->pipelineMetadata.pointSizeUsed);
 

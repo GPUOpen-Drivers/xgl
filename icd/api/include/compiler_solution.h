@@ -130,6 +130,7 @@ public:
         const void*  pInitialData,
         size_t       initialDataSize,
         void*        pShaderCacheMem,
+        uint32_t     expectedEntries,
         ShaderCache* pShaderCache) = 0;
 
     virtual VkResult BuildShaderModule(
@@ -195,6 +196,7 @@ protected:
     static const char* GetShaderStageName(ShaderStage shaderStage);
 
 private:
+
     PAL_DISALLOW_COPY_AND_ASSIGN(CompilerSolution);
 };
 

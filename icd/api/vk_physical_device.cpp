@@ -336,6 +336,7 @@ PhysicalDevice::PhysicalDevice(
     m_tunnelComputeSubEngineIndex(UINT32_MAX),
     m_tunnelPriorities(),
     m_queueFamilyCount(0),
+    m_pipelineCacheCount(0),
     m_appProfile(appProfile),
     m_prtOnDmaSupported(true),
     m_eqaaSupported(true),
@@ -970,7 +971,7 @@ VkResult PhysicalDevice::Initialize()
                     m_memoryVkIndexToPalHeap[m_memoryProperties.memoryTypeCount] =
                         m_memoryVkIndexToPalHeap[memoryTypeIndex];
                     m_memoryPalHeapToVkIndexBits[m_memoryVkIndexToPalHeap[m_memoryProperties.memoryTypeCount]] |=
-                        (1UL << memoryTypeIndex);
+                        (1UL << m_memoryProperties.memoryTypeCount);
 
                     m_memoryTypeMask |= 1 << m_memoryProperties.memoryTypeCount;
 
@@ -2071,6 +2072,7 @@ void PhysicalDevice::GetSparseImageFormatProperties(
     }
 }
 
+// =====================================================================================================================
 VkResult PhysicalDevice::GetPhysicalDeviceCalibrateableTimeDomainsEXT(
     uint32_t*                           pTimeDomainCount,
     VkTimeDomainEXT*                    pTimeDomains)
@@ -2180,13 +2182,8 @@ VkResult PhysicalDevice::GetPhysicalDeviceToolPropertiesEXT(
 // Returns the API version supported by this device.
 uint32_t PhysicalDevice::GetSupportedAPIVersion() const
 {
-#if VKI_SDK_NEXT
     // Currently all of our HW supports Vulkan 1.3
     return (VK_API_VERSION_1_3 | VK_HEADER_VERSION);
-#else
-    // Currently all of our HW supports Vulkan 1.2
-    return (VK_API_VERSION_1_2 | VK_HEADER_VERSION);
-#endif
 }
 
 // =====================================================================================================================
@@ -3746,7 +3743,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_GLOBAL_PRIORITY));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_GLOBAL_PRIORITY_QUERY));
-
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_GLOBAL_PRIORITY));
     }
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_FENCE));
@@ -3868,8 +3865,9 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_INTEGER_DOT_PRODUCT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COPY_COMMANDS2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW));
-    bool supportFloatAtomics = ((pPhysicalDevice == nullptr) ||
-                                 pPhysicalDevice->PalProperties().gfxipProperties.flags.supportFloatAtomics);
+    bool supportFloatAtomics = ((pPhysicalDevice == nullptr)                                                  ||
+                                 pPhysicalDevice->PalProperties().gfxipProperties.flags.supportFloat32Atomics ||
+                                 pPhysicalDevice->PalProperties().gfxipProperties.flags.supportFloat64Atomics);
     if (supportFloatAtomics)
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_ATOMIC_FLOAT));
@@ -3885,6 +3883,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CUSTOM_BORDER_COLOR));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_COLOR_WRITE_ENABLE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_WORKGROUP_MEMORY_EXPLICIT_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_LOAD_STORE_OP_NONE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_YCBCR_IMAGE_ARRAYS));
 
@@ -3917,9 +3916,12 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_DRAW_INDIRECT_COUNT));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_IMAGE_LOAD_STORE_LOD));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_INFO));
-        if ((pPhysicalDevice == nullptr) || pPhysicalDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
+
         {
-            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_FRAGMENT_MASK));
+            if ((pPhysicalDevice == nullptr) || pPhysicalDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
+            {
+                availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_FRAGMENT_MASK));
+            }
         }
 #if VK_IS_PAL_VERSION_AT_LEAST(664, 1)
         if ((pPhysicalDevice == nullptr) ||
@@ -4959,14 +4961,14 @@ void PhysicalDevice::GetPhysicalDeviceDescriptorIndexingFeatures(
     T pDescriptorIndexingFeatures
     ) const
 {
-    pDescriptorIndexingFeatures->shaderInputAttachmentArrayDynamicIndexing           = VK_FALSE;
+    pDescriptorIndexingFeatures->shaderInputAttachmentArrayDynamicIndexing           = VK_TRUE;
     pDescriptorIndexingFeatures->shaderUniformTexelBufferArrayDynamicIndexing        = VK_TRUE;
     pDescriptorIndexingFeatures->shaderStorageTexelBufferArrayDynamicIndexing        = VK_TRUE;
     pDescriptorIndexingFeatures->shaderUniformBufferArrayNonUniformIndexing          = VK_TRUE;
     pDescriptorIndexingFeatures->shaderSampledImageArrayNonUniformIndexing           = VK_TRUE;
     pDescriptorIndexingFeatures->shaderStorageBufferArrayNonUniformIndexing          = VK_TRUE;
     pDescriptorIndexingFeatures->shaderStorageImageArrayNonUniformIndexing           = VK_TRUE;
-    pDescriptorIndexingFeatures->shaderInputAttachmentArrayNonUniformIndexing        = VK_FALSE;
+    pDescriptorIndexingFeatures->shaderInputAttachmentArrayNonUniformIndexing        = VK_TRUE;
     pDescriptorIndexingFeatures->shaderUniformTexelBufferArrayNonUniformIndexing     = VK_TRUE;
     pDescriptorIndexingFeatures->shaderStorageTexelBufferArrayNonUniformIndexing     = VK_TRUE;
     pDescriptorIndexingFeatures->descriptorBindingUniformBufferUpdateAfterBind       = VK_TRUE;
@@ -5735,7 +5737,6 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
-#if VKI_SDK_NEXT
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceVulkan13Features*>(pHeader);
@@ -5763,7 +5764,6 @@ size_t PhysicalDevice::GetFeatures2(
 
                 break;
             }
-#endif
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
             {
@@ -6017,32 +6017,40 @@ size_t PhysicalDevice::GetFeatures2(
                 auto pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(pHeader);
                 if (updateFeatures)
                 {
-                    pExtInfo->shaderBufferFloat32Atomics   = VK_TRUE;
+                    if (PalProperties().gfxipProperties.flags.supportFloat32Atomics)
+                    {
+                        pExtInfo->shaderSharedFloat32Atomics = VK_TRUE;
+                        pExtInfo->shaderBufferFloat32Atomics = VK_TRUE;
+                        pExtInfo->shaderImageFloat32Atomics  = VK_TRUE;
+                        pExtInfo->sparseImageFloat32Atomics  = VK_TRUE;
+                    }
+                    else
+                    {
+                        pExtInfo->shaderSharedFloat32Atomics = VK_FALSE;
+                        pExtInfo->shaderBufferFloat32Atomics = VK_FALSE;
+                        pExtInfo->shaderImageFloat32Atomics  = VK_FALSE;
+                        pExtInfo->sparseImageFloat32Atomics  = VK_FALSE;
+                    }
+
                     pExtInfo->shaderBufferFloat32AtomicAdd = VK_FALSE;
-                    if (PalProperties().gfxipProperties.flags.support64BitInstructions)
-                    {
-                        pExtInfo->shaderBufferFloat64Atomics   = VK_TRUE;
-                    }
-                    else
-                    {
-                        pExtInfo->shaderBufferFloat64Atomics   = VK_FALSE;
-                    }
-                    pExtInfo->shaderBufferFloat64AtomicAdd = VK_FALSE;
-                    pExtInfo->shaderSharedFloat32Atomics   = VK_TRUE;
-                    pExtInfo->shaderSharedFloat32AtomicAdd = VK_FALSE;
-                    if (PalProperties().gfxipProperties.flags.support64BitInstructions)
-                    {
-                        pExtInfo->shaderSharedFloat64Atomics   = VK_TRUE;
-                    }
-                    else
-                    {
-                        pExtInfo->shaderSharedFloat64Atomics   = VK_FALSE;
-                    }
-                    pExtInfo->shaderSharedFloat64AtomicAdd = VK_FALSE;
-                    pExtInfo->shaderImageFloat32Atomics    = VK_TRUE;
                     pExtInfo->shaderImageFloat32AtomicAdd  = VK_FALSE;
-                    pExtInfo->sparseImageFloat32Atomics    = VK_TRUE;
                     pExtInfo->sparseImageFloat32AtomicAdd  = VK_FALSE;
+                    pExtInfo->shaderSharedFloat32AtomicAdd = VK_FALSE;
+
+                    if (PalProperties().gfxipProperties.flags.support64BitInstructions &&
+                        PalProperties().gfxipProperties.flags.supportFloat64Atomics)
+                    {
+                        pExtInfo->shaderBufferFloat64Atomics = VK_TRUE;
+                        pExtInfo->shaderSharedFloat64Atomics = VK_TRUE;
+                    }
+                    else
+                    {
+                        pExtInfo->shaderBufferFloat64Atomics = VK_FALSE;
+                        pExtInfo->shaderSharedFloat64Atomics = VK_FALSE;
+                    }
+
+                    pExtInfo->shaderBufferFloat64AtomicAdd = VK_FALSE;
+                    pExtInfo->shaderSharedFloat64AtomicAdd = VK_FALSE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6058,29 +6066,36 @@ size_t PhysicalDevice::GetFeatures2(
                     pExtInfo->shaderBufferFloat16Atomics      = VK_FALSE;
                     pExtInfo->shaderBufferFloat16AtomicAdd    = VK_FALSE;
                     pExtInfo->shaderBufferFloat16AtomicMinMax = VK_FALSE;
-                    pExtInfo->shaderBufferFloat32AtomicMinMax = VK_TRUE;
-                    if (PalProperties().gfxipProperties.flags.support64BitInstructions)
-                    {
-                        pExtInfo->shaderBufferFloat64AtomicMinMax = VK_TRUE;
-                    }
-                    else
-                    {
-                        pExtInfo->shaderBufferFloat64AtomicMinMax = VK_FALSE;
-                    }
                     pExtInfo->shaderSharedFloat16Atomics      = VK_FALSE;
                     pExtInfo->shaderSharedFloat16AtomicAdd    = VK_FALSE;
                     pExtInfo->shaderSharedFloat16AtomicMinMax = VK_FALSE;
-                    pExtInfo->shaderSharedFloat32AtomicMinMax = VK_TRUE;
-                    if (PalProperties().gfxipProperties.flags.support64BitInstructions)
+
+                    if (PalProperties().gfxipProperties.flags.supportFloat32Atomics)
                     {
+                        pExtInfo->shaderImageFloat32AtomicMinMax  = VK_TRUE;
+                        pExtInfo->sparseImageFloat32AtomicMinMax  = VK_TRUE;
+                        pExtInfo->shaderSharedFloat32AtomicMinMax = VK_TRUE;
+                        pExtInfo->shaderBufferFloat32AtomicMinMax = VK_TRUE;
+                    }
+                    else
+                    {
+                        pExtInfo->shaderImageFloat32AtomicMinMax  = VK_FALSE;
+                        pExtInfo->sparseImageFloat32AtomicMinMax  = VK_FALSE;
+                        pExtInfo->shaderSharedFloat32AtomicMinMax = VK_FALSE;
+                        pExtInfo->shaderBufferFloat32AtomicMinMax = VK_FALSE;
+                    }
+
+                    if (PalProperties().gfxipProperties.flags.support64BitInstructions &&
+                        PalProperties().gfxipProperties.flags.supportFloat64Atomics)
+                    {
+                        pExtInfo->shaderBufferFloat64AtomicMinMax = VK_TRUE;
                         pExtInfo->shaderSharedFloat64AtomicMinMax = VK_TRUE;
                     }
                     else
                     {
+                        pExtInfo->shaderBufferFloat64AtomicMinMax = VK_FALSE;
                         pExtInfo->shaderSharedFloat64AtomicMinMax = VK_FALSE;
                     }
-                    pExtInfo->shaderImageFloat32AtomicMinMax  = VK_TRUE;
-                    pExtInfo->sparseImageFloat32AtomicMinMax  = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6166,7 +6181,6 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
-#if VKI_SDK_NEXT
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXTURE_COMPRESSION_ASTC_HDR_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceTextureCompressionASTCHDRFeatures*>(pHeader);
@@ -6179,7 +6193,22 @@ size_t PhysicalDevice::GetFeatures2(
                 structSize = sizeof(*pExtInfo);
                 break;
             }
-#endif
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->workgroupMemoryExplicitLayout                  = VK_TRUE;
+                    pExtInfo->workgroupMemoryExplicitLayoutScalarBlockLayout = VK_TRUE;
+                    pExtInfo->workgroupMemoryExplicitLayout8BitAccess        = VK_TRUE;
+                    pExtInfo->workgroupMemoryExplicitLayout16BitAccess       = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
 
             default:
             {
@@ -6678,7 +6707,6 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
-#if VKI_SDK_NEXT
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES:
         {
             auto* pVulkan13Properties = static_cast<VkPhysicalDeviceVulkan13Properties*>(pNext);
@@ -6748,7 +6776,6 @@ void PhysicalDevice::GetDeviceProperties2(
 
             break;
         }
-#endif
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR:
         {
@@ -6783,7 +6810,10 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->fragmentShadingRateWithShaderDepthStencilWrites      =
                 PalProperties().gfxipProperties.flags.supportVrsWithDsExports;
             pProps->fragmentShadingRateWithSampleMask                    = VK_TRUE;
-            pProps->fragmentShadingRateWithShaderSampleMask              = VK_TRUE;
+
+            pProps->fragmentShadingRateWithShaderSampleMask =
+                PalProperties().gfxipProperties.flags.supportVrsWithDsExports;
+
             pProps->fragmentShadingRateWithConservativeRasterization     = VK_TRUE;
             pProps->fragmentShadingRateWithFragmentShaderInterlock       = VK_FALSE;
             pProps->fragmentShadingRateWithCustomSampleLocations         = VK_TRUE;
@@ -7026,15 +7056,45 @@ void PhysicalDevice::GetExternalSemaphoreProperties(
     pExternalSemaphoreProperties->externalSemaphoreFeatures     = 0;
     const Pal::DeviceProperties& props                          = PalProperties();
 
+    bool isTimeline = false;
+
+    for (const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pExternalSemaphoreInfo->pNext);
+        pHeader != nullptr; pHeader = pHeader->pNext)
+    {
+        switch (static_cast<uint32>(pHeader->sType))
+        {
+            case VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO_KHR:
+            {
+                const auto* pTypeInfo = reinterpret_cast<const VkSemaphoreTypeCreateInfoKHR*>(pHeader);
+
+                isTimeline = (pTypeInfo->semaphoreType == VK_SEMAPHORE_TYPE_TIMELINE_KHR);
+                break;
+            }
+            default:
+            {
+                // Skip any unknown extension structures
+                break;
+            }
+        }
+    }
+
 #if defined(__unix__)
     if (IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_SEMAPHORE_FD))
     {
+        // Exporting as SYNC_FD is only supported for binary semaphores according to spec:
+        // 1) VUID-VkSemaphoreGetFdInfoKHR-handleType-03253:
+        //    If handleType refers to a handle type with copy payload transference
+        //    semantics, semaphore must have been created with a VkSemaphoreType
+        //    of VK_SEMAPHORE_TYPE_BINARY
+        // 2) According to Table 9. Handle Types Supported by VkImportSemaphoreFdInfoKHR in Chapter 7. Synchronization and Cache Control,
+        //    SYNC_FD has copy payload transference.
         if (pExternalSemaphoreInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT)
         {
             pExternalSemaphoreProperties->externalSemaphoreFeatures = VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT |
                                                                       VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;
         }
         else if ((pExternalSemaphoreInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT) &&
+                 isTimeline == false &&
                  (props.osProperties.supportSyncFileSemaphore))
         {
             pExternalSemaphoreProperties->externalSemaphoreFeatures = VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT |
@@ -7619,7 +7679,6 @@ static void VerifyExtensions(
                && dev.IsExtensionSupported(DeviceExtensions::KHR_BUFFER_DEVICE_ADDRESS));
     }
 
-#if VKI_SDK_NEXT
     if (apiVersion >= VK_API_VERSION_1_3)
     {
         VK_ASSERT(dev.IsExtensionSupported(DeviceExtensions::EXT_4444_FORMATS)
@@ -7646,7 +7705,6 @@ static void VerifyExtensions(
                && dev.IsExtensionSupported(DeviceExtensions::KHR_SYNCHRONIZATION2)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY));
     }
-#endif
 }
 
 // =====================================================================================================================
@@ -8010,6 +8068,33 @@ uint32 PhysicalDevice::GetNumberOfSupportedShadingRates(
     }
 
     return outputCount;
+}
+
+// =====================================================================================================================
+// Gets default pipeline cache expected entry count based on current existing pipeline cache count.
+uint32_t PhysicalDevice::GetPipelineCacheExpectedEntryCount()
+{
+    // if expectedEntries is 0 , default value 0x4000 will be used.
+    uint32_t expectedEntries = 0;
+    // It's supposed to be protected by a Mutex, but the number doesn't really count much and using AtomicIncrement is
+    // enough.
+    const uint32_t excessivePipelineCacheCount =
+        GetRuntimeSettings().excessivePipelineCacheCountThreshold;
+
+    if (Util::AtomicIncrement(&m_pipelineCacheCount) > excessivePipelineCacheCount / MaxPalDevices)
+    {
+        expectedEntries = GetRuntimeSettings().expectedPipelineCacheEntries;
+    }
+
+    return expectedEntries;
+}
+
+// =====================================================================================================================
+// Decrease pipeline cachecount
+void PhysicalDevice::DecreasePipelineCacheCount()
+{
+    VK_ALERT(m_pipelineCacheCount == 0);
+    Util::AtomicDecrement(&m_pipelineCacheCount);
 }
 
 // =====================================================================================================================
@@ -8437,14 +8522,6 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalFenceProperties(
         pExternalFenceProperties);
 }
 
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkTrimCommandPool(
-    VkDevice                                    device,
-    VkCommandPool                               commandPool,
-    VkCommandPoolTrimFlags                      flags)
-{
-}
-
 #if defined(__unix__)
 
 #ifdef VK_USE_PLATFORM_XCB_KHR
@@ -8692,7 +8769,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceToolPropertiesEXT(
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceToolProperties(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pToolCount,
     VkPhysicalDeviceToolPropertiesEXT*          pToolProperties)

@@ -35,11 +35,7 @@
 #if EXTERNAL_VULKAN_HEADERS
 #include "vulkan/vk_icd.h"
 #else
-#if VKI_SDK_NEXT
 #include "sdk-1.3/vulkan/vk_icd.h"
-#else
-#include "sdk-1.2/vulkan/vk_icd.h"
-#endif
 #endif
 
 #endif /* __VK_ICD_H_PROXY__ */

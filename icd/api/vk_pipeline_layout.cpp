@@ -53,7 +53,14 @@ uint64_t PipelineLayout::BuildApiHash(
 
     for (uint32_t i = 0; i < pCreateInfo->setLayoutCount; i++)
     {
-        hasher.Update(DescriptorSetLayout::ObjectFromHandle(pCreateInfo->pSetLayouts[i])->GetApiHash());
+        if (pCreateInfo->pSetLayouts[i] != VK_NULL_HANDLE)
+        {
+            hasher.Update(DescriptorSetLayout::ObjectFromHandle(pCreateInfo->pSetLayouts[i])->GetApiHash());
+        }
+        else
+        {
+            hasher.Update(0ULL);
+        }
     }
 
     hasher.Update(pCreateInfo->pushConstantRangeCount);
@@ -407,49 +414,54 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
     {
         SetUserDataLayout* pSetUserData = &pSetUserDataLayouts[i];
 
-        const DescriptorSetLayout::CreateInfo& setLayoutInfo =
-            DescriptorSetLayout::ObjectFromHandle(pIn->pSetLayouts[i])->Info();
-
         pSetUserData->setPtrRegOffset      = InvalidReg;
         pSetUserData->dynDescDataRegOffset = 0;
-        pSetUserData->dynDescCount         = setLayoutInfo.numDynamicDescriptors;
+        pSetUserData->dynDescCount         = 0;
         pSetUserData->firstRegOffset       = setBindingCompactRegBase - pUserDataLayout->setBindingPtrRegBase;
         pSetUserData->totalRegCount        = 0;
 
-        if (setLayoutInfo.activeStageMask != 0)
+        if (pIn->pSetLayouts[i] != VK_NULL_HANDLE)
         {
-            // Add space for static descriptors
-            if (setLayoutInfo.sta.numRsrcMapNodes > 0)
-            {
-                pPipelineInfo->numUserDataNodes += 1;
-                pPipelineInfo->numRsrcMapNodes  += setLayoutInfo.sta.numRsrcMapNodes;
+            const DescriptorSetLayout::CreateInfo& setLayoutInfo =
+                DescriptorSetLayout::ObjectFromHandle(pIn->pSetLayouts[i])->Info();
 
-                // Add count for FMASK nodes
-                if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
+            if (setLayoutInfo.activeStageMask != 0)
+            {
+                pSetUserData->dynDescCount = setLayoutInfo.numDynamicDescriptors;
+
+                // Add space for static descriptors
+                if (setLayoutInfo.sta.numRsrcMapNodes > 0)
                 {
-                    pPipelineInfo->numRsrcMapNodes += setLayoutInfo.sta.numRsrcMapNodes;
+                    pPipelineInfo->numUserDataNodes += 1;
+                    pPipelineInfo->numRsrcMapNodes  += setLayoutInfo.sta.numRsrcMapNodes;
+
+                    // Add count for FMASK nodes
+                    if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
+                    {
+                        pPipelineInfo->numRsrcMapNodes += setLayoutInfo.sta.numRsrcMapNodes;
+                    }
                 }
-            }
 
-            // Add space for immutable sampler descriptor storage needed by the set
-            pPipelineInfo->numDescRangeValueNodes += setLayoutInfo.imm.numDescriptorValueNodes;
+                // Add space for immutable sampler descriptor storage needed by the set
+                pPipelineInfo->numDescRangeValueNodes += setLayoutInfo.imm.numDescriptorValueNodes;
 
-            // Add space for dynamic descriptors
-            if (setLayoutInfo.dyn.numRsrcMapNodes > 0)
-            {
-                pPipelineInfo->numUserDataNodes += 1;
-                pPipelineInfo->numRsrcMapNodes  += setLayoutInfo.dyn.numRsrcMapNodes;
-                totalDynDescCount               += setLayoutInfo.numDynamicDescriptors;
-            }
+                // Add space for dynamic descriptors
+                if (setLayoutInfo.dyn.numRsrcMapNodes > 0)
+                {
+                    pPipelineInfo->numUserDataNodes += 1;
+                    pPipelineInfo->numRsrcMapNodes  += setLayoutInfo.dyn.numRsrcMapNodes;
+                    totalDynDescCount += setLayoutInfo.numDynamicDescriptors;
+                }
 
-            // Fill set user data layout
-            pSetUserData->dynDescDataRegOffset = pSetUserData->firstRegOffset + pSetUserData->totalRegCount;
-            pSetUserData->totalRegCount +=
-                pSetUserData->dynDescCount * DescriptorSetLayout::GetDynamicBufferDescDwSize(pDevice);
-            if (setLayoutInfo.sta.numRsrcMapNodes > 0)
-            {
-                pSetUserData->setPtrRegOffset = pSetUserData->firstRegOffset + pSetUserData->totalRegCount;
-                pSetUserData->totalRegCount += SetPtrRegCount;
+                // Fill set user data layout
+                pSetUserData->dynDescDataRegOffset = pSetUserData->firstRegOffset + pSetUserData->totalRegCount;
+                pSetUserData->totalRegCount +=
+                    pSetUserData->dynDescCount * DescriptorSetLayout::GetDynamicBufferDescDwSize(pDevice);
+                if (setLayoutInfo.sta.numRsrcMapNodes > 0)
+                {
+                    pSetUserData->setPtrRegOffset = pSetUserData->firstRegOffset + pSetUserData->totalRegCount;
+                    pSetUserData->totalRegCount += SetPtrRegCount;
+                }
             }
         }
 
@@ -522,7 +534,10 @@ VkResult PipelineLayout::Create(
     for (uint32_t i = 0; i < pCreateInfo->setLayoutCount; ++i)
     {
         DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pCreateInfo->pSetLayouts[i]);
-        setLayoutsArraySize += pLayout->GetObjectSize(VK_SHADER_STAGE_ALL);
+        if (pLayout != nullptr)
+        {
+            setLayoutsArraySize += pLayout->GetObjectSize(VK_SHADER_STAGE_ALL);
+        }
     }
 
     // Need to add extra storage for DescriptorSetLayout*, SetUserDataLayout, the descriptor set layouts themselves,
@@ -565,14 +580,21 @@ VkResult PipelineLayout::Create(
 
         for (uint32_t i = 0; i < pCreateInfo->setLayoutCount; ++i)
         {
-            ppSetLayouts[i] = reinterpret_cast<DescriptorSetLayout*>(Util::VoidPtrInc(pSysMem, currentSetLayoutOffset));
-
             const DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pCreateInfo->pSetLayouts[i]);
 
-            // Copy the original descriptor set layout object
-            pLayout->Copy(pDevice, VK_SHADER_STAGE_ALL, ppSetLayouts[i]);
+            if (pLayout != nullptr)
+            {
+                ppSetLayouts[i] = reinterpret_cast<DescriptorSetLayout*>(Util::VoidPtrInc(pSysMem, currentSetLayoutOffset));
 
-            currentSetLayoutOffset += pLayout->GetObjectSize(VK_SHADER_STAGE_ALL);
+                // Copy the original descriptor set layout object
+                pLayout->Copy(pDevice, VK_SHADER_STAGE_ALL, ppSetLayouts[i]);
+
+                currentSetLayoutOffset += pLayout->GetObjectSize(VK_SHADER_STAGE_ALL);
+            }
+            else
+            {
+                ppSetLayouts[i] = nullptr;
+            }
         }
 
         VK_PLACEMENT_NEW(pSysMem) PipelineLayout(pDevice, info, pipelineInfo, apiHash);
@@ -1144,7 +1166,8 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
     {
         const DescriptorSetLayout* pSetLayout = GetSetLayouts(setIndex);
 
-        const uint32_t visibility = stageMask & VkToVkgcShaderStageMask(pSetLayout->Info().activeStageMask);
+        const uint32_t visibility = (pSetLayout != nullptr) ?
+                (stageMask & VkToVkgcShaderStageMask(pSetLayout->Info().activeStageMask)) : 0;
 
         if (visibility != 0)
         {
@@ -1248,7 +1271,11 @@ VkResult PipelineLayout::Destroy(
 {
     for (uint32_t i = 0; i < m_info.setCount; ++i)
     {
-        GetSetLayouts(i)->Destroy(pDevice, pAllocator, false);
+        DescriptorSetLayout* pSetLayout = GetSetLayouts(i);
+        if (pSetLayout != nullptr)
+        {
+            pSetLayout->Destroy(pDevice, pAllocator, false);
+        }
     }
 
     this->~PipelineLayout();

@@ -154,5 +154,7 @@ VK_KHR_zero_initialize_workgroup_memory
 VK_EXT_load_store_op_none
 VK_KHR_maintenance4
 VK_EXT_image_view_min_lod
+VK_KHR_global_priority
 VK_EXT_index_type_uint8
 VK_EXT_provoking_vertex
+VK_KHR_workgroup_memory_explicit_layout

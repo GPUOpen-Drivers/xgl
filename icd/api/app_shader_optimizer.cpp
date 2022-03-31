@@ -153,6 +153,10 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pOptions->fp32DenormalMode = shaderCreate.tuningOptions.fp32DenormalMode;
                 }
+                if (shaderCreate.tuningOptions.fastMathFlags != 0)
+                {
+                    options.pOptions->fastMathFlags = shaderCreate.tuningOptions.fastMathFlags;
+                }
                 if (shaderCreate.apply.waveSize)
                 {
                     options.pOptions->waveSize = shaderCreate.tuningOptions.waveSize;
@@ -490,7 +494,7 @@ void ShaderOptimizer::BuildTuningProfile()
 
     // Only a single entry is currently supported
     m_tuningProfile.entryCount = 1;
-    PipelineProfileEntry& entry = m_tuningProfile.pEntries[0];
+    auto pEntry = &m_tuningProfile.pEntries[0];
 
     bool matchHash = false;
     if ((m_settings.overrideShaderHashLower != 0) ||
@@ -500,7 +504,7 @@ void ShaderOptimizer::BuildTuningProfile()
     }
     else
     {
-        entry.pattern.match.always = 1;
+        pEntry->pattern.match.always = 1;
     }
 
     // Assign ShaderStage type according to setting file
@@ -531,53 +535,53 @@ void ShaderOptimizer::BuildTuningProfile()
 
     VK_ASSERT(shaderStage < ShaderStage::ShaderStageCount);
 
-    ShaderProfilePattern& pattern = entry.pattern.shaders[shaderStage];
-    ShaderProfileAction& action   = entry.action.shaders[shaderStage];
+    auto pPattern = &pEntry->pattern.shaders[shaderStage];
+    auto pAction  = &pEntry->action.shaders[shaderStage];
 
-    pattern.match.codeHash = matchHash;
-    pattern.codeHash.lower = m_settings.overrideShaderHashLower;
-    pattern.codeHash.upper = m_settings.overrideShaderHashUpper;
+    pPattern->match.codeHash = matchHash;
+    pPattern->codeHash.lower = m_settings.overrideShaderHashLower;
+    pPattern->codeHash.upper = m_settings.overrideShaderHashUpper;
 
     if (m_settings.overrideNumVGPRsAvailable != 0)
     {
-        action.shaderCreate.apply.vgprLimit         = true;
-        action.shaderCreate.tuningOptions.vgprLimit = m_settings.overrideNumVGPRsAvailable;
+        pAction->shaderCreate.apply.vgprLimit         = true;
+        pAction->shaderCreate.tuningOptions.vgprLimit = m_settings.overrideNumVGPRsAvailable;
     }
 
     if (m_settings.overrideMaxLdsSpillDwords != 0)
     {
-        action.shaderCreate.apply.ldsSpillLimitDwords         = true;
-        action.shaderCreate.tuningOptions.ldsSpillLimitDwords = m_settings.overrideMaxLdsSpillDwords;
+        pAction->shaderCreate.apply.ldsSpillLimitDwords         = true;
+        pAction->shaderCreate.tuningOptions.ldsSpillLimitDwords = m_settings.overrideMaxLdsSpillDwords;
     }
 
     if (m_settings.overrideUserDataSpillThreshold)
     {
-        action.shaderCreate.apply.userDataSpillThreshold         = true;
-        action.shaderCreate.tuningOptions.userDataSpillThreshold = 0;
+        pAction->shaderCreate.apply.userDataSpillThreshold         = true;
+        pAction->shaderCreate.tuningOptions.userDataSpillThreshold = 0;
     }
 
-    action.shaderCreate.apply.allowReZ                = m_settings.overrideAllowReZ;
-    action.shaderCreate.apply.enableSelectiveInline   = m_settings.overrideEnableSelectiveInline;
-    action.shaderCreate.apply.disableLoopUnrolls      = m_settings.overrideDisableLoopUnrolls;
+    pAction->shaderCreate.apply.allowReZ                = m_settings.overrideAllowReZ;
+    pAction->shaderCreate.apply.enableSelectiveInline   = m_settings.overrideEnableSelectiveInline;
+    pAction->shaderCreate.apply.disableLoopUnrolls      = m_settings.overrideDisableLoopUnrolls;
 
     if (m_settings.overrideUseSiScheduler)
     {
-        action.shaderCreate.tuningOptions.useSiScheduler = true;
+        pAction->shaderCreate.tuningOptions.useSiScheduler = true;
     }
 
     if (m_settings.overrideReconfigWorkgroupLayout)
     {
-        action.shaderCreate.tuningOptions.reconfigWorkgroupLayout = true;
+        pAction->shaderCreate.tuningOptions.reconfigWorkgroupLayout = true;
     }
 
     if (m_settings.overrideDisableLicm)
     {
-        action.shaderCreate.tuningOptions.disableLicm = true;
+        pAction->shaderCreate.tuningOptions.disableLicm = true;
     }
 
     if (m_settings.overrideEnableLoadScalarizer)
     {
-        action.shaderCreate.tuningOptions.enableLoadScalarizer = true;
+        pAction->shaderCreate.tuningOptions.enableLoadScalarizer = true;
     }
 
     switch (m_settings.overrideWaveSize)
@@ -585,12 +589,12 @@ void ShaderOptimizer::BuildTuningProfile()
     case ShaderWaveSize::WaveSizeAuto:
         break;
     case ShaderWaveSize::WaveSize64:
-        action.shaderCreate.apply.waveSize = true;
-        action.shaderCreate.tuningOptions.waveSize = 64;
+        pAction->shaderCreate.apply.waveSize = true;
+        pAction->shaderCreate.tuningOptions.waveSize = 64;
         break;
     case ShaderWaveSize::WaveSize32:
-        action.shaderCreate.apply.waveSize = true;
-        action.shaderCreate.tuningOptions.waveSize = 32;
+        pAction->shaderCreate.apply.waveSize = true;
+        pAction->shaderCreate.tuningOptions.waveSize = 32;
         break;
     default:
         VK_NEVER_CALLED();
@@ -603,45 +607,45 @@ void ShaderOptimizer::BuildTuningProfile()
     case WgpMode::WgpModeCu:
         break;
     case WgpMode::WgpModeWgp:
-        action.shaderCreate.apply.wgpMode = true;
+        pAction->shaderCreate.apply.wgpMode = true;
         break;
     default:
         VK_NEVER_CALLED();
     }
 
-    action.shaderCreate.apply.nggDisable      = m_settings.overrideUseNgg;
-    action.shaderCreate.apply.enableSubvector = m_settings.overrideEnableSubvector;
+    pAction->shaderCreate.apply.nggDisable      = m_settings.overrideUseNgg;
+    pAction->shaderCreate.apply.enableSubvector = m_settings.overrideEnableSubvector;
 
     if (m_settings.overrideWavesPerCu != 0)
     {
-        action.dynamicShaderInfo.apply.maxWavesPerCu = true;
-        action.dynamicShaderInfo.maxWavesPerCu       = m_settings.overrideWavesPerCu;
+        pAction->dynamicShaderInfo.apply.maxWavesPerCu = true;
+        pAction->dynamicShaderInfo.maxWavesPerCu       = m_settings.overrideWavesPerCu;
     }
 
     if ((m_settings.overrideCsTgPerCu != 0) &&
         (shaderStage == ShaderStage::ShaderStageCompute))
     {
-        action.dynamicShaderInfo.apply.maxThreadGroupsPerCu = true;
-        action.dynamicShaderInfo.maxThreadGroupsPerCu       = m_settings.overrideCsTgPerCu;
+        pAction->dynamicShaderInfo.apply.maxThreadGroupsPerCu = true;
+        pAction->dynamicShaderInfo.maxThreadGroupsPerCu       = m_settings.overrideCsTgPerCu;
     }
 
     if (m_settings.overrideUsePbbPerCrc != PipelineBinningModeDefault)
     {
-        entry.action.createInfo.apply.binningOverride = true;
+        pEntry->action.createInfo.apply.binningOverride = true;
 
         switch (m_settings.overrideUsePbbPerCrc)
         {
         case PipelineBinningModeEnable:
-            entry.action.createInfo.binningOverride = Pal::BinningOverride::Enable;
+            pEntry->action.createInfo.binningOverride = Pal::BinningOverride::Enable;
             break;
 
         case PipelineBinningModeDisable:
-            entry.action.createInfo.binningOverride = Pal::BinningOverride::Disable;
+            pEntry->action.createInfo.binningOverride = Pal::BinningOverride::Disable;
             break;
 
         case PipelineBinningModeDefault:
         default:
-            entry.action.createInfo.binningOverride = Pal::BinningOverride::Default;
+            pEntry->action.createInfo.binningOverride = Pal::BinningOverride::Default;
             break;
         }
     }
@@ -680,7 +684,7 @@ void ShaderOptimizer::BuildAppProfileLlpc()
 
     uint32_t i = 0;
 
-    m_appShaderProfile.BuildAppProfileLlpc(appProfile, gfxIpLevel, &m_appProfile);
+    m_appShaderProfile.BuildAppProfileLlpc(appProfile, gfxIpLevel, asicRevision, &m_appProfile);
 
     if (appProfile == AppProfile::Dota2)
     {

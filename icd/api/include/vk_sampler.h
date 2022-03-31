@@ -71,6 +71,11 @@ public:
         return m_multiPlaneCount;
     }
 
+    uint32_t GetBorderColorPaletteIndex() const
+    {
+        return m_borderColorPaletteIndex;
+    }
+
     Vkgc::SamplerYCbCrConversionMetaData* GetYCbCrConversionMetaData()
     {
         return m_pYcbcrConversionMetaData;
@@ -83,6 +88,15 @@ public:
     }
 
 protected:
+
+    struct SamplerExtStructs
+    {
+        const VkSamplerReductionModeCreateInfo*                   pSamplerReductionModeCreateInfo;
+        const VkSamplerYcbcrConversionInfo*                       pSamplerYcbcrConversionInfo;
+        const VkSamplerCustomBorderColorCreateInfoEXT*            pSamplerCustomBorderColorCreateInfoEXT;
+        const VkSamplerBorderColorComponentMappingCreateInfoEXT*  pSamplerBorderColorComponentMappingCreateInfoEXT;
+    };
+
     Sampler(
         uint64_t                              apiHash,
         bool                                  isYCbCrSampler,
@@ -99,7 +113,8 @@ protected:
     }
 
     static uint64_t BuildApiHash(
-        const VkSamplerCreateInfo* pCreateInfo);
+        const VkSamplerCreateInfo* pCreateInfo,
+        const SamplerExtStructs&   extStructs);
 
     const uint64_t                        m_apiHash;
     const bool                            m_isYCbCrSampler;
@@ -109,6 +124,11 @@ protected:
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Sampler);
+
+    static void HandleExtensionStructs(
+        const VkSamplerCreateInfo* pCreateInfo,
+        SamplerExtStructs*         pExtStructs);
+
 };
 
 namespace entry

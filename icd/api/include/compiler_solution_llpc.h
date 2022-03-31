@@ -57,6 +57,7 @@ public:
         const void*  pInitialData,
         size_t       initialDataSize,
         void*        pShaderCacheMem,
+        uint32_t     expectedEntries,
         ShaderCache* pShaderCache) override;
 
     virtual VkResult BuildShaderModule(

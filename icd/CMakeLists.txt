@@ -215,11 +215,13 @@ set(ICD_GEN_STRINGS_OPT -w ${ICD_STRING_DIR} -d ${ICD_STRING_DIR})
 
 set(ICD_GEN_STRINGS_FILES ${ICD_GEN_STRINGS} ${ICD_STRING_DIR}/func_table_template.py)
 
-set(ICD_STRING_OUTPUT_FILES ${ICD_STRING_DIR}/g_entry_points_decl.h
-                            ${ICD_STRING_DIR}/g_entry_points_impl.h
-                            ${ICD_STRING_DIR}/g_extensions_decl.h
-                            ${ICD_STRING_DIR}/g_extensions_impl.h
-                            ${ICD_STRING_DIR}/g_func_table.h
+set(ICD_STRING_OUTPUT_DIR ${ICD_STRING_DIR})
+
+set(ICD_STRING_OUTPUT_FILES ${ICD_STRING_OUTPUT_DIR}/g_entry_points_decl.h
+                            ${ICD_STRING_OUTPUT_DIR}/g_entry_points_impl.h
+                            ${ICD_STRING_OUTPUT_DIR}/g_extensions_decl.h
+                            ${ICD_STRING_OUTPUT_DIR}/g_extensions_impl.h
+                            ${ICD_STRING_OUTPUT_DIR}/g_func_table.h
 )
 
 set(ICD_STRING_SOURCE_FILES ${ICD_STRING_DIR}/entry_points.txt

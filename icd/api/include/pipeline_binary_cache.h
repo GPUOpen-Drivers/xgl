@@ -66,6 +66,7 @@ public:
 #if ICD_GPUOPEN_DEVMODE_BUILD
         vk::DevModeMgr*            pDevModeMgr,
 #endif
+        uint32_t                   expectedEntries,
         size_t                     initDataSize,
         const void*                pInitData,
         bool                       createArchiveLayers);
@@ -172,7 +173,8 @@ private:
 
     explicit PipelineBinaryCache(
         VkAllocationCallbacks*    pAllocationCallbacks,
-        const Vkgc::GfxIpVersion& gfxIp);
+        const Vkgc::GfxIpVersion& gfxIp,
+        uint32_t                  expectedEntries);
 
     VkResult InitializePlatformKey(
         const PhysicalDevice*  pPhysicalDevice,
@@ -241,6 +243,8 @@ private:
 #endif
 
     Util::ICacheLayer*        m_pMemoryLayer;
+
+    uint32_t                  m_expectedEntries;
 
     // Archive based cache layers
     using FileVector  = Util::Vector<Util::IArchiveFile*, 8, PalAllocator>;

@@ -110,25 +110,25 @@ private:
 
 namespace entry
 {
-VKAPI_ATTR VkResult VKAPI_CALL vkCreatePrivateDataSlotEXT(
+VKAPI_ATTR VkResult VKAPI_CALL vkCreatePrivateDataSlot(
     VkDevice                                    device,
     const VkPrivateDataSlotCreateInfoEXT*       pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
     VkPrivateDataSlotEXT*                       pPrivateDataSlot);
 
-VKAPI_ATTR void VKAPI_CALL vkDestroyPrivateDataSlotEXT(
+VKAPI_ATTR void VKAPI_CALL vkDestroyPrivateDataSlot(
     VkDevice                                    device,
     VkPrivateDataSlotEXT                        privateDataSlot,
     const VkAllocationCallbacks*                pAllocator);
 
-VKAPI_ATTR VkResult VKAPI_CALL vkSetPrivateDataEXT(
+VKAPI_ATTR VkResult VKAPI_CALL vkSetPrivateData(
     VkDevice                                    device,
     VkObjectType                                objectType,
     uint64_t                                    objectHandle,
     VkPrivateDataSlotEXT                        privateDataSlot,
     uint64_t                                    data);
 
-VKAPI_ATTR void VKAPI_CALL vkGetPrivateDataEXT(
+VKAPI_ATTR void VKAPI_CALL vkGetPrivateData(
     VkDevice                                    device,
     VkObjectType                                objectType,
     uint64_t                                    objectHandle,

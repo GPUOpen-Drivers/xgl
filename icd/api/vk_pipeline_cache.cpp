@@ -151,6 +151,7 @@ VkResult PipelineCache::Create(
 
         ShaderCache shaderCaches[MaxPalDevices];
         size_t shaderCacheOffset = sizeof(PipelineCache);
+        uint32_t expectedEntries = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetPipelineCacheExpectedEntryCount();
 
         for (uint32_t i = 0; i < numPalDevices; i++)
         {
@@ -168,6 +169,7 @@ VkResult PipelineCache::Create(
                 result = pDevice->GetCompiler(DefaultDeviceIndex)->CreateShaderCache(
                     pInitialData,
                     initialDataSize,
+                    expectedEntries,
                     Util::VoidPtrInc(pMemory, shaderCacheOffset),
                     &shaderCaches[i]);
             }
@@ -213,6 +215,7 @@ VkResult PipelineCache::Create(
 #if ICD_GPUOPEN_DEVMODE_BUILD
                     pDefaultPhysicalDevice->VkInstance()->GetDevModeMgr(),
 #endif
+                    expectedEntries,
                     initialDataSize,
                     pInitialData,
                     false);
@@ -237,6 +240,7 @@ VkResult PipelineCache::Destroy(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
+    pDevice->VkPhysicalDevice(DefaultDeviceIndex)->DecreasePipelineCacheCount();
     if (m_pBinaryCache != nullptr)
     {
         m_pBinaryCache->Destroy();

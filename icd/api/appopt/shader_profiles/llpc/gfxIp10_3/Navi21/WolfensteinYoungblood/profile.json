@@ -1,0 +1,88 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x15ed07fc5a652d5b fb9aadd786b3883a"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0xa0fb7ebc03b45207 afab1a2efcf63ae2"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x8d8b60de0782642b f143d8ecd6de6b11"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x421cc6f5ec031ec1 2f36edc1c043adf9"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x45b1fd4fe26b69c3 4a8d94913ed81bb"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x182812e30a77e9bc 26f3dad1df817a8a"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xa5e97aa30fc20bee cd825e729a4b3230"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    }
+  ]
+}

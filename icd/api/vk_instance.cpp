@@ -139,13 +139,8 @@ bool Instance::IsExtensionEnabledByEnv(
 VkResult Instance::EnumerateVersion(
     uint32_t*                       pApiVersion)
 {
-#if VKI_SDK_NEXT
     // Report 1.3 support
     *pApiVersion = (VK_API_VERSION_1_3 | VK_HEADER_VERSION);
-#else
-    // Report 1.2 support
-    *pApiVersion = (VK_API_VERSION_1_2 | VK_HEADER_VERSION);
-#endif
 
     return VK_SUCCESS;
 }

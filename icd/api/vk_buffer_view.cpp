@@ -60,26 +60,61 @@ VkResult BufferView::Create(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
+    void* pSrdMemory = Util::VoidPtrInc(pMemory, apiSize);
+
+    Buffer*      pBuffer                      = Buffer::ObjectFromHandle(pCreateInfo->buffer);
+    Pal::gpusize bufferAddress[MaxPalDevices] = {};
+
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+    {
+        bufferAddress[deviceIdx] = pBuffer->GpuVirtAddr(deviceIdx);
+    }
+
+    VkDeviceSize range = pCreateInfo->range;
+
+    if (range == VK_WHOLE_SIZE)
+    {
+        const RuntimeSettings&    settings       = pDevice->GetRuntimeSettings();
+        const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(pCreateInfo->format, settings);
+        const Pal::gpusize        stride         = Pal::Formats::BytesPerPixel(swizzledFormat.format);
+
+        range = Util::RoundDownToMultiple(pBuffer->GetSize() - pCreateInfo->offset, stride);
+    }
+
+    BuildSrd(pDevice,
+             pCreateInfo->offset,
+             range,
+             bufferAddress,
+             pCreateInfo->format,
+             pDevice->NumPalDevices(),
+             srdSize,
+             pSrdMemory);
+
+    VK_PLACEMENT_NEW(pMemory) BufferView(pDevice, static_cast<uint32_t>(srdSize), pSrdMemory);
+
+    *pBufferView = BufferView::HandleFromVoidPointer(pMemory);
+
+    return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+void BufferView::BuildSrd(
+    const Device*                 pDevice,
+    const VkDeviceSize            bufferOffset,
+    const VkDeviceSize            bufferRange,
+    const Pal::gpusize*           bufferAddress,
+    const VkFormat                format,
+    const uint32_t                deviceNum,
+    const size_t                  srdSize,
+    void*                         pSrdMemory)
+{
     // Build the SRD
-    Pal::BufferViewInfo info = {};
-
-    Buffer* pBuffer = Buffer::ObjectFromHandle(pCreateInfo->buffer);
-
+    Pal::BufferViewInfo info        = {};
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
-    info.swizzledFormat = VkToPalFormat(pCreateInfo->format, settings);
+    info.swizzledFormat = VkToPalFormat(format, settings);
     info.stride         = Pal::Formats::BytesPerPixel(info.swizzledFormat.format);
-    if (pCreateInfo->range == VK_WHOLE_SIZE)
-    {
-        /* "If range is equal to VK_WHOLE_SIZE, the range from offset to the end of the buffer is used.
-         *  If VK_WHOLE_SIZE is used and the remaining size of the buffer is not a multiple of the
-         *  element size of format, then the nearest smaller multiple is used." */
-        info.range = Util::RoundDownToMultiple(pBuffer->GetSize() - pCreateInfo->offset, info.stride);
-    }
-    else
-    {
-        info.range = pCreateInfo->range;
-    }
+    info.range          = bufferRange;
 
     // Bypass Mall read/write if no alloc policy is set for SRDs
     if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocBufferViewSrds))
@@ -88,12 +123,11 @@ VkResult BufferView::Create(
         info.flags.bypassMallWrite = 1;
     }
 
-    void* pSrdMemory = Util::VoidPtrInc(pMemory, apiSize);
-    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+    for (uint32_t deviceIdx = 0; deviceIdx < deviceNum; deviceIdx++)
     {
-        info.gpuAddr = pBuffer->GpuVirtAddr(deviceIdx) + pCreateInfo->offset;
+        info.gpuAddr = bufferAddress[deviceIdx] + bufferOffset;
 
-        if (pCreateInfo->format != VK_FORMAT_UNDEFINED)
+        if (format != VK_FORMAT_UNDEFINED)
         {
             pDevice->PalDevice(deviceIdx)->CreateTypedBufferViewSrds(
                 1, &info, Util::VoidPtrInc(pSrdMemory, srdSize * deviceIdx));
@@ -109,15 +143,9 @@ VkResult BufferView::Create(
         VK_ASSERT(srdSize >=
                   pDevice->VkPhysicalDevice(deviceIdx)->PalProperties().gfxipProperties.srdSizes.bufferView);
     }
-
-    VK_PLACEMENT_NEW (pMemory) BufferView (pDevice, static_cast<uint32_t>(srdSize), pSrdMemory);
-
-    *pBufferView = BufferView::HandleFromVoidPointer(pMemory);
-
-    return VK_SUCCESS;
 }
 
-// ===============================================================================================
+// =====================================================================================================================
 BufferView::BufferView(
     Device*             pDevice,
     uint32_t            srdSize,
@@ -129,7 +157,7 @@ BufferView::BufferView(
 {
 }
 
-// ===============================================================================================
+// =====================================================================================================================
 // Destroy a buffer object
 VkResult BufferView::Destroy(
     Device*                         pDevice,

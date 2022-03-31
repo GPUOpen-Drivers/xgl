@@ -261,6 +261,7 @@ struct AllGpuRenderState
     Pal::VrsRateParams               vrsRate;
     Pal::ColorWriteMaskParams        colorWriteMaskParams;
     SamplePattern                    samplePattern;
+
 };
 
 // State tracked during a render pass instance when building a command buffer.
@@ -643,15 +644,6 @@ public:
         const VkEvent*                              pEvents,
         uint32_t                                    dependencyCount,
         const VkDependencyInfoKHR*                  pDependencyInfos);
-
-    void ExecuteAcquireRelease(
-        uint32_t                                    eventCount,
-        const VkEvent*                              pEvents,
-        uint32_t                                    deviceIdx,
-        uint32_t                                    dependencyCount,
-        const VkDependencyInfoKHR*                  pDependencyInfos,
-        AcquireReleaseMode                          acquireReleaseMode,
-        uint32_t                                    rgpBarrierReasonType);
 
     void PipelineBarrier(
         PipelineStageFlags                          srcStageMask,
@@ -1124,7 +1116,7 @@ private:
         uint32_t                       mainTransitionCount);
 
     void ExecuteBarriers(
-        VirtualStackFrame&           virtStackFrame,
+        VirtualStackFrame*           pVirtStackFrame,
         uint32_t                     memBarrierCount,
         const VkMemoryBarrier*       pMemoryBarriers,
         uint32_t                     bufferMemoryBarrierCount,
@@ -1132,6 +1124,25 @@ private:
         uint32_t                     imageMemoryBarrierCount,
         const VkImageMemoryBarrier*  pImageMemoryBarriers,
         Pal::BarrierInfo*            pBarrier);
+
+    void ExecuteReleaseThenAcquire(
+        PipelineStageFlags           srcStageMask,
+        PipelineStageFlags           dstStageMask,
+        uint32_t                     memBarrierCount,
+        const VkMemoryBarrier*       pMemoryBarriers,
+        uint32_t                     bufferMemoryBarrierCount,
+        const VkBufferMemoryBarrier* pBufferMemoryBarriers,
+        uint32_t                     imageMemoryBarrierCount,
+        const VkImageMemoryBarrier*  pImageMemoryBarriers);
+
+    void ExecuteAcquireRelease(
+        uint32_t                     eventCount,
+        const VkEvent*               pEvents,
+        uint32_t                     deviceIdx,
+        uint32_t                     dependencyCount,
+        const VkDependencyInfoKHR*   pDependencyInfos,
+        AcquireReleaseMode           acquireReleaseMode,
+        uint32_t                     rgpBarrierReasonType);
 
     enum RebindUserDataFlag : uint32_t
     {
@@ -1229,6 +1240,14 @@ private:
         const VkDescriptorSet*                      pDescriptorSets,
         uint32_t                                    dynamicOffsetCount,
         const uint32_t*                             pDynamicOffsets);
+
+void SetUserDataPipelineLayout(
+        uint32_t                                    firstSet,
+        uint32_t                                    setCount,
+        const PipelineLayout*                       pLayout,
+        PipelineBindState*                          pBindState,
+        const Pal::PipelineBindPoint                palBindPoint,
+        const PipelineBindPoint                     apiBindPoint);
 
     template<uint32_t numPalDevices, bool robustBufferAccess>
     static VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets(
@@ -1876,27 +1895,27 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginConditionalRenderingEXT(
 VKAPI_ATTR void VKAPI_CALL vkCmdEndConditionalRenderingEXT(
     VkCommandBuffer                           commandBuffer);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetEvent2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetEvent2(
     VkCommandBuffer                             commandBuffer,
     VkEvent                                     event,
     const VkDependencyInfoKHR*                  pDependencyInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdResetEvent2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdResetEvent2(
     VkCommandBuffer                             commandBuffer,
     VkEvent                                     event,
     VkPipelineStageFlags2KHR                    stageMask);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdWaitEvents2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdWaitEvents2(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    eventCount,
     const VkEvent*                              pEvents,
     const VkDependencyInfoKHR*                  pDependencyInfos);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier2(
     VkCommandBuffer                             commandBuffer,
     const VkDependencyInfoKHR*                  pDependencyInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdWriteTimestamp2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdWriteTimestamp2(
     VkCommandBuffer                             commandBuffer,
     VkPipelineStageFlags2KHR                    stage,
     VkQueryPool                                 queryPool,
@@ -1909,36 +1928,36 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarker2AMD(
     VkDeviceSize                                dstOffset,
     uint32_t                                    marker);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderingKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginRendering(
     VkCommandBuffer           commandBuffer,
     const VkRenderingInfoKHR* pRenderingInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderingKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdEndRendering(
     VkCommandBuffer           commandBuffer);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetCullModeEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetCullMode(
     VkCommandBuffer                             commandBuffer,
     VkCullModeFlags                             cullMode);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetFrontFaceEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetFrontFace(
     VkCommandBuffer                             commandBuffer,
     VkFrontFace                                 frontFace);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveTopologyEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveTopology(
     VkCommandBuffer                             commandBuffer,
     VkPrimitiveTopology                         primitiveTopology);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetViewportWithCountEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetViewportWithCount(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    viewportCount,
     const VkViewport*                           pViewports);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetScissorWithCountEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetScissorWithCount(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    scissorCount,
     const VkRect2D*                             pScissors);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2EXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    firstBinding,
     uint32_t                                    bindingCount,
@@ -1947,27 +1966,27 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2EXT(
     const VkDeviceSize*                         pSizes,
     const VkDeviceSize*                         pStrides);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthTestEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthTestEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    depthTestEnable);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthWriteEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthWriteEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    depthWriteEnable);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthCompareOpEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthCompareOp(
     VkCommandBuffer                             commandBuffer,
     VkCompareOp                                 depthCompareOp);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBoundsTestEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBoundsTestEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    depthBoundsTestEnable);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilTestEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilTestEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    stencilTestEnable);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOpEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOp(
     VkCommandBuffer                             commandBuffer,
     VkStencilFaceFlags                          faceMask,
     VkStencilOp                                 failOp,
@@ -1980,15 +1999,15 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetColorWriteEnableEXT(
     uint32_t                                    attachmentCount,
     const VkBool32*                             pColorWriteEnables);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetRasterizerDiscardEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRasterizerDiscardEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    rasterizerDiscardEnable);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveRestartEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveRestartEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    primitiveRestartEnable);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBiasEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBiasEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    depthBiasEnable);
 
@@ -2000,27 +2019,27 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetPatchControlPointsEXT(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    patchControlPoints);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage2(
     VkCommandBuffer                             commandBuffer,
     const VkBlitImageInfo2KHR*                  pBlitImageInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer2(
     VkCommandBuffer                             commandBuffer,
     const VkCopyBufferInfo2KHR*                 pCopyBufferInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage2(
     VkCommandBuffer                             commandBuffer,
     const VkCopyBufferToImageInfo2KHR*          pCopyBufferToImageInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage2(
     VkCommandBuffer                             commandBuffer,
     const VkCopyImageInfo2KHR*                  pCopyImageInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer2(
     VkCommandBuffer                             commandBuffer,
     const VkCopyImageToBufferInfo2KHR*          pCopyImageToBufferInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage2(
     VkCommandBuffer                             commandBuffer,
     const VkResolveImageInfo2KHR*               pResolveImageInfo);
 

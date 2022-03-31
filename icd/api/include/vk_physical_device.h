@@ -687,6 +687,9 @@ public:
     void GetMemoryBudgetProperties(
         VkPhysicalDeviceMemoryBudgetPropertiesEXT* pMemBudgetProps);
 
+    uint32_t GetPipelineCacheExpectedEntryCount();
+    void DecreasePipelineCacheCount();
+
     uint32_t GetNumberOfSupportedShadingRates(
         uint32 supportedVrsRates) const;
 
@@ -808,6 +811,11 @@ protected:
     uint32_t                         m_tunnelComputeSubEngineIndex;
     uint32_t                         m_tunnelPriorities;
     uint32_t                         m_queueFamilyCount;
+
+    // Record pipeline caches count created on this device. Note this may be dropped once there isn't any test creating
+    // excessive pipeline caches.
+    volatile uint32_t                m_pipelineCacheCount;
+
     struct
     {
         Pal::QueueType               palQueueType;
@@ -972,11 +980,6 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMultisamplePropertiesEXT(
     VkSampleCountFlagBits                       samples,
     VkMultisamplePropertiesEXT*                 pMultisampleProperties);
 
-VKAPI_ATTR void VKAPI_CALL vkTrimCommandPool(
-    VkDevice                                    device,
-    VkCommandPool                               commandPool,
-    VkCommandPoolTrimFlags                      flags);
-
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
     VkPhysicalDevice                            physicalDevice,
     VkSurfaceKHR                                surface,
@@ -1135,7 +1138,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(
     uint32_t*                                   pTimeDomainCount,
     VkTimeDomainEXT*                            pTimeDomains);
 
-VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceToolPropertiesEXT(
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceToolProperties(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pToolCount,
     VkPhysicalDeviceToolPropertiesEXT*          pToolProperties);

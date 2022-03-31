@@ -38,7 +38,8 @@ namespace vk
 // =====================================================================================================================
 // Generates the API hash using the contents of the VkSamplerCreateInfo struct
 uint64_t Sampler::BuildApiHash(
-    const VkSamplerCreateInfo* pCreateInfo)
+    const VkSamplerCreateInfo* pCreateInfo,
+    const SamplerExtStructs&   extStructs)
 {
     Util::MetroHash64 hasher;
 
@@ -59,56 +60,38 @@ uint64_t Sampler::BuildApiHash(
     hasher.Update(pCreateInfo->borderColor);
     hasher.Update(pCreateInfo->unnormalizedCoordinates);
 
-    if (pCreateInfo->pNext != nullptr)
+    if (extStructs.pSamplerYcbcrConversionInfo != nullptr)
     {
-        union
-        {
-            const VkStructHeader*                                       pInfo;
-            const VkSamplerYcbcrConversionInfo*                         pYCbCrConversionInfo;
-            const VkSamplerReductionModeCreateInfo*                     pReductionModeCreateInfo;
-            const VkSamplerCustomBorderColorCreateInfoEXT*              pVkSamplerCustomBorderColorCreateInfoEXT;
-            const VkSamplerBorderColorComponentMappingCreateInfoEXT*    pVkSamplerBorderColorComponentMappingCreateInfoEXT;
-        };
+        hasher.Update(extStructs.pSamplerYcbcrConversionInfo->sType);
+        Vkgc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData;
+        pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(
+            extStructs.pSamplerYcbcrConversionInfo->conversion)->GetMetaData();
+        hasher.Update(pSamplerYCbCrConversionMetaData->word0.u32All);
+        hasher.Update(pSamplerYCbCrConversionMetaData->word1.u32All);
+        hasher.Update(pSamplerYCbCrConversionMetaData->word2.u32All);
+        hasher.Update(pSamplerYCbCrConversionMetaData->word3.u32All);
+        hasher.Update(pSamplerYCbCrConversionMetaData->word4.u32All);
+        hasher.Update(pSamplerYCbCrConversionMetaData->word5.u32All);
+    }
 
-        pInfo = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
+    if (extStructs.pSamplerReductionModeCreateInfo != nullptr)
+    {
+        hasher.Update(extStructs.pSamplerReductionModeCreateInfo->sType);
+        hasher.Update(extStructs.pSamplerReductionModeCreateInfo->reductionMode);
+    }
 
-        while (pInfo != nullptr)
-        {
-            switch (static_cast<uint32_t>(pInfo->sType))
-            {
-            case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
-                hasher.Update(pYCbCrConversionInfo->sType);
-                Vkgc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData;
-                pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(pYCbCrConversionInfo->conversion)->GetMetaData();
-                hasher.Update(pSamplerYCbCrConversionMetaData->word0.u32All);
-                hasher.Update(pSamplerYCbCrConversionMetaData->word1.u32All);
-                hasher.Update(pSamplerYCbCrConversionMetaData->word2.u32All);
-                hasher.Update(pSamplerYCbCrConversionMetaData->word3.u32All);
-                hasher.Update(pSamplerYCbCrConversionMetaData->word4.u32All);
-                hasher.Update(pSamplerYCbCrConversionMetaData->word5.u32All);
+    if (extStructs.pSamplerCustomBorderColorCreateInfoEXT != nullptr)
+    {
+        hasher.Update(extStructs.pSamplerCustomBorderColorCreateInfoEXT->sType);
+        hasher.Update(extStructs.pSamplerCustomBorderColorCreateInfoEXT->customBorderColor);
+        hasher.Update(extStructs.pSamplerCustomBorderColorCreateInfoEXT->format);
+    }
 
-                break;
-            case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO:
-                hasher.Update(pReductionModeCreateInfo->sType);
-                hasher.Update(pReductionModeCreateInfo->reductionMode);
-
-                break;
-            case VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT:
-                hasher.Update(pVkSamplerCustomBorderColorCreateInfoEXT->sType);
-                hasher.Update(pVkSamplerCustomBorderColorCreateInfoEXT->customBorderColor);
-                hasher.Update(pVkSamplerCustomBorderColorCreateInfoEXT->format);
-                break;
-            case VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT:
-                hasher.Update(pVkSamplerBorderColorComponentMappingCreateInfoEXT->sType);
-                hasher.Update(pVkSamplerBorderColorComponentMappingCreateInfoEXT->components);
-                hasher.Update(pVkSamplerBorderColorComponentMappingCreateInfoEXT->srgb);
-                break;
-            default:
-                break;
-            }
-
-            pInfo = pInfo->pNext;
-        }
+    if (extStructs.pSamplerBorderColorComponentMappingCreateInfoEXT != nullptr)
+    {
+        hasher.Update(extStructs.pSamplerBorderColorComponentMappingCreateInfoEXT->sType);
+        hasher.Update(extStructs.pSamplerBorderColorComponentMappingCreateInfoEXT->components);
+        hasher.Update(extStructs.pSamplerBorderColorComponentMappingCreateInfoEXT->srgb);
     }
 
     uint64_t hash;
@@ -127,7 +110,6 @@ VkResult Sampler::Create(
 {
     VK_ASSERT(pCreateInfo->sType == VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO);
 
-    uint64           apiHash     = BuildApiHash(pCreateInfo);
     Pal::SamplerInfo samplerInfo = {};
     samplerInfo.filterMode       = Pal::TexFilterMode::Blend;  // Initialize "legacy" behavior
     Vkgc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData = nullptr;
@@ -179,60 +161,49 @@ VkResult Sampler::Create(
                                                        (samplerInfo.compareFunc == Pal::CompareFunc::Never))
                                                       ? 1 : 0;
 
-    // Parse the creation info.
-    const void* pNext = pCreateInfo->pNext;
+    SamplerExtStructs extStructs = {};
 
-    while (pNext != nullptr)
+    HandleExtensionStructs(pCreateInfo, &extStructs);
+
+    if (extStructs.pSamplerYcbcrConversionInfo != nullptr)
     {
-        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+        pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(
+                                            extStructs.pSamplerYcbcrConversionInfo->conversion)->GetMetaData();
+        pSamplerYCbCrConversionMetaData->word1.lumaFilter = samplerInfo.filter.minification;
 
-        switch (static_cast<uint32>(pHeader->sType))
+        if (pSamplerYCbCrConversionMetaData->word0.forceExplicitReconstruct)
         {
-        case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT:
-        {
-            const auto* pExtInfo = static_cast<const VkSamplerReductionModeCreateInfo*>(pNext);
-            samplerInfo.filterMode = VkToPalTexFilterMode(pExtInfo->reductionMode);
-            break;
+            samplerInfo.flags.truncateCoords = 0;
         }
-        case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
-        {
-            const auto* pExtInfo = static_cast<const VkSamplerYcbcrConversionInfo*>(pNext);
-            pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(pExtInfo->conversion)->GetMetaData();
-            pSamplerYCbCrConversionMetaData->word1.lumaFilter = samplerInfo.filter.minification;
+    }
 
-            if (pSamplerYCbCrConversionMetaData->word0.forceExplicitReconstruct)
-            {
-                samplerInfo.flags.truncateCoords = 0;
-            }
-            break;
-        }
-        case VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT:
-        {
-            if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_CUSTOM_BORDER_COLOR))
-            {
-                const auto* pExtInfo = static_cast<const VkSamplerCustomBorderColorCreateInfoEXT*>(pNext);
-                VK_ASSERT(samplerInfo.borderColorType == Pal::BorderColorType::PaletteIndex);
-                samplerInfo.borderColorPaletteIndex = pDevice->GetBorderColorIndex(pExtInfo->customBorderColor.float32);
+    if (extStructs.pSamplerReductionModeCreateInfo != nullptr)
+    {
+        samplerInfo.filterMode = VkToPalTexFilterMode(extStructs.pSamplerReductionModeCreateInfo->reductionMode);
+    }
 
-                if (samplerInfo.borderColorPaletteIndex == MaxBorderColorPaletteSize)
-                {
-                    samplerInfo.borderColorType = Pal::BorderColorType::TransparentBlack;
-                    VK_ASSERT(!"Limit has been reached");
-                }
-            }
-            else
+    const bool extCustomBorderColor = pDevice->IsExtensionEnabled(DeviceExtensions::EXT_CUSTOM_BORDER_COLOR);
+
+    if (extStructs.pSamplerCustomBorderColorCreateInfoEXT != nullptr)
+    {
+        if (extCustomBorderColor)
+        {
+            VK_ASSERT(samplerInfo.borderColorType == Pal::BorderColorType::PaletteIndex);
+
+            samplerInfo.borderColorPaletteIndex = pDevice->GetBorderColorIndex(
+                extStructs.pSamplerCustomBorderColorCreateInfoEXT->customBorderColor.float32);
+
+            if (samplerInfo.borderColorPaletteIndex == MaxBorderColorPaletteSize)
             {
                 samplerInfo.borderColorType = Pal::BorderColorType::TransparentBlack;
-                VK_ASSERT(!"Extension is not enabled");
+                VK_ASSERT(!"Limit has been reached");
             }
-            break;
         }
-        default:
-            // Skip any unknown extension structures
-            break;
+        else
+        {
+            samplerInfo.borderColorType = Pal::BorderColorType::TransparentBlack;
+            VK_ASSERT(!"Extension is not enabled");
         }
-
-        pNext = pHeader->pNext;
     }
 
     // Figure out how big a sampler SRD is. This is not the most efficient way of doing
@@ -270,7 +241,7 @@ VkResult Sampler::Create(
 
     uint32_t multiPlaneCount = pSamplerYCbCrConversionMetaData != nullptr ? pSamplerYCbCrConversionMetaData->word1.planes : 1;
 
-    VK_PLACEMENT_NEW (pMemory) Sampler(apiHash,
+    VK_PLACEMENT_NEW (pMemory) Sampler(BuildApiHash(pCreateInfo, extStructs),
                                        (pSamplerYCbCrConversionMetaData != nullptr),
                                        multiPlaneCount,
                                        samplerInfo.borderColorPaletteIndex,
@@ -299,6 +270,51 @@ VkResult Sampler::Destroy(
     pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
+}
+
+// ====================================================================================================================
+void Sampler::HandleExtensionStructs(
+    const VkSamplerCreateInfo*  pCreateInfo,
+    SamplerExtStructs*          pExtStructs)
+{
+    // Parse the creation info.
+    const void* pNext = pCreateInfo->pNext;
+
+    while (pNext != nullptr)
+    {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
+        {
+        case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT:
+        {
+            pExtStructs->pSamplerReductionModeCreateInfo = static_cast<const VkSamplerReductionModeCreateInfo*>(pNext);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
+        {
+            pExtStructs->pSamplerYcbcrConversionInfo = static_cast<const VkSamplerYcbcrConversionInfo*>(pNext);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT:
+        {
+            pExtStructs->pSamplerCustomBorderColorCreateInfoEXT = static_cast<
+                const VkSamplerCustomBorderColorCreateInfoEXT*>(pNext);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT:
+        {
+            pExtStructs->pSamplerBorderColorComponentMappingCreateInfoEXT = static_cast<
+                const VkSamplerBorderColorComponentMappingCreateInfoEXT*>(pNext);
+            break;
+        }
+        default:
+            // Skip any unknown extension structures
+            break;
+        }
+
+        pNext = pHeader->pNext;
+    }
 }
 
 namespace entry

@@ -1,0 +1,14 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    }
+  ]
+}
