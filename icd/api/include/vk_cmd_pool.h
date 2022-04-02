@@ -67,6 +67,8 @@ public:
 
     VkResult Reset(VkCommandPoolResetFlags flags);
 
+    void Trim();
+
     Pal::ICmdAllocator* PalCmdAllocator(int32_t idx)
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(m_pDevice->NumPalDevices())));
@@ -82,6 +84,10 @@ public:
     const VkAllocationCallbacks* GetCmdPoolAllocator() const { return m_pAllocator; }
 
     bool IsProtected() const { return m_flags.isProtected ? true : false; }
+
+    Pal::Result MarkCmdBufBegun(CmdBuffer* pCmdBuffer);
+
+    void UnmarkCmdBufBegun(CmdBuffer* pCmdBuffer);
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(CmdPool);
@@ -113,6 +119,13 @@ private:
     } m_flags;
 
     Util::HashSet<CmdBuffer*, PalAllocator> m_cmdBufferRegistry;
+
+    Util::HashSet<CmdBuffer*, PalAllocator> m_cmdBuffersAlreadyBegun;
+
+    // Indicates that the command pool is currently being reset.  This is used to prevent erasing individual elements
+    // in m_cmdBuffersAlreadyBegun during reset as it is more efficient to reset the entire HashSet all at once after
+    // all individual command buffer resets of the command buffers in m_cmdBuffersAlreadyBegun are completed.
+    bool m_cmdPoolResetInProgress = false;
 };
 
 namespace entry
@@ -127,6 +140,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkResetCommandPool(
     VkDevice                                    device,
     VkCommandPool                               commandPool,
     VkCommandPoolResetFlags                     flags);
+
+VKAPI_ATTR void VKAPI_CALL vkTrimCommandPool(
+    VkDevice                                    device,
+    VkCommandPool                               commandPool,
+    VkCommandPoolTrimFlags                      flags);
 } // namespace entry
 
 } // namespace vk

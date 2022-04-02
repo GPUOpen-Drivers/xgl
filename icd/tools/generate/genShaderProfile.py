@@ -926,61 +926,113 @@ def main():
         for gfxip in gfxips:
             gfxipDir = os.path.join(compilerDir, gfxip)
 
-            print("Parsing " + gfxipDir)
-            gameTitles = os.listdir(os.path.join(gfxipDir))
-            for title in gameTitles:
-                gameTitleDir = os.path.join(gfxipDir, title)
-                fileToRead = os.path.join(gfxip, gameTitleDir, configFileName)
-                content, readSuccess = readFromFile(fileToRead)
+            gameTitlesGfxList = []
+            ifAsicGroupDict = {}
+            ifAsicGenericDict = {}
 
-                if readSuccess:
-                    if title not in gameTitlesList:
-                        gameTitlesList.append(title)
-                    if title not in ifGfxipGroupDict:
-                        ifGfxipGroupDict[title] = ""
-                    if title not in ifGenericDict:
-                        ifGenericDict[title] = ""
+            if gfxip != "generic":
+                asics = os.listdir(os.path.join(gfxipDir))
+            else:
+                asics = [gfxip]
 
-                    # for header file: g_shader_profile.h********************************************************
-                    funcName = compiler.title() + title + gfxip[0].upper() + gfxip[1:]
-                    funcCompGameGfx = FuncDecSetAppProfile.replace("%FuncName%", funcName)
+            for asic in asics:
+                if gfxip != "generic":
+                    asicDir = os.path.join(gfxipDir, asic)
+                else:
+                    asicDir = gfxipDir
 
-                    for buildType, obj in gameTitleInfo.items():
-                        if title in obj["gameTitles"]:
-                            funcCompGameGfx = wrapWithDirective(funcCompGameGfx, obj["buildTypes"])
+                print("Parsing " + asicDir)
+                gameTitles = os.listdir(os.path.join(asicDir))
+                for title in gameTitles:
+                    gameTitleDir = os.path.join(asicDir, title)
+                    fileToRead = os.path.join(gfxip, gameTitleDir, configFileName)
+                    content, readSuccess = readFromFile(fileToRead)
 
-                    if gfxip in BuildTypesTemplate:
-                        funcCompGameGfx = wrapWithDirective(funcCompGameGfx, BuildTypesTemplate[gfxip])
+                    if readSuccess:
+                        if title not in gameTitlesList:
+                            gameTitlesList.append(title)
+                        if title not in gameTitlesGfxList:
+                            gameTitlesGfxList.append(title)
+                        if title not in ifGfxipGroupDict:
+                            ifGfxipGroupDict[title] = ""
+                        if title not in ifGenericDict:
+                            ifGenericDict[title] = ""
+                        if title not in ifAsicGroupDict:
+                            ifAsicGroupDict[title] = ""
+                        if title not in ifAsicGenericDict:
+                            ifAsicGenericDict[title] = ""
 
-                    classShaderProfileBodyDict[compiler] += funcCompGameGfx
-                    # ********************************************************************************************
+                        # for header file: g_shader_profile.h********************************************************
+                        funcName = compiler.title() + title + gfxip[0].upper() + gfxip[1:]
 
-                    # for cpp file: g_shader_profile.cpp *********************************************************
-                    if gfxip == "generic":
-                        ifGeneric = GenericGfxIpAppProfile.replace("%FuncName%", funcName)
-                        ifGenericDict[title] = ifGeneric
-                    else:
-                        ifGfxip = ConditionGfxIp.replace("%Gfxip%", gfxip[0].upper() + gfxip[1:])
-                        ifGfxip = ifGfxip.replace("%FuncName%", funcName)
+                        if gfxip != "generic":
+                            if asic != "generic":
+                                funcName = compiler.title() + title + asic[0].upper() + asic[1:]
+                            else:
+                                funcName += asic[0].upper() + asic[1:]
+
+                        funcCompGameGfxAsic = FuncDecSetAppProfile.replace("%FuncName%", funcName)
+
+                        for buildType, obj in gameTitleInfo.items():
+                            if title in obj["gameTitles"]:
+                                funcCompGameGfxAsic = wrapWithDirective(funcCompGameGfxAsic, obj["buildTypes"])
+
+                        if asic in BuildTypesTemplate:
+                            funcCompGameGfxAsic = wrapWithDirective(funcCompGameGfxAsic, BuildTypesTemplate[asic])
+
                         if gfxip in BuildTypesTemplate:
-                            ifGfxip = wrapWithDirective(ifGfxip, BuildTypesTemplate[gfxip])
-                        ifGfxipGroupDict[title] = ifGfxipGroupDict[title] + ifGfxip
+                            funcCompGameGfxAsic = wrapWithDirective(funcCompGameGfxAsic, BuildTypesTemplate[gfxip])
 
-                    appProfile = genProfile(content, compiler, gfxip)
-                    funcSetAppProfile = SetAppProfileFunc.replace("%FuncName%", funcName)
-                    funcSetAppProfile = funcSetAppProfile.replace("%FuncDefs%", indent(appProfile))
-                    if compiler in BuildTypesTemplate:
-                        funcSetAppProfile = wrapWithDirective(funcSetAppProfile, BuildTypesTemplate[compiler])
+                        classShaderProfileBodyDict[compiler] += funcCompGameGfxAsic
+                        # ********************************************************************************************
 
-                    for buildType, obj in gameTitleInfo.items():
-                        if title in obj["gameTitles"]:
-                            funcSetAppProfile = wrapWithDirective(funcSetAppProfile, obj["buildTypes"])
+                        # for cpp file: g_shader_profile.cpp *********************************************************
+                        if asic == "generic":
+                            ifAsicGeneric = GenericAsicAppProfile.replace("%FuncName%", funcName)
+                            ifAsicGenericDict[title] = ifAsicGeneric
+                        else:
+                            ifAsic = ConditionAsic.replace("%Asic%", asic[0].upper() + asic[1:])
+                            ifAsic = ifAsic.replace("%FuncName%", funcName)
+                            if asic in BuildTypesTemplate:
+                                ifAsic = wrapWithDirective(ifAsic, BuildTypesTemplate[asic])
+                            ifAsicGroupDict[title] = ifAsicGroupDict[title] + ifAsic
 
+                        if gfxip == "generic":
+                            ifGeneric = GenericGfxIpAppProfile.replace("%FuncName%", funcName)
+                            ifGenericDict[title] = ifGeneric
+
+                        appProfile = genProfile(content, compiler, gfxip)
+                        funcSetAppProfile = SetAppProfileFunc.replace("%FuncName%", funcName)
+                        funcSetAppProfile = funcSetAppProfile.replace("%FuncDefs%", indent(appProfile))
+                        if compiler in BuildTypesTemplate:
+                            funcSetAppProfile = wrapWithDirective(funcSetAppProfile, BuildTypesTemplate[compiler])
+
+                        for buildType, obj in gameTitleInfo.items():
+                            if title in obj["gameTitles"]:
+                                funcSetAppProfile = wrapWithDirective(funcSetAppProfile, obj["buildTypes"])
+
+                        if asic in BuildTypesTemplate:
+                            funcSetAppProfile = wrapWithDirective(funcSetAppProfile, BuildTypesTemplate[asic])
+
+                        if gfxip in BuildTypesTemplate:
+                            funcSetAppProfile = wrapWithDirective(funcSetAppProfile, BuildTypesTemplate[gfxip])
+
+                        funcSetAppProfileGroup = funcSetAppProfileGroup + funcSetAppProfile
+                        # ********************************************************************************************
+
+            # for cpp file: g_shader_profile.cpp******************************************************************
+            for title in gameTitlesGfxList:
+                if gfxip != "generic":
+                    if ifAsicGenericDict[title]:
+                        ifGfxipBody = indent(ifAsicGroupDict[title] + ifAsicGenericDict[title])
+                    else:
+                        ifGfxipBody = indent(ifAsicGroupDict[title])
+                    ifGfxip = ConditionGfxIp.replace("%Gfxip%", gfxip[0].upper() + gfxip[1:])
+                    ifGfxip = ifGfxip.replace("%Defs%", ifGfxipBody)
                     if gfxip in BuildTypesTemplate:
-                        funcSetAppProfile = wrapWithDirective(funcSetAppProfile, BuildTypesTemplate[gfxip])
-
-                    funcSetAppProfileGroup = funcSetAppProfileGroup + funcSetAppProfile
-                    # ********************************************************************************************
+                        ifGfxip = wrapWithDirective(ifGfxip, BuildTypesTemplate[gfxip])
+                    ifGfxipGroupDict[title] = ifGfxipGroupDict[title] + ifGfxip
+            # ****************************************************************************************************
 
         # for cpp file: g_shader_profile.cpp******************************************************************
         for title in gameTitlesList:

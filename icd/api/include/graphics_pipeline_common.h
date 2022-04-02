@@ -209,6 +209,7 @@ protected:
         const Device*                       pDevice,
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
         const PipelineLayout*               pPipelineLayout,
+        PipelineCache*                      pPipelineCache,
         GraphicsPipelineBinaryCreateInfo*   pBinInfo,
         GraphicsPipelineShaderStageInfo*    pShaderInfo,
         VbBindingInfo*                      pVbInfo,

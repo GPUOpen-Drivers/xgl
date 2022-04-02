@@ -175,7 +175,7 @@ private:
     void WriteCbStartMarker() const;
     void WriteCbEndMarker() const;
     void WritePipelineBindMarker(const Pal::Developer::BindPipelineData& data) const;
-    void WriteMarker(const void* pData, size_t dataSize) const;
+    void WriteMarker(const void* pData, size_t dataSize, Pal::RgpMarkerSubQueueFlags subQueueFlags) const;
     void WriteBeginGeneralApiMarker(RgpSqttMarkerGeneralApiType apiType) const;
     void WriteEndGeneralApiMarker(RgpSqttMarkerGeneralApiType apiType) const;
     void WriteBarrierStartMarker(const Pal::Developer::BarrierData& data) const;
@@ -183,15 +183,17 @@ private:
     void WriteBarrierEndMarker(const Pal::Developer::BarrierData& data) const;
     void ResetBarrierState();
     void WriteEventMarker(
-        RgpSqttMarkerEventType apiType,
-        uint32_t               vertexOffsetUserData,
-        uint32_t               instanceOffsetUserData,
-        uint32_t               drawIndexUserData);
+        RgpSqttMarkerEventType      apiType,
+        uint32_t                    vertexOffsetUserData,
+        uint32_t                    instanceOffsetUserData,
+        uint32_t                    drawIndexUserData,
+        Pal::RgpMarkerSubQueueFlags subQueueFlags);
     void WriteEventWithDimsMarker(
-        RgpSqttMarkerEventType apiType,
-        uint32_t               x,
-        uint32_t               y,
-        uint32_t               z);
+        RgpSqttMarkerEventType      apiType,
+        uint32_t                    x,
+        uint32_t                    y,
+        uint32_t                    z,
+        Pal::RgpMarkerSubQueueFlags subQueueFlags);
 
     CmdBuffer*                  m_pCmdBuf;
     SqttMgr*                    m_pSqttMgr;          // Per-device SQTT state

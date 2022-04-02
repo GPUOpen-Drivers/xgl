@@ -68,6 +68,7 @@ private:
     PAL_DISALLOW_COPY_AND_ASSIGN(DescriptorUpdateTemplate);
 
     DescriptorUpdateTemplate(
+        VkPipelineBindPoint         pipelineBindPoint,
         uint32_t                    numEntries);
 
     ~DescriptorUpdateTemplate();
@@ -162,6 +163,7 @@ private:
             const void*                 pDescriptorInfo,
             const TemplateUpdateInfo&   entry);
 
+    VkPipelineBindPoint         m_pipelineBindPoint;
     uint32_t                    m_numEntries;
 };
 

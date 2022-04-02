@@ -60,10 +60,6 @@ VkResult DescriptorUpdateTemplate::Create(
 
     if (result == VK_SUCCESS)
     {
-        // It's safe to ignore pCreateInfo.pipelineBindPoint, pCreateInfo.pipelineLayout, and pCreateInfo.set because
-        // we don't support VK_KHR_push_descriptors.
-        VK_ASSERT(pCreateInfo->templateType == VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET);
-
         TemplateUpdateInfo* pEntries = static_cast<TemplateUpdateInfo*>(Util::VoidPtrInc(pSysMem, apiSize));
 
         for (uint32_t ii = 0; ii < numEntries; ii++)
@@ -99,7 +95,9 @@ VkResult DescriptorUpdateTemplate::Create(
                 GetUpdateEntryFunc(pDevice, srcEntry.descriptorType, dstBinding);
         }
 
-        VK_PLACEMENT_NEW(pSysMem) DescriptorUpdateTemplate(pCreateInfo->descriptorUpdateEntryCount);
+        VK_PLACEMENT_NEW(pSysMem) DescriptorUpdateTemplate(
+            pCreateInfo->pipelineBindPoint,
+            pCreateInfo->descriptorUpdateEntryCount);
 
         *pDescriptorUpdateTemplate = DescriptorUpdateTemplate::HandleFromVoidPointer(pSysMem);
     }
@@ -293,8 +291,10 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
 
 // =====================================================================================================================
 DescriptorUpdateTemplate::DescriptorUpdateTemplate(
+    VkPipelineBindPoint         pipelineBindPoint,
     uint32_t                    numEntries)
     :
+    m_pipelineBindPoint(pipelineBindPoint),
     m_numEntries(numEntries)
 {
 }

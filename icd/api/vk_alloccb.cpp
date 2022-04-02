@@ -57,10 +57,13 @@ static void* VKAPI_PTR
     VkSystemAllocationScope                 allocType)
 {
     void* pMemory;
-#if __STDC_VERSION__ >= 201112L
-    alignment = Util::Pow2Align(alignment, sizeof(void*));
-    pMemory = aligned_alloc(alignment, Util::Pow2Align(size, alignment));
-#elif _POSIX_VERSION >= 200112L
+#if _POSIX_VERSION >= 200112L
+    // posix_memalign is unilaterally preferred over aligned_alloc for several reasons
+    //  - Older versions of glibc have it (eg, for RHEL6)
+    //  - Several shipping games override the global allocator, but use an old enough lib that aligned_alloc's aren't
+    //    handled (exploding on free). This issue only appears on newer glibc due to some removed debug hooks that
+    //    previously saved it despite the buggy tcmalloc_minimal.
+    //    This occurs on DOTA2 and probably CS:GO.
     if (posix_memalign(&pMemory, Util::Pow2Align(alignment, sizeof(void*)), size))
     {
         pMemory = NULL;

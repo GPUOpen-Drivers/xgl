@@ -872,8 +872,18 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.forceMinImageCount = 3;
         }
 
+        if (appProfile == AppProfile::X4Foundations)
+        {
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.disableHtileBasedMsaaRead = true;
+            }
+        }
+
         if (appProfile == AppProfile::Valheim)
         {
+            m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
+
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
             {
                 m_settings.csWaveSize = 32;
@@ -1132,12 +1142,6 @@ void VulkanSettingsLoader::UpdatePalSettings()
 
     pPalSettings->hintDisableSmallSurfColorCompressionSize = m_settings.disableSmallSurfColorCompressionSize;
 
-    {
-        Pal::DeviceProperties info;
-        m_pDevice->GetProperties(&info);
-        pPalSettings->useAcqRelInterface      = info.gfxipProperties.flags.supportReleaseAcquireInterface && m_settings.useAcqRelInterface;
-    }
-
     // Setting disableSkipFceOptimization to false enables an optimization in PAL that disregards the FCE in a transition
     // if one of the built in clear colors are used (white/black) and the image is TCC compatible.
     pPalSettings->disableSkipFceOptimization = false;
@@ -1174,8 +1178,10 @@ void VulkanSettingsLoader::GenerateSettingHash()
 // =====================================================================================================================
 // Completes the initialization of the settings by overriding values from the registry and validating the final settings
 // struct
-void VulkanSettingsLoader::FinalizeSettings()
+void VulkanSettingsLoader::FinalizeSettings(
+    )
 {
+
     m_state = Pal::SettingsLoaderState::Final;
 
     GenerateSettingHash();

@@ -154,14 +154,21 @@ GenericGfxIpAppProfile = """
 SetAppProfile%FuncName%(pPipelineProfile);
 """
 
+GenericAsicAppProfile = """\
+// The shader profile in this function will apply to all AsicRevisions in this GfxIp level
+SetAppProfile%FuncName%(pPipelineProfile);
+"""
+
 FuncDecBuildAppProfileLlpc = """\
 void BuildAppProfileLlpc(const AppProfile appProfile,
                          const Pal::GfxIpLevel gfxIpLevel,
+                         const Pal::AsicRevision asicRevision,
                          PipelineProfile* pPipelineProfile);\n"""
 
 BuildAppProfileLlpcFunc = """\
 void ShaderProfile::BuildAppProfileLlpc(const AppProfile appProfile,
                                         const Pal::GfxIpLevel gfxIpLevel,
+                                        const Pal::AsicRevision asicRevision,
                                         PipelineProfile* pPipelineProfile)
 {
 %FuncDefs%
@@ -411,6 +418,12 @@ ConditionGameTitle = """if (appProfile == AppProfile::%GameTitle%)
 """
 
 ConditionGfxIp = """if (gfxIpLevel == Pal::GfxIpLevel::%Gfxip%)
+{
+%Defs%\
+}
+"""
+
+ConditionAsic = """if (asicRevision == Pal::AsicRevision::%Asic%)
 {
     SetAppProfile%FuncName%(pPipelineProfile);
 }
@@ -1509,6 +1522,27 @@ SHADER_ACTION = {
         "jsonWriterTemplate": jsonEnumWriterTemplate(["Auto", "FlushToZero", "Preserve"], prefix="Vkgc::DenormalMode::"),
         "jsonReaderTemplate": jsonEnumReaderTemplate(["Auto", "FlushToZero", "Preserve"], prefix="Vkgc::DenormalMode::")
     },
+
+    "fastMathFlags": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "fastMathFlags",
+                "dataType": "uint32_t",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+            },
+        ],
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
+        "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
+    },
 }
 
 SHADER_PATTERN = {
@@ -2162,6 +2196,9 @@ ValidKeysForEntity = {
 
 BuildTypesTemplate = {
     "llpc": "ICD_BUILD_LLPC",
+    "navi22": "VKI_BUILD_NAVI22",
+    "navi23": "VKI_BUILD_NAVI23",
+    "navi24": "VKI_BUILD_NAVI24",
     "icdRuntimeAppProfile": "ICD_RUNTIME_APP_PROFILE"
 }
 

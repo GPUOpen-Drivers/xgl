@@ -2392,6 +2392,11 @@ inline uint32_t VkToPalPipelineStageFlags(
                                 Pal::PipelineStageGs;
     }
 
+    if (stageMask & VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT)
+    {
+        palPipelineStageMask |= Pal::PipelineStageFetchIndices;
+    }
+
     return palPipelineStageMask;
 }
 

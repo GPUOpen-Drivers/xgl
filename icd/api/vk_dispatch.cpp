@@ -599,155 +599,132 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdBeginConditionalRenderingEXT               );
     INIT_DISPATCH_ENTRY(vkCmdEndConditionalRenderingEXT                 );
 
-    INIT_DISPATCH_ENTRY(vkCmdSetEvent2KHR                               );
-    INIT_DISPATCH_ENTRY(vkCmdResetEvent2KHR                             );
-    INIT_DISPATCH_ENTRY(vkCmdWaitEvents2KHR                             );
-    INIT_DISPATCH_ENTRY(vkCmdPipelineBarrier2KHR                        );
-    INIT_DISPATCH_ENTRY(vkCmdWriteTimestamp2KHR                         );
+    INIT_DISPATCH_ENTRY(vkCmdSetEvent2                                  );
+    INIT_DISPATCH_ENTRY(vkCmdResetEvent2                                );
+    INIT_DISPATCH_ENTRY(vkCmdWaitEvents2                                );
+    INIT_DISPATCH_ENTRY(vkCmdPipelineBarrier2                           );
+    INIT_DISPATCH_ENTRY(vkCmdWriteTimestamp2                            );
     INIT_DISPATCH_ENTRY(vkCmdWriteBufferMarker2AMD                      );
-    INIT_DISPATCH_ENTRY(vkQueueSubmit2KHR                               );
+    INIT_DISPATCH_ENTRY(vkQueueSubmit2                                  );
+    INIT_DISPATCH_ALIAS(vkCmdSetEvent2KHR,
+                        vkCmdSetEvent2                                  );
+    INIT_DISPATCH_ALIAS(vkCmdResetEvent2KHR,
+                        vkCmdResetEvent2                                );
+    INIT_DISPATCH_ALIAS(vkCmdWaitEvents2KHR,
+                        vkCmdWaitEvents2                                );
+    INIT_DISPATCH_ALIAS(vkCmdPipelineBarrier2KHR,
+                        vkCmdPipelineBarrier2                           );
+    INIT_DISPATCH_ALIAS(vkCmdWriteTimestamp2KHR,
+                        vkCmdWriteTimestamp2                            );
+    INIT_DISPATCH_ALIAS(vkQueueSubmit2KHR,
+                        vkQueueSubmit2                                  );
 
-#if VKI_SDK_NEXT
-    INIT_DISPATCH_ALIAS(vkCmdSetEvent2,
-                        vkCmdSetEvent2KHR                               );
-    INIT_DISPATCH_ALIAS(vkCmdResetEvent2,
-                        vkCmdResetEvent2KHR                             );
-    INIT_DISPATCH_ALIAS(vkCmdWaitEvents2,
-                        vkCmdWaitEvents2KHR                             );
-    INIT_DISPATCH_ALIAS(vkCmdPipelineBarrier2,
-                        vkCmdPipelineBarrier2KHR                        );
-    INIT_DISPATCH_ALIAS(vkCmdWriteTimestamp2,
-                        vkCmdWriteTimestamp2KHR                         );
-    INIT_DISPATCH_ALIAS(vkQueueSubmit2,
-                        vkQueueSubmit2KHR                               );
-#endif
+    INIT_DISPATCH_ENTRY(vkCmdBeginRendering                             );
+    INIT_DISPATCH_ENTRY(vkCmdEndRendering                               );
+    INIT_DISPATCH_ALIAS(vkCmdBeginRenderingKHR,
+                        vkCmdBeginRendering                             );
+    INIT_DISPATCH_ALIAS(vkCmdEndRenderingKHR,
+                        vkCmdEndRendering                               );
 
-    INIT_DISPATCH_ENTRY(vkCmdBeginRenderingKHR                          );
-    INIT_DISPATCH_ENTRY(vkCmdEndRenderingKHR                            );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceToolProperties               );
+    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceToolPropertiesEXT,
+                        vkGetPhysicalDeviceToolProperties               );
 
-#if VKI_SDK_NEXT
-    INIT_DISPATCH_ALIAS(vkCmdBeginRendering,
-                        vkCmdBeginRenderingKHR                          );
-    INIT_DISPATCH_ALIAS(vkCmdEndRendering,
-                        vkCmdEndRenderingKHR                            );
-#endif
-
-    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceToolPropertiesEXT            );
-
-#if VKI_SDK_NEXT
-    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceToolProperties,
-                        vkGetPhysicalDeviceToolPropertiesEXT            );
-#endif
-
-    INIT_DISPATCH_ENTRY(vkCmdSetCullModeEXT                             );
-    INIT_DISPATCH_ENTRY(vkCmdSetFrontFaceEXT                            );
-    INIT_DISPATCH_ENTRY(vkCmdSetPrimitiveTopologyEXT                    );
-    INIT_DISPATCH_ENTRY(vkCmdSetViewportWithCountEXT                    );
-    INIT_DISPATCH_ENTRY(vkCmdSetScissorWithCountEXT                     );
-    INIT_DISPATCH_ENTRY(vkCmdBindVertexBuffers2EXT                      );
-    INIT_DISPATCH_ENTRY(vkCmdSetDepthTestEnableEXT                      );
-    INIT_DISPATCH_ENTRY(vkCmdSetDepthWriteEnableEXT                     );
-    INIT_DISPATCH_ENTRY(vkCmdSetDepthCompareOpEXT                       );
-    INIT_DISPATCH_ENTRY(vkCmdSetDepthBoundsTestEnableEXT                );
-    INIT_DISPATCH_ENTRY(vkCmdSetStencilTestEnableEXT                    );
-    INIT_DISPATCH_ENTRY(vkCmdSetStencilOpEXT                            );
-#if VKI_SDK_NEXT
-    INIT_DISPATCH_ALIAS(vkCmdSetCullMode,
-                        vkCmdSetCullModeEXT                             );
-    INIT_DISPATCH_ALIAS(vkCmdSetFrontFace,
-                        vkCmdSetFrontFaceEXT                            );
-    INIT_DISPATCH_ALIAS(vkCmdSetPrimitiveTopology,
-                        vkCmdSetPrimitiveTopologyEXT                    );
-    INIT_DISPATCH_ALIAS(vkCmdSetViewportWithCount,
-                        vkCmdSetViewportWithCountEXT                    );
-    INIT_DISPATCH_ALIAS(vkCmdSetScissorWithCount,
-                        vkCmdSetScissorWithCountEXT                     );
-    INIT_DISPATCH_ALIAS(vkCmdBindVertexBuffers2,
-                        vkCmdBindVertexBuffers2EXT                      );
-    INIT_DISPATCH_ALIAS(vkCmdSetDepthTestEnable,
-                        vkCmdSetDepthTestEnableEXT                      );
-    INIT_DISPATCH_ALIAS(vkCmdSetDepthWriteEnable,
-                        vkCmdSetDepthWriteEnableEXT                     );
-    INIT_DISPATCH_ALIAS(vkCmdSetDepthCompareOp,
-                        vkCmdSetDepthCompareOpEXT                       );
-    INIT_DISPATCH_ALIAS(vkCmdSetDepthBoundsTestEnable,
-                        vkCmdSetDepthBoundsTestEnableEXT                );
-    INIT_DISPATCH_ALIAS(vkCmdSetStencilTestEnable,
-                        vkCmdSetStencilTestEnableEXT                    );
-    INIT_DISPATCH_ALIAS(vkCmdSetStencilOp,
-                        vkCmdSetStencilOpEXT                            );
-#endif
+    INIT_DISPATCH_ENTRY(vkCmdSetCullMode                                );
+    INIT_DISPATCH_ENTRY(vkCmdSetFrontFace                               );
+    INIT_DISPATCH_ENTRY(vkCmdSetPrimitiveTopology                       );
+    INIT_DISPATCH_ENTRY(vkCmdSetViewportWithCount                       );
+    INIT_DISPATCH_ENTRY(vkCmdSetScissorWithCount                        );
+    INIT_DISPATCH_ENTRY(vkCmdBindVertexBuffers2                         );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthTestEnable                         );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthWriteEnable                        );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthCompareOp                          );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthBoundsTestEnable                   );
+    INIT_DISPATCH_ENTRY(vkCmdSetStencilTestEnable                       );
+    INIT_DISPATCH_ENTRY(vkCmdSetStencilOp                               );
+    INIT_DISPATCH_ALIAS(vkCmdSetCullModeEXT,
+                        vkCmdSetCullMode                                );
+    INIT_DISPATCH_ALIAS(vkCmdSetFrontFaceEXT,
+                        vkCmdSetFrontFace                               );
+    INIT_DISPATCH_ALIAS(vkCmdSetPrimitiveTopologyEXT,
+                        vkCmdSetPrimitiveTopology                       );
+    INIT_DISPATCH_ALIAS(vkCmdSetViewportWithCountEXT,
+                        vkCmdSetViewportWithCount                       );
+    INIT_DISPATCH_ALIAS(vkCmdSetScissorWithCountEXT,
+                        vkCmdSetScissorWithCount                        );
+    INIT_DISPATCH_ALIAS(vkCmdBindVertexBuffers2EXT,
+                        vkCmdBindVertexBuffers2                         );
+    INIT_DISPATCH_ALIAS(vkCmdSetDepthTestEnableEXT,
+                        vkCmdSetDepthTestEnable                         );
+    INIT_DISPATCH_ALIAS(vkCmdSetDepthWriteEnableEXT,
+                        vkCmdSetDepthWriteEnable                        );
+    INIT_DISPATCH_ALIAS(vkCmdSetDepthCompareOpEXT,
+                        vkCmdSetDepthCompareOp                          );
+    INIT_DISPATCH_ALIAS(vkCmdSetDepthBoundsTestEnableEXT,
+                        vkCmdSetDepthBoundsTestEnable                   );
+    INIT_DISPATCH_ALIAS(vkCmdSetStencilTestEnableEXT,
+                        vkCmdSetStencilTestEnable                       );
+    INIT_DISPATCH_ALIAS(vkCmdSetStencilOpEXT,
+                        vkCmdSetStencilOp                               );
 
     INIT_DISPATCH_ENTRY(vkCmdSetFragmentShadingRateKHR                  );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceFragmentShadingRatesKHR      );
 
-    INIT_DISPATCH_ENTRY(vkCreatePrivateDataSlotEXT                      );
-    INIT_DISPATCH_ENTRY(vkDestroyPrivateDataSlotEXT                     );
-    INIT_DISPATCH_ENTRY(vkSetPrivateDataEXT                             );
-    INIT_DISPATCH_ENTRY(vkGetPrivateDataEXT                             );
-
-#if VKI_SDK_NEXT
-    INIT_DISPATCH_ALIAS(vkCreatePrivateDataSlot,
-                        vkCreatePrivateDataSlotEXT                      );
-    INIT_DISPATCH_ALIAS(vkDestroyPrivateDataSlot,
-                        vkDestroyPrivateDataSlotEXT                     );
-    INIT_DISPATCH_ALIAS(vkSetPrivateData,
-                        vkSetPrivateDataEXT                             );
-    INIT_DISPATCH_ALIAS(vkGetPrivateData,
-                        vkGetPrivateDataEXT                             );
-#endif
+    INIT_DISPATCH_ENTRY(vkCreatePrivateDataSlot                         );
+    INIT_DISPATCH_ENTRY(vkDestroyPrivateDataSlot                        );
+    INIT_DISPATCH_ENTRY(vkSetPrivateData                                );
+    INIT_DISPATCH_ENTRY(vkGetPrivateData                                );
+    INIT_DISPATCH_ALIAS(vkCreatePrivateDataSlotEXT,
+                        vkCreatePrivateDataSlot                         );
+    INIT_DISPATCH_ALIAS(vkDestroyPrivateDataSlotEXT,
+                        vkDestroyPrivateDataSlot                        );
+    INIT_DISPATCH_ALIAS(vkSetPrivateDataEXT,
+                        vkSetPrivateData                                );
+    INIT_DISPATCH_ALIAS(vkGetPrivateDataEXT,
+                        vkGetPrivateData                                );
 
     INIT_DISPATCH_ENTRY(vkCmdSetColorWriteEnableEXT                     );
 
-    INIT_DISPATCH_ENTRY(vkCmdSetRasterizerDiscardEnableEXT              );
-    INIT_DISPATCH_ENTRY(vkCmdSetPrimitiveRestartEnableEXT               );
-    INIT_DISPATCH_ENTRY(vkCmdSetDepthBiasEnableEXT                      );
+    INIT_DISPATCH_ENTRY(vkCmdSetRasterizerDiscardEnable                 );
+    INIT_DISPATCH_ENTRY(vkCmdSetPrimitiveRestartEnable                  );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthBiasEnable                         );
     INIT_DISPATCH_ENTRY(vkCmdSetLogicOpEXT                              );
     INIT_DISPATCH_ENTRY(vkCmdSetPatchControlPointsEXT                   );
+    INIT_DISPATCH_ALIAS(vkCmdSetRasterizerDiscardEnableEXT,
+                        vkCmdSetRasterizerDiscardEnable                 );
+    INIT_DISPATCH_ALIAS(vkCmdSetPrimitiveRestartEnableEXT,
+                        vkCmdSetPrimitiveRestartEnable                  );
+    INIT_DISPATCH_ALIAS(vkCmdSetDepthBiasEnableEXT,
+                        vkCmdSetDepthBiasEnable                         );
 
-#if VKI_SDK_NEXT
-    INIT_DISPATCH_ALIAS(vkCmdSetRasterizerDiscardEnable,
-                        vkCmdSetRasterizerDiscardEnableEXT              );
-    INIT_DISPATCH_ALIAS(vkCmdSetPrimitiveRestartEnable,
-                        vkCmdSetPrimitiveRestartEnableEXT               );
-    INIT_DISPATCH_ALIAS(vkCmdSetDepthBiasEnable,
-                        vkCmdSetDepthBiasEnableEXT                      );
-#endif
+    INIT_DISPATCH_ENTRY(vkCmdBlitImage2                                 );
+    INIT_DISPATCH_ENTRY(vkCmdCopyBuffer2                                );
+    INIT_DISPATCH_ENTRY(vkCmdCopyBufferToImage2                         );
+    INIT_DISPATCH_ENTRY(vkCmdCopyImage2                                 );
+    INIT_DISPATCH_ENTRY(vkCmdCopyImageToBuffer2                         );
+    INIT_DISPATCH_ENTRY(vkCmdResolveImage2                              );
+    INIT_DISPATCH_ALIAS(vkCmdBlitImage2KHR,
+                        vkCmdBlitImage2                                 );
+    INIT_DISPATCH_ALIAS(vkCmdCopyBuffer2KHR,
+                        vkCmdCopyBuffer2                                );
+    INIT_DISPATCH_ALIAS(vkCmdCopyBufferToImage2KHR,
+                        vkCmdCopyBufferToImage2                         );
+    INIT_DISPATCH_ALIAS(vkCmdCopyImage2KHR,
+                        vkCmdCopyImage2                                 );
+    INIT_DISPATCH_ALIAS(vkCmdCopyImageToBuffer2KHR,
+                        vkCmdCopyImageToBuffer2                         );
+    INIT_DISPATCH_ALIAS(vkCmdResolveImage2KHR,
+                        vkCmdResolveImage2                              );
 
-    INIT_DISPATCH_ENTRY(vkCmdBlitImage2KHR                              );
-    INIT_DISPATCH_ENTRY(vkCmdCopyBuffer2KHR                             );
-    INIT_DISPATCH_ENTRY(vkCmdCopyBufferToImage2KHR                      );
-    INIT_DISPATCH_ENTRY(vkCmdCopyImage2KHR                              );
-    INIT_DISPATCH_ENTRY(vkCmdCopyImageToBuffer2KHR                      );
-    INIT_DISPATCH_ENTRY(vkCmdResolveImage2KHR                           );
-
-#if VKI_SDK_NEXT
-    INIT_DISPATCH_ALIAS(vkCmdBlitImage2,
-                        vkCmdBlitImage2KHR                              );
-    INIT_DISPATCH_ALIAS(vkCmdCopyBuffer2,
-                        vkCmdCopyBuffer2KHR                             );
-    INIT_DISPATCH_ALIAS(vkCmdCopyBufferToImage2,
-                        vkCmdCopyBufferToImage2KHR                      );
-    INIT_DISPATCH_ALIAS(vkCmdCopyImage2,
-                        vkCmdCopyImage2KHR                              );
-    INIT_DISPATCH_ALIAS(vkCmdCopyImageToBuffer2,
-                        vkCmdCopyImageToBuffer2KHR                      );
-    INIT_DISPATCH_ALIAS(vkCmdResolveImage2,
-                        vkCmdResolveImage2KHR                           );
-#endif
-
-    INIT_DISPATCH_ENTRY(vkGetDeviceBufferMemoryRequirementsKHR          );
-    INIT_DISPATCH_ENTRY(vkGetDeviceImageMemoryRequirementsKHR           );
-    INIT_DISPATCH_ENTRY(vkGetDeviceImageSparseMemoryRequirementsKHR     );
-
-#ifdef VKI_SDK_NEXT
-    INIT_DISPATCH_ALIAS(vkGetDeviceBufferMemoryRequirements,
-                        vkGetDeviceBufferMemoryRequirementsKHR          );
-    INIT_DISPATCH_ALIAS(vkGetDeviceImageMemoryRequirements,
-                        vkGetDeviceImageMemoryRequirementsKHR           );
-    INIT_DISPATCH_ALIAS(vkGetDeviceImageSparseMemoryRequirements,
-                        vkGetDeviceImageSparseMemoryRequirementsKHR     );
-#endif
+    INIT_DISPATCH_ENTRY(vkGetDeviceBufferMemoryRequirements             );
+    INIT_DISPATCH_ENTRY(vkGetDeviceImageMemoryRequirements              );
+    INIT_DISPATCH_ENTRY(vkGetDeviceImageSparseMemoryRequirements        );
+    INIT_DISPATCH_ALIAS(vkGetDeviceBufferMemoryRequirementsKHR,
+                        vkGetDeviceBufferMemoryRequirements             );
+    INIT_DISPATCH_ALIAS(vkGetDeviceImageMemoryRequirementsKHR,
+                        vkGetDeviceImageMemoryRequirements              );
+    INIT_DISPATCH_ALIAS(vkGetDeviceImageSparseMemoryRequirementsKHR,
+                        vkGetDeviceImageSparseMemoryRequirements        );
 
 }
 
@@ -756,8 +733,8 @@ void DispatchTable::Init()
 // Depending on the dispatch table type the following behavior is expected:
 // * GLOBAL - Only entry points queriable using vkGetInstanceProcAddr with an instance parameter of VK_NULL_HANDLE
 //   are returned. This means only global entry points can be queried this way.
-// * INSTANCE - Only entry points queriable using vkGetInstanceProcAddr with an instance parameter different than
-//   VK_NULL_HANDLE are returned. This means instance- and device-level entry points can be queried this way and
+// * INSTANCE/PHYSDEVICE - Only entry points queriable using vkGetInstanceProcAddr with an instance parameter different
+//   than VK_NULL_HANDLE are returned. This means instance- and device-level entry points can be queried this way and
 //   for device entry points an appropriate trampoline is returned if applicable. Core API version, instance
 //   extension enablement, and device extension availability are a prerequisite.
 // * DEVICE - Only entry points queriable using vkGetDeviceProcAddr are returned. This means only device-level
@@ -787,14 +764,16 @@ PFN_vkVoidFunction DispatchTable::GetEntryPoint(const char* pName) const
                 }
                 break;
 
+            case EntryPoint::Type::PHYSDEVICE:
             case EntryPoint::Type::INSTANCE:
-                // Only return instance-level entry points if this is an instance dispatch table.
+                // Only return physical-device and instance-level entry points if this is an instance dispatch table.
                 if (GetType() == Type::INSTANCE)
                 {
                     pFunc = m_table[epIdx];
                 }
 
-                // Allows instance-level functions to be queried with vkGetDeviceProcAddr for special cases.
+                // Allows physical-device and instance-level functions to be queried with vkGetDeviceProcAddr for
+                // special cases.
                 if (m_pDevice != nullptr)
                 {
                     const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
@@ -813,6 +792,33 @@ PFN_vkVoidFunction DispatchTable::GetEntryPoint(const char* pName) const
                 }
                 break;
             }
+        }
+    }
+
+    return pFunc;
+}
+
+// =====================================================================================================================
+// Call this function to get the entry point corresponding to physical device entry point name from the instance
+// dispatch table and return NULL addresses for non physical device entry points.(requirement of the
+// vkGetPhysicalDeviceProcAddr function).
+PFN_vkVoidFunction DispatchTable::GetPhysicalDeviceEntryPoint(const char* pName) const
+{
+    PFN_vkVoidFunction pFunc = nullptr;
+
+    for (uint32_t epIdx = 0; epIdx < VKI_ENTRY_POINT_COUNT; epIdx++)
+    {
+        const EntryPoint::Metadata& metadata = g_EntryPointMetadataTable[epIdx];
+
+        if ((metadata.pName != nullptr) &&
+            (strcmp(pName, metadata.pName) == 0))
+        {
+            if (metadata.type == EntryPoint::Type::PHYSDEVICE)
+            {
+                pFunc = m_table[epIdx];
+            }
+
+            break;
         }
     }
 
@@ -842,7 +848,7 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetPhysicalDeviceProcAddr(
     VkInstance                                  instance,
     const char*                                 pName)
 {
-    return Instance::ObjectFromHandle(instance)->GetDispatchTable().GetEntryPoint(pName);
+    return Instance::ObjectFromHandle(instance)->GetDispatchTable().GetPhysicalDeviceEntryPoint(pName);
 }
 
 // =====================================================================================================================

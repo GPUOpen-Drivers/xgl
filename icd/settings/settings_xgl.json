@@ -1815,7 +1815,7 @@
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": true
+        "Default": false
       },
       "Scope": "Driver",
       "Type": "bool",
@@ -2476,7 +2476,7 @@
           },
           {
             "Name": "DbgBarrierOther",
-            "Value": 8589934592,
+            "Value": 17179869184,
             "Description": "Any other command not listed above"
           }
         ],
@@ -3087,6 +3087,18 @@
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "ExcessivePipelineCacheCountThreshold"
+    },
+    {
+      "Description": "The expected number of pipeline cache entries when ExcessivePipelineCacheCountThreshold is reached.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": 256
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "Name": "ExpectedPipelineCacheEntries"
     },
     {
       "Description": "If not UINT_MAX, this PAL enumerated device index will always be returned as the first enumerated physical device.",
@@ -4635,8 +4647,8 @@
       "Type": "uint32"
     },
     {
-      "Name": "UseAcqRelInterface",
-      "Description": "The acquire/release-based barrier interface is enabled. ",
+      "Name": "UseRelThenAcqForVkCmdPipelineBarrier",
+      "Description": "Enables the use of PAL::CmdReleaseThenAcquire() barrier interface on supported ASICs (gfx9+) via vkCmdPipelineBarrier API call",
       "Tags": [
         "Optimization"
       ],

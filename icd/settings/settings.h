@@ -70,7 +70,8 @@ public:
 
     void UpdatePalSettings();
 
-    void FinalizeSettings();
+    void FinalizeSettings(
+        );
 
     const RuntimeSettings& GetSettings() const { return m_settings; };
     RuntimeSettings* GetSettingsPtr() { return &m_settings; }

@@ -49,12 +49,6 @@ macro(xgl_set_compile_definitions)
         target_compile_definitions(xgl PRIVATE ICD_BUILD_LLPC)
     endif()
 
-#if VKI_SDK_NEXT
-    if(VKI_SDK_NEXT)
-        target_compile_definitions(xgl PRIVATE VKI_SDK_NEXT=1)
-    endif()
-#endif
-
     target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX9=1)
 
     target_compile_definitions(xgl PRIVATE PAL_BUILD_RAVEN2)

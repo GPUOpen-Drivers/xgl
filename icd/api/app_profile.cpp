@@ -133,6 +133,12 @@ constexpr AppProfilePatternEntry AppEngineSource2 =
     "source2"
 };
 
+constexpr AppProfilePatternEntry AppEngineDXVK =
+{
+    PatternEngineNameLower,
+    "dxvk"
+};
+
 constexpr AppProfilePatternEntry AppNameTalosWin32Bit =
 {
     PatternAppNameLower,
@@ -479,6 +485,24 @@ constexpr AppProfilePatternEntry AppNameCSGOLinux64Bit =
 {
     PatternAppNameLower,
     "csgo_linux64"
+};
+
+constexpr AppProfilePatternEntry AppNameGodOfWar
+{
+    PatternAppNameLower,
+    "gow.exe"
+};
+
+constexpr AppProfilePatternEntry AppNameX4Foundations
+{
+    PatternAppNameLower,
+    "x4"
+};
+
+constexpr AppProfilePatternEntry AppNameX4Engine
+{
+    PatternEngineNameLower,
+    "engine name"
 };
 
 constexpr AppProfilePatternEntry PatternEnd = {};
@@ -971,8 +995,25 @@ AppProfilePattern AppPatternTable[] =
             AppNameCSGOLinux64Bit,
             PatternEnd
         }
-    }
+    },
 
+    {
+        AppProfile::DxvkGodOfWar,
+        {
+            AppNameGodOfWar,
+            AppEngineDXVK,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::X4Foundations,
+        {
+            AppNameX4Foundations,
+            AppNameX4Engine,
+            PatternEnd
+        }
+    }
 };
 
 static char* GetExecutableName(size_t* pLength, bool includeExtension = false);

@@ -484,6 +484,7 @@ void Buffer::GetBufferMemoryRequirements(
         // remove the device coherent memory type
         pMemoryRequirements->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD);
     }
+
 }
 
 void Buffer::CalculateBufferFlags(

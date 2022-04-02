@@ -109,6 +109,8 @@ enum class AppProfile : uint32_t
     Maxon,                       // Maxon
     AngleEngine,                 // Angle Engine
     CSGO,                        // Counter-Strike: Global Offensive
+    DxvkGodOfWar,                // DXVK God of War
+    X4Foundations                // X4: Foundations by Egosoft
 };
 
 struct ProfileSettings

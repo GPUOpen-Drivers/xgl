@@ -49,6 +49,16 @@ public:
         const VkAllocationCallbacks*      pAllocator,
         VkBufferView*                     pBufferView);
 
+    static void BuildSrd(
+        const Device*                     pDevice,
+        const VkDeviceSize                bufferOffset,
+        const VkDeviceSize                bufferRange,
+        const Pal::gpusize*               bufferAddress,
+        const VkFormat                    format,
+        const uint32_t                    deviceNum,
+        const size_t                      srdSize,
+        void*                             pSrdMemory);
+
     VkResult Destroy(
         Device*                           pDevice,
         const VkAllocationCallbacks*      pAllocator);
@@ -59,7 +69,10 @@ public:
     }
 
 protected:
-    BufferView(Device* pDevice, uint32_t srdSize, const void* pSrds);
+    BufferView(
+        Device*     pDevice,
+        uint32_t    srdSize,
+        const void* pSrds);
 
     const Device* const     m_pDevice;
     uint32_t                m_SrdSize;   // size of the Srd in bytes

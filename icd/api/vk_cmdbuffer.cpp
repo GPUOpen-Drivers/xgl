@@ -576,7 +576,7 @@ VkResult CmdBuffer::Create(
                         * sizeof(uint32);
 
     // The total object size less any inaccessible setBindingData (for the last device only to not disrupt MGPU indexing)
-    const size_t cmdBufSize = apiSize + palSize + perGpuSize - inaccessibleSize;
+    size_t cmdBufSize = apiSize + palSize + perGpuSize - inaccessibleSize;
 
     VK_ASSERT(palResult == Pal::Result::Success);
 
@@ -683,6 +683,7 @@ VkResult CmdBuffer::Initialize(
         // Set up the default front/back op values == 1
         m_allGpuState.stencilRefMasks.frontOpValue = DefaultStencilOpValue;
         m_allGpuState.stencilRefMasks.backOpValue = DefaultStencilOpValue;
+
     }
 
     // Initialize SQTT command buffer state if thread tracing support is enabled (gpuopen developer mode).
@@ -1299,6 +1300,11 @@ VkResult CmdBuffer::Begin(
 
     Pal::Result result = PalCmdBufferBegin(cmdInfo);
 
+    if (result == Pal::Result::Success)
+    {
+        result = m_pCmdPool->MarkCmdBufBegun(this);
+    }
+
     DbgBarrierPreCmd(DbgBarrierCmdBufStart);
 
     VK_ASSERT(result == Pal::Result::Success);
@@ -1606,6 +1612,12 @@ VkResult CmdBuffer::Reset(VkCommandBufferResetFlags flags)
         result = PalToVkResult(PalCmdBufferReset(releaseResources));
 
         m_flags.wasBegun = false;
+
+        if ((result == VK_SUCCESS) && releaseResources)
+        {
+            // Notify the command pool that the command buffer is reset.
+            m_pCmdPool->UnmarkCmdBufBegun(this);
+        }
     }
 
     return result;
@@ -2057,7 +2069,8 @@ void CmdBuffer::BindDescriptorSets(
                         setLayoutInfo.dynDescCount,
                         useCompactDescriptor);
 
-                } while (deviceGroup.IterateNext());
+                }
+                while (deviceGroup.IterateNext());
 
                 // Skip over the already consumed dynamic offsets.
                 pDynamicOffsets += setLayoutInfo.dynDescCount;
@@ -2077,109 +2090,129 @@ void CmdBuffer::BindDescriptorSets(
                         deviceIdx,
                         &(PerGpuState(deviceIdx)->
                             setBindingData[apiBindPoint][setLayoutInfo.setPtrRegOffset]));
-                } while (deviceGroup.IterateNext());
-            }
-        }
-
-        if (pLayout->GetScheme() == PipelineLayoutScheme::Compact)
-        {
-            // Figure out the total range of user data registers written by this sequence of descriptor set binds
-            const PipelineLayout::SetUserDataLayout& firstSetLayout = pLayout->GetSetUserData(firstSet);
-            const PipelineLayout::SetUserDataLayout& lastSetLayout  = pLayout->GetSetUserData(firstSet + setCount - 1);
-
-            const uint32_t rangeOffsetBegin = firstSetLayout.firstRegOffset;
-            const uint32_t rangeOffsetEnd   = lastSetLayout.firstRegOffset + lastSetLayout.totalRegCount;
-
-            // Update the high watermark of number of user data entries written for currently bound descriptor sets and
-            // their dynamic offsets in the current command buffer state.
-            pBindState->boundSetCount = Util::Max(pBindState->boundSetCount, rangeOffsetEnd);
-
-            // Descriptor set with zero resource binding is allowed in spec, so we need to check this and only proceed
-            // when there are at least 1 user data to update.
-            const uint32_t rangeRegCount = rangeOffsetEnd - rangeOffsetBegin;
-
-            if (rangeRegCount > 0)
-            {
-                // Program the user data register only if the current user data layout base matches that of the given
-                // layout.  Otherwise, what's happening is that the application is binding descriptor sets for a future
-                // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant.
-                // A future vkCmdBindPipeline will reprogram the user data register.
-                if (PalPipelineBindingOwnedBy(palBindPoint, apiBindPoint) &&
-                    (pBindState->userDataLayout.compact.setBindingRegBase ==
-                     layoutInfo.userDataLayout.compact.setBindingRegBase))
-                {
-                    utils::IterateMask deviceGroup(m_curDeviceMask);
-                    do
-                    {
-                        const uint32_t deviceIdx = deviceGroup.Index();
-
-                        PalCmdBuffer(deviceIdx)->CmdSetUserData(
-                            palBindPoint,
-                            pBindState->userDataLayout.compact.setBindingRegBase + rangeOffsetBegin,
-                            rangeRegCount,
-                            &(PerGpuState(deviceIdx)->setBindingData[apiBindPoint][rangeOffsetBegin]));
-                    }
-                    while (deviceGroup.IterateNext());
                 }
+                while (deviceGroup.IterateNext());
             }
         }
-        else if (pLayout->GetScheme() == PipelineLayoutScheme::Indirect)
+
+        SetUserDataPipelineLayout(firstSet, setCount, pLayout, pBindState, palBindPoint, apiBindPoint);
+    }
+
+    DbgBarrierPostCmd(DbgBarrierBindSetsPushConstants);
+}
+
+// =====================================================================================================================
+
+// =====================================================================================================================
+void CmdBuffer::SetUserDataPipelineLayout(
+    uint32_t                      firstSet,
+    uint32_t                      setCount,
+    const PipelineLayout*         pLayout,
+    PipelineBindState*            pBindState,
+    const Pal::PipelineBindPoint  palBindPoint,
+    const PipelineBindPoint       apiBindPoint)
+{
+    VK_ASSERT(setCount > 0);
+
+    // Get user data register information from the given pipeline layout
+    const PipelineLayout::Info& layoutInfo = pLayout->GetInfo();
+
+    if (pLayout->GetScheme() == PipelineLayoutScheme::Compact)
+    {
+        // Figure out the total range of user data registers written by this sequence of descriptor set binds
+        const PipelineLayout::SetUserDataLayout& firstSetLayout = pLayout->GetSetUserData(firstSet);
+        const PipelineLayout::SetUserDataLayout& lastSetLayout = pLayout->GetSetUserData(firstSet + setCount - 1);
+
+        const uint32_t rangeOffsetBegin = firstSetLayout.firstRegOffset;
+        const uint32_t rangeOffsetEnd = lastSetLayout.firstRegOffset + lastSetLayout.totalRegCount;
+
+        // Update the high watermark of number of user data entries written for currently bound descriptor sets and
+        // their dynamic offsets in the current command buffer state.
+        pBindState->boundSetCount = Util::Max(pBindState->boundSetCount, rangeOffsetEnd);
+
+        // Descriptor set with zero resource binding is allowed in spec, so we need to check this and only proceed
+        // when there are at least 1 user data to update.
+        const uint32_t rangeRegCount = rangeOffsetEnd - rangeOffsetBegin;
+
+        if (rangeRegCount > 0)
         {
-            const auto& userDataLayout = layoutInfo.userDataLayout.indirect;
-
-            for (uint32_t setIdx = firstSet; setIdx < firstSet + setCount; ++setIdx)
+            // Program the user data register only if the current user data layout base matches that of the given
+            // layout.  Otherwise, what's happening is that the application is binding descriptor sets for a future
+            // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant.
+            // A future vkCmdBindPipeline will reprogram the user data register.
+            if (PalPipelineBindingOwnedBy(palBindPoint, apiBindPoint) &&
+                (pBindState->userDataLayout.compact.setBindingRegBase ==
+                    layoutInfo.userDataLayout.compact.setBindingRegBase))
             {
-                const PipelineLayout::SetUserDataLayout& setLayoutInfo = pLayout->GetSetUserData(setIdx);
-
                 utils::IterateMask deviceGroup(m_curDeviceMask);
                 do
                 {
                     const uint32_t deviceIdx = deviceGroup.Index();
 
-                    if (setLayoutInfo.dynDescCount > 0)
-                    {
-                        const uint32_t dynBufferSizeDw =
-                            setLayoutInfo.dynDescCount * DescriptorSetLayout::GetDynamicBufferDescDwSize(m_pDevice);
-
-                        Pal::gpusize gpuAddr;
-
-                        void* pCpuAddr = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(
-                            dynBufferSizeDw,
-                            m_pDevice->GetProperties().descriptorSizes.alignmentInDwords,
-                            &gpuAddr);
-
-                        const uint32_t gpuAddrLow = static_cast<uint32_t>(gpuAddr);
-
-                        memcpy(pCpuAddr,
-                               &(PerGpuState(deviceIdx)->setBindingData[apiBindPoint][setLayoutInfo.dynDescDataRegOffset]),
-                               dynBufferSizeDw * sizeof(uint32_t));
-
-                        PalCmdBuffer(deviceIdx)->CmdSetUserData(
-                            palBindPoint,
-                            userDataLayout.setBindingPtrRegBase + 2 * setIdx * PipelineLayout::SetPtrRegCount,
-                            PipelineLayout::SetPtrRegCount,
-                            &gpuAddrLow);
-                    }
-
-                    if (setLayoutInfo.setPtrRegOffset != PipelineLayout::InvalidReg)
-                    {
-                        PalCmdBuffer(deviceIdx)->CmdSetUserData(
-                            palBindPoint,
-                            userDataLayout.setBindingPtrRegBase + (2 * setIdx + 1) * PipelineLayout::SetPtrRegCount,
-                            PipelineLayout::SetPtrRegCount,
-                            &(PerGpuState(deviceIdx)->setBindingData[apiBindPoint][setLayoutInfo.setPtrRegOffset]));
-                    }
+                    PalCmdBuffer(deviceIdx)->CmdSetUserData(
+                        palBindPoint,
+                        pBindState->userDataLayout.compact.setBindingRegBase + rangeOffsetBegin,
+                        rangeRegCount,
+                        &(PerGpuState(deviceIdx)->setBindingData[apiBindPoint][rangeOffsetBegin]));
                 }
                 while (deviceGroup.IterateNext());
             }
         }
-        else
+    }
+    else if (pLayout->GetScheme() == PipelineLayoutScheme::Indirect)
+    {
+        const auto& userDataLayout = layoutInfo.userDataLayout.indirect;
+
+        for (uint32_t setIdx = firstSet; setIdx < firstSet + setCount; ++setIdx)
         {
-            VK_NEVER_CALLED();
+            const PipelineLayout::SetUserDataLayout& setLayoutInfo = pLayout->GetSetUserData(setIdx);
+
+            utils::IterateMask deviceGroup(m_curDeviceMask);
+            do
+            {
+                const uint32_t deviceIdx = deviceGroup.Index();
+
+                if (setLayoutInfo.dynDescCount > 0)
+                {
+                    const uint32_t dynBufferSizeDw =
+                        setLayoutInfo.dynDescCount * DescriptorSetLayout::GetDynamicBufferDescDwSize(m_pDevice);
+
+                    Pal::gpusize gpuAddr;
+
+                    void* pCpuAddr = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(
+                        dynBufferSizeDw,
+                        m_pDevice->GetProperties().descriptorSizes.alignmentInDwords,
+                        &gpuAddr);
+
+                    const uint32_t gpuAddrLow = static_cast<uint32_t>(gpuAddr);
+
+                    memcpy(pCpuAddr,
+                        &(PerGpuState(deviceIdx)->setBindingData[apiBindPoint][setLayoutInfo.dynDescDataRegOffset]),
+                        dynBufferSizeDw * sizeof(uint32_t));
+
+                    PalCmdBuffer(deviceIdx)->CmdSetUserData(
+                        palBindPoint,
+                        userDataLayout.setBindingPtrRegBase + 2 * setIdx * PipelineLayout::SetPtrRegCount,
+                        PipelineLayout::SetPtrRegCount,
+                        &gpuAddrLow);
+                }
+
+                if (setLayoutInfo.setPtrRegOffset != PipelineLayout::InvalidReg)
+                {
+                    PalCmdBuffer(deviceIdx)->CmdSetUserData(
+                        palBindPoint,
+                        userDataLayout.setBindingPtrRegBase + (2 * setIdx + 1) * PipelineLayout::SetPtrRegCount,
+                        PipelineLayout::SetPtrRegCount,
+                        &(PerGpuState(deviceIdx)->setBindingData[apiBindPoint][setLayoutInfo.setPtrRegOffset]));
+                }
+            }
+            while (deviceGroup.IterateNext());
         }
     }
-
-    DbgBarrierPostCmd(DbgBarrierBindSetsPushConstants);
+    else
+    {
+        VK_NEVER_CALLED();
+    }
 }
 
 // =====================================================================================================================
@@ -4040,7 +4073,7 @@ void CmdBuffer::SetEvent(
 }
 
 // =====================================================================================================================
-// Implementation of vkCmdSetEvent2KHR()
+// Implementation of vkCmdSetEvent2()
 void CmdBuffer::SetEvent2(
     VkEvent                    event,
     const VkDependencyInfoKHR* pDependencyInfo)
@@ -4617,7 +4650,7 @@ void CmdBuffer::FlushBarriers(
 // =====================================================================================================================
 // ExecuteBarriers  Called by vkCmdWaitEvents() and vkCmdPipelineBarrier().
 void CmdBuffer::ExecuteBarriers(
-    VirtualStackFrame&           virtStackFrame,
+    VirtualStackFrame*           pVirtStackFrame,
     uint32_t                     memBarrierCount,
     const VkMemoryBarrier*       pMemoryBarriers,
     uint32_t                     bufferMemoryBarrierCount,
@@ -4640,7 +4673,7 @@ void CmdBuffer::ExecuteBarriers(
     pBarrier->globalSrcCacheMask = 0u;
     pBarrier->globalDstCacheMask = 0u;
 
-    Pal::BarrierTransition* pTransitions = virtStackFrame.AllocArray<Pal::BarrierTransition>(MaxTransitionCount);
+    Pal::BarrierTransition* pTransitions = pVirtStackFrame->AllocArray<Pal::BarrierTransition>(MaxTransitionCount);
     Pal::BarrierTransition* pNextMain    = pTransitions;
 
     if (pTransitions == nullptr)
@@ -4651,7 +4684,7 @@ void CmdBuffer::ExecuteBarriers(
     }
 
     const Image** pTransitionImages = (m_numPalDevices > 1) && (imageMemoryBarrierCount > 0) ?
-        virtStackFrame.AllocArray<const Image*>(MaxTransitionCount) : nullptr;
+        pVirtStackFrame->AllocArray<const Image*>(MaxTransitionCount) : nullptr;
 
     for (uint32_t i = 0; i < memBarrierCount; ++i)
     {
@@ -4705,7 +4738,7 @@ void CmdBuffer::ExecuteBarriers(
     uint32_t locationIndex = 0;
     uint32_t locationCount = (imageMemoryBarrierCount > MaxLocationCount) ? MaxLocationCount : imageMemoryBarrierCount;
     Pal::MsaaQuadSamplePattern* pLocations = imageMemoryBarrierCount > 0
-                                           ? virtStackFrame.AllocArray<Pal::MsaaQuadSamplePattern>(locationCount)
+                                           ? pVirtStackFrame->AllocArray<Pal::MsaaQuadSamplePattern>(locationCount)
                                            : nullptr;
 
     for (uint32_t i = 0; i < imageMemoryBarrierCount; ++i)
@@ -4863,14 +4896,14 @@ void CmdBuffer::ExecuteBarriers(
 
     FlushBarriers(pBarrier, pTransitions, pTransitionImages, mainTransitionCount);
 
-    virtStackFrame.FreeArray(pLocations);
+    pVirtStackFrame->FreeArray(pLocations);
 
     if (pTransitionImages != nullptr)
     {
-        virtStackFrame.FreeArray(pTransitionImages);
+        pVirtStackFrame->FreeArray(pTransitionImages);
     }
 
-    virtStackFrame.FreeArray(pTransitions);
+    pVirtStackFrame->FreeArray(pTransitions);
 }
 
 // =====================================================================================================================
@@ -4918,7 +4951,7 @@ void CmdBuffer::WaitEvents(
         barrier.ppGpuEvents           = ppGpuEvents;
         barrier.pSplitBarrierGpuEvent = nullptr;
 
-        ExecuteBarriers(virtStackFrame,
+        ExecuteBarriers(&virtStackFrame,
                         memoryBarrierCount,
                         pMemoryBarriers,
                         bufferMemoryBarrierCount,
@@ -4938,7 +4971,7 @@ void CmdBuffer::WaitEvents(
 }
 
 // =====================================================================================================================
-// Implementation of vkCmdWaitEvents2KHR()
+// Implementation of vkCmdWaitEvents2()
 void CmdBuffer::WaitEvents2(
     uint32_t                   eventCount,
     const VkEvent*             pEvents,
@@ -5115,7 +5148,7 @@ void CmdBuffer::WaitEventsSync2ToSync1(
             barrier.ppGpuEvents           = ppGpuEvents;
             barrier.pSplitBarrierGpuEvent = nullptr;
 
-            ExecuteBarriers(virtStackFrame,
+            ExecuteBarriers(&virtStackFrame,
                             pThisDependencyInfo->memoryBarrierCount,
                             pMemoryBarriers,
                             pThisDependencyInfo->bufferMemoryBarrierCount,
@@ -5149,7 +5182,7 @@ void CmdBuffer::WaitEventsSync2ToSync1(
 }
 
 // =====================================================================================================================
-// Execute Acquire or Release according to the mode.
+// Based on Dependency Info, execute Acquire or Release according to the mode.
 void CmdBuffer::ExecuteAcquireRelease(
     uint32_t                   eventCount,
     const VkEvent*             pEvents,
@@ -5488,6 +5521,223 @@ void CmdBuffer::ExecuteAcquireRelease(
 }
 
 // =====================================================================================================================
+// Execute Release then acquire mode
+void CmdBuffer::ExecuteReleaseThenAcquire(
+    PipelineStageFlags           srcStageMask,
+    PipelineStageFlags           dstStageMask,
+    uint32_t                     memBarrierCount,
+    const VkMemoryBarrier*       pMemoryBarriers,
+    uint32_t                     bufferMemoryBarrierCount,
+    const VkBufferMemoryBarrier* pBufferMemoryBarriers,
+    uint32_t                     imageMemoryBarrierCount,
+    const VkImageMemoryBarrier*  pImageMemoryBarriers)
+{
+    if ((memBarrierCount + bufferMemoryBarrierCount + imageMemoryBarrierCount) > 0)
+    {
+        utils::IterateMask deviceGroup(m_curDeviceMask);
+
+        VirtualStackFrame virtStackFrame(m_pStackAllocator);
+
+        do
+        {
+            const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+
+            uint32_t deviceIdx              = deviceGroup.Index();
+            uint32_t maxImageMemoryBarriers = imageMemoryBarrierCount * MaxPalAspectsPerMask;
+
+            Pal::MsaaQuadSamplePattern* pLocations = (maxImageMemoryBarriers > 0) ?
+                virtStackFrame.AllocArray<Pal::MsaaQuadSamplePattern>(maxImageMemoryBarriers) : nullptr;
+
+            Pal::MemBarrier* pPalBufferMemoryBarriers = (bufferMemoryBarrierCount > 0) ?
+                virtStackFrame.AllocArray<Pal::MemBarrier>(bufferMemoryBarrierCount) : nullptr;
+
+            Pal::ImgBarrier* pPalImageBarriers = (maxImageMemoryBarriers > 0) ?
+                virtStackFrame.AllocArray<Pal::ImgBarrier>(maxImageMemoryBarriers) : nullptr;
+
+            Pal::AcquireReleaseInfo acquireReleaseInfo = {};
+
+            acquireReleaseInfo.pMemoryBarriers = pPalBufferMemoryBarriers;
+            acquireReleaseInfo.pImageBarriers  = pPalImageBarriers;
+            acquireReleaseInfo.reason          = RgpBarrierExternalCmdPipelineBarrier;
+
+            uint32_t locationIndex = 0;
+
+            for (uint32_t i = 0; i < memBarrierCount; i++)
+            {
+                Pal::BarrierTransition tempTransition = {};
+
+                VkAccessFlags srcAccessMask = pMemoryBarriers[i].srcAccessMask;
+                VkAccessFlags dstAccessMask = pMemoryBarriers[i].dstAccessMask;
+
+                acquireReleaseInfo.srcStageMask |= VkToPalPipelineStageFlags(srcStageMask);
+                acquireReleaseInfo.dstStageMask |= VkToPalPipelineStageFlags(dstStageMask);
+
+                m_pDevice->GetBarrierPolicy().ApplyBarrierCacheFlags(srcAccessMask, dstAccessMask, VK_IMAGE_LAYOUT_GENERAL,
+                    VK_IMAGE_LAYOUT_GENERAL, &tempTransition);
+
+                acquireReleaseInfo.srcGlobalAccessMask |= tempTransition.srcCacheMask;
+                acquireReleaseInfo.dstGlobalAccessMask |= tempTransition.dstCacheMask;
+            }
+
+            for (uint32_t i = 0; i < bufferMemoryBarrierCount; i++)
+            {
+                Pal::BarrierTransition tempTransition = {};
+
+                acquireReleaseInfo.srcStageMask |= VkToPalPipelineStageFlags(srcStageMask);
+                acquireReleaseInfo.dstStageMask |= VkToPalPipelineStageFlags(dstStageMask);
+
+                const Buffer* pBuffer = Buffer::ObjectFromHandle(pBufferMemoryBarriers[i].buffer);
+
+                pBuffer->GetBarrierPolicy().ApplyBufferMemoryBarrier<VkBufferMemoryBarrier>(
+                    GetQueueFamilyIndex(),
+                    pBufferMemoryBarriers[i],
+                    &tempTransition);
+
+                pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].flags.u32All      =
+                    0;
+                pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.pGpuMemory =
+                    pBuffer->PalMemory(deviceIdx);
+                pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.offset     =
+                    pBufferMemoryBarriers[i].offset;
+                pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.size       =
+                    pBufferMemoryBarriers[i].size;
+                pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].srcAccessMask     =
+                    tempTransition.srcCacheMask;
+                pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].dstAccessMask     =
+                    tempTransition.dstCacheMask;
+
+                acquireReleaseInfo.memoryBarrierCount++;
+            }
+
+            for (uint32_t i = 0; i < imageMemoryBarrierCount; i++)
+            {
+                Pal::BarrierTransition tempTransition = {};
+
+                acquireReleaseInfo.srcStageMask |= VkToPalPipelineStageFlags(srcStageMask);
+                acquireReleaseInfo.dstStageMask |= VkToPalPipelineStageFlags(dstStageMask);
+
+                bool layoutChanging = false;
+                Pal::ImageLayout oldLayouts[MaxPalAspectsPerMask];
+                Pal::ImageLayout newLayouts[MaxPalAspectsPerMask];
+
+                const Image* pImage = Image::ObjectFromHandle(pImageMemoryBarriers[i].image);
+
+                pImage->GetBarrierPolicy().ApplyImageMemoryBarrier<VkImageMemoryBarrier>(
+                    GetQueueFamilyIndex(),
+                    pImageMemoryBarriers[i],
+                    &tempTransition,
+                    &layoutChanging,
+                    oldLayouts,
+                    newLayouts,
+                    false);
+
+                VkFormat format = pImage->GetFormat();
+
+                uint32_t layoutIdx     = 0;
+                uint32_t palRangeIdx   = 0;
+                uint32_t palRangeCount = 0;
+
+                Pal::SubresRange palRanges[MaxPalAspectsPerMask];
+
+                VkToPalSubresRange(
+                    format,
+                    pImageMemoryBarriers[i].subresourceRange,
+                    pImage->GetMipLevels(),
+                    pImage->GetArraySize(),
+                    palRanges,
+                    &palRangeCount,
+                    settings);
+
+                if (layoutChanging && Formats::HasStencil(format))
+                {
+                    if (palRangeCount == MaxPalDepthAspectsPerMask)
+                    {
+                        // Find the subset of an images subres ranges that need to be transitioned based changes between
+                        // the source and destination layouts.
+                        if ((oldLayouts[0].usages  == newLayouts[0].usages) &&
+                            (oldLayouts[0].engines == newLayouts[0].engines))
+                        {
+                            // Skip the depth transition
+                            palRangeCount--;
+
+                            palRangeIdx++;
+                            layoutIdx++;
+                        }
+                        else if ((oldLayouts[1].usages  == newLayouts[1].usages) &&
+                                    (oldLayouts[1].engines == newLayouts[1].engines))
+                        {
+                            // Skip the stencil transition
+                            palRangeCount--;
+                        }
+                    }
+                    else if (pImageMemoryBarriers[i].subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT)
+                    {
+                        VK_ASSERT((pImageMemoryBarriers[i].subresourceRange.aspectMask &
+                                    VK_IMAGE_ASPECT_DEPTH_BIT) == 0);
+
+                        // Always use the second layout for stencil transitions. It is the only valid one for combined
+                        // depth stencil layouts, and LayoutUsageHelper replicates stencil-only layouts to all aspects.
+                        layoutIdx++;
+                    }
+                }
+
+                EXTRACT_VK_STRUCTURES_1(
+                    Barrier,
+                    ImageMemoryBarrier,
+                    SampleLocationsInfoEXT,
+                    &pImageMemoryBarriers[i],
+                    IMAGE_MEMORY_BARRIER,
+                    SAMPLE_LOCATIONS_INFO_EXT)
+
+                for (uint32_t transitionIdx = 0; transitionIdx < palRangeCount; transitionIdx++)
+                {
+                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].srcAccessMask      = tempTransition.srcCacheMask;
+                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].dstAccessMask      = tempTransition.dstCacheMask;
+                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].pImage             = pImage->PalImage(deviceIdx);
+                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].subresRange        = palRanges[palRangeIdx];
+                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].oldLayout          = oldLayouts[layoutIdx];
+                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].newLayout          = newLayouts[layoutIdx];
+                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].pQuadSamplePattern = nullptr;
+
+                    if (pSampleLocationsInfoEXT == nullptr)
+                    {
+                        pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].pQuadSamplePattern = nullptr;
+                    }
+                    else if (pLocations != nullptr)  // Could be null due to an OOM error
+                    {
+                        VK_ASSERT(static_cast<uint32_t>(pSampleLocationsInfoEXT->sType) ==
+                                    VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT);
+                        VK_ASSERT(pImage->IsSampleLocationsCompatibleDepth());
+
+                        ConvertToPalMsaaQuadSamplePattern(pSampleLocationsInfoEXT, &pLocations[locationIndex]);
+
+                        pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].pQuadSamplePattern =
+                            &pLocations[locationIndex];
+                    }
+
+                    acquireReleaseInfo.imageBarrierCount++;
+
+                    layoutIdx++;
+                    palRangeIdx++;
+                }
+
+                if (pSampleLocationsInfoEXT != nullptr)
+                {
+                    ++locationIndex;
+                }
+            }
+
+            PalCmdBuffer(deviceIdx)->CmdReleaseThenAcquire(acquireReleaseInfo);
+
+            virtStackFrame.FreeArray(pLocations);
+            virtStackFrame.FreeArray(pPalImageBarriers);
+            virtStackFrame.FreeArray(pPalBufferMemoryBarriers);
+        }
+        while (deviceGroup.IterateNext());
+    }
+}
+
+// =====================================================================================================================
 // Implements of vkCmdPipelineBarrier()
 void CmdBuffer::PipelineBarrier(
     PipelineStageFlags           srcStageMask,
@@ -5501,37 +5751,51 @@ void CmdBuffer::PipelineBarrier(
 {
     DbgBarrierPreCmd(DbgBarrierPipelineBarrierWaitEvents);
 
-    VirtualStackFrame virtStackFrame(m_pStackAllocator);
+    if (m_flags.hasReleaseAcquire && m_pDevice->GetRuntimeSettings().useRelThenAcqForVkCmdPipelineBarrier)
+    {
+        ExecuteReleaseThenAcquire(srcStageMask,
+                                  destStageMask,
+                                  memBarrierCount,
+                                  pMemoryBarriers,
+                                  bufferMemoryBarrierCount,
+                                  pBufferMemoryBarriers,
+                                  imageMemoryBarrierCount,
+                                  pImageMemoryBarriers);
+    }
+    else
+    {
+        VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
-    Pal::BarrierInfo barrier = {};
+        Pal::BarrierInfo barrier = {};
 
-    // Tell PAL to wait at a specific point until the given set of pipeline events has been signaled (this version
-    // does not use GpuEvent objects).
-    barrier.reason       = RgpBarrierExternalCmdPipelineBarrier;
-    barrier.flags.u32All = 0;
-    barrier.waitPoint    = VkToPalWaitPipePoint(destStageMask);
+        // Tell PAL to wait at a specific point until the given set of pipeline events has been signaled (this version
+        // does not use GpuEvent objects).
+        barrier.reason       = RgpBarrierExternalCmdPipelineBarrier;
+        barrier.flags.u32All = 0;
+        barrier.waitPoint    = VkToPalWaitPipePoint(destStageMask);
 
-    // Collect signal pipe points.
-    Pal::HwPipePoint pipePoints[MaxHwPipePoints];
+        // Collect signal pipe points.
+        Pal::HwPipePoint pipePoints[MaxHwPipePoints];
 
-    barrier.pipePointWaitCount      = VkToPalSrcPipePoints(srcStageMask, pipePoints);
-    barrier.pPipePoints             = pipePoints;
-    barrier.pSplitBarrierGpuEvent   = nullptr;
+        barrier.pipePointWaitCount      = VkToPalSrcPipePoints(srcStageMask, pipePoints);
+        barrier.pPipePoints             = pipePoints;
+        barrier.pSplitBarrierGpuEvent   = nullptr;
 
-    ExecuteBarriers(virtStackFrame,
-                    memBarrierCount,
-                    pMemoryBarriers,
-                    bufferMemoryBarrierCount,
-                    pBufferMemoryBarriers,
-                    imageMemoryBarrierCount,
-                    pImageMemoryBarriers,
-                    &barrier);
+        ExecuteBarriers(&virtStackFrame,
+                        memBarrierCount,
+                        pMemoryBarriers,
+                        bufferMemoryBarrierCount,
+                        pBufferMemoryBarriers,
+                        imageMemoryBarrierCount,
+                        pImageMemoryBarriers,
+                        &barrier);
 
-    DbgBarrierPostCmd(DbgBarrierPipelineBarrierWaitEvents);
+        DbgBarrierPostCmd(DbgBarrierPipelineBarrierWaitEvents);
+    }
 }
 
 // =====================================================================================================================
-// Implements of vkCmdPipelineBarrier2KHR()
+// Implements of vkCmdPipelineBarrier2()
 void CmdBuffer::PipelineBarrier2(
     const VkDependencyInfoKHR*   pDependencyInfo)
 {
@@ -5651,7 +5915,7 @@ void CmdBuffer::PipelineBarrierSync2ToSync1(
     barrier.pPipePoints             = pipePoints;
     barrier.pSplitBarrierGpuEvent   = nullptr;
 
-    ExecuteBarriers(virtStackFrame,
+    ExecuteBarriers(&virtStackFrame,
                     pDependencyInfo->memoryBarrierCount,
                     pMemoryBarriers,
                     pDependencyInfo->bufferMemoryBarrierCount,
@@ -9798,7 +10062,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndConditionalRenderingEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetEvent2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetEvent2(
     VkCommandBuffer                             commandBuffer,
     VkEvent                                     event,
     const VkDependencyInfoKHR*                  pDependencyInfo)
@@ -9807,7 +10071,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetEvent2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdResetEvent2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdResetEvent2(
     VkCommandBuffer                             commandBuffer,
     VkEvent                                     event,
     VkPipelineStageFlags2KHR                    stageMask)
@@ -9816,7 +10080,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdResetEvent2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdWaitEvents2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdWaitEvents2(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    eventCount,
     const VkEvent*                              pEvents,
@@ -9826,7 +10090,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWaitEvents2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier2(
     VkCommandBuffer                             commandBuffer,
     const VkDependencyInfoKHR*                  pDependencyInfo)
 {
@@ -9834,7 +10098,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdWriteTimestamp2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdWriteTimestamp2(
     VkCommandBuffer                             commandBuffer,
     VkPipelineStageFlags2KHR                    stage,
     VkQueryPool                                 queryPool,
@@ -9858,7 +10122,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarker2AMD(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderingKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginRendering(
     VkCommandBuffer           commandBuffer,
     const VkRenderingInfoKHR* pRenderingInfo)
 {
@@ -9866,14 +10130,14 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderingKHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderingKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdEndRendering(
     VkCommandBuffer           commandBuffer)
 {
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->EndRendering();
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetCullModeEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetCullMode(
     VkCommandBuffer                             commandBuffer,
     VkCullModeFlags                             cullMode)
 {
@@ -9881,7 +10145,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetCullModeEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetFrontFaceEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetFrontFace(
     VkCommandBuffer                             commandBuffer,
     VkFrontFace                                 frontFace)
 {
@@ -9889,7 +10153,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetFrontFaceEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveTopologyEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveTopology(
     VkCommandBuffer                             commandBuffer,
     VkPrimitiveTopology                         primitiveTopology)
 {
@@ -9897,7 +10161,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveTopologyEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetViewportWithCountEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetViewportWithCount(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    viewportCount,
     const VkViewport*                           pViewports)
@@ -9906,7 +10170,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetViewportWithCountEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetScissorWithCountEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetScissorWithCount(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    scissorCount,
     const VkRect2D*                             pScissors)
@@ -9915,7 +10179,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetScissorWithCountEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2EXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    firstBinding,
     uint32_t                                    bindingCount,
@@ -9933,7 +10197,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2EXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthTestEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthTestEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    depthTestEnable)
 {
@@ -9941,7 +10205,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthTestEnableEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthWriteEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthWriteEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    depthWriteEnable)
 {
@@ -9949,7 +10213,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthWriteEnableEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthCompareOpEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthCompareOp(
     VkCommandBuffer                             commandBuffer,
     VkCompareOp                                 depthCompareOp)
 {
@@ -9957,7 +10221,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthCompareOpEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBoundsTestEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBoundsTestEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    depthBoundsTestEnable)
 {
@@ -9965,7 +10229,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBoundsTestEnableEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilTestEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilTestEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    stencilTestEnable)
 {
@@ -9973,7 +10237,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilTestEnableEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOpEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOp(
     VkCommandBuffer                             commandBuffer,
     VkStencilFaceFlags                          faceMask,
     VkStencilOp                                 failOp,
@@ -9994,7 +10258,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetColorWriteEnableEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetRasterizerDiscardEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRasterizerDiscardEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    rasterizerDiscardEnable)
 {
@@ -10002,7 +10266,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetRasterizerDiscardEnableEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveRestartEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveRestartEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    primitiveRestartEnable)
 {
@@ -10010,7 +10274,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveRestartEnableEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBiasEnableEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBiasEnable(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    depthBiasEnable)
 {
@@ -10034,7 +10298,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetPatchControlPointsEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage2(
     VkCommandBuffer                             commandBuffer,
     const VkBlitImageInfo2KHR*                  pBlitImageInfo)
 {
@@ -10049,7 +10313,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer2(
     VkCommandBuffer                             commandBuffer,
     const VkCopyBufferInfo2KHR*                 pCopyBufferInfo)
 {
@@ -10061,7 +10325,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage2(
     VkCommandBuffer                             commandBuffer,
     const VkCopyBufferToImageInfo2KHR*          pCopyBufferToImageInfo)
 {
@@ -10074,7 +10338,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage2(
     VkCommandBuffer                             commandBuffer,
     const VkCopyImageInfo2KHR*                  pCopyImageInfo)
 {
@@ -10088,7 +10352,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer2(
     VkCommandBuffer                             commandBuffer,
     const VkCopyImageToBufferInfo2KHR*          pCopyImageToBufferInfo)
 {
@@ -10101,7 +10365,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage2(
     VkCommandBuffer                             commandBuffer,
     const VkResolveImageInfo2KHR*               pResolveImageInfo)
 {

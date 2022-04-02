@@ -92,7 +92,9 @@ macro(xgl_get_path)
     set(XGL_CACHE_CREATOR_PATH ${PROJECT_SOURCE_DIR}/tools/cache_creator CACHE PATH "Path to the cache creator tool")
 
     # PAL path
-    if(EXISTS ${PROJECT_SOURCE_DIR}/../pal)
+    if(EXISTS ${PROJECT_SOURCE_DIR}/icd/imported/pal)
+        set(XGL_PAL_PATH ${PROJECT_SOURCE_DIR}/icd/imported/pal CACHE PATH "Specify the path to the PAL project.")
+    elseif(EXISTS ${PROJECT_SOURCE_DIR}/../pal)
         set(XGL_PAL_PATH ${PROJECT_SOURCE_DIR}/../pal CACHE PATH "Specify the path to the PAL project.")
     endif()
 
@@ -103,11 +105,11 @@ macro(xgl_get_path)
 #endif
 
     # VKGC path
-    if (EXISTS ${PROJECT_SOURCE_DIR}/../llpc/CMakeLists.txt)
+    if (EXISTS ${XGL_ICD_PATH}/api/compiler)
+        set(XGL_VKGC_PATH ${XGL_ICD_PATH}/api/compiler CACHE PATH "Specify the path to the compiler.")
+    elseif(EXISTS ${PROJECT_SOURCE_DIR}/../llpc)
         # On github, the default repo name is llpc instead of compiler
         set(XGL_VKGC_PATH ${PROJECT_SOURCE_DIR}/../llpc CACHE PATH "Specify the path to the llpc repository.")
-    else()
-        set(XGL_VKGC_PATH ${XGL_ICD_PATH}/api/compiler CACHE PATH "Specify the path to the compiler.")
     endif()
 
     # external Vulkan headers path
@@ -118,14 +120,14 @@ macro(xgl_get_path)
     # Metrohash path
     if(EXISTS ${PROJECT_SOURCE_DIR}/../MetroHash)
         set(XGL_METROHASH_PATH ${PROJECT_SOURCE_DIR}/../MetroHash CACHE PATH "The path of metrohash.")
-    else()
+    elseif(EXISTS ${PROJECT_SOURCE_DIR}/../third_party/metrohash)
         set(XGL_METROHASH_PATH ${PROJECT_SOURCE_DIR}/../third_party/metrohash CACHE PATH "The path of metrohash.")
     endif()
 
     # cwpack path
     if(EXISTS ${PROJECT_SOURCE_DIR}/../CWPack)
         set(XGL_CWPACK_PATH ${PROJECT_SOURCE_DIR}/../CWPack CACHE PATH "The path of cwpack.")
-    else()
+    elseif(EXISTS ${PROJECT_SOURCE_DIR}/../third_party/cwpack)
         set(XGL_CWPACK_PATH ${PROJECT_SOURCE_DIR}/../third_party/cwpack CACHE PATH "The path of cwpack.")
     endif()
 endmacro()
@@ -220,7 +222,7 @@ macro(xgl_overrides)
     xgl_get_path()
 
     if(ICD_BUILD_LLPCONLY)
-        set(ICD_BUILD_LLPC ON CACHE BOOL "ICD_BUILD_LLPCONLY override." FORCE)
+        set(ICD_BUILD_LLPC ON CACHE BOOL "ICD_BUILD_LLPC override." FORCE)
     endif()
 
     if(NOT ICD_BUILD_LLPC)

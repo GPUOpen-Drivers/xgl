@@ -84,9 +84,9 @@ constexpr uint32_t PrsDynamicStatesMask = 0
 // - VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK
 // - VK_DYNAMIC_STATE_STENCIL_WRITE_MASK
 // - VK_DYNAMIC_STATE_STENCIL_REFERENCE
-// - VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT
 // - VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR
 // - VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT
+// - VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT
 // - VK_DYNAMIC_STATE_DEPTH_COMPARE_OP_EXT
 // - VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE_EXT
 // - VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT
@@ -96,9 +96,9 @@ constexpr uint32_t FgsDynamicStatesMask = 0
     | (1 << static_cast<uint32_t>(DynamicStatesInternal::StencilCompareMask))
     | (1 << static_cast<uint32_t>(DynamicStatesInternal::StencilWriteMask))
     | (1 << static_cast<uint32_t>(DynamicStatesInternal::StencilReference))
-    | (1 << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt))
     | (1 << static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr))
     | (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthTestEnableExt))
+    | (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnableExt))
     | (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthCompareOpExt))
     | (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthBoundsTestEnableExt))
     | (1 << static_cast<uint32_t>(DynamicStatesInternal::StencilTestEnableExt))
@@ -107,12 +107,12 @@ constexpr uint32_t FgsDynamicStatesMask = 0
 // =====================================================================================================================
 // The dynamic states of Fragment Output Interface section
 // - VK_DYNAMIC_STATE_BLEND_CONSTANTS
-// - VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT
+// - VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT
 // - VK_DYNAMIC_STATE_LOGIC_OP_EXT (not available)
 // - VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT
 constexpr uint32_t FoiDynamicStatesMask = 0
     | (1 << static_cast<uint32_t>(DynamicStatesInternal::BlendConstants))
-    | (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnableExt))
+    | (1 << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt))
     | (1 << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt));
 
 // =====================================================================================================================
@@ -388,6 +388,9 @@ uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
                 dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::ScissorCount));
                 dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::Scissor));
                 break;
+            case VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT:
+                dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::RasterizerDiscardEnableExt));
+                break;
             case VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE_EXT:
                 dynamicState |= prsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthBiasEnableExt));
                 break;
@@ -403,17 +406,11 @@ uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
             case VK_DYNAMIC_STATE_STENCIL_REFERENCE:
                 dynamicState |= fgsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::StencilReference));
                 break;
-            case VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT:
-                dynamicState |= fgsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt));
-                break;
             case VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR:
                 dynamicState |= fgsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr));
                 break;
             case VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT:
                 dynamicState |= fgsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthTestEnableExt));
-                break;
-            case VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT:
-                dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnableExt));
                 break;
             case VK_DYNAMIC_STATE_DEPTH_COMPARE_OP_EXT:
                 dynamicState |= fgsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthCompareOpExt));
@@ -430,8 +427,11 @@ uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
             case VK_DYNAMIC_STATE_BLEND_CONSTANTS:
                 dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::BlendConstants));
                 break;
-            case VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT:
-                dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::RasterizerDiscardEnableExt));
+            case VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT:
+                dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt));
+                break;
+            case VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT:
+                dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnableExt));
                 break;
             case VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT:
                 dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt));
@@ -759,45 +759,34 @@ static void BuildViewportState(
 
 // =====================================================================================================================
 static void BuildVrsRateParams(
-    const Device*                       pDevice,
-    const VkGraphicsPipelineCreateInfo* pIn,
-    const uint32_t                      dynamicStateFlags,
-    GraphicsPipelineObjectCreateInfo*   pInfo)
+    const Device*                                          pDevice,
+    const VkPipelineFragmentShadingRateStateCreateInfoKHR* pFsr,
+    const uint32_t                                         dynamicStateFlags,
+    GraphicsPipelineObjectCreateInfo*                      pInfo)
 {
-    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::FragmentShadingRateStateKhr) == false)
+    if ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::FragmentShadingRateStateKhr) == false) &&
+        (pFsr != nullptr))
     {
-        EXTRACT_VK_STRUCTURES_0(
-            variableRateShading,
-            PipelineFragmentShadingRateStateCreateInfoKHR,
-            static_cast<const VkPipelineFragmentShadingRateStateCreateInfoKHR*>(pIn->pNext),
-            PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR)
+        pInfo->immedInfo.vrsRateParams.flags.exposeVrsPixelsMask = 1;
 
-        if (pPipelineFragmentShadingRateStateCreateInfoKHR != nullptr)
-        {
-            pInfo->immedInfo.vrsRateParams.flags.exposeVrsPixelsMask = 1;
+        pInfo->immedInfo.vrsRateParams.shadingRate =
+            VkToPalShadingSize(VkClampShadingRate(pFsr->fragmentSize, pDevice->GetMaxVrsShadingRate()));
 
-            pInfo->immedInfo.vrsRateParams.shadingRate =
-                VkToPalShadingSize(VkClampShadingRate(
-                        pPipelineFragmentShadingRateStateCreateInfoKHR->fragmentSize,
-                        pDevice->GetMaxVrsShadingRate()));
+        pInfo->immedInfo.vrsRateParams.combinerState[
+            static_cast<uint32_t>(Pal::VrsCombinerStage::ProvokingVertex)] =
+            VkToPalShadingRateCombinerOp(pFsr->combinerOps[0]);
 
-            pInfo->immedInfo.vrsRateParams.combinerState[
-                static_cast<uint32_t>(Pal::VrsCombinerStage::ProvokingVertex)] =
-                VkToPalShadingRateCombinerOp(pPipelineFragmentShadingRateStateCreateInfoKHR->combinerOps[0]);
+        pInfo->immedInfo.vrsRateParams.combinerState[
+            static_cast<uint32_t>(Pal::VrsCombinerStage::Primitive)]= Pal::VrsCombiner::Passthrough;
 
-            pInfo->immedInfo.vrsRateParams.combinerState[
-                static_cast<uint32_t>(Pal::VrsCombinerStage::Primitive)]= Pal::VrsCombiner::Passthrough;
+        pInfo->immedInfo.vrsRateParams.combinerState[
+            static_cast<uint32_t>(Pal::VrsCombinerStage::Image)] = VkToPalShadingRateCombinerOp(pFsr->combinerOps[1]);
 
-            pInfo->immedInfo.vrsRateParams.combinerState[
-                static_cast<uint32_t>(Pal::VrsCombinerStage::Image)] =
-                VkToPalShadingRateCombinerOp(pPipelineFragmentShadingRateStateCreateInfoKHR->combinerOps[1]);
+        pInfo->immedInfo.vrsRateParams.combinerState[
+            static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] = Pal::VrsCombiner::Passthrough;
 
-            pInfo->immedInfo.vrsRateParams.combinerState[
-                static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] = Pal::VrsCombiner::Passthrough;
-
-            pInfo->staticStateMask |=
-                1 << static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr);
-        }
+        pInfo->staticStateMask |=
+            1 << static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr);
     }
 }
 
@@ -1144,9 +1133,6 @@ static void BuildPreRasterizationShaderState(
     {
         // Build states via VkPipelineViewportStateCreateInfo
         BuildViewportState(pDevice, pIn->pViewportState, dynamicStateFlags, pInfo);
-
-        // Build VRS state
-        BuildVrsRateParams(pDevice, pIn, dynamicStateFlags, pInfo);
     }
 
     if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::CullModeExt) == false)
@@ -1187,6 +1173,15 @@ static void BuildFragmentShaderState(
 
     // Build states via VkPipelineDepthStencilStateCreateInfo
     BuildDepthStencilState(pIn->pDepthStencilState, dynamicStateFlags, pInfo);
+
+    // Build VRS state
+    EXTRACT_VK_STRUCTURES_0(
+        variableRateShading,
+        PipelineFragmentShadingRateStateCreateInfoKHR,
+        static_cast<const VkPipelineFragmentShadingRateStateCreateInfoKHR*>(pIn->pNext),
+        PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR)
+
+    BuildVrsRateParams(pDevice, pPipelineFragmentShadingRateStateCreateInfoKHR, dynamicStateFlags, pInfo);
 
     if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthTestEnableExt) == false)
     {
@@ -1467,6 +1462,7 @@ VkResult GraphicsPipelineCommon::BuildPipelineBinaryCreateInfo(
     const Device*                       pDevice,
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
     const PipelineLayout*               pPipelineLayout,
+    PipelineCache*                      pPipelineCache,
     GraphicsPipelineBinaryCreateInfo*   pBinInfo,
     GraphicsPipelineShaderStageInfo*    pShaderInfo,
     VbBindingInfo*                      pVbInfo,
@@ -1482,7 +1478,9 @@ VkResult GraphicsPipelineCommon::BuildPipelineBinaryCreateInfo(
                                                return stageIdx;
                                            },
                                            pShaderInfo->stages,
-                                           pTempModules);
+                                           pTempModules,
+                                           pPipelineCache,
+                                           pBinInfo->stageFeedback);
 
     if (result == VK_SUCCESS)
     {

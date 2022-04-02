@@ -123,13 +123,13 @@ public:
     inline void* AllocMem(
         size_t                  size,
         size_t                  alignment,
-        VkSystemAllocationScope allocType);
+        VkSystemAllocationScope allocType) const;
 
     inline void* AllocMem(
         size_t                  size,
-        VkSystemAllocationScope allocType);
+        VkSystemAllocationScope allocType) const;
 
-    inline void FreeMem(void* pMem);
+    inline void FreeMem(void* pMem) const;
 
     VirtualStackMgr* StackMgr()
         { return m_pVirtualStackMgr; }
@@ -364,7 +364,7 @@ private:
 void* Instance::AllocMem(
     size_t                  size,
     size_t                  alignment,
-    VkSystemAllocationScope allocType)
+    VkSystemAllocationScope allocType) const
 {
     VK_ASSERT(size > 0);
 
@@ -378,7 +378,7 @@ void* Instance::AllocMem(
 // Allocate mem using allocator callbacks (default alignment)
 void* Instance::AllocMem(
     size_t                  size,
-    VkSystemAllocationScope allocType)
+    VkSystemAllocationScope allocType) const
 {
     return AllocMem(size, VK_DEFAULT_MEM_ALIGN, allocType);
 }
@@ -386,7 +386,7 @@ void* Instance::AllocMem(
 // =====================================================================================================================
 // Free memory using allocator callbacks.
 void Instance::FreeMem(
-    void* pMem)
+    void* pMem) const
 {
     if (pMem != nullptr)
     {

@@ -361,15 +361,19 @@ RgpSqttMarkerEvent SqttCmdBufferState::BuildEventMarker(
 
 // =====================================================================================================================
 void SqttCmdBufferState::WriteMarker(
-    const void* pData,
-    size_t      dataSize
+    const void*                 pData,
+    size_t                      dataSize,
+    Pal::RgpMarkerSubQueueFlags subQueueFlags
     ) const
 {
     VK_ASSERT(m_enabledMarkers != 0);
     VK_ASSERT((dataSize % sizeof(uint32_t)) == 0);
     VK_ASSERT((dataSize / sizeof(uint32_t)) > 0);
 
-    m_pCmdBuf->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertRgpTraceMarker(static_cast<uint32_t>(dataSize / sizeof(uint32_t)), pData);
+    m_pCmdBuf->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertRgpTraceMarker(
+        subQueueFlags,
+        static_cast<uint32_t>(dataSize / sizeof(uint32_t)),
+        pData);
 }
 
 // =====================================================================================================================
@@ -394,10 +398,11 @@ void SqttCmdBufferState::EndEventMarkers()
 // =====================================================================================================================
 // Inserts an RGP pre-draw/dispatch marker.
 void SqttCmdBufferState::WriteEventMarker(
-    RgpSqttMarkerEventType apiType,
-    uint32_t               vertexOffsetUserData,
-    uint32_t               instanceOffsetUserData,
-    uint32_t               drawIndexUserData
+    RgpSqttMarkerEventType      apiType,
+    uint32_t                    vertexOffsetUserData,
+    uint32_t                    instanceOffsetUserData,
+    uint32_t                    drawIndexUserData,
+    Pal::RgpMarkerSubQueueFlags subQueueFlags
     )
 {
     if (m_enabledMarkers & DevModeSqttMarkerEnableEvent)
@@ -421,17 +426,18 @@ void SqttCmdBufferState::WriteEventMarker(
         marker.instanceOffsetRegIdx = instanceOffsetUserData;
         marker.drawIndexRegIdx      = drawIndexUserData;
 
-        WriteMarker(&marker, sizeof(marker));
+        WriteMarker(&marker, sizeof(marker), subQueueFlags);
     }
 }
 
 // =====================================================================================================================
 // Inserts an RGP pre-dispatch marker
 void SqttCmdBufferState::WriteEventWithDimsMarker(
-    RgpSqttMarkerEventType apiType,
-    uint32_t               x,
-    uint32_t               y,
-    uint32_t               z
+    RgpSqttMarkerEventType      apiType,
+    uint32_t                    x,
+    uint32_t                    y,
+    uint32_t                    z,
+    Pal::RgpMarkerSubQueueFlags subQueueFlags
     )
 {
     if (m_enabledMarkers & DevModeSqttMarkerEnableEvent)
@@ -446,7 +452,7 @@ void SqttCmdBufferState::WriteEventWithDimsMarker(
         eventWithDims.threadY             = y;
         eventWithDims.threadZ             = z;
 
-        WriteMarker(&eventWithDims, sizeof(eventWithDims));
+        WriteMarker(&eventWithDims, sizeof(eventWithDims), subQueueFlags);
     }
 }
 
@@ -493,7 +499,10 @@ void SqttCmdBufferState::WriteUserEventMarker(
             markerSize += sizeof(uint32_t) * ((strLength + sizeof(uint32_t) - 1) / sizeof(uint32_t));
         }
 
-        WriteMarker(m_pUserEvent, markerSize);
+        Pal::RgpMarkerSubQueueFlags subQueueFlags = {};
+        subQueueFlags.includeMainSubQueue         = 1;
+
+        WriteMarker(m_pUserEvent, markerSize, subQueueFlags);
     }
 }
 
@@ -558,7 +567,8 @@ void SqttCmdBufferState::PalDrawDispatchCallback(
             m_currentEventType,
             drawDispatch.draw.userDataRegs.firstVertex,
             drawDispatch.draw.userDataRegs.instanceOffset,
-            drawDispatch.draw.userDataRegs.drawIndex);
+            drawDispatch.draw.userDataRegs.drawIndex,
+            drawDispatch.subQueueFlags);
     }
     // Dispatch call
     else
@@ -574,7 +584,8 @@ void SqttCmdBufferState::PalDrawDispatchCallback(
                 m_currentEventType,
                 drawDispatch.dispatch.groupDims[0],
                 drawDispatch.dispatch.groupDims[1],
-                drawDispatch.dispatch.groupDims[2]);
+                drawDispatch.dispatch.groupDims[2],
+                drawDispatch.subQueueFlags);
         }
         else
         {
@@ -582,7 +593,8 @@ void SqttCmdBufferState::PalDrawDispatchCallback(
                 m_currentEventType,
                 UINT_MAX,
                 UINT_MAX,
-                UINT_MAX);
+                UINT_MAX,
+                drawDispatch.subQueueFlags);
         }
     }
 }
@@ -617,7 +629,10 @@ void SqttCmdBufferState::WriteBarrierStartMarker(
             marker.dword02 = RgpBarrierUnknownReason;
         }
 
-        WriteMarker(&marker, sizeof(marker));
+        Pal::RgpMarkerSubQueueFlags subQueueFlags = {};
+        subQueueFlags.includeMainSubQueue         = 1;
+
+        WriteMarker(&marker, sizeof(marker), subQueueFlags);
     }
 }
 
@@ -640,7 +655,10 @@ void SqttCmdBufferState::WriteLayoutTransitionMarker(
         marker.fmaskColorExpand             = data.operations.layoutTransitions.fmaskColorExpand;
         marker.initMaskRam                  = data.operations.layoutTransitions.initMaskRam;
 
-        WriteMarker(&marker, sizeof(marker));
+        Pal::RgpMarkerSubQueueFlags subQueueFlags = {};
+        subQueueFlags.includeMainSubQueue         = 1;
+
+        WriteMarker(&marker, sizeof(marker), subQueueFlags);
     }
 }
 
@@ -686,7 +704,10 @@ void SqttCmdBufferState::WriteBarrierEndMarker(
 
         marker.invalGl1             = operations.caches.invalGl1;
 
-        WriteMarker(&marker, sizeof(marker));
+        Pal::RgpMarkerSubQueueFlags subQueueFlags = {};
+        subQueueFlags.includeMainSubQueue         = 1;
+
+        WriteMarker(&marker, sizeof(marker), subQueueFlags);
     }
 }
 
@@ -705,7 +726,10 @@ void SqttCmdBufferState::WriteCbStartMarker() const
         marker.queue        = m_queueFamilyIndex;
         marker.queueFlags   = m_queueFamilyFlags;
 
-        WriteMarker(&marker, sizeof(marker));
+        Pal::RgpMarkerSubQueueFlags subQueueFlags = {};
+        subQueueFlags.includeMainSubQueue         = 1;
+
+        WriteMarker(&marker, sizeof(marker), subQueueFlags);
     }
 }
 
@@ -722,7 +746,10 @@ void SqttCmdBufferState::WriteCbEndMarker() const
         marker.deviceIdLow  = static_cast<uint32_t>(m_deviceId);
         marker.deviceIdHigh = static_cast<uint32_t>(m_deviceId >> 32);
 
-        WriteMarker(&marker, sizeof(marker));
+        Pal::RgpMarkerSubQueueFlags subQueueFlags = {};
+        subQueueFlags.includeMainSubQueue         = 1;
+
+        WriteMarker(&marker, sizeof(marker), subQueueFlags);
     }
 }
 
@@ -753,7 +780,10 @@ void SqttCmdBufferState::WritePipelineBindMarker(
         static_assert(sizeof(marker.apiPsoHash) == sizeof(data.apiPsoHash), "Api Pso Hash size mismatch");
         memcpy(marker.apiPsoHash, &data.apiPsoHash, sizeof(marker.apiPsoHash));
 
-        WriteMarker(&marker, sizeof(marker));
+        Pal::RgpMarkerSubQueueFlags subQueueFlags = {};
+        subQueueFlags.includeMainSubQueue         = 1;
+
+        WriteMarker(&marker, sizeof(marker), subQueueFlags);
     }
 }
 
@@ -770,7 +800,10 @@ void SqttCmdBufferState::WriteBeginGeneralApiMarker(
         marker.identifier = RgpSqttMarkerIdentifierGeneralApi;
         marker.apiType    = static_cast<uint32_t>(apiType);
 
-        WriteMarker(&marker, sizeof(marker));
+        Pal::RgpMarkerSubQueueFlags subQueueFlags = {};
+        subQueueFlags.includeMainSubQueue         = 1;
+
+        WriteMarker(&marker, sizeof(marker), subQueueFlags);
     }
 }
 
@@ -788,7 +821,10 @@ void SqttCmdBufferState::WriteEndGeneralApiMarker(
         marker.apiType    = static_cast<uint32_t>(apiType);
         marker.isEnd      = 1;
 
-        WriteMarker(&marker, sizeof(marker));
+        Pal::RgpMarkerSubQueueFlags subQueueFlags = {};
+        subQueueFlags.includeMainSubQueue         = 1;
+
+        WriteMarker(&marker, sizeof(marker), subQueueFlags);
     }
 }
 

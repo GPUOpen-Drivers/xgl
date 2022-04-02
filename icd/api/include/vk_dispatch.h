@@ -54,6 +54,7 @@ enum class Type : uint32_t
     GLOBAL,                 // Global entry point
     INSTANCE,               // Instance-level entry point
     DEVICE,                 // Device-level entry point
+    PHYSDEVICE,             // Physical-device-level entry point
 };
 
 // Entry point metadata
@@ -106,6 +107,8 @@ public:
     }
 
     PFN_vkVoidFunction GetEntryPoint(const char* pName) const;
+
+    PFN_vkVoidFunction GetPhysicalDeviceEntryPoint(const char* pName) const;
 
     VK_FORCEINLINE EntryPoints* OverrideEntryPoints()
     {

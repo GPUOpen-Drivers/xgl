@@ -65,6 +65,17 @@ template <uint32_t numPalDevices>
 class DescriptorSet final : public NonDispatchable<VkDescriptorSet, DescriptorSet<numPalDevices>>
 {
 public:
+    DescriptorSet(uint32_t heapIndex);
+
+    void Reassign(
+        const DescriptorSetLayout*  pLayout,
+        Pal::gpusize                gpuMemOffset,
+        DescriptorAddr*             pBaseAddrs,
+        void*                       pAllocHandle);
+
+    void WriteImmutableSamplers(
+        uint32_t imageDescSizeInBytes);
+
     const DescriptorSetLayout* Layout() const
         { return m_pLayout; }
 
@@ -114,19 +125,8 @@ public:
         bool            useCompactDescriptor);
 
 protected:
-    DescriptorSet(uint32_t heapIndex);
-
     ~DescriptorSet()
         { PAL_NEVER_CALLED(); }
-
-    void Reassign(
-        const DescriptorSetLayout*  pLayout,
-        Pal::gpusize                gpuMemOffset,
-        DescriptorAddr*             pBaseAddrs,
-        void*                       pAllocHandle);
-
-    void WriteImmutableSamplers(
-        uint32_t imageDescSizeInBytes);
 
     void Reset();
 

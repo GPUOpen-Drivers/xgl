@@ -128,7 +128,8 @@ private:
             uint32_t createSparseResidency : 1;   // VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT
             uint32_t createProtected       : 1;   // VK_BUFFER_CREATE_PROTECTED_BIT
             uint32_t reserved2             : 1;
-            uint32_t reserved              : 22;
+            uint32_t reserved3             : 1;
+            uint32_t reserved              : 21;
         };
         uint32_t     u32All;
     };

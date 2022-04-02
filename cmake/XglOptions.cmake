@@ -29,27 +29,23 @@ macro(xgl_options)
 
 ### Cached Project Options #############################################################################################
 
-#if VKI_SDK_NEXT
-    option(VKI_SDK_NEXT "Build with Vulkan 1.3 support" ON)
-#endif
-
     option(XGL_ENABLE_PRINTS_ASSERTS "Build with debug print enabled?" OFF)
 
     option(XGL_ENABLE_LTO "Build with LTO enabled?" ON)
 
     option(XGL_ENABLE_GCOV "Build with gcov source code coverage?" OFF)
 
-    option(XGL_BUILD_VEGA20 "Build open source vulkan for Vega20?" ON)
+    option(XGL_BUILD_VEGA20 "Build vulkan for Vega20?" ON)
 
-    option(XGL_BUILD_GFX103 "Build open source vulkan for GFX103" ON)
+    option(XGL_BUILD_GFX103 "Build vulkan for GFX103" ON)
 
-    option(XGL_BUILD_NAVI12 "Build open source vulkan for Navi12" ON)
+    option(XGL_BUILD_NAVI12 "Build vulkan for Navi12" ON)
 
-    option(XGL_BUILD_NAVI22 "Build open source vulkan for Navi22" ON)
+    option(XGL_BUILD_NAVI22 "Build vulkan for Navi22" ON)
 
-    option(XGL_BUILD_NAVI23 "Build open source vulkan for Navi23" ON)
+    option(XGL_BUILD_NAVI23 "Build vulkan for Navi23" ON)
 
-    option(XGL_BUILD_NAVI24 "Build open source vulkan for Navi24" ON)
+    option(XGL_BUILD_NAVI24 "Build vulkan for Navi24" ON)
 
     option(XGL_BUILD_TESTS "Build all tests?" OFF)
 

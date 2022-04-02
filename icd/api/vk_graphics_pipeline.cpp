@@ -278,14 +278,18 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
                 if ((pObjectCreateInfo->immedInfo.rasterizerDiscardEnable != VK_TRUE) &&
                     (pObjectCreateInfo->flags.sampleShadingEnable == false))
                 {
-                    const auto& info = pPalPipeline[deviceIdx]->GetInfo();
+                    const auto& palProperties = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
+                    const auto& info          = pPalPipeline[deviceIdx]->GetInfo();
 
-                    if (info.ps.flags.perSampleShading == 1)
+                    if ((info.ps.flags.perSampleShading == 1) ||
+                        ((info.ps.flags.usesSampleMask  == 1) &&
+                         (palProperties.gfxipProperties.flags.supportVrsWithDsExports == 0)))
                     {
-                        // Override the shader rate to 1x1 if SampleId used in shader
+                        // Override the shader rate to 1x1 if SampleId used in shader or
+                        // supportVrsWithDsExports is not supported and SampleMask used in shader.
                         Force1x1ShaderRate(&pObjectCreateInfo->immedInfo.vrsRateParams);
-                        pObjectCreateInfo->flags.force1x1ShaderRate |= true;
-                        pObjectCreateInfo->msaa.pixelShaderSamples   = pObjectCreateInfo->msaa.coverageSamples;
+                        pObjectCreateInfo->flags.force1x1ShaderRate = true;
+                        pObjectCreateInfo->msaa.pixelShaderSamples  = pObjectCreateInfo->msaa.coverageSamples;
                     }
                 }
 
@@ -440,7 +444,15 @@ VkResult GraphicsPipeline::Create(
     if (result == VK_SUCCESS)
     {
         result = BuildPipelineBinaryCreateInfo(
-            pDevice, pCreateInfo, pPipelineLayout, &binaryCreateInfo, &shaderStageInfo, &vbInfo, &internalBufferInfo, tempModules);
+            pDevice,
+            pCreateInfo,
+            pPipelineLayout,
+            pPipelineCache,
+            &binaryCreateInfo,
+            &shaderStageInfo,
+            &vbInfo,
+            &internalBufferInfo,
+            tempModules);
     }
 
     // 3. Create pipeine binaries
@@ -478,7 +490,9 @@ VkResult GraphicsPipeline::Create(
         objectCreateInfo.immedInfo.checkDeferCompilePipeline =
             pDevice->GetRuntimeSettings().deferCompileOptimizedPipeline &&
             (binaryCreateInfo.pipelineInfo.enableEarlyCompile || binaryCreateInfo.pipelineInfo.enableUberFetchShader);
+
         objectCreateInfo.flags.isPointSizeUsed = binaryCreateInfo.pipelineMetadata.pointSizeUsed;
+
         // 5. Create pipeline objects
         result = CreatePipelineObjects(
             pDevice,
@@ -823,27 +837,27 @@ VkResult GraphicsPipeline::DeferCreateOptimizedPipeline(
     if (result == VK_SUCCESS)
     {
         result = CreatePipelineBinaries(pDevice,
-            nullptr,
-            pShaderStageInfo,
-            nullptr,
-            pBinaryCreateInfo,
-            pPipelineCache,
-            nullptr,
-            cacheId,
-            pipelineBinarySizes,
-            pPipelineBinaries);
+                                        nullptr,
+                                        pShaderStageInfo,
+                                        nullptr,
+                                        pBinaryCreateInfo,
+                                        pPipelineCache,
+                                        nullptr,
+                                        cacheId,
+                                        pipelineBinarySizes,
+                                        pPipelineBinaries);
     }
 
     if (result == VK_SUCCESS)
     {
         result = CreatePalPipelineObjects(pDevice,
-            pPipelineCache,
-            pObjectCreateInfo,
-            pipelineBinarySizes,
-            pPipelineBinaries,
-            cacheId,
-            pSystemMem,
-            pPalPipeline);
+                                          pPipelineCache,
+                                          pObjectCreateInfo,
+                                          pipelineBinarySizes,
+                                          pPipelineBinaries,
+                                          cacheId,
+                                          pSystemMem,
+                                          pPalPipeline);
     }
 
     if (result == VK_SUCCESS)
@@ -916,7 +930,12 @@ GraphicsPipeline::GraphicsPipeline(
     m_deferWorkload{},
     m_flags()
 {
-    Pipeline::Init(pPalPipeline, pLayout, pBinary, staticStateMask, apiHash);
+    Pipeline::Init(
+        pPalPipeline,
+        pLayout,
+        pBinary,
+        staticStateMask,
+        apiHash);
 
     memcpy(m_pPalMsaa,         pPalMsaa,         sizeof(pPalMsaa[0])         * pDevice->NumPalDevices());
     memcpy(m_pPalColorBlend,   pPalColorBlend,   sizeof(pPalColorBlend[0])   * pDevice->NumPalDevices());

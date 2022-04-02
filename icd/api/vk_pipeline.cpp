@@ -33,6 +33,7 @@
 #include "include/vk_pipeline.h"
 #include "include/vk_shader.h"
 #include "include/vk_pipeline_layout.h"
+#include "include/vk_pipeline_cache.h"
 
 #include "palAutoBuffer.h"
 #include "palInlineFuncs.h"
@@ -71,16 +72,22 @@ static const char* ApiStageNames[] =
     ".ps"
 };
 
-static const Pal::ShaderStageFlagBits IndexPalShaderStages[] =
+static constexpr struct
 {
-    Pal::ApiShaderStageCompute,
-    static_cast<Pal::ShaderStageFlagBits>(0x0), ///< @internal Reserved for future features.  Do not use!
-    Pal::ApiShaderStageVertex,
-    Pal::ApiShaderStageHull,
-    Pal::ApiShaderStageDomain,
-    Pal::ApiShaderStageGeometry,
-    static_cast<Pal::ShaderStageFlagBits>(0x0), ///< @internal Reserved for future features.  Do not use!
-    Pal::ApiShaderStagePixel
+    Pal::ShaderStageFlagBits palFlagBits;
+    Util::Abi::ApiShaderType abiType;
+} IndexShaderStages[] =
+{
+    { Pal::ApiShaderStageCompute,                 Util::Abi::ApiShaderType::Cs },
+    ///< @internal Reserved for future features.  Do not use!
+    { static_cast<Pal::ShaderStageFlagBits>(0x0), static_cast<Util::Abi::ApiShaderType>(0x0) },
+    { Pal::ApiShaderStageVertex,                  Util::Abi::ApiShaderType::Vs },
+    { Pal::ApiShaderStageHull,                    Util::Abi::ApiShaderType::Hs },
+    { Pal::ApiShaderStageDomain,                  Util::Abi::ApiShaderType::Ds },
+    { Pal::ApiShaderStageGeometry,                Util::Abi::ApiShaderType::Gs },
+    ///< @internal Reserved for future features.  Do not use!
+    { static_cast<Pal::ShaderStageFlagBits>(0x0), static_cast<Util::Abi::ApiShaderType>(0x0) },
+    { Pal::ApiShaderStagePixel,                   Util::Abi::ApiShaderType::Ps },
 };
 
 static constexpr char shaderPreNameIntermediate[] = "Intermediate";
@@ -159,7 +166,9 @@ VkResult Pipeline::BuildShaderStageInfo(
     uint32_t                               (*pfnGetOutputIdx)(const uint32_t inputIdx,
                                                               const uint32_t stageIdx),
     ShaderStageInfo*                       pShaderStageInfo,
-    ShaderModuleHandle*                    pTempModules)
+    ShaderModuleHandle*                    pTempModules,
+    PipelineCache*                         pCache,
+    PipelineCreationFeedback*              pFeedbacks)
 {
     VkResult result = VK_SUCCESS;
 
@@ -183,16 +192,17 @@ VkResult Pipeline::BuildShaderStageInfo(
         }
         else
         {
-            // Caller must make sure that pNewModules should be non-null if shader module may be deprecated.
-            // Meanwhile, the memory pointed by pNewModules should be initialized to 0 and can take all the
+            // Caller must make sure that pTempModules should be non-null if shader module may be deprecated.
+            // Meanwhile, the memory pointed by pTempModules should be initialized to 0 and can take all the
             // newly-built modules in the pipeline (at most stageCount entries required).
             // Caller should release the newly-built temporary modules set in pNewModules manually after
             // creation of pipeline.
             VK_ASSERT(pTempModules != nullptr);
 
-            VkShaderModuleCreateFlags flags    = 0;
-            size_t                    codeSize = 0;
-            const void*               pCode    = nullptr;
+            VkShaderModuleCreateFlags flags           = 0;
+            size_t                    codeSize        = 0;
+            const void*               pCode           = nullptr;
+            PipelineCreationFeedback* pShaderFeedback = (pFeedbacks == nullptr) ? nullptr : pFeedbacks + outIdx;
 
             if (stageInfo.module != VK_NULL_HANDLE)
             {
@@ -217,8 +227,10 @@ VkResult Pipeline::BuildShaderStageInfo(
             }
 
             const Pal::ShaderHash codeHash = ShaderModule::BuildCodeHash(pCode, codeSize);
+            PipelineBinaryCache* pBinaryCache = (pCache == nullptr) ? nullptr : pCache->GetPipelineCache();
 
-            result = pCompiler->BuildShaderModule(pDevice, flags, codeSize, pCode, &pTempModules[numNewModules]);
+            result = pCompiler->BuildShaderModule(
+                pDevice, flags, codeSize, pCode, pBinaryCache, pShaderFeedback, &pTempModules[numNewModules]);
 
             if (result != VK_SUCCESS)
             {
@@ -283,7 +295,8 @@ Pipeline::Pipeline(
     m_staticStateMask(0),
     m_apiHash(0),
     m_type(type),
-    m_pBinary(nullptr)
+    m_pBinary(nullptr),
+    m_availableAmdIlSymbol(0)
 {
     memset(m_pPalPipeline, 0, sizeof(m_pPalPipeline));
 }
@@ -295,9 +308,9 @@ void Pipeline::Init(
     uint32_t              staticStateMask,
     uint64_t              apiHash)
 {
-    m_staticStateMask = staticStateMask;
-    m_apiHash = apiHash;
-    m_pBinary = pBinary;
+    m_staticStateMask            = staticStateMask;
+    m_apiHash                    = apiHash;
+    m_pBinary                    = pBinary;
 
     if (pLayout != nullptr)
     {
@@ -310,7 +323,9 @@ void Pipeline::Init(
 
     if (pPalPipeline != nullptr)
     {
-        m_palPipelineHash = pPalPipeline[DefaultDeviceIndex]->GetInfo().internalPipelineHash.unique;
+        m_palPipelineHash      = pPalPipeline[DefaultDeviceIndex]->GetInfo().internalPipelineHash.unique;
+        m_availableAmdIlSymbol = GetShaderSymbolAvailability(
+                m_pDevice, pPalPipeline[DefaultDeviceIndex], Util::Abi::PipelineSymbolType::ShaderAmdIl);
 
         for (uint32_t devIdx = 0; devIdx < m_pDevice->NumPalDevices(); devIdx++)
         {
@@ -319,7 +334,8 @@ void Pipeline::Init(
     }
     else
     {
-        m_palPipelineHash = 0;
+        m_palPipelineHash      = 0;
+        m_availableAmdIlSymbol = 0;
 
         for (uint32_t devIdx = 0; devIdx < m_pDevice->NumPalDevices(); devIdx++)
         {
@@ -616,6 +632,74 @@ static void ConvertShaderInfoStatistics(
         pStats->computeWorkGroupSize[1] = palStats.cs.numThreadsPerGroupY;
         pStats->computeWorkGroupSize[2] = palStats.cs.numThreadsPerGroupZ;
     }
+}
+
+// =====================================================================================================================
+// Returns a bit mask based on Pal::ShaderStageFlagBits. Bit one means that the specified type of symbol derived from
+// the corresponding shader is available in the pipeline binary.
+uint32_t Pipeline::GetShaderSymbolAvailability(
+    const Device*                       pDevice,
+    const Pal::IPipeline*               pPalPipeline,
+    const Util::Abi::PipelineSymbolType pipelineSymbolType) const
+{
+    uint32_t shaderMask = 0;
+
+    const PipelineBinaryInfo* pPipelineBinary = GetBinary();
+    if (pPipelineBinary != nullptr)
+    {
+        Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(), pPipelineBinary->pBinary);
+        Pal::Result result = abiReader.Init();
+
+        if (result == Pal::Result::Success)
+        {
+            const Util::Abi::ApiHwShaderMapping apiToHwShader = pPalPipeline->ApiHwShaderMapping();
+
+            for (uint32_t i = 0; i < Util::ArrayLen32(IndexShaderStages); ++i)
+            {
+                const Pal::ShaderStageFlagBits palShaderType = IndexShaderStages[i].palFlagBits;
+                const Util::Abi::ApiShaderType abiShaderType = IndexShaderStages[i].abiType;
+
+                uint32_t hwStage = 0;
+
+                if ((palShaderType != 0) &&
+                    (static_cast<uint32_t>(abiShaderType) != 0) &&
+                    Util::BitMaskScanForward(&hwStage, apiToHwShader.apiShaders[static_cast<uint32_t>(abiShaderType)]))
+                {
+                    const Util::Elf::SymbolTableEntry* pSymbolEntry = nullptr;
+                    const char* pSectionName                        = nullptr;
+
+                    if (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderDisassembly)
+                    {
+                        pSymbolEntry = abiReader.GetPipelineSymbol(
+                            Util::Abi::GetSymbolForStage(
+                                Util::Abi::PipelineSymbolType::ShaderDisassembly,
+                                static_cast<Util::Abi::HardwareStage>(hwStage)));
+                        pSectionName = Util::Abi::AmdGpuDisassemblyName;
+                    }
+                    else if (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderAmdIl)
+                    {
+                        pSymbolEntry = abiReader.GetPipelineSymbol(
+                            Util::Abi::GetSymbolForStage(
+                                Util::Abi::PipelineSymbolType::ShaderAmdIl,
+                                abiShaderType));
+                        pSectionName = Util::Abi::AmdGpuCommentLlvmIrName;
+                    }
+                    else
+                    {
+                        VK_NOT_IMPLEMENTED;
+                    }
+
+                    if ((pSymbolEntry != nullptr) ||
+                        ((pSectionName != nullptr) && (abiReader.GetElfReader().FindSection(pSectionName) != 0)))
+                    {
+                        shaderMask |= palShaderType;
+                    }
+                }
+            }
+        }
+    }
+
+    return shaderMask;
 }
 
 namespace entry
@@ -1060,7 +1144,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
     Pal::Result      palResult = pPalPipeline->GetShaderStats(apiShaderType, &palStats, true);
 
     // Return (Number of Intermediate Shaders) + Number of HW ISA shaders
-    uint32_t numberOfInternalRepresentations = Util::CountSetBits(palStats.shaderStageMask) + 1;
+    uint32_t numberOfInternalRepresentations =
+        Util::CountSetBits(palStats.shaderStageMask & pPipeline->GetAvailableAmdIlSymbol()) + 1;
 
     if (pInternalRepresentations == nullptr)
     {
@@ -1070,7 +1155,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
 
     // Output the Intermediate API Shaders
     uint32_t outputCount   = 0;
-    uint32_t apiShaderMask = palStats.shaderStageMask;
+    uint32_t apiShaderMask = palStats.shaderStageMask & pPipeline->GetAvailableAmdIlSymbol();
 
     uint32_t i = 0;
     while((Util::BitMaskScanForward(&i, apiShaderMask)) &&
@@ -1078,7 +1163,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
     {
          // Build the name and description of the output property for IL
          const char*              pApiString    = ApiStageNames[i];
-         Pal::ShaderStageFlagBits palShaderMask = IndexPalShaderStages[i];
+         Pal::ShaderStageFlagBits palShaderMask = IndexShaderStages[i].palFlagBits;
 
          BuildPipelineNameDescription(
              shaderPreNameIntermediate,

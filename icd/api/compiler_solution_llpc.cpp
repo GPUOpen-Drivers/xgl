@@ -105,6 +105,7 @@ VkResult CompilerSolutionLlpc::CreateShaderCache(
     const void*  pInitialData,
     size_t       initialDataSize,
     void*        pShaderCacheMem,
+    uint32_t     expectedEntries,
     ShaderCache* pShaderCache)
 {
     return VK_ERROR_INITIALIZATION_FAILED;
@@ -484,9 +485,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
     pOptionBuffer += optionLength;
     bufSize -= optionLength;
 
-    // Generate ELF binary, not assembly text
-    llpcOptions[numOptions++] = "-filetype=obj";
-
     // LLPC debug options
     if (settings.enableDebug)
     {
@@ -510,14 +508,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
     // WARNING: Do not conditionally add options based on GFXIP version as these will
     // break support for systems with a mixture of ASICs. GFXIP dependent options
     // should be subtarget features or handled in LLVM backend.
-    llpcOptions[numOptions++] = "-simplifycfg-sink-common=false";
-    llpcOptions[numOptions++] = "-amdgpu-vgpr-index-mode"; // force VGPR indexing on GFX8
-
-    llpcOptions[numOptions++] = "-amdgpu-atomic-optimizations";
-    llpcOptions[numOptions++] = "-use-gpu-divergence-analysis";
-
-    llpcOptions[numOptions++] = "-enable-load-scalarizer";
-    llpcOptions[numOptions++] = "-scalar-threshold=3";
 
     if ((appProfile == AppProfile::SeriousSamFusion) ||
         (appProfile == AppProfile::Talos))
@@ -534,12 +524,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
         // si-scheduler interacts badly with SIFormMemoryClauses pass, so
         // disable the effect of that pass by limiting clause length to 1.
         llpcOptions[numOptions++] = "-amdgpu-max-memory-clause=1";
-    }
-
-    if ((appProfile == AppProfile::CSGO) &&
-        (m_gfxIpLevel == Pal::GfxIpLevel::GfxIp10_3))
-    {
-        llpcOptions[numOptions++] = "-spirv-gen-fast-math-flags=0x10";
     }
 
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-executable-name=%s", pExecutablePtr);
@@ -565,12 +549,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
     llpcOptions[numOptions++] = pOptionBuffer;
     pOptionBuffer += optionLength;
     bufSize -= optionLength;
-
-    if ((m_gfxIp.major == 10) && (m_gfxIp.minor >= 3))
-    {
-        // Enable flat scratch for gfx10.3+
-        llpcOptions[numOptions++] = "-amdgpu-enable-flat-scratch";
-    }
 
     if (settings.llpcOptions[0] != '\0')
     {
