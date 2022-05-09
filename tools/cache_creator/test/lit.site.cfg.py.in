@@ -13,7 +13,6 @@ config.llvm_assertions = "@LLVM_ENABLE_ASSERTIONS@"
 config.cache_creator_tools_dir = "@CACHE_CREATOR_TOOLS_BINARY_DIR@"
 config.amdllpc_dir = "@CACHE_CREATOR_AMDLLPC_DIR@"
 config.gfxip = "@CACHE_CREATOR_DEFAULT_GFXIP@"
-config.spvgen_dir = "@CACHE_CREATOR_SPVGEN_DIR@"
 config.test_run_dir = "@CACHE_CREATOR_TEST_BINARY_DIR@"
 
 # Support substitution of the tools_dir with user parameters. This is

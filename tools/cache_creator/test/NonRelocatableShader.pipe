@@ -1,7 +1,7 @@
 ; Check that cache-creator handles non-relocatable ELFs (i.e., in full pipeline compilation).
 
 ; Compile the full pipeline to a non-relocatable ELF.
-; RUN: amdllpc %spvgen -v %gfxip %s -o %t.elf | FileCheck -check-prefix=CHECK-LLPC %s
+; RUN: amdllpc -v %gfxip %s -o %t.elf | FileCheck -check-prefix=CHECK-LLPC %s
 ; CHECK-LLPC: {{^// LLPC}} SPIRV-to-LLVM translation results
 ; CHECK-LLPC: AMDLLPC SUCCESS
 
