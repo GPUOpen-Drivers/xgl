@@ -1,5 +1,5 @@
 ; Check if lit is configured properly and that all basic tools run.
-; RUN: amdllpc %s %gfxip %spvgen %reloc -v -o %t.elf | FileCheck --check-prefix=CHECK-LLPC %s
+; RUN: amdllpc %s %gfxip %reloc -v -o %t.elf | FileCheck --check-prefix=CHECK-LLPC %s
 ; CHECK-LLPC: {{^// LLPC}} SPIRV-to-LLVM translation results
 ; CHECK-LLPC: AMDLLPC SUCCESS
 
