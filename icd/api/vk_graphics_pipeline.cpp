@@ -27,6 +27,7 @@
 #include "include/vk_conv.h"
 #include "include/vk_device.h"
 #include "include/vk_graphics_pipeline.h"
+#include "include/vk_graphics_pipeline_library.h"
 #include "include/vk_instance.h"
 #include "include/vk_memory.h"
 #include "include/vk_pipeline_cache.h"
@@ -430,9 +431,8 @@ VkResult GraphicsPipeline::Create(
                                                   &pPipelineCreationFeedbackCreateInfo);
 
     // 1. Get pipeline layout
-    bool            isMergedLayout      = false;
-    PipelineLayout* pPipelineLayout   = nullptr;
-    VkResult result = AchievePipelineLayout(pDevice, pCreateInfo, pAllocator, &pPipelineLayout, &isMergedLayout);
+    VK_ASSERT(pCreateInfo->layout != VK_NULL_HANDLE);
+    PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
 
     // 2. Build pipeline binary create info
     GraphicsPipelineBinaryCreateInfo binaryCreateInfo  = {};
@@ -441,19 +441,16 @@ VkResult GraphicsPipeline::Create(
     PipelineInternalBufferInfo       internalBufferInfo = {};
     ShaderModuleHandle               tempModules[ShaderStage::ShaderStageGfxCount] = {};
 
-    if (result == VK_SUCCESS)
-    {
-        result = BuildPipelineBinaryCreateInfo(
-            pDevice,
-            pCreateInfo,
-            pPipelineLayout,
-            pPipelineCache,
-            &binaryCreateInfo,
-            &shaderStageInfo,
-            &vbInfo,
-            &internalBufferInfo,
-            tempModules);
-    }
+    VkResult result = BuildPipelineBinaryCreateInfo(
+        pDevice,
+        pCreateInfo,
+        pPipelineLayout,
+        pPipelineCache,
+        &binaryCreateInfo,
+        &shaderStageInfo,
+        &vbInfo,
+        &internalBufferInfo,
+        tempModules);
 
     // 3. Create pipeine binaries
     size_t                pipelineBinarySizes[MaxPalDevices] = {};
@@ -511,12 +508,6 @@ VkResult GraphicsPipeline::Create(
 
     // Free the temporary newly-built shader modules
     FreeTempModules(pDevice, ShaderStage::ShaderStageGfxCount, tempModules);
-
-    // Free the temporary merged pipeline layout used only for current pipeline
-    if (isMergedLayout)
-    {
-        pPipelineLayout->Destroy(pDevice, pAllocator);
-    }
 
     if (internalBufferInfo.pData != nullptr)
     {
@@ -1284,7 +1275,10 @@ void GraphicsPipeline::BindToCmdBuffer(
 
         if (ContainsStaticState(DynamicStatesInternal::DepthBiasEnableExt))
         {
-            pRenderState->triangleRasterState.flags.depthBiasEnable = m_info.triangleRasterState.flags.depthBiasEnable;
+            pRenderState->triangleRasterState.flags.frontDepthBiasEnable =
+                m_info.triangleRasterState.flags.frontDepthBiasEnable;
+            pRenderState->triangleRasterState.flags.backDepthBiasEnable =
+                m_info.triangleRasterState.flags.backDepthBiasEnable;
         }
 
         pRenderState->dirtyGraphics.rasterState = 1;

@@ -3169,7 +3169,7 @@
     {
       "Description": "Determines where the vkAppProfile.txt file will be written to. This file contains  the app profile enumeration index.",
       "Tags": [
-        "General"
+        "Optimization"
       ],
       "Flags": {
         "IsPath": true
@@ -3180,6 +3180,38 @@
       "Name": "AppProfileDumpDir",
       "Type": "string",
       "Size": 512,
+      "Scope": "Driver"
+    },
+    {
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "None",
+            "Value": 0,
+            "Description": "Default, do not dump app profile information"
+          },
+          {
+            "Name": "AppProfileValue",
+            "Value": 1,
+            "Description": "Dump the application path and the applied app profile index (like ForceAppProfileValue)"
+          }
+        ],
+        "Name": "AppProfileDumpFlags"
+      },
+      "Description": "Dumping options for working with application profiles",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "AppProfileDumpMask",
       "Scope": "Driver"
     },
     {
@@ -3343,21 +3375,6 @@
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "MemoryBaseAddrAlignmentCpuVisibleWin32"
-    },
-    {
-      "Name": "MemoryRemoteBackupHeapMinHeapSize",
-      "Description": "If the size of a device-local heap is smaller than this value, the remote (GART USWC) heap is used as a secondary heap for VkMemory objects created using the default GPU-local memory type for that device-local heap. The remote back-up heap is added regardless when overallocation is allowed via the VK_AMD_memory_overallocation extension. ",
-      "Tags": [
-        "Memory"
-      ],
-      "Defaults": {
-        "Default": 8053063680
-      },
-      "Scope": "Driver",
-      "Type": "gpusize",
-      "Flags": {
-        "IsHex": true
-      }
     },
     {
       "Description": "Default priority of all VkMemory objects as two hex digits.  The first (most-significant) digit defines the priority level, and the second digit defines the priority offset.  Valid priority level values (Pal::GpuMemPriority) are:  0: Unused 1: VeryLow 2: Low 3: Normal 4: High 5: VeryHigh. Valid priority offset values (Pal::GpuMemPriorityOffset) are: 0: Offset0 (same as base level) 1: Offset1 2: Offset2 3: Offset3 4: Offset4 5: Offset5 6: Offset6 7: Offset7 ",
@@ -4390,19 +4407,6 @@
       "Name": "TransferDstUsageAsShaderWriteMask"
     },
     {
-      "Description": "Enable extension AMD_GPU_SHADER_HALF_FLOAT and AMD_GPU_SHADER_INT16 only on ASIC >= gfx9.",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": true
-      },
-      "Type": "bool",
-      "VariableName": "optOnlyEnableFP16ForGfx9Plus",
-      "Name": "OnlyEnableFP16ForGfx9Plus",
-      "Scope": "Driver"
-    },
-    {
       "Description": "If set, an image with color target usage bit does not implicitly allow to be in resolve_src or resolve_dst layout.",
       "Tags": [
         "Optimization"
@@ -4554,7 +4558,7 @@
         "Optimization"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Type": "bool",
       "Name": "PrefetchShaders",
@@ -4647,8 +4651,8 @@
       "Type": "uint32"
     },
     {
-      "Name": "UseRelThenAcqForVkCmdPipelineBarrier",
-      "Description": "Enables the use of PAL::CmdReleaseThenAcquire() barrier interface on supported ASICs (gfx9+) via vkCmdPipelineBarrier API call",
+      "Name": "UseReleaseAcquireInterface",
+      "Description": "Enables the use of Pal::CmdReleaseThenAcquire(), Pal::CmdRelease() and Pal::CmdAcquire() barrier interfaces on supported ASICs (gfx9+).",
       "Tags": [
         "Optimization"
       ],
@@ -4881,23 +4885,6 @@
       "Scope": "Driver",
       "Type": "bool",
       "Name": "DevModeQueueTimingEnable"
-    },
-    {
-      "Description": "This controls if the legacy timed queue semaphores are to be used on Windows instead of the ETW client. This parameter does not affect Linux.",
-      "Tags": [
-        "Developer Mode"
-      ],
-      "Defaults": {
-        "Default": true
-      },
-      "DependsOn": {
-        "OS": [
-          "Windows"
-        ]
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "DevModeSemaphoreQueueTimingEnable"
     },
     {
       "Description": "This controls what kind of SQTT instrumentation marker data is output from the driver. Note that this only fine-tunes instrumentation: the master toggle for SQTT is always whether developer mode is enabled.  General SQTT data (event, wave, instruction) is also generated independent of this setting if SQTT is enabled. ",

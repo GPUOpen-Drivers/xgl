@@ -59,7 +59,6 @@ CmdPool::CmdPool(
     m_pDevice(pDevice),
     m_pAllocator(pAllocator),
     m_queueFamilyIndex(queueFamilyIndex),
-    m_sharedCmdAllocator(sharedCmdAllocator),
     m_cmdBufferRegistry(32, pDevice->VkInstance()->Allocator()),
     m_cmdBuffersAlreadyBegun(32, pDevice->VkInstance()->Allocator())
 {
@@ -69,6 +68,12 @@ CmdPool::CmdPool(
     {
         m_flags.isProtected = true;
     }
+    if (flags & VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+    {
+        m_flags.isResetCmdBuffer = true;
+    }
+
+    m_flags.sharedCmdAllocator = sharedCmdAllocator;
 
     memcpy(m_pPalCmdAllocators, pPalCmdAllocators, sizeof(pPalCmdAllocators[0]) * pDevice->NumPalDevices());
 }
@@ -227,7 +232,7 @@ VkResult CmdPool::Destroy(
     }
 
     // If we don't use a shared CmdAllocator then we have to destroy our own one.
-    if (m_sharedCmdAllocator == false)
+    if (m_flags.sharedCmdAllocator == 0)
     {
         for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
         {
@@ -244,7 +249,8 @@ VkResult CmdPool::Destroy(
 
 // =====================================================================================================================
 // Resets the PAL command allocators
-VkResult CmdPool::ResetCmdAllocator()
+VkResult CmdPool::ResetCmdAllocator(
+    bool releaseResources)
 {
     Pal::Result result = Pal::Result::Success;
 
@@ -252,7 +258,7 @@ VkResult CmdPool::ResetCmdAllocator()
         (deviceIdx < m_pDevice->NumPalDevices()) && (result == Pal::Result::Success);
         deviceIdx++)
     {
-        result = m_pPalCmdAllocators[deviceIdx]->Reset();
+        result = m_pPalCmdAllocators[deviceIdx]->Reset(releaseResources);
     }
 
     return PalToVkResult(result);
@@ -260,34 +266,49 @@ VkResult CmdPool::ResetCmdAllocator()
 
 // =====================================================================================================================
 // Reset a command buffer pool object
-VkResult CmdPool::Reset(VkCommandPoolResetFlags flags)
+VkResult CmdPool::Reset(
+    VkCommandPoolResetFlags flags)
 {
     VkResult result = VK_SUCCESS;
 
     m_cmdPoolResetInProgress = true;
 
-    // First reset all command buffers that were begun and not already reset (PAL doesn't do this automatically).
-    for (auto it = m_cmdBuffersAlreadyBegun.Begin(); (it.Get() != nullptr) && (result == VK_SUCCESS); it.Next())
+    // Reset all command buffers in the pool when individual command buffer reset is selected for this pool.  Otherwise,
+    // only reset the command buffers that were begun and not already reset (PAL doesn't do this automatically).
+    if (IsResetCmdBuffer())
     {
-        // Per-spec we always have to do a command buffer reset that also releases the used resources.
-        result = it.Get()->key->Reset(VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+        for (auto it = m_cmdBufferRegistry.Begin(); (it.Get() != nullptr) && (result == VK_SUCCESS); it.Next())
+        {
+            // Per-spec we always have to do a command buffer reset that also releases the used resources.
+            result = it.Get()->key->Reset(VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+        }
+    }
+    else
+    {
+        for (auto it = m_cmdBuffersAlreadyBegun.Begin(); (it.Get() != nullptr) && (result == VK_SUCCESS); it.Next())
+        {
+            // Per-spec we always have to do a command buffer reset that also releases the used resources.
+            result = it.Get()->key->Reset(VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+        }
+
+        // Clear the set of command buffers to reset. Only done if all the buffers were reset successfully so it is
+        // possible that after an error this set will contain already reset command buffers. This is fine because we
+        // can reset command buffers twice.
+        if ((result == VK_SUCCESS) && (m_cmdBuffersAlreadyBegun.GetNumEntries() > 0))
+        {
+            m_cmdBuffersAlreadyBegun.Reset();
+        }
     }
 
     if (result == VK_SUCCESS)
     {
-        // Clear the set of command buffers to reset. Only done if all the buffers were reset successfully so it is
-        // possible that after an error this set will contain already reset command buffers. This is fine because we
-        // can reset command buffers twice.
-        if (m_cmdBuffersAlreadyBegun.GetNumEntries() > 0)
-        {
-            m_cmdBuffersAlreadyBegun.Reset();
-        }
-
         // After resetting the registered command buffers, reset the pool itself but only if we use per-pool
         // CmdAllocator objects, not a single shared one.
-        if (m_sharedCmdAllocator == false)
+        if (m_flags.sharedCmdAllocator == 0)
         {
-            result = ResetCmdAllocator();
+            const bool releaseResources = ((flags & VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT) != 0);
+
+            result = ResetCmdAllocator(releaseResources);
         }
     }
 
@@ -325,7 +346,14 @@ void CmdPool::UnregisterCmdBuffer(CmdBuffer* pCmdBuffer)
 Pal::Result CmdPool::MarkCmdBufBegun(
     CmdBuffer* pCmdBuffer)
 {
-    return m_cmdBuffersAlreadyBegun.Insert(pCmdBuffer);
+    Pal::Result result = Pal::Result::Success;
+
+    if (IsResetCmdBuffer() == false)
+    {
+        result = m_cmdBuffersAlreadyBegun.Insert(pCmdBuffer);
+    }
+
+    return result;
 }
 
 // =====================================================================================================================
@@ -335,7 +363,7 @@ void CmdPool::UnmarkCmdBufBegun(
 {
     // Skip erasing individual command buffers during command pool reset as the command pool reset will instead reset
     // the entire HashSet all at once after all individual command buffer resets are completed.
-    if (m_cmdPoolResetInProgress == false)
+    if ((IsResetCmdBuffer() == false) && (m_cmdPoolResetInProgress == false))
     {
         m_cmdBuffersAlreadyBegun.Erase(pCmdBuffer);
     }

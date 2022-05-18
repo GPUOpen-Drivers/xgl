@@ -86,13 +86,6 @@ namespace RGPProtocol
 {
 class RGPServer;
 }
-
-#if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
-namespace ETWProtocol
-{
-class ETWClient;
-}
-#endif
 }
 
 // Vulkan forward declarations
@@ -312,19 +305,10 @@ private:
     TraceQueueState* FindTraceQueueState(TraceState* pState, const Queue* pQueue);
     bool QueueSupportsTiming(uint32_t deviceIdx, const Queue* pQueue);
 
-#if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
-    Pal::Result InitEtwClient();
-    void CleanupEtwClient();
-#endif
-
     Instance*                           m_pInstance;
     DevDriver::DevDriverServer*         m_pDevDriverServer;
     DevDriver::RGPProtocol::RGPServer*  m_pRGPServer;
     DevDriver::PipelineUriService*      m_pPipelineUriService;
-#if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
-    DevDriver::ETWProtocol::ETWClient*  m_pEtwClient;               // ETW client pointer used to collect gpu
-                                                                    // events for RGP
-#endif
     Util::Mutex                         m_traceMutex;
     TraceState                          m_trace;
     bool                                m_finalized;

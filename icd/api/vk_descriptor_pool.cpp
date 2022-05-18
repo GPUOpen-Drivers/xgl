@@ -155,7 +155,6 @@ VkResult DescriptorPool::Init(
 
                 if (m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
                 {
-                    m_addresses[deviceIdx].fmaskGpuAddr = m_staticInternalMem.GpuShadowVirtAddr(deviceIdx);
                     m_addresses[deviceIdx].fmaskCpuAddr = static_cast<uint32_t*>(m_gpuMemHeap.CpuShadowAddr(deviceIdx));
                 }
             }

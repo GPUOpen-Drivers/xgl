@@ -316,6 +316,7 @@ Pal::Result ImageView::BuildColorTargetView(
 
 // =====================================================================================================================
 Pal::Result ImageView::BuildDepthStencilView(
+    const Device*             pDevice,
     const Pal::IDevice*       pPalDevice,
     const Pal::IImage*        pPalImage,
     VkImageViewType           viewType,
@@ -364,6 +365,13 @@ Pal::Result ImageView::BuildDepthStencilView(
         depthInfo.baseArraySlice = zRange.offset;
         depthInfo.arraySize      = zRange.extent;
     }
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 730
+    if (pDevice->GetAppProfile() == AppProfile::AngleEngine)
+    {
+        depthInfo.flags.lowZplanePolyOffsetBits = 1;
+    }
+#endif
 
     Pal::Result result = pPalDevice->CreateDepthStencilView(
         depthInfo,
@@ -647,7 +655,8 @@ VkResult ImageView::Create(
             void* pPalMem = Util::VoidPtrInc(pMemory,
                             depthViewSegmentOffset + (depthViewSegmentSize * deviceIdx));
 
-            result = BuildDepthStencilView(pDevice->PalDevice(deviceIdx),
+            result = BuildDepthStencilView(pDevice,
+                                           pDevice->PalDevice(deviceIdx),
                                            pImage->PalImage(deviceIdx),
                                            pCreateInfo->viewType,
                                            imageViewUsage,

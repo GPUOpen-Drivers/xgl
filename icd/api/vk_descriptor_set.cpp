@@ -80,8 +80,6 @@ void DescriptorSet<numPalDevices>::Reassign(
 
         if (pBaseAddrs[deviceIdx].fmaskCpuAddr != nullptr)
         {
-            m_addresses[deviceIdx].fmaskGpuAddr = pBaseAddrs[deviceIdx].fmaskGpuAddr + gpuMemOffset;
-
             m_addresses[deviceIdx].fmaskCpuAddr = static_cast<uint32_t*>(Util::VoidPtrInc(pBaseAddrs[deviceIdx].fmaskCpuAddr, static_cast<intptr_t>(gpuMemOffset)));
             VK_ASSERT(Util::IsPow2Aligned(reinterpret_cast<uint64_t>(m_addresses[deviceIdx].fmaskCpuAddr), sizeof(uint32_t)));
         }
@@ -461,7 +459,6 @@ template <size_t imageDescSize,
           size_t fmaskDescSize,
           size_t samplerDescSize,
           size_t bufferDescSize,
-          bool fmaskBasedMsaaReadEnabled,
           uint32_t numPalDevices>
 void DescriptorUpdate::WriteDescriptorSets(
     const Device*                pDevice,
@@ -537,7 +534,7 @@ void DescriptorUpdate::WriteDescriptorSets(
                     destBinding.sta.dwArrayStride);
             }
 
-            if (fmaskBasedMsaaReadEnabled && (destBinding.sta.dwSize > 0))
+            if (fmaskDescSize != 0)
             {
                  WriteFmaskDescriptors<imageDescSize, fmaskDescSize>(
                      params.pImageInfo,
@@ -567,7 +564,7 @@ void DescriptorUpdate::WriteDescriptorSets(
                 params.descriptorCount,
                 destBinding.sta.dwArrayStride);
 
-            if (fmaskBasedMsaaReadEnabled && (destBinding.sta.dwSize > 0))
+            if (fmaskDescSize != 0)
             {
                 WriteFmaskDescriptors<imageDescSize, fmaskDescSize>(
                     params.pImageInfo,
@@ -675,7 +672,7 @@ void DescriptorUpdate::WriteDescriptorSets(
 
 // =====================================================================================================================
 // Copy from one descriptor set to another
-template <size_t imageDescSize, size_t fmaskDescSize, bool fmaskBasedMsaaReadEnabled, uint32_t numPalDevices>
+template <size_t imageDescSize, size_t fmaskDescSize, uint32_t numPalDevices>
 void DescriptorUpdate::CopyDescriptorSets(
     const Device*                pDevice,
     uint32_t                     deviceIdx,
@@ -769,7 +766,7 @@ void DescriptorUpdate::CopyDescriptorSets(
                 memcpy(pDestAddr, pSrcAddr, srcBinding.sta.dwArrayStride * sizeof(uint32_t) * count);
             }
 
-            if (fmaskBasedMsaaReadEnabled && srcBinding.sta.dwSize > 0 &&
+            if ((fmaskDescSize != 0) &&
                 ((srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) ||
                  (srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) ||
                  (srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)))
@@ -809,8 +806,7 @@ template <size_t imageDescSize,
           size_t fmaskDescSize,
           size_t samplerDescSize,
           size_t bufferDescSize,
-          uint32_t numPalDevices,
-          bool fmaskBasedMsaaReadEnabled>
+          uint32_t numPalDevices>
 VKAPI_ATTR void VKAPI_CALL DescriptorUpdate::UpdateDescriptorSets(
     VkDevice                                    device,
     uint32_t                                    descriptorWriteCount,
@@ -822,20 +818,17 @@ VKAPI_ATTR void VKAPI_CALL DescriptorUpdate::UpdateDescriptorSets(
 
     for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
     {
-        WriteDescriptorSets<
-            imageDescSize, fmaskDescSize, samplerDescSize, bufferDescSize,
-            fmaskBasedMsaaReadEnabled, numPalDevices>(
-                            pDevice,
-                            deviceIdx,
-                            descriptorWriteCount,
-                            pDescriptorWrites);
+        WriteDescriptorSets<imageDescSize, fmaskDescSize, samplerDescSize, bufferDescSize, numPalDevices>(
+            pDevice,
+            deviceIdx,
+            descriptorWriteCount,
+            pDescriptorWrites);
 
-        CopyDescriptorSets<
-            imageDescSize, fmaskDescSize, fmaskBasedMsaaReadEnabled, numPalDevices>(
-                           pDevice,
-                           deviceIdx,
-                           descriptorCopyCount,
-                           pDescriptorCopies);
+        CopyDescriptorSets<imageDescSize, fmaskDescSize, numPalDevices>(
+            pDevice,
+            deviceIdx,
+            descriptorCopyCount,
+            pDescriptorCopies);
     }
 }
 
@@ -877,25 +870,6 @@ template <uint32_t numPalDevices>
 PFN_vkUpdateDescriptorSets DescriptorUpdate::GetUpdateDescriptorSetsFunc(
     const Device* pDevice)
 {
-    PFN_vkUpdateDescriptorSets pFunc = nullptr;
-
-    if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
-    {
-        pFunc = GetUpdateDescriptorSetsFunc<numPalDevices, true>(pDevice);
-    }
-    else
-    {
-        pFunc = GetUpdateDescriptorSetsFunc<numPalDevices, false>(pDevice);
-    }
-
-    return pFunc;
-}
-
-// =====================================================================================================================
-template <uint32_t numPalDevices, bool fmaskBasedMsaaReadEnabled>
-PFN_vkUpdateDescriptorSets DescriptorUpdate::GetUpdateDescriptorSetsFunc(
-    const Device* pDevice)
-{
     const size_t imageDescSize      = pDevice->GetProperties().descriptorSizes.imageView;
     const size_t fmaskDescSize      = pDevice->GetProperties().descriptorSizes.fmaskView;
     const size_t samplerDescSize    = pDevice->GetProperties().descriptorSizes.sampler;
@@ -906,15 +880,23 @@ PFN_vkUpdateDescriptorSets DescriptorUpdate::GetUpdateDescriptorSetsFunc(
         (samplerDescSize == 16) &&
         (bufferDescSize == 16))
     {
-        if (fmaskDescSize == 32)
+        if ((pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead == false) || (fmaskDescSize == 0))
+        {
+            pFunc = &UpdateDescriptorSets<
+                32,
+                0,
+                16,
+                16,
+                numPalDevices>;
+        }
+        else if (fmaskDescSize == 32)
         {
             pFunc = &UpdateDescriptorSets<
                 32,
                 32,
                 16,
                 16,
-                numPalDevices,
-                fmaskBasedMsaaReadEnabled>;
+                numPalDevices>;
         }
         else
         {
@@ -955,6 +937,15 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(
 
 template
 void DescriptorUpdate::WriteFmaskDescriptors<32, 32>(
+    const VkDescriptorImageInfo*    pDescriptors,
+    uint32_t                        deviceIdx,
+    uint32_t*                       pDestAddr,
+    uint32_t                        count,
+    uint32_t                        dwStride,
+    size_t                          descriptorStrideInBytes);
+
+template
+void DescriptorUpdate::WriteFmaskDescriptors<32, 0>(
     const VkDescriptorImageInfo*    pDescriptors,
     uint32_t                        deviceIdx,
     uint32_t*                       pDestAddr,
@@ -1069,67 +1060,67 @@ DescriptorSet<1>::DescriptorSet(uint32_t heapIndex);
 
 template
 void DescriptorSet<1>::Reassign(
-        const DescriptorSetLayout*  pLayout,
-        Pal::gpusize                gpuMemOffset,
-        DescriptorAddr*             pBaseAddrs,
-        void*                       pAllocHandle);
+    const DescriptorSetLayout*  pLayout,
+    Pal::gpusize                gpuMemOffset,
+    DescriptorAddr*             pBaseAddrs,
+    void*                       pAllocHandle);
 
 template
 void DescriptorSet<1>::Reset();
 
 template
 void DescriptorSet<1>::WriteImmutableSamplers(
-        uint32_t imageDescSizeInBytes);
+    uint32_t imageDescSizeInBytes);
 
 template
 DescriptorSet<2>::DescriptorSet(uint32_t heapIndex);
 
 template
 void DescriptorSet<2>::Reassign(
-        const DescriptorSetLayout*  pLayout,
-        Pal::gpusize                gpuMemOffset,
-        DescriptorAddr*             pBaseAddrs,
-        void*                       pAllocHandle);
+    const DescriptorSetLayout*  pLayout,
+    Pal::gpusize                gpuMemOffset,
+    DescriptorAddr*             pBaseAddrs,
+    void*                       pAllocHandle);
 
 template
 void DescriptorSet<2>::Reset();
 
 template
 void DescriptorSet<2>::WriteImmutableSamplers(
-        uint32_t imageDescSizeInBytes);
+    uint32_t imageDescSizeInBytes);
 
 template
 DescriptorSet<3>::DescriptorSet(uint32_t heapIndex);
 
 template
 void DescriptorSet<3>::Reassign(
-        const DescriptorSetLayout*  pLayout,
-        Pal::gpusize                gpuMemOffset,
-        DescriptorAddr*             pBaseAddrs,
-        void*                       pAllocHandle);
+    const DescriptorSetLayout*  pLayout,
+    Pal::gpusize                gpuMemOffset,
+    DescriptorAddr*             pBaseAddrs,
+    void*                       pAllocHandle);
 
 template
 void DescriptorSet<3>::Reset();
 
 template
 void DescriptorSet<3>::WriteImmutableSamplers(
-        uint32_t imageDescSizeInBytes);
+    uint32_t imageDescSizeInBytes);
 
 template
 DescriptorSet<4>::DescriptorSet(uint32_t heapIndex);
 
 template
 void DescriptorSet<4>::Reassign(
-        const DescriptorSetLayout*  pLayout,
-        Pal::gpusize                gpuMemOffset,
-        DescriptorAddr*             pBaseAddrs,
-        void*                       pAllocHandle);
+    const DescriptorSetLayout*  pLayout,
+    Pal::gpusize                gpuMemOffset,
+    DescriptorAddr*             pBaseAddrs,
+    void*                       pAllocHandle);
 
 template
 void DescriptorSet<4>::Reset();
 
 template
 void DescriptorSet<4>::WriteImmutableSamplers(
-        uint32_t imageDescSizeInBytes);
+    uint32_t imageDescSizeInBytes);
 
 } // namespace vk

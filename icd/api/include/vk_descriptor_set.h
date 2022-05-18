@@ -53,7 +53,6 @@ class BufferView;
 struct DescriptorAddr
 {
     Pal::gpusize  staticGpuAddr;
-    Pal::gpusize  fmaskGpuAddr;
     uint32_t*     staticCpuAddr;
     uint32_t*     fmaskCpuAddr;
 };
@@ -90,11 +89,6 @@ public:
     uint32_t* StaticCpuAddress(int32_t idx) const
     {
         return m_addresses[idx].staticCpuAddr;
-    }
-
-    Pal::gpusize FmaskGpuAddress(int32_t idx) const
-    {
-        return m_addresses[idx].fmaskGpuAddr;
     }
 
     uint32_t* FmaskCpuAddress(int32_t idx) const
@@ -312,15 +306,11 @@ private:
     template <uint32_t numPalDevices>
     static PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc(const Device* pDevice);
 
-    template <uint32_t numPalDevices, bool fmaskBasedMsaaReadEnabled>
-    static PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc(const Device* pDevice);
-
     template <size_t imageDescSize,
               size_t fmaskDescSize,
               size_t samplerDescSize,
               size_t bufferDescSize,
-              uint32_t numPalDevices,
-              bool fmaskBasedMsaaReadEnabled>
+              uint32_t numPalDevices>
     static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(
         VkDevice                                    device,
         uint32_t                                    descriptorWriteCount,
@@ -332,7 +322,6 @@ private:
               size_t fmaskDescSize,
               size_t samplerDescSize,
               size_t bufferDescSize,
-              bool fmaskBasedMsaaReadEnabled,
               uint32_t numPalDevices>
     static void WriteDescriptorSets(
         const Device*                pDevice,
@@ -340,7 +329,7 @@ private:
         uint32_t                     descriptorWriteCount,
         const VkWriteDescriptorSet*  pDescriptorWrites);
 
-    template <size_t imageDescSize, size_t fmaskDescSize, bool fmaskBasedMsaaReadEnabled, uint32_t numPalDevices>
+    template <size_t imageDescSize, size_t fmaskDescSize, uint32_t numPalDevices>
     static void CopyDescriptorSets(
         const Device*                pDevice,
         uint32_t                     deviceIdx,

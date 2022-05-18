@@ -36,6 +36,7 @@
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_render_pass.h"
 #include "include/vk_graphics_pipeline.h"
+#include "include/vk_graphics_pipeline_library.h"
 #include "include/pipeline_compiler.h"
 #include <vector>
 
@@ -268,22 +269,19 @@ VkResult PipelineCompiler::Initialize()
         result = m_compilerSolutionLlpc.Initialize(m_gfxIp, info.gfxLevel, pCacheAdapter);
     }
 
-    if (settings.enableUberFetchShader || settings.enableEarlyCompile)
+    if (result == VK_SUCCESS)
     {
-        if (result == VK_SUCCESS)
-        {
-            result = PalToVkResult(m_shaderModuleHandleMap.Init());
-        }
+        result = PalToVkResult(m_shaderModuleHandleMap.Init());
+    }
 
-        if (result == VK_SUCCESS)
-        {
-            result = PalToVkResult(m_uberFetchShaderInfoFormatMap.Init());
-        }
+    if (result == VK_SUCCESS)
+    {
+        result = PalToVkResult(m_uberFetchShaderInfoFormatMap.Init());
+    }
 
-        if (result == VK_SUCCESS)
-        {
-            result = InitializeUberFetchShaderFormatTable(m_pPhysicalDevice, &m_uberFetchShaderInfoFormatMap);
-        }
+    if (result == VK_SUCCESS)
+    {
+        result = InitializeUberFetchShaderFormatTable(m_pPhysicalDevice, &m_uberFetchShaderInfoFormatMap);
     }
 
     if (result == VK_SUCCESS)
@@ -560,6 +558,7 @@ VkResult PipelineCompiler::BuildShaderModule(
     const VkShaderModuleCreateFlags flags,
     size_t                          codeSize,
     const void*                     pCode,
+    const bool                      adaptForFaskLink,
     PipelineBinaryCache*            pBinaryCache,
     PipelineCreationFeedback*       pFeedback,
     ShaderModuleHandle*             pShaderModule)
@@ -570,10 +569,14 @@ VkResult PipelineCompiler::BuildShaderModule(
     uint32_t compilerMask = GetCompilerCollectionMask();
     Util::MetroHash::Hash stableHash = {};
     Util::MetroHash::Hash uniqueHash = {};
-    Util::MetroHash64::Hash(reinterpret_cast<const uint8_t*>(pCode), codeSize, stableHash.bytes);
-    uniqueHash = stableHash;
-    bool findReplaceShader = false;
 
+    Util::MetroHash64 hasher;
+    hasher.Update(reinterpret_cast<const uint8_t*>(pCode), codeSize);
+    hasher.Update(adaptForFaskLink);
+    hasher.Finalize(stableHash.bytes);
+    uniqueHash = stableHash;
+
+    bool findReplaceShader = false;
     if ((pSettings->shaderReplaceMode == ShaderReplaceShaderHash) ||
         (pSettings->shaderReplaceMode == ShaderReplaceShaderHashPipelineBinaryHash))
     {
@@ -591,12 +594,13 @@ VkResult PipelineCompiler::BuildShaderModule(
 
     result = LoadShaderModuleFromCache(
         pDevice, flags, compilerMask, uniqueHash, pBinaryCache, pFeedback, pShaderModule);
+
     if (result != VK_SUCCESS)
     {
         if (compilerMask & (1 << PipelineCompilerTypeLlpc))
         {
             result = m_compilerSolutionLlpc.BuildShaderModule(
-                pDevice, flags, codeSize, pCode, pShaderModule, stableHash);
+                pDevice, flags, codeSize, pCode, adaptForFaskLink, pShaderModule, stableHash);
         }
 
         StoreShaderModuleToCache(pDevice, flags, compilerMask, uniqueHash, pBinaryCache, pShaderModule);
@@ -735,7 +739,7 @@ bool PipelineCompiler::ReplacePipelineShaderModule(
 
         if (LoadReplaceShaderBinary(hash64, &codeSize, &pCode))
         {
-            VkResult result = BuildShaderModule(pDevice, 0, codeSize, pCode, nullptr, nullptr, pShaderModule);
+            VkResult result = BuildShaderModule(pDevice, 0, codeSize, pCode, false, nullptr, nullptr, pShaderModule);
             if (result == VK_SUCCESS)
             {
                 pShaderInfo->pModuleData = ShaderModule::GetShaderData(compilerType, pShaderModule);
@@ -1614,6 +1618,145 @@ void BuildLlpcVertexInputDescriptors(
 }
 
 // =====================================================================================================================
+template <uint32_t shaderMask>
+static void CopyPipelineShadersInfo(
+    const GraphicsPipelineLibrary*    pLibrary,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo)
+{
+    const GraphicsPipelineBinaryCreateInfo& libInfo = pLibrary->GetPipelineBinaryCreateInfo();
+
+    pCreateInfo->compilerType = libInfo.compilerType;
+
+    Vkgc::PipelineShaderInfo* pShaderInfosDst[] =
+    {
+        &pCreateInfo->pipelineInfo.vs,
+        &pCreateInfo->pipelineInfo.tcs,
+        &pCreateInfo->pipelineInfo.tes,
+        &pCreateInfo->pipelineInfo.gs,
+        &pCreateInfo->pipelineInfo.fs,
+    };
+
+    const Vkgc::PipelineShaderInfo* pShaderInfosSrc[] =
+    {
+        &libInfo.pipelineInfo.vs,
+        &libInfo.pipelineInfo.tcs,
+        &libInfo.pipelineInfo.tes,
+        &libInfo.pipelineInfo.gs,
+        &libInfo.pipelineInfo.fs,
+    };
+
+    for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
+    {
+        if ((shaderMask & (1 << stage)) != 0)
+        {
+            *pShaderInfosDst[stage]                        = *pShaderInfosSrc[stage];
+            pCreateInfo->pipelineProfileKey.shaders[stage] = libInfo.pipelineProfileKey.shaders[stage];
+        }
+    }
+}
+
+// =====================================================================================================================
+static void CopyVertexInputInterfaceState(
+    const Device*                     pDevice,
+    const GraphicsPipelineLibrary*    pLibrary,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    VbBindingInfo*                    pVbInfo)
+{
+    const GraphicsPipelineBinaryCreateInfo& libInfo = pLibrary->GetPipelineBinaryCreateInfo();
+
+    pCreateInfo->pipelineInfo.pVertexInput               = libInfo.pipelineInfo.pVertexInput;
+    pCreateInfo->pipelineInfo.iaState.topology           = libInfo.pipelineInfo.iaState.topology;
+    pCreateInfo->pipelineInfo.iaState.disableVertexReuse = libInfo.pipelineInfo.iaState.disableVertexReuse;
+    pCreateInfo->pipelineInfo.dynamicVertexStride        = libInfo.pipelineInfo.dynamicVertexStride;
+
+    BuildLlpcVertexInputDescriptors(pDevice, pCreateInfo->pipelineInfo.pVertexInput, pVbInfo);
+}
+
+// =====================================================================================================================
+static void MergePipelineOptions(const Vkgc::PipelineOptions& src, Vkgc::PipelineOptions& dst)
+{
+    dst.includeDisassembly                    |= src.includeDisassembly;
+    dst.scalarBlockLayout                     |= src.scalarBlockLayout;
+    dst.reconfigWorkgroupLayout               |= src.reconfigWorkgroupLayout;
+    dst.includeIr                             |= src.includeIr;
+    dst.robustBufferAccess                    |= src.robustBufferAccess;
+    dst.enableRelocatableShaderElf            |= src.enableRelocatableShaderElf;
+    dst.disableImageResourceCheck             |= src.disableImageResourceCheck;
+    dst.enableScratchAccessBoundsChecks       |= src.enableScratchAccessBoundsChecks;
+    dst.extendedRobustness.nullDescriptor     |= src.extendedRobustness.nullDescriptor;
+    dst.extendedRobustness.robustBufferAccess |= src.extendedRobustness.robustBufferAccess;
+    dst.extendedRobustness.robustImageAccess  |= src.extendedRobustness.robustImageAccess;
+    dst.enableInterpModePatch                 |= src.enableInterpModePatch;
+    dst.pageMigrationEnabled                  |= src.pageMigrationEnabled;
+
+    dst.shadowDescriptorTableUsage   = src.shadowDescriptorTableUsage;
+    dst.shadowDescriptorTablePtrHigh = src.shadowDescriptorTablePtrHigh;
+}
+
+// =====================================================================================================================
+static void CopyPreRasterizationShaderState(
+    const GraphicsPipelineLibrary*    pLibrary,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo)
+{
+    const GraphicsPipelineBinaryCreateInfo& libInfo = pLibrary->GetPipelineBinaryCreateInfo();
+
+    pCreateInfo->pipelineInfo.iaState.patchControlPoints      = libInfo.pipelineInfo.iaState.patchControlPoints;
+    pCreateInfo->pipelineInfo.iaState.switchWinding           = libInfo.pipelineInfo.iaState.switchWinding;
+    pCreateInfo->pipelineInfo.vpState.depthClipEnable         = libInfo.pipelineInfo.vpState.depthClipEnable;
+    pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = libInfo.pipelineInfo.rsState.rasterizerDiscardEnable;
+    pCreateInfo->pipelineInfo.rsState.provokingVertexMode     = libInfo.pipelineInfo.rsState.provokingVertexMode;
+    pCreateInfo->pipelineInfo.nggState                        = libInfo.pipelineInfo.nggState;
+    pCreateInfo->pipelineInfo.enableUberFetchShader           = libInfo.pipelineInfo.enableUberFetchShader;
+    pCreateInfo->rasterizationStream                          = libInfo.rasterizationStream;
+
+    MergePipelineOptions(libInfo.pipelineInfo.options, pCreateInfo->pipelineInfo.options);
+
+    CopyPipelineShadersInfo<PrsShaderMask>(pLibrary, pCreateInfo);
+}
+
+// =====================================================================================================================
+static void CopyFragmentShaderState(
+    const GraphicsPipelineLibrary*    pLibrary,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo)
+{
+    const GraphicsPipelineBinaryCreateInfo& libInfo = pLibrary->GetPipelineBinaryCreateInfo();
+
+    pCreateInfo->pipelineInfo.rsState.perSampleShading      = libInfo.pipelineInfo.rsState.perSampleShading;
+    pCreateInfo->pipelineInfo.rsState.numSamples            = libInfo.pipelineInfo.rsState.numSamples;
+    pCreateInfo->pipelineInfo.rsState.samplePatternIdx      = libInfo.pipelineInfo.rsState.samplePatternIdx;
+    pCreateInfo->pipelineInfo.rsState.pixelShaderSamples    = libInfo.pipelineInfo.rsState.pixelShaderSamples;
+
+    pCreateInfo->pipelineInfo.dsState.depthTestEnable   = libInfo.pipelineInfo.dsState.depthTestEnable;
+    pCreateInfo->pipelineInfo.dsState.depthWriteEnable  = libInfo.pipelineInfo.dsState.depthWriteEnable;
+    pCreateInfo->pipelineInfo.dsState.depthCompareOp    = libInfo.pipelineInfo.dsState.depthCompareOp;
+    pCreateInfo->pipelineInfo.dsState.stencilTestEnable = libInfo.pipelineInfo.dsState.stencilTestEnable;
+    pCreateInfo->pipelineInfo.dsState.front             = libInfo.pipelineInfo.dsState.front;
+    pCreateInfo->pipelineInfo.dsState.back              = libInfo.pipelineInfo.dsState.back;
+
+    MergePipelineOptions(libInfo.pipelineInfo.options, pCreateInfo->pipelineInfo.options);
+
+    CopyPipelineShadersInfo<FgsShaderMask>(pLibrary, pCreateInfo);
+}
+
+// =====================================================================================================================
+static void CopyFragmentOutputInterfaceState(
+    const GraphicsPipelineLibrary*    pLibrary,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo)
+{
+    const GraphicsPipelineBinaryCreateInfo& libInfo = pLibrary->GetPipelineBinaryCreateInfo();
+
+    for (uint32_t i = 0; i < Vkgc::MaxColorTargets; ++i)
+    {
+        pCreateInfo->pipelineInfo.cbState.target[i] = libInfo.pipelineInfo.cbState.target[i];
+    }
+
+    pCreateInfo->dbFormat                                   = libInfo.dbFormat;
+    pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable = libInfo.pipelineInfo.cbState.alphaToCoverageEnable;
+    pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable = libInfo.pipelineInfo.cbState.dualSourceBlendEnable;
+    pCreateInfo->pipelineInfo.iaState.enableMultiView       = libInfo.pipelineInfo.iaState.enableMultiView;
+}
+
+// =====================================================================================================================
 static void BuildRasterizationState(
     const VkPipelineRasterizationStateCreateInfo* pRs,
     const uint32_t                                dynamicStateFlags,
@@ -2006,6 +2149,28 @@ static void BuildPipelineShadersInfo(
             );
         }
     }
+
+    // Uber fetch shader is actully used in the following scenes:
+    // * enableUberFetchShader or enableEarlyCompile is set as TRUE in panel.
+    // * When creating shader module, adaptForFaskLink parameter of PipelineCompiler::BuildShaderModule() is set as
+    //   TRUE.  This may happen when shader is created during pipeline creation, and that pipeline is a library, not
+    //   executable.  More details can be found in Pipeline::BuildShaderStageInfo().
+    // * When creating pipeline, GraphicsPipelineBuildInfo::enableUberFetchShader controls the actual enablement. It is
+    //   only set when Vertex Input Interface section (VII) is not avaible and Pre-Rasterization Shader section (PRS)is
+    //   available, or inherits from its PRS parent (referenced library). However, enableUberFetchShader would also be
+    //   set as FALSE even if its parent set it as TRUE if current pipeline want to re-compile pre-rasterazation shaders
+    //   and VII is available.  This may happen when VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT is set.  More
+    //   details can be found in PipelineCompiler::ConvertGraphicsPipelineInfo().
+    // PS: For standard gfx pipeline, GraphicsPipelineBuildInfo::enableUberFetchShader is never set as TRUE with default
+    //     panel setting because VII and PRS are always available at the same time.
+    if (pDevice->GetRuntimeSettings().enableUberFetchShader ||
+        pDevice->GetRuntimeSettings().enableEarlyCompile ||
+        (((pCreateInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) == 0) &&
+         ((pCreateInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) != 0))
+        )
+    {
+        pCreateInfo->pipelineInfo.enableUberFetchShader = true;
+    }
 }
 
 // =====================================================================================================================
@@ -2130,11 +2295,6 @@ static void BuildVertexInputInterfaceState(
             pCreateInfo->pipelineInfo.dynamicVertexStride = true;
         }
 
-        if (pDevice->GetRuntimeSettings().enableUberFetchShader || pDevice->GetRuntimeSettings().enableEarlyCompile)
-        {
-            pCreateInfo->pipelineInfo.enableUberFetchShader = true;
-        }
-
         BuildLlpcVertexInputDescriptors(pDevice, pIn->pVertexInputState, pVbInfo);
     }
 }
@@ -2244,21 +2404,11 @@ static void BuildFragmentOutputInterfaceState(
 }
 
 // =====================================================================================================================
-static void BuildPipelineInternalBufferData(
-    const Device*                     pDevice,
-    GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-    PipelineInternalBufferInfo*       pInternalBufferInfo)
-{
-    PipelineCompiler* pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
-    VK_ASSERT(pCreateInfo->pipelineInfo.enableUberFetchShader);
-    pDefaultCompiler->BuildPipelineInternalBufferData(pCreateInfo, pInternalBufferInfo);
-}
-
-// =====================================================================================================================
 static void BuildExecutablePipelineState(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
     const GraphicsPipelineShaderStageInfo* pShaderInfo,
+    const PipelineLayout*                  pPipelineLayout,
     const uint32_t                         dynamicStateFlags,
     GraphicsPipelineBinaryCreateInfo*      pCreateInfo,
     PipelineInternalBufferInfo*            pInternalBufferInfo)
@@ -2298,7 +2448,7 @@ static void BuildExecutablePipelineState(
 
     if (pCreateInfo->pipelineInfo.enableUberFetchShader)
     {
-        BuildPipelineInternalBufferData(pDevice, pCreateInfo, pInternalBufferInfo);
+        pDefaultCompiler->BuildPipelineInternalBufferData(pPipelineLayout, pCreateInfo, pInternalBufferInfo);
     }
 
 }
@@ -2318,31 +2468,71 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     VkResult result = VK_SUCCESS;
 
-    VkShaderStageFlagBits activeStages = GraphicsPipelineCommon::GetActiveShaderStages(
-                                             pIn
-                                             );
+    GraphicsPipelineLibraryInfo libInfo;
+    GraphicsPipelineCommon::ExtractLibraryInfo(pIn, &libInfo);
 
-    uint32_t dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(
-                                     pIn->pDynamicState
-                                     );
+    pCreateInfo->libFlags = libInfo.libFlags;
+
+    pCreateInfo->libFlags |= (libInfo.pVertexInputInterfaceLib == nullptr) ?
+                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT;
+    pCreateInfo->libFlags |= (libInfo.pPreRasterizationShaderLib == nullptr) ?
+                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT;
+    pCreateInfo->libFlags |= (libInfo.pFragmentShaderLib == nullptr) ?
+                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT;
+    pCreateInfo->libFlags |= (libInfo.pFragmentOutputInterfaceLib == nullptr) ?
+                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
+
+    VkShaderStageFlagBits activeStages = GraphicsPipelineCommon::GetActiveShaderStages(pIn, &libInfo);
+
+    uint32_t dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
 
     pCreateInfo->flags = pIn->flags;
 
-    BuildVertexInputInterfaceState(pDevice, pIn, dynamicStateFlags, activeStages, pCreateInfo, pVbInfo);
+    if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)
+    {
+        BuildVertexInputInterfaceState(pDevice, pIn, dynamicStateFlags, activeStages, pCreateInfo, pVbInfo);
+    }
+    else if (libInfo.pVertexInputInterfaceLib != nullptr)
+    {
+        CopyVertexInputInterfaceState(pDevice, libInfo.pVertexInputInterfaceLib, pCreateInfo, pVbInfo);
+    }
 
-    BuildPreRasterizationShaderState(pDevice, pIn, pShaderInfo, dynamicStateFlags, activeStages, pCreateInfo);
+    if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT)
+    {
+        BuildPreRasterizationShaderState(pDevice, pIn, pShaderInfo, dynamicStateFlags, activeStages, pCreateInfo);
+    }
+    else if (libInfo.pPreRasterizationShaderLib != nullptr)
+    {
+        CopyPreRasterizationShaderState(libInfo.pPreRasterizationShaderLib, pCreateInfo);
+    }
 
     const bool enableRasterization =
+        (~libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) ||
         (pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable == false) ||
         IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizerDiscardEnableExt);
 
     if (enableRasterization)
     {
-        BuildFragmentShaderState(pDevice, pIn, pShaderInfo, pCreateInfo);
+        if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
+        {
+            BuildFragmentShaderState(pDevice, pIn, pShaderInfo, pCreateInfo);
+        }
+        else if (libInfo.pFragmentShaderLib != nullptr)
+        {
+            CopyFragmentShaderState(libInfo.pFragmentShaderLib, pCreateInfo);
+        }
 
-        BuildFragmentOutputInterfaceState(pDevice, pIn, pCreateInfo);
+        if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)
+        {
+            BuildFragmentOutputInterfaceState(pDevice, pIn, pCreateInfo);
+        }
+        else if (libInfo.pFragmentOutputInterfaceLib != nullptr)
+        {
+            CopyFragmentOutputInterfaceState(libInfo.pFragmentOutputInterfaceLib, pCreateInfo);
+        }
     }
 
+    if (GraphicsPipelineCommon::NeedBuildPipelineBinary(&libInfo, enableRasterization))
     {
         const Vkgc::PipelineShaderInfo* shaderInfos[] =
         {
@@ -2362,13 +2552,21 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 availableStageMask |= (1 << stage);
             }
         }
+
+        if ((libInfo.flags.optimize != 0) &&
+            ((libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) ||
+             (libInfo.pVertexInputInterfaceLib != nullptr)))
+        {
+            pCreateInfo->pipelineInfo.enableUberFetchShader = false;
+        }
+
         result = BuildPipelineResourceMapping(pDevice, pPipelineLayout, availableStageMask, pVbInfo, pCreateInfo);
     }
 
-    if ((result == VK_SUCCESS)
-        )
+    if ((result == VK_SUCCESS) && (libInfo.flags.isLibrary == false))
     {
-        BuildExecutablePipelineState(pDevice, pIn, pShaderInfo, dynamicStateFlags, pCreateInfo, pInternalBufferInfo);
+        BuildExecutablePipelineState(
+            pDevice, pIn, pShaderInfo, pPipelineLayout, dynamicStateFlags, pCreateInfo, pInternalBufferInfo);
     }
 
     return result;
@@ -2818,9 +3016,31 @@ void PipelineCompiler::GetGraphicsPipelineCacheId(
 
 // =====================================================================================================================
 void PipelineCompiler::BuildPipelineInternalBufferData(
-    GraphicsPipelineBinaryCreateInfo*           pCreateInfo,
-    PipelineInternalBufferInfo*                 pInternalBufferInfo)
+    const PipelineLayout*             pPipelineLayout,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    PipelineInternalBufferInfo*       pInternalBufferInfo)
 {
+    uint32_t fetchShaderConstBufRegBase  = PipelineLayout::InvalidReg;
+    uint32_t specConstBufVertexRegBase   = PipelineLayout::InvalidReg;
+    uint32_t specConstBufFragmentRegBase = PipelineLayout::InvalidReg;
+
+    const UserDataLayout& layout = pPipelineLayout->GetInfo().userDataLayout;
+
+    switch (layout.scheme)
+    {
+    case PipelineLayoutScheme::Compact:
+        fetchShaderConstBufRegBase  = layout.compact.uberFetchConstBufRegBase;
+        specConstBufVertexRegBase   = layout.compact.specConstBufVertexRegBase;
+        specConstBufFragmentRegBase = layout.compact.specConstBufFragmentRegBase;
+        break;
+    case PipelineLayoutScheme::Indirect:
+        fetchShaderConstBufRegBase = layout.indirect.uberFetchConstBufRegBase;
+        break;
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+
     if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
     {
         VK_NOT_IMPLEMENTED;

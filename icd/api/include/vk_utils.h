@@ -136,10 +136,7 @@ inline uint64_t TicksToNano(uint64_t ticks)
 
 // =====================================================================================================================
 // Get driver build time hash
-inline uint32_t GetBuildTimeHash()
-{
-    return Util::HashLiteralString(__DATE__ __TIME__);
-}
+uint32_t GetBuildTimeHash();
 
 // =====================================================================================================================
 // This function can be used to get the right externsion structure of specific type in case there are more than one

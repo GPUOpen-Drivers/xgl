@@ -1041,9 +1041,9 @@ VkResult PalToVkError(
 }
 
 // =====================================================================================================================
-uint32_t GetBufferSrdFormatInfo(
-    PhysicalDevice*     pPhysicalDevice,
-    Pal::SwizzledFormat swizzledFormat)
+static uint32_t GetBufferSrdFormatInfo(
+    const PhysicalDevice*     pPhysicalDevice,
+    const Pal::SwizzledFormat swizzledFormat)
 {
     if (swizzledFormat.format == Pal::ChNumFormat::Undefined)
     {
@@ -1082,7 +1082,7 @@ uint32_t GetBufferSrdFormatInfo(
 
 // =====================================================================================================================
 VkResult InitializeUberFetchShaderFormatTable(
-    PhysicalDevice*               pPhysicalDevice,
+    const PhysicalDevice*         pPhysicalDevice,
     UberFetchShaderFormatInfoMap* pFormatInfoMap)
 {
     INIT_UBER_FORMATINFO(A2B10G10R10_SINT_PACK32,
@@ -1319,9 +1319,9 @@ VkResult InitializeUberFetchShaderFormatTable(
 
 // =====================================================================================================================
 UberFetchShaderFormatInfo GetUberFetchShaderFormatInfo(
-    UberFetchShaderFormatInfoMap* pFormatInfoMap,
-    VkFormat                      vkFormat,
-    bool                          isZeroStride)
+    const UberFetchShaderFormatInfoMap* pFormatInfoMap,
+    const VkFormat                      vkFormat,
+    const bool                          isZeroStride)
 {
     UberFetchShaderFormatInfo formatInfo = {};
     auto pFormatInfo = pFormatInfoMap->FindKey(vkFormat);

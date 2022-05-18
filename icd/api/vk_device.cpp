@@ -268,7 +268,7 @@ Device::Device(
 #if VKI_GPU_DECOMPRESS
     m_pGpuDecoderLayer(nullptr),
 #endif
-    m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true),
+    m_allocationSizeTracking(true),
     m_useComputeAsTransferQueue(useComputeAsTransferQueue),
     m_useUniversalAsComputeQueue(pPhysicalDevices[DefaultDeviceIndex]->GetRuntimeSettings().useUniversalAsComputeQueue),
     m_useGlobalGpuVa(false),
@@ -453,7 +453,7 @@ VkResult Device::Create(
         if (!DeviceExtensions::EnableExtensions(pCreateInfo->ppEnabledExtensionNames,
                                                 pCreateInfo->enabledExtensionCount,
                                                 pPhysicalDevice->GetAllowedExtensions(),
-                                                enabledDeviceExtensions))
+                                                &enabledDeviceExtensions))
         {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
         }
@@ -997,8 +997,7 @@ VkResult Device::Create(
         vkResult = VK_SUCCESS;
 
         // Finalize the physical device settings before they are cached in the device
-        pPhysicalDevices[DefaultDeviceIndex]->GetSettingsLoader()->FinalizeSettings(
-            );
+        pPhysicalDevices[DefaultDeviceIndex]->GetSettingsLoader()->FinalizeSettings(enabledDeviceExtensions);
 
         // Construct API device object.
         VK_INIT_DISPATCHABLE(Device, pMemory, (
@@ -1063,7 +1062,6 @@ VkResult Device::Create(
 
                     // Create a TMZ queue at the protected capability queue creation time
                     // when this engine support per queue level tmz.
-                    const Pal::DeviceProperties& deviceProps = pPhysicalDevices[deviceIdx]->PalProperties();
 
                     if ((queueFlags[queueFamilyIndex] & VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT) &&
                         (properties.engineProperties[queueCreateInfo.engineType].tmzSupportLevel ==
@@ -1437,8 +1435,8 @@ VkResult Device::Initialize(
 
     if (result == VK_SUCCESS)
     {
-        // For apps running on APU, disable allocation size tracking, allocate remote heap instead when local heap is used up.
-        if (palProps.gpuType == Pal::GpuType::Integrated)
+        // Allow overallocation by disabling tracking for apps running on APU or with the setting.
+        if ((palProps.gpuType == Pal::GpuType::Integrated) || m_settings.memoryDeviceOverallocationAllowed)
         {
             m_allocationSizeTracking = false;
         }
@@ -1479,8 +1477,6 @@ VkResult Device::Initialize(
                 {
                 case VK_MEMORY_OVERALLOCATION_BEHAVIOR_ALLOWED_AMD:
                     m_allocationSizeTracking = false;
-                    m_overallocationRequestedForPalHeap[Pal::GpuHeap::GpuHeapInvisible] = true;
-                    m_overallocationRequestedForPalHeap[Pal::GpuHeap::GpuHeapLocal] = true;
                     break;
                 case VK_MEMORY_OVERALLOCATION_BEHAVIOR_DISALLOWED_AMD:
                     m_allocationSizeTracking = true;
@@ -1492,9 +1488,7 @@ VkResult Device::Initialize(
             else if (enabled.IsExtensionEnabled(DeviceExtensions::ExtensionId::EXT_PAGEABLE_DEVICE_LOCAL_MEMORY) &&
                      pageableDeviceLocalMemory)
             {
-                // Add back-up heaps for device-local heaps
-                m_overallocationRequestedForPalHeap[Pal::GpuHeap::GpuHeapInvisible] = true;
-                m_overallocationRequestedForPalHeap[Pal::GpuHeap::GpuHeapLocal]     = true;
+                m_allocationSizeTracking = false;
             }
             else if ((m_settings.overrideHeapChoiceToLocal != 0) && (palProps.gpuType == Pal::GpuType::Discrete))
             {
@@ -1503,6 +1497,13 @@ VkResult Device::Initialize(
                 m_allocationSizeTracking = true;
                 m_overallocationRequestedForPalHeap[Pal::GpuHeap::GpuHeapLocal] = true;
             }
+        }
+
+        if (m_allocationSizeTracking == false)
+        {
+            // Add back-up heaps for device-local heaps
+            m_overallocationRequestedForPalHeap[Pal::GpuHeap::GpuHeapInvisible] = true;
+            m_overallocationRequestedForPalHeap[Pal::GpuHeap::GpuHeapLocal]     = true;
         }
     }
 
@@ -1934,6 +1935,7 @@ VkResult Device::CreateInternalComputePipeline(
         flags,
         codeByteSize,
         pCode,
+        false,
         nullptr,
         nullptr,
         &shaderModule);

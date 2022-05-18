@@ -22,33 +22,28 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+/**
+ ***********************************************************************************************************************
+ * @file  vk_utils.cpp
+ * @brief Utility functions for Vulkan. This file is rebuilt every time.
+ ***********************************************************************************************************************
+ */
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
+#include "vk_utils.h"
 
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
+namespace vk
+{
 
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
+namespace utils
+{
 
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
+// =====================================================================================================================
+// Get driver build time hash
+uint32_t GetBuildTimeHash()
+{
+    return Util::HashLiteralString(__DATE__ __TIME__);
+}
 
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   226
+} // namespace utils
 
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
-
-// These values specify the driver ID and driver info string
-#define VULKAN_DRIVER_ID            VK_DRIVER_ID_AMD_OPEN_SOURCE_KHR  // "AMDOPEN"
-#define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
-#define VULKAN_DRIVER_INFO_STR      "2022.Q2.2"
-
-// These values tell which version of the conformance test the driver is compliant against
-#define CTS_VERSION_MAJOR           1
-#define CTS_VERSION_MINOR           3
-#define CTS_VERSION_SUBMINOR        0
-#define CTS_VERSION_PATCH           0
+} // namespace vk

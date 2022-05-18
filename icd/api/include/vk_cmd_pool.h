@@ -85,6 +85,8 @@ public:
 
     bool IsProtected() const { return m_flags.isProtected ? true : false; }
 
+    bool IsResetCmdBuffer() const { return m_flags.isResetCmdBuffer; }
+
     Pal::Result MarkCmdBufBegun(CmdBuffer* pCmdBuffer);
 
     void UnmarkCmdBufBegun(CmdBuffer* pCmdBuffer);
@@ -100,20 +102,21 @@ private:
         VkCommandPoolCreateFlags     flags,
         bool                         sharedCmdAllocator);
 
-    VkResult ResetCmdAllocator();
+    VkResult ResetCmdAllocator(bool releaseResources);
 
     Device*                      m_pDevice;
     Pal::ICmdAllocator*          m_pPalCmdAllocators[MaxPalDevices];
     const VkAllocationCallbacks* m_pAllocator;
     const uint32_t               m_queueFamilyIndex;
-    const bool                   m_sharedCmdAllocator;
 
     union
     {
         struct
         {
-            uint32 isProtected : 1;
-            uint32 reserved    : 31;
+            uint32 isProtected        : 1;
+            uint32 sharedCmdAllocator : 1;
+            uint32 isResetCmdBuffer   : 1;
+            uint32 reserved           : 29;
         };
         uint32 u32All;
     } m_flags;

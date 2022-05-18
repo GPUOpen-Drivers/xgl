@@ -593,6 +593,22 @@ SHADER_ACTION = {
         ],
     },
 
+    "optStrategyFlags2": {
+        "type": [int, dict],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "optStrategyFlags2",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {},
+            }
+        ],
+    },
+
     "vgprLimit": {
         "type": [int],
         "jsonReadable": True,

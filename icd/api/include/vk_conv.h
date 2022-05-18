@@ -2519,7 +2519,8 @@ inline VkCompositeAlphaFlagsKHR PalToVkSupportedCompositeAlphaMode(uint32 compos
 // Converts Vulkan image creation flags to PAL image creation flags (unfortunately, PAL doesn't define a dedicated type
 // for the image creation flags so we have to return the constructed flag set as a uint32_t)
 inline uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
-                                           VkFormat           format)
+                                        VkFormat           format,
+                                        VkImageUsageFlags  imageUsage)
 {
     Pal::ImageCreateFlags flags = {};
 
@@ -3603,13 +3604,13 @@ class PhysicalDevice;
 
 // =====================================================================================================================
 VkResult InitializeUberFetchShaderFormatTable(
-    PhysicalDevice*               pPhysicalDevice,
+    const PhysicalDevice*         pPhysicalDevice,
     UberFetchShaderFormatInfoMap* pFormatInfoMap);
 
 UberFetchShaderFormatInfo GetUberFetchShaderFormatInfo(
-    UberFetchShaderFormatInfoMap* pFormatInfoMap,
-    VkFormat                      vkFormat,
-    bool                          isZeroStride);
+    const UberFetchShaderFormatInfoMap* pFormatInfoMap,
+    const VkFormat                      vkFormat,
+    const bool                          isZeroStride);
 
 } // namespace vk
 

@@ -141,7 +141,8 @@ def parseJsonFlags(key, flags):
 # Parses stage actions from the input json file and fetches code template from shaderProfileTemplate.py.
 # Includes parsing options for
 # [
-#  'optStrategyFlags', 'vgprLimit', 'sgprLimit', 'ldsSpillLimitDwords', 'maxArraySizeForFastDynamicIndexing',
+#  'optStrategyFlags', 'optStrategyFlags2', 'vgprLimit', 'sgprLimit', 'ldsSpillLimitDwords',
+#  'maxArraySizeForFastDynamicIndexing',
 #  'userDataSpillThreshold', 'maxThreadGroupsPerComputeUnit', 'scOptions', 'scOptionsMask', 'trapPresent',
 #  'debugMode', 'allowReZ', 'shaderReplaceEnabled', 'fpControlFlags', 'optimizationIntent', 'disableLoopUnrolls',
 #  'enableSelectiveInline', 'maxOccupancyOptions', 'lowLatencyOptions', 'waveSize', 'wgpMode', 'waveBreakSize',
@@ -184,6 +185,8 @@ def parseJsonProfileActionShader(shaderActions):
             if shaderActionKey in BRANCHES:
                 if shaderActionKey == 'optStrategyFlags':
                     result["optStrategyFlags"] = True
+                elif shaderActionKey == 'optStrategyFlags2':
+                    result["optStrategyFlags2"] = True
                 elif shaderActionKey == 'fpControlFlags':
                     result["fpControlFlags"] = True
                 elif shaderActionKey == 'maxOccupancyOptions':

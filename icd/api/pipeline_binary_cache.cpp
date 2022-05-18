@@ -1344,7 +1344,7 @@ VkResult PipelineBinaryCache::Merge(
     uint32_t                    srcCacheCount,
     const PipelineBinaryCache** ppSrcCaches)
 {
-    VkResult result = VK_ERROR_INITIALIZATION_FAILED;
+    Pal::Result result = Pal::Result::ErrorInitializationFailed;
 
     if (m_pMemoryLayer != nullptr)
     {
@@ -1353,25 +1353,28 @@ VkResult PipelineBinaryCache::Merge(
             Util::ICacheLayer* pMemoryLayer = ppSrcCaches[i]->GetMemoryLayer();
             size_t curCount, curDataSize;
 
-            result = PalToVkResult(Util::GetMemoryCacheLayerCurSize(pMemoryLayer, &curCount, &curDataSize));
-            if ((result == VK_SUCCESS) && (curCount > 0))
+            result = Util::GetMemoryCacheLayerCurSize(pMemoryLayer, &curCount, &curDataSize);
+
+            if ((result == Pal::Result::Success) && (curCount > 0))
             {
                 Util::AutoBuffer<Util::Hash128, 8, PalAllocator> cacheIds(curCount, &m_palAllocator);
 
-                result = PalToVkResult(Util::GetMemoryCacheLayerHashIds(pMemoryLayer, curCount, &cacheIds[0]));
-                if (result == VK_SUCCESS)
+                result = Util::GetMemoryCacheLayerHashIds(pMemoryLayer, curCount, &cacheIds[0]);
+                if (result == Pal::Result::Success)
                 {
                     for (uint32_t j = 0; j < curCount; j++)
                     {
                         size_t           dataSize;
                         const void*      pBinaryCacheData;
 
-                        result = PalToVkResult(ppSrcCaches[i]->LoadPipelineBinary(&cacheIds[j], &dataSize, &pBinaryCacheData));
-                        if (result == VK_SUCCESS)
+                        result = ppSrcCaches[i]->LoadPipelineBinary(&cacheIds[j], &dataSize, &pBinaryCacheData);
+                        if (result == Pal::Result::Success)
                         {
-                            result = PalToVkResult(StorePipelineBinary(&cacheIds[j], dataSize, pBinaryCacheData));
+                            result = StorePipelineBinary(&cacheIds[j], dataSize, pBinaryCacheData);
                             FreeMem(const_cast<void*>(pBinaryCacheData));
-                            if (result != VK_SUCCESS)
+
+                            // Do not break for success cases or an already existing cache entry
+                            if ((result != Pal::Result::Success) && (result != Pal::Result::AlreadyExists))
                             {
                                 break;
                             }
@@ -1382,7 +1385,9 @@ VkResult PipelineBinaryCache::Merge(
         }
     }
 
-    return result;
+    return (((result == Pal::Result::Success) ||
+             (result == Pal::Result::AlreadyExists))?
+            VK_SUCCESS : PalToVkResult(result));
 }
 
 } // namespace vk

@@ -138,6 +138,8 @@ void VulkanSettingsLoader::OverrideSettingsBySystemInfo()
         MakeAbsolutePath(m_settings.shaderReplaceDir, sizeof(m_settings.shaderReplaceDir),
                          pRootPath, m_settings.shaderReplaceDir);
 
+        MakeAbsolutePath(m_settings.appProfileDumpDir, sizeof(m_settings.appProfileDumpDir),
+                         pRootPath, m_settings.appProfileDumpDir);
         MakeAbsolutePath(m_settings.pipelineProfileDumpFile, sizeof(m_settings.pipelineProfileDumpFile),
                          pRootPath, m_settings.pipelineProfileDumpFile);
 #if ICD_RUNTIME_APP_PROFILE
@@ -192,6 +194,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (pInfo->gfxLevel <= Pal::GfxIpLevel::GfxIp9)
         {
             m_settings.forceResolveLayoutForDepthStencilTransferUsage = true;
+
+            m_settings.useReleaseAcquireInterface = false;
         }
 
         // In general, DCC is very beneficial for color attachments, 2D, 3D shader storage resources that have BPP>=32.
@@ -204,6 +208,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                          ForceDccFor3DShaderStorage |
                                          ForceDccFor32BppShaderStorage |
                                          ForceDccFor64BppShaderStorage);
+            m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         }
 
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
@@ -215,8 +220,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         }
 
-        // Put command buffers in local for large/resizable BAR systems
-        const gpusize minLocalSize = 256 * 1024 * 1024;
+        // Put command buffers in local for large/resizable BAR systems with > 7 GBs of local heap
+        const gpusize minLocalSize = 7ull * 1024ull * 1024ull * 1024ull;
 
         if ((gpuMemoryHeapPropertiesResult == Pal::Result::Success) &&
             (heapProperties[Pal::GpuHeapLocal].heapSize > minLocalSize))
@@ -521,7 +526,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                     ForceDccFor64BppShaderStorage);
 
                 m_settings.enableNgg = 0x0;
-
             }
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
@@ -634,15 +638,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 if (pInfo->revision == Pal::AsicRevision::Navi23)
                 {
                     m_settings.overrideLocalHeapSizeInGBs = 8;
-
-                    if ((gpuMemoryHeapPropertiesResult == Pal::Result::Success) &&
-                        ((m_settings.overrideLocalHeapSizeInGBs * 1024 * 1024 *1024) >
-                            (heapProperties[Pal::GpuHeapLocal].heapSize +
-                             heapProperties[Pal::GpuHeapInvisible].heapSize)))
-                    {
-                        m_settings.memoryRemoteBackupHeapMinHeapSize = 0x220000000;
-                        m_settings.memoryDeviceOverallocationAllowed = true;
-                    }
+                    m_settings.memoryDeviceOverallocationAllowed = true;
                 }
                 if (pInfo->revision == Pal::AsicRevision::Navi24)
                 {
@@ -652,7 +648,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                         ForceDccFor32BppShaderStorage);
 
                     m_settings.overrideLocalHeapSizeInGBs = 8;
-                    m_settings.memoryRemoteBackupHeapMinHeapSize = 0x220000000;
                     m_settings.memoryDeviceOverallocationAllowed = true;
                 }
             }
@@ -925,27 +920,24 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 void VulkanSettingsLoader::DumpAppProfileChanges(
     AppProfile         appProfile)
 {
-    if (m_settings.appProfileDumpDir[0] == '\0')
+    if ((m_settings.appProfileDumpMask & AppProfileDumpFlags::AppProfileValue) != 0)
     {
-        // Don't do anything if dump directory has not been set
-        return;
-    }
+        wchar_t executableName[PATH_MAX];
+        wchar_t executablePath[PATH_MAX];
+        utils::GetExecutableNameAndPath(executableName, executablePath);
 
-    wchar_t executableName[PATH_MAX];
-    wchar_t executablePath[PATH_MAX];
-    utils::GetExecutableNameAndPath(executableName, executablePath);
+        char fileName[512] = {};
+        Util::Snprintf(&fileName[0], sizeof(fileName), "%s/vkAppProfile.txt", &m_settings.appProfileDumpDir[0]);
 
-    char fileName[512] = {};
-    Util::Snprintf(&fileName[0], sizeof(fileName), "%s/vkAppProfile.txt", &m_settings.appProfileDumpDir[0]);
-
-    Util::File dumpFile;
-    if (dumpFile.Open(fileName, Util::FileAccessAppend) == Pal::Result::Success)
-    {
-        dumpFile.Printf("Executable: %S%S\nApp Profile Enumeration: %d\n\n",
-                        &executablePath[0],
-                        &executableName[0],
-                        static_cast<uint32_t>(appProfile));
-        dumpFile.Close();
+        Util::File dumpFile;
+        if (dumpFile.Open(fileName, Util::FileAccessAppend) == Pal::Result::Success)
+        {
+            dumpFile.Printf("Executable: %S%S\nApp Profile Enumeration: %d\n\n",
+                            &executablePath[0],
+                            &executableName[0],
+                            static_cast<uint32_t>(appProfile));
+            dumpFile.Close();
+        }
     }
 }
 
@@ -1094,36 +1086,6 @@ void VulkanSettingsLoader::ValidateSettings()
         m_settings.enableFmaskBasedMsaaRead = false;
     }
 
-#if !VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
-    // Internal semaphore queue timing is always enabled when ETW is not available
-    m_settings.devModeSemaphoreQueueTimingEnable = true;
-#endif
-
-    // Undo any heap overrides to local if oversubscription is allowed by default because they will likely
-    // degrade performance instead of improve it. When not allowed, testing should catch these cases
-    // so that overrides to local aren't added in the first place.
-    Pal::GpuMemoryHeapProperties heapProperties[Pal::GpuHeapCount] = {};
-
-    if ((m_pDevice->GetGpuMemoryHeapProperties(heapProperties) == Pal::Result::Success) &&
-        (heapProperties[Pal::GpuHeapLocal].heapSize < m_settings.memoryRemoteBackupHeapMinHeapSize) &&
-        (heapProperties[Pal::GpuHeapInvisible].heapSize < m_settings.memoryRemoteBackupHeapMinHeapSize))
-    {
-        if (heapProperties[Pal::GpuHeapGartUswc].heapSize > 0)
-        {
-            if (m_settings.cmdAllocatorDataHeap == Pal::GpuHeapLocal)
-            {
-                m_settings.cmdAllocatorDataHeap = Pal::GpuHeapGartUswc;
-            }
-
-            if (m_settings.cmdAllocatorEmbeddedHeap == Pal::GpuHeapLocal)
-            {
-                m_settings.cmdAllocatorEmbeddedHeap  = Pal::GpuHeapGartUswc;
-            }
-        }
-
-        m_settings.overrideHeapChoiceToLocal = 0;
-    }
-
     // Command buffer prefetching was found to be slower for command buffers in local memory.
     if (m_settings.cmdAllocatorDataHeap == Pal::GpuHeapLocal)
     {
@@ -1179,8 +1141,13 @@ void VulkanSettingsLoader::GenerateSettingHash()
 // Completes the initialization of the settings by overriding values from the registry and validating the final settings
 // struct
 void VulkanSettingsLoader::FinalizeSettings(
-    )
+    const DeviceExtensions::Enabled& enabledExtensions)
 {
+    if (
+        false)
+    {
+        m_settings.enableFmaskBasedMsaaRead = false;
+    }
 
     m_state = Pal::SettingsLoaderState::Final;
 

@@ -89,12 +89,6 @@ macro(xgl_set_compile_definitions)
         target_compile_definitions(xgl PRIVATE ICD_ENABLE_GCOV)
     endif()
 
-#if VKI_EXT_EXTENDED_DYNAMIC_STATE2
-    if(VKI_EXT_EXTENDED_DYNAMIC_STATE2)
-        target_compile_definitions(xgl PRIVATE VKI_EXT_EXTENDED_DYNAMIC_STATE2)
-    endif()
-#endif
-
 #if VKI_GPU_DECOMPRESS
     if(VKI_GPU_DECOMPRESS)
         target_compile_definitions(xgl PRIVATE VKI_GPU_DECOMPRESS)

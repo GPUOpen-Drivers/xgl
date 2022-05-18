@@ -750,12 +750,10 @@ VkResult Queue::PalSignalSemaphores(
     const uint32_t*     pSemaphoreDeviceIndices)
 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
     DevModeMgr* pDevModeMgr = m_pDevice->VkInstance()->GetDevModeMgr();
 
     bool timedQueueEvents = ((pDevModeMgr != nullptr) &&
-                             pDevModeMgr->IsQueueTimingActive(m_pDevice) &&
-                             settings.devModeSemaphoreQueueTimingEnable);
+                             pDevModeMgr->IsQueueTimingActive(m_pDevice));
 #else
     bool timedQueueEvents = false;
 #endif
@@ -829,12 +827,10 @@ VkResult Queue::PalWaitSemaphores(
     uint32_t    deviceIdx = DefaultDeviceIndex;
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
     DevModeMgr* pDevModeMgr = m_pDevice->VkInstance()->GetDevModeMgr();
 
     bool timedQueueEvents = ((pDevModeMgr != nullptr) &&
-                             pDevModeMgr->IsQueueTimingActive(m_pDevice) &&
-                             settings.devModeSemaphoreQueueTimingEnable);
+                             pDevModeMgr->IsQueueTimingActive(m_pDevice));
 #else
     bool timedQueueEvents = false;
 #endif
