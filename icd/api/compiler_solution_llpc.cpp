@@ -118,6 +118,7 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     VkShaderModuleCreateFlags    flags,
     size_t                       codeSize,
     const void*                  pCode,
+    const bool                   adaptForFaskLink,
     ShaderModuleHandle*          pShaderModule,
     const Util::MetroHash::Hash& hash)
 {
@@ -460,10 +461,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
     uint32_t           numOptions                      = 0;
     // Identify for Icd and stanalone compiler
     llpcOptions[numOptions++] = Llpc::VkIcdName;
-
-    // Enable shadow descriptor table
-    Pal::DeviceProperties info;
-    m_pPhysicalDevice->PalDevice()->GetProperties(&info);
 
     // LLPC log options
     llpcOptions[numOptions++] = (settings.enableLog & 1) ? "-enable-errs=1" : "-enable-errs=0";

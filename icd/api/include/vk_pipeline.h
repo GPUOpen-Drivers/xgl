@@ -193,7 +193,7 @@ protected:
         const Device*                          pDevice,
         const uint32_t                         stageCount,
         const VkPipelineShaderStageCreateInfo* pStages,
-        const bool                             duplicateExistingModules,
+        const bool                             isLibrary,
         uint32_t                               (*pfnGetOutputIdx)(const uint32_t inputIdx,
                                                                   const uint32_t stageIdx),
         ShaderStageInfo*                       pShaderStageInfo,

@@ -179,7 +179,7 @@ VkResult Instance::Create(
         if (!InstanceExtensions::EnableExtensions(pCreateInfo->ppEnabledExtensionNames,
                                                   pCreateInfo->enabledExtensionCount,
                                                   Instance::GetSupportedExtensions(),
-                                                  enabledInstanceExtensions))
+                                                  &enabledInstanceExtensions))
         {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
         }
@@ -541,10 +541,7 @@ VkResult Instance::Init(
         m_logTagIdMask = pPhysicalDevice->GetRuntimeSettings().logTagIdMask;
         AmdvlkLog(m_logTagIdMask, GeneralPrint, "%s Begin ********\n",
             GetApplicationName());
-    }
 
-    if (status == VK_SUCCESS)
-    {
         InitDispatchTable();
     }
 

@@ -541,13 +541,10 @@ public:
         uint32_t     deviceMask,
         uint32_t     heapIdx);
 
-    bool ShouldAddRemoteBackupHeap(
-        uint32_t deviceIdx,
-        uint32_t memoryTypeIdx,
+    bool OverallocationRequestedForPalHeap(
         uint32_t palHeapIdx) const
     {
-        return (m_perGpu[deviceIdx].pPhysicalDevice->ShouldAddRemoteBackupHeap(memoryTypeIdx) ||
-                m_overallocationRequestedForPalHeap[palHeapIdx]);
+        return m_overallocationRequestedForPalHeap[palHeapIdx];
     }
 
     const InternalPipeline& GetTimestampQueryCopyPipeline() const

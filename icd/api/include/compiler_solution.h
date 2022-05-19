@@ -94,6 +94,9 @@ struct GraphicsPipelineBinaryCreateInfo
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback[ShaderStage::ShaderStageGfxCount];
     uint32_t                               rasterizationStream;
+    VkGraphicsPipelineLibraryFlagsEXT      libFlags;    // These flags indicate the section(s) included in pipeline
+                                                        // (library).  Including the sections in the referenced
+                                                        // libraries.
     PipelineMetadata                       pipelineMetadata;
 };
 
@@ -138,6 +141,7 @@ public:
         VkShaderModuleCreateFlags    flags,
         size_t                       codeSize,
         const void*                  pCode,
+        const bool                   adaptForFaskLink,
         ShaderModuleHandle*          pShaderModule,
         const Util::MetroHash::Hash& hash) = 0;
 

@@ -113,7 +113,7 @@ VkResult Memory::Create(
     createInfo.heapCount = 1;
     createInfo.heaps[0] = pDevice->GetPalHeapFromVkTypeIndex(pAllocInfo->memoryTypeIndex);
 
-    if (pDevice->ShouldAddRemoteBackupHeap(DefaultDeviceIndex, pAllocInfo->memoryTypeIndex, createInfo.heaps[0]))
+    if (pDevice->OverallocationRequestedForPalHeap(createInfo.heaps[0]))
     {
         createInfo.heaps[createInfo.heapCount++] = Pal::GpuHeapGartUswc;
 
@@ -152,7 +152,7 @@ VkResult Memory::Create(
              pDevice->VkPhysicalDevice(DefaultDeviceIndex)->IsOverrideHeapChoiceToLocalWithinBudget(createInfo.size))
     {
         // When this setting is active (not supported by MGPU), prefer local visible before the requested heap until
-        // the allowable budget for it is reached. ShouldAddRemoteBackupHeap's choice may be updated here.
+        // the allowable budget for it is reached. OverallocationRequestedForPalHeap's choice may be updated here.
         createInfo.heaps[1] = createInfo.heaps[0];
         createInfo.heaps[0] = Pal::GpuHeapLocal;
     }

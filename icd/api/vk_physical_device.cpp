@@ -352,7 +352,7 @@ PhysicalDevice::PhysicalDevice(
     memset(&m_queueFamilies, 0, sizeof(m_queueFamilies));
     memset(&m_memoryProperties, 0, sizeof(m_memoryProperties));
     memset(&m_gpaProps, 0, sizeof(m_gpaProps));
-    memset(&m_memoryVkIndexAddRemoteBackupHeap, 0, sizeof(m_memoryVkIndexAddRemoteBackupHeap));
+
     for (uint32_t i = 0; i < Pal::GpuHeapCount; i++)
     {
         m_memoryPalHeapToVkIndexBits[i] = 0; // invalid bits
@@ -874,18 +874,6 @@ VkResult PhysicalDevice::Initialize()
                 if (m_memoryProperties.memoryHeaps[heapIndex].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
                 {
                     pMemoryType->propertyFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-                    if (m_memoryProperties.memoryHeapCount > 1)
-                    {
-                        // Add back-up heap for parts with VRAM smaller than 8GB.
-                        // Note: The back-up heap can also be added if overallocation is allowed via
-                        //       VK_AMD_memory_overallocation_behavior.
-                        // Use m_heapVkToPal instead of palGpuHeap here to handle cases where multiple memory types
-                        // share the same heap.
-                        const Pal::gpusize heapSize = heapProperties[m_heapVkToPal[pMemoryType->heapIndex]].heapSize;
-                        m_memoryVkIndexAddRemoteBackupHeap[memoryTypeIndex] =
-                            (heapSize < settings.memoryRemoteBackupHeapMinHeapSize);
-                    }
                 }
 
                 if (m_properties.gfxipProperties.flags.supportGl2Uncached)
@@ -974,9 +962,6 @@ VkResult PhysicalDevice::Initialize()
                         (1UL << m_memoryProperties.memoryTypeCount);
 
                     m_memoryTypeMask |= 1 << m_memoryProperties.memoryTypeCount;
-
-                    m_memoryVkIndexAddRemoteBackupHeap[m_memoryProperties.memoryTypeCount] =
-                        m_memoryVkIndexAddRemoteBackupHeap[memoryTypeIndex];
 
                     ++m_memoryProperties.memoryTypeCount;
                 }
@@ -1477,9 +1462,7 @@ size_t PhysicalDevice::GetFeatures(
         pFeatures->shaderInt64                              =
             (PalProperties().gfxipProperties.flags.support64BitInstructions ? VK_TRUE : VK_FALSE);
 
-        if ((PalProperties().gfxipProperties.flags.support16BitInstructions) &&
-            ((settings.optOnlyEnableFP16ForGfx9Plus == false)      ||
-            (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)))
+        if (PalProperties().gfxipProperties.flags.support16BitInstructions)
         {
             pFeatures->shaderInt16 = VK_TRUE;
         }
@@ -3862,6 +3845,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PRIMITIVE_TOPOLOGY_LIST_RESTART));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DYNAMIC_RENDERING));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PIPELINE_LIBRARY));
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_INTEGER_DOT_PRODUCT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COPY_COMMANDS2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW));
@@ -3917,16 +3902,13 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_IMAGE_LOAD_STORE_LOD));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_INFO));
 
+        if ((pPhysicalDevice == nullptr) || pPhysicalDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
         {
-            if ((pPhysicalDevice == nullptr) || pPhysicalDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
-            {
-                availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_FRAGMENT_MASK));
-            }
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_FRAGMENT_MASK));
         }
-#if VK_IS_PAL_VERSION_AT_LEAST(664, 1)
+
         if ((pPhysicalDevice == nullptr) ||
             (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportTextureGatherBiasLod))
-#endif
         {
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_TEXTURE_GATHER_BIAS_LOD));
         }
@@ -3950,18 +3932,14 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         }
 
         if ((pPhysicalDevice == nullptr) ||
-            ((pPhysicalDevice->PalProperties().gfxipProperties.flags.support16BitInstructions) &&
-                ((pPhysicalDevice->GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
-                    (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))))
+            (pPhysicalDevice->PalProperties().gfxipProperties.flags.support16BitInstructions))
         {
             // Deprecation by shaderFloat16 from VK_KHR_shader_float16_int8
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPU_SHADER_HALF_FLOAT));
         }
 
         if ((pPhysicalDevice == nullptr) ||
-            ((pPhysicalDevice->PalProperties().gfxipProperties.flags.support16BitInstructions) &&
-                ((pPhysicalDevice->GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
-                    (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))))
+            (pPhysicalDevice->PalProperties().gfxipProperties.flags.support16BitInstructions))
         {
             // Deprecation by shaderFloat16 from VK_KHR_shader_float16_int8 and shaderInt16
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPU_SHADER_INT16));
@@ -4135,7 +4113,7 @@ void PhysicalDevice::PopulateQueueFamilies()
             case Pal::EngineTypeUniversal:
                 palImageLayoutFlag            = Pal::LayoutUniversalEngine;
                 transferGranularityOverride   = settings.transferGranularityUniversalOverride;
-                m_queueFamilies[m_queueFamilyCount].validShaderStages = VK_SHADER_STAGE_ALL_GRAPHICS |
+                m_queueFamilies[m_queueFamilyCount].validShaderStages = ShaderStageAllGraphics |
                                                                         VK_SHADER_STAGE_COMPUTE_BIT;
                 break;
             case Pal::EngineTypeCompute:
@@ -4554,9 +4532,7 @@ void PhysicalDevice::GetPhysicalDeviceDotProduct16Properties(
     VkBool32* pIntegerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated
 ) const
 {
-    const VkBool32 int16DotSupport = ((PalProperties().gfxipProperties.flags.support16BitInstructions) &&
-        ((GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
-            (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))
+    const VkBool32 int16DotSupport = ((PalProperties().gfxipProperties.flags.support16BitInstructions)
         ) ? VK_TRUE : VK_FALSE;
 
     *pIntegerDotProduct16BitUnsignedAccelerated                              = int16DotSupport;
@@ -4848,9 +4824,7 @@ void PhysicalDevice::GetPhysicalDevice16BitStorageFeatures(
 
     // Currently we seem to only support 16-bit inputs/outputs on ASICs supporting
     // 16-bit ALU. It's unclear at this point whether we can do any better.
-    if (PalProperties().gfxipProperties.flags.support16BitInstructions &&
-        ((GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
-         (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)))
+    if (PalProperties().gfxipProperties.flags.support16BitInstructions)
     {
         *pStorageInputOutput16           = VK_TRUE;
     }
@@ -5986,6 +5960,22 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT:
+            {
+                if (IsExtensionSupported(DeviceExtensions::EXT_GRAPHICS_PIPELINE_LIBRARY))
+                {
+                    auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT*>(pHeader);
+
+                    if (updateFeatures)
+                    {
+                        pExtInfo->graphicsPipelineLibrary = VK_TRUE;
+                    }
+
+                    structSize = sizeof(*pExtInfo);
+                }
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_IMAGE_ARRAYS_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceYcbcrImageArraysFeaturesEXT*>(pHeader);
@@ -6897,6 +6887,17 @@ void PhysicalDevice::GetDeviceProperties2(
         {
             auto* pProps = static_cast<VkPhysicalDeviceCustomBorderColorPropertiesEXT *>(pNext);
             pProps->maxCustomBorderColorSamplers = MaxBorderColorPaletteSize;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT:
+        {
+            if (IsExtensionSupported(DeviceExtensions::EXT_GRAPHICS_PIPELINE_LIBRARY))
+            {
+                auto* pProps = static_cast<VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT*>(pNext);
+                pProps->graphicsPipelineLibraryFastLinking                        = VK_TRUE;
+                pProps->graphicsPipelineLibraryIndependentInterpolationDecoration = VK_TRUE;
+            }
             break;
         }
 

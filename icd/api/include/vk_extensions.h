@@ -160,7 +160,7 @@ public:
         const char* const* const    extensionNames,
         uint32_t                    extensionNameCount,
         const Supported&            supported,
-        Enabled&                    enabled)
+        Enabled*                    pEnabled)
     {
         bool invalidExtensionRequested = false;
 
@@ -180,7 +180,7 @@ public:
 
                     if (strcmp(extensionNames[i], ext.extensionName) == 0)
                     {
-                        enabled.EnableExtension(id);
+                        pEnabled->EnableExtension(id);
                         break;
                     }
                 }
@@ -283,6 +283,7 @@ public:
         KHR_MAINTENANCE4,
         KHR_MULTIVIEW,
         KHR_PIPELINE_EXECUTABLE_PROPERTIES,
+        KHR_PIPELINE_LIBRARY,
         KHR_RELAXED_BLOCK_LAYOUT,
         KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE,
         KHR_SAMPLER_YCBCR_CONVERSION,
@@ -329,6 +330,7 @@ public:
         EXT_EXTERNAL_MEMORY_HOST,
         EXT_GLOBAL_PRIORITY,
         EXT_GLOBAL_PRIORITY_QUERY,
+        EXT_GRAPHICS_PIPELINE_LIBRARY,
         EXT_HDR_METADATA,
         EXT_HOST_QUERY_RESET,
         EXT_IMAGE_ROBUSTNESS,

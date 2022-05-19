@@ -216,9 +216,10 @@ void Image::ConvertImageCreateInfo(
     const ResourceOptimizerKey&  resourceKey,
     Pal::ImageCreateInfo*        pPalCreateInfo)
 {
-    VkImageUsageFlags      imageUsage       = pCreateInfo->usage;
-    const RuntimeSettings& settings         = pDevice->GetRuntimeSettings();
-    VkFormat               createInfoFormat = GetCreateInfoFormat(pCreateInfo, extStructs);
+    VkImageUsageFlags            imageUsage       = pCreateInfo->usage;
+    const RuntimeSettings&       settings         = pDevice->GetRuntimeSettings();
+    const Pal::DeviceProperties& palProperties    = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
+    VkFormat                     createInfoFormat = GetCreateInfoFormat(pCreateInfo, extStructs);
 
     // VK_IMAGE_CREATE_EXTENDED_USAGE_BIT indicates that the image can be created with usage flags that are not
     // supported for the format the image is created with but are supported for at least one format a VkImageView
@@ -243,6 +244,7 @@ void Image::ConvertImageCreateInfo(
 
     pPalCreateInfo->extent.width     = pCreateInfo->extent.width;
     pPalCreateInfo->extent.height    = pCreateInfo->extent.height;
+
     pPalCreateInfo->extent.depth     = pCreateInfo->extent.depth;
     pPalCreateInfo->imageType        = VkToPalImageType(pCreateInfo->imageType);
     pPalCreateInfo->swizzledFormat   = VkToPalFormat(createInfoFormat, settings);
@@ -255,7 +257,7 @@ void Image::ConvertImageCreateInfo(
 
     if ((pPalCreateInfo->tilingOptMode == Pal::TilingOptMode::OptForSpace) &&
         Pal::Formats::IsBlockCompressed(pPalCreateInfo->swizzledFormat.format) &&
-        (pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel > Pal::GfxIpLevel::GfxIp9))
+        (palProperties.gfxLevel > Pal::GfxIpLevel::GfxIp9))
     {
         pPalCreateInfo->tilingOptMode = Pal::TilingOptMode::Balanced;
     }
@@ -270,7 +272,7 @@ void Image::ConvertImageCreateInfo(
         pPalCreateInfo->tilingPreference = settings.imageTilingPreference;
     }
 
-    pPalCreateInfo->flags.u32All     = VkToPalImageCreateFlags(pCreateInfo->flags, createInfoFormat);
+    pPalCreateInfo->flags.u32All     = VkToPalImageCreateFlags(pCreateInfo->flags, createInfoFormat, imageUsage);
     pPalCreateInfo->usageFlags       = VkToPalImageUsageFlags(
                                          imageUsage,
                                          pCreateInfo->samples,
@@ -409,7 +411,7 @@ void Image::ConvertImageCreateInfo(
     // Don't force DCC to be enabled for performance reasons unless the image is larger than the minimum size set for
     // compression, another performance optimization.
     // Don't force DCC to be enabled for shader write image on pre-gfx10 ASICs as DCC is unsupported in shader write.
-    const Pal::GfxIpLevel gfxLevel = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel;
+    const Pal::GfxIpLevel gfxLevel = palProperties.gfxLevel;
     if (((pPalCreateInfo->extent.width * pPalCreateInfo->extent.height) >
          (settings.disableSmallSurfColorCompressionSize * settings.disableSmallSurfColorCompressionSize)) &&
         (Formats::IsColorFormat(createInfoFormat)) &&

@@ -66,6 +66,42 @@ namespace
 {
 
 // =====================================================================================================================
+// Convert Pipe points
+static uint32_t ConvertPipePointToPipeStage(
+    Pal::HwPipePoint pipePoint)
+{
+    uint32_t stageMask = 0;
+
+    switch (pipePoint)
+    {
+        case Pal::HwPipeTop:
+            stageMask = Pal::PipelineStageTopOfPipe;
+            break;
+        // Same as Pal::HwPipePreCs and Pal::HwPipePreBlt
+        case Pal::HwPipePostIndexFetch:
+            stageMask = Pal::PipelineStageFetchIndirectArgs | Pal::PipelineStageFetchIndices;
+            break;
+        case Pal::HwPipePreRasterization:
+        case Pal::HwPipePostPs:
+            stageMask = Pal::PipelineStagePs;
+            break;
+        case Pal::HwPipePreColorTarget:
+            stageMask = Pal::PipelineStageColorTarget;
+            break;
+        case Pal::HwPipePostCs:
+            stageMask = Pal::PipelineStageCs;
+            break;
+        case Pal::HwPipePostBlt:
+            stageMask = Pal::PipelineStageBlt;
+        case Pal::HwPipeBottom:
+            stageMask = Pal::PipelineStageBottomOfPipe;
+            break;
+    }
+
+    return stageMask;
+}
+
+// =====================================================================================================================
 // Creates a compatible PAL "clear box" structure from attachment + render area for a renderpass clear.
 Pal::Box BuildClearBox(
     const Pal::Rect&               renderArea,
@@ -522,8 +558,9 @@ CmdBuffer::CmdBuffer(
     // designed for Acquire/Release-based driver. This flag is currently enabled for gfx9 and above.
     // If supportSplitReleaseAcquire is true, the ASIC provides split CmdRelease() and CmdAcquire() to express barrier,
     // and CmdReleaseThenAcquire() is still valid. This flag is currently enabled for gfx10 and above.
-    m_flags.hasReleaseAcquire       = info.gfxipProperties.flags.supportReleaseAcquireInterface;
-    m_flags.useSplitReleaseAcquire  = info.gfxipProperties.flags.supportReleaseAcquireInterface &&
+    m_flags.useReleaseAcquire       = info.gfxipProperties.flags.supportReleaseAcquireInterface &&
+                                      settings.useReleaseAcquireInterface;
+    m_flags.useSplitReleaseAcquire  = m_flags.useReleaseAcquire &&
                                       info.gfxipProperties.flags.supportSplitReleaseAcquire;
 }
 
@@ -1464,6 +1501,15 @@ VkResult CmdBuffer::Begin(
         }
 
         m_allGpuState.dirtyGraphics.vrs = 0;
+
+        // Set default sample pattern
+        m_allGpuState.samplePattern.sampleCount   = 1;
+        m_allGpuState.samplePattern.locations     =
+            *Device::GetDefaultQuadSamplePattern(m_allGpuState.samplePattern.sampleCount);
+
+        PalCmdSetMsaaQuadSamplePattern(m_allGpuState.samplePattern.sampleCount, m_allGpuState.samplePattern.locations);
+
+        m_allGpuState.dirtyGraphics.samplePattern = 0;
     }
 
     DbgBarrierPostCmd(DbgBarrierCmdBufStart);
@@ -1879,11 +1925,13 @@ void CmdBuffer::RebindUserData(
             {
                 const uint32_t deviceIdx = deviceGroup.Index();
 
-                PalCmdBuffer(deviceIdx)->CmdSetUserData(palBindPoint,
+                PalCmdBuffer(deviceIdx)->CmdSetUserData(
+                    palBindPoint,
                     userDataLayout.setBindingRegBase,
                     count,
                     PerGpuState(deviceIdx)->setBindingData[apiBindPoint]);
-            } while (deviceGroup.IterateNext());
+            }
+            while (deviceGroup.IterateNext());
         }
     }
 
@@ -2030,9 +2078,6 @@ void CmdBuffer::BindDescriptorSets(
 
         ConvertPipelineBindPoint(pipelineBindPoint, &palBindPoint, &apiBindPoint);
 
-        // Get the current binding state in the command buffer
-        PipelineBindState* pBindState = &m_allGpuState.pipelineState[apiBindPoint];
-
         const PipelineLayout* pLayout = PipelineLayout::ObjectFromHandle(layout);
 
         // Get user data register information from the given pipeline layout
@@ -2052,9 +2097,7 @@ void CmdBuffer::BindDescriptorSets(
             // If this descriptor set has any dynamic descriptor data then write them into the shadow.
             if (setLayoutInfo.dynDescCount > 0)
             {
-                // NOTE: We currently have to supply patched SRDs directly in used data registers. If we'll have proper
-                // support for dynamic descriptors in SC then we'll only need to write the dynamic offsets directly.
-
+                // NOTE: We supply patched SRDs directly in used data registers.
                 utils::IterateMask deviceGroup(m_curDeviceMask);
                 do
                 {
@@ -2095,7 +2138,7 @@ void CmdBuffer::BindDescriptorSets(
             }
         }
 
-        SetUserDataPipelineLayout(firstSet, setCount, pLayout, pBindState, palBindPoint, apiBindPoint);
+        SetUserDataPipelineLayout(firstSet, setCount, pLayout, palBindPoint, apiBindPoint);
     }
 
     DbgBarrierPostCmd(DbgBarrierBindSetsPushConstants);
@@ -2108,7 +2151,6 @@ void CmdBuffer::SetUserDataPipelineLayout(
     uint32_t                      firstSet,
     uint32_t                      setCount,
     const PipelineLayout*         pLayout,
-    PipelineBindState*            pBindState,
     const Pal::PipelineBindPoint  palBindPoint,
     const PipelineBindPoint       apiBindPoint)
 {
@@ -2119,6 +2161,9 @@ void CmdBuffer::SetUserDataPipelineLayout(
 
     if (pLayout->GetScheme() == PipelineLayoutScheme::Compact)
     {
+        // Get the current binding state in the command buffer
+        PipelineBindState* pBindState = &m_allGpuState.pipelineState[apiBindPoint];
+
         // Figure out the total range of user data registers written by this sequence of descriptor set binds
         const PipelineLayout::SetUserDataLayout& firstSetLayout = pLayout->GetSetUserData(firstSet);
         const PipelineLayout::SetUserDataLayout& lastSetLayout = pLayout->GetSetUserData(firstSet + setCount - 1);
@@ -5540,194 +5585,235 @@ void CmdBuffer::ExecuteReleaseThenAcquire(
 
         do
         {
+            uint32_t deviceIdx              = deviceGroup.Index();
             const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
-            uint32_t deviceIdx              = deviceGroup.Index();
-            uint32_t maxImageMemoryBarriers = imageMemoryBarrierCount * MaxPalAspectsPerMask;
+            constexpr uint32_t MaxTransitionCount     = 512;
+            constexpr uint32_t MaxSampleLocationCount = 128;
 
-            Pal::MsaaQuadSamplePattern* pLocations = (maxImageMemoryBarriers > 0) ?
-                virtStackFrame.AllocArray<Pal::MsaaQuadSamplePattern>(maxImageMemoryBarriers) : nullptr;
+            // Keeps track of the number of barriers for which info has already been
+            // stored in Pal::AcquireReleaseInfo
+            uint32_t memoryBarrierIdx       = 0;
+            uint32_t bufferMemoryBarrierIdx = 0;
+            uint32_t imageMemoryBarrierIdx  = 0;
+
+            uint32_t maxLocationCount       = Util::Min(imageMemoryBarrierCount, MaxSampleLocationCount);
+            uint32_t maxBufferBarrierCount  = Util::Min(bufferMemoryBarrierCount, MaxTransitionCount);
+            uint32_t maxImageBarrierCount   = Util::Min((MaxPalAspectsPerMask * imageMemoryBarrierCount) + 1,
+                                                        MaxTransitionCount);
+
+            Pal::MsaaQuadSamplePattern* pLocations = (imageMemoryBarrierCount > 0) ?
+                virtStackFrame.AllocArray<Pal::MsaaQuadSamplePattern>(maxLocationCount) : nullptr;
 
             Pal::MemBarrier* pPalBufferMemoryBarriers = (bufferMemoryBarrierCount > 0) ?
-                virtStackFrame.AllocArray<Pal::MemBarrier>(bufferMemoryBarrierCount) : nullptr;
+                virtStackFrame.AllocArray<Pal::MemBarrier>(maxBufferBarrierCount) : nullptr;
 
-            Pal::ImgBarrier* pPalImageBarriers = (maxImageMemoryBarriers > 0) ?
-                virtStackFrame.AllocArray<Pal::ImgBarrier>(maxImageMemoryBarriers) : nullptr;
+            Pal::ImgBarrier* pPalImageBarriers = (imageMemoryBarrierCount > 0) ?
+                virtStackFrame.AllocArray<Pal::ImgBarrier>(maxImageBarrierCount) : nullptr;
 
-            Pal::AcquireReleaseInfo acquireReleaseInfo = {};
-
-            acquireReleaseInfo.pMemoryBarriers = pPalBufferMemoryBarriers;
-            acquireReleaseInfo.pImageBarriers  = pPalImageBarriers;
-            acquireReleaseInfo.reason          = RgpBarrierExternalCmdPipelineBarrier;
-
-            uint32_t locationIndex = 0;
-
-            for (uint32_t i = 0; i < memBarrierCount; i++)
+            while ((memoryBarrierIdx < memBarrierCount) ||
+                   (bufferMemoryBarrierIdx < bufferMemoryBarrierCount) ||
+                   (imageMemoryBarrierIdx < imageMemoryBarrierCount))
             {
-                Pal::BarrierTransition tempTransition = {};
+                Pal::AcquireReleaseInfo acquireReleaseInfo = {};
 
-                VkAccessFlags srcAccessMask = pMemoryBarriers[i].srcAccessMask;
-                VkAccessFlags dstAccessMask = pMemoryBarriers[i].dstAccessMask;
+                acquireReleaseInfo.pMemoryBarriers = pPalBufferMemoryBarriers;
+                acquireReleaseInfo.pImageBarriers  = pPalImageBarriers;
+                acquireReleaseInfo.reason          = RgpBarrierExternalCmdPipelineBarrier;
 
                 acquireReleaseInfo.srcStageMask |= VkToPalPipelineStageFlags(srcStageMask);
                 acquireReleaseInfo.dstStageMask |= VkToPalPipelineStageFlags(dstStageMask);
 
-                m_pDevice->GetBarrierPolicy().ApplyBarrierCacheFlags(srcAccessMask, dstAccessMask, VK_IMAGE_LAYOUT_GENERAL,
-                    VK_IMAGE_LAYOUT_GENERAL, &tempTransition);
+                uint32_t locationIndex = 0;
 
-                acquireReleaseInfo.srcGlobalAccessMask |= tempTransition.srcCacheMask;
-                acquireReleaseInfo.dstGlobalAccessMask |= tempTransition.dstCacheMask;
-            }
-
-            for (uint32_t i = 0; i < bufferMemoryBarrierCount; i++)
-            {
-                Pal::BarrierTransition tempTransition = {};
-
-                acquireReleaseInfo.srcStageMask |= VkToPalPipelineStageFlags(srcStageMask);
-                acquireReleaseInfo.dstStageMask |= VkToPalPipelineStageFlags(dstStageMask);
-
-                const Buffer* pBuffer = Buffer::ObjectFromHandle(pBufferMemoryBarriers[i].buffer);
-
-                pBuffer->GetBarrierPolicy().ApplyBufferMemoryBarrier<VkBufferMemoryBarrier>(
-                    GetQueueFamilyIndex(),
-                    pBufferMemoryBarriers[i],
-                    &tempTransition);
-
-                pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].flags.u32All      =
-                    0;
-                pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.pGpuMemory =
-                    pBuffer->PalMemory(deviceIdx);
-                pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.offset     =
-                    pBufferMemoryBarriers[i].offset;
-                pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.size       =
-                    pBufferMemoryBarriers[i].size;
-                pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].srcAccessMask     =
-                    tempTransition.srcCacheMask;
-                pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].dstAccessMask     =
-                    tempTransition.dstCacheMask;
-
-                acquireReleaseInfo.memoryBarrierCount++;
-            }
-
-            for (uint32_t i = 0; i < imageMemoryBarrierCount; i++)
-            {
-                Pal::BarrierTransition tempTransition = {};
-
-                acquireReleaseInfo.srcStageMask |= VkToPalPipelineStageFlags(srcStageMask);
-                acquireReleaseInfo.dstStageMask |= VkToPalPipelineStageFlags(dstStageMask);
-
-                bool layoutChanging = false;
-                Pal::ImageLayout oldLayouts[MaxPalAspectsPerMask];
-                Pal::ImageLayout newLayouts[MaxPalAspectsPerMask];
-
-                const Image* pImage = Image::ObjectFromHandle(pImageMemoryBarriers[i].image);
-
-                pImage->GetBarrierPolicy().ApplyImageMemoryBarrier<VkImageMemoryBarrier>(
-                    GetQueueFamilyIndex(),
-                    pImageMemoryBarriers[i],
-                    &tempTransition,
-                    &layoutChanging,
-                    oldLayouts,
-                    newLayouts,
-                    false);
-
-                VkFormat format = pImage->GetFormat();
-
-                uint32_t layoutIdx     = 0;
-                uint32_t palRangeIdx   = 0;
-                uint32_t palRangeCount = 0;
-
-                Pal::SubresRange palRanges[MaxPalAspectsPerMask];
-
-                VkToPalSubresRange(
-                    format,
-                    pImageMemoryBarriers[i].subresourceRange,
-                    pImage->GetMipLevels(),
-                    pImage->GetArraySize(),
-                    palRanges,
-                    &palRangeCount,
-                    settings);
-
-                if (layoutChanging && Formats::HasStencil(format))
+                while (memoryBarrierIdx < memBarrierCount)
                 {
-                    if (palRangeCount == MaxPalDepthAspectsPerMask)
-                    {
-                        // Find the subset of an images subres ranges that need to be transitioned based changes between
-                        // the source and destination layouts.
-                        if ((oldLayouts[0].usages  == newLayouts[0].usages) &&
-                            (oldLayouts[0].engines == newLayouts[0].engines))
-                        {
-                            // Skip the depth transition
-                            palRangeCount--;
+                    Pal::BarrierTransition tempTransition = {};
 
-                            palRangeIdx++;
+                    VkAccessFlags srcAccessMask = pMemoryBarriers[memoryBarrierIdx].srcAccessMask;
+                    VkAccessFlags dstAccessMask = pMemoryBarriers[memoryBarrierIdx].dstAccessMask;
+
+                    m_pDevice->GetBarrierPolicy().ApplyBarrierCacheFlags(
+                        srcAccessMask,
+                        dstAccessMask,
+                        VK_IMAGE_LAYOUT_GENERAL,
+                        VK_IMAGE_LAYOUT_GENERAL,
+                        &tempTransition);
+
+                    acquireReleaseInfo.srcGlobalAccessMask |= tempTransition.srcCacheMask;
+                    acquireReleaseInfo.dstGlobalAccessMask |= tempTransition.dstCacheMask;
+
+                    memoryBarrierIdx++;
+                }
+
+                while ((acquireReleaseInfo.memoryBarrierCount < maxBufferBarrierCount) &&
+                       (bufferMemoryBarrierIdx < bufferMemoryBarrierCount))
+                {
+                    Pal::BarrierTransition tempTransition = {};
+
+                    const Buffer* pBuffer = Buffer::ObjectFromHandle(
+                        pBufferMemoryBarriers[bufferMemoryBarrierIdx].buffer);
+
+                    pBuffer->GetBarrierPolicy().ApplyBufferMemoryBarrier<VkBufferMemoryBarrier>(
+                        GetQueueFamilyIndex(),
+                        pBufferMemoryBarriers[bufferMemoryBarrierIdx],
+                        &tempTransition);
+
+                    pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].flags.u32All      =
+                        0;
+                    pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.pGpuMemory =
+                        pBuffer->PalMemory(deviceIdx);
+                    pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.offset     =
+                        pBufferMemoryBarriers[bufferMemoryBarrierIdx].offset;
+                    pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.size       =
+                        pBufferMemoryBarriers[bufferMemoryBarrierIdx].size;
+                    pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].srcAccessMask     =
+                        tempTransition.srcCacheMask;
+                    pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].dstAccessMask     =
+                        tempTransition.dstCacheMask;
+
+                    acquireReleaseInfo.memoryBarrierCount++;
+
+                    bufferMemoryBarrierIdx++;
+                }
+
+                // Accounting for the max sub ranges, if we do not have enough space left for another image,
+                // break from this loop. The info for remaining barriers will be passed to PAL in subsequent calls.
+                while (((MaxPalAspectsPerMask + acquireReleaseInfo.imageBarrierCount) < maxImageBarrierCount) &&
+                       (locationIndex < maxLocationCount) &&
+                       (imageMemoryBarrierIdx < imageMemoryBarrierCount))
+                {
+                    Pal::BarrierTransition tempTransition = {};
+
+                    bool layoutChanging = false;
+                    Pal::ImageLayout oldLayouts[MaxPalAspectsPerMask];
+                    Pal::ImageLayout newLayouts[MaxPalAspectsPerMask];
+
+                    const Image* pImage = Image::ObjectFromHandle(pImageMemoryBarriers[imageMemoryBarrierIdx].image);
+
+                    // When using CmdReleaseThenAcquire() to execute barriers, vulkan driver does not need to add an
+                    // optimization for Image barrier with the same oldLayout & newLayout,like VK_IMAGE_LAYOUT_GENERAL
+                    // to VK_IMAGE_LAYOUT_GENERAL. PAL should not be doing any transition logic and only flush or
+                    // invalidate caches as apporiate. so we make use of the template flag skipMatchingLayouts to skip
+                    // this if-checking for the same layout change by setting the flag skipMatchingLayouts to false.
+                    pImage->GetBarrierPolicy().ApplyImageMemoryBarrier<VkImageMemoryBarrier>(
+                        GetQueueFamilyIndex(),
+                        pImageMemoryBarriers[imageMemoryBarrierIdx],
+                        &tempTransition,
+                        &layoutChanging,
+                        oldLayouts,
+                        newLayouts,
+                        false);
+
+                    VkFormat format = pImage->GetFormat();
+
+                    uint32_t layoutIdx     = 0;
+                    uint32_t palRangeIdx   = 0;
+                    uint32_t palRangeCount = 0;
+
+                    Pal::SubresRange palRanges[MaxPalAspectsPerMask];
+
+                    VkToPalSubresRange(
+                        format,
+                        pImageMemoryBarriers[imageMemoryBarrierIdx].subresourceRange,
+                        pImage->GetMipLevels(),
+                        pImage->GetArraySize(),
+                        palRanges,
+                        &palRangeCount,
+                        settings);
+
+                    if (layoutChanging && Formats::HasStencil(format))
+                    {
+                        if (palRangeCount == MaxPalDepthAspectsPerMask)
+                        {
+                            // Find the subset of an images subres ranges that need to be transitioned based changes
+                            // between the source and destination layouts.
+                            if ((oldLayouts[0].usages  == newLayouts[0].usages) &&
+                                (oldLayouts[0].engines == newLayouts[0].engines))
+                            {
+                                // Skip the depth transition
+                                palRangeCount--;
+
+                                palRangeIdx++;
+                                layoutIdx++;
+                            }
+                            else if ((oldLayouts[1].usages  == newLayouts[1].usages) &&
+                                     (oldLayouts[1].engines == newLayouts[1].engines))
+                            {
+                                // Skip the stencil transition
+                                palRangeCount--;
+                            }
+                        }
+                        else if (pImageMemoryBarriers[imageMemoryBarrierIdx].subresourceRange.aspectMask &
+                                 VK_IMAGE_ASPECT_STENCIL_BIT)
+                        {
+                            VK_ASSERT((pImageMemoryBarriers[imageMemoryBarrierIdx].subresourceRange.aspectMask &
+                                       VK_IMAGE_ASPECT_DEPTH_BIT) == 0);
+
+                            // Always use the second layout for stencil transitions. It is the only valid one for
+                            // combined depth stencil layouts, and LayoutUsageHelper replicates stencil-only layouts
+                            // to all aspects.
                             layoutIdx++;
                         }
-                        else if ((oldLayouts[1].usages  == newLayouts[1].usages) &&
-                                    (oldLayouts[1].engines == newLayouts[1].engines))
-                        {
-                            // Skip the stencil transition
-                            palRangeCount--;
-                        }
                     }
-                    else if (pImageMemoryBarriers[i].subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT)
+
+                    EXTRACT_VK_STRUCTURES_1(
+                        Barrier,
+                        ImageMemoryBarrier,
+                        SampleLocationsInfoEXT,
+                        &pImageMemoryBarriers[imageMemoryBarrierIdx],
+                        IMAGE_MEMORY_BARRIER,
+                        SAMPLE_LOCATIONS_INFO_EXT)
+
+                    for (uint32_t transitionIdx = 0; transitionIdx < palRangeCount; transitionIdx++)
                     {
-                        VK_ASSERT((pImageMemoryBarriers[i].subresourceRange.aspectMask &
-                                    VK_IMAGE_ASPECT_DEPTH_BIT) == 0);
-
-                        // Always use the second layout for stencil transitions. It is the only valid one for combined
-                        // depth stencil layouts, and LayoutUsageHelper replicates stencil-only layouts to all aspects.
-                        layoutIdx++;
-                    }
-                }
-
-                EXTRACT_VK_STRUCTURES_1(
-                    Barrier,
-                    ImageMemoryBarrier,
-                    SampleLocationsInfoEXT,
-                    &pImageMemoryBarriers[i],
-                    IMAGE_MEMORY_BARRIER,
-                    SAMPLE_LOCATIONS_INFO_EXT)
-
-                for (uint32_t transitionIdx = 0; transitionIdx < palRangeCount; transitionIdx++)
-                {
-                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].srcAccessMask      = tempTransition.srcCacheMask;
-                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].dstAccessMask      = tempTransition.dstCacheMask;
-                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].pImage             = pImage->PalImage(deviceIdx);
-                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].subresRange        = palRanges[palRangeIdx];
-                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].oldLayout          = oldLayouts[layoutIdx];
-                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].newLayout          = newLayouts[layoutIdx];
-                    pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].pQuadSamplePattern = nullptr;
-
-                    if (pSampleLocationsInfoEXT == nullptr)
-                    {
-                        pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].pQuadSamplePattern = nullptr;
-                    }
-                    else if (pLocations != nullptr)  // Could be null due to an OOM error
-                    {
-                        VK_ASSERT(static_cast<uint32_t>(pSampleLocationsInfoEXT->sType) ==
-                                    VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT);
-                        VK_ASSERT(pImage->IsSampleLocationsCompatibleDepth());
-
-                        ConvertToPalMsaaQuadSamplePattern(pSampleLocationsInfoEXT, &pLocations[locationIndex]);
-
+                        pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].srcAccessMask      =
+                            tempTransition.srcCacheMask;
+                        pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].dstAccessMask      =
+                            tempTransition.dstCacheMask;
+                        pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].pImage             =
+                            pImage->PalImage(deviceIdx);
+                        pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].subresRange        =
+                            palRanges[palRangeIdx];
+                        pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].oldLayout          =
+                            oldLayouts[layoutIdx];
+                        pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].newLayout          =
+                            newLayouts[layoutIdx];
                         pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].pQuadSamplePattern =
-                            &pLocations[locationIndex];
+                            nullptr;
+
+                        if (pSampleLocationsInfoEXT == nullptr)
+                        {
+                            pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].pQuadSamplePattern = nullptr;
+                        }
+                        else if (pLocations != nullptr)  // Could be null due to an OOM error
+                        {
+                            VK_ASSERT(static_cast<uint32_t>(pSampleLocationsInfoEXT->sType) ==
+                                VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT);
+                            VK_ASSERT(pImage->IsSampleLocationsCompatibleDepth());
+
+                            ConvertToPalMsaaQuadSamplePattern(pSampleLocationsInfoEXT, &pLocations[locationIndex]);
+
+                            pPalImageBarriers[acquireReleaseInfo.imageBarrierCount].pQuadSamplePattern =
+                                &pLocations[locationIndex];
+                        }
+
+                        acquireReleaseInfo.imageBarrierCount++;
+
+                        layoutIdx++;
+                        palRangeIdx++;
                     }
 
-                    acquireReleaseInfo.imageBarrierCount++;
+                    if (pSampleLocationsInfoEXT != nullptr)
+                    {
+                        ++locationIndex;
+                    }
 
-                    layoutIdx++;
-                    palRangeIdx++;
+                    imageMemoryBarrierIdx++;
                 }
 
-                if (pSampleLocationsInfoEXT != nullptr)
-                {
-                    ++locationIndex;
-                }
+                PalCmdBuffer(deviceIdx)->CmdReleaseThenAcquire(acquireReleaseInfo);
             }
-
-            PalCmdBuffer(deviceIdx)->CmdReleaseThenAcquire(acquireReleaseInfo);
 
             virtStackFrame.FreeArray(pLocations);
             virtStackFrame.FreeArray(pPalImageBarriers);
@@ -5751,7 +5837,7 @@ void CmdBuffer::PipelineBarrier(
 {
     DbgBarrierPreCmd(DbgBarrierPipelineBarrierWaitEvents);
 
-    if (m_flags.hasReleaseAcquire && m_pDevice->GetRuntimeSettings().useRelThenAcqForVkCmdPipelineBarrier)
+    if (m_flags.useReleaseAcquire)
     {
         ExecuteReleaseThenAcquire(srcStageMask,
                                   destStageMask,
@@ -5801,7 +5887,7 @@ void CmdBuffer::PipelineBarrier2(
 {
     DbgBarrierPreCmd(DbgBarrierPipelineBarrierWaitEvents);
 
-    if (m_flags.hasReleaseAcquire)
+    if (m_flags.useReleaseAcquire)
     {
         utils::IterateMask deviceGroup(m_curDeviceMask);
         do
@@ -6199,29 +6285,39 @@ void CmdBuffer::PalCmdBarrier(
     const Pal::BarrierInfo& info,
     uint32_t                deviceMask)
 {
-    // If you trip this assert, you've forgotten to populate a value for this field.  You should use one of the
-    // RgpBarrierReason enum values from sqtt_rgp_annotations.h.  Preferably you should add a new one as described
-    // in the header, but temporarily you may use the generic "unknown" reason so as not to block your main code change.
-    VK_ASSERT(info.reason != 0);
+    if (m_flags.useReleaseAcquire)
+    {
+        // Translate the Pal::BarrierInfo to an equivalent Pal::AcquireReleaseInfo struct and then call
+        // Pal::CmdReleaseThenAcquire() instead of Pal::CmdBarrier()
+        TranslateBarrierInfoToAcqRel(info, deviceMask);
+    }
+    else
+    {
+        // If you trip this assert, you've forgotten to populate a value for this field.  You should use one of the
+        // RgpBarrierReason enum values from sqtt_rgp_annotations.h.  Preferably you should add a new one as described
+        // in the header, but temporarily you may use the generic "unknown" reason so as not to block your main code
+        // change.
+        VK_ASSERT(info.reason != 0);
 
 #if PAL_ENABLE_PRINTS_ASSERTS
-    for (uint32_t i = 0; i < info.transitionCount; ++i)
-    {
-        // Detect if PAL may execute a barrier blt using this image
-        VK_ASSERT(info.pTransitions[i].imageInfo.pImage == nullptr);
-        // You need to use the other PalCmdBarrier method (below) which uses vk::Image ptrs to obtain the
-        // corresponding Pal::IImage ptr for each image transition
-    }
+        for (uint32_t i = 0; i < info.transitionCount; ++i)
+        {
+            // Detect if PAL may execute a barrier blt using this image
+            VK_ASSERT(info.pTransitions[i].imageInfo.pImage == nullptr);
+            // You need to use the other PalCmdBarrier method (below) which uses vk::Image ptrs to obtain the
+            // corresponding Pal::IImage ptr for each image transition
+        }
 #endif
 
-    utils::IterateMask deviceGroup(deviceMask);
-    do
-    {
-        const uint32_t deviceIdx = deviceGroup.Index();
+        utils::IterateMask deviceGroup(deviceMask);
+        do
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
 
-        PalCmdBuffer(deviceIdx)->CmdBarrier(info);
+            PalCmdBuffer(deviceIdx)->CmdBarrier(info);
+        }
+        while (deviceGroup.IterateNext());
     }
-    while (deviceGroup.IterateNext());
 }
 
 // =====================================================================================================================
@@ -6266,6 +6362,135 @@ void CmdBuffer::PalCmdBarrier(
         }
 
         PalCmdBuffer(deviceIdx)->CmdBarrier(*pInfo);
+    }
+    while (deviceGroup.IterateNext());
+}
+
+// =====================================================================================================================
+// Translates the Pal::BarrierInfo into equivalent Pal::AcquireReleaseInfo struct. This function does a 1-to-1 mapping
+// for struct members and hence should not be used in any special cases.
+void CmdBuffer::TranslateBarrierInfoToAcqRel(
+    const Pal::BarrierInfo& barrierInfo,
+    uint32_t                deviceMask)
+{
+    VirtualStackFrame virtStackFrame(m_pStackAllocator);
+
+    Pal::AcquireReleaseInfo info = {};
+
+    Pal::ImgBarrier* pImageBarriers = (barrierInfo.transitionCount != 0) ?
+                                      virtStackFrame.AllocArray<Pal::ImgBarrier>(barrierInfo.transitionCount) :
+                                      nullptr;
+
+    info.dstStageMask        = ConvertPipePointToPipeStage(barrierInfo.waitPoint);
+    info.srcGlobalAccessMask = barrierInfo.globalSrcCacheMask;
+    info.dstGlobalAccessMask = barrierInfo.globalDstCacheMask;
+    info.reason              = barrierInfo.reason;
+
+    for (uint32_t i = 0; i < barrierInfo.pipePointWaitCount; i++)
+    {
+        info.srcStageMask |= ConvertPipePointToPipeStage(barrierInfo.pPipePoints[i]);
+    }
+
+    for (uint32_t i = 0; i < barrierInfo.transitionCount; i++)
+    {
+        // Pal::AcquireReleaseInfo requires a section of an IGpuMemory object to be provided for memory barriers. Since
+        // we do not have any information about it, any memory barrier transitions in Pal::BarrierInfo will have to be
+        // specified via global cache masks in Pal::AcquireReleaseInfo.
+        if (barrierInfo.pTransitions[i].imageInfo.pImage == nullptr)
+        {
+            info.srcGlobalAccessMask |= barrierInfo.pTransitions[i].srcCacheMask;
+            info.dstGlobalAccessMask |= barrierInfo.pTransitions[i].dstCacheMask;
+        }
+        else
+        {
+            pImageBarriers[i].pImage             = barrierInfo.pTransitions[i].imageInfo.pImage;
+            pImageBarriers[i].subresRange        = barrierInfo.pTransitions[i].imageInfo.subresRange;
+            pImageBarriers[i].box                = {};
+            pImageBarriers[i].srcAccessMask      = barrierInfo.pTransitions[i].srcCacheMask;
+            pImageBarriers[i].dstAccessMask      = barrierInfo.pTransitions[i].dstCacheMask;
+            pImageBarriers[i].oldLayout          = barrierInfo.pTransitions[i].imageInfo.oldLayout;
+            pImageBarriers[i].newLayout          = barrierInfo.pTransitions[i].imageInfo.newLayout;
+            pImageBarriers[i].pQuadSamplePattern = barrierInfo.pTransitions[i].imageInfo.pQuadSamplePattern;
+
+            info.imageBarrierCount++;
+        }
+    }
+
+    if (info.imageBarrierCount > 0)
+    {
+        info.pImageBarriers = pImageBarriers;
+    }
+
+    PalCmdReleaseThenAcquire(info, deviceMask);
+
+    if (pImageBarriers != nullptr)
+    {
+        virtStackFrame.FreeArray(pImageBarriers);
+    }
+}
+
+// =====================================================================================================================
+// This is the main hook for any CmdReleaseThenAcquire going into PAL. Always call this function instead of CmdBarrier
+// directly.
+void CmdBuffer::PalCmdReleaseThenAcquire(
+    const Pal::AcquireReleaseInfo& info,
+    uint32_t                       deviceMask)
+{
+    // If you trip this assert, you've forgotten to populate a value for this field.  You should use one of the
+    // RgpBarrierReason enum values from sqtt_rgp_annotations.h.  Preferably you should add a new one as described
+    // in the header, but temporarily you may use the generic "unknown" reason so as not to block your main code change.
+    VK_ASSERT(info.reason != 0);
+
+#if PAL_ENABLE_PRINTS_ASSERTS
+    for (uint32_t i = 0; i < info.imageBarrierCount; ++i)
+    {
+        // Detect if PAL may execute a barrier blt using this image
+        VK_ASSERT(info.pImageBarriers[i].pImage == nullptr);
+        // You need to use the other PalCmdReleaseThenAcquire method (below) which uses vk::Image ptrs to obtain the
+        // corresponding Pal::IImage ptr for each image transition
+    }
+#endif
+
+    utils::IterateMask deviceGroup(deviceMask);
+    do
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        PalCmdBuffer(deviceIdx)->CmdReleaseThenAcquire(info);
+    }
+    while (deviceGroup.IterateNext());
+}
+
+// =====================================================================================================================
+void CmdBuffer::PalCmdReleaseThenAcquire(
+    Pal::AcquireReleaseInfo*      pAcquireReleaseInfo,
+    Pal::ImgBarrier* const        pImageBarriers,
+    const Image** const           pTransitionImages,
+    uint32_t                      deviceMask)
+{
+    // If you trip this assert, you've forgot to populate a value for this field.  You should use one of the
+    // RgpBarrierReason enum values from sqtt_rgp_annotations.h.  Preferably you should add a new one as described
+    // in the header, but temporarily you may use the generic "unknown" reason so as not to block you.
+    VK_ASSERT(pAcquireReleaseInfo->reason != 0);
+
+    utils::IterateMask deviceGroup(deviceMask);
+    do
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        if (deviceIdx > 0)
+        {
+            for (uint32_t i = 0; i < pAcquireReleaseInfo->imageBarrierCount; i++)
+            {
+                if (pImageBarriers[i].pImage != nullptr)
+                {
+                    pImageBarriers[i].pImage = pTransitionImages[i]->PalImage(deviceIdx);
+                }
+            }
+            pAcquireReleaseInfo->pImageBarriers = pImageBarriers;
+        }
+
+        PalCmdBuffer(deviceIdx)->CmdReleaseThenAcquire(*pAcquireReleaseInfo);
     }
     while (deviceGroup.IterateNext());
 }
@@ -7024,10 +7249,10 @@ void CmdBuffer::RPBeginSubpass()
 }
 
 // =====================================================================================================================
-// Executes a "sync point" during a render pass instance.  There are a number of these at different stages between
-// subpasses where we handle execution/memory dependencies from subpass dependencies as well as trigger automatic
-// layout transitions.
-void CmdBuffer::RPSyncPoint(
+// Executes a "sync point" during a render pass instance using the legacy barriers. There are a number of these at
+// different stages between subpasses where we handle execution/memory dependencies from subpass dependencies as well as
+// trigger automatic layout transitions.
+void CmdBuffer::RPSyncPointLegacy(
     const RPSyncPointInfo& syncPoint,
     VirtualStackFrame*     pVirtStack)
 {
@@ -7089,8 +7314,8 @@ void CmdBuffer::RPSyncPoint(
                     tr.attachment,
                     plane);
 
-                if (oldLayout.usages  != newLayout.usages ||
-                    oldLayout.engines != newLayout.engines)
+                if ((oldLayout.usages  != newLayout.usages) ||
+                    (oldLayout.engines != newLayout.engines))
                 {
                     VK_ASSERT(barrier.transitionCount < maxTransitionCount);
 
@@ -7111,22 +7336,22 @@ void CmdBuffer::RPSyncPoint(
 
                     if (sampleCount > 0)
                     {
-                         if (attachment.pImage->IsSampleLocationsCompatibleDepth() &&
-                             tr.flags.isInitialLayoutTransition)
-                         {
-                             VK_ASSERT(attachment.pImage->HasDepth());
+                        if (attachment.pImage->IsSampleLocationsCompatibleDepth() &&
+                            tr.flags.isInitialLayoutTransition)
+                        {
+                            VK_ASSERT(attachment.pImage->HasDepth());
 
-                             // Use the provided sample locations for this attachment if this is its
-                             // initial layout transition
-                             pQuadSamplePattern =
-                                 &m_renderPassInstance.pAttachments[tr.attachment].initialSamplePattern.locations;
-                         }
-                         else
-                         {
-                             // Otherwise, use the subpass' sample locations
-                             uint32_t subpass   = m_renderPassInstance.subpass;
-                             pQuadSamplePattern = &m_renderPassInstance.pSamplePatterns[subpass].locations;
-                         }
+                            // Use the provided sample locations for this attachment if this is its
+                            // initial layout transition
+                            pQuadSamplePattern =
+                                &m_renderPassInstance.pAttachments[tr.attachment].initialSamplePattern.locations;
+                        }
+                        else
+                        {
+                            // Otherwise, use the subpass' sample locations
+                            uint32_t subpass   = m_renderPassInstance.subpass;
+                            pQuadSamplePattern = &m_renderPassInstance.pSamplePatterns[subpass].locations;
+                        }
                     }
 
                     pLayoutTransition->imageInfo.pQuadSamplePattern = pQuadSamplePattern;
@@ -7166,9 +7391,9 @@ void CmdBuffer::RPSyncPoint(
 
     // Execute the barrier if it actually did anything
     if ((barrier.waitPoint != Pal::HwPipeBottom) ||
-        (barrier.transitionCount > 0) ||
-        ((barrier.pipePointWaitCount > 1) ||
-         (barrier.pipePointWaitCount == 1 && barrier.pPipePoints[0] != Pal::HwPipeTop)))
+        (barrier.transitionCount > 0)            ||
+        ((barrier.pipePointWaitCount > 1)        ||
+         ((barrier.pipePointWaitCount == 1) && (barrier.pPipePoints[0] != Pal::HwPipeTop))))
     {
         PalCmdBarrier(&barrier, pPalTransitions, ppImages, GetRpDeviceMask());
     }
@@ -7181,6 +7406,155 @@ void CmdBuffer::RPSyncPoint(
     if (ppImages != nullptr)
     {
         pVirtStack->FreeArray(ppImages);
+    }
+}
+
+// =====================================================================================================================
+// Executes a "sync point" during a render pass instance.  There are a number of these at different stages between
+// subpasses where we handle execution/memory dependencies from subpass dependencies as well as trigger automatic
+// layout transitions.
+void CmdBuffer::RPSyncPoint(
+    const RPSyncPointInfo& syncPoint,
+    VirtualStackFrame*     pVirtStack)
+{
+    const auto& rpBarrier = syncPoint.barrier;
+
+    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+
+    if (m_flags.useReleaseAcquire)
+    {
+        Pal::AcquireReleaseInfo acquireReleaseInfo = {};
+
+        acquireReleaseInfo.reason       = RgpBarrierExternalRenderPassSync;
+        acquireReleaseInfo.srcStageMask = rpBarrier.srcStageMask;
+        acquireReleaseInfo.dstStageMask = rpBarrier.dstStageMask;
+
+        const uint32_t maxTransitionCount = MaxPalAspectsPerMask * syncPoint.transitionCount;
+
+        Pal::ImgBarrier* pPalTransitions  = (maxTransitionCount != 0) ?
+                                            pVirtStack->AllocArray<Pal::ImgBarrier>(maxTransitionCount) :
+                                            nullptr;
+        const Image** ppImages            = (maxTransitionCount != 0)                                ?
+                                            pVirtStack->AllocArray<const Image*>(maxTransitionCount) :
+                                            nullptr;
+
+        // Construct global memory dependency to synchronize caches (subpass dependencies + implicit synchronization)
+        if (rpBarrier.flags.needsGlobalTransition)
+        {
+            Pal::BarrierTransition globalTransition = { };
+
+            m_pDevice->GetBarrierPolicy().ApplyBarrierCacheFlags(
+                rpBarrier.srcAccessMask,
+                rpBarrier.dstAccessMask,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_IMAGE_LAYOUT_GENERAL,
+                &globalTransition);
+
+            acquireReleaseInfo.srcGlobalAccessMask = globalTransition.srcCacheMask | rpBarrier.implicitSrcCacheMask;
+            acquireReleaseInfo.dstGlobalAccessMask = globalTransition.dstCacheMask | rpBarrier.implicitDstCacheMask;
+        }
+
+        if ((pPalTransitions != nullptr) && (ppImages != nullptr))
+        {
+            // Construct attachment-specific layout transitions
+            for (uint32_t t = 0; t < syncPoint.transitionCount; ++t)
+            {
+                const RPTransitionInfo& tr = syncPoint.pTransitions[t];
+
+                const Framebuffer::Attachment& attachment = m_allGpuState.pFramebuffer->GetAttachment(tr.attachment);
+
+                for (uint32_t sr = 0; sr < attachment.subresRangeCount; ++sr)
+                {
+                    const uint32_t plane = attachment.subresRange[sr].startSubres.plane;
+
+                    const RPImageLayout nextLayout = (plane == 1) ? tr.nextStencilLayout : tr.nextLayout;
+
+                    const Pal::ImageLayout newLayout = attachment.pImage->GetAttachmentLayout(
+                        nextLayout,
+                        plane,
+                        this);
+
+                    const Pal::ImageLayout oldLayout = RPGetAttachmentLayout(
+                        tr.attachment,
+                        plane);
+
+                    if ((oldLayout.usages  != newLayout.usages) ||
+                        (oldLayout.engines != newLayout.engines))
+                    {
+                        VK_ASSERT(acquireReleaseInfo.imageBarrierCount < maxTransitionCount);
+
+                        ppImages[acquireReleaseInfo.imageBarrierCount] = attachment.pImage;
+
+                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].srcAccessMask = 0;
+                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].dstAccessMask = 0;
+                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].pImage        = attachment.pImage->
+                                                                                              PalImage(DefaultDeviceIndex);
+                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].oldLayout     = oldLayout;
+                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].newLayout     = newLayout;
+                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].subresRange   = attachment.subresRange[sr];
+
+                        const Pal::MsaaQuadSamplePattern* pQuadSamplePattern = nullptr;
+
+                        const uint32_t sampleCount = attachment.pImage->GetImageSamples();
+
+                        if (sampleCount > 0)
+                        {
+                             if (attachment.pImage->IsSampleLocationsCompatibleDepth() &&
+                                 tr.flags.isInitialLayoutTransition)
+                             {
+                                 VK_ASSERT(attachment.pImage->HasDepth());
+
+                                 // Use the provided sample locations for this attachment if this is its
+                                 // initial layout transition
+                                 pQuadSamplePattern =
+                                     &m_renderPassInstance.pAttachments[tr.attachment].initialSamplePattern.locations;
+                             }
+                             else
+                             {
+                                 // Otherwise, use the subpass' sample locations
+                                 uint32_t subpass   = m_renderPassInstance.subpass;
+                                 pQuadSamplePattern = &m_renderPassInstance.pSamplePatterns[subpass].locations;
+                             }
+                        }
+
+                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].pQuadSamplePattern = pQuadSamplePattern;
+
+                        RPSetAttachmentLayout(tr.attachment, plane, newLayout);
+
+                        acquireReleaseInfo.imageBarrierCount++;
+                    }
+                }
+            }
+
+            acquireReleaseInfo.pImageBarriers = pPalTransitions;
+        }
+        else if (maxTransitionCount != 0)
+        {
+            m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+
+        // Execute the barrier if it actually did anything
+        if ((rpBarrier.waitPoint != Pal::HwPipeBottom) ||
+            (acquireReleaseInfo.imageBarrierCount > 0) ||
+            ((rpBarrier.pipePointCount > 1) ||
+             ((rpBarrier.pipePointCount == 1) && (rpBarrier.pipePoints[0] != Pal::HwPipeTop))))
+        {
+            PalCmdReleaseThenAcquire(&acquireReleaseInfo, pPalTransitions, ppImages, GetRpDeviceMask());
+        }
+
+        if (pPalTransitions != nullptr)
+        {
+            pVirtStack->FreeArray(pPalTransitions);
+        }
+
+        if (ppImages != nullptr)
+        {
+            pVirtStack->FreeArray(ppImages);
+        }
+    }
+    else
+    {
+        RPSyncPointLegacy(syncPoint, pVirtStack);
     }
 }
 
@@ -8004,7 +8378,7 @@ void CmdBuffer::PushConstantsIssueWrites(
 
     }
 
-    if ((stageFlags & VK_SHADER_STAGE_ALL_GRAPHICS) != 0)
+    if ((stageFlags & ShaderStageAllGraphics) != 0)
     {
         WritePushConstants(PipelineBindGraphics,
                            Pal::PipelineBindPoint::Graphics,
@@ -9113,10 +9487,12 @@ void CmdBuffer::SetPrimitiveRestartEnableEXT(
 void CmdBuffer::SetDepthBiasEnableEXT(
     VkBool32                                   depthBiasEnable)
 {
-    if (m_allGpuState.triangleRasterState.flags.depthBiasEnable != depthBiasEnable)
+    if ((m_allGpuState.triangleRasterState.flags.frontDepthBiasEnable != depthBiasEnable) ||
+        (m_allGpuState.triangleRasterState.flags.backDepthBiasEnable  != depthBiasEnable))
     {
-        m_allGpuState.triangleRasterState.flags.depthBiasEnable = depthBiasEnable;
-        m_allGpuState.dirtyGraphics.rasterState                         = 1;
+        m_allGpuState.triangleRasterState.flags.frontDepthBiasEnable = depthBiasEnable;
+        m_allGpuState.triangleRasterState.flags.backDepthBiasEnable  = depthBiasEnable;
+        m_allGpuState.dirtyGraphics.rasterState                      = 1;
     }
 
     m_allGpuState.staticTokens.triangleRasterState = DynamicRenderStateToken;

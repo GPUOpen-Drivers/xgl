@@ -80,14 +80,15 @@ VkResult Event::Create(
     Pal::DeviceProperties info;
     pDevice->PalDevice(DefaultDeviceIndex)->GetProperties(&info);
 
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+
     // If supportReleaseAcquireInterface is true, the ASIC provides new barrier interface CmdReleaseThenAcquire()
     // designed for Acquire/Release-based driver. This flag is currently enabled for gfx9 and above.
     // If supportSplitReleaseAcquire is true, the ASIC provides split CmdRelease() and CmdAcquire() to express barrier,
     // and CmdReleaseThenAcquire() is still valid. This flag is currently enabled for gfx10 and above.
     bool useSplitReleaseAcquire = info.gfxipProperties.flags.supportReleaseAcquireInterface &&
-                                  info.gfxipProperties.flags.supportSplitReleaseAcquire;
-
-    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+                                  info.gfxipProperties.flags.supportSplitReleaseAcquire &&
+                                  settings.useReleaseAcquireInterface;
 
     if (useSplitReleaseAcquire && settings.syncTokenEnabled &&
         ((pCreateInfo->flags & VK_EVENT_CREATE_DEVICE_ONLY_BIT_KHR) != 0))

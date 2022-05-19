@@ -192,7 +192,8 @@ VkResult ShaderModule::Init(const Device* pDevice, VkShaderModuleCreateFlags fla
 {
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
-    VkResult result = pCompiler->BuildShaderModule(pDevice, flags, m_codeSize, m_pCode, nullptr, nullptr, &m_handle);
+    VkResult result = pCompiler->BuildShaderModule(
+        pDevice, flags, m_codeSize, m_pCode, false, nullptr, nullptr, &m_handle);
 
     if (result == VK_SUCCESS)
     {

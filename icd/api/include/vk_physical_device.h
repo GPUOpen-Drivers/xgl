@@ -93,6 +93,11 @@ struct PhysicalDeviceGpaProperties
 };
 
 // =====================================================================================================================
+// Shader stage bit that represents all graphics stages
+static const uint32 ShaderStageAllGraphics =
+                                             VK_SHADER_STAGE_ALL_GRAPHICS;
+
+// =====================================================================================================================
 // Represents the Vulkan view of physical device. All Vulkan functions on the VkPhysicalDevice land in
 // this class. The class wraps a PAL IDevice and punts most functionality down to the next layer.
 class PhysicalDevice
@@ -760,9 +765,6 @@ public:
         Pal::gpusize allocationSize,
         uint32_t     heapIdx);
 
-    bool ShouldAddRemoteBackupHeap(uint32_t vkIndex) const
-        { return m_memoryVkIndexAddRemoteBackupHeap[vkIndex]; }
-
     bool IsOverrideHeapChoiceToLocalWithinBudget(Pal::gpusize size) const;
 
     Util::IPlatformKey* GetPlatformKey() const { return m_pPlatformKey; }
@@ -792,7 +794,6 @@ protected:
 
     uint32_t                         m_memoryTypeMask;
     uint32_t                         m_memoryTypeMaskForExternalSharing;
-    bool                             m_memoryVkIndexAddRemoteBackupHeap[VK_MAX_MEMORY_TYPES];
     uint32_t                         m_memoryPalHeapToVkIndexBits[Pal::GpuHeapCount];
     uint32_t                         m_memoryPalHeapToVkHeap[Pal::GpuHeapCount];
     Pal::GpuHeap                     m_memoryVkIndexToPalHeap[VK_MAX_MEMORY_TYPES];

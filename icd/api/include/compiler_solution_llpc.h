@@ -65,6 +65,7 @@ public:
         VkShaderModuleCreateFlags    flags,
         size_t                       codeSize,
         const void*                  pCode,
+        const bool                   adaptForFaskLink,
         ShaderModuleHandle*          pShaderModule,
         const Util::MetroHash::Hash& hash) override;
 

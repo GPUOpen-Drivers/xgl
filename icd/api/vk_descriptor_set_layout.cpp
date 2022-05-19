@@ -659,6 +659,8 @@ VkResult DescriptorSetLayout::Create(
     // Set the base pointer of the immutable sampler data to the appropriate location within the allocated memory
     info.imm.pImmutableSamplerData = reinterpret_cast<uint32_t*>(Util::VoidPtrInc(pSysMem, apiSize + bindingInfoAuxSize));
 
+    info.flags = pCreateInfo->flags;
+
     // Fill descriptor set layout information
     VkResult result = ConvertCreateInfo(
         pDevice,
@@ -727,6 +729,15 @@ void DescriptorSetLayout::Merge(
         const DescriptorSetLayout* pRef       = DescriptorSetLayout::ObjectFromHandle(pLayouts[i]);
         const CreateInfo&          refInfo    = pRef->Info();
         const VkShaderStageFlags   shaderMask = pShaderMasks[i];
+
+        if (i == 0)
+        {
+            mergedInfo.flags = DescriptorSetLayout::ObjectFromHandle(pLayouts[i])->Info().flags;
+        }
+        else
+        {
+            VK_ASSERT(mergedInfo.flags == DescriptorSetLayout::ObjectFromHandle(pLayouts[i])->Info().flags);
+        }
 
         for (uint32_t j = 0; j < refInfo.count; ++j)
         {

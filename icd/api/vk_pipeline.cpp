@@ -162,7 +162,7 @@ VkResult Pipeline::BuildShaderStageInfo(
     const Device*                          pDevice,
     const uint32_t                         stageCount,
     const VkPipelineShaderStageCreateInfo* pStages,
-    const bool                             duplicateExistingModules,
+    const bool                             isLibrary,
     uint32_t                               (*pfnGetOutputIdx)(const uint32_t inputIdx,
                                                               const uint32_t stageIdx),
     ShaderStageInfo*                       pShaderStageInfo,
@@ -175,6 +175,9 @@ VkResult Pipeline::BuildShaderStageInfo(
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
     uint32_t numNewModules = 0;
+
+    const bool duplicateExistingModules = isLibrary;
+    const bool adaptForFaskLink         = isLibrary;
 
     for (uint32_t i = 0; i < stageCount; ++i)
     {
@@ -206,7 +209,7 @@ VkResult Pipeline::BuildShaderStageInfo(
 
             if (stageInfo.module != VK_NULL_HANDLE)
             {
-                // TODO: It's better to copy the compiled shader modules rather than compile them again.
+                // Shader needs to be recompiled with additional options for compatibility with fast-link mode
                 const ShaderModule* pModule = ShaderModule::ObjectFromHandle(stageInfo.module);
                 codeSize = pModule->GetCodeSize();
                 pCode    = pModule->GetCode();
@@ -230,7 +233,8 @@ VkResult Pipeline::BuildShaderStageInfo(
             PipelineBinaryCache* pBinaryCache = (pCache == nullptr) ? nullptr : pCache->GetPipelineCache();
 
             result = pCompiler->BuildShaderModule(
-                pDevice, flags, codeSize, pCode, pBinaryCache, pShaderFeedback, &pTempModules[numNewModules]);
+                pDevice,flags, codeSize, pCode, adaptForFaskLink,
+                pBinaryCache, pShaderFeedback, &pTempModules[numNewModules]);
 
             if (result != VK_SUCCESS)
             {

@@ -127,6 +127,7 @@ protected:
         const RuntimeSettings&    settings);
 
     static Pal::Result BuildDepthStencilView(
+        const Device*             pDevice,
         const Pal::IDevice*       pPalDevice,
         const Pal::IImage*        pPalImage,
         VkImageViewType           viewType,

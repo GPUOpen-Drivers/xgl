@@ -112,7 +112,6 @@ template <size_t imageDescSize,
           size_t bufferDescSize,
           uint32_t numPalDevices>
 DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntryFunc(
-    const Device*                           pDevice,
     VkDescriptorType                        descriptorType,
     const DescriptorSetLayout::BindingInfo& dstBinding)
 {
@@ -124,61 +123,31 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
         pFunc = &UpdateEntrySampler<samplerDescSize, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-        if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead && (dstBinding.sta.dwSize > 0))
+        if (dstBinding.imm.dwSize != 0)
         {
-            if (dstBinding.imm.dwSize != 0)
+            if (dstBinding.bindingFlags.ycbcrConversionUsage != 0)
             {
-                if (dstBinding.bindingFlags.ycbcrConversionUsage != 0)
-                {
-                    pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize,
-                        true, true, true, numPalDevices>;
-                }
-                else
-                {
-                    pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize,
-                        true, true, false, numPalDevices>;
-                }
+                pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize,
+                    true, true, numPalDevices>;
             }
             else
             {
                 pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize,
-                    true, false, false, numPalDevices>;
+                    true, false, numPalDevices>;
             }
         }
         else
         {
-            if (dstBinding.imm.dwSize != 0)
-            {
-                pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize,
-                    false, true, false, numPalDevices>;
-            }
-            else
-            {
-                pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize,
-                    false, false, false, numPalDevices>;
-            }
+            pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize,
+                false, false, numPalDevices>;
         }
         break;
     case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
     case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-        if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead && (dstBinding.sta.dwSize > 0))
-        {
-            pFunc = &UpdateEntrySampledImage<imageDescSize, fmaskDescSize, true, false, numPalDevices>;
-        }
-        else
-        {
-            pFunc = &UpdateEntrySampledImage<imageDescSize, fmaskDescSize, false, false, numPalDevices>;
-        }
+        pFunc = &UpdateEntrySampledImage<imageDescSize, fmaskDescSize, false, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-        if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead && (dstBinding.sta.dwSize > 0))
-        {
-            pFunc = &UpdateEntrySampledImage<imageDescSize, fmaskDescSize, true, true, numPalDevices>;
-        }
-        else
-        {
-            pFunc = &UpdateEntrySampledImage<imageDescSize, fmaskDescSize, false, true, numPalDevices>;
-        }
+        pFunc = &UpdateEntrySampledImage<imageDescSize, fmaskDescSize, true, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
         pFunc = &UpdateEntryTexelBuffer<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, numPalDevices>;
@@ -228,14 +197,23 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
         (bufferDescSize == 16))
 
     {
-        if (fmaskDescSize == 32)
+        if ((pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead == false) || (fmaskDescSize == 0))
+        {
+            pFunc = GetUpdateEntryFunc<
+                32,
+                0,
+                16,
+                16,
+                numPalDevices>(descriptorType, dstBinding);
+        }
+        else if (fmaskDescSize == 32)
         {
             pFunc = GetUpdateEntryFunc<
                 32,
                 32,
                 16,
                 16,
-                numPalDevices>(pDevice, descriptorType, dstBinding);
+                numPalDevices>(descriptorType, dstBinding);
         }
         else
         {
@@ -333,7 +311,7 @@ void DescriptorUpdateTemplate::Update(
 }
 
 // =====================================================================================================================
-template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, bool updateFmask, bool immutable,
+template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, bool immutable,
     bool ycbcrUsage, uint32_t numPalDevices>
 void DescriptorUpdateTemplate::UpdateEntryCombinedImageSampler(
     const Device*               pDevice,
@@ -387,7 +365,7 @@ void DescriptorUpdateTemplate::UpdateEntryCombinedImageSampler(
                 entry.srcStride);
         }
 
-        if (updateFmask)
+        if (fmaskDescSize != 0)
         {
             uint32_t* pDestFmaskAddr = pDstSet->FmaskCpuAddress(deviceIdx) + entry.dstStaOffset;
 
@@ -513,13 +491,12 @@ void DescriptorUpdateTemplate::UpdateEntrySampler(
 }
 
 // =====================================================================================================================
-template <size_t imageDescSize, size_t fmaskDescSize, bool updateFmask, bool isShaderStorageDesc,
-    uint32_t numPalDevices>
+template <size_t imageDescSize, size_t fmaskDescSize, bool isShaderStorageDesc, uint32_t numPalDevices>
 void DescriptorUpdateTemplate::UpdateEntrySampledImage(
-        const Device*               pDevice,
-        VkDescriptorSet             descriptorSet,
-        const void*                 pDescriptorInfo,
-        const TemplateUpdateInfo&   entry)
+    const Device*               pDevice,
+    VkDescriptorSet             descriptorSet,
+    const void*                 pDescriptorInfo,
+    const TemplateUpdateInfo&   entry)
 {
     DescriptorSet<numPalDevices>* pDstSet = DescriptorSet<numPalDevices>::ObjectFromHandle(descriptorSet);
 
@@ -539,7 +516,7 @@ void DescriptorUpdateTemplate::UpdateEntrySampledImage(
                 entry.dstBindStaDwArrayStride,
                 entry.srcStride);
 
-         if (updateFmask)
+         if (fmaskDescSize != 0)
          {
              uint32_t* pDestFmaskAddr = pDstSet->FmaskCpuAddress(deviceIdx) + entry.dstStaOffset;
 
@@ -583,7 +560,8 @@ void DescriptorUpdateTemplate::UpdateEntryInlineUniformBlock(
             );
 
         deviceIdx++;
-    } while (deviceIdx < numPalDevices);
+    }
+    while (deviceIdx < numPalDevices);
 }
 
 namespace entry

@@ -41,6 +41,7 @@
 // then we need to include this file from "settings" dir.
 #include "settings/g_settings.h"
 #include "include/app_profile.h"
+#include "include/vk_extensions.h"
 
 namespace Pal
 {
@@ -71,7 +72,7 @@ public:
     void UpdatePalSettings();
 
     void FinalizeSettings(
-        );
+        const DeviceExtensions::Enabled& enabledExtensions);
 
     const RuntimeSettings& GetSettings() const { return m_settings; };
     RuntimeSettings* GetSettingsPtr() { return &m_settings; }

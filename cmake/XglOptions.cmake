@@ -54,24 +54,11 @@ macro(xgl_options)
 
     option(XGL_BUILD_CACHE_CREATOR "Build cache-creator tools?" OFF)
 
-#if VKI_EXT_EXTENDED_DYNAMIC_STATE2
-    option(VKI_EXT_EXTENDED_DYNAMIC_STATE2 "Build vulkan with EXT_EXTENDED_DYNAMIC_STATE2" OFF)
-#endif
-
-#if VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES
-    option(VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES "Build vulkan with KHR_SHADER_SUBGROUP_EXTENDED_TYPES" OFF)
-#endif
-
 #if VKI_GPU_DECOMPRESS
     option(VKI_GPU_DECOMPRESS "Build vulkan with GPU_DECOMPRESS" OFF)
 #endif
 
-#if VKI_EXT_EXTENDED_DYNAMIC_STATE
-    option(VKI_EXT_EXTENDED_DYNAMIC_STATE "Build vulkan with EXTENDED_DYNAMIC_STATE extention" OFF)
-#endif
-
-    option(ICD_BUILD_LLPC "Build LLPC?" ON)
-
+        option(ICD_BUILD_LLPC "Build LLPC?" ON)
     option(ICD_BUILD_LLPCONLY "Build LLPC Only?" OFF)
 
     option(XGL_LLVM_UPSTREAM "Build with upstreamed LLVM?" OFF)

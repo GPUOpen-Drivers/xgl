@@ -88,7 +88,12 @@ class TimestampQueryPool;
 class SqttCmdBufferState;
 class QueryPool;
 
-constexpr uint8_t DefaultStencilOpValue = 1;
+constexpr uint8_t  DefaultStencilOpValue      = 1;
+constexpr uint8_t  DefaultRefPicIndexValue    = 0xFF;
+constexpr uint8_t  DefaultIndex7BitsValue     = 0x7F;
+constexpr uint8_t  DefaultTidValue            = 0xFF;
+constexpr uint8_t  AssociatedFlag             = 31;
+constexpr uint32_t DefaultAssociatedFlagValue = (1 << AssociatedFlag);
 
 // Internal API pipeline binding points
 enum PipelineBindPoint
@@ -821,6 +826,10 @@ public:
 
     VK_FORCEINLINE VirtualStackAllocator* GetStackAllocator() { return m_pStackAllocator; }
 
+    void TranslateBarrierInfoToAcqRel(
+        const Pal::BarrierInfo& barrierInfo,
+        uint32_t                deviceMask);
+
     void PalCmdBarrier(
         const Pal::BarrierInfo& info,
         uint32_t                deviceMask);
@@ -830,6 +839,16 @@ public:
         Pal::BarrierTransition* const pTransitions,
         const Image** const           pTransitionImages,
         uint32_t                      deviceMask);
+
+    void PalCmdReleaseThenAcquire(
+        const Pal::AcquireReleaseInfo& info,
+        uint32_t                       deviceMask);
+
+    void PalCmdReleaseThenAcquire(
+        Pal::AcquireReleaseInfo* pAcquireReleaseInfo,
+        Pal::ImgBarrier* const   pImageBarriers,
+        const Image** const      pTransitionImages,
+        uint32_t                 deviceMask);
 
     Pal::Result PalCmdBufferBegin(
             const Pal::CmdBufferBuildInfo& cmdInfo);
@@ -1169,6 +1188,7 @@ private:
     void RPEndSubpass();
     void RPResolveAttachments(uint32_t count, const RPResolveInfo* pResolves);
     void RPSyncPoint(const RPSyncPointInfo& syncPoint, VirtualStackFrame* pVirtStack);
+    void RPSyncPointLegacy(const RPSyncPointInfo& syncPoint, VirtualStackFrame* pVirtStack);
     void RPLoadOpClearColor(uint32_t count, const RPLoadOpClearInfo* pClears);
     void RPLoadOpClearDepthStencil(uint32_t count, const RPLoadOpClearInfo* pClears);
     void RPBindTargets(const RPBindTargetsInfo& targets);
@@ -1231,7 +1251,7 @@ private:
     void DbgCmdBarrier(bool preCmd);
 #endif
 
-    template <uint32_t numPalDevices, bool robustBufferAccess>
+    template <uint32_t numPalDevices, bool useCompactDescriptor>
     void BindDescriptorSets(
         VkPipelineBindPoint                         pipelineBindPoint,
         VkPipelineLayout                            layout,
@@ -1245,11 +1265,10 @@ void SetUserDataPipelineLayout(
         uint32_t                                    firstSet,
         uint32_t                                    setCount,
         const PipelineLayout*                       pLayout,
-        PipelineBindState*                          pBindState,
         const Pal::PipelineBindPoint                palBindPoint,
         const PipelineBindPoint                     apiBindPoint);
 
-    template<uint32_t numPalDevices, bool robustBufferAccess>
+    template<uint32_t numPalDevices, bool useCompactDescriptor>
     static VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets(
         VkCommandBuffer                             cmdBuffer,
         VkPipelineBindPoint                         pipelineBindPoint,
@@ -1317,12 +1336,13 @@ void SetUserDataPipelineLayout(
             uint32_t disableResetReleaseResources        :  1;
             uint32_t subpassLoadOpClearsBoundAttachments :  1;
             uint32_t preBindDefaultState                 :  1;
-            uint32_t hasReleaseAcquire                   :  1;
+            uint32_t useReleaseAcquire                   :  1;
             uint32_t useSplitReleaseAcquire              :  1;
             uint32_t reserved2                           :  3;
             uint32_t isRenderingSuspended                :  1;
             uint32_t reserved4                           :  1;
-            uint32_t reserved                            : 15;
+            uint32_t reserved5                           :  1;
+            uint32_t reserved                            : 14;
         };
     };
 

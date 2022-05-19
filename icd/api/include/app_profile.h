@@ -45,6 +45,7 @@ namespace Pal
 namespace vk
 {
 class Instance;
+class PhysicalDevice;
 };
 
 namespace vk

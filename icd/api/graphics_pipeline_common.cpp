@@ -27,8 +27,11 @@
 #include "include/vk_cmdbuffer.h"
 #include "include/vk_device.h"
 #include "include/vk_graphics_pipeline.h"
+#include "include/vk_graphics_pipeline_library.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_render_pass.h"
+
+#include "palVectorImpl.h"
 
 namespace vk
 {
@@ -309,9 +312,36 @@ static uint32_t GetColorAttachmentCount(
 }
 
 // =====================================================================================================================
+static VkShaderStageFlagBits GetLibraryActiveShaderStages(
+    const VkGraphicsPipelineLibraryFlagsEXT libFlags)
+{
+    constexpr VkShaderStageFlagBits PrsActiveStageMask =
+        static_cast<VkShaderStageFlagBits>(
+                                           VK_SHADER_STAGE_VERTEX_BIT |
+                                           VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+                                           VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+                                           VK_SHADER_STAGE_GEOMETRY_BIT);
+    constexpr VkShaderStageFlagBits FgsActiveStageMask =
+        static_cast<VkShaderStageFlagBits>(VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    VkShaderStageFlagBits activeStageMask = static_cast<VkShaderStageFlagBits>(0);
+
+    if (libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT)
+    {
+        activeStageMask = static_cast<VkShaderStageFlagBits>(activeStageMask | PrsActiveStageMask);
+    }
+    if (libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
+    {
+        activeStageMask = static_cast<VkShaderStageFlagBits>(activeStageMask | FgsActiveStageMask);
+    }
+
+    return activeStageMask;
+}
+
+// =====================================================================================================================
 VkShaderStageFlagBits GraphicsPipelineCommon::GetActiveShaderStages(
-    const VkGraphicsPipelineCreateInfo*  pGraphicsPipelineCreateInfo
-    )
+    const VkGraphicsPipelineCreateInfo* pGraphicsPipelineCreateInfo,
+    const GraphicsPipelineLibraryInfo*  pLibInfo)
 {
     VK_ASSERT(pGraphicsPipelineCreateInfo != nullptr);
 
@@ -322,15 +352,84 @@ VkShaderStageFlagBits GraphicsPipelineCommon::GetActiveShaderStages(
         activeStages = static_cast<VkShaderStageFlagBits>(activeStages | pGraphicsPipelineCreateInfo->pStages[i].stage);
     }
 
+    VkShaderStageFlagBits activeStageMask = GetLibraryActiveShaderStages(pLibInfo->libFlags);
+
+    activeStages = static_cast<VkShaderStageFlagBits>(activeStages & activeStageMask);
+
+    const GraphicsPipelineLibrary* libraries[] = { pLibInfo->pPreRasterizationShaderLib, pLibInfo->pFragmentShaderLib };
+
+    for (uint32_t i = 0; i < Util::ArrayLen(libraries); ++i)
+    {
+        if (libraries[i] != nullptr)
+        {
+            const VkShaderStageFlagBits libShaderStages =
+                libraries[i]->GetPipelineObjectCreateInfo().activeStages;
+
+            const VkShaderStageFlagBits libActiveStageMask =
+                GetLibraryActiveShaderStages(libraries[i]->GetLibraryFlags());
+
+            activeStages = static_cast<VkShaderStageFlagBits>(activeStages | (libActiveStageMask & libShaderStages));
+        }
+    }
+
+    activeStageMask = static_cast<VkShaderStageFlagBits>(0);
+
+    if (pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT)
+    {
+        activeStageMask = static_cast<VkShaderStageFlagBits>(activeStageMask |
+                                                             VK_SHADER_STAGE_VERTEX_BIT |
+                                                             VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+                                                             VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+                                                             VK_SHADER_STAGE_GEOMETRY_BIT);
+    }
+    if (pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
+    {
+        activeStageMask = static_cast<VkShaderStageFlagBits>(activeStageMask | VK_SHADER_STAGE_FRAGMENT_BIT);
+    }
+
+    activeStages = static_cast<VkShaderStageFlagBits>(activeStages & activeStageMask);
+
     return activeStages;
 }
 
 // =====================================================================================================================
 uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
-    const VkPipelineDynamicStateCreateInfo* pDy
-    )
+    const VkPipelineDynamicStateCreateInfo* pDy,
+    const GraphicsPipelineLibraryInfo*      pLibInfo)
 {
     uint32_t dynamicState = 0;
+
+    if (pLibInfo->pVertexInputInterfaceLib != nullptr)
+    {
+        const uint32_t libDynamicStates =
+            ViiDynamicStatesMask & pLibInfo->pVertexInputInterfaceLib->GetDynamicStates();
+
+        dynamicState |= libDynamicStates;
+    }
+
+    if (pLibInfo->pPreRasterizationShaderLib != nullptr)
+    {
+        const uint32_t libDynamicStates =
+            PrsDynamicStatesMask & pLibInfo->pPreRasterizationShaderLib->GetDynamicStates();
+
+        dynamicState |= libDynamicStates;
+    }
+
+    if (pLibInfo->pFragmentShaderLib != nullptr)
+    {
+        const uint32_t libDynamicStates =
+            FgsDynamicStatesMask & pLibInfo->pFragmentShaderLib->GetDynamicStates();
+
+        dynamicState |= libDynamicStates;
+    }
+
+    if (pLibInfo->pFragmentOutputInterfaceLib != nullptr)
+    {
+        const uint32_t libDynamicStates =
+            FoiDynamicStatesMask & pLibInfo->pFragmentOutputInterfaceLib->GetDynamicStates();
+
+        dynamicState |= libDynamicStates;
+    }
 
     // The section of the following dynamic states are not defined, so we don't get them from libraries
     // - VK_DYNAMIC_STATE_WAVE_LIMIT_AMD
@@ -341,10 +440,14 @@ uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
     // Get dynamic states from VkPipelineDynamicStateCreateInfo
     if (pDy != nullptr)
     {
-        const uint32_t viiMask = 0xFFFFFFFF;
-        const uint32_t prsMask = 0xFFFFFFFF;
-        const uint32_t fgsMask = 0xFFFFFFFF;
-        const uint32_t foiMask = 0xFFFFFFFF;
+        const uint32_t viiMask =
+            (pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)    ? 0xFFFFFFFF : 0;
+        const uint32_t prsMask =
+            (pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) ? 0xFFFFFFFF : 0;
+        const uint32_t fgsMask =
+            (pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)           ? 0xFFFFFFFF : 0;
+        const uint32_t foiMask =
+            (pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT) ? 0xFFFFFFFF : 0;
 
         for (uint32_t i = 0; i < pDy->dynamicStateCount; ++i)
         {
@@ -409,6 +512,9 @@ uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
             case VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR:
                 dynamicState |= fgsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr));
                 break;
+            case VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT:
+                dynamicState |= fgsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnableExt));
+                break;
             case VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT:
                 dynamicState |= fgsMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthTestEnableExt));
                 break;
@@ -430,9 +536,6 @@ uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
             case VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT:
                 dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt));
                 break;
-            case VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT:
-                dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnableExt));
-                break;
             case VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT:
                 dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt));
                 break;
@@ -447,6 +550,119 @@ uint32_t GraphicsPipelineCommon::GetDynamicStateFlags(
 }
 
 // =====================================================================================================================
+void GraphicsPipelineCommon::ExtractLibraryInfo(
+    const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    GraphicsPipelineLibraryInfo*        pLibInfo)
+{
+    constexpr VkGraphicsPipelineLibraryFlagsEXT GraphicsPipelineLibraryAll = 0
+        | VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT
+        | VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT
+        | VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT
+        | VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
+
+    EXTRACT_VK_STRUCTURES_1(
+        gfxPipeline,
+        GraphicsPipelineLibraryCreateInfoEXT,
+        PipelineLibraryCreateInfoKHR,
+        static_cast<const VkGraphicsPipelineLibraryCreateInfoEXT*>(pCreateInfo->pNext),
+        GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT,
+        PIPELINE_LIBRARY_CREATE_INFO_KHR)
+
+    pLibInfo->flags.isLibrary = (pCreateInfo->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) ? 1 : 0;
+
+    pLibInfo->flags.optimize  = (pCreateInfo->flags & VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT) ? 1 : 0;
+
+    pLibInfo->libFlags =
+        (pLibInfo->flags.isLibrary == false) ? GraphicsPipelineLibraryAll :
+        (pGraphicsPipelineLibraryCreateInfoEXT == nullptr) ? 0 : pGraphicsPipelineLibraryCreateInfoEXT->flags;
+
+    pLibInfo->pVertexInputInterfaceLib    = nullptr;
+    pLibInfo->pPreRasterizationShaderLib  = nullptr;
+    pLibInfo->pFragmentShaderLib          = nullptr;
+    pLibInfo->pFragmentOutputInterfaceLib = nullptr;
+
+    if (pPipelineLibraryCreateInfoKHR != nullptr)
+    {
+        for (uint32_t i = 0; i < pPipelineLibraryCreateInfoKHR->libraryCount; ++i)
+        {
+            const GraphicsPipelineLibrary* pPipelineLib =
+                GraphicsPipelineLibrary::ObjectFromHandle(pPipelineLibraryCreateInfoKHR->pLibraries[i]);
+
+            if (pPipelineLib != nullptr)
+            {
+                VkGraphicsPipelineLibraryFlagsEXT linkLibFlags = pPipelineLib->GetLibraryFlags();
+
+                if (linkLibFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)
+                {
+                    VK_ASSERT(pLibInfo->pVertexInputInterfaceLib == nullptr);
+                    pLibInfo->pVertexInputInterfaceLib = pPipelineLib;
+                    pLibInfo->libFlags &= ~VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT;
+                }
+
+                if (linkLibFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT)
+                {
+                    VK_ASSERT(pLibInfo->pPreRasterizationShaderLib == nullptr);
+                    pLibInfo->pPreRasterizationShaderLib = pPipelineLib;
+                    pLibInfo->libFlags &= ~VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT;
+                }
+
+                if (linkLibFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
+                {
+                    VK_ASSERT(pLibInfo->pFragmentShaderLib == nullptr);
+                    pLibInfo->pFragmentShaderLib = pPipelineLib;
+                    pLibInfo->libFlags &= ~VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT;
+                }
+
+                if (linkLibFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)
+                {
+                    VK_ASSERT(pLibInfo->pFragmentOutputInterfaceLib == nullptr);
+                    pLibInfo->pFragmentOutputInterfaceLib = pPipelineLib;
+                    pLibInfo->libFlags &= ~VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
+                }
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
+bool GraphicsPipelineCommon::NeedBuildPipelineBinary(
+    const GraphicsPipelineLibraryInfo* pLibInfo,
+    const bool                         enableRasterization)
+{
+    bool result = false;
+
+    if (pLibInfo->flags.isLibrary == false)
+    {
+        result = true;
+    }
+    else if (pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT)
+    {
+        result = true;
+    }
+    else if ((enableRasterization == true) &&
+             (pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT))
+    {
+        result = true;
+    }
+    else if (pLibInfo->flags.optimize)
+    {
+        if ((pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) &&
+            (pLibInfo->pPreRasterizationShaderLib != nullptr))
+        {
+            result = true;
+        }
+        else if ((pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT) &&
+                 (pLibInfo->pFragmentOutputInterfaceLib != nullptr) &&
+                 (enableRasterization == true))
+        {
+            result = true;
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 VkResult GraphicsPipelineCommon::Create(
     Device*                             pDevice,
     PipelineCache*                      pPipelineCache,
@@ -456,12 +672,139 @@ VkResult GraphicsPipelineCommon::Create(
 {
     VkResult result;
 
+    const bool isLibrary = pCreateInfo->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
+
+    if (isLibrary)
+    {
+        result =  GraphicsPipelineLibrary::Create(
+            pDevice, pPipelineCache, pCreateInfo, pAllocator, pPipeline);
+    }
+    else
     {
         result =  GraphicsPipeline::Create(
             pDevice, pPipelineCache, pCreateInfo, pAllocator, pPipeline);
     }
 
     return result;
+}
+
+// =====================================================================================================================
+static void CopyVertexInputInterfaceState(
+    const GraphicsPipelineLibrary*    pLibrary,
+    GraphicsPipelineObjectCreateInfo* pInfo)
+{
+    const GraphicsPipelineObjectCreateInfo& libInfo = pLibrary->GetPipelineObjectCreateInfo();
+
+    pInfo->pipeline.iaState             = libInfo.pipeline.iaState;
+
+    pInfo->immedInfo.inputAssemblyState = libInfo.immedInfo.inputAssemblyState;
+
+    pInfo->staticStateMask             |= (libInfo.staticStateMask & ViiDynamicStatesMask);
+}
+
+// =====================================================================================================================
+static void CopyPreRasterizationShaderState(
+    const GraphicsPipelineLibrary*    pLibrary,
+    GraphicsPipelineObjectCreateInfo* pInfo)
+{
+    const GraphicsPipelineObjectCreateInfo& libInfo = pLibrary->GetPipelineObjectCreateInfo();
+
+    pInfo->pipeline.rsState            = libInfo.pipeline.rsState;
+    pInfo->pipeline.viewportInfo       = libInfo.pipeline.viewportInfo;
+
+    pInfo->msaa.conservativeRasterizationMode         = libInfo.msaa.conservativeRasterizationMode;
+    pInfo->msaa.flags.enableConservativeRasterization = libInfo.msaa.flags.enableConservativeRasterization;
+    pInfo->msaa.flags.enableLineStipple               = libInfo.msaa.flags.enableLineStipple;
+
+    pInfo->immedInfo.triangleRasterState       = libInfo.immedInfo.triangleRasterState;
+    pInfo->immedInfo.depthBiasParams           = libInfo.immedInfo.depthBiasParams;
+    pInfo->immedInfo.pointLineRasterParams     = libInfo.immedInfo.pointLineRasterParams;
+    pInfo->immedInfo.lineStippleParams         = libInfo.immedInfo.lineStippleParams;
+    pInfo->immedInfo.graphicsShaderInfos.vs    = libInfo.immedInfo.graphicsShaderInfos.vs;
+    pInfo->immedInfo.graphicsShaderInfos.hs    = libInfo.immedInfo.graphicsShaderInfos.hs;
+    pInfo->immedInfo.graphicsShaderInfos.ds    = libInfo.immedInfo.graphicsShaderInfos.ds;
+    pInfo->immedInfo.graphicsShaderInfos.gs    = libInfo.immedInfo.graphicsShaderInfos.gs;
+    pInfo->immedInfo.graphicsShaderInfos.ts    = libInfo.immedInfo.graphicsShaderInfos.ts;
+    pInfo->immedInfo.graphicsShaderInfos.ms    = libInfo.immedInfo.graphicsShaderInfos.ms;
+    pInfo->immedInfo.graphicsShaderInfos.flags = libInfo.immedInfo.graphicsShaderInfos.flags;
+    pInfo->immedInfo.viewportParams            = libInfo.immedInfo.viewportParams;
+    pInfo->immedInfo.scissorRectParams         = libInfo.immedInfo.scissorRectParams;
+    pInfo->immedInfo.rasterizerDiscardEnable   = libInfo.immedInfo.rasterizerDiscardEnable;
+
+    pInfo->flags.bresenhamEnable = libInfo.flags.bresenhamEnable;
+
+    pInfo->staticStateMask      |= (libInfo.staticStateMask & PrsDynamicStatesMask);
+}
+
+// =====================================================================================================================
+static void CopyFragmentShaderState(
+    const GraphicsPipelineLibrary*    pLibrary,
+    GraphicsPipelineObjectCreateInfo* pInfo)
+{
+    const GraphicsPipelineObjectCreateInfo& libInfo = pLibrary->GetPipelineObjectCreateInfo();
+
+    pInfo->immedInfo.depthBoundParams                         = libInfo.immedInfo.depthBoundParams;
+    pInfo->immedInfo.stencilRefMasks                          = libInfo.immedInfo.stencilRefMasks;
+    pInfo->immedInfo.graphicsShaderInfos.ps                   = libInfo.immedInfo.graphicsShaderInfos.ps;
+    pInfo->immedInfo.depthStencilCreateInfo.front             = libInfo.immedInfo.depthStencilCreateInfo.front;
+    pInfo->immedInfo.depthStencilCreateInfo.back              = libInfo.immedInfo.depthStencilCreateInfo.back;
+    pInfo->immedInfo.depthStencilCreateInfo.depthFunc         = libInfo.immedInfo.depthStencilCreateInfo.depthFunc;
+    pInfo->immedInfo.depthStencilCreateInfo.depthEnable       = libInfo.immedInfo.depthStencilCreateInfo.depthEnable;
+    pInfo->immedInfo.depthStencilCreateInfo.depthWriteEnable  = libInfo.immedInfo.depthStencilCreateInfo.depthWriteEnable;
+    pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable = libInfo.immedInfo.depthStencilCreateInfo.depthBoundsEnable;
+    pInfo->immedInfo.depthStencilCreateInfo.stencilEnable     = libInfo.immedInfo.depthStencilCreateInfo.stencilEnable;
+    pInfo->immedInfo.vrsRateParams                            = libInfo.immedInfo.vrsRateParams;
+
+    pInfo->staticStateMask            |= (libInfo.staticStateMask & FgsDynamicStatesMask);
+}
+
+// =====================================================================================================================
+static void CopyFragmentOutputInterfaceState(
+    const GraphicsPipelineLibrary*    pLibrary,
+    GraphicsPipelineObjectCreateInfo* pInfo)
+{
+    const GraphicsPipelineObjectCreateInfo& libInfo = pLibrary->GetPipelineObjectCreateInfo();
+
+    pInfo->pipeline.cbState.dualSourceBlendEnable     = libInfo.pipeline.cbState.dualSourceBlendEnable;
+    pInfo->pipeline.cbState.logicOp                   = libInfo.pipeline.cbState.logicOp;
+    pInfo->pipeline.cbState.uavExportSingleDraw       = libInfo.pipeline.cbState.uavExportSingleDraw;
+    pInfo->pipeline.cbState.target[0].forceAlphaToOne = libInfo.pipeline.cbState.target[0].forceAlphaToOne;
+    pInfo->pipeline.cbState.alphaToCoverageEnable     = libInfo.pipeline.cbState.alphaToCoverageEnable;
+    for (uint32_t i = 0; i < MaxColorTargets; ++i)
+    {
+        pInfo->pipeline.cbState.target[i].swizzledFormat = libInfo.pipeline.cbState.target[i].swizzledFormat;
+        pInfo->pipeline.cbState.target[i].channelWriteMask = libInfo.pipeline.cbState.target[i].channelWriteMask;
+    }
+    pInfo->pipeline.viewInstancingDesc = libInfo.pipeline.viewInstancingDesc;
+
+    for (uint32_t i = 0; i < Pal::MaxColorTargets; ++i)
+    {
+        pInfo->blend.targets[i] = libInfo.blend.targets[i];
+    }
+
+    pInfo->msaa.coverageSamples                   = libInfo.msaa.coverageSamples;
+    pInfo->msaa.exposedSamples                    = libInfo.msaa.exposedSamples;
+    pInfo->msaa.pixelShaderSamples                = libInfo.msaa.pixelShaderSamples;
+    pInfo->msaa.depthStencilSamples               = libInfo.msaa.depthStencilSamples;
+    pInfo->msaa.shaderExportMaskSamples           = libInfo.msaa.shaderExportMaskSamples;
+    pInfo->msaa.sampleMask                        = libInfo.msaa.sampleMask;
+    pInfo->msaa.sampleClusters                    = libInfo.msaa.sampleClusters;
+    pInfo->msaa.alphaToCoverageSamples            = libInfo.msaa.alphaToCoverageSamples;
+    pInfo->msaa.occlusionQuerySamples             = libInfo.msaa.occlusionQuerySamples;
+    pInfo->msaa.flags.enable1xMsaaSampleLocations = libInfo.msaa.flags.enable1xMsaaSampleLocations;
+
+    pInfo->immedInfo.blendConstParams = libInfo.immedInfo.blendConstParams;
+    pInfo->immedInfo.samplePattern    = libInfo.immedInfo.samplePattern;
+
+    pInfo->sampleCoverage               = libInfo.sampleCoverage;
+    pInfo->flags.customMultiSampleState = libInfo.flags.customMultiSampleState;
+    pInfo->flags.customSampleLocations  = libInfo.flags.customSampleLocations;
+    pInfo->flags.force1x1ShaderRate     = libInfo.flags.force1x1ShaderRate;
+    pInfo->flags.sampleShadingEnable    = libInfo.flags.sampleShadingEnable;
+
+    pInfo->staticStateMask |= (libInfo.staticStateMask & FoiDynamicStatesMask);
+
+    pInfo->dbFormat = libInfo.dbFormat;
 }
 
 // =====================================================================================================================
@@ -492,10 +835,11 @@ static void BuildRasterizationState(
         pInfo->immedInfo.triangleRasterState.cullMode               = VkToPalCullMode(pRs->cullMode);
         pInfo->immedInfo.triangleRasterState.frontFace              = VkToPalFaceOrientation(pRs->frontFace);
 
-        pInfo->immedInfo.triangleRasterState.flags.depthBiasEnable  = pRs->depthBiasEnable;
-        pInfo->immedInfo.depthBiasParams.depthBias                  = pRs->depthBiasConstantFactor;
-        pInfo->immedInfo.depthBiasParams.depthBiasClamp             = pRs->depthBiasClamp;
-        pInfo->immedInfo.depthBiasParams.slopeScaledDepthBias       = pRs->depthBiasSlopeFactor;
+        pInfo->immedInfo.triangleRasterState.flags.frontDepthBiasEnable = pRs->depthBiasEnable;
+        pInfo->immedInfo.triangleRasterState.flags.backDepthBiasEnable  = pRs->depthBiasEnable;
+        pInfo->immedInfo.depthBiasParams.depthBias                      = pRs->depthBiasConstantFactor;
+        pInfo->immedInfo.depthBiasParams.depthBiasClamp                 = pRs->depthBiasClamp;
+        pInfo->immedInfo.depthBiasParams.slopeScaledDepthBias           = pRs->depthBiasSlopeFactor;
 
         if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizerDiscardEnableExt) == true)
         {
@@ -925,6 +1269,36 @@ static void BuildDepthStencilState(
             pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::StencilReference);
         }
 
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthWriteEnableExt) == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnableExt);
+        }
+
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthTestEnableExt) == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DepthTestEnableExt);
+        }
+
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthCompareOpExt) == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DepthCompareOpExt);
+        }
+
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthBoundsTestEnableExt) == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DepthBoundsTestEnableExt);
+        }
+
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilTestEnableExt) == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::StencilTestEnableExt);
+        }
+
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilOpExt) == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::StencilOpExt);
+        }
+
         pInfo->immedInfo.depthStencilCreateInfo.front.stencilFailOp      = VkToPalStencilOp(pDs->front.failOp);
         pInfo->immedInfo.depthStencilCreateInfo.front.stencilPassOp      = VkToPalStencilOp(pDs->front.passOp);
         pInfo->immedInfo.depthStencilCreateInfo.front.stencilDepthFailOp = VkToPalStencilOp(pDs->front.depthFailOp);
@@ -1183,26 +1557,6 @@ static void BuildFragmentShaderState(
 
     BuildVrsRateParams(pDevice, pPipelineFragmentShadingRateStateCreateInfoKHR, dynamicStateFlags, pInfo);
 
-    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthTestEnableExt) == false)
-    {
-        pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DepthTestEnableExt);
-    }
-    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthCompareOpExt) == false)
-    {
-        pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DepthCompareOpExt);
-    }
-    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthBoundsTestEnableExt) == false)
-    {
-        pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DepthBoundsTestEnableExt);
-    }
-    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilTestEnableExt) == false)
-    {
-        pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::StencilTestEnableExt);
-    }
-    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilOpExt) == false)
-    {
-        pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::StencilOpExt);
-    }
 }
 
 // =====================================================================================================================
@@ -1231,13 +1585,13 @@ static void BuildFragmentOutputInterfaceState(
     {
         // Build states via VkPipelineColorBlendStateCreateInfo
         BuildColorBlendState(
-        pDevice,
-        pPipelineRenderingCreateInfoKHR,
-        pIn->pColorBlendState,
-        pRenderPass,
-        subpass,
-        dynamicStateFlags,
-        pInfo);
+            pDevice,
+            pPipelineRenderingCreateInfoKHR,
+            pIn->pColorBlendState,
+            pRenderPass,
+            subpass,
+            dynamicStateFlags,
+            pInfo);
     }
 
     BuildRenderingState(pDevice,
@@ -1246,10 +1600,6 @@ static void BuildFragmentOutputInterfaceState(
                         pRenderPass,
                         pInfo);
 
-    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthWriteEnableExt) == false)
-    {
-        pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnableExt);
-    }
     if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorWriteEnableExt) == false)
     {
         pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt);
@@ -1341,12 +1691,10 @@ static void BuildExecutablePipelineState(
 
         pInfo->sampleCoverage = 1;
 
-        pInfo->immedInfo.samplePattern = {};
+        pInfo->immedInfo.samplePattern.sampleCount = 1;
+        pInfo->immedInfo.samplePattern.locations   = *Device::GetDefaultQuadSamplePattern(1);
 
         pInfo->flags.sampleShadingEnable = false;
-
-        pInfo->staticStateMask &=
-            ~(1 << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt));
     }
 
 #if PAL_BUILD_GFX103
@@ -1392,35 +1740,67 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     const PipelineLayout*               pPipelineLayout,
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
+    GraphicsPipelineLibraryInfo libInfo;
+    ExtractLibraryInfo(pIn, &libInfo);
 
-    pInfo->activeStages = GetActiveShaderStages(pIn
-                                                );
+    pInfo->activeStages = GetActiveShaderStages(pIn, &libInfo);
 
-    uint32_t dynamicStateFlags = GetDynamicStateFlags(
-                                     pIn->pDynamicState
-                                     );
+    uint32_t dynamicStateFlags = GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
 
-    BuildVertexInputInterfaceState(pDevice, pIn, pVbInfo, dynamicStateFlags, false, pInfo);
+    pInfo->dynamicStates = dynamicStateFlags;
 
-    BuildPreRasterizationShaderState(pDevice,
-                                     pIn,
-                                     dynamicStateFlags,
-                                     pInfo);
+    if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)
+    {
+        BuildVertexInputInterfaceState(
+            pDevice, pIn, pVbInfo, dynamicStateFlags, libInfo.flags.isLibrary, pInfo);
+    }
+    else if (libInfo.pVertexInputInterfaceLib != nullptr)
+    {
+        CopyVertexInputInterfaceState(libInfo.pVertexInputInterfaceLib, pInfo);
+    }
+
+    if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT)
+    {
+        BuildPreRasterizationShaderState(pDevice,
+                                         pIn,
+                                         dynamicStateFlags,
+                                         pInfo);
+    }
+    else if (libInfo.pPreRasterizationShaderLib != nullptr)
+    {
+        CopyPreRasterizationShaderState(libInfo.pPreRasterizationShaderLib, pInfo);
+    }
 
     const bool enableRasterization =
+        (~libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) ||
         (pInfo->immedInfo.rasterizerDiscardEnable == false) ||
         IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizerDiscardEnableExt);
 
     if (enableRasterization)
     {
-        BuildFragmentShaderState(pDevice,
-                                 pIn,
-                                 dynamicStateFlags,
-                                 pInfo);
+        if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
+        {
+            BuildFragmentShaderState(pDevice,
+                                     pIn,
+                                     dynamicStateFlags,
+                                     pInfo);
+        }
+        else if (libInfo.pFragmentShaderLib != nullptr)
+        {
+            CopyFragmentShaderState(libInfo.pFragmentShaderLib, pInfo);
+        }
 
-        BuildFragmentOutputInterfaceState(pDevice, pIn, dynamicStateFlags, pInfo);
+        if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)
+        {
+            BuildFragmentOutputInterfaceState(pDevice, pIn, dynamicStateFlags, pInfo);
+        }
+        else if (libInfo.pFragmentOutputInterfaceLib != nullptr)
+        {
+            CopyFragmentOutputInterfaceState(libInfo.pFragmentOutputInterfaceLib, pInfo);
+        }
     }
 
+    if (libInfo.flags.isLibrary == false)
     {
         BuildExecutablePipelineState(pBinInfo, dynamicStateFlags, pInfo);
 
@@ -1433,27 +1813,6 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
                 &pInfo->immedInfo.graphicsShaderInfos);
         }
     }
-}
-
-// =====================================================================================================================
-// Achieve pipeline layout from VkGraphicsPipelineCreateInfo.
-// If the pipeline layout is merged, callee must destroy it manually.
-VkResult GraphicsPipelineCommon::AchievePipelineLayout(
-    const Device*                       pDevice,
-    const VkGraphicsPipelineCreateInfo* pCreateInfo,
-    const VkAllocationCallbacks*        pAllocator,
-    PipelineLayout**                    ppPipelineLayout,
-    bool*                               pIsMerged)
-{
-    VkResult result = VK_SUCCESS;
-
-    *pIsMerged = false;
-
-    {
-        *ppPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
-    }
-
-    return result;
 }
 
 // =====================================================================================================================
@@ -2086,28 +2445,58 @@ uint64_t GraphicsPipelineCommon::BuildApiHash(
     Util::MetroHash128 baseHasher;
     Util::MetroHash128 apiHasher;
 
-    uint32_t dynamicStateFlags = GetDynamicStateFlags(
-        pCreateInfo->pDynamicState
-    );
+    GraphicsPipelineLibraryInfo libInfo;
+    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, &libInfo);
+
+    uint32_t dynamicStateFlags = GetDynamicStateFlags(pCreateInfo->pDynamicState, &libInfo);
 
     baseHasher.Update(pCreateInfo->flags);
     baseHasher.Update(dynamicStateFlags);
 
     const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pCreateInfo->renderPass);
 
-    GenerateHashForVertexInputInterfaceState(pCreateInfo, &baseHasher, &apiHasher);
+    if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)
+    {
+        GenerateHashForVertexInputInterfaceState(pCreateInfo, &baseHasher, &apiHasher);
+    }
+    else if (libInfo.pVertexInputInterfaceLib != nullptr)
+    {
+        baseHasher.Update(libInfo.pVertexInputInterfaceLib->GetApiHash());
+    }
 
-    GenerateHashForPreRasterizationShadersState(pCreateInfo, pInfo, &baseHasher, &apiHasher);
+    if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT)
+    {
+        GenerateHashForPreRasterizationShadersState(pCreateInfo, pInfo, &baseHasher, &apiHasher);
+    }
+    else if (libInfo.pPreRasterizationShaderLib != nullptr)
+    {
+        baseHasher.Update(libInfo.pPreRasterizationShaderLib->GetApiHash());
+    }
 
     const bool enableRasterization =
+        (~libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) ||
         (pInfo->immedInfo.rasterizerDiscardEnable == false) ||
         IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizerDiscardEnableExt);
 
     if (enableRasterization)
     {
-        GenerateHashForFragmentShaderState(pCreateInfo, &baseHasher, &apiHasher);
+        if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
+        {
+            GenerateHashForFragmentShaderState(pCreateInfo, &baseHasher, &apiHasher);
+        }
+        else if (libInfo.pFragmentShaderLib != nullptr)
+        {
+            baseHasher.Update(libInfo.pFragmentShaderLib->GetApiHash());
+        }
 
-        GenerateHashForFragmentOutputInterfaceState(pCreateInfo, &baseHasher, &apiHasher);
+        if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)
+        {
+            GenerateHashForFragmentOutputInterfaceState(pCreateInfo, &baseHasher, &apiHasher);
+        }
+        else if (libInfo.pFragmentOutputInterfaceLib != nullptr)
+        {
+            baseHasher.Update(libInfo.pFragmentOutputInterfaceLib->GetApiHash());
+        }
     }
 
     if ((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))

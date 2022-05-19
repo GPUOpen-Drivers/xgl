@@ -134,6 +134,8 @@ public:
                                             // layout
         uint32_t        varDescStride;      // Byte size of a descriptor of the type specified for
                                             // the VARIABLE_DESCRIPTOR_COUNT_BIT binding
+
+        VkDescriptorSetLayoutCreateFlags flags;
     };
 
     static VkResult Create(

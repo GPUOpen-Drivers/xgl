@@ -104,7 +104,6 @@ private:
               size_t bufferDescSize,
               uint32_t numPalDevices>
     static PfnUpdateEntry GetUpdateEntryFunc(
-        const Device*                           pDevice,
         VkDescriptorType                        descriptorType,
         const DescriptorSetLayout::BindingInfo& dstBinding);
 
@@ -119,49 +118,48 @@ private:
         VkDescriptorType                        descriptorType,
         const DescriptorSetLayout::BindingInfo& dstBinding);
 
-    template <size_t imageDescSize, size_t fmaskDescSize,  bool updateFmask, bool isShaderStorageDesc,
-        uint32_t numPalDevices>
+    template <size_t imageDescSize, size_t fmaskDescSize, bool isShaderStorageDesc, uint32_t numPalDevices>
     static void UpdateEntrySampledImage(
-            const Device*               pDevice,
-            VkDescriptorSet             descriptorSet,
-            const void*                 pDescriptorInfo,
-            const TemplateUpdateInfo&   entry);
+        const Device*               pDevice,
+        VkDescriptorSet             descriptorSet,
+        const void*                 pDescriptorInfo,
+        const TemplateUpdateInfo&   entry);
 
     template <size_t samplerDescSize, uint32_t numPalDevices>
     static void UpdateEntrySampler(
-            const Device*               pDevice,
-            VkDescriptorSet             descriptorSet,
-            const void*                 pDescriptorInfo,
-            const TemplateUpdateInfo&   entry);
+        const Device*               pDevice,
+        VkDescriptorSet             descriptorSet,
+        const void*                 pDescriptorInfo,
+        const TemplateUpdateInfo&   entry);
 
     template <size_t bufferDescSize, VkDescriptorType descriptorType, uint32_t numPalDevices>
     static void UpdateEntryBuffer(
-            const Device*               pDevice,
-            VkDescriptorSet             descriptorSet,
-            const void*                 pDescriptorInfo,
-            const TemplateUpdateInfo&   entry);
+        const Device*               pDevice,
+        VkDescriptorSet             descriptorSet,
+        const void*                 pDescriptorInfo,
+        const TemplateUpdateInfo&   entry);
 
     template <size_t bufferDescSize, VkDescriptorType descriptorType, uint32_t numPalDevices>
     static void UpdateEntryTexelBuffer(
-            const Device*               pDevice,
-            VkDescriptorSet             descriptorSet,
-            const void*                 pDescriptorInfo,
-            const TemplateUpdateInfo&   entry);
+        const Device*               pDevice,
+        VkDescriptorSet             descriptorSet,
+        const void*                 pDescriptorInfo,
+        const TemplateUpdateInfo&   entry);
 
-    template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, bool updateFmask, bool immutable,
+    template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, bool immutable,
         bool ycbcrUsage, uint32_t numPalDevices>
     static void UpdateEntryCombinedImageSampler(
-            const Device*               pDevice,
-            VkDescriptorSet             descriptorSet,
-            const void*                 pDescriptorInfo,
-            const TemplateUpdateInfo&   entry);
+        const Device*               pDevice,
+        VkDescriptorSet             descriptorSet,
+        const void*                 pDescriptorInfo,
+        const TemplateUpdateInfo&   entry);
 
     template <uint32_t numPalDevices>
     static void UpdateEntryInlineUniformBlock(
-            const Device*               pDevice,
-            VkDescriptorSet             descriptorSet,
-            const void*                 pDescriptorInfo,
-            const TemplateUpdateInfo&   entry);
+        const Device*               pDevice,
+        VkDescriptorSet             descriptorSet,
+        const void*                 pDescriptorInfo,
+        const TemplateUpdateInfo&   entry);
 
     VkPipelineBindPoint         m_pipelineBindPoint;
     uint32_t                    m_numEntries;

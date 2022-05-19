@@ -45,10 +45,10 @@ class DescriptorSetLayout;
 // Determine mapping layout of the resouces used in shaders
 enum class PipelineLayoutScheme : uint32_t
 {
-    // Compact scheme make full use of all the user data registers and can achieve best performance in theory.
+    // Compact scheme makes full use of all the user data registers and can achieve best performance in theory.
     // See PipelineLayout::BuildCompactSchemeInfo() for more details
     Compact = 0,
-    // The searching path of resouce belongs to a specific binding is fixed in indirect scheme.
+    // The searching path of resource belongs to a specific binding is fixed in indirect scheme.
     // See PipelineLayout::BuildIndirectSchemeInfo() for more details
     Indirect
 };
@@ -79,6 +79,14 @@ struct UserDataLayout
             // Number of user data registers used for transform feedback
             uint32_t transformFeedbackRegCount;
 
+            // Base user data register index to use for the constant buffer used in uber-fetch shader
+            // The number of user data register used is always 2
+            uint32_t uberFetchConstBufRegBase;
+
+            // Base user data register indices to use for buffers storing specialization constants
+            uint32_t specConstBufVertexRegBase;
+            uint32_t specConstBufFragmentRegBase;
+
         } compact;
 
         struct
@@ -88,8 +96,8 @@ struct UserDataLayout
             uint32_t transformFeedbackRegBase;
 
             // Base user data register index to use for the pointers pointing to the buffers
-            // storing descriptor set bingding data.
-            // Each set occupy 2 entries: one for static and one for descriptor descriptors
+            // storing descriptor set binding data.
+            // Each set occupy 2 entries: one for static and one for dynamic descriptors
             // The total number of user data registers used is always MaxDescriptorSets * 2 * SetPtrRegCount
             uint32_t setBindingPtrRegBase;
 
@@ -99,6 +107,10 @@ struct UserDataLayout
 
             // The size of buffer required to store push constants
             uint32_t pushConstSizeInDword;
+
+            // Base user data register index to use for the constant buffer used in uber-fetch shader
+            // The number of user data register used is always 2
+            uint32_t uberFetchConstBufRegBase;
 
         } indirect;
     };
@@ -121,6 +133,13 @@ public:
 
     // Number of user data registers consumed per dynamic descriptor (compact descriptors only require 2 if used)
     static constexpr uint32_t DynDescRegCount = 4;
+
+    // PAL requires all indirect user data tables to be 1DW
+    static constexpr uint32_t VbTablePtrRegCount = 1;
+
+    // DescriptorBufferCompact node, which is used to represent internal constant buffer always requires 2DW
+    // user data entries
+    static constexpr uint32_t InternalConstBufferRegCount = 2;
 
     // Magic number describing an invalid or unmapped user data entry
     static constexpr uint8 InvalidReg = UINT8_MAX;
@@ -271,35 +290,24 @@ protected:
     void BuildIndirectSchemeLlpcPipelineMapping(
         const uint32_t             stageMask,
         const VbBindingInfo*       pVbInfo,
+        const bool                 appendFetchShaderCb,
         void*                      pBuffer,
         Vkgc::ResourceMappingData* pResourceMapping) const;
 
-    void BuildLlpcStaticSetMapping(
-        const DescriptorSetLayout*   pLayout,
-        const uint32_t               visibility,
-        const uint32_t               setIndex,
-        Vkgc::ResourceMappingNode*   pNodes,
-        uint32_t*                    pNodeCount,
-        Vkgc::StaticDescriptorValue* pDescriptorRangeValue,
-        uint32_t*                    pDescriptorRangeCount) const;
-
-    template <typename NodeType>
-    void FillDynamicSetNode(
-        const Vkgc::ResourceMappingNodeType     type,
+    void BuildLlpcStaticMapping(
+        const DescriptorSetLayout*              pLayout,
         const uint32_t                          visibility,
         const uint32_t                          setIndex,
         const DescriptorSetLayout::BindingInfo& binding,
-        const uint32_t                          userDataRegBase,
-        NodeType*                               pNode) const;
+        Vkgc::ResourceMappingNode*              pNode,
+        Vkgc::StaticDescriptorValue*            pDescriptorRangeValue,
+        uint32_t*                               pDescriptorRangeCount) const;
 
-    template <typename NodeType>
-    void BuildLlpcDynamicSetMapping(
-        const DescriptorSetLayout* pLayout,
-        const uint32_t             visibility,
-        const uint32_t             setIndex,
-        const uint32_t             userDataRegBase,
-        NodeType*                  pNodes,
-        uint32_t*                  pNodeCount) const;
+    void BuildLlpcDynamicMapping(
+        const uint32_t                          setIndex,
+        const uint32_t                          userDataRegBase,
+        const DescriptorSetLayout::BindingInfo& binding,
+        Vkgc::ResourceMappingNode*              pNode) const;
 
     void BuildLlpcVertexBufferTableMapping(
         const VbBindingInfo*           pVbInfo,
@@ -312,6 +320,13 @@ protected:
         const uint32_t                 stageMask,
         const uint32_t                 offsetInDwords,
         const uint32_t                 sizeInDwords,
+        Vkgc::ResourceMappingRootNode* pNode,
+        uint32_t*                      pNodeCount) const;
+
+    void BuildLlpcInternalConstantBufferMapping(
+        const uint32_t                 stageMask,
+        const uint32_t                 offsetInDwords,
+        const uint32_t                 binding,
         Vkgc::ResourceMappingRootNode* pNode,
         uint32_t*                      pNodeCount) const;
 

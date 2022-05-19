@@ -127,6 +127,7 @@ public:
         const VkShaderModuleCreateFlags flags,
         size_t                          codeSize,
         const void*                     pCode,
+        const bool                      adaptForFaskLink,
         PipelineBinaryCache*            pBinaryCache,
         PipelineCreationFeedback*       pFeedback,
         ShaderModuleHandle*             pShaderModule);
@@ -242,8 +243,10 @@ public:
 
     void DestroyPipelineBinaryCache();
 
-    void BuildPipelineInternalBufferData(GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-                                         PipelineInternalBufferInfo*       pInternalBufferInfo);
+    void BuildPipelineInternalBufferData(
+        const PipelineLayout*             pPipelineLayout,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        PipelineInternalBufferInfo*       pInternalBufferInfo);
 
     void GetComputePipelineCacheId(
         uint32_t                         deviceIdx,

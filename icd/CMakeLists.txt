@@ -118,6 +118,7 @@ target_sources(xgl PRIVATE
     api/vk_physical_device.cpp
     api/vk_physical_device_manager.cpp
     api/vk_graphics_pipeline.cpp
+    api/vk_graphics_pipeline_library.cpp
     api/vk_image.cpp
     api/vk_image_view.cpp
     api/vk_instance.cpp
@@ -137,6 +138,7 @@ target_sources(xgl PRIVATE
     api/vk_surface.cpp
     api/vk_gpa_session.cpp
     api/vk_descriptor_update_template.cpp
+    api/vk_utils.cpp
     api/appopt/barrier_filter_layer.cpp
     api/appopt/strange_brigade_layer.cpp
     api/appopt/g_shader_profile.cpp
@@ -163,20 +165,14 @@ if(ICD_BUILD_LLPC)
     )
 endif()
 
-# vk_physical_device.cpp uses the __DATE__ and __TIME__ macros to generate a pipelineCacheUUID.
-# The following rule forces vk_physical_device.cpp to be re-compiled on every build, so that
-# an up-to-date time/date is always used regardless of which files were touched since the last build.
+# vk_utils.cpp uses the __DATE__ and __TIME__ macros to generate a pipelineCacheUUID. The following
+# rule forces vk_utils.cpp to be re-compiled on every build, so that an up-to-date time/date
+# is always used regardless of which files were touched since the last build.
 add_custom_command(
-    OUTPUT "vk_physical_device.g"
-    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_SOURCE_DIR}/api/vk_physical_device.cpp
+    TARGET xgl PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_SOURCE_DIR}/api/vk_utils.cpp
+    COMMENT "Touching vk_utils.cpp"
 )
-
-add_custom_target(
-    RebuildVkPhysicalDevice
-    DEPENDS "vk_physical_device.g"
-)
-
-add_dependencies(xgl RebuildVkPhysicalDevice)
 
 ### ICD Auto-generated Shader Profiles Files ##################################
 # ICD_GENDIR Path to the code generation tools
@@ -318,11 +314,11 @@ if (UNIX)
         endif()
     endif()
 
-    target_link_libraries(xgl PRIVATE
+    target_link_options(xgl PRIVATE
         -Wl,-Bdynamic
         -Wl,-z,noexecstack
         -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/make/amdicd.so.def
-        -Wl,-Map=${ICD_TARGET}.map
+        -Wl,-Map=$<TARGET_FILE_DIR:xgl>/${ICD_TARGET}.map
         -Wl,-soname=${ICD_TARGET}.so.1
     )
 

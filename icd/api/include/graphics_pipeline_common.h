@@ -37,6 +37,7 @@
 namespace vk
 {
 
+class GraphicsPipelineLibrary;
 class PipelineCache;
 class RenderPass;
 struct PipelineOptimizerKey;
@@ -134,6 +135,7 @@ struct GraphicsPipelineObjectCreateInfo
     uint32_t                                    sampleCoverage;
     VkShaderStageFlagBits                       activeStages;
     VkFormat                                    dbFormat;
+    uint32_t                                    dynamicStates;
 
     union
     {
@@ -163,6 +165,32 @@ struct GraphicsPipelineBinaryInfo
 };
 
 // =====================================================================================================================
+// Graphics pipeline library information extracted from VkGraphicsPipelineCreateInfo
+struct GraphicsPipelineLibraryInfo
+{
+    union
+    {
+        struct
+        {
+            uint32_t isLibrary : 1;     //> Whether the pipeline is a library or is executable
+            uint32_t optimize  : 1;     //> Can do link time optimization
+            uint32_t reserved  : 30;
+        };
+        uint32_t value;
+    } flags;
+
+    VkGraphicsPipelineLibraryFlagsEXT libFlags;     //> The sections whose state should be built via
+                                                    //  VkGraphicsPipelineCreateInfo rather than copy from pipeline
+                                                    //  library or be skipped.
+
+    // The referred pipeline libraries for each section.
+    const GraphicsPipelineLibrary*    pVertexInputInterfaceLib;
+    const GraphicsPipelineLibrary*    pPreRasterizationShaderLib;
+    const GraphicsPipelineLibrary*    pFragmentShaderLib;
+    const GraphicsPipelineLibrary*    pFragmentOutputInterfaceLib;
+};
+
+// =====================================================================================================================
 // The common part used by both executable graphics pipelines and graphics pipeline libraries
 class GraphicsPipelineCommon : public Pipeline
 {
@@ -177,8 +205,8 @@ public:
 
     // Get the active shader stages through API info
     static VkShaderStageFlagBits GetActiveShaderStages(
-        const VkGraphicsPipelineCreateInfo*  pGraphicsPipelineCreateInfo
-        );
+        const VkGraphicsPipelineCreateInfo* pGraphicsPipelineCreateInfo,
+        const GraphicsPipelineLibraryInfo*  pLibInfo);
 
     // Returns true if Dual Source Blending is to be enabled based on the given ColorBlendAttachmentState
     static bool GetDualSourceBlendEnableState(
@@ -200,8 +228,18 @@ public:
 
     // Get the dynamics states specified by API info
     static uint32_t GetDynamicStateFlags(
-        const VkPipelineDynamicStateCreateInfo* pDy
-        );
+        const VkPipelineDynamicStateCreateInfo* pDy,
+        const GraphicsPipelineLibraryInfo*      pLibInfo);
+
+    // Extract graphics pipeline library related info from VkGraphicsPipelineCreateInfo.
+    static void ExtractLibraryInfo(
+        const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        GraphicsPipelineLibraryInfo*        pLibInfo);
+
+    // Check whether pipeline binary will be built
+    static bool NeedBuildPipelineBinary(
+        const GraphicsPipelineLibraryInfo* pLibInfo,
+        const bool                         enableRasterization);
 
 protected:
     // Convert API information into internal create info used to create internal pipeline binary
@@ -224,13 +262,6 @@ protected:
         const GraphicsPipelineBinaryInfo*   pBinInfo,
         const PipelineLayout*               pPipelineLayout,
         GraphicsPipelineObjectCreateInfo*   pObjInfo);
-
-    static VkResult AchievePipelineLayout(
-        const Device*                       pDevice,
-        const VkGraphicsPipelineCreateInfo* pCreateInfo,
-        const VkAllocationCallbacks*        pAllocator,
-        PipelineLayout**                    ppPipelineLayout,
-        bool*                               pIsTemporary);
 
     // Generates the API PSO hash using the contents of the VkGraphicsPipelineCreateInfo struct
     static uint64_t BuildApiHash(
