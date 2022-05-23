@@ -36,6 +36,7 @@ RUN cat /vulkandriver/build_info.txt \
 # Build XGL targets.
 WORKDIR /vulkandriver/builds/ci-build
 RUN source /vulkandriver/env.sh \
+    && cmake . \
     && cmake --build . \
     && cmake --build . --target amdvlk64.so cache-creator
 
