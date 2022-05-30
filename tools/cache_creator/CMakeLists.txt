@@ -85,7 +85,7 @@ target_link_libraries(cache-info PRIVATE cache_creator_lib)
 # Build cache creator tools whenever we build XGL.
 add_dependencies(xgl cache-creator cache-info)
 
-if(XGL_BUILD_TESTS OR XGL_BUILD_LIT)
+if(XGL_BUILD_TESTS)
     message(STATUS "Building cache creator tests")
     set(CACHE_CREATOR_TOOLS_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
     add_subdirectory(test "${CMAKE_CURRENT_BINARY_DIR}/test/cache-creator/lit")
