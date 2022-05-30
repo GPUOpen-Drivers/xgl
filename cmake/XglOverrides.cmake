@@ -192,11 +192,6 @@ macro(xgl_overrides_vkgc)
 
     set(LLPC_BUILD_TESTS ${XGL_BUILD_TESTS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
-    set(LLPC_BUILD_LIT ${XGL_BUILD_LIT} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-
-    if(XGL_BUILD_LIT)
-        message(DEPRECATION "XGL_BUILD_LIT is deprecated, use XGL_BUILD_TESTS instead")
-    endif()
     set(LLPC_BUILD_NAVI12 ${XGL_BUILD_NAVI12} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
     set(LLPC_BUILD_NAVI22 ${XGL_BUILD_NAVI22} CACHE BOOL "${PROJECT_NAME} override." FORCE)

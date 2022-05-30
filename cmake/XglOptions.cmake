@@ -49,9 +49,6 @@ macro(xgl_options)
 
     option(XGL_BUILD_TESTS "Build all tests?" OFF)
 
-    # Deprecated, use XGL_BUILD_TESTS instead.
-    option(XGL_BUILD_LIT "Build with Lit test?" OFF)
-
     option(XGL_BUILD_CACHE_CREATOR "Build cache-creator tools?" OFF)
 
 #if VKI_GPU_DECOMPRESS
