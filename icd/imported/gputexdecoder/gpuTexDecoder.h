@@ -56,14 +56,16 @@ using Pal::uint16;
 using Pal::uint32;
 using Pal::uint64;
 
-constexpr uint32 AstcInternalPipelineNodes = 6;
-constexpr uint32 Etc2InternalPipelineNodes = 2;
+constexpr uint32 AstcInternalPipelineNodes = 7;
+constexpr uint32 Etc2InternalPipelineNodes = 4;
+constexpr uint32 DXT5InternalPipelineNodes = 2;
 
 // Enum for internal texture format convert type
 enum class InternalTexConvertCsType : uint32
 {
      ConvertASTCToRGBA8,
      ConvertETC2ToRGBA8,
+     ConvertRGBA8ToDXT5,
      Count
 };
 
@@ -95,6 +97,7 @@ enum class NodeType : uint32
     Buffer,
     TexBuffer,
     Image,
+    PushConstant,
     Count
 };
 
@@ -196,7 +199,8 @@ public:
         Pal::IImage*                pDstImage,
         uint32                      regionCount,
         Pal::MemoryImageCopyRegion* pPalBufferRegionsIn,
-        const CompileTimeConstants& constInfo);
+        const CompileTimeConstants& constInfo,
+        Pal::SwizzledFormat         sourceViewFormat);
 
 private:
     void CreateUserData(
@@ -238,6 +242,14 @@ private:
         uint8                     stride,
         Pal::SwizzledFormat       swizzleFormat) const;
 
+    void BuildTypedBufferViewInfo(
+        uint32*                   pData,
+        uint8                     count,
+        Pal::gpusize              addr,
+        Pal::gpusize              dataBytes,
+        uint8                     stride,
+        Pal::SwizzledFormat       swizzleFormat) const;
+
    void BuildImageViewInfo(
         Pal::ImageViewInfo*  pInfo,
         const Pal::IImage*   pImage,
@@ -258,5 +270,6 @@ private:
     Util::GenericAllocatorTracked m_allocator;
     Util::RWLock                  m_internalPipelineLock;
     InternalPipelineMap           m_pipelineMap;
+    InternalPipelineMemoryPair    m_etc2PipeLine;
 };
 }

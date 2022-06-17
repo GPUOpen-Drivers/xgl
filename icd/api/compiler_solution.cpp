@@ -32,6 +32,9 @@
 #include "include/vk_device.h"
 #include "include/vk_physical_device.h"
 
+#include <climits>
+#include <cmath>
+
 namespace vk
 {
     // =====================================================================================================================

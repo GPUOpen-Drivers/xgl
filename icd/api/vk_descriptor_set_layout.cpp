@@ -589,6 +589,9 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
 
     VK_ASSERT(pOut->numDynamicDescriptors <= MaxDynamicDescriptors);
 
+    VK_ASSERT(((pIn->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR) == 0) ||
+              ((pIn->bindingCount <= MaxPushDescriptors) && (pOut->numDynamicDescriptors == 0)));
+
     return VK_SUCCESS;
 }
 

@@ -368,7 +368,7 @@ bool PipelineCompiler::LoadReplaceShaderBinary(
     const RuntimeSettings* pSettings = &m_pPhysicalDevice->GetRuntimeSettings();
     bool findShader = false;
 
-    char replaceFileName[Pal::MaxPathStrLen] = {};
+    char replaceFileName[Util::MaxPathStrLen] = {};
     Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/Shader_0x%016llX_replace.spv",
         pSettings->shaderReplaceDir, shaderHash);
 
@@ -558,7 +558,7 @@ VkResult PipelineCompiler::BuildShaderModule(
     const VkShaderModuleCreateFlags flags,
     size_t                          codeSize,
     const void*                     pCode,
-    const bool                      adaptForFaskLink,
+    const bool                      adaptForFastLink,
     PipelineBinaryCache*            pBinaryCache,
     PipelineCreationFeedback*       pFeedback,
     ShaderModuleHandle*             pShaderModule)
@@ -572,9 +572,10 @@ VkResult PipelineCompiler::BuildShaderModule(
 
     Util::MetroHash64 hasher;
     hasher.Update(reinterpret_cast<const uint8_t*>(pCode), codeSize);
-    hasher.Update(adaptForFaskLink);
     hasher.Finalize(stableHash.bytes);
-    uniqueHash = stableHash;
+
+    hasher.Update(adaptForFastLink);
+    hasher.Finalize(uniqueHash.bytes);
 
     bool findReplaceShader = false;
     if ((pSettings->shaderReplaceMode == ShaderReplaceShaderHash) ||
@@ -600,7 +601,7 @@ VkResult PipelineCompiler::BuildShaderModule(
         if (compilerMask & (1 << PipelineCompilerTypeLlpc))
         {
             result = m_compilerSolutionLlpc.BuildShaderModule(
-                pDevice, flags, codeSize, pCode, adaptForFaskLink, pShaderModule, stableHash);
+                pDevice, flags, codeSize, pCode, adaptForFastLink, pShaderModule, stableHash);
         }
 
         StoreShaderModuleToCache(pDevice, flags, compilerMask, uniqueHash, pBinaryCache, pShaderModule);
@@ -690,10 +691,10 @@ bool PipelineCompiler::ReplacePipelineBinary(
     const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
-    char fileName[Pal::MaxFileNameStrLen] = {};
+    char fileName[Util::MaxFileNameStrLen] = {};
     Vkgc::IPipelineDumper::GetPipelineName(pPipelineBuildInfo, fileName, sizeof(fileName), hashCode64);
 
-    char replaceFileName[Pal::MaxPathStrLen] = {};
+    char replaceFileName[Util::MaxPathStrLen] = {};
     int32_t length = Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/%s_replace.elf", settings.shaderReplaceDir, fileName);
     VK_ASSERT(length > 0 && (static_cast<uint32_t>(length) < sizeof(replaceFileName)));
 
@@ -805,7 +806,7 @@ void PipelineCompiler::ReplacePipelineIsaCode(
 {
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
 
-    char replaceFileName[Pal::MaxPathStrLen] = {};
+    char replaceFileName[Util::MaxPathStrLen] = {};
     if (pipelineIndex > 0)
     {
         Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/" "0x%016" PRIX64 "_replace.txt.%u",
@@ -1164,6 +1165,8 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
             if (result == VK_SUCCESS)
             {
+                pCreateInfo->freeCompilerBinary = FreeWithCompiler;
+
                 auto                   pInstance     = m_pPhysicalDevice->Manager()->VkInstance();
                 // Write PipelineMetadata to ELF section
                 Pal::Result palResult = Pal::Result::Success;
@@ -1413,6 +1416,10 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
                     &compileTime);
             }
 
+            if (result == VK_SUCCESS)
+            {
+                pCreateInfo->freeCompilerBinary = FreeWithCompiler;
+            }
         }
     }
 
@@ -1678,6 +1685,7 @@ static void MergePipelineOptions(const Vkgc::PipelineOptions& src, Vkgc::Pipelin
     dst.includeDisassembly                    |= src.includeDisassembly;
     dst.scalarBlockLayout                     |= src.scalarBlockLayout;
     dst.reconfigWorkgroupLayout               |= src.reconfigWorkgroupLayout;
+    dst.forceCsThreadIdSwizzling              |= src.forceCsThreadIdSwizzling;
     dst.includeIr                             |= src.includeIr;
     dst.robustBufferAccess                    |= src.robustBufferAccess;
     dst.enableRelocatableShaderElf            |= src.enableRelocatableShaderElf;
@@ -2081,7 +2089,8 @@ static VkResult BuildPipelineResourceMapping(
                                                        pVbInfo,
                                                        pCreateInfo->pipelineInfo.enableUberFetchShader,
                                                        pCreateInfo->pTempBuffer,
-                                                       &pCreateInfo->pipelineInfo.resourceMapping);
+                                                       &pCreateInfo->pipelineInfo.resourceMapping,
+                                                       &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
         }
     }
 
@@ -2152,7 +2161,7 @@ static void BuildPipelineShadersInfo(
 
     // Uber fetch shader is actully used in the following scenes:
     // * enableUberFetchShader or enableEarlyCompile is set as TRUE in panel.
-    // * When creating shader module, adaptForFaskLink parameter of PipelineCompiler::BuildShaderModule() is set as
+    // * When creating shader module, adaptForFastLink parameter of PipelineCompiler::BuildShaderModule() is set as
     //   TRUE.  This may happen when shader is created during pipeline creation, and that pipeline is a library, not
     //   executable.  More details can be found in Pipeline::BuildShaderStageInfo().
     // * When creating pipeline, GraphicsPipelineBuildInfo::enableUberFetchShader controls the actual enablement. It is
@@ -2740,7 +2749,8 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
                                                        nullptr,
                                                        false,
                                                        pCreateInfo->pTempBuffer,
-                                                       &pCreateInfo->pipelineInfo.resourceMapping);
+                                                       &pCreateInfo->pipelineInfo.resourceMapping,
+                                                       &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
         }
     }
 

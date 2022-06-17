@@ -118,7 +118,7 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     VkShaderModuleCreateFlags    flags,
     size_t                       codeSize,
     const void*                  pCode,
-    const bool                   adaptForFaskLink,
+    const bool                   adaptForFastLink,
     ShaderModuleHandle*          pShaderModule,
     const Util::MetroHash::Hash& hash)
 {
@@ -337,6 +337,8 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     {
         pPipelineBuildInfo->options.reconfigWorkgroupLayout = true;
     }
+
+    pPipelineBuildInfo->options.forceCsThreadIdSwizzling = settings.forceCsThreadIdSwizzling;
 
     // By default the client hash provided to PAL is more accurate than the one used by pipeline
     // profiles.

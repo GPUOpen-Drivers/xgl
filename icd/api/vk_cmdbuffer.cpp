@@ -29,6 +29,7 @@
 #include "include/vk_conv.h"
 #include "include/vk_device.h"
 #include "include/vk_descriptor_set.h"
+#include "include/vk_descriptor_update_template.h"
 #include "include/vk_event.h"
 #include "include/vk_formats.h"
 #include "include/vk_framebuffer.h"
@@ -93,6 +94,7 @@ static uint32_t ConvertPipePointToPipeStage(
             break;
         case Pal::HwPipePostBlt:
             stageMask = Pal::PipelineStageBlt;
+            break;
         case Pal::HwPipeBottom:
             stageMask = Pal::PipelineStageBottomOfPipe;
             break;
@@ -721,6 +723,12 @@ VkResult CmdBuffer::Initialize(
         m_allGpuState.stencilRefMasks.frontOpValue = DefaultStencilOpValue;
         m_allGpuState.stencilRefMasks.backOpValue = DefaultStencilOpValue;
 
+        for (uint32 i = 0; i < PipelineBindCount; ++i)
+        {
+            m_allGpuState.pipelineState[i].pushDescriptorSet        = VK_NULL_HANDLE;
+            m_allGpuState.pipelineState[i].pPushDescriptorSetMemory = nullptr;
+            m_allGpuState.pipelineState[i].pushDescriptorSetMaxSize = 0;
+        }
     }
 
     // Initialize SQTT command buffer state if thread tracing support is enabled (gpuopen developer mode).
@@ -1991,6 +1999,11 @@ VkResult CmdBuffer::Destroy(void)
 {
     Instance* const pInstance = m_pDevice->VkInstance();
 
+    for (uint32 i = 0; i < PipelineBindCount; ++i)
+    {
+        pInstance->FreeMem(m_allGpuState.pipelineState[i].pPushDescriptorSetMemory);
+    }
+
     if (m_pSqttState != nullptr)
     {
         Util::Destructor(m_pSqttState);
@@ -2331,6 +2344,144 @@ PFN_vkCmdBindDescriptorSets CmdBuffer::GetCmdBindDescriptorSetsFunc(
     else
     {
         pFunc = CmdBindDescriptorSets<numPalDevices, false>;
+    }
+
+    return pFunc;
+}
+
+// =====================================================================================================================
+template <size_t imageDescSize,
+          size_t samplerDescSize,
+          size_t bufferDescSize,
+          uint32_t numPalDevices>
+VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSetKHR(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipelineLayout                            layout,
+    uint32_t                                    set,
+    uint32_t                                    descriptorWriteCount,
+    const VkWriteDescriptorSet*                 pDescriptorWrites)
+{
+    CmdBuffer* pCmdBuffer = ApiCmdBuffer::ObjectFromHandle(commandBuffer);
+
+    pCmdBuffer->PushDescriptorSetKHR<imageDescSize, samplerDescSize, bufferDescSize, numPalDevices>(
+        pipelineBindPoint,
+        layout,
+        set,
+        descriptorWriteCount,
+        pDescriptorWrites);
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+PFN_vkCmdPushDescriptorSetKHR CmdBuffer::GetCmdPushDescriptorSetKHRFunc(
+    const Device* pDevice)
+{
+    const size_t imageDescSize   = pDevice->GetProperties().descriptorSizes.imageView;
+    const size_t samplerDescSize = pDevice->GetProperties().descriptorSizes.sampler;
+    const size_t bufferDescSize  = pDevice->GetProperties().descriptorSizes.bufferView;
+
+    PFN_vkCmdPushDescriptorSetKHR pFunc = nullptr;
+
+    if ((imageDescSize   == 32) &&
+        (samplerDescSize == 16) &&
+        (bufferDescSize  == 16))
+    {
+        pFunc = &CmdPushDescriptorSetKHR<
+            32,
+            16,
+            16,
+            numPalDevices>;
+    }
+    else
+    {
+        VK_NEVER_CALLED();
+    }
+
+    return pFunc;
+}
+
+// =====================================================================================================================
+PFN_vkCmdPushDescriptorSetKHR CmdBuffer::GetCmdPushDescriptorSetKHRFunc(
+    const Device* pDevice)
+{
+    PFN_vkCmdPushDescriptorSetKHR pFunc = nullptr;
+
+    switch (pDevice->NumPalDevices())
+    {
+        case 1:
+            pFunc = GetCmdPushDescriptorSetKHRFunc<1>(pDevice);
+            break;
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
+        case 2:
+            pFunc = GetCmdPushDescriptorSetKHRFunc<2>(pDevice);
+            break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 2)
+        case 3:
+            pFunc = GetCmdPushDescriptorSetKHRFunc<3>(pDevice);
+            break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 3)
+        case 4:
+            pFunc = GetCmdPushDescriptorSetKHRFunc<4>(pDevice);
+            break;
+#endif
+        default:
+            VK_NEVER_CALLED();
+            break;
+    }
+
+    return pFunc;
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSetWithTemplateKHR(
+    VkCommandBuffer                             commandBuffer,
+    VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
+    VkPipelineLayout                            layout,
+    uint32_t                                    set,
+    const void*                                 pData)
+{
+    CmdBuffer* pCmdBuffer = ApiCmdBuffer::ObjectFromHandle(commandBuffer);
+
+    pCmdBuffer->PushDescriptorSetWithTemplateKHR<numPalDevices>(
+        descriptorUpdateTemplate,
+        layout,
+        set,
+        pData);
+}
+
+// =====================================================================================================================
+PFN_vkCmdPushDescriptorSetWithTemplateKHR CmdBuffer::GetCmdPushDescriptorSetWithTemplateKHRFunc(
+    const Device* pDevice)
+{
+    PFN_vkCmdPushDescriptorSetWithTemplateKHR pFunc = nullptr;
+
+    switch (pDevice->NumPalDevices())
+    {
+        case 1:
+            pFunc = CmdPushDescriptorSetWithTemplateKHR<1>;
+            break;
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
+        case 2:
+            pFunc = CmdPushDescriptorSetWithTemplateKHR<2>;
+            break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 2)
+        case 3:
+            pFunc = CmdPushDescriptorSetWithTemplateKHR<3>;
+            break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 3)
+        case 4:
+            pFunc = CmdPushDescriptorSetWithTemplateKHR<4>;
+            break;
+#endif
+        default:
+            VK_NEVER_CALLED();
+            break;
     }
 
     return pFunc;
@@ -4222,6 +4373,9 @@ void CmdBuffer::LoadOpClearColor(
              Pal::SubresRange subresRange = {};
              pImageView->GetFrameBufferAttachmentSubresRange(&subresRange);
 
+             // Override the number of slices with layerCount from pBeginRendering
+             subresRange.numSlices = pRenderingInfo->layerCount;
+
             const auto clearSubresRanges = LoadOpClearSubresRanges(
                 pRenderingInfo->viewMask,
                 subresRange);
@@ -5316,8 +5470,8 @@ void CmdBuffer::ExecuteAcquireRelease(
 
             pBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].flags.u32All      =
                 0;
-            pBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.pGpuMemory =
-                pBuffer->PalMemory(deviceIdx);
+            pBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.address    =
+                pBuffer->GpuVirtAddr(deviceIdx);
             pBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.offset     =
                 pThisDependencyInfo->pBufferMemoryBarriers[i].offset;
             pBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.size       =
@@ -5661,8 +5815,8 @@ void CmdBuffer::ExecuteReleaseThenAcquire(
 
                     pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].flags.u32All      =
                         0;
-                    pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.pGpuMemory =
-                        pBuffer->PalMemory(deviceIdx);
+                    pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.address    =
+                        pBuffer->GpuVirtAddr(deviceIdx);
                     pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.offset     =
                         pBufferMemoryBarriers[bufferMemoryBarrierIdx].offset;
                     pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.size       =
@@ -7207,14 +7361,15 @@ void CmdBuffer::RPBeginSubpass()
         RPSyncPoint(subpass.begin.syncTop, &virtStack);
     }
 
+    if (m_flags.subpassLoadOpClearsBoundAttachments)
+    {
+        // Bind targets
+        RPBindTargets(subpass.begin.bindTargets);
+    }
+
     // Execute any color clear load operations
     if (subpass.begin.loadOps.colorClearCount > 0)
     {
-        if (m_flags.subpassLoadOpClearsBoundAttachments)
-        {
-            // Bind targets
-            RPBindTargets(subpass.begin.bindTargets);
-        }
         RPLoadOpClearColor(subpass.begin.loadOps.colorClearCount, subpass.begin.loadOps.pColorClears);
     }
 
@@ -7227,13 +7382,6 @@ void CmdBuffer::RPBeginSubpass()
     // Execute any depth-stencil clear load operations
     if (subpass.begin.loadOps.dsClearCount > 0)
     {
-        if ((m_flags.subpassLoadOpClearsBoundAttachments) &&
-            (subpass.begin.loadOps.colorClearCount == 0))
-        {
-            // Bind targets
-            RPBindTargets(subpass.begin.bindTargets);
-        }
-
         RPLoadOpClearDepthStencil(subpass.begin.loadOps.dsClearCount, subpass.begin.loadOps.pDsClears);
     }
 
@@ -7573,7 +7721,7 @@ void CmdBuffer::RPLoadOpClearColor(
 
     Util::Vector<Pal::ClearBoundTargetRegion, 8, VirtualStackFrame> clearRegions{ &virtStackFrame };
 
-    const auto maxRects = EstimateMaxObjectsOnVirtualStack(sizeof(VkClearRect));
+    const auto maxRects  = EstimateMaxObjectsOnVirtualStack(sizeof(VkClearRect));
     auto       rectBatch = Util::Min(count, maxRects);
     const auto palResult = clearRegions.Reserve(rectBatch);
 
@@ -7593,15 +7741,28 @@ void CmdBuffer::RPLoadOpClearColor(
         Pal::BoundColorTarget target = {};
         if (m_flags.subpassLoadOpClearsBoundAttachments)
         {
-            const uint32_t tgtIdx = clear.attachment;
             const RenderPass* pRenderPass = m_allGpuState.pRenderPass;
-            const uint32_t subpass = m_renderPassInstance.subpass;
+            const uint32_t    subpass     = m_renderPassInstance.subpass;
 
-            target.targetIndex = tgtIdx;
+            uint32_t          tgtIdx      = VK_ATTACHMENT_UNUSED;
+
+            // Find color target of current attachment
+            for (uint32_t colorTgt = 0; colorTgt < pRenderPass->GetSubpassColorReferenceCount(subpass); ++colorTgt)
+            {
+                const AttachmentReference& colorRef = pRenderPass->GetSubpassColorReference(subpass, colorTgt);
+                if (clear.attachment == colorRef.attachment)
+                {
+                    tgtIdx = colorTgt;
+                    break;
+                }
+            }
+            VK_ASSERT(tgtIdx != VK_ATTACHMENT_UNUSED);
+
+            target.targetIndex    = tgtIdx;
             target.swizzledFormat = attachment.viewFormat;
-            target.samples = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
-            target.fragments = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
-            target.clearValue = clearColor;
+            target.samples        = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
+            target.fragments      = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
+            target.clearValue     = clearColor;
         }
 
         Pal::SubresRange subresRange;
@@ -7639,7 +7800,7 @@ void CmdBuffer::RPLoadOpClearColor(
             {
                 const RenderPass* pRenderPass = m_allGpuState.pRenderPass;
                 const uint32_t    subpass     = m_renderPassInstance.subpass;
-                uint32_t          viewMask     = pRenderPass->GetViewMask(subpass);
+                uint32_t          viewMask    = pRenderPass->GetViewMask(subpass);
 
                 const VkRect2D rect =
                 {
@@ -7662,11 +7823,12 @@ void CmdBuffer::RPLoadOpClearColor(
                     &clearRegions);
 
                // Clear the bound color targets
+               // TODO: Batch color targets in one call
                PalCmdBuffer(deviceIdx)->CmdClearBoundColorTargets(
-                        1,
-                        &target,
-                        clearRegions.NumElements(),
-                        clearRegions.Data());
+                   1,
+                   &target,
+                   clearRegions.NumElements(),
+                   clearRegions.Data());
             }
         }
         while (deviceGroup.IterateNext());
@@ -7693,7 +7855,7 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
 
     Util::Vector<Pal::ClearBoundTargetRegion, 8, VirtualStackFrame> clearRegions{ &virtStackFrame };
 
-    const auto maxRects = EstimateMaxObjectsOnVirtualStack(sizeof(VkClearRect));
+    const auto maxRects  = EstimateMaxObjectsOnVirtualStack(sizeof(VkClearRect));
     auto       rectBatch = Util::Min(count, maxRects);
 
     for (uint32_t i = 0; i < count; ++i)
@@ -7762,7 +7924,7 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
 
                 Pal::DepthStencilSelectFlags selectFlags = {};
 
-                selectFlags.depth = ((clear.aspect & VK_IMAGE_ASPECT_DEPTH_BIT) != 0);
+                selectFlags.depth   = ((clear.aspect & VK_IMAGE_ASPECT_DEPTH_BIT  ) != 0);
                 selectFlags.stencil = ((clear.aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0);
 
                 const VkRect2D rect =
@@ -8387,6 +8549,369 @@ void CmdBuffer::PushConstantsIssueWrites(
                            lengthInDwords,
                            pInputValues);
     }
+}
+
+// =====================================================================================================================
+// Creates or grows an internal descriptor set for the command buffer to push
+template <uint32_t numPalDevices>
+VkDescriptorSet CmdBuffer::InitPushDescriptorSet(
+    const DescriptorSetLayout*               pDestSetLayout,
+    const PipelineLayout::SetUserDataLayout& setLayoutInfo,
+    const size_t                             descriptorSetSize,
+    PipelineBindPoint                        bindPoint,
+    const uint32_t                           alignmentInDwords)
+{
+    // The descriptor writes must go to the command buffer's shadow to handle incremental updates.
+    // Any used descriptors are required to be pushed before the pipeline is executed or else they are undefined,
+    // which means the last push descriptor set's value or uninitialized memory because no special care is taken here.
+    DescriptorSet<numPalDevices>* pSet = DescriptorSet<numPalDevices>::ObjectFromHandle(
+            m_allGpuState.pipelineState[bindPoint].pushDescriptorSet);
+
+    // Reuse the existing shadow buffer unless it wasn't created or needs to grow.
+    if (descriptorSetSize > m_allGpuState.pipelineState[bindPoint].pushDescriptorSetMaxSize)
+    {
+        const size_t objSize = Util::Pow2Align(sizeof(DescriptorSet<numPalDevices>), VK_DEFAULT_MEM_ALIGN);
+
+        // Note that descriptor sets don't require a destructor to be called
+        m_pDevice->VkInstance()->FreeMem(m_allGpuState.pipelineState[bindPoint].pPushDescriptorSetMemory);
+
+        void* pSetMem = m_pDevice->VkInstance()->AllocMem(
+            (descriptorSetSize * numPalDevices) + objSize,
+            (alignmentInDwords * sizeof(uint32_t)),
+            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+        if (pSetMem != nullptr)
+        {
+            pSet = VK_PLACEMENT_NEW (Util::VoidPtrInc(pSetMem, (descriptorSetSize * numPalDevices)))
+                DescriptorSet<numPalDevices>(0);
+
+            // Store the API handle to avoid templated parameters when using it.
+            m_allGpuState.pipelineState[bindPoint].pushDescriptorSet        =
+                DescriptorSet<numPalDevices>::HandleFromObject(pSet);
+            m_allGpuState.pipelineState[bindPoint].pPushDescriptorSetMemory = pSetMem;
+            m_allGpuState.pipelineState[bindPoint].pushDescriptorSetMaxSize = descriptorSetSize;
+        }
+        else
+        {
+            PAL_ASSERT_ALWAYS();
+            pSet = nullptr;
+
+            m_allGpuState.pipelineState[bindPoint].pushDescriptorSet        = VK_NULL_HANDLE;
+            m_allGpuState.pipelineState[bindPoint].pPushDescriptorSetMemory = nullptr;
+            m_allGpuState.pipelineState[bindPoint].pushDescriptorSetMaxSize = 0;
+        }
+    }
+
+    if (pSet != nullptr)
+    {
+        DescriptorAddr descriptorAddrs[numPalDevices] = {};
+
+        // If there is a set pointer, the shadow memory is that of the push descriptor set. Otherwise, the descriptor
+        // set is written inline to the command buffer binding data set shadow memory.
+        if (setLayoutInfo.setPtrRegOffset != PipelineLayout::InvalidReg)
+        {
+            for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
+            {
+                descriptorAddrs[deviceIdx].staticCpuAddr =
+                    static_cast<uint32_t*>(Util::VoidPtrInc(
+                        m_allGpuState.pipelineState[bindPoint].pPushDescriptorSetMemory, descriptorSetSize * deviceIdx));
+            }
+        }
+        else
+        {
+            for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
+            {
+                descriptorAddrs[deviceIdx].staticCpuAddr =
+                    &(PerGpuState(deviceIdx)->setBindingData[bindPoint][setLayoutInfo.firstRegOffset]);
+            }
+        }
+
+        pSet->Reassign(pDestSetLayout, 0, descriptorAddrs, nullptr);
+    }
+
+    // Push descriptor sets don't use vkAllocateDescriptorSets, so if they must be written to the descriptor set,
+    // every push of an immutable sampler must be honored instead of skipping as we do today. Write them all here
+    // until it's known if not skipping them must be implemented.
+    if (m_pDevice->MustWriteImmutableSamplers())
+    {
+        VK_NOT_IMPLEMENTED;
+
+        pSet->WriteImmutableSamplers(m_pDevice->GetProperties().descriptorSizes.imageView);
+    }
+
+    return DescriptorSet<numPalDevices>::HandleFromObject(pSet);
+}
+
+// =====================================================================================================================
+template <size_t imageDescSize,
+          size_t samplerDescSize,
+          size_t bufferDescSize,
+          uint32_t numPalDevices>
+void CmdBuffer::PushDescriptorSetKHR(
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipelineLayout                            layout,
+    uint32_t                                    set,
+    uint32_t                                    descriptorWriteCount,
+    const VkWriteDescriptorSet*                 pDescriptorWrites)
+{
+    DbgBarrierPreCmd(DbgBarrierPushDescriptorSet);
+
+    const PipelineLayout*                    pLayout         = PipelineLayout::ObjectFromHandle(layout);
+    const DescriptorSetLayout*               pDestSetLayout  = pLayout->GetSetLayouts(set);
+    const PipelineLayout::SetUserDataLayout& setLayoutInfo   = pLayout->GetSetUserData(set);
+    const uint8                              setPtrRegOffset = setLayoutInfo.setPtrRegOffset;
+
+    Pal::PipelineBindPoint palBindPoint;
+    PipelineBindPoint      apiBindPoint;
+
+    ConvertPipelineBindPoint(pipelineBindPoint, &palBindPoint, &apiBindPoint);
+
+    const uint32_t descriptorSetSizeInDwords = pDestSetLayout->Info().sta.dwSize;
+    const uint32_t alignmentInDwords         = m_pDevice->GetProperties().descriptorSizes.alignmentInDwords;
+
+    // An internal descriptor set is used to represent the shadow to be consistent with the
+    // vkCmdPushDescriptorSetWithTemplateKHR implementation only. WriteDescriptorSets would have to have
+    // been modified to accept the destination set as a new parameter instead of using VkWriteDescriptorSet.
+    VkDescriptorSet pushDescriptorSet = InitPushDescriptorSet<numPalDevices>(
+        pDestSetLayout,
+        setLayoutInfo,
+        (descriptorSetSizeInDwords * sizeof(uint32_t)),
+        apiBindPoint,
+        alignmentInDwords);
+
+    DescriptorSet<numPalDevices>* pDestSet = DescriptorSet<numPalDevices>::ObjectFromHandle(pushDescriptorSet);
+
+    utils::IterateMask deviceGroup(m_curDeviceMask);
+
+    do
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        // Issue the descriptor writes using the destination address of the command buffer's shadow rather than the
+        // descriptor set memory; the dstSet member of VkWriteDescriptorSet must be ignored for push descriptors.
+        for (uint32_t i = 0; i < descriptorWriteCount; ++i)
+        {
+            const VkWriteDescriptorSet&             params      = pDescriptorWrites[i];
+            const DescriptorSetLayout::BindingInfo& destBinding = pDestSetLayout->Binding(params.dstBinding);
+
+            uint32_t* pDestAddr = pDestSet->StaticCpuAddress(deviceIdx) +
+                                  pDestSetLayout->GetDstStaOffset(destBinding, params.dstArrayElement);
+
+            // Determine whether the binding has immutable sampler descriptors.
+            const bool hasImmutableSampler = (destBinding.imm.dwSize != 0);
+
+            switch (static_cast<uint32_t>(params.descriptorType))
+            {
+            case VK_DESCRIPTOR_TYPE_SAMPLER:
+                if (hasImmutableSampler == false)
+                {
+                    DescriptorUpdate::WriteSamplerDescriptors<samplerDescSize>(
+                        params.pImageInfo,
+                        pDestAddr,
+                        params.descriptorCount,
+                        destBinding.sta.dwArrayStride);
+                }
+                break;
+
+            case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+                if (hasImmutableSampler)
+                {
+                    if (destBinding.bindingFlags.ycbcrConversionUsage == 0)
+                    {
+                        // If the sampler part of the combined image sampler is immutable then we should only update
+                        // the image descriptors, but have to make sure to still use the appropriate stride.
+                        DescriptorUpdate::WriteImageDescriptors<imageDescSize, false>(
+                            params.pImageInfo,
+                            deviceIdx,
+                            pDestAddr,
+                            params.descriptorCount,
+                            destBinding.sta.dwArrayStride);
+                    }
+                    else
+                    {
+                        DescriptorUpdate::WriteImageDescriptorsYcbcr<imageDescSize>(
+                            params.pImageInfo,
+                            deviceIdx,
+                            pDestAddr,
+                            params.descriptorCount,
+                            destBinding.sta.dwArrayStride);
+                    }
+                }
+                else
+                {
+                    DescriptorUpdate::WriteImageSamplerDescriptors<imageDescSize, samplerDescSize>(
+                        params.pImageInfo,
+                        deviceIdx,
+                        pDestAddr,
+                        params.descriptorCount,
+                        destBinding.sta.dwArrayStride);
+                }
+                break;
+
+            case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+                DescriptorUpdate::WriteImageDescriptors<imageDescSize, true>(
+                    params.pImageInfo,
+                    deviceIdx,
+                    pDestAddr,
+                    params.descriptorCount,
+                    destBinding.sta.dwArrayStride);
+                break;
+
+            case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+                DescriptorUpdate::WriteImageDescriptors<imageDescSize, false>(
+                    params.pImageInfo,
+                    deviceIdx,
+                    pDestAddr,
+                    params.descriptorCount,
+                    destBinding.sta.dwArrayStride);
+                break;
+
+            case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+                DescriptorUpdate::WriteBufferDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER>(
+                    params.pTexelBufferView,
+                    deviceIdx,
+                    pDestAddr,
+                    params.descriptorCount,
+                    destBinding.sta.dwArrayStride);
+                break;
+
+            case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+                DescriptorUpdate::WriteBufferDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER>(
+                    params.pTexelBufferView,
+                    deviceIdx,
+                    pDestAddr,
+                    params.descriptorCount,
+                    destBinding.sta.dwArrayStride);
+                break;
+
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+                DescriptorUpdate::WriteBufferInfoDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER>(
+                    m_pDevice,
+                    params.pBufferInfo,
+                    deviceIdx,
+                    pDestAddr,
+                    params.descriptorCount,
+                    destBinding.sta.dwArrayStride);
+                break;
+
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+                DescriptorUpdate::WriteBufferInfoDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER>(
+                    m_pDevice,
+                    params.pBufferInfo,
+                    deviceIdx,
+                    pDestAddr,
+                    params.descriptorCount,
+                    destBinding.sta.dwArrayStride);
+                break;
+
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+            case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+            default:
+                VK_ASSERT(!"Unexpected descriptor type");
+                break;
+            }
+        }
+
+        // If there is a set pointer, update the push descriptor set from the command buffer shadow set to an embedded
+        // memory allocation. Otherwise, the shadow set contents will be directly written to user data instead of this
+        // push descriptor set pointer.
+        if (setPtrRegOffset != PipelineLayout::InvalidReg)
+        {
+            Pal::gpusize gpuAddr;
+            uint32*      pCpuAddr = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(descriptorSetSizeInDwords,
+                                                                                     alignmentInDwords,
+                                                                                     &gpuAddr);
+
+            memcpy(pCpuAddr, pDestSet->StaticCpuAddress(deviceIdx), (descriptorSetSizeInDwords * sizeof(uint32_t)));
+
+            // CmdAllocateEmbeddedData is allocated out of VaRange::DescriptorTable, so the upper half is
+            // known by the shader as is the case for our descriptor pool allocations.
+            PerGpuState(deviceIdx)->setBindingData[apiBindPoint][setPtrRegOffset] = static_cast<uint32_t>(gpuAddr);
+        }
+
+        SetUserDataPipelineLayout(set, 1, pLayout, palBindPoint, apiBindPoint);
+    }
+    while (deviceGroup.IterateNext());
+
+    DbgBarrierPostCmd(DbgBarrierPushDescriptorSet);
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+void CmdBuffer::PushDescriptorSetWithTemplateKHR(
+    VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
+    VkPipelineLayout                            layout,
+    uint32_t                                    set,
+    const void*                                 pData)
+{
+    DbgBarrierPreCmd(DbgBarrierPushDescriptorSet);
+
+    const PipelineLayout*      pLayout        = PipelineLayout::ObjectFromHandle(layout);
+    const DescriptorSetLayout* pDestSetLayout = pLayout->GetSetLayouts(set);
+    DescriptorUpdateTemplate*  pTemplate      = DescriptorUpdateTemplate::ObjectFromHandle(descriptorUpdateTemplate);
+
+    Pal::PipelineBindPoint palBindPoint;
+    PipelineBindPoint      apiBindPoint;
+
+    ConvertPipelineBindPoint(pTemplate->GetPipelineBindPoint(), &palBindPoint, &apiBindPoint);
+
+    const uint32_t descriptorSetSizeInDwords = pDestSetLayout->Info().sta.dwSize;
+    const uint32_t alignmentInDwords         = m_pDevice->GetProperties().descriptorSizes.alignmentInDwords;
+
+    const PipelineLayout::SetUserDataLayout& setLayoutInfo = pLayout->GetSetUserData(set);
+
+    // An internal descriptor set is used to represent the shadow to utilize normal descriptor write support
+    // for updating the shadow. Push descriptors can be represented by only the static section of the descriptor set
+    // layout because not all descriptor types are supported.
+    VkDescriptorSet pushDescriptorSet = InitPushDescriptorSet<numPalDevices>(
+        pDestSetLayout,
+        setLayoutInfo,
+        (descriptorSetSizeInDwords * sizeof(uint32_t)),
+        apiBindPoint,
+        alignmentInDwords);
+
+    // Issue the descriptor template update using the internal descriptor set to use the destination address of the
+    // command buffer's shadow rather than descriptor pool memory like regular descriptor sets.
+    pTemplate->Update(
+        m_pDevice,
+        pushDescriptorSet,
+        pData);
+
+    const uint8 setPtrRegOffset = setLayoutInfo.setPtrRegOffset;
+
+    utils::IterateMask deviceGroup(m_curDeviceMask);
+
+    do
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        // If there is a set pointer, update the push descriptor set from the command buffer shadow set to an embedded
+        // memory allocation. Otherwise, the shadow set contents will be directly written to user data instead of this
+        // push descriptor set pointer.
+        if (setPtrRegOffset != PipelineLayout::InvalidReg)
+        {
+            Pal::gpusize gpuAddr;
+            uint32*      pCpuAddr = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(descriptorSetSizeInDwords,
+                                                                                     alignmentInDwords,
+                                                                                     &gpuAddr);
+
+            const DescriptorSet<numPalDevices>* pShadowSet =
+                DescriptorSet<numPalDevices>::ObjectFromHandle(pushDescriptorSet);
+
+            memcpy(pCpuAddr, pShadowSet->StaticCpuAddress(deviceIdx), (descriptorSetSizeInDwords * sizeof(uint32_t)));
+
+            // CmdAllocateEmbeddedData is allocated out of VaRange::DescriptorTable, so the upper half is
+            // known by the shader as is the case for our descriptor pool allocations.
+            PerGpuState(deviceIdx)->setBindingData[apiBindPoint][setPtrRegOffset] = static_cast<uint32_t>(gpuAddr);
+        }
+
+        SetUserDataPipelineLayout(set, 1, pLayout, palBindPoint, apiBindPoint);
+    }
+    while (deviceGroup.IterateNext());
+
+    DbgBarrierPostCmd(DbgBarrierPushDescriptorSet);
 }
 
 // =====================================================================================================================
@@ -10752,6 +11277,40 @@ VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage2(
         pResolveImageInfo->dstImageLayout,
         pResolveImageInfo->regionCount,
         pResolveImageInfo->pRegions);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetKHR(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipelineLayout                            layout,
+    uint32_t                                    set,
+    uint32_t                                    descriptorWriteCount,
+    const VkWriteDescriptorSet*                 pDescriptorWrites)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSetKHR(
+        commandBuffer,
+        pipelineBindPoint,
+        layout,
+        set,
+        descriptorWriteCount,
+        pDescriptorWrites);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplateKHR(
+    VkCommandBuffer                             commandBuffer,
+    VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
+    VkPipelineLayout                            layout,
+    uint32_t                                    set,
+    const void*                                 pData)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSetWithTemplateKHR(
+        commandBuffer,
+        descriptorUpdateTemplate,
+        layout,
+        set,
+        pData);
 }
 
 } // namespace entry

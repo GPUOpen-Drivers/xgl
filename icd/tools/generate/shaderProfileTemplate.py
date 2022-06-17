@@ -23,6 +23,9 @@
  #
  #######################################################################################################################
 
+'''This script defines a template for shader profile files.
+'''
+
 import os
 import sys
 
@@ -38,7 +41,8 @@ else:
     CopyrightFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../xgl-copyright-template.txt"
     AppProfileHeaderFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../../api/include/app_profile.h"
 
-FileHeaderCopyright = open(CopyrightFilePath).read()
+with open(CopyrightFilePath, encoding='utf-8') as f:
+    FileHeaderCopyright = f.read()
 
 FileHeaderWarning = "\
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n\
@@ -300,11 +304,7 @@ ParseJsonShaderTuningFlagsFunc = \
 """
     bool success = true;
 
-    if (pJson->type == utils::JsonValueType::Number)
-    {
-        pFlags->u32All = static_cast<uint32_t>(pJson->integerValue);
-    }
-    else if (pJson->type == utils::JsonValueType::Object)
+    if (pJson->type == utils::JsonValueType::Object)
     {
         static const char* ValidKeys[] =
         {
@@ -330,11 +330,7 @@ ParseJsonShaderTuningOptionsFunc = \
 """
     bool success = true;
 
-    if (pJson->type == utils::JsonValueType::Number)
-    {
-        pOptions->u32All = static_cast<uint32_t>(pJson->integerValue);
-    }
-    else if (pJson->type == utils::JsonValueType::Object)
+    if (pJson->type == utils::JsonValueType::Object)
     {
         static const char* ValidKeys[] =
         {
@@ -483,6 +479,10 @@ shaderCreateTuningOptionsTemplate = """\
     pWriter->Key("%Flag%");
     pWriter->Value(shader.shaderCreate.tuningOptions.%Flag%);"""
 
+shaderCreateTuningOptionsBooleanTemplate = """\
+    pWriter->Key("%Flag%");
+    pWriter->Value(true);"""
+
 shaderCreateDynamicShaderInfoTemplate = """\
     pWriter->Key("%Flag%");
     pWriter->Value(shader.dynamicShaderInfo.%Flag%);"""
@@ -526,6 +526,7 @@ BRANCHES = [
     ]
 
 def jsonEnumWriterTemplate(values, prefix=""):
+    '''Return JSON writer code generator template.'''
     template = ""
     elseValue = ""
     for value in values:
@@ -543,6 +544,7 @@ def jsonEnumWriterTemplate(values, prefix=""):
     return template
 
 def jsonEnumReaderTemplate(values, prefix=""):
+    '''Return JSON reader code generator template.'''
     template = \
       "    if (pItem->pStringValue != nullptr)\n" + \
       "    {\n"
@@ -578,7 +580,7 @@ def jsonEnumReaderTemplate(values, prefix=""):
 
 SHADER_ACTION = {
     "optStrategyFlags": {
-        "type": [int, dict],
+        "type": [dict],
         "jsonReadable": True,
         "entityInfo": [
             {
@@ -589,12 +591,12 @@ SHADER_ACTION = {
                 "defaultValue": 1,
                 "jsonWritable": True,
                 "buildTypes": {},
-            }
+            },
         ],
     },
 
     "optStrategyFlags2": {
-        "type": [int, dict],
+        "type": [dict],
         "jsonReadable": True,
         "entityInfo": [
             {
@@ -605,10 +607,9 @@ SHADER_ACTION = {
                 "defaultValue": 1,
                 "jsonWritable": True,
                 "buildTypes": {},
-            }
+            },
         ],
     },
-
     "vgprLimit": {
         "type": [int],
         "jsonReadable": True,
@@ -952,29 +953,8 @@ SHADER_ACTION = {
         "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
     },
 
-    "enableSelectiveInline": {
-        "type": [int],
-        "jsonReadable": True,
-        "entityInfo": [
-            {
-                "parent": "shaderCreate.anonStruct",
-                "entity": "bitField",
-                "varName": "enableSelectiveInline",
-                "dataType": "uint32_t",
-                "defaultValue": 1,
-                "jsonWritable": True,
-                "buildTypes": {},
-            },
-        ],
-        "buildTypes": {},
-        "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
-    },
-
     "maxOccupancyOptions": {
-        "type": [int, dict],
+        "type": [dict],
         "entityInfo": [
         ],
     },
@@ -1221,48 +1201,6 @@ SHADER_ACTION = {
                 "parent": "shaderCreate.anonStruct",
                 "entity": "bitField",
                 "varName": "nggEnableSmallPrimFilter",
-                "dataType": "uint32_t",
-                "defaultValue": 1,
-                "jsonWritable": True,
-                "buildTypes": {},
-            },
-        ],
-        "buildTypes": {},
-        "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
-    },
-
-    "enableSubvector": {
-        "type": [int],
-        "jsonReadable": True,
-        "entityInfo": [
-            {
-                "parent": "shaderCreate.anonStruct",
-                "entity": "bitField",
-                "varName": "enableSubvector",
-                "dataType": "uint32_t",
-                "defaultValue": 1,
-                "jsonWritable": True,
-                "buildTypes": {},
-            },
-        ],
-        "buildTypes": {},
-        "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
-    },
-
-    "enableSubvectorSharedVgprs": {
-        "type": [int],
-        "jsonReadable": True,
-        "entityInfo": [
-            {
-                "parent": "shaderCreate.anonStruct",
-                "entity": "bitField",
-                "varName": "enableSubvectorSharedVgprs",
                 "dataType": "uint32_t",
                 "defaultValue": 1,
                 "jsonWritable": True,
@@ -1937,7 +1875,7 @@ ShaderTuningStructsAndVars = {
                     "shaders": {
                         "entity": "array",
                         "varName": "shaders",
-                        "arraySize": "ShaderStageCount",
+                        "arraySize": "ShaderStage::ShaderStageNativeStageCount",
                         "arrayValue": "",
                         "dataType": "ShaderProfilePattern",
                         "buildTypes": {},
@@ -1987,7 +1925,7 @@ ShaderTuningStructsAndVars = {
                                             "entity": "bitField",
                                             "varName": "reserved",
                                             "dataType": "uint32_t",
-                                            "defaultValue": 1,
+                                            "defaultValue": 3,
                                             "buildTypes": {},
                                         },
                                     }
@@ -2009,6 +1947,28 @@ ShaderTuningStructsAndVars = {
                         "defaultValue": "",
                         "buildTypes": {},
                     },
+                }
+            },
+            "shaderReplace": {
+                "entity": "struct",
+                "structName": "",
+                "objectName": "shaderReplace",
+                "buildTypes": {},
+                "child": {
+                    "pCode": {
+                        "entity": "var",
+                        "varName": "pCode",
+                        "dataType": "const void*",
+                        "defaultValue": "",
+                        "buildTypes": {},
+                    },
+                    "sizeInBytes": {
+                        "entity": "var",
+                        "varName": "sizeInBytes",
+                        "dataType": "size_t",
+                        "defaultValue": "",
+                        "buildTypes": {},
+                    }
                 }
             },
             "pipelineShader": {
@@ -2079,7 +2039,7 @@ ShaderTuningStructsAndVars = {
                 "entity": "array",
                 "description": "Applied to ShaderCreateInfo/PipelineShaderInfo/DynamicXShaderInfo:",
                 "varName": "shaders",
-                "arraySize": "ShaderStageCount",
+                "arraySize": "ShaderStage::ShaderStageNativeStageCount",
                 "arrayValue": "",
                 "dataType": "ShaderProfileAction",
                 "buildTypes": {},

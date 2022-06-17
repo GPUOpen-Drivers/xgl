@@ -23,12 +23,14 @@
  #
  #######################################################################################################################
 
+'''This is the xgl settings helper script for the generation of settings code by a script in PAL.
+
+This script lives in the generate/ directory, while the other generation files (e.g. template files)
+reside in pal/tools/generate/ directory.
+'''
+
 import os
 import sys
-
-# This script lives in the generate/ directory, other generation files (e.g. template files)
-# reside in pal/tools/generate/ directory
-# This script is the xgl settings helper script for the generate settings code script in PAL
 
 GenerateDirPath = os.path.dirname(sys.argv[0])
 if GenerateDirPath == "":
@@ -66,6 +68,7 @@ settingsArgData = {
 }
 
 def GenSettings(argData):
+    '''Invoke generate settings script.'''
     # Build the command string
     commandStr = GenSettingsStr
     commandStr = commandStr.replace("%SettingsFile%",      argData["SettingsFile"])
@@ -94,9 +97,9 @@ if len(sys.argv) not in (3,4):
 
 if sys.argv[1] == "-all":
     # Generate all the settings files
-    for key in settingsArgData:
+    for key, value in settingsArgData.items():
         print("Generating settings code for " + key)
-        result = GenSettings(settingsArgData[key])
+        result = GenSettings(value)
         if result != 0:
             print("Error generating settings for " + key)
 else:

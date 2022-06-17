@@ -68,6 +68,12 @@ VkResult DescriptorUpdateTemplate::Create(
             const DescriptorSetLayout::BindingInfo& dstBinding = pLayout->Binding(srcEntry.dstBinding);
             uint32_t                                dstArrayElement;
 
+            // Push descriptor templates do not support all descriptor types
+            VK_ASSERT((pCreateInfo->templateType != VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS_KHR) ||
+                      ((dstBinding.info.descriptorType != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) &&
+                       (dstBinding.info.descriptorType != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) &&
+                       (dstBinding.info.descriptorType != VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)));
+
             if (dstBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)
             {
                 // Convert dstArrayElement to dword

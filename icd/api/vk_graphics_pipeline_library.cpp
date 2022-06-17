@@ -398,7 +398,6 @@ VkResult GraphicsPipelineLibrary::Create(
     ExtractLibraryInfo(pCreateInfo, &libInfo);
 
     // 1. Get pipeline layout
-    VK_ASSERT(pCreateInfo->layout != VK_NULL_HANDLE);
     PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
 
     // 2. Fill GraphicsPipelineBinaryCreateInfo

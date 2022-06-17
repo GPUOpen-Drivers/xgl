@@ -127,7 +127,7 @@ public:
         const VkShaderModuleCreateFlags flags,
         size_t                          codeSize,
         const void*                     pCode,
-        const bool                      adaptForFaskLink,
+        const bool                      adaptForFastLink,
         PipelineBinaryCache*            pBinaryCache,
         PipelineCreationFeedback*       pFeedback,
         ShaderModuleHandle*             pShaderModule);

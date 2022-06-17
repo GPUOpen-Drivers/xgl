@@ -268,6 +268,8 @@ public:
         Pal::PresentSwapChainInfo*  pPresentInfo,
         const Pal::FlipStatusFlags& flipFlags);
 
+    Pal::Result IsFullscreenOwnershipSafe() const;
+
     ExclusiveModeFlags GetExclusiveModeFlags() const
         { return m_exclusiveModeFlags; }
 

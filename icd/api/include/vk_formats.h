@@ -70,7 +70,6 @@ struct Formats
     inline static uint32_t GetYuvPlaneCounts(VkFormat format);
     inline static bool IsASTCFormat(VkFormat format);
     inline static bool IsEtc2Format(VkFormat format);
-    inline static bool IsEacFormat(VkFormat format);
     inline static bool HasDepth(VkFormat format);
     inline static bool HasStencil(VkFormat format);
     inline static VkFormat GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask);
@@ -242,14 +241,7 @@ bool Formats::IsASTCFormat(
 bool Formats::IsEtc2Format(
     VkFormat format)
 {
-    return ((format >= VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK) && (format <= VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK));
-}
-
-// =====================================================================================================================
-bool Formats::IsEacFormat(
-    VkFormat format)
-{
-    return ((format >= VK_FORMAT_EAC_R11_UNORM_BLOCK) && (format <= VK_FORMAT_EAC_R11G11_SNORM_BLOCK));
+    return ((format >= VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK) && (format <= VK_FORMAT_EAC_R11G11_SNORM_BLOCK));
 }
 
 // =====================================================================================================================

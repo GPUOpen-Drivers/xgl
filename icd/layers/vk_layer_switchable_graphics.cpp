@@ -206,11 +206,27 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
 
     if (result == VK_SUCCESS)
     {
-        void* pMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
-                                                physicalDeviceCount * sizeof(VkPhysicalDevice),
-                                                sizeof(void*),
-                                                VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-        if (pMemory == nullptr)
+        void* pMemory = nullptr;
+
+        if (pPhysicalDevices != NULL)
+        {
+            physicalDeviceCount = (physicalDeviceCount < *pPhysicalDeviceCount) ?
+                physicalDeviceCount : *pPhysicalDeviceCount;
+        }
+
+        if (physicalDeviceCount > 0)
+        {
+            pMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                        physicalDeviceCount * sizeof(VkPhysicalDevice),
+                                        sizeof(void*),
+                                        VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+        }
+        else
+        {
+            pMemory = static_cast<void*>(pPhysicalDevices);
+        }
+
+        if ((physicalDeviceCount > 0) && (pMemory == nullptr))
         {
             result = VK_ERROR_OUT_OF_HOST_MEMORY;
         }
@@ -227,16 +243,22 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
     }
 #if defined(__unix__)
 
-    if (result == VK_SUCCESS)
+    if ((result == VK_SUCCESS) || (result == VK_INCOMPLETE))
     {
-        // Allocate memory space to place the PhysicalDeviceProperties
-        void* pPropertiesMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
-                                  physicalDeviceCount * sizeof(VkPhysicalDeviceProperties),
-                                  sizeof(void*),
-                                  VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+        void* pPropertiesMemory = nullptr;
+
+        if (physicalDeviceCount > 0)
+        {
+            // Allocate memory space to place the PhysicalDeviceProperties
+            pPropertiesMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                    physicalDeviceCount * sizeof(VkPhysicalDeviceProperties),
+                                    sizeof(void*),
+                                    VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+        }
+
         VkPhysicalDeviceProperties* pProperties = static_cast<VkPhysicalDeviceProperties*>(pPropertiesMemory);
 
-        if (pProperties == nullptr)
+        if ((physicalDeviceCount > 0) && (pProperties == nullptr))
         {
             result = VK_ERROR_OUT_OF_HOST_MEMORY;
         }
@@ -248,7 +270,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
             }
         }
 
-        if (result == VK_SUCCESS)
+        if ((result == VK_SUCCESS) || (result == VK_INCOMPLETE))
         {
             uint32_t returnedPhysicalDeviceCount = 0;
             uint32_t availablePhysicalDeviceCount = 0;
@@ -327,7 +349,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
         }
     }
 #endif
-    if (pLayerPhysicalDevices != nullptr)
+    if ((pLayerPhysicalDevices != nullptr) && (pLayerPhysicalDevices != pPhysicalDevices))
     {
         pAllocCb->pfnFree(pAllocCb->pUserData, pLayerPhysicalDevices);
     }
@@ -359,11 +381,27 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
 
     if (result == VK_SUCCESS)
     {
-        void* pMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
-                                                physicalDeviceGroupCount * sizeof(VkPhysicalDeviceGroupProperties),
-                                                sizeof(void*),
-                                                VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-        if (pMemory == nullptr)
+        void* pMemory = nullptr;
+
+        if (pPhysicalDeviceGroupProperties != NULL)
+        {
+            physicalDeviceGroupCount = (physicalDeviceGroupCount < *pPhysicalDeviceGroupCount) ?
+                physicalDeviceGroupCount : *pPhysicalDeviceGroupCount;
+        }
+
+        if (physicalDeviceGroupCount > 0)
+        {
+            pMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                physicalDeviceGroupCount * sizeof(VkPhysicalDeviceGroupProperties),
+                                sizeof(void*),
+                                VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+        }
+        else
+        {
+            pMemory = static_cast<void*>(pPhysicalDeviceGroupProperties);
+        }
+
+        if ((physicalDeviceGroupCount > 0) && (pMemory == nullptr))
         {
             result = VK_ERROR_OUT_OF_HOST_MEMORY;
         }
@@ -385,7 +423,7 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
         result = pEnumPhysDeviceGroupsFunc(instance, &physicalDeviceGroupCount, pLayerPhysicalDeviceGroups);
     }
 
-    if (result == VK_SUCCESS)
+    if ((result == VK_SUCCESS) || (result == VK_INCOMPLETE))
     {
         bool processDevices = false;
 
@@ -399,20 +437,28 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
 
         if (processDevices)
         {
+            void* pTmpLayerPhysicalDeviceMemory = nullptr;
+            void* pPropertiesMemory = nullptr;
+
             uint32_t physicalDeviceCount = 0;
             nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
-            void* pTmpLayerPhysicalDeviceMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+
+            if (physicalDeviceCount > 0)
+            {
+                pTmpLayerPhysicalDeviceMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
                                                         physicalDeviceCount * sizeof(VkPhysicalDevice),
                                                         sizeof(void*),
                                                         VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-            void* pPropertiesMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                pPropertiesMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
                                                     physicalDeviceCount * sizeof(VkPhysicalDeviceProperties),
                                                     sizeof(void*),
                                                     VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+            }
+
             VkPhysicalDevice* pTmpLayerPhysicalDevice = static_cast<VkPhysicalDevice*>(pTmpLayerPhysicalDeviceMemory);
             VkPhysicalDeviceProperties* pProperties = static_cast<VkPhysicalDeviceProperties*>(pPropertiesMemory);
 
-            if ((pTmpLayerPhysicalDevice == nullptr) || (pProperties == nullptr))
+            if ((physicalDeviceCount > 0) && ((pTmpLayerPhysicalDevice == nullptr) || (pProperties == nullptr)))
             {
                 result = VK_ERROR_OUT_OF_HOST_MEMORY;
             }
@@ -484,7 +530,7 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
         }
     }
 
-    if (pLayerPhysicalDeviceGroups != nullptr)
+    if ((pLayerPhysicalDeviceGroups != nullptr) && (pLayerPhysicalDeviceGroups != pPhysicalDeviceGroupProperties))
     {
         pAllocCb->pfnFree(pAllocCb->pUserData, pLayerPhysicalDeviceGroups);
     }

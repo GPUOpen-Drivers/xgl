@@ -35,8 +35,6 @@ macro(xgl_options)
 
     option(XGL_ENABLE_GCOV "Build with gcov source code coverage?" OFF)
 
-    option(XGL_BUILD_VEGA20 "Build vulkan for Vega20?" ON)
-
     option(XGL_BUILD_GFX103 "Build vulkan for GFX103" ON)
 
     option(XGL_BUILD_NAVI12 "Build vulkan for Navi12" ON)

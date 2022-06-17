@@ -35,6 +35,7 @@ VK_KHR_external_fence
 VK_KHR_external_fence_fd
 VK_KHR_maintenance1
 VK_KHR_maintenance2
+VK_KHR_push_descriptor
 VK_KHR_relaxed_block_layout
 VK_KHR_sampler_mirror_clamp_to_edge
 VK_KHR_shader_draw_parameters
@@ -155,8 +156,10 @@ VK_EXT_ycbcr_image_arrays
 VK_KHR_zero_initialize_workgroup_memory
 VK_EXT_load_store_op_none
 VK_KHR_maintenance4
+VK_AMD_shader_early_and_late_fragment_tests
 VK_EXT_image_view_min_lod
 VK_KHR_global_priority
 VK_EXT_index_type_uint8
 VK_EXT_provoking_vertex
 VK_KHR_workgroup_memory_explicit_layout
+VK_EXT_primitives_generated_query

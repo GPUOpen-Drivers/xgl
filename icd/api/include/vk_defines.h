@@ -190,6 +190,9 @@ namespace vk
     // The maximum size of push constants in bytes
     static const uint32_t MaxPushConstants = 128;
 
+    // The maximum number of push descriptors that can appear in a descriptor set
+    static const uint32_t MaxPushDescriptors = 32;
+
     // The default, full stencil write mask
     static const uint8_t StencilWriteMaskFull = 0xFF;
 

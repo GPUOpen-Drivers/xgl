@@ -368,6 +368,8 @@ VkResult Instance::Init(
     createInfo.flags.supportRgpTraces = 1;
 #endif
 
+    createInfo.clientApiId = Pal::ClientApi::Vulkan;
+
     Pal::Result palResult = Pal::CreatePlatform(createInfo, pPalMemory, &m_pPalPlatform);
 
     if (palResult != Pal::Result::ErrorUnknown)

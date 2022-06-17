@@ -123,6 +123,10 @@ struct PipelineBindState
     uint32_t pushConstData[MaxPushConstRegCount];
     // Dynamic info (wave limits, etc.)
     PipelineDynamicBindInfo dynamicBindInfo;
+    // The command buffer's push descriptor set state
+    VkDescriptorSet pushDescriptorSet;
+    void*           pPushDescriptorSetMemory;
+    size_t          pushDescriptorSetMaxSize;
 };
 
 union DirtyGraphicsState
@@ -720,6 +724,24 @@ public:
         uint32_t                                    length,
         const void*                                 values);
 
+    template <size_t imageDescSize,
+              size_t samplerDescSize,
+              size_t bufferDescSize,
+              uint32_t numPalDevices>
+    void PushDescriptorSetKHR(
+        VkPipelineBindPoint                         pipelineBindPoint,
+        VkPipelineLayout                            layout,
+        uint32_t                                    set,
+        uint32_t                                    descriptorWriteCount,
+        const VkWriteDescriptorSet*                 pDescriptorWrites);
+
+    template <uint32_t numPalDevices>
+    void PushDescriptorSetWithTemplateKHR(
+        VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
+        VkPipelineLayout                            layout,
+        uint32_t                                    set,
+        const void*                                 pData);
+
     void WriteBufferMarker(
         PipelineStageFlags      pipelineStage,
         VkBuffer                dstBuffer,
@@ -1064,6 +1086,9 @@ public:
 
     static PFN_vkCmdBindDescriptorSets GetCmdBindDescriptorSetsFunc(const Device* pDevice);
 
+    static PFN_vkCmdPushDescriptorSetKHR GetCmdPushDescriptorSetKHRFunc(const Device* pDevice);
+    static PFN_vkCmdPushDescriptorSetWithTemplateKHR GetCmdPushDescriptorSetWithTemplateKHRFunc(const Device* pDevice);
+
     CmdPool* GetCmdPool() const { return m_pCmdPool; }
 
     PerGpuRenderState* PerGpuState(uint32 deviceIdx)
@@ -1281,6 +1306,37 @@ void SetUserDataPipelineLayout(
 
     template <uint32_t numPalDevices>
     static PFN_vkCmdBindDescriptorSets GetCmdBindDescriptorSetsFunc(const Device* pDevice);
+
+    template <uint32_t numPalDevices>
+    VkDescriptorSet InitPushDescriptorSet(
+        const DescriptorSetLayout*               pDestSetLayout,
+        const PipelineLayout::SetUserDataLayout& setLayoutInfo,
+        const size_t                             descriptorSetSize,
+        PipelineBindPoint                        bindPoint,
+        const uint32_t                           alignmentInDwords);
+
+    template <uint32_t numPalDevices>
+    static PFN_vkCmdPushDescriptorSetKHR GetCmdPushDescriptorSetKHRFunc(const Device* pDevice);
+
+    template <size_t imageDescSize,
+              size_t samplerDescSize,
+              size_t bufferDescSize,
+              uint32_t numPalDevices>
+    static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetKHR(
+        VkCommandBuffer                             commandBuffer,
+        VkPipelineBindPoint                         pipelineBindPoint,
+        VkPipelineLayout                            layout,
+        uint32_t                                    set,
+        uint32_t                                    descriptorWriteCount,
+        const VkWriteDescriptorSet*                 pDescriptorWrites);
+
+    template <uint32_t numPalDevices>
+    static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetWithTemplateKHR(
+        VkCommandBuffer                             commandBuffer,
+        VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
+        VkPipelineLayout                            layout,
+        uint32_t                                    set,
+        const void*                                 pData);
 
     bool PalPipelineBindingOwnedBy(
         Pal::PipelineBindPoint palBind,
@@ -2062,6 +2118,21 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer2(
 VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage2(
     VkCommandBuffer                             commandBuffer,
     const VkResolveImageInfo2KHR*               pResolveImageInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetKHR(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipelineLayout                            layout,
+    uint32_t                                    set,
+    uint32_t                                    descriptorWriteCount,
+    const VkWriteDescriptorSet*                 pDescriptorWrites);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplateKHR(
+    VkCommandBuffer                             commandBuffer,
+    VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
+    VkPipelineLayout                            layout,
+    uint32_t                                    set,
+    const void*                                 pData);
 
 } // namespace entry
 

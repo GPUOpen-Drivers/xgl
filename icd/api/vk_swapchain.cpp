@@ -1018,17 +1018,10 @@ bool FullscreenMgr::TryEnterExclusive(
 
         VK_ASSERT(m_pImage != nullptr);
 
-        const auto& imageInfo = m_pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
-
-        Pal::Extent2d imageExtent;
-
-        imageExtent.width  = imageInfo.extent.width;
-        imageExtent.height = imageInfo.extent.height;
-
         // Update current exclusive access compatibility
         // This is called in both Implicit and Explicit mode to make sure we don't accidentally acquire FSE when it's
         // not safe, especially when the window is in the background and not the active window.
-        result = m_pScreen->IsImplicitFullscreenOwnershipSafe(m_hDisplay, m_hWindow, imageExtent);
+        result = IsFullscreenOwnershipSafe();
 
         // Exit exclusive access mode if no longer compatible or try to enter (or simply remain in) if we are currently
         // compatible
@@ -1351,18 +1344,9 @@ void FullscreenMgr::UpdatePresentInfo(
     // Present mode does not matter in DXGI as it is completely OS handled. This is for our internal tracking only
     if (pSwapChain->IsDxgiEnabled())
     {
-        const auto& imageInfo = m_pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
-
-        Pal::Extent2d imageExtent;
-
-        imageExtent.width  = imageInfo.extent.width;
-        imageExtent.height = imageInfo.extent.height;
-
-        Pal::Result isFsePossible = m_pScreen->IsImplicitFullscreenOwnershipSafe(m_hDisplay, m_hWindow, imageExtent);
-
         // If KMD reported we're in Indpendent Flip and our window is fullscreen compatible, it is safe to assume
         // that DXGI acquired FSE.
-        bool isFullscreen = (isFsePossible == Pal::Result::Success) && flipFlags.iFlip;
+        bool isFullscreen = (IsFullscreenOwnershipSafe() == Pal::Result::Success) && flipFlags.iFlip;
 
         pPresentInfo->presentMode = isFullscreen ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
     }
@@ -1375,6 +1359,20 @@ void FullscreenMgr::UpdatePresentInfo(
         pPresentInfo->presentMode =
             m_exclusiveModeFlags.acquired ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
     }
+}
+
+// =====================================================================================================================
+// This function determines whether it's safe to acquire full screen exclusive or not.
+Pal::Result FullscreenMgr::IsFullscreenOwnershipSafe() const
+{
+    const auto& imageInfo = m_pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
+
+    Pal::Extent2d imageExtent;
+
+    imageExtent.width  = imageInfo.extent.width;
+    imageExtent.height = imageInfo.extent.height;
+
+    return m_pScreen->IsImplicitFullscreenOwnershipSafe(m_hDisplay, m_hWindow, imageExtent);
 }
 
 // =====================================================================================================================

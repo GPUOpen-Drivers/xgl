@@ -29,7 +29,7 @@
 
 #version 450
 #extension GL_EXT_scalar_block_layout : enable
-#extension  GL_EXT_samplerless_texture_functions : enable
+#extension  GL_EXT_samplerless_texture_functions : require
 
 // color Format
 #define FMT_LUMINANCE  0
@@ -112,8 +112,30 @@ layout(set = 0, binding = 4) writeonly uniform image2D outputImage;
 layout(rgba32ui,binding = 5) readonly  uniform uimage2D astcSrcImage2D;
 
 layout(local_size_x_id = 0, local_size_y_id = 1, local_size_z = 1) in;
-layout(constant_id = 2) const bool isSrgb = false;
-layout(constant_id = 3) const bool isBufferCopy = false;
+
+struct BufferCopyData
+{
+    ivec4 offset;
+    ivec4 extent;
+    //x---> rowPitch y---> imageHeight
+    ivec4 pitch;
+};
+
+struct ImageCopyData
+{
+    ivec4 srcOffset;
+    ivec4 dstOffset;
+    ivec4 extent;
+};
+
+layout(push_constant) uniform constants
+{
+    BufferCopyData bufferData;
+    ImageCopyData imageData;
+    bool  isSrgb;
+    bool  isBufferCopy;
+} copyData;
+
 shared BlockMode blockInfo;
 shared uvec4 blockData;
 shared uint bitsOfWeight;
@@ -995,14 +1017,14 @@ uvec4 InterpolateEndpoint(uvec4 ep0, uvec4 ep1, uvec4 weight)
     // Lerp the Color
     uvec4 ecolor0 = ep0;
     uvec4 ecolor1 = ep1;
-    if(isSrgb)
+    if(copyData.isSrgb)
     {
        ecolor0 = ep0 >> 8;
        ecolor1 = ep1 >> 8;
     }
     uvec4 color = (ecolor0 * (64 - weight) + ecolor1 * weight + 32) >> 6;
     uvec4 finalColor = color;
-    if(isSrgb)
+    if(copyData.isSrgb)
     {
        color = color | (color << 8);
        finalColor = ProcessSrgbColor(color);
@@ -1014,20 +1036,24 @@ void main()
 {
    // Load Image Block
    ivec3 globalcoord = ivec3(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y, gl_GlobalInvocationID.z);
-   uint threadId = gl_LocalInvocationIndex;
-   uvec2 pixelCoord = uvec2(gl_LocalInvocationID.xy);
-   ivec2 blockCoord = ivec2(gl_WorkGroupID.x, gl_WorkGroupID.y);
+   uint  threadId    = gl_LocalInvocationIndex;
+   uvec2 pixelCoord  = uvec2(gl_LocalInvocationID.xy);
+   ivec2 blockCoord  = ivec2(gl_WorkGroupID.x, gl_WorkGroupID.y);
 
    if(threadId == 0u)
    {  //uint(blockCoord.y * gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_NumWorkGroups.x + blockCoord.x * gl_WorkGroupSize.x)
       bitsSwapped = uvec4(0);
-      if(isBufferCopy == true)
+      if(copyData.isBufferCopy == true)
       {
-         blockData = uvec4(texelFetch(astcSrcBuffer2D, int(blockCoord.y * gl_NumWorkGroups.x + blockCoord.x)).xyzw);
+        if (any(greaterThanEqual(blockCoord , uvec2(copyData.bufferData.extent.xy))))
+            return;
+         blockData = uvec4(texelFetch(astcSrcBuffer2D, int(blockCoord.y * copyData.bufferData.pitch.x + blockCoord.x)).xyzw);
       }
       else
       {
-         blockData = imageLoad(astcSrcImage2D, blockCoord);
+        if (any(greaterThanEqual(blockCoord , uvec2(copyData.imageData.extent.xy))))
+            return;
+         blockData = imageLoad(astcSrcImage2D, blockCoord + copyData.imageData.srcOffset.xy);
       }
 
       blockMode = ReadVecBits32(blockData, BLOCK_MODE_BITS_COUNT, 0);
@@ -1131,5 +1157,12 @@ void main()
    // Interpolate the Final Color
    uvec4 color = InterpolateEndpoint(ep0, ep1, weights);
    vec4 outColor = vec4(color) / 65536.0f;
-   imageStore(outputImage, globalcoord.xy, outColor);
+   if(copyData.isBufferCopy == true)
+   {
+      imageStore(outputImage, globalcoord.xy + copyData.bufferData.offset.xy, outColor);
+   }
+   else
+   {
+      imageStore(outputImage, globalcoord.xy + copyData.imageData.dstOffset.xy, outColor);
+   }
 }
