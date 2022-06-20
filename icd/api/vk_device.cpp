@@ -98,6 +98,8 @@
 #include "palAutoBuffer.h"
 #include "palBorderColorPalette.h"
 
+#include <cmath>
+
 namespace vk
 {
 
@@ -806,9 +808,7 @@ VkResult Device::Create(
     }
 
     uint32 totalQueues = 0;
-
-    Pal::DeviceProperties properties = {};
-    pPhysicalDevice->PalDevice()->GetProperties(&properties);
+    const Pal::DeviceProperties& properties = pPhysicalDevice->PalProperties();
 
     for (uint32 i = 0; i < pCreateInfo->queueCreateInfoCount; i++)
     {
@@ -1555,6 +1555,12 @@ void Device::InitDispatchTable()
     ep->vkResetDescriptorPool       = DescriptorPool::GetResetDescriptorPoolFunc(this);
     ep->vkAllocateDescriptorSets    = DescriptorPool::GetAllocateDescriptorSetsFunc(this);
 
+    if (m_enabledExtensions.IsExtensionEnabled(DeviceExtensions::KHR_PUSH_DESCRIPTOR))
+    {
+        ep->vkCmdPushDescriptorSetKHR             = CmdBuffer::GetCmdPushDescriptorSetKHRFunc(this);
+        ep->vkCmdPushDescriptorSetWithTemplateKHR = CmdBuffer::GetCmdPushDescriptorSetWithTemplateKHRFunc(this);
+    }
+
     // =================================================================================================================
     // After generic overrides, apply any internal layer specific dispatch table override.
 
@@ -2173,6 +2179,30 @@ VkResult Device::CreateFence(
     VkFence*                        pFence)
 {
     return Fence::Create(this, pCreateInfo, pAllocator, pFence);
+}
+
+// =====================================================================================================================
+VkQueue Device::GetQueue(
+    Pal::EngineType engineType,
+    Pal::QueueType  queueType)
+{
+    VkQueue queueHandle = VK_NULL_HANDLE;
+
+    for (uint32_t familyIdx = 0; familyIdx < Queue::MaxQueueFamilies; ++familyIdx)
+    {
+        if ((GetQueueFamilyPalQueueType(familyIdx) == queueType) &&
+            (GetQueueFamilyPalEngineType(familyIdx) == engineType))
+        {
+            GetQueue(familyIdx, 0, &queueHandle);
+
+            if (queueHandle != VK_NULL_HANDLE)
+            {
+                break;
+            }
+        }
+    }
+
+    return queueHandle;
 }
 
 // =====================================================================================================================
@@ -3621,7 +3651,8 @@ void Device::ReserveBorderColorIndex(
 bool Device::ReserveFastPrivateDataSlot(
         uint64*                         pIndex)
 {
-    *pIndex = Util::AtomicIncrement64(&m_nextPrivateDataSlot) - 1;
+    Util::RWLockAuto<Util::RWLock::LockType::ReadWrite> lock(&m_privateDataRWLock);
+    *pIndex = ++m_nextPrivateDataSlot - 1;
 
     return ((*pIndex) < m_privateDataSlotRequestCount) ? true : false;
 }

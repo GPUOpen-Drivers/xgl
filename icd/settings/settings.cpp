@@ -1143,8 +1143,8 @@ void VulkanSettingsLoader::GenerateSettingHash()
 void VulkanSettingsLoader::FinalizeSettings(
     const DeviceExtensions::Enabled& enabledExtensions)
 {
-    if (
-        false)
+    if (enabledExtensions.IsExtensionEnabled(DeviceExtensions::KHR_PUSH_DESCRIPTOR)
+		)
     {
         m_settings.enableFmaskBasedMsaaRead = false;
     }

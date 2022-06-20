@@ -1733,17 +1733,26 @@ constexpr Pal::SwizzledFormat PalFmt(
 }
 
 #if (VKI_GPU_DECOMPRESS)
-static VkFormat convertCompressedFormat(VkFormat format)
+static VkFormat convertCompressedFormat(VkFormat format, bool useBC5)
 {
     if (Formats::IsASTCFormat(format))
     {
         AstcMappedInfo mapInfo = {};
         Formats::GetAstcMappedInfo(format, &mapInfo);
-        format = mapInfo.format;
+        format = useBC5 ? VK_FORMAT_BC3_UNORM_BLOCK : mapInfo.format;
     }
     else if (Formats::IsEtc2Format(format))
     {
-        format = VK_FORMAT_R8G8B8A8_UNORM;
+        if( (VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK == format)   ||
+            (VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK == format) ||
+            (VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK == format))
+        {
+            format = useBC5 ? VK_FORMAT_BC3_SRGB_BLOCK : VK_FORMAT_R8G8B8A8_SRGB;
+        }
+        else
+        {
+            format = useBC5 ? VK_FORMAT_BC3_UNORM_BLOCK : VK_FORMAT_R8G8B8A8_UNORM;
+        }
     }
     return format;
 }
@@ -1763,7 +1772,7 @@ inline Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings&
 #if VKI_GPU_DECOMPRESS
         if (settings.enableShaderDecode)
         {
-            format = convertCompressedFormat(format);
+            format = convertCompressedFormat(format, settings.enableBC5Encoder);
         }
 #endif
         return convert::VkToPalSwizzledFormatLookupTableStorage[format];

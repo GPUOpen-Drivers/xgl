@@ -34,15 +34,23 @@
 #define __GPU_DECODE_LAYER_H
 
 #pragma once
+#include "palImage.h"
+#include "palHashMapImpl.h"
+#include "palHashSetImpl.h"
 #include "opt_layer.h"
 #include "include/vk_alloccb.h"
 #include "include/vk_conv.h"
 #include "include/vk_private_data_slot.h"
-#include "palList.h"
+
 #include "gpuTexDecoder.h"
 
 namespace vk
 {
+struct StagingResourcePair
+{
+    VkImage image;
+    VkDeviceMemory memory;
+};
 
 // =====================================================================================================================
 // GPU Decoder  Wrapper
@@ -59,15 +67,30 @@ public:
         return m_pGpuTexDecoder;
     }
 
-    bool isAstcSrgbaFormat(VkFormat format)
+    bool IsAstcSrgbaFormat(VkFormat format)
     {
          return Formats::IsASTCFormat(format) &&
             (static_cast<uint32_t>(format) % 2 == 0);
     }
 
+    VkImage CreateStagingImage(Device* device, VkCommandBuffer userCmdBuf,  VkImage dstImage);
+    void ClearStagingResources(VkImage image);
+
+    typedef Util::HashMap<VkImage, StagingResourcePair, PalAllocator> ImageResourcePairMap;
+    typedef Util::HashSet<VkImage, PalAllocator> DecodedImagesSet;
+
+    void AddDecodedImage(VkImage image) { m_decodedImages.Insert(image); }
+    bool IsImageDecoded(VkImage image) { return m_decodedImages.Contains(image); }
+    bool RemoveDecodedImage(VkImage image) { return m_decodedImages.Erase(image); }
+
 private:
     Device*                   m_pDevice;
     GpuTexDecoder::Device*    m_pGpuTexDecoder;
+    ImageResourcePairMap      m_cachedStagingRes;
+    DecodedImagesSet          m_decodedImages;
+
+    uint32_t FindMemoryType(Device* device, uint32_t typeFilter, VkMemoryPropertyFlags properties);
+
     PAL_DISALLOW_COPY_AND_ASSIGN(GpuDecoderLayer);
 };
 

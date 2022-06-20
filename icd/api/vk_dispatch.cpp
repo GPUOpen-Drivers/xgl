@@ -716,6 +716,8 @@ void DispatchTable::Init()
     INIT_DISPATCH_ALIAS(vkCmdResolveImage2KHR,
                         vkCmdResolveImage2                              );
 
+    INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSetKHR                       );
+    INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSetWithTemplateKHR           );
     INIT_DISPATCH_ENTRY(vkGetDeviceBufferMemoryRequirements             );
     INIT_DISPATCH_ENTRY(vkGetDeviceImageMemoryRequirements              );
     INIT_DISPATCH_ENTRY(vkGetDeviceImageSparseMemoryRequirements        );

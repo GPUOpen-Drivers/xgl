@@ -177,7 +177,7 @@ VkResult Pipeline::BuildShaderStageInfo(
     uint32_t numNewModules = 0;
 
     const bool duplicateExistingModules = isLibrary;
-    const bool adaptForFaskLink         = isLibrary;
+    const bool adaptForFastLink         = isLibrary;
 
     for (uint32_t i = 0; i < stageCount; ++i)
     {
@@ -233,7 +233,7 @@ VkResult Pipeline::BuildShaderStageInfo(
             PipelineBinaryCache* pBinaryCache = (pCache == nullptr) ? nullptr : pCache->GetPipelineCache();
 
             result = pCompiler->BuildShaderModule(
-                pDevice,flags, codeSize, pCode, adaptForFaskLink,
+                pDevice,flags, codeSize, pCode, adaptForFastLink,
                 pBinaryCache, pShaderFeedback, &pTempModules[numNewModules]);
 
             if (result != VK_SUCCESS)

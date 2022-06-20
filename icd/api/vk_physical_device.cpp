@@ -1719,7 +1719,9 @@ VkResult PhysicalDevice::GetImageFormatProperties(
         (((usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0)                           &&
          ((supportedFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) == 0))           ||
         (((usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) != 0)                           &&
-         ((supportedFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) == 0)))
+         ((supportedFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) == 0))              ||
+        (((usage & VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) != 0)       &&
+         ((supportedFeatures & VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) == 0)))
     {
         // If extended usage was set ignore the error. We do not know what format or usage is intended.
         // However for Yuv and Depth images that do not have any compatible formats, report error always.
@@ -2935,6 +2937,8 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
     ) const
 {
     VkResult result = VK_SUCCESS;
+    const RuntimeSettings& settings = GetSettingsLoader()->GetSettings();
+
     DisplayableSurfaceInfo displayableInfo = {};
 
     Surface* pSurface = Surface::ObjectFromHandle(surface);
@@ -3850,8 +3854,9 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_INTEGER_DOT_PRODUCT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COPY_COMMANDS2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW));
-    bool supportFloatAtomics = ((pPhysicalDevice == nullptr)                                                  ||
-                                 pPhysicalDevice->PalProperties().gfxipProperties.flags.supportFloat32Atomics ||
+    bool supportFloatAtomics = ((pPhysicalDevice == nullptr)                                                        ||
+                                 pPhysicalDevice->PalProperties().gfxipProperties.flags.supportFloat32BufferAtomics ||
+                                 pPhysicalDevice->PalProperties().gfxipProperties.flags.supportFloat32ImageAtomics  ||
                                  pPhysicalDevice->PalProperties().gfxipProperties.flags.supportFloat64Atomics);
     if (supportFloatAtomics)
     {
@@ -3881,7 +3886,13 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE4));
 
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_VIEW_MIN_LOD));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PUSH_DESCRIPTOR));
+
+    if ((pPhysicalDevice == nullptr) ||
+         pPhysicalDevice->PalProperties().gfxipProperties.flags.supportImageViewMinLod)
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_VIEW_MIN_LOD));
+    }
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INDEX_TYPE_UINT8));
 
     bool disableAMDVendorExtensions = false;
@@ -3894,6 +3905,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     // AMD Extensions
     if (!disableAMDVendorExtensions)
     {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_EARLY_AND_LATE_FRAGMENT_TESTS));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_TRINARY_MINMAX));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_EXPLICIT_VERTEX_PARAMETER));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GCN_SHADER));
@@ -5932,6 +5944,19 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EARLY_AND_LATE_FRAGMENT_TESTS_FEATURES_AMD:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderEarlyAndLateFragmentTestsFeaturesAMD*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderEarlyAndLateFragmentTests = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceColorWriteEnableFeaturesEXT*>(pHeader);
@@ -5976,6 +6001,21 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVES_GENERATED_QUERY_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->primitivesGeneratedQuery                      = VK_TRUE;
+                    pExtInfo->primitivesGeneratedQueryWithRasterizerDiscard = VK_FALSE;
+                    pExtInfo->primitivesGeneratedQueryWithNonZeroStreams    = VK_FALSE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_IMAGE_ARRAYS_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceYcbcrImageArraysFeaturesEXT*>(pHeader);
@@ -6007,20 +6047,15 @@ size_t PhysicalDevice::GetFeatures2(
                 auto pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(pHeader);
                 if (updateFeatures)
                 {
-                    if (PalProperties().gfxipProperties.flags.supportFloat32Atomics)
-                    {
-                        pExtInfo->shaderSharedFloat32Atomics = VK_TRUE;
-                        pExtInfo->shaderBufferFloat32Atomics = VK_TRUE;
-                        pExtInfo->shaderImageFloat32Atomics  = VK_TRUE;
-                        pExtInfo->sparseImageFloat32Atomics  = VK_TRUE;
-                    }
-                    else
-                    {
-                        pExtInfo->shaderSharedFloat32Atomics = VK_FALSE;
-                        pExtInfo->shaderBufferFloat32Atomics = VK_FALSE;
-                        pExtInfo->shaderImageFloat32Atomics  = VK_FALSE;
-                        pExtInfo->sparseImageFloat32Atomics  = VK_FALSE;
-                    }
+                    pExtInfo->shaderBufferFloat32Atomics =
+                        PalProperties().gfxipProperties.flags.supportFloat32BufferAtomics;
+                    pExtInfo->shaderImageFloat32Atomics  =
+                        PalProperties().gfxipProperties.flags.supportFloat32ImageAtomics;
+
+                    // HW has no distinction between shared and normal buffers for atomics.
+                    pExtInfo->shaderSharedFloat32Atomics = pExtInfo->shaderBufferFloat32Atomics;
+                    // HW has no distinction between normal and sparse images for atomics.
+                    pExtInfo->sparseImageFloat32Atomics = pExtInfo->shaderImageFloat32Atomics;
 
                     pExtInfo->shaderBufferFloat32AtomicAdd = VK_FALSE;
                     pExtInfo->shaderImageFloat32AtomicAdd  = VK_FALSE;
@@ -6060,20 +6095,15 @@ size_t PhysicalDevice::GetFeatures2(
                     pExtInfo->shaderSharedFloat16AtomicAdd    = VK_FALSE;
                     pExtInfo->shaderSharedFloat16AtomicMinMax = VK_FALSE;
 
-                    if (PalProperties().gfxipProperties.flags.supportFloat32Atomics)
-                    {
-                        pExtInfo->shaderImageFloat32AtomicMinMax  = VK_TRUE;
-                        pExtInfo->sparseImageFloat32AtomicMinMax  = VK_TRUE;
-                        pExtInfo->shaderSharedFloat32AtomicMinMax = VK_TRUE;
-                        pExtInfo->shaderBufferFloat32AtomicMinMax = VK_TRUE;
-                    }
-                    else
-                    {
-                        pExtInfo->shaderImageFloat32AtomicMinMax  = VK_FALSE;
-                        pExtInfo->sparseImageFloat32AtomicMinMax  = VK_FALSE;
-                        pExtInfo->shaderSharedFloat32AtomicMinMax = VK_FALSE;
-                        pExtInfo->shaderBufferFloat32AtomicMinMax = VK_FALSE;
-                    }
+                    pExtInfo->shaderBufferFloat32AtomicMinMax =
+                        PalProperties().gfxipProperties.flags.supportFloat32BufferAtomics;
+                    pExtInfo->shaderImageFloat32AtomicMinMax  =
+                        PalProperties().gfxipProperties.flags.supportFloat32ImageAtomics;
+
+                    // HW has no distinction between shared and normal buffers for atomics.
+                    pExtInfo->shaderSharedFloat32AtomicMinMax = pExtInfo->shaderBufferFloat32AtomicMinMax;
+                    // HW has no distinction between sparse and normal images for atomics.
+                    pExtInfo->sparseImageFloat32AtomicMinMax  = pExtInfo->shaderImageFloat32AtomicMinMax;
 
                     if (PalProperties().gfxipProperties.flags.support64BitInstructions &&
                         PalProperties().gfxipProperties.flags.supportFloat64Atomics)
@@ -6402,6 +6432,14 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR:
+        {
+            auto* pProps = reinterpret_cast<VkPhysicalDevicePushDescriptorPropertiesKHR*>(pNext);
+
+            pProps->maxPushDescriptors = MaxPushDescriptors;
+            break;
+        }
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES:
         {
             auto* pProps = static_cast<VkPhysicalDeviceMultiviewProperties*>(pNext);
@@ -6478,6 +6516,7 @@ void PhysicalDevice::GetDeviceProperties2(
             const Pal::DeviceProperties& palProps = PalProperties();
 
             pProps->shaderCoreFeatures = 0;
+
             pProps->activeComputeUnitCount = 0;
             for (uint32_t i = 0; i < palProps.gfxipProperties.shaderCore.numShaderEngines; ++i)
             {

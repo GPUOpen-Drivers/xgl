@@ -23,9 +23,15 @@
  #
  #######################################################################################################################
 
+'''This script defines a template for Vulkan settings initialization.
+'''
+
 import os
+
 CopyrightFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../xgl-copyright-template.txt"
-FileHeaderCopyright = open(CopyrightFilePath, 'r').read()
+
+with open(CopyrightFilePath, encoding='utf-8') as f:
+    FileHeaderCopyright = f.read()
 
 FileHeaderWarning = "\
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n\

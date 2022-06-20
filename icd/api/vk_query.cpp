@@ -86,12 +86,17 @@ VkResult PalQueryPool::Create(
     VkResult result = VK_SUCCESS;
 
     Pal::QueryPoolCreateInfo createInfo = {};
+    Pal::QueryType           queryType  = Pal::QueryType::Occlusion;
 
-    Pal::QueryType           queryType = Pal::QueryType::Occlusion;
     if (pCreateInfo->queryType == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT)
     {
         queryType                = Pal::QueryType::StreamoutStats;
         createInfo.queryPoolType = Pal::QueryPoolType::StreamoutStats;
+    }
+    else if (pCreateInfo->queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT)
+    {
+        queryType                = Pal::QueryType::PipelineStats;
+        createInfo.queryPoolType = Pal::QueryPoolType::PipelineStats;
     }
 
     if (VK_ENUM_IN_RANGE(pCreateInfo->queryType, VK_QUERY_TYPE))
@@ -101,7 +106,15 @@ VkResult PalQueryPool::Create(
     }
 
     createInfo.numSlots = pCreateInfo->queryCount;
-    createInfo.enabledStats = VkToPalQueryPipelineStatsFlags(pCreateInfo->pipelineStatistics);
+
+    VkQueryPipelineStatisticFlags enabledStats = pCreateInfo->pipelineStatistics;
+
+    if (pCreateInfo->queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT)
+    {
+        enabledStats |= VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT;
+    }
+
+    createInfo.enabledStats = VkToPalQueryPipelineStatsFlags(enabledStats);
 
     createInfo.flags.enableCpuAccess = true;
 

@@ -485,168 +485,168 @@ void ShaderOptimizer::BuildTuningProfile()
                                             VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
     m_tuningProfile.pEntries = static_cast<PipelineProfileEntry*>(pMemory);
 
-    if ((m_settings.overrideShaderParams == false) || (pMemory == nullptr))
+    if (pMemory != nullptr)
     {
-        return;
-    }
+        memset(pMemory, 0, newSize);
 
-    memset(pMemory, 0, newSize);
-
-    // Only a single entry is currently supported
-    m_tuningProfile.entryCount = 1;
-    auto pEntry = &m_tuningProfile.pEntries[0];
-
-    bool matchHash = false;
-    if ((m_settings.overrideShaderHashLower != 0) ||
-        (m_settings.overrideShaderHashUpper != 0))
-    {
-        matchHash = true;
-    }
-    else
-    {
-        pEntry->pattern.match.always = 1;
-    }
-
-    // Assign ShaderStage type according to setting file
-    uint32_t shaderStage = ShaderStage::ShaderStageFragment;
-    switch (m_settings.overrideShaderStage)
-    {
-    case ShaderMode::VertexShader:
-        shaderStage = ShaderStage::ShaderStageVertex;
-        break;
-    case ShaderMode::TessellationControlShader:
-        shaderStage = ShaderStage::ShaderStageTessControl;
-        break;
-    case ShaderMode::TessellationEvaluationShader:
-        shaderStage = ShaderStage::ShaderStageTessEval;
-        break;
-    case ShaderMode::GeometryShader:
-        shaderStage = ShaderStage::ShaderStageGeometry;
-        break;
-    case ShaderMode::FragmentShader:
-        shaderStage = ShaderStage::ShaderStageFragment;
-        break;
-    case ShaderMode::ComputeShader:
-        shaderStage = ShaderStage::ShaderStageCompute;
-        break;
-    default:
-        VK_NEVER_CALLED();
-    }
-
-    VK_ASSERT(shaderStage < ShaderStage::ShaderStageCount);
-
-    auto pPattern = &pEntry->pattern.shaders[shaderStage];
-    auto pAction  = &pEntry->action.shaders[shaderStage];
-
-    pPattern->match.codeHash = matchHash;
-    pPattern->codeHash.lower = m_settings.overrideShaderHashLower;
-    pPattern->codeHash.upper = m_settings.overrideShaderHashUpper;
-
-    if (m_settings.overrideNumVGPRsAvailable != 0)
-    {
-        pAction->shaderCreate.apply.vgprLimit         = true;
-        pAction->shaderCreate.tuningOptions.vgprLimit = m_settings.overrideNumVGPRsAvailable;
-    }
-
-    if (m_settings.overrideMaxLdsSpillDwords != 0)
-    {
-        pAction->shaderCreate.apply.ldsSpillLimitDwords         = true;
-        pAction->shaderCreate.tuningOptions.ldsSpillLimitDwords = m_settings.overrideMaxLdsSpillDwords;
-    }
-
-    if (m_settings.overrideUserDataSpillThreshold)
-    {
-        pAction->shaderCreate.apply.userDataSpillThreshold         = true;
-        pAction->shaderCreate.tuningOptions.userDataSpillThreshold = 0;
-    }
-
-    pAction->shaderCreate.apply.allowReZ                = m_settings.overrideAllowReZ;
-    pAction->shaderCreate.apply.enableSelectiveInline   = m_settings.overrideEnableSelectiveInline;
-    pAction->shaderCreate.apply.disableLoopUnrolls      = m_settings.overrideDisableLoopUnrolls;
-
-    if (m_settings.overrideUseSiScheduler)
-    {
-        pAction->shaderCreate.tuningOptions.useSiScheduler = true;
-    }
-
-    if (m_settings.overrideReconfigWorkgroupLayout)
-    {
-        pAction->shaderCreate.tuningOptions.reconfigWorkgroupLayout = true;
-    }
-
-    if (m_settings.overrideDisableLicm)
-    {
-        pAction->shaderCreate.tuningOptions.disableLicm = true;
-    }
-
-    if (m_settings.overrideEnableLoadScalarizer)
-    {
-        pAction->shaderCreate.tuningOptions.enableLoadScalarizer = true;
-    }
-
-    switch (m_settings.overrideWaveSize)
-    {
-    case ShaderWaveSize::WaveSizeAuto:
-        break;
-    case ShaderWaveSize::WaveSize64:
-        pAction->shaderCreate.apply.waveSize = true;
-        pAction->shaderCreate.tuningOptions.waveSize = 64;
-        break;
-    case ShaderWaveSize::WaveSize32:
-        pAction->shaderCreate.apply.waveSize = true;
-        pAction->shaderCreate.tuningOptions.waveSize = 32;
-        break;
-    default:
-        VK_NEVER_CALLED();
-    }
-
-    switch (m_settings.overrideWgpMode)
-    {
-    case WgpMode::WgpModeAuto:
-        break;
-    case WgpMode::WgpModeCu:
-        break;
-    case WgpMode::WgpModeWgp:
-        pAction->shaderCreate.apply.wgpMode = true;
-        break;
-    default:
-        VK_NEVER_CALLED();
-    }
-
-    pAction->shaderCreate.apply.nggDisable      = m_settings.overrideUseNgg;
-    pAction->shaderCreate.apply.enableSubvector = m_settings.overrideEnableSubvector;
-
-    if (m_settings.overrideWavesPerCu != 0)
-    {
-        pAction->dynamicShaderInfo.apply.maxWavesPerCu = true;
-        pAction->dynamicShaderInfo.maxWavesPerCu       = m_settings.overrideWavesPerCu;
-    }
-
-    if ((m_settings.overrideCsTgPerCu != 0) &&
-        (shaderStage == ShaderStage::ShaderStageCompute))
-    {
-        pAction->dynamicShaderInfo.apply.maxThreadGroupsPerCu = true;
-        pAction->dynamicShaderInfo.maxThreadGroupsPerCu       = m_settings.overrideCsTgPerCu;
-    }
-
-    if (m_settings.overrideUsePbbPerCrc != PipelineBinningModeDefault)
-    {
-        pEntry->action.createInfo.apply.binningOverride = true;
-
-        switch (m_settings.overrideUsePbbPerCrc)
+        if (m_settings.overrideShaderParams)
         {
-        case PipelineBinningModeEnable:
-            pEntry->action.createInfo.binningOverride = Pal::BinningOverride::Enable;
-            break;
 
-        case PipelineBinningModeDisable:
-            pEntry->action.createInfo.binningOverride = Pal::BinningOverride::Disable;
-            break;
+            // Only a single entry is currently supported
+            m_tuningProfile.entryCount = 1;
+            auto pEntry = &m_tuningProfile.pEntries[0];
 
-        case PipelineBinningModeDefault:
-        default:
-            pEntry->action.createInfo.binningOverride = Pal::BinningOverride::Default;
-            break;
+            bool matchHash = false;
+            if ((m_settings.overrideShaderHashLower != 0) ||
+                (m_settings.overrideShaderHashUpper != 0))
+            {
+                matchHash = true;
+            }
+            else
+            {
+                pEntry->pattern.match.always = 1;
+            }
+
+            // Assign ShaderStage type according to setting file
+            uint32_t shaderStage = ShaderStage::ShaderStageFragment;
+            switch (m_settings.overrideShaderStage)
+            {
+            case ShaderMode::VertexShader:
+                shaderStage = ShaderStage::ShaderStageVertex;
+                break;
+            case ShaderMode::TessellationControlShader:
+                shaderStage = ShaderStage::ShaderStageTessControl;
+                break;
+            case ShaderMode::TessellationEvaluationShader:
+                shaderStage = ShaderStage::ShaderStageTessEval;
+                break;
+            case ShaderMode::GeometryShader:
+                shaderStage = ShaderStage::ShaderStageGeometry;
+                break;
+            case ShaderMode::FragmentShader:
+                shaderStage = ShaderStage::ShaderStageFragment;
+                break;
+            case ShaderMode::ComputeShader:
+                shaderStage = ShaderStage::ShaderStageCompute;
+                break;
+            default:
+                VK_NEVER_CALLED();
+            }
+
+            VK_ASSERT(shaderStage < ShaderStage::ShaderStageCount);
+
+            auto pPattern = &pEntry->pattern.shaders[shaderStage];
+            auto pAction  = &pEntry->action.shaders[shaderStage];
+
+            pPattern->match.codeHash = matchHash;
+            pPattern->codeHash.lower = m_settings.overrideShaderHashLower;
+            pPattern->codeHash.upper = m_settings.overrideShaderHashUpper;
+
+            if (m_settings.overrideNumVGPRsAvailable != 0)
+            {
+                pAction->shaderCreate.apply.vgprLimit         = true;
+                pAction->shaderCreate.tuningOptions.vgprLimit = m_settings.overrideNumVGPRsAvailable;
+            }
+
+            if (m_settings.overrideMaxLdsSpillDwords != 0)
+            {
+                pAction->shaderCreate.apply.ldsSpillLimitDwords         = true;
+                pAction->shaderCreate.tuningOptions.ldsSpillLimitDwords = m_settings.overrideMaxLdsSpillDwords;
+            }
+
+            if (m_settings.overrideUserDataSpillThreshold)
+            {
+                pAction->shaderCreate.apply.userDataSpillThreshold         = true;
+                pAction->shaderCreate.tuningOptions.userDataSpillThreshold = 0;
+            }
+
+            pAction->shaderCreate.apply.allowReZ                = m_settings.overrideAllowReZ;
+            pAction->shaderCreate.apply.disableLoopUnrolls      = m_settings.overrideDisableLoopUnrolls;
+
+            if (m_settings.overrideUseSiScheduler)
+            {
+                pAction->shaderCreate.tuningOptions.useSiScheduler = true;
+            }
+
+            if (m_settings.overrideReconfigWorkgroupLayout)
+            {
+                pAction->shaderCreate.tuningOptions.reconfigWorkgroupLayout = true;
+            }
+
+            if (m_settings.overrideDisableLicm)
+            {
+                pAction->shaderCreate.tuningOptions.disableLicm = true;
+            }
+
+            if (m_settings.overrideEnableLoadScalarizer)
+            {
+                pAction->shaderCreate.tuningOptions.enableLoadScalarizer = true;
+            }
+
+            switch (m_settings.overrideWaveSize)
+            {
+            case ShaderWaveSize::WaveSizeAuto:
+                break;
+            case ShaderWaveSize::WaveSize64:
+                pAction->shaderCreate.apply.waveSize = true;
+                pAction->shaderCreate.tuningOptions.waveSize = 64;
+                break;
+            case ShaderWaveSize::WaveSize32:
+                pAction->shaderCreate.apply.waveSize = true;
+                pAction->shaderCreate.tuningOptions.waveSize = 32;
+                break;
+            default:
+                VK_NEVER_CALLED();
+            }
+
+            switch (m_settings.overrideWgpMode)
+            {
+            case WgpMode::WgpModeAuto:
+                break;
+            case WgpMode::WgpModeCu:
+                break;
+            case WgpMode::WgpModeWgp:
+                pAction->shaderCreate.apply.wgpMode = true;
+                break;
+            default:
+                VK_NEVER_CALLED();
+            }
+
+            pAction->shaderCreate.apply.nggDisable      = m_settings.overrideUseNgg;
+
+            if (m_settings.overrideWavesPerCu != 0)
+            {
+                pAction->dynamicShaderInfo.apply.maxWavesPerCu = true;
+                pAction->dynamicShaderInfo.maxWavesPerCu       = m_settings.overrideWavesPerCu;
+            }
+
+            if ((m_settings.overrideCsTgPerCu != 0) &&
+                (shaderStage == ShaderStage::ShaderStageCompute))
+            {
+                pAction->dynamicShaderInfo.apply.maxThreadGroupsPerCu = true;
+                pAction->dynamicShaderInfo.maxThreadGroupsPerCu       = m_settings.overrideCsTgPerCu;
+            }
+
+            if (m_settings.overrideUsePbbPerCrc != PipelineBinningModeDefault)
+            {
+                pEntry->action.createInfo.apply.binningOverride = true;
+
+                switch (m_settings.overrideUsePbbPerCrc)
+                {
+                case PipelineBinningModeEnable:
+                    pEntry->action.createInfo.binningOverride = Pal::BinningOverride::Enable;
+                    break;
+
+                case PipelineBinningModeDisable:
+                    pEntry->action.createInfo.binningOverride = Pal::BinningOverride::Disable;
+                    break;
+
+                case PipelineBinningModeDefault:
+                default:
+                    pEntry->action.createInfo.binningOverride = Pal::BinningOverride::Default;
+                    break;
+                }
+            }
         }
     }
 }
@@ -745,6 +745,17 @@ void ShaderOptimizer::BuildAppProfileLlpc()
             m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x313dab8ff9408da0;
             m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0xbb11905194a55485;
             m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+        }
+    }
+
+    if (appProfile == AppProfile::ShadowOfTheTombRaider)
+    {
+        if (gfxIpLevel >= Pal::GfxIpLevel::GfxIp10_3)
+        {
+            i = m_appProfile.entryCount++;
+            PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
+            pEntry->pattern.match.always = true;
+            pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.tuningOptions.fastMathFlags = 16u;
         }
     }
 }

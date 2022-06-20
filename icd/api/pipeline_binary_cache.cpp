@@ -343,7 +343,11 @@ Util::Result PipelineBinaryCache::StorePipelineBinary(
 {
     VK_ASSERT(m_pTopLayer != nullptr);
 
-    return m_pTopLayer->Store(pCacheId, pPipelineBinary, pipelineBinarySize);
+    Util::StoreFlags storeFlags  = {};
+    storeFlags.enableFileCache   = true;
+    storeFlags.enableCompression = true;
+
+    return m_pTopLayer->Store(storeFlags, pCacheId, pPipelineBinary, pipelineBinarySize);
 }
 
 // =====================================================================================================================
@@ -488,7 +492,10 @@ Util::Result PipelineBinaryCache::StoreReinjectionBinary(
             gfxIpMinor == m_gfxIp.minor &&
             gfxIpStepping == m_gfxIp.stepping)
         {
-            result = m_pReinjectionLayer->Store(pInternalPipelineHash, pPipelineBinary, pipelineBinarySize);
+            Util::StoreFlags storeFlags  = {};
+            storeFlags.enableFileCache   = true;
+            storeFlags.enableCompression = true;
+            result = m_pReinjectionLayer->Store(storeFlags, pInternalPipelineHash, pPipelineBinary, pipelineBinarySize);
         }
         else
         {

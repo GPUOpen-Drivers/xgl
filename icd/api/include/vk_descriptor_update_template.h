@@ -64,6 +64,9 @@ public:
         VkDescriptorSet descriptorSet,
         const void*     pData);
 
+    VkPipelineBindPoint GetPipelineBindPoint() const
+        { return m_pipelineBindPoint; }
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(DescriptorUpdateTemplate);
 

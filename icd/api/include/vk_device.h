@@ -204,6 +204,10 @@ public:
         const VkAllocationCallbacks*                pAllocator,
         VkDeviceMemory*                             pMem);
 
+    VkQueue GetQueue(
+        Pal::EngineType                             engineType,
+        Pal::QueueType                              queueType);
+
     void GetQueue(
         uint32_t                                    queueFamilyIndex,
         uint32_t                                    queueIndex,
@@ -416,6 +420,9 @@ public:
 
     VK_FORCEINLINE const Properties& GetProperties() const
         { return m_properties; }
+
+    VK_FORCEINLINE const Pal::DeviceProperties& GetPalProperties() const
+        { return VkPhysicalDevice(DefaultDeviceIndex)->PalProperties(); }
 
     Pal::QueueType GetQueueFamilyPalQueueType(
         uint32_t queueFamilyIndex) const;

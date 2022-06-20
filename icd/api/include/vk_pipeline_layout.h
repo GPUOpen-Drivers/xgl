@@ -190,11 +190,12 @@ public:
     typedef VkPipelineLayout ApiType;
 
     VkResult BuildLlpcPipelineMapping(
-        const uint32_t             stageMask,
-        const VbBindingInfo*       pVbInfo,
-        const bool                 appendFetchShaderCb,
-        void*                      pBuffer,
-        Vkgc::ResourceMappingData* pResourceMapping) const;
+        const uint32_t              stageMask,
+        const VbBindingInfo*        pVbInfo,
+        const bool                  appendFetchShaderCb,
+        void*                       pBuffer,
+        Vkgc::ResourceMappingData*  pResourceMapping,
+        Vkgc::ResourceLayoutScheme* pLayoutScheme) const;
 
     static VkResult Create(
         const Device*                       pDevice,

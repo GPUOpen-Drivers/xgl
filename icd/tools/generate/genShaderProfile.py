@@ -24,6 +24,7 @@
  #
  #######################################################################################################################
 
+from queue import Empty
 import sys
 import os
 import json
@@ -566,6 +567,50 @@ def buildProfileEntryActionToJson():
                 if "jsonWritable" in entity and entity["jsonWritable"]:
                     if entity["parent"] == "shaderCreate.anonStruct":
                         conditionStr = ConditionShaderCreateApply.replace("%Defs%", SHADER_ACTION[action]["jsonWriterTemplate"])
+
+                        if action == "optStrategyFlags":
+                            optStrategyStr = ""
+                            for key in OPT_STRATEGY_FLAGS.keys():
+                                optFlagCondStr = ConditionShaderCreateTuningOptions
+                                optFlagCondStr = optFlagCondStr.replace("%Flag%", "flags" + '.' + key)
+                                optFlagCondStr = optFlagCondStr.replace("%Defs%", shaderCreateTuningOptionsBooleanTemplate.replace("%Flag%", key))
+                                optStrategyStr += indent(optFlagCondStr)
+                            conditionStr = conditionStr.replace("%OptStrategyEntry%", optStrategyStr)
+                        elif action == "optStrategyFlags2":
+                            optStrategy2Str = ""
+                            for key in OPT_STRATEGY_FLAGS2.keys():
+                                optFlag2CondStr = ConditionShaderCreateTuningOptions
+                                optFlag2CondStr = optFlag2CondStr.replace("%Flag%", "flags2" + '.' + key)
+                                optFlag2CondStr = optFlag2CondStr.replace("%Defs%", shaderCreateTuningOptionsBooleanTemplate.replace("%Flag%", key))
+                                optStrategy2Str += indent(optFlag2CondStr)
+                            conditionStr = conditionStr.replace("%OptStrategy2Entry%", optStrategy2Str)
+
+                        elif action == "optimizationIntent":
+                            maxOccupancyStr = ""
+                            lowLatencyStr   = ""
+
+                            for key in MAX_OCCUPANCY_OPTIONS.keys():
+                                maxOccupancyCondStr = ConditionShaderCreateTuningOptions
+                                maxOccupancyCondStr = maxOccupancyCondStr.replace("%Flag%", "maxOccupancyOptions" + '.' + key)
+                                maxOccupancyCondStr = maxOccupancyCondStr.replace("%Defs%", shaderCreateTuningOptionsBooleanTemplate.replace("%Flag%", key))
+                                maxOccupancyStr += indent(maxOccupancyCondStr, times=2)
+                            conditionStr = conditionStr.replace("%MaxOccupancyOptionsEntry%", maxOccupancyStr)
+
+                            for key in LOW_LATENCY_OPTIONS.keys():
+                                lowLatencyCondStr = ConditionShaderCreateTuningOptions
+                                lowLatencyCondStr = lowLatencyCondStr.replace("%Flag%", "lowLatencyOptions" + '.' + key)
+                                lowLatencyCondStr = lowLatencyCondStr.replace("%Defs%", shaderCreateTuningOptionsBooleanTemplate.replace("%Flag%", key))
+                                lowLatencyStr += indent(lowLatencyCondStr, times=2)
+                            conditionStr = conditionStr.replace("%LowLatencyOptionsEntry%", lowLatencyStr)
+                        elif action == "fpControlFlags":
+                            fpControlStr = ""
+                            for key in FP_CONTROL_FLAGS.keys():
+                                fpControlCondStr = ConditionShaderCreateTuningOptions
+                                fpControlCondStr = fpControlCondStr.replace("%Flag%", action + '.' + key)
+                                fpControlCondStr = fpControlCondStr.replace("%Defs%", shaderCreateTuningOptionsBooleanTemplate.replace("%Flag%", key))
+                                fpControlStr += indent(fpControlCondStr)
+                            conditionStr = conditionStr.replace("%fpControlOptionsEntry%", fpControlStr)
+
                         conditionStr = conditionStr.replace("%Flag%", action)
                         cppCode = cppCode + wrapWithDirective(conditionStr, SHADER_ACTION[action]["buildTypes"])
                         break

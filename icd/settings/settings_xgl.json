@@ -1716,6 +1716,30 @@
           {
             "Description": "Enable for compute shaders",
             "Value": 32
+          },
+          {
+            "Description": "Enable for raygen shaders",
+            "Value": 64
+          },
+          {
+            "Description": "Enable for intersect shaders",
+            "Value": 128
+          },
+          {
+            "Description": "Enable for any hit shaders",
+            "Value": 256
+          },
+          {
+            "Description": "Enable for closest hit shaders",
+            "Value": 512
+          },
+          {
+            "Description": "Enable for miss shaders",
+            "Value": 1024
+          },
+          {
+            "Description": "Enable for callable shaders",
+            "Value": 2048
           }
         ]
       },
@@ -2473,6 +2497,11 @@
             "Name": "DbgBarrierBeginRendering",
             "Value": 4294967296,
             "Description": "Begin rendering"
+          },
+          {
+            "Name": "DbgBarrierPushDescriptorSet",
+            "Value": 8589934592,
+            "Description": "vkCmdPushDescriptorSetKHR or vkCmdPushDescriptorSetWithTemplateKHR"
           },
           {
             "Name": "DbgBarrierOther",
@@ -4627,6 +4656,11 @@
             "Name": "ForceDisableDcc",
             "Value": 64,
             "Description": "Force disable DCC for every resource irrespective of PAL heuristics."
+          },
+          {
+            "Name": "ForceDisableDccForSharedImages",
+            "Value": 128,
+            "Description": "Force disable DCC for externally sharable resources."
           }
         ],
         "Name": "ForceEnableDcc"
@@ -4783,9 +4817,48 @@
       "Name": "ForceCsThreadGroupSwizzleMode"
     },
     {
+      "Description": "Originally SIMDs cover 16x2 regions, after swizzling they cover 8x4 regions.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "ForceCsThreadIdSwizzling"
+    },
+    {
+      "Description": "Write graphics pipeline push descriptors to user data registers unless the total user data count exceeds this value. Maximum value is MaxBindingRegCount (96)",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 29
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "Name": "GfxInlinePushDescriptorUserDataLimit"
+    },
+    {
+      "Description": "Write compute pipeline push descriptors to user data registers unless the total user data count exceeds this value. Maximum value is MaxBindingRegCount (96)",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 13
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "Name": "CsInlinePushDescriptorUserDataLimit"
+    },
+    {
       "Description": "Enable GPU decompress pass for astc/etc image, it is on the vkCopyBufferToImage, and not safe depending on application.",
       "Tags": [
         "Developer Mode"
+      ],
+      "BuildTypes": [
+        "VKI_GPU_DECOMPRESS"
       ],
       "Defaults": {
         "Default": false
@@ -4793,6 +4866,21 @@
       "Scope": "Driver",
       "Type": "bool",
       "Name": "EnableShaderDecode"
+    },
+    {
+      "Description": "Enable BC5 encoder to convert ASTC/ETC2 to BC5 format.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "BuildTypes": [
+        "VKI_GPU_DECOMPRESS"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "EnableBC5Encoder"
     },
     {
       "Description": "Determines the string that's used to trigger a start-frame delimiter via vkQueueInsertDebugUtilsLabelEXT. This string is \"AmdFrameBegin\" by default.",

@@ -1013,7 +1013,8 @@ AppProfilePattern AppPatternTable[] =
             AppNameX4Engine,
             PatternEnd
         }
-    }
+    },
+
 };
 
 static char* GetExecutableName(size_t* pLength, bool includeExtension = false);

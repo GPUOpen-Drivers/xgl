@@ -505,6 +505,14 @@ void Image::ConvertImageCreateInfo(
         pPalCreateInfo->metadataMode = Pal::MetadataMode::Disabled;
     }
 
+    // Disable metadata for sharable images if the ForceDisableDccForSharedImages
+    // flag is set in settings.forceEnableDcc
+    if (externalFlags.externallyShareable &&
+        ((settings.forceEnableDcc & ForceDisableDccForSharedImages) != 0))
+    {
+        pPalCreateInfo->metadataMode = Pal::MetadataMode::Disabled;
+    }
+
     // Apply per application (or run-time) options
     pDevice->GetResourceOptimizer()->OverrideImageCreateInfo(resourceKey, pPalCreateInfo);
 }

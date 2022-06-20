@@ -278,6 +278,58 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
         // Test if this set is active in at least one stage
         if (setLayoutInfo.activeStageMask != 0)
         {
+            // Optimized path to inline push descriptors if it can be done without spilling out of user data registers
+            bool inlinePushDescriptorSet = false;
+
+            if ((setLayoutInfo.flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR) &&
+                ((setLayoutInfo.activeStageMask & ~(VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT)) == 0))
+            {
+                uint32_t regCountSpillLimit = (setLayoutInfo.activeStageMask == VK_SHADER_STAGE_COMPUTE_BIT) ?
+                                                settings.csInlinePushDescriptorUserDataLimit :
+                                                settings.gfxInlinePushDescriptorUserDataLimit;
+                uint32_t inlineRegCount     = pInfo->userDataRegCount +
+                                              setLayoutInfo.sta.dwSize +
+                                              pushConstRegCount;
+
+                VK_ASSERT(regCountSpillLimit < MaxBindingRegCount);
+                VK_ASSERT(setLayoutInfo.numDynamicDescriptors == 0);
+
+                // Also check any remaining sets because pInfo->userDataRegCount doesn't yet include them.
+                for (uint32_t j = i + 1; (j < pIn->setLayoutCount) && (inlineRegCount <= regCountSpillLimit); ++j)
+                {
+                    const auto& nextSetLayoutInfo = DescriptorSetLayout::ObjectFromHandle(pIn->pSetLayouts[j])->Info();
+
+                    inlineRegCount += nextSetLayoutInfo.numDynamicDescriptors *
+                                      DescriptorSetLayout::GetDynamicBufferDescDwSize(pDevice);
+
+                    if (nextSetLayoutInfo.sta.numRsrcMapNodes > 0)
+                    {
+                        inlineRegCount += SetPtrRegCount;
+                    }
+                }
+
+                if (inlineRegCount <= regCountSpillLimit)
+                {
+                    inlinePushDescriptorSet = true;
+                }
+            }
+
+            if (inlinePushDescriptorSet)
+            {
+                // Add space for the user data node entries instead of resource nodes
+                pPipelineInfo->numUserDataNodes += setLayoutInfo.sta.numRsrcMapNodes;
+
+                // Add space for immutable sampler descriptor storage needed by the set
+                pPipelineInfo->numDescRangeValueNodes += setLayoutInfo.imm.numDescriptorValueNodes;
+
+                // Reserve additional user data register space similar to what is done for dynamic descriptor data
+                pSetUserData->totalRegCount = setLayoutInfo.sta.dwSize;
+
+                // A push descriptor set without a set pointer offset is indication that pipeline creation's resource
+                // node mapping and push descriptor set calls will reference the user data directly.
+                VK_ASSERT(pSetUserData->setPtrRegOffset == InvalidReg);
+            }
+            else
             {
                 // Accumulate the space needed by all resource nodes for this set
                 pPipelineInfo->numRsrcMapNodes += setLayoutInfo.sta.numRsrcMapNodes;
@@ -965,6 +1017,16 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
                 {
                     Vkgc::ResourceMappingNode* pNode = nullptr;
 
+                    if ((pSetLayout->Info().flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR) &&
+                        (pSetUserData->setPtrRegOffset == InvalidReg))
+                    {
+                        auto* pUserDataNode = &pUserDataNodes[userDataNodeCount++];
+
+                        pUserDataNode->visibility = visibility;
+
+                        pNode = &pUserDataNode->node;
+                    }
+                    else
                     {
                         pNode = &pStaNodes[staNodeCount++];
                     }
@@ -1278,22 +1340,27 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
 // =====================================================================================================================
 // This function populates the resource mapping node details to the shader-stage specific pipeline info structure.
 VkResult PipelineLayout::BuildLlpcPipelineMapping(
-    const uint32_t             stageMask,
-    const VbBindingInfo*       pVbInfo,
-    const bool                 appendFetchShaderCb,
-    void*                      pBuffer,
-    Vkgc::ResourceMappingData* pResourceMapping
+    const uint32_t              stageMask,
+    const VbBindingInfo*        pVbInfo,
+    const bool                  appendFetchShaderCb,
+    void*                       pBuffer,
+    Vkgc::ResourceMappingData*  pResourceMapping,
+    Vkgc::ResourceLayoutScheme* pLayoutScheme
     ) const
 {
     VkResult result = VK_SUCCESS;
 
     if (m_info.userDataLayout.scheme == PipelineLayoutScheme::Compact)
     {
+        *pLayoutScheme = Vkgc::ResourceLayoutScheme::Compact;
+
         result = BuildCompactSchemeLlpcPipelineMapping(
             stageMask, pVbInfo, appendFetchShaderCb, pBuffer, pResourceMapping);
     }
     else if (m_info.userDataLayout.scheme == PipelineLayoutScheme::Indirect)
     {
+        *pLayoutScheme = Vkgc::ResourceLayoutScheme::Indirect;
+
         BuildIndirectSchemeLlpcPipelineMapping(
             stageMask, pVbInfo, appendFetchShaderCb, pBuffer, pResourceMapping);
     }
