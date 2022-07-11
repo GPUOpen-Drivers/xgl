@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         host-os:             ["ubuntu-20.04"]
-        base-image-template: ["gcr.io/stadia-open-source/amdvlk_%s%s:nightly"]
+        base-image-template: ["us-docker.pkg.dev/stadia-open-source/amdvlk-public-ci/amdvlk_%s%s:nightly"]
         config:              [Release]
         feature-set:         ["+gcc", "+gcc+assertions",
                               "+clang", "+clang+shadercache+ubsan+asan+assertions"]
