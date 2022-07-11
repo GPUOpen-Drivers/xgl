@@ -1,12 +1,13 @@
 #
 # Dockerfile for public XGL CI with GitHub Actions.
 # Sample invocation:
-#    docker build . --file tools/cache_creator/docker/check_xgl.Dockerfile                    \
-#                   --build-arg AMDVLK_IMAGE=gcr.io/stadia-open-source/amdvlk:nightly         \
-#                   --build-arg XGL_REPO_NAME=GPUOpen-Drivers/xgl                             \
-#                   --build-arg XGL_REPO_REF=<GIT_REF>                                        \
-#                   --build-arg XGL_REPO_SHA=<GIT_SHA>                                        \
-#                   --tag xgl-ci/xgl
+#    docker build .                                                                                          \
+#       --file tools/cache_creator/docker/check_xgl.Dockerfile                                               \
+#       --build-arg AMDVLK_IMAGE=us-docker.pkg.dev/stadia-open-source/amdvlk-public-ci/clang_release:nightly \
+#       --build-arg XGL_REPO_NAME=GPUOpen-Drivers/xgl                                                        \
+#       --build-arg XGL_REPO_REF=<GIT_REF>                                                                   \
+#       --build-arg XGL_REPO_SHA=<GIT_SHA>                                                                    \
+#       --tag xgl-ci/xgl
 #
 # Required arguments:
 # - AMDVLK_IMAGE: Base image name for prebuilt amdvlk
