@@ -1307,7 +1307,7 @@ SHADER_ACTION = {
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.%FieldName% = %IntValue%u;\n""",
         "jsonWriterTemplate": shaderCreateDynamicShaderInfoTemplate,
         "jsonReaderTemplate": \
-            "    if (shaderStage == ShaderStage::ShaderStageCompute)\n    {\n" +
+            "    if (shaderStage >= ShaderStage::ShaderStageCompute)\n    {\n" +
             "        pActions->dynamicShaderInfo.apply.%Action% = true;\n" +
             "        pActions->dynamicShaderInfo.%Action%       = %Value%;" +
             "\n    }\n    else\n    {\n" +
@@ -1485,6 +1485,27 @@ SHADER_ACTION = {
                 "parent": "ShaderTuningOptions",
                 "entity": "var",
                 "varName": "fastMathFlags",
+                "dataType": "uint32_t",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+            },
+        ],
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
+        "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
+    },
+
+    "disableFastMathFlags": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "disableFastMathFlags",
                 "dataType": "uint32_t",
                 "defaultValue": "",
                 "jsonWritable": True,
@@ -1772,7 +1793,7 @@ ENTRIES_TEMPLATE = {
                     "type": [dict],
                     "branch": SHADER_ACTION,
                     "shaderStage": "ShaderStage::ShaderStageCompute"
-                }
+                },
             },
             # The "BuildTypes" key is not used by the genShaderProfile script in any way. It is included here simply to
             # mark this key as a valid key that can be a part of each entry in the entries list in profile.json files.
@@ -1875,7 +1896,7 @@ ShaderTuningStructsAndVars = {
                     "shaders": {
                         "entity": "array",
                         "varName": "shaders",
-                        "arraySize": "ShaderStage::ShaderStageNativeStageCount",
+                        "arraySize": "ShaderStage::ShaderStageCount",
                         "arrayValue": "",
                         "dataType": "ShaderProfilePattern",
                         "buildTypes": {},
@@ -2039,7 +2060,7 @@ ShaderTuningStructsAndVars = {
                 "entity": "array",
                 "description": "Applied to ShaderCreateInfo/PipelineShaderInfo/DynamicXShaderInfo:",
                 "varName": "shaders",
-                "arraySize": "ShaderStage::ShaderStageNativeStageCount",
+                "arraySize": "ShaderStage::ShaderStageCount",
                 "arrayValue": "",
                 "dataType": "ShaderProfileAction",
                 "buildTypes": {},

@@ -142,9 +142,12 @@ void ImageView::BuildImageSrds(
     info.minLod       = minLod;
 
     // Restrict possible usages to only those supported by the image, e.g. no FMask based reads without MSAA.
-    info.possibleLayouts.usages  = (pImage->GetBarrierPolicy().GetSupportedLayoutUsageMask() &
+    const ImageBarrierPolicy& barrierPolicy = pImage->GetBarrierPolicy();
+
+    info.possibleLayouts.usages  = (barrierPolicy.GetSupportedLayoutUsageMask() &
                                     (Pal::LayoutShaderRead | Pal::LayoutShaderFmaskBasedRead));
-    info.possibleLayouts.engines = Pal::LayoutUniversalEngine | Pal::LayoutComputeEngine;
+
+    info.possibleLayouts.engines = barrierPolicy.GetPossibleLayoutEngineMasks();
 
     pDevice->GetResourceOptimizer()->OverrideImageViewCreateInfo(pImage->GetResourceKey(), &info);
 

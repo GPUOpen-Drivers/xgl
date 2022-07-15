@@ -327,9 +327,14 @@ static void GetSpvCode(
         *pCode = Etc2Decoder;
         *pSize = sizeof(Etc2Decoder);
     }
+    else if (type == InternalTexConvertCsType::ConvertETC2ToBc3)
+    {
+        *pCode = Etc2ToBc3;
+        *pSize = sizeof(Etc2ToBc3);
+    }
     else
     {
-        PAL_ASSERT(type == InternalTexConvertCsType::ConvertRGBA8ToDXT5);
+        PAL_ASSERT(type == InternalTexConvertCsType::ConvertRGBA8ToBc3);
         *pCode = Bc3Encoder;
         *pSize = sizeof(Bc3Encoder);
     }
@@ -361,9 +366,19 @@ Device::~Device()
         ClientDestroyInternalComputePipeline(m_info, itr.Get()->value.pPipeline, itr.Get()->value.pMemory);
     }
 
-    if (m_etc2PipeLine.pPipeline != nullptr)
+    if (m_etc2ToRgba8PipeLine.pPipeline != nullptr)
     {
-        ClientDestroyInternalComputePipeline(m_info, m_etc2PipeLine.pPipeline, m_etc2PipeLine.pMemory);
+        ClientDestroyInternalComputePipeline(m_info, m_etc2ToRgba8PipeLine.pPipeline, m_etc2ToRgba8PipeLine.pMemory);
+    }
+
+    if (m_rgba8ToBc3PipeLine.pPipeline != nullptr)
+    {
+        ClientDestroyInternalComputePipeline(m_info, m_rgba8ToBc3PipeLine.pPipeline, m_rgba8ToBc3PipeLine.pMemory);
+    }
+
+    if (m_etc2ToBc3Pipeline.pPipeline != nullptr)
+    {
+        ClientDestroyInternalComputePipeline(m_info, m_etc2ToBc3Pipeline.pPipeline, m_etc2ToBc3Pipeline.pMemory);
     }
 
 }
@@ -376,23 +391,53 @@ void Device::Init(
     m_imageViewSizeInDwords = m_info.pDeviceProperties->gfxipProperties.srdSizes.imageView / sizeof(uint32);
     m_bufferViewSizeInDwords = m_info.pDeviceProperties->gfxipProperties.srdSizes.bufferView / sizeof(uint32);
 
-    // 3 Table and 1 TexBuffer, and 2 Image resource, 26 DWORDs copyData
+    // 3 Table and 1 TexBuffer, and 2 Image resource
     m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertASTCToRGBA8)]
-        = (3 + 1) * m_bufferViewSizeInDwords + 2 * m_imageViewSizeInDwords + 26;
+        = (3 + 1) * m_bufferViewSizeInDwords + 2 * m_imageViewSizeInDwords;
+
     // 1 Image resource for output 1 image resource for image input and 1 TexBuffer for buffer Input
-    // 28 DWORD for copyData
     m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertETC2ToRGBA8)]
-        =  2 * m_imageViewSizeInDwords + m_bufferViewSizeInDwords + 28;
+        =  2 * m_imageViewSizeInDwords + m_bufferViewSizeInDwords;
 
     // 2 Image resources for output and Input
-    m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertRGBA8ToDXT5)]
+    m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertRGBA8ToBc3)]
         =  2 * m_imageViewSizeInDwords;
 
-    Pal::Result result       = m_pipelineMap.Init();
-    m_etc2PipeLine.pMemory   = nullptr;
-    m_etc2PipeLine.pPipeline = nullptr;
+    // 1 Image resource for output 1 image resource for image input and 1 TexBuffer for buffer Input
+    m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertETC2ToBc3)]
+        =  2 * m_imageViewSizeInDwords + m_bufferViewSizeInDwords;
+
+    Pal::Result result              = m_pipelineMap.Init();
+    m_etc2ToRgba8PipeLine.pMemory   = nullptr;
+    m_etc2ToRgba8PipeLine.pPipeline = nullptr;
+    m_rgba8ToBc3PipeLine.pMemory    = nullptr;
+    m_rgba8ToBc3PipeLine.pPipeline  = nullptr;
+    m_etc2ToBc3Pipeline.pMemory     = nullptr;
+    m_etc2ToBc3Pipeline.pPipeline   = nullptr;
 
     PAL_ASSERT(result == Pal::Result::Success);
+}
+
+// =====================================================================================================================
+static void InsertBarrier(Pal::ICmdBuffer*& cmdBuffer)
+{
+    PAL_ASSERT(cmdBuffer != nullptr);
+
+    Pal::BarrierInfo barrierInfo = {};
+    barrierInfo.waitPoint = Pal::HwPipePreCs;
+
+    const Pal::HwPipePoint pipePoint = Pal::HwPipePostCs;
+    barrierInfo.pipePointWaitCount = 1;
+    barrierInfo.pPipePoints = &pipePoint;
+
+    Pal::BarrierTransition transition = {};
+    transition.srcCacheMask = Pal::CoherShader;
+    transition.dstCacheMask = Pal::CoherShader;
+
+    barrierInfo.transitionCount = 1;
+    barrierInfo.pTransitions = &transition;
+    barrierInfo.reason = 1;
+    cmdBuffer->CmdBarrier(barrierInfo);
 }
 
 // =====================================================================================================================
@@ -412,23 +457,23 @@ Pal::Result Device::GpuDecodeImage(
 
     if (type == InternalTexConvertCsType::ConvertASTCToRGBA8)
     {
+        uint32 pushConstant[PushConstASTCToRGBA];
         for (uint32 idx = 0; idx < regionCount; ++idx)
         {
             pUserData = nullptr;
             CreateUserData(
-                InternalTexConvertCsType::ConvertASTCToRGBA8,
+                type,
                 &pUserData,
-                m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertASTCToRGBA8)]);
+                m_srdDwords[static_cast<uint32>(type)]);
 
             // Skip the texture buffer view
             pUserData += 4;
 
             Pal::ImageCopyRegion copyRegion = pPalImageRegions[idx];
-            Pal::SubresId palSrcSubResId = copyRegion.srcSubres;
-            Pal::SubresId palDstSubResId = copyRegion.dstSubres;
-
-            Pal::SwizzledFormat dstFormat = pDstImage->GetImageCreateInfo().swizzledFormat;
-            Pal::SwizzledFormat srcFormat = pSrcImage->GetImageCreateInfo().swizzledFormat;
+            Pal::SubresId palSrcSubResId    = copyRegion.srcSubres;
+            Pal::SubresId palDstSubResId    = copyRegion.dstSubres;
+            Pal::SwizzledFormat dstFormat   = pDstImage->GetImageCreateInfo().swizzledFormat;
+            Pal::SwizzledFormat srcFormat   = pSrcImage->GetImageCreateInfo().swizzledFormat;
 
             Pal::ImageViewInfo imageView[2] = {};
 
@@ -439,62 +484,65 @@ Pal::Result Device::GpuDecodeImage(
 
             pUserData += 2 * m_imageViewSizeInDwords;
 
-            // skip buffer copyData
-            pUserData += 12;
-
             uint32_t copyData[12] = {
-                pPalImageRegions[idx].srcOffset.x,
-                pPalImageRegions[idx].srcOffset.y,
-                pPalImageRegions[idx].srcOffset.z,
+                static_cast<uint32_t>(pPalImageRegions[idx].srcOffset.x),
+                static_cast<uint32_t>(pPalImageRegions[idx].srcOffset.y),
+                static_cast<uint32_t>(pPalImageRegions[idx].srcOffset.z),
                 0,
-
                 pPalImageRegions[idx].dstOffset.x * constInfo.pConstants[0],
                 pPalImageRegions[idx].dstOffset.y * constInfo.pConstants[1],
-                pPalImageRegions[idx].dstOffset.z,
+                static_cast<uint32_t>(pPalImageRegions[idx].dstOffset.z),
                 0,
-
                 pPalImageRegions[idx].extent.width,
                 pPalImageRegions[idx].extent.height,
                 pPalImageRegions[idx].extent.depth,
                 0
             };
 
-            memcpy(pUserData, copyData, sizeof(uint32_t)*12);
-            pUserData += 12;
+            // skip buffer copyData
+            memcpy(&pushConstant[12], copyData, sizeof(uint32_t)*12);
 
             // isSrgb
-            *pUserData = constInfo.pConstants[2];
-            pUserData ++;
-
+            pushConstant[24] = constInfo.pConstants[2];
             // isCopyBuffer
-            *pUserData = 0;
-            pUserData ++;
+            pushConstant[25] = 0;
+
+            m_pPalCmdBuffer->CmdSetUserData(Pal::PipelineBindPoint::Compute, 1, PushConstASTCToRGBA , &pushConstant[0]);
 
             // extent in block
             uint32 threadGroupsX = pPalImageRegions[idx].extent.width;
             uint32 threadGroupsY = pPalImageRegions[idx].extent.height;
-            uint32 threadGroupsZ = 1;
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
+            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, 1);
         }
     }
-    else if (type == InternalTexConvertCsType::ConvertETC2ToRGBA8)
+    else if ((type == InternalTexConvertCsType::ConvertETC2ToRGBA8) ||
+        (type == InternalTexConvertCsType::ConvertETC2ToBc3))
     {
+        uint32 pushConstant[PushConstETC2ToRGBA];
+
         for (uint32 idx = 0; idx < regionCount; ++idx)
         {
             pUserData = nullptr;
             CreateUserData(
-                InternalTexConvertCsType::ConvertETC2ToRGBA8,
+                type,
                 &pUserData,
-                m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertETC2ToRGBA8)]);
+                m_srdDwords[static_cast<uint32>(type)]);
 
             Pal::ImageCopyRegion copyRegion = pPalImageRegions[idx];
-            uint32 mips = copyRegion.dstSubres.mipLevel;
-            Pal::SubresId palSrcSubResId = copyRegion.srcSubres;
-            Pal::SubresId palDstSubResId = copyRegion.dstSubres;
+            Pal::SubresId palSrcSubResId    = copyRegion.srcSubres;
+            Pal::SubresId palDstSubResId    = copyRegion.dstSubres;
+            Pal::SwizzledFormat dstFormat   = pDstImage->GetImageCreateInfo().swizzledFormat;
+            Pal::SwizzledFormat srcFormat   = pSrcImage->GetImageCreateInfo().swizzledFormat;
 
-            Pal::SwizzledFormat dstFormat = pDstImage->GetImageCreateInfo().swizzledFormat;
-            Pal::SwizzledFormat srcFormat = pSrcImage->GetImageCreateInfo().swizzledFormat;
+            if (type == InternalTexConvertCsType::ConvertETC2ToBc3)
+            {
+                dstFormat.format    = Pal::ChNumFormat::X32Y32Z32W32_Uint;
+                dstFormat.swizzle.r = Pal::ChannelSwizzle::X;
+                dstFormat.swizzle.g = Pal::ChannelSwizzle::Y;
+                dstFormat.swizzle.b = Pal::ChannelSwizzle::Z;
+                dstFormat.swizzle.a = Pal::ChannelSwizzle::W;
+            }
 
             Pal::ImageViewInfo imageView[2] = {};
 
@@ -505,78 +553,62 @@ Pal::Result Device::GpuDecodeImage(
 
             pUserData += (2 * m_imageViewSizeInDwords) + m_bufferViewSizeInDwords;
 
-            // skip buffer copyData
-            pUserData += 12;
-
             uint32_t copyData[12] = {
-                pPalImageRegions[idx].srcOffset.x,
-                pPalImageRegions[idx].srcOffset.y,
-                pPalImageRegions[idx].srcOffset.z,
+                static_cast<uint32_t>(pPalImageRegions[idx].srcOffset.x),
+                static_cast<uint32_t>(pPalImageRegions[idx].srcOffset.y),
+                static_cast<uint32_t>(pPalImageRegions[idx].srcOffset.z),
                 0,
-
-                pPalImageRegions[idx].dstOffset.x * 4,
-                pPalImageRegions[idx].dstOffset.y * 4,
-                pPalImageRegions[idx].dstOffset.z,
+                static_cast<uint32_t>(pPalImageRegions[idx].dstOffset.x * 4),
+                static_cast<uint32_t>(pPalImageRegions[idx].dstOffset.y * 4),
+                static_cast<uint32_t>(pPalImageRegions[idx].dstOffset.z),
                 0,
-
                 pPalImageRegions[idx].extent.width,
                 pPalImageRegions[idx].extent.height,
                 pPalImageRegions[idx].extent.depth,
                 0
             };
 
-            memcpy(pUserData, copyData, sizeof(uint32_t)*12);
-            pUserData += 12;
+            // skip buffer copyData
+            memcpy(&pushConstant[12], copyData, sizeof(uint32_t)*12);
 
             // alphaBits
-            *pUserData = constInfo.pConstants[0];
-            pUserData ++;
-
+            pushConstant[24] = constInfo.pConstants[0];
             // components
-            *pUserData = constInfo.pConstants[1];
-            pUserData ++;
-
+            pushConstant[25] = constInfo.pConstants[1];
             // signedFlags
-            *pUserData = constInfo.pConstants[2];
-            pUserData ++;
-
+            pushConstant[26] = constInfo.pConstants[2];
             // isBufferSrc
-            *pUserData = 0;
-            pUserData ++;
+            pushConstant[27] = 0;
+
+            m_pPalCmdBuffer->CmdSetUserData(Pal::PipelineBindPoint::Compute, 1, PushConstETC2ToRGBA , &pushConstant[0]);
 
             uint32 threadGroupsX = (pPalImageRegions[idx].extent.width + 1) / 2;
             uint32 threadGroupsY = (pPalImageRegions[idx].extent.height + 1) / 2;
-            uint32 threadGroupsZ = 1;
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
+            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, 1);
         }
     }
     else
     {
-        PAL_ASSERT(type == InternalTexConvertCsType::ConvertRGBA8ToDXT5);
+        PAL_ASSERT(type == InternalTexConvertCsType::ConvertRGBA8ToBc3);
+
+        uint32 pushConstant[PushConstRGBAToBC3];
+
         for (uint32 idx = 0; idx < regionCount; ++idx)
         {
             pUserData = nullptr;
             CreateUserData(
-                InternalTexConvertCsType::ConvertRGBA8ToDXT5,
+                type,
                 &pUserData,
-                m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertRGBA8ToDXT5)]);
+                m_srdDwords[static_cast<uint32>(type)]);
 
             Pal::ImageCopyRegion copyRegion = pPalImageRegions[idx];
-            uint32 mips = copyRegion.dstSubres.mipLevel;
-            Pal::SubresId palSrcSubResId = copyRegion.srcSubres;
-            Pal::SubresId palDstSubResId = copyRegion.dstSubres;
-
-            if (palDstSubResId.mipLevel > pDstImage->GetImageCreateInfo().mipLevels)
-            {
-                m_pPalCmdBuffer->CmdRestoreComputeState(Pal::ComputeStateAll);
-                break;
-            }
-
-            Pal::SwizzledFormat srcFormat = pSrcImage->GetImageCreateInfo().swizzledFormat;
+            Pal::SubresId palSrcSubResId    = copyRegion.srcSubres;
+            Pal::SubresId palDstSubResId    = copyRegion.dstSubres;
+            Pal::SwizzledFormat srcFormat   = pSrcImage->GetImageCreateInfo().swizzledFormat;
 
             Pal::SwizzledFormat dstFormat;
-            dstFormat.format = Pal::ChNumFormat::X32Y32Z32W32_Uint;
+            dstFormat.format    = Pal::ChNumFormat::X32Y32Z32W32_Uint;
             dstFormat.swizzle.r = Pal::ChannelSwizzle::X;
             dstFormat.swizzle.g = Pal::ChannelSwizzle::Y;
             dstFormat.swizzle.b = Pal::ChannelSwizzle::Z;
@@ -588,35 +620,28 @@ Pal::Result Device::GpuDecodeImage(
 
             m_info.pPalDevice->CreateImageViewSrds(2, imageView, pUserData);
 
-            uint32 width = pSrcImage->GetImageCreateInfo().extent.width;
-            uint32 height = pSrcImage->GetImageCreateInfo().extent.height;
+            pUserData += (2 * m_imageViewSizeInDwords);
 
-            width = (width >> mips) > 1 ? (width >> mips) : 1;
-            height = (height >> mips) > 1 ? (height >> mips) : 1;
+            uint32_t cbParams[4] = {
+                pPalImageRegions[idx].extent.width,
+                constInfo.pConstants[0],
+                constInfo.pConstants[1],
+                0
+            };
 
+            memcpy(&pushConstant[0], cbParams, sizeof(uint32_t)*4);
+
+            m_pPalCmdBuffer->CmdSetUserData(Pal::PipelineBindPoint::Compute, 1, PushConstRGBAToBC3 , &pushConstant[0]);
+
+            uint32 width         = pPalImageRegions[idx].extent.width * 4;
+            uint32 height        = pPalImageRegions[idx].extent.height * 4;
             uint32 threadGroupsX = (width * height + 63) / 64;
-            uint32 threadGroupsY = 1;
-            uint32 threadGroupsZ = 1;
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
+            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, 1, 1);
         }
     }
 
-    Pal::BarrierInfo barrierInfo = {};
-    barrierInfo.waitPoint = Pal::HwPipePreCs;
-
-    const Pal::HwPipePoint pipePoint = Pal::HwPipePostCs;
-    barrierInfo.pipePointWaitCount = 1;
-    barrierInfo.pPipePoints = &pipePoint;
-
-    Pal::BarrierTransition transition = {};
-    transition.srcCacheMask = Pal::CoherShader;
-    transition.dstCacheMask = Pal::CoherShader;
-
-    barrierInfo.transitionCount = 1;
-    barrierInfo.pTransitions = &transition;
-    barrierInfo.reason = 1;
-    m_pPalCmdBuffer->CmdBarrier(barrierInfo);
+    InsertBarrier(m_pPalCmdBuffer);
 
     m_pPalCmdBuffer->CmdRestoreComputeState(Pal::ComputeStateAll);
 
@@ -640,24 +665,26 @@ Pal::Result Device::GpuDecodeBuffer(
     // only handle 2D texture with one slice copy by now
     PAL_ASSERT(pPalBufferRegionsIn->numSlices == 1);
     PAL_ASSERT(pPalBufferRegionsIn->imageExtent.depth == 1);
+
     uint32* pUserData = nullptr;
     BindPipeline(type, constInfo);
 
     if (type == InternalTexConvertCsType::ConvertASTCToRGBA8)
     {
+        uint32 pushConstant[PushConstASTCToRGBA];
         // fixed 128 bits for one ASTC block
         uint32_t viewBpp = 16;
         for (uint32 idx = 0; idx < regionCount; ++idx)
         {
             pUserData = nullptr;
             CreateUserData(
-                InternalTexConvertCsType::ConvertASTCToRGBA8,
+                type,
                 &pUserData,
-                m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertASTCToRGBA8)]);
+                m_srdDwords[static_cast<uint32>(type)]);
 
             Pal::MemoryImageCopyRegion copyRegion = pPalBufferRegionsIn[idx];
-            Pal::SubresId palDstSubResId = copyRegion.imageSubres;
-            Pal::SwizzledFormat dstFormat = pDstImage->GetImageCreateInfo().swizzledFormat;
+            Pal::SubresId palDstSubResId          = copyRegion.imageSubres;
+            Pal::SwizzledFormat dstFormat         = pDstImage->GetImageCreateInfo().swizzledFormat;
 
             Pal::gpusize range = ((pPalBufferRegionsIn[idx].imageExtent.height - 1) * pPalBufferRegionsIn[idx].gpuMemoryRowPitch) +
                 (pPalBufferRegionsIn[idx].imageExtent.width * viewBpp);
@@ -685,49 +712,41 @@ Pal::Result Device::GpuDecodeBuffer(
 
             PAL_ASSERT((pPalBufferRegionsIn[idx].gpuMemoryRowPitch / viewBpp) >= 1);
 
-            uint32_t copyData[12] =
-            {
+            uint32_t copyData[12] = {
                 uint32_t(pPalBufferRegionsIn[idx].imageOffset.x),
                 uint32_t(pPalBufferRegionsIn[idx].imageOffset.y),
                 uint32_t(pPalBufferRegionsIn[idx].imageOffset.z),
                 0, // unused
-
                 pPalBufferRegionsIn[idx].imageExtent.width,
                 pPalBufferRegionsIn[idx].imageExtent.height,
                 pPalBufferRegionsIn[idx].imageExtent.depth,
                 0, // unused
-
-                (pPalBufferRegionsIn[idx].gpuMemoryRowPitch / viewBpp),
-                pPalBufferRegionsIn[idx].gpuMemoryDepthPitch,
+                static_cast<uint32_t>(pPalBufferRegionsIn[idx].gpuMemoryRowPitch / viewBpp),
+                static_cast<uint32_t>(pPalBufferRegionsIn[idx].gpuMemoryDepthPitch),
                 0, // unused
                 0  // unused
             };
 
-            memcpy(pUserData, copyData, sizeof(uint32_t)*12);
-            pUserData += 12;
-
-            // skip imageData
-            pUserData += 12;
+            memcpy(&pushConstant[0], copyData, sizeof(uint32_t)*12);
 
             // isSrgb
-            *pUserData = constInfo.pConstants[2];
-            pUserData ++;
+            pushConstant[24] = constInfo.pConstants[2];
 
             // isBufferCpy
-            *pUserData = 1;
-            pUserData ++;
+            pushConstant[25] = 1;
+
+            m_pPalCmdBuffer->CmdSetUserData(Pal::PipelineBindPoint::Compute, 1, PushConstASTCToRGBA , &pushConstant[0]);
 
             uint32 threadGroupsX = pPalBufferRegionsIn[idx].imageExtent.width * 4;
             uint32 threadGroupsY = pPalBufferRegionsIn[idx].imageExtent.height * 4;
-            uint32 threadGroupsZ = 1;
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
-
+            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, 1);
         }
-
     }
-    else if (type == InternalTexConvertCsType::ConvertETC2ToRGBA8)
+    else
     {
+        PAL_ASSERT((type == InternalTexConvertCsType::ConvertETC2ToRGBA8) || (type == InternalTexConvertCsType::ConvertETC2ToBc3));
+
         uint32 viewBpp = 0;
         switch (sourceViewFormat.format)
         {
@@ -737,26 +756,34 @@ Pal::Result Device::GpuDecodeBuffer(
         case Pal::ChNumFormat::X32Y32_Uint:
             viewBpp = 8;
             break;
-        case Pal::ChNumFormat::X32_Uint:
-            viewBpp = 4;
-            break;
         default:
             PAL_ASSERT(0); // should not happen
             break;
         }
 
+        uint32 pushConstant[PushConstETC2ToBC3];
+
         for (uint32 idx = 0; idx < regionCount; ++idx)
         {
             pUserData = nullptr;
             CreateUserData(
-                InternalTexConvertCsType::ConvertETC2ToRGBA8,
+                type,
                 &pUserData,
-                m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertETC2ToRGBA8)]);
+                m_srdDwords[static_cast<uint32>(type)]);
 
             Pal::MemoryImageCopyRegion copyRegion = pPalBufferRegionsIn[idx];
-            Pal::SubresId palDstSubResId = copyRegion.imageSubres;
-            Pal::SwizzledFormat dstFormat = pDstImage->GetImageCreateInfo().swizzledFormat;
-            Pal::ImageViewInfo imageView = {};
+            Pal::SubresId palDstSubResId          = copyRegion.imageSubres;
+            Pal::SwizzledFormat dstFormat         = pDstImage->GetImageCreateInfo().swizzledFormat;
+            Pal::ImageViewInfo imageView          = {};
+
+            if (type == InternalTexConvertCsType::ConvertETC2ToBc3)
+            {
+                dstFormat.format = Pal::ChNumFormat::X32Y32Z32W32_Uint;
+                dstFormat.swizzle.r = Pal::ChannelSwizzle::X;
+                dstFormat.swizzle.g = Pal::ChannelSwizzle::Y;
+                dstFormat.swizzle.b = Pal::ChannelSwizzle::Z;
+                dstFormat.swizzle.a = Pal::ChannelSwizzle::W;
+            }
 
             BuildImageViewInfo(&imageView, pDstImage, palDstSubResId, dstFormat, true);
 
@@ -779,76 +806,44 @@ Pal::Result Device::GpuDecodeBuffer(
 
             PAL_ASSERT((pPalBufferRegionsIn[idx].gpuMemoryRowPitch / viewBpp) >= 1);
 
-            uint32_t copyData[12] =
-            {
+            uint32_t copyData[12] = {
                 uint32_t(pPalBufferRegionsIn[idx].imageOffset.x),
                 uint32_t(pPalBufferRegionsIn[idx].imageOffset.y),
                 uint32_t(pPalBufferRegionsIn[idx].imageOffset.z),
                 0, // unused
-
                 pPalBufferRegionsIn[idx].imageExtent.width,
                 pPalBufferRegionsIn[idx].imageExtent.height,
                 pPalBufferRegionsIn[idx].imageExtent.depth,
                 0, // unused
-
-                (pPalBufferRegionsIn[idx].gpuMemoryRowPitch / viewBpp),
-                pPalBufferRegionsIn[idx].gpuMemoryDepthPitch,
+                static_cast<uint32_t>(pPalBufferRegionsIn[idx].gpuMemoryRowPitch / viewBpp),
+                static_cast<uint32_t>(pPalBufferRegionsIn[idx].gpuMemoryDepthPitch),
                 0, // unused
                 0  // unused
             };
 
-            memcpy(pUserData, copyData, sizeof(uint32_t)*12);
-
-            pUserData += 12;
-
-            // skip image copyData
-            pUserData += 12;
+            memcpy(&pushConstant[0], copyData, sizeof(uint32_t)*12);
 
              // alphaBits
-            *pUserData = constInfo.pConstants[0];
-            pUserData ++;
-
+            pushConstant[24] = constInfo.pConstants[0];
             // components
-            *pUserData = constInfo.pConstants[1];
-            pUserData ++;
-
+            pushConstant[25] = constInfo.pConstants[1];
             // signedFlags
-            *pUserData = constInfo.pConstants[2];
-            pUserData ++;
-
+            pushConstant[26] = constInfo.pConstants[2];
             // isBufferSrc
-            *pUserData = 1;
-            pUserData ++;
+            pushConstant[27] = 1;
+
+            m_pPalCmdBuffer->CmdSetUserData(Pal::PipelineBindPoint::Compute, 1, PushConstETC2ToBC3 , &pushConstant[0]);
 
             uint32 threadGroupsX = (pPalBufferRegionsIn[idx].imageExtent.width + 1) / 2;
             uint32 threadGroupsY = (pPalBufferRegionsIn[idx].imageExtent.height + 1) / 2;
-            uint32 threadGroupsZ = 1;
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
+            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, 1);
         }
     }
-    else
-    {
-        PAL_NOT_IMPLEMENTED();
-    }
 
-    Pal::BarrierInfo barrierInfo = {};
-    barrierInfo.waitPoint = Pal::HwPipePreCs;
+    InsertBarrier(m_pPalCmdBuffer);
 
-    const Pal::HwPipePoint pipePoint = Pal::HwPipePostCs;
-    barrierInfo.pipePointWaitCount = 1;
-    barrierInfo.pPipePoints = &pipePoint;
-
-    Pal::BarrierTransition transition = {};
-    transition.srcCacheMask = Pal::CoherShader;
-    transition.dstCacheMask = Pal::CoherShader;
-
-    barrierInfo.transitionCount = 1;
-    barrierInfo.pTransitions = &transition;
-    barrierInfo.reason = 1;
-    m_pPalCmdBuffer->CmdBarrier(barrierInfo);
-
-     m_pPalCmdBuffer->CmdRestoreComputeState(Pal::ComputeStateAll);
+    m_pPalCmdBuffer->CmdRestoreComputeState(Pal::ComputeStateAll);
 
     return Pal::Result::Success;
 }
@@ -894,10 +889,10 @@ Pal::Result Device::CreateGpuMemory(
     Pal::gpusize*               pOffset)
 {
     Pal::GpuMemoryCreateInfo createInfo = {};
-    createInfo.size = pMemReqs->size;
+    createInfo.size      = pMemReqs->size;
     createInfo.alignment = pMemReqs->alignment;
-    createInfo.vaRange = Pal::VaRange::Default;
-    createInfo.priority = Pal::GpuMemPriority::VeryLow;
+    createInfo.vaRange   = Pal::VaRange::Default;
+    createInfo.priority  = Pal::GpuMemPriority::VeryLow;
     createInfo.heapCount = pMemReqs->heapCount;
 
     for (uint32 i = 0; i < createInfo.heapCount; i++)
@@ -933,11 +928,11 @@ void Device::CreateMemoryReqs(
     uint32                      alignment,
     Pal::GpuMemoryRequirements* pMemReqs)
 {
-    pMemReqs->size = bytesSize;
+    pMemReqs->size      = bytesSize;
     pMemReqs->alignment = alignment;
     pMemReqs->heapCount = 2;
-    pMemReqs->heaps[0] = Pal::GpuHeapLocal;
-    pMemReqs->heaps[1] = Pal::GpuHeapGartUswc;
+    pMemReqs->heaps[0]  = Pal::GpuHeapLocal;
+    pMemReqs->heaps[1]  = Pal::GpuHeapGartUswc;
 }
 
 // =====================================================================================================================
@@ -948,12 +943,11 @@ uint32* Device::CreateAndBindEmbeddedUserData(
     uint32            bindNum) const
 {
     Pal::gpusize gpuVirtAddr = 0;
-    uint32* const pCmdSpace = pCmdBuffer->CmdAllocateEmbeddedData(sizeInDwords, 8, &gpuVirtAddr);
+    uint32* const pCmdSpace  = pCmdBuffer->CmdAllocateEmbeddedData(sizeInDwords, 8, &gpuVirtAddr);
     PAL_ASSERT(pCmdSpace != nullptr);
 
     const uint32 gpuVirtAddrLo = Util::LowPart(gpuVirtAddr);
     pCmdBuffer->CmdSetUserData(Pal::PipelineBindPoint::Compute, entryToBind, bindNum, &gpuVirtAddrLo);
-
     return pCmdSpace;
 }
 
@@ -962,47 +956,49 @@ Pal::IPipeline* Device::GetInternalPipeline(
     InternalTexConvertCsType    type,
     const CompileTimeConstants& constInfo)
 {
-    Pal::IPipeline* pPipeline = nullptr;
-    void* pMemory = nullptr;
-    PipelineBuildInfo buildInfo = {};
-    GpuDecodeMappingNode resourceNodes[AstcInternalPipelineNodes];
+    void* pMemory                             = nullptr;
+    PipelineBuildInfo buildInfo               = {};
     InternalPipelineMemoryPair* pPipelinePair = nullptr;
-    Pal::Result result = Pal::Result::Success;
+    Pal::Result result                        = Pal::Result::Success;
+    GpuDecodeMappingNode resourceNodes[AstcInternalPipelineNodes];
 
-    if (type == InternalTexConvertCsType::ConvertETC2ToRGBA8)
+    if ((type == InternalTexConvertCsType::ConvertETC2ToRGBA8) || (type == InternalTexConvertCsType::ConvertETC2ToBc3))
     {
-        if (m_etc2PipeLine.pPipeline == nullptr)
+        InternalPipelineMemoryPair* pPipeline = (type == InternalTexConvertCsType::ConvertETC2ToRGBA8) ?
+            &m_etc2ToRgba8PipeLine : &m_etc2ToBc3Pipeline;
+
+        if (pPipeline->pPipeline == nullptr)
         {
-            buildInfo.nodeCount = 1;
-
             // 1. output
-            resourceNodes[0].nodeType = NodeType::Image;
-            resourceNodes[0].sizeInDwords = m_imageViewSizeInDwords;
+            resourceNodes[0].nodeType       = NodeType::Image;
+            resourceNodes[0].sizeInDwords   = m_imageViewSizeInDwords;
             resourceNodes[0].offsetInDwords = 0;
-            resourceNodes[0].binding = 0;
-            resourceNodes[0].set = 0;
+            resourceNodes[0].binding        = 0;
+            resourceNodes[0].set            = 0;
 
-            // 2. input
-            resourceNodes[1].nodeType = NodeType::Image;
-            resourceNodes[1].sizeInDwords = m_imageViewSizeInDwords;
+            // 2. input image
+            resourceNodes[1].nodeType       = NodeType::Image;
+            resourceNodes[1].sizeInDwords   = m_imageViewSizeInDwords;
             resourceNodes[1].offsetInDwords = 1 * m_imageViewSizeInDwords;
-            resourceNodes[1].binding = 1;
-            resourceNodes[1].set = 0;
+            resourceNodes[1].binding        = 1;
+            resourceNodes[1].set            = 0;
 
-            resourceNodes[2].nodeType = NodeType::TexBuffer;
-            resourceNodes[2].sizeInDwords = m_imageViewSizeInDwords;
+            // 3. input buffer
+            resourceNodes[2].nodeType       = NodeType::TexBuffer;
+            resourceNodes[2].sizeInDwords   = m_bufferViewSizeInDwords;
             resourceNodes[2].offsetInDwords = 2 * m_imageViewSizeInDwords;
-            resourceNodes[2].binding = 2;
-            resourceNodes[2].set = 0;
+            resourceNodes[2].binding        = 2;
+            resourceNodes[2].set            = 0;
 
-            resourceNodes[3].nodeType = NodeType::PushConstant;
-            resourceNodes[3].sizeInDwords = 28; // bufferData, imageData, alphabits, eacComps, signedflags, isBufferSrc
+            // 4. push constants
+            resourceNodes[3].nodeType       = NodeType::PushConstant;
+            resourceNodes[3].sizeInDwords   = 28; // bufferData, imageData, alphabits, eacComps, signedflags, isBufferSrc
             resourceNodes[3].offsetInDwords = 2 * m_imageViewSizeInDwords + m_bufferViewSizeInDwords;
-            resourceNodes[3].binding = 0;
-            resourceNodes[3].set = static_cast<unsigned>(-1); // Vkgc::InternalDescriptorSetId
+            resourceNodes[3].binding        = 0;
+            resourceNodes[3].set            = static_cast<unsigned>(-1); // Vkgc::InternalDescriptorSetId
 
-            buildInfo.shaderType = InternalTexConvertCsType::ConvertETC2ToRGBA8;
-
+            buildInfo.nodeCount      = GpuTexDecoder::Etc2InternalPipelineNodes;
+            buildInfo.shaderType     = type;
             buildInfo.pUserDataNodes = resourceNodes;
 
             GetSpvCode(buildInfo.shaderType, &(buildInfo.code.pSpvCode), &(buildInfo.code.spvSize));
@@ -1011,13 +1007,54 @@ Pal::IPipeline* Device::GetInternalPipeline(
                 m_info,
                 constInfo,
                 buildInfo,
-                &m_etc2PipeLine.pPipeline,
-                &m_etc2PipeLine.pMemory);
+                &pPipeline->pPipeline,
+                &pPipeline->pMemory);
 
             PAL_ASSERT(result == Pal::Result::Success);
         }
 
-        pPipelinePair = &m_etc2PipeLine;
+        pPipelinePair = pPipeline;
+    }
+    else if (type == InternalTexConvertCsType::ConvertRGBA8ToBc3)
+    {
+        if (m_rgba8ToBc3PipeLine.pPipeline == nullptr)
+        {
+            // 1. input
+            resourceNodes[0].nodeType       = NodeType::Image;
+            resourceNodes[0].sizeInDwords   = m_imageViewSizeInDwords;
+            resourceNodes[0].offsetInDwords = 0;
+            resourceNodes[0].binding        = 0;
+            resourceNodes[0].set            = 0;
+
+            // 2. output
+            resourceNodes[1].nodeType       = NodeType::Image;
+            resourceNodes[1].sizeInDwords   = m_imageViewSizeInDwords;
+            resourceNodes[1].offsetInDwords = 1 * m_imageViewSizeInDwords;
+            resourceNodes[1].binding        = 1;
+            resourceNodes[1].set            = 0;
+
+            resourceNodes[2].nodeType       = NodeType::PushConstant;
+            resourceNodes[2].sizeInDwords   = 4; // width, start_block, quality, aligned to 4 DWORDs
+            resourceNodes[2].offsetInDwords = 2 * m_imageViewSizeInDwords;
+            resourceNodes[2].binding        = 0;
+            resourceNodes[2].set            = static_cast<unsigned>(-1); // Vkgc::InternalDescriptorSetId
+
+            buildInfo.nodeCount      = GpuTexDecoder::Bc3InternalPipelineNodes;
+            buildInfo.shaderType     = type;
+            buildInfo.pUserDataNodes = resourceNodes;
+
+            GetSpvCode(buildInfo.shaderType, &(buildInfo.code.pSpvCode), &(buildInfo.code.spvSize));
+
+            result = ClientCreateInternalComputePipeline(
+                m_info,
+                constInfo,
+                buildInfo,
+                &m_rgba8ToBc3PipeLine.pPipeline,
+                &m_rgba8ToBc3PipeLine.pMemory);
+
+            PAL_ASSERT(result == Pal::Result::Success);
+        }
+        pPipelinePair = &m_rgba8ToBc3PipeLine;
     }
     else
     {
@@ -1027,8 +1064,8 @@ Pal::IPipeline* Device::GetInternalPipeline(
         Util::MetroHash64::Hash((uint8 *)(constInfo.pConstants), sizeof(uint32) * constInfo.numConstants, &hash.bytes[0]);
 
         InternalPipelineKey key = {};
-        key.shaderType = type;
-        key.constInfoHash = Util::MetroHash::Compact32(&hash);
+        key.shaderType          = type;
+        key.constInfoHash       = Util::MetroHash::Compact32(&hash);
 
         {
             Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> lock(pPipelineLock);
@@ -1040,88 +1077,64 @@ Pal::IPipeline* Device::GetInternalPipeline(
             Util::RWLockAuto<Util::RWLock::LockType::ReadWrite> lock(pPipelineLock);
 
             bool existed = false;
-            result = m_pipelineMap.FindAllocate(key, &existed, &pPipelinePair);
+            result       = m_pipelineMap.FindAllocate(key, &existed, &pPipelinePair);
 
             if ((existed == false) && (result == Pal::Result::Success) && (pPipelinePair != nullptr))
             {
                 if (type == InternalTexConvertCsType::ConvertASTCToRGBA8)
                 {
-                    buildInfo.nodeCount = 1;
-
                     // 1.Color UnQuantization Buffer View
-                    resourceNodes[0].nodeType = NodeType::Buffer;
-                    resourceNodes[0].sizeInDwords = m_bufferViewSizeInDwords;
+                    resourceNodes[0].nodeType       = NodeType::Buffer;
+                    resourceNodes[0].sizeInDwords   = m_bufferViewSizeInDwords;
                     resourceNodes[0].offsetInDwords = 0;
-                    resourceNodes[0].binding = 0;
-                    resourceNodes[0].set = 0;
+                    resourceNodes[0].binding        = 0;
+                    resourceNodes[0].set            = 0;
 
                     // 2.Trits Quints Buffer View
-                    resourceNodes[1].nodeType = NodeType::Buffer;
-                    resourceNodes[1].sizeInDwords = m_bufferViewSizeInDwords;
+                    resourceNodes[1].nodeType       = NodeType::Buffer;
+                    resourceNodes[1].sizeInDwords   = m_bufferViewSizeInDwords;
                     resourceNodes[1].offsetInDwords = 1 * m_bufferViewSizeInDwords;
-                    resourceNodes[1].binding = 1;
-                    resourceNodes[1].set = 0;
+                    resourceNodes[1].binding        = 1;
+                    resourceNodes[1].set            = 0;
 
                     // 3.Quant and Transfer Buffer View
-                    resourceNodes[2].nodeType = NodeType::Buffer;
-                    resourceNodes[2].sizeInDwords = m_bufferViewSizeInDwords;
+                    resourceNodes[2].nodeType       = NodeType::Buffer;
+                    resourceNodes[2].sizeInDwords   = m_bufferViewSizeInDwords;
                     resourceNodes[2].offsetInDwords = 2 * m_bufferViewSizeInDwords;
-                    resourceNodes[2].binding = 2;
-                    resourceNodes[2].set = 0;
+                    resourceNodes[2].binding        = 2;
+                    resourceNodes[2].set            = 0;
 
                     // 4. TexBuffer View for Src Image Buffer
-                    resourceNodes[3].nodeType = NodeType::TexBuffer;
-                    resourceNodes[3].sizeInDwords = m_bufferViewSizeInDwords;
+                    resourceNodes[3].nodeType       = NodeType::TexBuffer;
+                    resourceNodes[3].sizeInDwords   = m_bufferViewSizeInDwords;
                     resourceNodes[3].offsetInDwords = 3 * m_bufferViewSizeInDwords;
-                    resourceNodes[3].binding = 3;
-                    resourceNodes[3].set = 0;
+                    resourceNodes[3].binding        = 3;
+                    resourceNodes[3].set            = 0;
 
                     // 5. Image View for Src Image
-                    resourceNodes[4].nodeType = NodeType::Image;
-                    resourceNodes[4].sizeInDwords = m_imageViewSizeInDwords;
+                    resourceNodes[4].nodeType       = NodeType::Image;
+                    resourceNodes[4].sizeInDwords   = m_imageViewSizeInDwords;
                     resourceNodes[4].offsetInDwords = 4 * m_bufferViewSizeInDwords;
-                    resourceNodes[4].binding = 4;
-                    resourceNodes[4].set = 0;
+                    resourceNodes[4].binding        = 4;
+                    resourceNodes[4].set            = 0;
 
                     // 6. Image View for Dst Image
-                    resourceNodes[5].nodeType = NodeType::Image;
-                    resourceNodes[5].sizeInDwords = m_imageViewSizeInDwords;
+                    resourceNodes[5].nodeType       = NodeType::Image;
+                    resourceNodes[5].sizeInDwords   = m_imageViewSizeInDwords;
                     resourceNodes[5].offsetInDwords = 4 * m_bufferViewSizeInDwords + m_imageViewSizeInDwords;
-                    resourceNodes[5].binding = 5;
-                    resourceNodes[5].set = 0;
+                    resourceNodes[5].binding        = 5;
+                    resourceNodes[5].set            = 0;
 
-                    resourceNodes[6].nodeType = NodeType::PushConstant;
-                    resourceNodes[6].sizeInDwords = 26; // bufferData, imageData, isSrgb, isBufferCpy
+                    resourceNodes[6].nodeType       = NodeType::PushConstant;
+                    resourceNodes[6].sizeInDwords   = 26; // bufferData, imageData, isSrgb, isBufferCpy
                     resourceNodes[6].offsetInDwords = 4 * m_bufferViewSizeInDwords + 2 * m_imageViewSizeInDwords;
-                    resourceNodes[6].binding = 0;
-                    resourceNodes[6].set = static_cast<unsigned>(-1); // Vkgc::InternalDescriptorSetId
+                    resourceNodes[6].binding        = 0;
+                    resourceNodes[6].set            = static_cast<unsigned>(-1); // Vkgc::InternalDescriptorSetId
 
-                    buildInfo.shaderType = InternalTexConvertCsType::ConvertASTCToRGBA8;
+                    buildInfo.nodeCount      = GpuTexDecoder::AstcInternalPipelineNodes;
+                    buildInfo.shaderType     = type;
+                    buildInfo.pUserDataNodes = resourceNodes;
                 }
-                else
-                {
-                    PAL_ASSERT(type == InternalTexConvertCsType::ConvertRGBA8ToDXT5);
-
-                    buildInfo.nodeCount = 1;
-
-                    // 1. input
-                    resourceNodes[0].nodeType = NodeType::Image;
-                    resourceNodes[0].sizeInDwords = m_imageViewSizeInDwords;
-                    resourceNodes[0].offsetInDwords = 0;
-                    resourceNodes[0].binding = 0;
-                    resourceNodes[0].set = 0;
-
-                    // 2. output
-                    resourceNodes[1].nodeType = NodeType::Image;
-                    resourceNodes[1].sizeInDwords = m_imageViewSizeInDwords;
-                    resourceNodes[1].offsetInDwords = 1 * m_imageViewSizeInDwords;
-                    resourceNodes[1].binding = 1;
-                    resourceNodes[1].set = 0;
-
-                    buildInfo.shaderType = InternalTexConvertCsType::ConvertRGBA8ToDXT5;
-                }
-
-                buildInfo.pUserDataNodes = resourceNodes;
 
                 GetSpvCode(buildInfo.shaderType, &(buildInfo.code.pSpvCode), &(buildInfo.code.spvSize));
 
@@ -1151,11 +1164,10 @@ void Device::BuildBufferViewInfo(
     Pal::SwizzledFormat       swizzleFormat) const
 {
     Pal::BufferViewInfo tableDataView = {};
-    tableDataView.gpuAddr = addr;
-    tableDataView.range = dataBytes;
-    tableDataView.stride = stride;
-    tableDataView.swizzledFormat = swizzleFormat;
-
+    tableDataView.gpuAddr             = addr;
+    tableDataView.range               = dataBytes;
+    tableDataView.stride              = stride;
+    tableDataView.swizzledFormat      = swizzleFormat;
     m_info.pPalDevice->CreateUntypedBufferViewSrds(count, &tableDataView, pData);
 }
 
@@ -1169,11 +1181,10 @@ void Device::BuildTypedBufferViewInfo(
     Pal::SwizzledFormat       swizzleFormat) const
 {
     Pal::BufferViewInfo tableDataView = {};
-    tableDataView.gpuAddr = addr;
-    tableDataView.range = dataBytes;
-    tableDataView.stride = stride;
-    tableDataView.swizzledFormat = swizzleFormat;
-
+    tableDataView.gpuAddr             = addr;
+    tableDataView.range               = dataBytes;
+    tableDataView.stride              = stride;
+    tableDataView.swizzledFormat      = swizzleFormat;
     m_info.pPalDevice->CreateTypedBufferViewSrds(count, &tableDataView, pData);
 }
 
@@ -1186,16 +1197,15 @@ void Device::BuildImageViewInfo(
     bool                 isShaderWriteable) const
 {
     const Pal::ImageType imageType = pImage->GetImageCreateInfo().imageType;
-
-    pInfo->pImage = pImage;
-    pInfo->viewType = static_cast<Pal::ImageViewType>(imageType);
+    pInfo->pImage                  = pImage;
+    pInfo->viewType                = static_cast<Pal::ImageViewType>(imageType);
     pInfo->subresRange.startSubres = subresId;
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 642
     pInfo->subresRange.numPlanes = 1;
 #endif
-    pInfo->subresRange.numMips = 1;
+    pInfo->subresRange.numMips   = 1;
     pInfo->subresRange.numSlices = 1;
-    pInfo->swizzledFormat = swizzledFormat;
+    pInfo->swizzledFormat        = swizzledFormat;
 
     // ASTC/ETC only uses compute shaders, where the write-out surface is assumed to be write-only.
     pInfo->possibleLayouts = { (isShaderWriteable ? Pal::LayoutShaderWrite : Pal::LayoutShaderRead),
@@ -1206,11 +1216,11 @@ void Device::BuildImageViewInfo(
 // =====================================================================================================================
 Pal::Result Device::CreateTableMemory()
 {
-    Pal::Result result = Pal::Result::Success;
+    Pal::Result result         = Pal::Result::Success;
     uint32_t colorUnquantiSize = sizeof(ColorQuantizationModeInfo);
-    uint32_t triSize = sizeof(TritsQuintsTable);
-    uint32_t quantiModesize = sizeof(QuantAndXferTables);
-    uint32_t totalSize = colorUnquantiSize + triSize + quantiModesize;
+    uint32_t triSize           = sizeof(TritsQuintsTable);
+    uint32_t quantiModesize    = sizeof(QuantAndXferTables);
+    uint32_t totalSize         = colorUnquantiSize + triSize + quantiModesize;
 
     // Create gpu memory for all table
     Pal::GpuMemoryRequirements memReqs = {};
@@ -1218,8 +1228,8 @@ Pal::Result Device::CreateTableMemory()
     Pal::GpuMemoryRef memRef;
 
     Pal::gpusize offset = 0;
-    uint8* pData = nullptr;
-    result = CreateGpuMemory(&memReqs, &m_pTableMemory, &offset);
+    uint8* pData        = nullptr;
+    result              = CreateGpuMemory(&memReqs, &m_pTableMemory, &offset);
 
     if (result == Pal::Result::Success)
     {
@@ -1266,10 +1276,10 @@ Pal::Result Device::SetupInternalTables(
     {
         if (result == Pal::Result::Success)
         {
-            uint32 offset = 0;
+            uint32 offset            = 0;
             uint32 colorUnquantiSize = sizeof(ColorQuantizationModeInfo);
-            uint32 triSize = sizeof(TritsQuintsTable);
-            uint32 quantiModesize = sizeof(QuantAndXferTables);
+            uint32 triSize           = sizeof(TritsQuintsTable);
+            uint32 quantiModesize    = sizeof(QuantAndXferTables);
 
             // 1.Color UnQuantization
             BuildBufferViewInfo(*ppUserData, 1, m_pTableMemory->Desc().gpuVirtAddr, colorUnquantiSize, 1, Pal::UndefinedSwizzledFormat);

@@ -45,12 +45,14 @@ macro(xgl_options)
 
     option(XGL_BUILD_NAVI24 "Build vulkan for Navi24" ON)
 
-    option(XGL_BUILD_TESTS "Build all tests?" OFF)
+    option(XGL_BUILD_TESTS "Build tests?" OFF)
+
+    option(XGL_BUILD_TOOLS "Build tools?" OFF)
 
     option(XGL_BUILD_CACHE_CREATOR "Build cache-creator tools?" OFF)
 
 #if VKI_GPU_DECOMPRESS
-    option(VKI_GPU_DECOMPRESS "Build vulkan with GPU_DECOMPRESS" OFF)
+    option(VKI_GPU_DECOMPRESS "Build vulkan with GPU_DECOMPRESS" ON)
 #endif
 
         option(ICD_BUILD_LLPC "Build LLPC?" ON)

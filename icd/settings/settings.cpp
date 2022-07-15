@@ -131,8 +131,6 @@ void VulkanSettingsLoader::OverrideSettingsBySystemInfo()
 
     if (pRootPath != nullptr)
     {
-        MakeAbsolutePath(m_settings.renderPassLogDirectory, sizeof(m_settings.renderPassLogDirectory),
-                         pRootPath, m_settings.renderPassLogDirectory);
         MakeAbsolutePath(m_settings.pipelineDumpDir, sizeof(m_settings.pipelineDumpDir),
                          pRootPath, m_settings.pipelineDumpDir);
         MakeAbsolutePath(m_settings.shaderReplaceDir, sizeof(m_settings.shaderReplaceDir),
@@ -216,6 +214,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // Enable NGG culling by default for Navi2x.
             m_settings.nggEnableBackfaceCulling = true;
             m_settings.nggEnableSmallPrimFilter = true;
+
+            // Enable NGG compactionless mode for Navi2x
             m_settings.nggCompactionMode = NggCompactDisable;
 
         }
@@ -907,6 +907,35 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
+        if ((appProfile == AppProfile::SniperElite5) &&
+            (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3))
+        {
+            m_settings.csWaveSize = 64;
+            m_settings.fsWaveSize = 64;
+
+            if (pInfo->revision == Pal::AsicRevision::Navi21)
+            {
+                m_settings.pipelineBinningMode = PipelineBinningModeDisable;
+            }
+
+            if (pInfo->revision == Pal::AsicRevision::Navi22)
+            {
+                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                             ForceDccFor32BppShaderStorage);
+            }
+            else if (pInfo->revision == Pal::AsicRevision::Navi23)
+            {
+                m_settings.pipelineBinningMode = PipelineBinningModeDisable;
+            }
+            else if (pInfo->revision == Pal::AsicRevision::Navi24)
+            {
+                m_settings.pipelineBinningMode    = PipelineBinningModeDisable;
+                m_settings.mallNoAllocCtPolicy    = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                m_settings.mallNoAllocSsrPolicy   = MallNoAllocSsrAsSnsr;
+            }
+        }
+
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
     }
 
@@ -1021,17 +1050,6 @@ void VulkanSettingsLoader::ReadPublicSettings()
         sizeof(appGpuID)))
     {
         m_settings.appGpuID = appGpuID;
-    }
-
-    // Read TurboSync global key
-    bool turboSyncGlobal = false;
-    if (m_pDevice->ReadSetting("TurboSync",
-                                Pal::SettingScope::Global,
-                                Util::ValueType::Boolean,
-                                &turboSyncGlobal,
-                                sizeof(turboSyncGlobal)))
-    {
-        m_settings.enableTurboSync = turboSyncGlobal;
     }
 
     // Read TFQ global key

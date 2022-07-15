@@ -265,6 +265,18 @@ constexpr AppProfilePatternEntry AppEngineStrangeBrigade =
     "strange"
 };
 
+constexpr AppProfilePatternEntry AppNameSkyGold =
+{
+    PatternAppNameLower,
+    "sky"
+};
+
+constexpr AppProfilePatternEntry AppEngineSkyGold =
+{
+    PatternEngineNameLower,
+    "sky"
+};
+
 constexpr AppProfilePatternEntry AppNameWWZ =
 {
     PatternAppNameLower,
@@ -503,6 +515,18 @@ constexpr AppProfilePatternEntry AppNameX4Engine
 {
     PatternEngineNameLower,
     "engine name"
+};
+
+constexpr AppProfilePatternEntry AppNameSniperElite5 =
+{
+    PatternAppNameLower,
+    "sniper5"
+};
+
+constexpr AppProfilePatternEntry AppEngineSniperElite5 =
+{
+    PatternEngineNameLower,
+    "sniper5"
 };
 
 constexpr AppProfilePatternEntry PatternEnd = {};
@@ -846,6 +870,15 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::SkyGold,
+        {
+            AppNameSkyGold,
+            AppEngineSkyGold,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::WorldWarZ,
         {
             AppNameWWZ,
@@ -974,6 +1007,15 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::SniperElite5,
+        {
+            AppNameSniperElite5,
+            AppEngineSniperElite5,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::AngleEngine,
         {
             AppEngineAngle,
@@ -1013,8 +1055,7 @@ AppProfilePattern AppPatternTable[] =
             AppNameX4Engine,
             PatternEnd
         }
-    },
-
+    }
 };
 
 static char* GetExecutableName(size_t* pLength, bool includeExtension = false);

@@ -1308,9 +1308,9 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
 
     *pCount = Util::Min(m_queueFamilyCount, *pCount);
 
-    for (uint32_t i = 0; i < *pCount; ++i)
+    for (uint32_t queueFamilyIndex = 0; queueFamilyIndex < *pCount; ++queueFamilyIndex)
     {
-        pQueueProperties[i] = m_queueFamilies[i].properties;
+        pQueueProperties[queueFamilyIndex] = m_queueFamilies[queueFamilyIndex].properties;
     }
 
     return ((m_queueFamilyCount == *pCount) ? VK_SUCCESS : VK_INCOMPLETE);
@@ -1331,12 +1331,12 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
 
     *pCount = Util::Min(m_queueFamilyCount, *pCount);
 
-    for (uint32 i = 0; i < *pCount; ++i)
+    for (uint32 queueFamilyIndex = 0; queueFamilyIndex < *pCount; ++queueFamilyIndex)
     {
-        VkQueueFamilyProperties2* pQueueProps = &pQueueProperties[i];
+        VkQueueFamilyProperties2* pQueueProps = &pQueueProperties[queueFamilyIndex];
         VK_ASSERT(pQueueProps->sType == VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2);
 
-        pQueueProps->queueFamilyProperties = m_queueFamilies[i].properties;
+        pQueueProps->queueFamilyProperties = m_queueFamilies[queueFamilyIndex].properties;
 
         void* pNext = pQueueProps->pNext;
 
@@ -1351,13 +1351,16 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
                     auto* pProperties = static_cast<VkQueueFamilyGlobalPriorityPropertiesEXT*>(pNext);
                     pProperties->priorityCount = 0;
 
+                    const auto palEngineType = GetQueueFamilyPalEngineType(queueFamilyIndex);
+                    const auto& palEngineProperties = m_properties.engineProperties[palEngineType];
+
                     uint32 queuePrioritySupportMask = 0;
-                    for (uint32 engineNdx = 0u; engineNdx < m_properties.engineProperties[i].engineCount; ++engineNdx)
+                    for (uint32 engineNdx = 0u; engineNdx < palEngineProperties.engineCount; ++engineNdx)
                     {
-                        const auto& engineCapabilities = m_properties.engineProperties[i].capabilities[engineNdx];
+                        const auto& engineCapabilities = palEngineProperties.capabilities[engineNdx];
 
                         // Leave out High Priority for Universal Queue
-                        if ((i != Pal::EngineTypeUniversal) || IsNormalQueue(engineCapabilities))
+                        if ((palEngineType != Pal::EngineTypeUniversal) || IsNormalQueue(engineCapabilities))
                         {
                             queuePrioritySupportMask |= engineCapabilities.queuePrioritySupport;
                         }
@@ -3895,6 +3898,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     }
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INDEX_TYPE_UINT8));
 
+     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_NON_SEAMLESS_CUBE_MAP));
+
     bool disableAMDVendorExtensions = false;
     if (pPhysicalDevice != nullptr)
     {
@@ -6224,6 +6229,19 @@ size_t PhysicalDevice::GetFeatures2(
                     pExtInfo->workgroupMemoryExplicitLayoutScalarBlockLayout = VK_TRUE;
                     pExtInfo->workgroupMemoryExplicitLayout8BitAccess        = VK_TRUE;
                     pExtInfo->workgroupMemoryExplicitLayout16BitAccess       = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NON_SEAMLESS_CUBE_MAP_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->nonSeamlessCubeMap = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);

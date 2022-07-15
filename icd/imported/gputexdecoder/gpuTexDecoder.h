@@ -56,22 +56,27 @@ using Pal::uint16;
 using Pal::uint32;
 using Pal::uint64;
 
-constexpr uint32 AstcInternalPipelineNodes = 7;
-constexpr uint32 Etc2InternalPipelineNodes = 4;
-constexpr uint32 DXT5InternalPipelineNodes = 2;
+constexpr uint32 AstcInternalPipelineNodes      = 7;
+constexpr uint32 Etc2InternalPipelineNodes      = 4;
+constexpr uint32 Bc3InternalPipelineNodes       = 3;
+constexpr uint32 Etc2ToBc3InternalPipelineNodes = Etc2InternalPipelineNodes;
+
+constexpr uint32 PushConstASTCToRGBA            = 26;
+constexpr uint32 PushConstETC2ToRGBA            = 28;
+constexpr uint32 PushConstRGBAToBC3             = 4;
+constexpr uint32 PushConstETC2ToBC3             = PushConstETC2ToRGBA;
 
 // Enum for internal texture format convert type
-enum class InternalTexConvertCsType : uint32
-{
+enum class InternalTexConvertCsType : uint32 {
      ConvertASTCToRGBA8,
      ConvertETC2ToRGBA8,
-     ConvertRGBA8ToDXT5,
+     ConvertRGBA8ToBc3,
+     ConvertETC2ToBc3,
      Count
 };
 
 // Information to initialize a gpuTexDecoder device
-struct DeviceInitInfo
-{
+struct DeviceInitInfo {
     uint32            gpuIdx;                       // Client GPU index associated with this gpurt device
     void*             pClientUserData;              // User data pointer passed to internal pipeline create/destroy callbacks
     Pal::IDevice*     pPalDevice;
@@ -80,20 +85,17 @@ struct DeviceInitInfo
                                                     // (this pointer is retained).
 };
 
-struct CompileTimeConstants
-{
+struct CompileTimeConstants {
     const uint32* pConstants;
     uint32        numConstants;
 };
 
-struct PipelineShaderCode
-{
+struct PipelineShaderCode {
     const void* pSpvCode;   // Code in SPIR-V form
     uint32      spvSize;    // Size in bytes of SPIR-V code
 };
 
-enum class NodeType : uint32
-{
+enum class NodeType : uint32 {
     Buffer,
     TexBuffer,
     Image,
@@ -101,8 +103,7 @@ enum class NodeType : uint32
     Count
 };
 
-struct GpuDecodeMappingNode
-{
+struct GpuDecodeMappingNode {
     NodeType nodeType;
     uint32   binding;
     uint32   set;
@@ -110,23 +111,20 @@ struct GpuDecodeMappingNode
     uint32   sizeInDwords;
 };
 
-struct PipelineBuildInfo
-{
-    GpuDecodeMappingNode*                pUserDataNodes;
-    uint32                               nodeCount;
-    PipelineShaderCode                   code;
-    InternalTexConvertCsType             shaderType;
+struct PipelineBuildInfo {
+    GpuDecodeMappingNode*    pUserDataNodes;
+    uint32                   nodeCount;
+    PipelineShaderCode       code;
+    InternalTexConvertCsType shaderType;
 };
 
 // Map key for map of internal pipelines
-struct InternalPipelineKey
-{
+struct InternalPipelineKey {
     InternalTexConvertCsType shaderType;
     uint32                   constInfoHash;
 };
 
-struct InternalPipelineMemoryPair
-{
+struct InternalPipelineMemoryPair {
     Pal::IPipeline* pPipeline;
     void*           pMemory;
 };
@@ -270,6 +268,8 @@ private:
     Util::GenericAllocatorTracked m_allocator;
     Util::RWLock                  m_internalPipelineLock;
     InternalPipelineMap           m_pipelineMap;
-    InternalPipelineMemoryPair    m_etc2PipeLine;
+    InternalPipelineMemoryPair    m_etc2ToRgba8PipeLine;
+    InternalPipelineMemoryPair    m_rgba8ToBc3PipeLine;
+    InternalPipelineMemoryPair    m_etc2ToBc3Pipeline;
 };
 }

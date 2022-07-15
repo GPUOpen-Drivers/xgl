@@ -47,12 +47,14 @@
 #define ALIGN_16
 #else
 #include INC_cmp_math_func
-#if defined(WIN32)
+#if defined(WIN32) || defined(_WIN64)
 #define ALIGN_16 __declspec(align(16))
 #else  // !WIN32 && !_WIN64
 #define ALIGN_16
+#endif  // !WIN32 && !_WIN64
 #endif
-#endif
+
+
 
 #define DXTC_OFFSET_ALPHA 0
 #define DXTC_OFFSET_RGB 2
@@ -1679,7 +1681,7 @@ static void cmp_decompressDXTRGBA_Internal(CGU_UINT8 rgbBlock[BLOCK_SIZE_4X4X4],
         }
     }  //MAP_ABGR
 }
-#endif
+#endif  // !ASPM_GPU
 
 //--------------------------------------------------------------------------------------------------------
 // Decompress is RGB (0.0f..255.0f)

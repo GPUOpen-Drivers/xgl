@@ -234,8 +234,7 @@ public:
 
     void ApplyDefaultShaderOptions(
         ShaderStage                  stage,
-        Vkgc::PipelineShaderOptions* pShaderOptions
-    ) const;
+        Vkgc::PipelineShaderOptions* pShaderOptions) const;
 
     Vkgc::GfxIpVersion& GetGfxIp() { return m_gfxIp; }
 

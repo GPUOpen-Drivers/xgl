@@ -83,6 +83,8 @@ static uint32_t ConvertPipePointToPipeStage(
             stageMask = Pal::PipelineStageFetchIndirectArgs | Pal::PipelineStageFetchIndices;
             break;
         case Pal::HwPipePreRasterization:
+            stageMask = Pal::PipelineStageVs | Pal::PipelineStageHs | Pal::PipelineStageDs | Pal::PipelineStageGs;
+            break;
         case Pal::HwPipePostPs:
             stageMask = Pal::PipelineStagePs;
             break;
@@ -717,6 +719,10 @@ VkResult CmdBuffer::Initialize(
     if (result == Pal::Result::Success)
     {
         m_flags.is2ndLvl = groupCreateInfo.flags.nested;
+
+        // Clear all stencilRefMasks bytes to zero to silence a Valgrind error.
+        memset(&m_allGpuState.stencilRefMasks, 0, sizeof(m_allGpuState.stencilRefMasks));
+
         m_allGpuState.stencilRefMasks.flags.u8All = 0xff;
 
         // Set up the default front/back op values == 1
@@ -1199,7 +1205,7 @@ VkResult CmdBuffer::Begin(
     VK_ASSERT(!m_flags.isRecording);
 
     m_flags.isRenderingSuspended = false;
-    m_flags.wasBegun = true;
+    m_flags.wasBegun             = true;
 
     // Beginning a command buffer implicitly resets its state
     ResetState();
@@ -1555,8 +1561,15 @@ VkResult CmdBuffer::End(void)
 // vkExecuteCommands.
 void CmdBuffer::ResetPipelineState()
 {
+    m_allGpuState.boundGraphicsPipelineHash = 0;
+    m_allGpuState.pGraphicsPipeline         = nullptr;
+    m_allGpuState.pComputePipeline          = nullptr;
+
     ResetVertexBuffer();
 
+    // Reset initial static values to "dynamic" values.  This will skip initial redundancy checking because the
+    // prior values are unknown.  Since DynamicRenderStateToken is 0, this is covered by the memset above.
+    static_assert(DynamicRenderStateToken == 0, "Unexpected value!");
     memset(&m_allGpuState.staticTokens, 0u, sizeof(m_allGpuState.staticTokens));
 
     memset(&m_allGpuState.depthStencilCreateInfo, 0u, sizeof(m_allGpuState.depthStencilCreateInfo));
@@ -1616,10 +1629,6 @@ void CmdBuffer::ResetState()
     const size_t memsetBytes = offsetof(AllGpuRenderState, pipelineState);
 
     memset(&m_allGpuState, 0, memsetBytes);
-
-    // Reset initial static values to "dynamic" values.  This will skip initial redundancy checking because the
-    // prior values are unknown.  Since DynamicRenderStateToken is 0, this is covered by the memset above.
-    static_assert(DynamicRenderStateToken == 0, "Unexpected value!");
 
     ResetPipelineState();
 
@@ -3307,14 +3316,13 @@ void CmdBuffer::ClearColorImage(
 }
 
 // =====================================================================================================================
-void CmdBuffer::PreBltBindMsaaState(
+bool CmdBuffer::PreBltBindMsaaState(
     const Image& image)
 {
+    const Pal::IMsaaState* const* pBltMsaa = nullptr;
+
     if (GetPalQueueType() == Pal::QueueTypeUniversal)
     {
-        VK_ASSERT(m_allGpuState.pBltMsaaStates == nullptr);
-
-        const Pal::IMsaaState* const * pBltMsaa = nullptr;
         const Pal::ImageCreateInfo& imgInfo = image.PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
 
         if (imgInfo.samples > 1)
@@ -3323,23 +3331,22 @@ void CmdBuffer::PreBltBindMsaaState(
         }
 
         PalCmdBindMsaaStates(pBltMsaa);
-
-        m_allGpuState.pBltMsaaStates = pBltMsaa;
     }
+
+    return (pBltMsaa != nullptr) ? true : false;
 }
 
 // =====================================================================================================================
-void CmdBuffer::PostBltRestoreMsaaState()
+void CmdBuffer::PostBltRestoreMsaaState(
+    bool bltMsaaState)
 {
     if (GetPalQueueType() == Pal::QueueTypeUniversal)
     {
-        if ((m_allGpuState.pBltMsaaStates != nullptr) &&
+        if (bltMsaaState &&
             (m_allGpuState.pGraphicsPipeline != nullptr))
         {
             PalCmdBindMsaaStates(m_allGpuState.pGraphicsPipeline->GetMsaaStates());
         }
-
-        m_allGpuState.pBltMsaaStates = nullptr;
     }
 }
 
@@ -3879,7 +3886,7 @@ void CmdBuffer::PalCmdClearColorImage(
 {
     DbgBarrierPreCmd(DbgBarrierClearColor);
 
-    PreBltBindMsaaState(image);
+    bool bltMsaaState = PreBltBindMsaaState(image);
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
 
@@ -3899,7 +3906,7 @@ void CmdBuffer::PalCmdClearColorImage(
     }
     while (deviceGroup.IterateNext());
 
-    PostBltRestoreMsaaState();
+    PostBltRestoreMsaaState(bltMsaaState);
 
     DbgBarrierPostCmd(DbgBarrierClearColor);
 }
@@ -3919,7 +3926,7 @@ void CmdBuffer::PalCmdClearDepthStencil(
 {
     DbgBarrierPreCmd(DbgBarrierClearDepth);
 
-    PreBltBindMsaaState(image);
+    bool bltMsaaState = PreBltBindMsaaState(image);
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
@@ -3941,7 +3948,7 @@ void CmdBuffer::PalCmdClearDepthStencil(
     }
     while (deviceGroup.IterateNext());
 
-    PostBltRestoreMsaaState();
+    PostBltRestoreMsaaState(bltMsaaState);
 
     DbgBarrierPostCmd(DbgBarrierClearDepth);
 }
@@ -3991,7 +3998,7 @@ void CmdBuffer::PalCmdResolveImage(
 {
     DbgBarrierPreCmd(DbgBarrierResolve);
 
-    PreBltBindMsaaState(srcImage);
+    bool bltMsaaState = PreBltBindMsaaState(srcImage);
 
     utils::IterateMask deviceGroup(deviceMask);
     do
@@ -4010,7 +4017,7 @@ void CmdBuffer::PalCmdResolveImage(
     }
     while (deviceGroup.IterateNext());
 
-    PostBltRestoreMsaaState();
+    PostBltRestoreMsaaState(bltMsaaState);
 
     DbgBarrierPostCmd(DbgBarrierResolve);
 }
@@ -4632,6 +4639,8 @@ void CmdBuffer::BeginRendering(
 
         if (!skipClears)
         {
+            PalCmdSuspendPredication(true);
+
             LoadOpClearColor(
                 m_allGpuState.dynamicRenderingInstance.renderArea,
                 pRenderingInfo);
@@ -4639,6 +4648,8 @@ void CmdBuffer::BeginRendering(
             LoadOpClearDepthStencil(
                 m_allGpuState.dynamicRenderingInstance.renderArea,
                 pRenderingInfo);
+
+            PalCmdSuspendPredication(false);
         }
 
         BindTargets(
@@ -4650,12 +4661,16 @@ void CmdBuffer::BeginRendering(
         PalCmdBuffer(DefaultDeviceIndex)->CmdSetViewInstanceMask(viewInstanceMask);
     }
 
-    m_allGpuState.dynamicRenderingInstance.viewMask = pRenderingInfo->viewMask;
+    m_allGpuState.dynamicRenderingInstance.viewMask             = pRenderingInfo->viewMask;
     m_allGpuState.dynamicRenderingInstance.colorAttachmentCount = pRenderingInfo->colorAttachmentCount;
+    m_allGpuState.dynamicRenderingInstance.enableResolveTarget  = false;
 
     for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; ++i)
     {
         const VkRenderingAttachmentInfoKHR& colorAttachmentInfo = pRenderingInfo->pColorAttachments[i];
+
+        m_allGpuState.dynamicRenderingInstance.enableResolveTarget |=
+            (colorAttachmentInfo.resolveImageView != VK_NULL_HANDLE);
 
         StoreAttachmentInfo(
             colorAttachmentInfo,
@@ -4666,6 +4681,9 @@ void CmdBuffer::BeginRendering(
     {
         const VkRenderingAttachmentInfoKHR& depthAttachmentInfo = *pRenderingInfo->pDepthAttachment;
 
+        m_allGpuState.dynamicRenderingInstance.enableResolveTarget |=
+            (depthAttachmentInfo.resolveImageView != VK_NULL_HANDLE);
+
         StoreAttachmentInfo(
             depthAttachmentInfo,
             &m_allGpuState.dynamicRenderingInstance.depthAttachment);
@@ -4674,6 +4692,9 @@ void CmdBuffer::BeginRendering(
     if (pRenderingInfo->pStencilAttachment != nullptr)
     {
         const VkRenderingAttachmentInfoKHR& stencilAttachmentInfo = *pRenderingInfo->pStencilAttachment;
+
+        m_allGpuState.dynamicRenderingInstance.enableResolveTarget |=
+            (stencilAttachmentInfo.resolveImageView != VK_NULL_HANDLE);
 
         StoreAttachmentInfo(
             stencilAttachmentInfo,
@@ -4757,14 +4778,40 @@ void CmdBuffer::ResolveImage(
 }
 
 // =====================================================================================================================
+// For Dynamic Rendering we need to wait for draws to finish before we do resolves.
+void CmdBuffer::PostDrawPreResolveSync()
+{
+    Pal::BarrierInfo barrierInfo = {};
+    barrierInfo.waitPoint = Pal::HwPipePreCs;
+
+    const Pal::HwPipePoint pipePoint = Pal::HwPipePostPs;
+    barrierInfo.pipePointWaitCount = 1;
+    barrierInfo.pPipePoints = &pipePoint;
+
+    Pal::BarrierTransition transition = {};
+    transition.srcCacheMask = Pal::CoherColorTarget;
+    transition.dstCacheMask = Pal::CoherShader;
+
+    barrierInfo.transitionCount = 1;
+    barrierInfo.pTransitions = &transition;
+
+    PalCmdBuffer(DefaultDeviceIndex)->CmdBarrier(barrierInfo);
+}
+
+// =====================================================================================================================
 // vkCmdEndRendering for VK_KHR_dynamic_rendering
 void CmdBuffer::EndRendering()
 {
     DbgBarrierPreCmd(DbgBarrierEndRenderPass);
 
-    // Only do resolves if renderpass isn't suspended
-    if (m_flags.isRenderingSuspended == false)
+    // Only do resolves if renderpass isn't suspended and
+    // there are resolve targets
+    if (m_allGpuState.dynamicRenderingInstance.enableResolveTarget &&
+        (m_flags.isRenderingSuspended == false))
     {
+        // Sync draws before resolves
+        PostDrawPreResolveSync();
+
         // Resolve Color Images
         for (uint32_t i = 0; i < m_allGpuState.dynamicRenderingInstance.colorAttachmentCount; ++i)
         {
@@ -4791,6 +4838,7 @@ void CmdBuffer::EndRendering()
     }
 
     // Reset attachment counts at End of Rendering
+    m_allGpuState.dynamicRenderingInstance.enableResolveTarget = false;
     m_allGpuState.dynamicRenderingInstance.colorAttachmentCount = 0;
     m_allGpuState.dynamicRenderingInstance.depthAttachment      = {};
     m_allGpuState.dynamicRenderingInstance.stencilAttachment    = {};
@@ -6296,9 +6344,9 @@ void CmdBuffer::FillTimestampQueryPool(
     // All the cache operations operating on the query pool's timestamp memory
     // that may have occurred before/after this reset.
     static const uint32_t TimestampCoher =
-        Pal::CoherShader    | // vkCmdCopyQueryPoolResults (CmdDispatch)
-        Pal::CoherMemory    | // vkCmdResetQueryPool (CmdFillMemory)
-        Pal::CoherTimestamp;  // vkCmdWriteTimestamp (CmdWriteTimestamp)
+        Pal::CoherShaderRead  | // vkCmdCopyQueryPoolResults (CmdDispatch)
+        Pal::CoherCopyDst     | // vkCmdResetQueryPool (CmdFillMemory)
+        Pal::CoherTimestamp;    // vkCmdWriteTimestamp (CmdWriteTimestamp)
 
     static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
     static const Pal::BarrierFlags flags = {};
@@ -6775,7 +6823,7 @@ void CmdBuffer::QueryCopy(
         static const Pal::BarrierTransition transition =
         {
             pBasePool->GetQueryType() == VK_QUERY_TYPE_TIMESTAMP ? Pal::CoherTimestamp : Pal::CoherMemory,
-            Pal::CoherShader
+            Pal::CoherShaderRead
         };
 
         static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
@@ -7367,22 +7415,30 @@ void CmdBuffer::RPBeginSubpass()
         RPBindTargets(subpass.begin.bindTargets);
     }
 
-    // Execute any color clear load operations
-    if (subpass.begin.loadOps.colorClearCount > 0)
+    if ((subpass.begin.loadOps.colorClearCount > 0) ||
+        (subpass.begin.loadOps.dsClearCount > 0))
     {
-        RPLoadOpClearColor(subpass.begin.loadOps.colorClearCount, subpass.begin.loadOps.pColorClears);
-    }
+        PalCmdSuspendPredication(true);
 
-    // If we are manually pre-syncing color clears, we must post-sync also
-    if (subpass.begin.syncTop.barrier.flags.preColorClearSync)
-    {
-        RPSyncPostLoadOpColorClear();
-    }
+        // Execute any color clear load operations
+        if (subpass.begin.loadOps.colorClearCount > 0)
+        {
+            RPLoadOpClearColor(subpass.begin.loadOps.colorClearCount, subpass.begin.loadOps.pColorClears);
+        }
 
-    // Execute any depth-stencil clear load operations
-    if (subpass.begin.loadOps.dsClearCount > 0)
-    {
-        RPLoadOpClearDepthStencil(subpass.begin.loadOps.dsClearCount, subpass.begin.loadOps.pDsClears);
+        // If we are manually pre-syncing color clears, we must post-sync also
+        if (subpass.begin.syncTop.barrier.flags.preColorClearSync)
+        {
+            RPSyncPostLoadOpColorClear();
+        }
+
+        // Execute any depth-stencil clear load operations
+        if (subpass.begin.loadOps.dsClearCount > 0)
+        {
+            RPLoadOpClearDepthStencil(subpass.begin.loadOps.dsClearCount, subpass.begin.loadOps.pDsClears);
+        }
+
+        PalCmdSuspendPredication(false);
     }
 
     if (m_flags.subpassLoadOpClearsBoundAttachments == false)
@@ -7574,8 +7630,8 @@ void CmdBuffer::RPSyncPoint(
         Pal::AcquireReleaseInfo acquireReleaseInfo = {};
 
         acquireReleaseInfo.reason       = RgpBarrierExternalRenderPassSync;
-        acquireReleaseInfo.srcStageMask = rpBarrier.srcStageMask;
-        acquireReleaseInfo.dstStageMask = rpBarrier.dstStageMask;
+        acquireReleaseInfo.srcStageMask = VkToPalPipelineStageFlags(rpBarrier.srcStageMask);
+        acquireReleaseInfo.dstStageMask = VkToPalPipelineStageFlags(rpBarrier.dstStageMask);
 
         const uint32_t maxTransitionCount = MaxPalAspectsPerMask * syncPoint.transitionCount;
 
@@ -7682,8 +7738,8 @@ void CmdBuffer::RPSyncPoint(
         }
 
         // Execute the barrier if it actually did anything
-        if ((rpBarrier.waitPoint != Pal::HwPipeBottom) ||
-            (acquireReleaseInfo.imageBarrierCount > 0) ||
+        if ((acquireReleaseInfo.dstStageMask != Pal::PipelineStageBottomOfPipe) ||
+            (acquireReleaseInfo.imageBarrierCount > 0)                          ||
             ((rpBarrier.pipePointCount > 1) ||
              ((rpBarrier.pipePointCount == 1) && (rpBarrier.pipePoints[0] != Pal::HwPipeTop))))
         {
@@ -10038,1281 +10094,145 @@ RenderPassInstanceState::RenderPassInstanceState(
     memset(&renderArea[0], 0, sizeof(renderArea));
 }
 
-namespace entry
-{
-
-// =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(
-    VkCommandBuffer                             cmdBuffer,
-    const VkCommandBufferBeginInfo*             pBeginInfo)
-{
-    return ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->Begin(pBeginInfo);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkEndCommandBuffer(
-    VkCommandBuffer                             cmdBuffer)
-{
-    return ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->End();
-}
-
-// =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkResetCommandBuffer(
-    VkCommandBuffer                             cmdBuffer,
-    VkCommandBufferResetFlags                   flags)
-{
-    return ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->Reset(flags);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBindPipeline(
-    VkCommandBuffer                             cmdBuffer,
-    VkPipelineBindPoint                         pipelineBindPoint,
-    VkPipeline                                  pipeline)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BindPipeline(pipelineBindPoint, pipeline);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets(
-    VkCommandBuffer                             cmdBuffer,
-    VkPipelineBindPoint                         pipelineBindPoint,
-    VkPipelineLayout                            layout,
-    uint32_t                                    firstSet,
-    uint32_t                                    descriptorSetCount,
-    const VkDescriptorSet*                      pDescriptorSets,
-    uint32_t                                    dynamicOffsetCount,
-    const uint32_t*                             pDynamicOffsets)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->VkDevice()->GetEntryPoints().vkCmdBindDescriptorSets(
-        cmdBuffer,
-        pipelineBindPoint,
-        layout,
-        firstSet,
-        descriptorSetCount,
-        pDescriptorSets,
-        dynamicOffsetCount,
-        pDynamicOffsets);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer(
-    VkCommandBuffer                             cmdBuffer,
-    VkBuffer                                    buffer,
-    VkDeviceSize                                offset,
-    VkIndexType                                 indexType)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BindIndexBuffer(
-        buffer,
-        offset,
-        indexType);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(
-    VkCommandBuffer                             cmdBuffer,
-    uint32_t                                    firstBinding,
-    uint32_t                                    bindingCount,
-    const VkBuffer*                             pBuffers,
-    const VkDeviceSize*                         pOffsets)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BindVertexBuffers(
-        firstBinding,
-        bindingCount,
-        pBuffers,
-        pOffsets,
-        nullptr,
-        nullptr);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDraw(
-    VkCommandBuffer                             cmdBuffer,
-    uint32_t                                    vertexCount,
-    uint32_t                                    instanceCount,
-    uint32_t                                    firstVertex,
-    uint32_t                                    firstInstance)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->Draw(
-        firstVertex,
-        vertexCount,
-        firstInstance,
-        instanceCount);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(
-    VkCommandBuffer                             cmdBuffer,
-    uint32_t                                    indexCount,
-    uint32_t                                    instanceCount,
-    uint32_t                                    firstIndex,
-    int32_t                                     vertexOffset,
-    uint32_t                                    firstInstance)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->DrawIndexed(
-        firstIndex,
-        indexCount,
-        vertexOffset,
-        firstInstance,
-        instanceCount);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirect(
-    VkCommandBuffer                             cmdBuffer,
-    VkBuffer                                    buffer,
-    VkDeviceSize                                offset,
-    uint32_t                                    drawCount,
-    uint32_t                                    stride)
-{
-    constexpr bool Indexed       = false;
-    constexpr bool BufferedCount = false;
-
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->DrawIndirect<Indexed, BufferedCount>(
-        buffer,
-        offset,
-        drawCount,
-        stride,
-        VK_NULL_HANDLE,
-        0);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirect(
-    VkCommandBuffer                             cmdBuffer,
-    VkBuffer                                    buffer,
-    VkDeviceSize                                offset,
-    uint32_t                                    drawCount,
-    uint32_t                                    stride)
-{
-    constexpr bool Indexed       = true;
-    constexpr bool BufferedCount = false;
-
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->DrawIndirect<Indexed, BufferedCount>(
-        buffer,
-        offset,
-        drawCount,
-        stride,
-        VK_NULL_HANDLE,
-        0);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirectCount(
-    VkCommandBuffer                             cmdBuffer,
-    VkBuffer                                    buffer,
-    VkDeviceSize                                offset,
-    VkBuffer                                    countBuffer,
-    VkDeviceSize                                countOffset,
-    uint32_t                                    maxDrawCount,
-    uint32_t                                    stride)
-{
-    constexpr bool Indexed       = false;
-    constexpr bool BufferedCount = true;
-
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->DrawIndirect<Indexed, BufferedCount>(
-        buffer,
-        offset,
-        maxDrawCount,
-        stride,
-        countBuffer,
-        countOffset);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirectCount(
-    VkCommandBuffer                             cmdBuffer,
-    VkBuffer                                    buffer,
-    VkDeviceSize                                offset,
-    VkBuffer                                    countBuffer,
-    VkDeviceSize                                countOffset,
-    uint32_t                                    maxDrawCount,
-    uint32_t                                    stride)
-{
-    constexpr bool Indexed       = true;
-    constexpr bool BufferedCount = true;
-
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->DrawIndirect<Indexed, BufferedCount>(
-        buffer,
-        offset,
-        maxDrawCount,
-        stride,
-        countBuffer,
-        countOffset);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(
-    VkCommandBuffer                             cmdBuffer,
-    uint32_t                                    x,
-    uint32_t                                    y,
-    uint32_t                                    z)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->Dispatch(x, y, z);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDispatchIndirect(
-    VkCommandBuffer                             cmdBuffer,
-    VkBuffer                                    buffer,
-    VkDeviceSize                                offset)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->DispatchIndirect(buffer, offset);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer(
-    VkCommandBuffer                             cmdBuffer,
-    VkBuffer                                    srcBuffer,
-    VkBuffer                                    dstBuffer,
-    uint32_t                                    regionCount,
-    const VkBufferCopy*                         pRegions)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->CopyBuffer(
-        srcBuffer,
-        dstBuffer,
-        regionCount,
-        pRegions);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(
-    VkCommandBuffer                             cmdBuffer,
-    VkImage                                     srcImage,
-    VkImageLayout                               srcImageLayout,
-    VkImage                                     dstImage,
-    VkImageLayout                               dstImageLayout,
-    uint32_t                                    regionCount,
-    const VkImageCopy*                          pRegions)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->CopyImage(
-        srcImage,
-        srcImageLayout,
-        dstImage,
-        dstImageLayout,
-        regionCount,
-        pRegions);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage(
-    VkCommandBuffer                             cmdBuffer,
-    VkImage                                     srcImage,
-    VkImageLayout                               srcImageLayout,
-    VkImage                                     dstImage,
-    VkImageLayout                               dstImageLayout,
-    uint32_t                                    regionCount,
-    const VkImageBlit*                          pRegions,
-    VkFilter                                    filter)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BlitImage(
-        srcImage,
-        srcImageLayout,
-        dstImage,
-        dstImageLayout,
-        regionCount,
-        pRegions,
-        filter);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(
-    VkCommandBuffer                             cmdBuffer,
-    VkBuffer                                    srcBuffer,
-    VkImage                                     dstImage,
-    VkImageLayout                               dstImageLayout,
-    uint32_t                                    regionCount,
-    const VkBufferImageCopy*                    pRegions)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->CopyBufferToImage(
-        srcBuffer,
-        dstImage,
-        dstImageLayout,
-        regionCount,
-        pRegions);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(
-    VkCommandBuffer                             cmdBuffer,
-    VkImage                                     srcImage,
-    VkImageLayout                               srcImageLayout,
-    VkBuffer                                    dstBuffer,
-    uint32_t                                    regionCount,
-    const VkBufferImageCopy*                    pRegions)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->CopyImageToBuffer(
-        srcImage,
-        srcImageLayout,
-        dstBuffer,
-        regionCount,
-        pRegions);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdUpdateBuffer(
-    VkCommandBuffer                             cmdBuffer,
-    VkBuffer                                    dstBuffer,
-    VkDeviceSize                                dstOffset,
-    VkDeviceSize                                dataSize,
-    const void*                                 pData)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->UpdateBuffer(
-        dstBuffer,
-        dstOffset,
-        dataSize,
-        static_cast<const uint32_t*>(pData));
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdFillBuffer(
-    VkCommandBuffer                             cmdBuffer,
-    VkBuffer                                    dstBuffer,
-    VkDeviceSize                                dstOffset,
-    VkDeviceSize                                size,
-    uint32_t                                    data)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->FillBuffer(
-        dstBuffer,
-        dstOffset,
-        size,
-        data);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdClearColorImage(
-    VkCommandBuffer                             cmdBuffer,
-    VkImage                                     image,
-    VkImageLayout                               imageLayout,
-    const VkClearColorValue*                    pColor,
-    uint32_t                                    rangeCount,
-    const VkImageSubresourceRange*              pRanges)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->ClearColorImage(
-        image,
-        imageLayout,
-        pColor,
-        rangeCount,
-        pRanges);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdClearDepthStencilImage(
-    VkCommandBuffer                             cmdBuffer,
-    VkImage                                     image,
-    VkImageLayout                               imageLayout,
-    const VkClearDepthStencilValue*             pDepthStencil,
-    uint32_t                                    rangeCount,
-    const VkImageSubresourceRange*              pRanges)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->ClearDepthStencilImage(
-        image,
-        imageLayout,
-        pDepthStencil->depth,
-        pDepthStencil->stencil,
-        rangeCount,
-        pRanges);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdClearAttachments(
-    VkCommandBuffer                             cmdBuffer,
-    uint32_t                                    attachmentCount,
-    const VkClearAttachment*                    pAttachments,
-    uint32_t                                    rectCount,
-    const VkClearRect*                          pRects)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->ClearAttachments(
-        attachmentCount,
-        pAttachments,
-        rectCount,
-        pRects);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage(
-    VkCommandBuffer                             cmdBuffer,
-    VkImage                                     srcImage,
-    VkImageLayout                               srcImageLayout,
-    VkImage                                     dstImage,
-    VkImageLayout                               dstImageLayout,
-    uint32_t                                    regionCount,
-    const VkImageResolve*                       pRegions)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->ResolveImage(srcImage,
-                                                            srcImageLayout,
-                                                            dstImage,
-                                                            dstImageLayout,
-                                                            regionCount,
-                                                            pRegions);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetEvent(
-    VkCommandBuffer                             cmdBuffer,
-    VkEvent                                     event,
-    VkPipelineStageFlags                        stageMask)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->SetEvent(event, stageMask);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdResetEvent(
-    VkCommandBuffer                             cmdBuffer,
-    VkEvent                                     event,
-    VkPipelineStageFlags                        stageMask)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->ResetEvent(event, stageMask);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdWaitEvents(
-    VkCommandBuffer                             cmdBuffer,
-    uint32_t                                    eventCount,
-    const VkEvent*                              pEvents,
-    VkPipelineStageFlags                        srcStageMask,
-    VkPipelineStageFlags                        dstStageMask,
-    uint32_t                                    memoryBarrierCount,
-    const VkMemoryBarrier*                      pMemoryBarriers,
-    uint32_t                                    bufferMemoryBarrierCount,
-    const VkBufferMemoryBarrier*                pBufferMemoryBarriers,
-    uint32_t                                    imageMemoryBarrierCount,
-    const VkImageMemoryBarrier*                 pImageMemoryBarriers)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->WaitEvents(
-        eventCount,
-        pEvents,
-        srcStageMask,
-        dstStageMask,
-        memoryBarrierCount,
-        pMemoryBarriers,
-        bufferMemoryBarrierCount,
-        pBufferMemoryBarriers,
-        imageMemoryBarrierCount,
-        pImageMemoryBarriers);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(
-    VkCommandBuffer                             cmdBuffer,
-    VkPipelineStageFlags                        srcStageMask,
-    VkPipelineStageFlags                        dstStageMask,
-    VkDependencyFlags                           dependencyFlags,
-    uint32_t                                    memoryBarrierCount,
-    const VkMemoryBarrier*                      pMemoryBarriers,
-    uint32_t                                    bufferMemoryBarrierCount,
-    const VkBufferMemoryBarrier*                pBufferMemoryBarriers,
-    uint32_t                                    imageMemoryBarrierCount,
-    const VkImageMemoryBarrier*                 pImageMemoryBarriers)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->PipelineBarrier(
-        srcStageMask,
-        dstStageMask,
-        memoryBarrierCount,
-        pMemoryBarriers,
-        bufferMemoryBarrierCount,
-        pBufferMemoryBarriers,
-        imageMemoryBarrierCount,
-        pImageMemoryBarriers);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBeginQuery(
-    VkCommandBuffer                             cmdBuffer,
-    VkQueryPool                                 queryPool,
-    uint32_t                                    query,
-    VkQueryControlFlags                         flags)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BeginQueryIndexed(queryPool, query, flags, 0);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdEndQuery(
-    VkCommandBuffer                             cmdBuffer,
-    VkQueryPool                                 queryPool,
-    uint32_t                                    query)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->EndQueryIndexed(queryPool, query, 0);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdResetQueryPool(
-    VkCommandBuffer                             cmdBuffer,
-    VkQueryPool                                 queryPool,
-    uint32_t                                    firstQuery,
-    uint32_t                                    queryCount)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->ResetQueryPool(queryPool,
-                                                              firstQuery,
-                                                              queryCount);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdWriteTimestamp(
-    VkCommandBuffer                             cmdBuffer,
-    VkPipelineStageFlagBits                     pipelineStage,
-    VkQueryPool                                 queryPool,
-    uint32_t                                    query)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->WriteTimestamp(
-        pipelineStage,
-        QueryPool::ObjectFromHandle(queryPool)->AsTimestampQueryPool(),
-        query);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyQueryPoolResults(
-    VkCommandBuffer                             cmdBuffer,
-    VkQueryPool                                 queryPool,
-    uint32_t                                    firstQuery,
-    uint32_t                                    queryCount,
-    VkBuffer                                    dstBuffer,
-    VkDeviceSize                                dstOffset,
-    VkDeviceSize                                stride,
-    VkQueryResultFlags                          flags)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->CopyQueryPoolResults(queryPool,
-                                                                    firstQuery,
-                                                                    queryCount,
-                                                                    dstBuffer,
-                                                                    dstOffset,
-                                                                    stride,
-                                                                    flags);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdPushConstants(
-    VkCommandBuffer                             cmdBuffer,
-    VkPipelineLayout                            layout,
-    VkShaderStageFlags                          stageFlags,
-    uint32_t                                    offset,
-    uint32_t                                    size,
-    const void*                                 pValues)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->PushConstants(layout,
-        stageFlags,
-        offset,
-        size,
-        pValues);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(
-    VkCommandBuffer                             commandBuffer,
-    const VkRenderPassBeginInfo*                pRenderPassBegin,
-    VkSubpassContents                           contents)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BeginRenderPass(pRenderPassBegin, contents);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass2(
-    VkCommandBuffer                             commandBuffer,
-    const VkRenderPassBeginInfo*                pRenderPassBegin,
-    const VkSubpassBeginInfo*                   pSubpassBeginInfo)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BeginRenderPass(pRenderPassBegin, pSubpassBeginInfo->contents);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(
-    VkCommandBuffer                             commandBuffer,
-    VkSubpassContents                           contents)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->NextSubPass(contents);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass2(
-    VkCommandBuffer                             commandBuffer,
-    const VkSubpassBeginInfo*                   pSubpassBeginInfo,
-    const VkSubpassEndInfo*                     pSubpassEndInfo)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->NextSubPass(pSubpassBeginInfo->contents);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(
-    VkCommandBuffer                             commandBuffer)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->EndRenderPass();
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass2(
-    VkCommandBuffer                             commandBuffer,
-    const VkSubpassEndInfo*                     pSubpassEndInfo)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->EndRenderPass();
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(
-    VkCommandBuffer                             cmdBuffer,
-    uint32_t                                    commandBufferCount,
-    const VkCommandBuffer*                      pCommandBuffers)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->ExecuteCommands(commandBufferCount, pCommandBuffers);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkFreeCommandBuffers(
-    VkDevice                                    device,
-    VkCommandPool                               commandPool,
-    uint32_t                                    commandBufferCount,
-    const VkCommandBuffer*                      pCommandBuffers)
-{
-    for(uint32_t i = 0;i < commandBufferCount; ++i)
-    {
-        if (pCommandBuffers[i] != VK_NULL_HANDLE)
-        {
-            ApiCmdBuffer::ObjectFromHandle(pCommandBuffers[i])->Destroy();
-        }
-    }
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBase(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    baseGroupX,
-    uint32_t                                    baseGroupY,
-    uint32_t                                    baseGroupZ,
-    uint32_t                                    groupCountX,
-    uint32_t                                    groupCountY,
-    uint32_t                                    groupCountZ)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->DispatchOffset(baseGroupX, baseGroupY, baseGroupZ,
-                                                                  groupCountX, groupCountY, groupCountZ);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDeviceMask(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    deviceMask)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDeviceMask(deviceMask);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetViewport(
-    VkCommandBuffer                             cmdBuffer,
-    uint32_t                                    firstViewport,
-    uint32_t                                    viewportCount,
-    const VkViewport*                           pViewports)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->SetViewport(firstViewport, viewportCount, pViewports);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetScissor(
-    VkCommandBuffer                             cmdBuffer,
-    uint32_t                                    firstScissor,
-    uint32_t                                    scissorCount,
-    const VkRect2D*                             pScissors)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->SetScissor(firstScissor, scissorCount, pScissors);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetLineWidth(
-    VkCommandBuffer                             cmdBuffer,
-    float                                       lineWidth)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->SetLineWidth(lineWidth);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBias(
-    VkCommandBuffer                             cmdBuffer,
-    float                                       depthBiasConstantFactor,
-    float                                       depthBiasClamp,
-    float                                       depthBiasSlopeFactor)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->SetDepthBias(depthBiasConstantFactor, depthBiasClamp, depthBiasSlopeFactor);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetBlendConstants(
-    VkCommandBuffer                             cmdBuffer,
-    const float                                 blendConstants[4])
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->SetBlendConstants(blendConstants);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBounds(
-    VkCommandBuffer                             cmdBuffer,
-    float                                       minDepthBounds,
-    float                                       maxDepthBounds)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->SetDepthBounds(minDepthBounds, maxDepthBounds);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilCompareMask(
-    VkCommandBuffer                             cmdBuffer,
-    VkStencilFaceFlags                          faceMask,
-    uint32_t                                    compareMask)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->SetStencilCompareMask(faceMask, compareMask);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilWriteMask(
-    VkCommandBuffer                             cmdBuffer,
-    VkStencilFaceFlags                          faceMask,
-    uint32_t                                    writeMask)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->SetStencilWriteMask(faceMask, writeMask);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilReference(
-    VkCommandBuffer                             cmdBuffer,
-    VkStencilFaceFlags                          faceMask,
-    uint32_t                                    reference)
-{
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->SetStencilReference(faceMask, reference);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDebugMarkerBeginEXT(
-    VkCommandBuffer                             commandBuffer,
-    const VkDebugMarkerMarkerInfoEXT*           pMarkerInfo)
-{
-    // The SQTT layer shadows this extension's functions and contains extra code to make use of them.  This
-    // extension is not enabled when the SQTT layer is not also enabled, so these functions are currently
-    // just blank placeholder functions in case there will be a time where we need to do something with them
-    // on this path also.
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDebugMarkerEndEXT(
-    VkCommandBuffer                             commandBuffer)
-{
-    // The SQTT layer shadows this extension's functions and contains extra code to make use of them.  This
-    // extension is not enabled when the SQTT layer is not also enabled, so these functions are currently
-    // just blank placeholder functions in case there will be a time where we need to do something with them
-    // on this path also.
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDebugMarkerInsertEXT(
-    VkCommandBuffer                             commandBuffer,
-    const VkDebugMarkerMarkerInfoEXT*           pMarkerInfo)
-{
-    // The SQTT layer shadows this extension's functions and contains extra code to make use of them.  This
-    // extension is not enabled when the SQTT layer is not also enabled, so these functions are currently
-    // just blank placeholder functions in case there will be a time where we need to do something with them
-    // on this path also.
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBeginDebugUtilsLabelEXT(
-    VkCommandBuffer                             commandBuffer,
-    const VkDebugUtilsLabelEXT*                 pLabelInfo)
-{
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdEndDebugUtilsLabelEXT(
-    VkCommandBuffer                             commandBuffer)
-{
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdInsertDebugUtilsLabelEXT(
-    VkCommandBuffer                             commandBuffer,
-    const VkDebugUtilsLabelEXT*                 pLabelInfo)
-{
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetSampleLocationsEXT(
-    VkCommandBuffer                         commandBuffer,
-    const VkSampleLocationsInfoEXT*         pSampleLocationsInfo)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetSampleLocations(pSampleLocationsInfo);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarkerAMD(
-    VkCommandBuffer         commandBuffer,
-    VkPipelineStageFlagBits pipelineStage,
-    VkBuffer                dstBuffer,
-    VkDeviceSize            dstOffset,
-    uint32_t                marker)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->WriteBufferMarker(pipelineStage, dstBuffer, dstOffset, marker);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBindTransformFeedbackBuffersEXT(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    firstBinding,
-    uint32_t                                    bindingCount,
-    const VkBuffer*                             pBuffers,
-    const VkDeviceSize*                         pOffsets,
-    const VkDeviceSize*                         pSizes)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BindTransformFeedbackBuffers(firstBinding,
-                                                                                bindingCount,
-                                                                                pBuffers,
-                                                                                pOffsets,
-                                                                                pSizes);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBeginTransformFeedbackEXT(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    firstCounterBuffer,
-    uint32_t                                    counterBufferCount,
-    const VkBuffer*                             pCounterBuffers,
-    const VkDeviceSize*                         pCounterBufferOffsets)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BeginTransformFeedback(firstCounterBuffer,
-                                                                          counterBufferCount,
-                                                                          pCounterBuffers,
-                                                                          pCounterBufferOffsets);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdEndTransformFeedbackEXT(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    firstCounterBuffer,
-    uint32_t                                    counterBufferCount,
-    const VkBuffer*                             pCounterBuffers,
-    const VkDeviceSize*                         pCounterBufferOffsets)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->EndTransformFeedback(firstCounterBuffer,
-                                                                        counterBufferCount,
-                                                                        pCounterBuffers,
-                                                                        pCounterBufferOffsets);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBeginQueryIndexedEXT(
-    VkCommandBuffer                             commandBuffer,
-    VkQueryPool                                 queryPool,
-    uint32_t                                    query,
-    VkQueryControlFlags                         flags,
-    uint32_t                                    index)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BeginQueryIndexed(queryPool, query, flags, index);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdEndQueryIndexedEXT(
-    VkCommandBuffer                             commandBuffer,
-    VkQueryPool                                 queryPool,
-    uint32_t                                    query,
-    uint32_t                                    index)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->EndQueryIndexed(queryPool, query, index);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirectByteCountEXT(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    instanceCount,
-    uint32_t                                    firstInstance,
-    VkBuffer                                    counterBuffer,
-    VkDeviceSize                                counterBufferOffset,
-    uint32_t                                    counterOffset,
-    uint32_t                                    vertexStride)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->DrawIndirectByteCount(instanceCount,
-                                                                         firstInstance,
-                                                                         counterBuffer,
-                                                                         counterBufferOffset,
-                                                                         counterOffset,
-                                                                         vertexStride);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStippleEXT(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    lineStippleFactor,
-    uint16_t                                    lineStipplePattern)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetLineStippleEXT(
-        lineStippleFactor,
-        lineStipplePattern);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetFragmentShadingRateKHR(
-    VkCommandBuffer                          commandBuffer,
-    const VkExtent2D*                        pFragmentSize,
-    const VkFragmentShadingRateCombinerOpKHR combinerOps[2])
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CmdSetPerDrawVrsRate(pFragmentSize, combinerOps);
-}
-
-VKAPI_ATTR void VKAPI_CALL vkCmdBeginConditionalRenderingEXT(
-    VkCommandBuffer                           commandBuffer,
-    const VkConditionalRenderingBeginInfoEXT* pConditionalRenderingBegin)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CmdBeginConditionalRendering(pConditionalRenderingBegin);
-}
-
-VKAPI_ATTR void VKAPI_CALL vkCmdEndConditionalRenderingEXT(
-    VkCommandBuffer                           commandBuffer)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CmdEndConditionalRendering();
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetEvent2(
-    VkCommandBuffer                             commandBuffer,
-    VkEvent                                     event,
-    const VkDependencyInfoKHR*                  pDependencyInfo)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetEvent2(event, pDependencyInfo);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdResetEvent2(
-    VkCommandBuffer                             commandBuffer,
-    VkEvent                                     event,
-    VkPipelineStageFlags2KHR                    stageMask)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->ResetEvent(event, stageMask);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdWaitEvents2(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    eventCount,
-    const VkEvent*                              pEvents,
-    const VkDependencyInfoKHR*                  pDependencyInfos)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->WaitEvents2(eventCount, pEvents, pDependencyInfos);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier2(
-    VkCommandBuffer                             commandBuffer,
-    const VkDependencyInfoKHR*                  pDependencyInfo)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->PipelineBarrier2(pDependencyInfo);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdWriteTimestamp2(
-    VkCommandBuffer                             commandBuffer,
-    VkPipelineStageFlags2KHR                    stage,
-    VkQueryPool                                 queryPool,
-    uint32_t                                    query)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->WriteTimestamp(
-        stage,
-        QueryPool::ObjectFromHandle(queryPool)->AsTimestampQueryPool(),
-        query);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarker2AMD(
-    VkCommandBuffer                             commandBuffer,
-    VkPipelineStageFlags2KHR                    stage,
-    VkBuffer                                    dstBuffer,
-    VkDeviceSize                                dstOffset,
-    uint32_t                                    marker)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->WriteBufferMarker(stage, dstBuffer, dstOffset, marker);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBeginRendering(
-    VkCommandBuffer           commandBuffer,
-    const VkRenderingInfoKHR* pRenderingInfo)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BeginRendering(pRenderingInfo);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdEndRendering(
-    VkCommandBuffer           commandBuffer)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->EndRendering();
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetCullMode(
-    VkCommandBuffer                             commandBuffer,
-    VkCullModeFlags                             cullMode)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetCullModeEXT(cullMode);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetFrontFace(
-    VkCommandBuffer                             commandBuffer,
-    VkFrontFace                                 frontFace)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetFrontFaceEXT(frontFace);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveTopology(
-    VkCommandBuffer                             commandBuffer,
-    VkPrimitiveTopology                         primitiveTopology)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetPrimitiveTopologyEXT(primitiveTopology);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetViewportWithCount(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    viewportCount,
-    const VkViewport*                           pViewports)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetViewportWithCount(viewportCount, pViewports);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetScissorWithCount(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    scissorCount,
-    const VkRect2D*                             pScissors)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetScissorWithCount(scissorCount, pScissors);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    firstBinding,
-    uint32_t                                    bindingCount,
-    const VkBuffer*                             pBuffers,
-    const VkDeviceSize*                         pOffsets,
-    const VkDeviceSize*                         pSizes,
-    const VkDeviceSize*                         pStrides)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BindVertexBuffers(firstBinding,
-                                                                     bindingCount,
-                                                                     pBuffers,
-                                                                     pOffsets,
-                                                                     pSizes,
-                                                                     pStrides);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthTestEnable(
-    VkCommandBuffer                             commandBuffer,
-    VkBool32                                    depthTestEnable)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDepthTestEnableEXT(depthTestEnable);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthWriteEnable(
-    VkCommandBuffer                             commandBuffer,
-    VkBool32                                    depthWriteEnable)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDepthWriteEnableEXT(depthWriteEnable);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthCompareOp(
-    VkCommandBuffer                             commandBuffer,
-    VkCompareOp                                 depthCompareOp)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDepthCompareOpEXT(depthCompareOp);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBoundsTestEnable(
-    VkCommandBuffer                             commandBuffer,
-    VkBool32                                    depthBoundsTestEnable)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDepthBoundsTestEnableEXT(depthBoundsTestEnable);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilTestEnable(
-    VkCommandBuffer                             commandBuffer,
-    VkBool32                                    stencilTestEnable)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetStencilTestEnableEXT(stencilTestEnable);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOp(
-    VkCommandBuffer                             commandBuffer,
-    VkStencilFaceFlags                          faceMask,
-    VkStencilOp                                 failOp,
-    VkStencilOp                                 passOp,
-    VkStencilOp                                 depthFailOp,
-    VkCompareOp                                 compareOp)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetStencilOpEXT(faceMask, failOp, passOp, depthFailOp, compareOp);
-}
-
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetColorWriteEnableEXT(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    attachmentCount,
-    const VkBool32*                             pColorWriteEnables)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetColorWriteEnableEXT(attachmentCount, pColorWriteEnables);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetRasterizerDiscardEnable(
-    VkCommandBuffer                             commandBuffer,
-    VkBool32                                    rasterizerDiscardEnable)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetRasterizerDiscardEnableEXT(rasterizerDiscardEnable);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveRestartEnable(
-    VkCommandBuffer                             commandBuffer,
-    VkBool32                                    primitiveRestartEnable)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetPrimitiveRestartEnableEXT(primitiveRestartEnable);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBiasEnable(
-    VkCommandBuffer                             commandBuffer,
-    VkBool32                                    depthBiasEnable)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDepthBiasEnableEXT(depthBiasEnable);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetLogicOpEXT(
-    VkCommandBuffer                             commandBuffer,
-    VkLogicOp                                   logicOp)
-{
-    VK_NOT_IMPLEMENTED;
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetPatchControlPointsEXT(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    patchControlPoints)
-{
-    VK_NOT_IMPLEMENTED;
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage2(
-    VkCommandBuffer                             commandBuffer,
-    const VkBlitImageInfo2KHR*                  pBlitImageInfo)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BlitImage(
-        pBlitImageInfo->srcImage,
-        pBlitImageInfo->srcImageLayout,
-        pBlitImageInfo->dstImage,
-        pBlitImageInfo->dstImageLayout,
-        pBlitImageInfo->regionCount,
-        pBlitImageInfo->pRegions,
-        pBlitImageInfo->filter);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer2(
-    VkCommandBuffer                             commandBuffer,
-    const VkCopyBufferInfo2KHR*                 pCopyBufferInfo)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CopyBuffer(
-        pCopyBufferInfo->srcBuffer,
-        pCopyBufferInfo->dstBuffer,
-        pCopyBufferInfo->regionCount,
-        pCopyBufferInfo->pRegions);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage2(
-    VkCommandBuffer                             commandBuffer,
-    const VkCopyBufferToImageInfo2KHR*          pCopyBufferToImageInfo)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CopyBufferToImage(
-        pCopyBufferToImageInfo->srcBuffer,
-        pCopyBufferToImageInfo->dstImage,
-        pCopyBufferToImageInfo->dstImageLayout,
-        pCopyBufferToImageInfo->regionCount,
-        pCopyBufferToImageInfo->pRegions);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage2(
-    VkCommandBuffer                             commandBuffer,
-    const VkCopyImageInfo2KHR*                  pCopyImageInfo)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CopyImage(
-        pCopyImageInfo->srcImage,
-        pCopyImageInfo->srcImageLayout,
-        pCopyImageInfo->dstImage,
-        pCopyImageInfo->dstImageLayout,
-        pCopyImageInfo->regionCount,
-        pCopyImageInfo->pRegions);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer2(
-    VkCommandBuffer                             commandBuffer,
-    const VkCopyImageToBufferInfo2KHR*          pCopyImageToBufferInfo)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CopyImageToBuffer(
-        pCopyImageToBufferInfo->srcImage,
-        pCopyImageToBufferInfo->srcImageLayout,
-        pCopyImageToBufferInfo->dstBuffer,
-        pCopyImageToBufferInfo->regionCount,
-        pCopyImageToBufferInfo->pRegions);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage2(
-    VkCommandBuffer                             commandBuffer,
-    const VkResolveImageInfo2KHR*               pResolveImageInfo)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->ResolveImage(
-        pResolveImageInfo->srcImage,
-        pResolveImageInfo->srcImageLayout,
-        pResolveImageInfo->dstImage,
-        pResolveImageInfo->dstImageLayout,
-        pResolveImageInfo->regionCount,
-        pResolveImageInfo->pRegions);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetKHR(
-    VkCommandBuffer                             commandBuffer,
-    VkPipelineBindPoint                         pipelineBindPoint,
-    VkPipelineLayout                            layout,
-    uint32_t                                    set,
-    uint32_t                                    descriptorWriteCount,
-    const VkWriteDescriptorSet*                 pDescriptorWrites)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSetKHR(
-        commandBuffer,
-        pipelineBindPoint,
-        layout,
-        set,
-        descriptorWriteCount,
-        pDescriptorWrites);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplateKHR(
-    VkCommandBuffer                             commandBuffer,
-    VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
-    VkPipelineLayout                            layout,
-    uint32_t                                    set,
-    const void*                                 pData)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSetWithTemplateKHR(
-        commandBuffer,
-        descriptorUpdateTemplate,
-        layout,
-        set,
-        pData);
-}
-
-} // namespace entry
+// Template instantiation needed for references entry.cpp.
+
+template
+void CmdBuffer::BlitImage<VkImageBlit>(
+    VkImage                 srcImage,
+    VkImageLayout           srcImageLayout,
+    VkImage                 destImage,
+    VkImageLayout           destImageLayout,
+    uint32_t                regionCount,
+    const VkImageBlit*      pRegions,
+    VkFilter                filter);
+
+template
+void CmdBuffer::BlitImage<VkImageBlit2>(
+    VkImage                 srcImage,
+    VkImageLayout           srcImageLayout,
+    VkImage                 destImage,
+    VkImageLayout           destImageLayout,
+    uint32_t                regionCount,
+    const VkImageBlit2*     pRegions,
+    VkFilter                filter);
+
+template
+void CmdBuffer::CopyBuffer<VkBufferCopy>(
+    VkBuffer                srcBuffer,
+    VkBuffer                destBuffer,
+    uint32_t                regionCount,
+    const VkBufferCopy*     pRegions);
+
+template
+void CmdBuffer::CopyBuffer<VkBufferCopy2>(
+    VkBuffer                srcBuffer,
+    VkBuffer                destBuffer,
+    uint32_t                regionCount,
+    const VkBufferCopy2*    pRegions);
+
+template
+void CmdBuffer::CopyBufferToImage<VkBufferImageCopy>(
+    VkBuffer                    srcBuffer,
+    VkImage                     destImage,
+    VkImageLayout               destImageLayout,
+    uint32_t                    regionCount,
+    const VkBufferImageCopy*    pRegions);
+
+template
+void CmdBuffer::CopyBufferToImage<VkBufferImageCopy2>(
+    VkBuffer                    srcBuffer,
+    VkImage                     destImage,
+    VkImageLayout               destImageLayout,
+    uint32_t                    regionCount,
+    const VkBufferImageCopy2*    pRegions);
+
+template
+void CmdBuffer::CopyImage<VkImageCopy>(
+    VkImage             srcImage,
+    VkImageLayout       srcImageLayout,
+    VkImage             destImage,
+    VkImageLayout       destImageLayout,
+    uint32_t            regionCount,
+    const VkImageCopy*  pRegions);
+
+template
+void CmdBuffer::CopyImage<VkImageCopy2>(
+    VkImage             srcImage,
+    VkImageLayout       srcImageLayout,
+    VkImage             destImage,
+    VkImageLayout       destImageLayout,
+    uint32_t            regionCount,
+    const VkImageCopy2* pRegions);
+
+template
+void CmdBuffer::CopyImageToBuffer<VkBufferImageCopy>(
+    VkImage                     srcImage,
+    VkImageLayout               srcImageLayout,
+    VkBuffer                    destBuffer,
+    uint32_t                    regionCount,
+    const VkBufferImageCopy*    pRegions);
+
+template
+void CmdBuffer::CopyImageToBuffer<VkBufferImageCopy2>(
+    VkImage                     srcImage,
+    VkImageLayout               srcImageLayout,
+    VkBuffer                    destBuffer,
+    uint32_t                    regionCount,
+    const VkBufferImageCopy2*   pRegions);
+
+template
+void CmdBuffer::DrawIndirect<false, false>(
+    VkBuffer        buffer,
+    VkDeviceSize    offset,
+    uint32_t        count,
+    uint32_t        stride,
+    VkBuffer        countBuffer,
+    VkDeviceSize    countOffset);
+
+template
+void CmdBuffer::DrawIndirect<true, false>(
+    VkBuffer        buffer,
+    VkDeviceSize    offset,
+    uint32_t        count,
+    uint32_t        stride,
+    VkBuffer        countBuffer,
+    VkDeviceSize    countOffset);
+
+template
+void CmdBuffer::DrawIndirect<false, true>(
+    VkBuffer        buffer,
+    VkDeviceSize    offset,
+    uint32_t        count,
+    uint32_t        stride,
+    VkBuffer        countBuffer,
+    VkDeviceSize    countOffset);
+
+template
+void CmdBuffer::DrawIndirect<true, true>(
+    VkBuffer        buffer,
+    VkDeviceSize    offset,
+    uint32_t        count,
+    uint32_t        stride,
+    VkBuffer        countBuffer,
+    VkDeviceSize    countOffset);
+
+template
+void CmdBuffer::ResolveImage<VkImageResolve>(
+    VkImage                 srcImage,
+    VkImageLayout           srcImageLayout,
+    VkImage                 destImage,
+    VkImageLayout           destImageLayout,
+    uint32_t                rectCount,
+    const VkImageResolve*   pRects);
+
+template
+void CmdBuffer::ResolveImage<VkImageResolve2>(
+    VkImage                 srcImage,
+    VkImageLayout           srcImageLayout,
+    VkImage                 destImage,
+    VkImageLayout           destImageLayout,
+    uint32_t                rectCount,
+    const VkImageResolve2*  pRects);
 
 } // namespace vk
