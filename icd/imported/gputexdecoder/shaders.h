@@ -25,3 +25,4 @@
 #include "shaders/AstcDecode.h"
 #include "shaders/Etc2Decode.h"
 #include "shaders/Bc3Encoder.h"
+#include "shaders/Etc2ToBc3.h"

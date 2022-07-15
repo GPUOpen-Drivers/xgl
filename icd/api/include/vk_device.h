@@ -626,7 +626,11 @@ public:
         { return (m_properties.timestampQueryPoolSlotSize == 32); }
 
     bool UseCompactDynamicDescriptors() const
-        { return !GetRuntimeSettings().enableRelocatableShaders && !GetEnabledFeatures().robustBufferAccess;}
+    {
+        return (
+                !GetRuntimeSettings().enableRelocatableShaders &&
+                !GetEnabledFeatures().robustBufferAccess);
+    }
 
     bool MustWriteImmutableSamplers() const
         { return GetEnabledFeatures().mustWriteImmutableSamplers; }

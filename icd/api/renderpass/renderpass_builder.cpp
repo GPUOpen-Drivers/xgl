@@ -33,7 +33,6 @@
 #include "include/vk_render_pass.h"
 
 #include "renderpass/renderpass_builder.h"
-#include "renderpass/renderpass_logger.h"
 
 #include "palListImpl.h"
 #include "palVectorImpl.h"
@@ -47,8 +46,7 @@ namespace vk
 // =====================================================================================================================
 RenderPassBuilder::RenderPassBuilder(
     Device*                  pDevice,
-    utils::TempMemArena*     pArena,
-    RenderPassLogger*        pLogger)
+    utils::TempMemArena*     pArena)
     :
     m_pInfo(nullptr),
     m_pDevice(pDevice),
@@ -57,8 +55,7 @@ RenderPassBuilder::RenderPassBuilder(
     m_pAttachments(nullptr),
     m_subpassCount(0),
     m_pSubpasses(nullptr),
-    m_endState(pArena),
-    m_pLogger(pLogger)
+    m_endState(pArena)
 {
 
 }
@@ -891,7 +888,7 @@ static void ConvertImplicitSyncs(RPBarrierInfo* pBarrier)
         pBarrier->implicitSrcCacheMask |= pBarrier->flags.preColorResolveSync ?
                                           Pal::CoherColorTarget :
                                           Pal::CoherDepthStencilTarget;
-        pBarrier->implicitDstCacheMask |= Pal::CoherResolve;
+        pBarrier->implicitDstCacheMask |= Pal::CoherResolveDst;
     }
 
     // Wait for (non-auto-synced) pre-clear if necessary.  No need to augment the pipe point because the prior work falls
@@ -910,7 +907,7 @@ static void ConvertImplicitSyncs(RPBarrierInfo* pBarrier)
         IncludePipePoint(pBarrier, Pal::HwPipePostBlt);
         IncludeWaitPoint(pBarrier, Pal::HwPipeTop);
 
-        pBarrier->implicitSrcCacheMask |= Pal::CoherResolve;
+        pBarrier->implicitSrcCacheMask |= Pal::CoherResolveSrc;
     }
 }
 

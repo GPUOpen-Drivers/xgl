@@ -254,76 +254,6 @@
   ],
   "Settings": [
     {
-      "Name": "RenderPassLogEnable",
-      "Description": "Write a graph visualization of each created render pass in .dot format",
-      "Tags": [
-        "Render Passes"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool"
-    },
-    {
-      "Name": "RenderPassLogDirectory",
-      "Description": "Relative directory where render pass graphs are placed. Root directory is determined in device. Each unique render pass is in a separate file within that directory. The log name is based on a hash of the render pass's create info. ",
-      "Tags": [
-        "Render Passes"
-      ],
-      "Flags": {
-        "IsPath": true
-      },
-      "Defaults": {
-        "Default": "amdpal/",
-        "WinDefault": "VulkanRenderPasses\\",
-        "LnxDefault": "amdpal/"
-      },
-      "Scope": "Driver",
-      "Type": "string",
-      "Size": 512
-    },
-    {
-      "Name": "RenderPassLogFlags",
-      "Description": "A bitmask of flags that control what kind of information is written to the render pass log.",
-      "Tags": [
-        "Render Passes"
-      ],
-      "Flags": {
-        "IsHex": true,
-        "IsBitmask": true
-      },
-      "Defaults": {
-        "Default": 4294967295
-      },
-      "ValidValues": {
-        "Values": [
-          {
-            "Description": "Include render graph.",
-            "Value": 1
-          },
-          {
-            "Description": "Include command list.",
-            "Value": 2
-          },
-          {
-            "Description": "Include original VkSubpassDependency edges.",
-            "Value": 4
-          },
-          {
-            "Description": "Include waits and signal event info.",
-            "Value": 8
-          },
-          {
-            "Description": "Include cache/layout synchronization info.",
-            "Value": 16
-          }
-        ]
-      },
-      "Scope": "Driver",
-      "Type": "uint32"
-    },
-    {
       "Description": "Use shared CmdAllocator for all command buffers.",
       "Tags": [
         "Command Buffer Options"
@@ -846,6 +776,18 @@
       "Type": "bool"
     },
     {
+      "Name": "DisableLoopUnrolls",
+      "Description": "Disable loop unrolls. This modifies the default pipeline state and can be overwritten by fine-grain override settings.",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Name": "DisableEmbedConstArrays",
       "Description": "If indexable constant arrays end up as local variables instead of literals, this embeds them  into the shader code so they can be indexed instead of spilling to memory and reading back.",
       "Tags": [
@@ -870,44 +812,6 @@
       "Scope": "Driver"
     },
     {
-      "Name": "UmdFramePacerControl",
-      "Description": "Enable UMD frame pacer control.",
-      "Tags": [
-        "Present"
-      ],
-      "Defaults": {
-        "Default": true
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "enableUmdFramePacer"
-    },
-    {
-      "Name": "EnableFRTC",
-      "Description": "Enable Frame Rate Target Control.",
-      "Tags": [
-        "Present"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "enableFrtc"
-    },
-    {
-      "Name": "EnableTurboSync",
-      "Description": "Enable Turbo Sync control.",
-      "Tags": [
-        "Present"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool"
-    },
-    {
       "Name": "FullscreenFrameMetadataSupport",
       "Description": "Support Fullscreen Frame Metadata.",
       "Tags": [
@@ -928,18 +832,6 @@
       ],
       "Defaults": {
         "Default": true
-      },
-      "Scope": "Driver",
-      "Type": "bool"
-    },
-    {
-      "Name": "EnableMailboxPresentMode",
-      "Description": "Enable VK_PRESENT_MODE_MAILBOX_KHR present mode support on Windows OS.",
-      "Tags": [
-        "Present"
-      ],
-      "Defaults": {
-        "Default": false
       },
       "Scope": "Driver",
       "Type": "bool"
@@ -1166,10 +1058,14 @@
           }
         ]
       },
-      "Description": "Enable log general output and error message in LLPC and BIL.",
+      "Description": "Enable log mask, enable with 1 in BIL or general output (2) and error message (1) in LLPC.",
       "Tags": [
         "SPIRV Options"
       ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
       "Defaults": {
         "Default": 0
       },
@@ -1258,7 +1154,7 @@
         ],
         "Name": "ShaderReplaceMode"
       },
-      "Description": "Enable shader replacement. This option is valid only if LLPC path is enabled.",
+      "Description": "Enable shader replacement.",
       "Tags": [
         "SPIRV Options"
       ],
@@ -1834,18 +1730,6 @@
       "Name": "EnableSpvValidation"
     },
     {
-      "Description": "GFX10 plus-specific tessellation factor optimization.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "OptimizeTessFactor"
-    },
-    {
       "Description": "[BIL ONLY] Zero initialize AMD IL registers. ",
       "Tags": [
         "SPIRV Options"
@@ -2183,24 +2067,6 @@
       },
       "Scope": "Driver",
       "Type": "uint64"
-    },
-    {
-      "Description": "Directory where ShaderDbg layer read its config file. The file is named \"shaderDbg.cfg\" with several lines. Each line represents a pipeline and has such format \"pipelineHash,stageMask\" (1 - compute shader, 2 - vertex shader, 4 - tessellation control shader, 8 - tessellation evaluation shader, 16 - geometry shader, 32 - fragment shader).",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Flags": {
-        "IsPath": true
-      },
-      "Defaults": {
-        "Default": "vkDump/ShaderDbgCfg",
-        "WinDefault": "vkDump\\ShaderDbgCfg",
-        "LnxDefault": "vkDump/ShaderDbgCfg"
-      },
-      "Scope": "Driver",
-      "Name": "ShaderDbgCfgDirectory",
-      "Type": "string",
-      "Size": 260
     },
     {
       "Description": "If true, duplicate pipelines will be dumped to a file with a numeric suffix attached to the filename to distinguish each copy of the pipeline.",
@@ -2929,19 +2795,6 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Instanced vertex buffer table ring size.",
-      "Tags": [
-        "General"
-      ],
-      "Defaults": {
-        "Default": 1024
-      },
-      "Type": "uint32",
-      "VariableName": "vbTableInstanceRingSize",
-      "Name": "VertexBufferTableInstanceRingSize",
-      "Scope": "Driver"
-    },
-    {
       "ValidValues": {
         "IsEnum": true,
         "Values": [
@@ -3030,21 +2883,6 @@
             "Name": "SkipDuplicateResourceBarriers",
             "Value": 4,
             "Description": "Ignores resource barriers that have the same source and destination parameters in case a full cross-bar sync isn't required."
-          },
-          {
-            "Name": "SkipWithAppProfile",
-            "Value": 8,
-            "Description": "Filter all requested pipeline barriers in an application profile specified by the setting BarrierFilterProfileFile."
-          },
-          {
-            "Name": "SkipWithAppProfileRegen",
-            "Value": 16,
-            "Description": "Same as SkipWithAppProfile but the pipeline hashes are not considered in order to regenerate strong barrier hashes after any application updates to its shaders."
-          },
-          {
-            "Name": "SkipWithIntDevOverlay",
-            "Value": 32,
-            "Description": "Manually remove barriers using keyboard shortcuts to visualize their effects. Use in conjunction with the developer overlay. See the setting VulkanOverlayEnable OverlayBarrierFiltering option for details. SkipWithAppProfile and SkipWithAppProfileRegen may be used simultaneously to refine or regenerate an existing profile."
           }
         ],
         "Name": "BarrierFilterOptions"
@@ -3088,22 +2926,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32"
-    },
-    {
-      "Description": "Path to a file that contains application-specific barrier filter profiles. The contents are read on startup and used if BarrierFilterOptions SkipWithAppProfile, SkipWithAppProfileRegen, or SkipWithIntDevOverlay are set. On exit, an updated profile is written to this same file. This setting only triggers on debug builds.",
-      "Tags": [
-        "General"
-      ],
-      "Flags": {
-        "IsPath": true
-      },
-      "Defaults": {
-        "Default": ""
-      },
-      "Scope": "Driver",
-      "Name": "BarrierFilterProfileFile",
-      "Type": "string",
-      "Size": 512
     },
     {
       "Description": "The number of pipeline cache count we treat as excessive and thus a smaller internal implementation is used for pipeline cache.",
@@ -4754,18 +4576,6 @@
       "Type": "enum"
     },
     {
-      "Description": "Disable DCC for video images with image usage flag VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_AMD and VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_AMD.",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "DisableDccForVideoImages"
-    },
-    {
       "Description": "Specifies the maximum threshold in bytes for linear transfer commands to use CP DMA, which have less overhead than CS/Gfx copies, but also less throughput for large copies.",
       "Tags": [
         "Optimization"
@@ -4861,14 +4671,15 @@
         "VKI_GPU_DECOMPRESS"
       ],
       "Defaults": {
-        "Default": false
+        "Default": false,
+        "AndroidDefault": true
       },
       "Scope": "Driver",
       "Type": "bool",
       "Name": "EnableShaderDecode"
     },
     {
-      "Description": "Enable BC5 encoder to convert ASTC/ETC2 to BC5 format.",
+      "Description": "Enable BC3 encoder to convert ASTC/ETC2 to BC3 format.",
       "Tags": [
         "Developer Mode"
       ],
@@ -4876,11 +4687,27 @@
         "VKI_GPU_DECOMPRESS"
       ],
       "Defaults": {
-        "Default": false
+        "Default": 0
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Value": 0,
+            "Description": "Disable Bc3 encoder for ETC2/ASTC texture"
+          },
+          {
+            "Value": 1,
+            "Description": "Enable Bc3 encoder for ETC2/ASTC texture, one step convert"
+          },
+          {
+            "Value": 2,
+            "Description": "Enable Bc3 encoder for ETC2/ASTC texture, two steps convert: compressed ---> RGBA8 ---> Bc3"
+          }
+        ]
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "Name": "EnableBC5Encoder"
+      "Type": "uint32",
+      "Name": "EnableBC3Encoder"
     },
     {
       "Description": "Determines the string that's used to trigger a start-frame delimiter via vkQueueInsertDebugUtilsLabelEXT. This string is \"AmdFrameBegin\" by default.",
@@ -5102,19 +4929,6 @@
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "DevModeSqttFrameCount"
-    },
-    {
-      "Description": "Any driver-generated user event markers will have this string as its prefix.",
-      "Tags": [
-        "Developer Mode"
-      ],
-      "Defaults": {
-        "Default": "[AMD] "
-      },
-      "Scope": "Driver",
-      "Name": "DevModeSqttInternalUserEventPrefix",
-      "Type": "string",
-      "Size": 512
     },
     {
       "Description": "If TRUE, DevModeSqttTrace[Begin|End]TagValues are used to override trace parameter begin/end command buffer debug object tag values. This is mainly used for debugging.",

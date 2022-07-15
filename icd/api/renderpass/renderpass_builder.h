@@ -50,7 +50,6 @@ class RenderPassCmdList;
 struct RenderPassActiveState;
 struct RuntimeSettings;
 class RenderPass;
-class RenderPassLogger;
 struct RenderPassCreateInfo;
 struct AttachmentDescription;
 struct SubpassDescription;
@@ -144,7 +143,7 @@ public:
         SyncPointState syncEnd;
     };
 
-    RenderPassBuilder(Device* pDevice, utils::TempMemArena* pArena, RenderPassLogger* pLogger);
+    RenderPassBuilder(Device* pDevice, utils::TempMemArena* pArena);
     ~RenderPassBuilder();
 
     VkResult Build(
@@ -207,7 +206,6 @@ private:
     uint32_t                                 m_subpassCount;        // Subpass count
     SubpassState*                            m_pSubpasses;          // Per-subpass build state
     EndState                                 m_endState;            // End-instance build state
-    RenderPassLogger*                        m_pLogger;             // Pointer to logger (null unless enabled)
 };
 
 } // namespace vk

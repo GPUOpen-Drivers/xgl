@@ -274,6 +274,17 @@ void ResourceOptimizer::BuildAppProfile()
             m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
         }
     }
+    else if (appProfile == AppProfile::SkyGold)
+    {
+        if (gfxIpLevel >= Pal::GfxIpLevel::GfxIp10_1)
+        {
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xdd5e41b92c928478;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = 1;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+        }
+    }
     else if (appProfile == AppProfile::WolfensteinII)
     {
         // The resource profile created by disabling DCC for usage containing:

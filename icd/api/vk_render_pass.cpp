@@ -871,17 +871,8 @@ static VkResult CreateRenderPass(
         infoMemorySize);
 
     RenderPassExecuteInfo* pExecuteInfo = nullptr;
-    RenderPassLogger*      pLogger      = nullptr;
 
-#if ICD_LOG_RENDER_PASSES
-    RenderPassLogger logger(&buildArena, pDevice);
-
-    pLogger = &logger;
-#endif
-
-    RenderPassLogBegin(pLogger, &renderPassInfo);
-
-    RenderPassBuilder builder(pDevice, &buildArena, pLogger);
+    RenderPassBuilder builder(pDevice, &buildArena);
 
     result = builder.Build(
         &renderPassInfo,
@@ -903,10 +894,6 @@ static VkResult CreateRenderPass(
 
         return result;
     }
-
-    RenderPassLogExecuteInfo(pLogger, pExecuteInfo);
-
-    RenderPassLogEnd(pLogger);
 
     VK_PLACEMENT_NEW(pMemory) RenderPass(&renderPassInfo, pExecuteInfo);
 

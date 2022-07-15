@@ -90,6 +90,7 @@ target_sources(xgl PRIVATE
     api/cmd_buffer_ring.cpp
     api/color_space_helper.cpp
     api/compiler_solution.cpp
+    api/entry.cpp
     api/internal_mem_mgr.cpp
     api/pipeline_compiler.cpp
     api/pipeline_binary_cache.cpp
@@ -144,7 +145,6 @@ target_sources(xgl PRIVATE
     api/appopt/g_shader_profile.cpp
     api/render_state_cache.cpp
     api/renderpass/renderpass_builder.cpp
-    api/renderpass/renderpass_logger.cpp
     api/utils/temp_mem_arena.cpp
     api/utils/json_reader.cpp
     api/utils/json_writer.cpp

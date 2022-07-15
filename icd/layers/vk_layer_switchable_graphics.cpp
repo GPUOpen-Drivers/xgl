@@ -214,12 +214,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
         {
             void* pMemory = nullptr;
 
-            if (pPhysicalDevices != NULL)
-            {
-                physicalDeviceCount = (physicalDeviceCount < *pPhysicalDeviceCount) ?
-                    physicalDeviceCount : *pPhysicalDeviceCount;
-            }
-
             if (physicalDeviceCount > 0)
             {
                 pMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
@@ -245,7 +239,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
         }
 #if defined(__unix__)
 
-        if ((result == VK_SUCCESS) || (result == VK_INCOMPLETE))
+        if (result == VK_SUCCESS)
         {
             void* pPropertiesMemory = nullptr;
 
@@ -272,7 +266,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
                 }
             }
 
-            if ((result == VK_SUCCESS) || (result == VK_INCOMPLETE))
+            if (result == VK_SUCCESS)
             {
                 uint32_t returnedPhysicalDeviceCount = 0;
                 uint32_t availablePhysicalDeviceCount = 0;
@@ -392,12 +386,6 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
         {
             void* pMemory = nullptr;
 
-            if (pPhysicalDeviceGroupProperties != NULL)
-            {
-                physicalDeviceGroupCount = (physicalDeviceGroupCount < *pPhysicalDeviceGroupCount) ?
-                    physicalDeviceGroupCount : *pPhysicalDeviceGroupCount;
-            }
-
             if (physicalDeviceGroupCount > 0)
             {
                 pMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
@@ -428,7 +416,7 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
             result = pEnumPhysDeviceGroupsFunc(instance, &physicalDeviceGroupCount, pLayerPhysicalDeviceGroups);
         }
 
-        if ((result == VK_SUCCESS) || (result == VK_INCOMPLETE))
+        if ((result == VK_SUCCESS))
         {
             bool processDevices = false;
 
@@ -498,7 +486,8 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
                                 (properties.deviceID == pProperties[j].deviceID) &&
                                 (strcmp(properties.deviceName, pProperties[j].deviceName) == 0))
                             {
-                                if (pPhysicalDeviceGroupProperties != nullptr)
+                                if ((pPhysicalDeviceGroupProperties != nullptr) &&
+                                    (deviceGroupCount < *pPhysicalDeviceGroupCount))
                                 {
                                     pPhysicalDeviceGroupProperties[deviceGroupCount] = pLayerPhysicalDeviceGroups[i];
                                 }
@@ -509,7 +498,21 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
                         }
                     }
 
-                    *pPhysicalDeviceGroupCount = deviceGroupCount;
+                    if (pPhysicalDeviceGroupProperties != nullptr)
+                    {
+                        if (*pPhysicalDeviceGroupCount < deviceGroupCount)
+                        {
+                            result = VK_INCOMPLETE;
+                        }
+                        else
+                        {
+                            *pPhysicalDeviceGroupCount = deviceGroupCount;
+                        }
+                    }
+                    else
+                    {
+                        *pPhysicalDeviceGroupCount = deviceGroupCount;
+                    }
                 }
 
                 if (pTmpLayerPhysicalDevice != nullptr)
@@ -524,13 +527,25 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
             }
             else
             {
-                *pPhysicalDeviceGroupCount = physicalDeviceGroupCount;
                 if (pPhysicalDeviceGroupProperties != nullptr)
                 {
-                    for (uint32_t i = 0; i < physicalDeviceGroupCount; i++)
+                    if (*pPhysicalDeviceGroupCount < physicalDeviceGroupCount)
+                    {
+                        result = VK_INCOMPLETE;
+                    }
+                    else
+                    {
+                        *pPhysicalDeviceGroupCount = physicalDeviceGroupCount;
+                    }
+
+                    for (uint32_t i = 0; i < *pPhysicalDeviceGroupCount; i++)
                     {
                         pPhysicalDeviceGroupProperties[i] = pLayerPhysicalDeviceGroups[i];
                     }
+                }
+                else
+                {
+                    *pPhysicalDeviceGroupCount = physicalDeviceGroupCount;
                 }
             }
         }

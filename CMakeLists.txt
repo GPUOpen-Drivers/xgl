@@ -300,7 +300,7 @@ else()
 endif()
 
 # VKGC compiler
-add_subdirectory(${XGL_VKGC_PATH} ${CMAKE_BINARY_DIR}/compiler EXCLUDE_FROM_ALL)
+add_subdirectory(${XGL_VKGC_PATH} ${CMAKE_BINARY_DIR}/compiler)
 
 # icd
 if(NOT ICD_BUILD_LLPCONLY)

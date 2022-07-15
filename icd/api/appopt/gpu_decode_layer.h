@@ -73,7 +73,7 @@ public:
             (static_cast<uint32_t>(format) % 2 == 0);
     }
 
-    VkImage CreateStagingImage(Device* device, VkCommandBuffer userCmdBuf,  VkImage dstImage);
+    VkImage CreateStagingImage(Device* device, VkImage dstImage);
     void ClearStagingResources(VkImage image);
 
     typedef Util::HashMap<VkImage, StagingResourcePair, PalAllocator> ImageResourcePairMap;

@@ -33,6 +33,8 @@
 #ifndef CMP_COMMON_DEFINITIONS_H
 #define CMP_COMMON_DEFINITIONS_H
 
+//#define USE_CMP_FIDELITY_FX_H
+
 // Proxy ISPC compiler (Warning! Not all ASPM features will be available : expect build errors for specialized ASPM code!
 #ifdef ISPC
 #define ASPM
@@ -84,6 +86,7 @@
 #endif
 #endif
 
+
 //=======================================
 // Skip CMP if only using FidelityFX Code
 //=======================================
@@ -113,6 +116,11 @@
 #include <cmath>
 #include <stdio.h>
 #include INC_cmp_math_vec4
+#endif
+
+#ifdef _WIN32
+//#define USE_ASPM_CODE
+#include <cmath>
 #endif
 
 #ifndef CMP_MAX
@@ -155,6 +163,8 @@
 #define BLOCK_SIZE_4X4 16
 #define BlockX 4
 #define BlockY 4
+//#define USE_BLOCK_LINEAR    // Source Data is organized in linear form for each block : Experimental Code not fully developed
+//#define USE_DOUBLE          // Default is to use float, enable to use double data types only for float definitions
 
 //---------------------------------------------
 // Predefinitions for GPU and CPU compiled code
@@ -273,6 +283,7 @@ typedef int3 CGV_Vec3i;
 typedef int4 CGU_Vec4i;
 typedef int4 CGV_Vec4i;
 
+
 typedef uint2 CGU_Vec2ui;
 typedef uint2 CGV_Vec2ui;
 typedef uint3 CGU_Vec3ui;
@@ -354,6 +365,7 @@ typedef float CGV_FLOAT;
 #define BC7_ENCODECLASS
 
 #define USE_BC7_SP_ERR_IDX
+//#define USE_BC7_RAMP
 
 #define CMP_EXPORT export
 #define TRUE true
@@ -449,7 +461,7 @@ typedef CMP_Vec4ui CGV_Vec4ui;
 typedef CMP_Vec4f  CGU_Vec4f;
 typedef CMP_Vec4f  CGV_Vec4f;
 
-#if defined(WIN32)
+#if defined(WIN32) || defined(_WIN64)
 #define CMP_CDECL __cdecl
 #else
 #define CMP_CDECL
@@ -487,7 +499,7 @@ typedef uint16 CGV_UINT16;
 typedef uint32 CGV_UINT32;
 typedef uint64 CGV_UINT64;
 
-#endif
+#endif  // else ASPM_GPU
 
 #define CMP_UNIFORM uniform
 #define CMP_VARYING varying
@@ -510,9 +522,9 @@ struct texture_surface
     CGU_INT width, height, stride;
     CGU_INT channels;
 };
-#endif
+#endif  // else ASPM_HLSL
 
-#endif
+#endif // USE CMP defines
 
 //=======================================
 // using FidelityFX Code
@@ -567,6 +579,7 @@ struct texture_surface
 // ==========
 // 20210518 - Merged CMP Common_def.h with ffx_a.h
 //==============================================================================================================================
+
 
 #define A_2PI 6.28318530718   // 2xPI
 
@@ -2264,6 +2277,6 @@ struct texture_surface
  AF3 opARcpF3(outAF3 d,inAF3 a){d=ARcpF3(a);return d;}
  AF4 opARcpF4(outAF4 d,inAF4 a){d=ARcpF4(a);return d;}
 #endif
-#endif
+#endif // USE_CMP_FIDELITY_FX_H
 
-#endif
+#endif  // Common_Def.h

@@ -1733,13 +1733,13 @@ constexpr Pal::SwizzledFormat PalFmt(
 }
 
 #if (VKI_GPU_DECOMPRESS)
-static VkFormat convertCompressedFormat(VkFormat format, bool useBC5)
+static VkFormat convertCompressedFormat(VkFormat format, bool useBC3)
 {
     if (Formats::IsASTCFormat(format))
     {
         AstcMappedInfo mapInfo = {};
         Formats::GetAstcMappedInfo(format, &mapInfo);
-        format = useBC5 ? VK_FORMAT_BC3_UNORM_BLOCK : mapInfo.format;
+        format = useBC3 ? VK_FORMAT_BC3_UNORM_BLOCK : mapInfo.format;
     }
     else if (Formats::IsEtc2Format(format))
     {
@@ -1747,11 +1747,11 @@ static VkFormat convertCompressedFormat(VkFormat format, bool useBC5)
             (VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK == format) ||
             (VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK == format))
         {
-            format = useBC5 ? VK_FORMAT_BC3_SRGB_BLOCK : VK_FORMAT_R8G8B8A8_SRGB;
+            format = useBC3 ? VK_FORMAT_BC3_SRGB_BLOCK : VK_FORMAT_R8G8B8A8_SRGB;
         }
         else
         {
-            format = useBC5 ? VK_FORMAT_BC3_UNORM_BLOCK : VK_FORMAT_R8G8B8A8_UNORM;
+            format = useBC3 ? VK_FORMAT_BC3_UNORM_BLOCK : VK_FORMAT_R8G8B8A8_UNORM;
         }
     }
     return format;
@@ -1772,7 +1772,7 @@ inline Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings&
 #if VKI_GPU_DECOMPRESS
         if (settings.enableShaderDecode)
         {
-            format = convertCompressedFormat(format, settings.enableBC5Encoder);
+            format = convertCompressedFormat(format, settings.enableBC3Encoder);
         }
 #endif
         return convert::VkToPalSwizzledFormatLookupTableStorage[format];
@@ -2343,6 +2343,11 @@ inline uint32_t VkToPalPipelineStageFlags(
         palPipelineStageMask |= Pal::PipelineStageBottomOfPipe;
     }
 
+    if (stageMask & VK_PIPELINE_STAGE_2_HOST_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageBottomOfPipe;
+    }
+
     if (stageMask & VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT_KHR)
     {
         palPipelineStageMask |= Pal::PipelineStageTopOfPipe         |
@@ -2401,7 +2406,7 @@ inline uint32_t VkToPalPipelineStageFlags(
                                 Pal::PipelineStageGs;
     }
 
-    if (stageMask & VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT)
+    if (stageMask & VK_PIPELINE_STAGE_2_CONDITIONAL_RENDERING_BIT_EXT)
     {
         palPipelineStageMask |= Pal::PipelineStageFetchIndices;
     }

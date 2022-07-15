@@ -210,10 +210,7 @@ void BarrierFilterLayer::OverrideDispatchTable(
 
     if (settings.barrierFilterOptions & (SkipStrayExecutionDependencies |
                                          SkipImageLayoutUndefined       |
-                                         SkipDuplicateResourceBarriers  |
-                                         SkipWithAppProfile             |
-                                         SkipWithAppProfileRegen        |
-                                         SkipWithIntDevOverlay))
+                                         SkipDuplicateResourceBarriers))
     {
         BARRIER_FILTER_LAYER_OVERRIDE_ENTRY(vkCmdPipelineBarrier);
     }

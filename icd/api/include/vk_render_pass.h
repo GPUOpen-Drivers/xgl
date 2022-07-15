@@ -36,7 +36,6 @@
 
 #include "renderpass/renderpass_types.h"
 #include "renderpass/renderpass_builder.h"
-#include "renderpass/renderpass_logger.h"
 
 #include "palCmdBuffer.h"
 #include "palVector.h"

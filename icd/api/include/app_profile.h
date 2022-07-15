@@ -91,6 +91,7 @@ enum class AppProfile : uint32_t
     WolfensteinCyberpilot, // Wolfenstein Cyberpilot by Machine Games
     EvilGenius2,           // Evil Genius 2
     KnockoutCity,          // Knockout City
+    SkyGold,               // Sky Gold by NetEase
     IdTechEngine,          // id Tech Engine (Default)
     Feral3DEngine,         // Feral3D Engine (Default)
     StrangeEngine,         // Strange Engine (Default)
@@ -106,6 +107,7 @@ enum class AppProfile : uint32_t
     SaschaWillemsExamples, // Vulkan Examples by Sascha Willems
     Hyperscape,            // Hyperscape by Ubisoft
     SeriousSam4,           // Serious Sam 4 by Croteam
+    SniperElite5,           // Sniper Elite 5 by Rebellion
     Maxon,                       // Maxon
     AngleEngine,                 // Angle Engine
     CSGO,                        // Counter-Strike: Global Offensive

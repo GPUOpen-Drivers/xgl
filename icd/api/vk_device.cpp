@@ -837,16 +837,16 @@ VkResult Device::Create(
                     queuePriority[pQueueInfo->queueFamilyIndex][queueId] = pPriorityInfo->globalPriority;
                 }
 
+                const auto palEngineType = pPhysicalDevice->GetQueueFamilyPalEngineType(pQueueInfo->queueFamilyIndex);
                 uint32 queuePrioritySupportMask = 0;
                 for (uint32 engineNdx = 0u;
-                     engineNdx < properties.engineProperties[pQueueInfo->queueFamilyIndex].engineCount;
+                     engineNdx < properties.engineProperties[palEngineType].engineCount;
                      ++engineNdx)
                 {
-                    const auto& engineCapabilities =
-                        properties.engineProperties[pQueueInfo->queueFamilyIndex].capabilities[engineNdx];
+                    const auto& engineCapabilities = properties.engineProperties[palEngineType].capabilities[engineNdx];
 
                     // Leave out High Priority for Universal Queue
-                    if ((pQueueInfo->queueFamilyIndex != Pal::EngineTypeUniversal) || IsNormalQueue(engineCapabilities))
+                    if ((palEngineType != Pal::EngineTypeUniversal) || IsNormalQueue(engineCapabilities))
                     {
                         queuePrioritySupportMask |= engineCapabilities.queuePrioritySupport;
                     }
@@ -1935,6 +1935,8 @@ VkResult Device::CreateInternalComputePipeline(
 
     ComputePipelineBinaryCreateInfo pipelineBuildInfo = {};
 
+    pCompiler->ApplyPipelineOptions(this, 0, &pipelineBuildInfo.pipelineInfo.options);
+
     // Build shader module
     result = pCompiler->BuildShaderModule(
         this,
@@ -1962,8 +1964,7 @@ VkResult Device::CreateInternalComputePipeline(
         pipelineBuildInfo.pipelineInfo.resourceMapping.userDataNodeCount = numUserDataNodes;
 
         pCompiler->ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute,
-                                             &pShaderInfo->options
-                                             );
+                                             &pShaderInfo->options);
 
         Util::MetroHash::Hash cacheId;
         result = pCompiler->CreateComputePipelineBinary(this,
@@ -2254,7 +2255,9 @@ void Device::GetQueue2(
     {
         {
             DispatchableQueue* pFoundQueue = m_pQueues[queueFamilyIndex][queueIndex];
-            *pQueue = ((*pFoundQueue)->GetFlags() == flags) ? reinterpret_cast<VkQueue>(pFoundQueue) : VK_NULL_HANDLE;
+            *pQueue = ((pFoundQueue != nullptr) && ((*pFoundQueue)->GetFlags() == flags)) ?
+                reinterpret_cast<VkQueue>(pFoundQueue) :
+                VK_NULL_HANDLE;
         }
     }
     else

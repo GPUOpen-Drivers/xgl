@@ -195,6 +195,7 @@ struct DynamicRenderingInstance
     uint32_t                    viewMask;
     uint32_t                    renderAreaCount;
     Pal::Rect                   renderArea[MaxPalDevices];
+    bool                        enableResolveTarget;
     uint32_t                    colorAttachmentCount;
     DynamicRenderingAttachments colorAttachments[Pal::MaxColorTargets];
     DynamicRenderingAttachments depthAttachment;
@@ -204,31 +205,7 @@ struct DynamicRenderingInstance
 // Members of CmdBufferRenderState that are the same for each GPU
 struct AllGpuRenderState
 {
-    const GraphicsPipeline*        pGraphicsPipeline;
-    uint64_t                       boundGraphicsPipelineHash;
-    const ComputePipeline*         pComputePipeline;
-    const RenderPass*              pRenderPass;
-    const Pal::IMsaaState* const * pBltMsaaStates;
-
-    // These tokens describe the current "static" values of pieces of Vulkan render state.  These are set by pipelines
-    // that program static render state, and are reset to DynamicRenderStateToken by vkCmdSet* functions.
-    //
-    // Command buffer recording can compare these tokens with new incoming tokens to efficiently redundancy check
-    // render state and avoid context rolling.  This redundancy checking is only done for static pipeline state and not
-    // for vkCmdSet* function values.
-    struct
-    {
-        uint32_t inputAssemblyState;
-        uint32_t triangleRasterState;
-        uint32_t pointLineRasterState;
-        uint32_t lineStippleState;
-        uint32_t depthBiasState;
-        uint32_t blendConst;
-        uint32_t depthBounds;
-        uint32_t viewports;
-        uint32_t scissorRect;
-        uint32_t fragmentShadingRate;
-    } staticTokens;
+    const RenderPass*             pRenderPass;
 
     // The Imageless Frambuffer extension allows setting this at RenderPassBind
     Framebuffer*             pFramebuffer;
@@ -256,6 +233,30 @@ struct AllGpuRenderState
     // Keep pipelineState as the first member of the section that is selectively reset.  It is used to compute how large
     // the first part is for the memset in CmdBuffer::ResetState().
     PipelineBindState       pipelineState[PipelineBindCount];
+
+    uint64_t                      boundGraphicsPipelineHash;
+    const GraphicsPipeline*       pGraphicsPipeline;
+    const ComputePipeline*        pComputePipeline;
+
+    // These tokens describe the current "static" values of pieces of Vulkan render state.  These are set by pipelines
+    // that program static render state, and are reset to DynamicRenderStateToken by vkCmdSet* functions.
+    //
+    // Command buffer recording can compare these tokens with new incoming tokens to efficiently redundancy check
+    // render state and avoid context rolling.  This redundancy checking is only done for static pipeline state and not
+    // for vkCmdSet* function values.
+    struct
+    {
+        uint32_t inputAssemblyState;
+        uint32_t triangleRasterState;
+        uint32_t pointLineRasterState;
+        uint32_t lineStippleState;
+        uint32_t depthBiasState;
+        uint32_t blendConst;
+        uint32_t depthBounds;
+        uint32_t viewports;
+        uint32_t scissorRect;
+        uint32_t fragmentShadingRate;
+    } staticTokens;
 
     // Which Vulkan PipelineBindPoint currently owns the state of each PAL pipeline bind point.  This is
     // relevant because e.g. multiple Vulkan pipeline bind points are implemented as compute pipelines and used through
@@ -675,6 +676,8 @@ public:
 
     void EndRendering();
 
+    void PostDrawPreResolveSync();
+
     void BeginQueryIndexed(
         VkQueryPool                                 queryPool,
         uint32_t                                    query,
@@ -1006,9 +1009,9 @@ public:
         const Pal::ImageResolveRegion* pRegions,
         uint32_t                       deviceMask);
 
-    void PreBltBindMsaaState(const Image& image);
+    bool PreBltBindMsaaState(const Image& image);
 
-    void PostBltRestoreMsaaState();
+    void PostBltRestoreMsaaState(bool bltMsaaState);
 
     void PalCmdBindMsaaStates(const Pal::IMsaaState* const * pStates);
 

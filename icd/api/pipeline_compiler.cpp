@@ -578,6 +578,7 @@ VkResult PipelineCompiler::BuildShaderModule(
     hasher.Finalize(uniqueHash.bytes);
 
     bool findReplaceShader = false;
+
     if ((pSettings->shaderReplaceMode == ShaderReplaceShaderHash) ||
         (pSettings->shaderReplaceMode == ShaderReplaceShaderHashPipelineBinaryHash))
     {
@@ -1436,6 +1437,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
     m_totalTimeSpent += shouldCompile ? compileTime : cacheTime;
     m_totalBinaries++;
+
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
     {
         ReplacePipelineIsaCode(pDevice, pipelineHash, 0, *ppPipelineBinary, *pPipelineBinarySize);
@@ -2028,8 +2030,7 @@ void PipelineCompiler::BuildPipelineShaderInfo(
         pShaderInfoOut->pEntryTarget        = pShaderInfoIn->pEntryPoint;
         pShaderInfoOut->entryStage          = stage;
         pCompiler->ApplyDefaultShaderOptions(stage,
-                                             &pShaderInfoOut->options
-                                             );
+                                             &pShaderInfoOut->options);
 
         if ((pShaderInfoIn->flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0)
         {
@@ -2759,8 +2760,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
         ShaderModule::GetShaderData(pCreateInfo->compilerType, pShaderInfo->stage.pModuleHandle);;
 
     ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute,
-                              &pCreateInfo->pipelineInfo.cs.options
-                              );
+                              &pCreateInfo->pipelineInfo.cs.options);
 
     ApplyProfileOptions(pDevice,
                         ShaderStage::ShaderStageCompute,
@@ -2779,8 +2779,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 // Set any non-zero shader option defaults
 void PipelineCompiler::ApplyDefaultShaderOptions(
     ShaderStage                  stage,
-    Vkgc::PipelineShaderOptions* pShaderOptions
-    ) const
+    Vkgc::PipelineShaderOptions* pShaderOptions) const
 {
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
 
@@ -2808,8 +2807,9 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
         break;
     }
 
-    pShaderOptions->wgpMode       = ((settings.enableWgpMode & (1 << stage)) != 0);
-    pShaderOptions->waveBreakSize = static_cast<Vkgc::WaveBreakSize>(settings.waveBreakSize);
+    pShaderOptions->wgpMode           = ((settings.enableWgpMode & (1 << stage)) != 0);
+    pShaderOptions->waveBreakSize     = static_cast<Vkgc::WaveBreakSize>(settings.waveBreakSize);
+    pShaderOptions->disableLoopUnroll = settings.disableLoopUnrolls;
 
 }
 

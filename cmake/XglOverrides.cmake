@@ -117,18 +117,20 @@ macro(xgl_get_path)
         set(VULKAN_HEADERS_PATH ${PROJECT_SOURCE_DIR}/../Vulkan-Headers CACHE PATH "The path of Vulkan headers.")
     endif()
 
+    # Third_party path
+    set(THIRD_PARTY_PATH ${PROJECT_SOURCE_DIR}/../third_party CACHE PATH "The path of third_party.")
     # Metrohash path
     if(EXISTS ${PROJECT_SOURCE_DIR}/../MetroHash)
         set(XGL_METROHASH_PATH ${PROJECT_SOURCE_DIR}/../MetroHash CACHE PATH "The path of metrohash.")
-    elseif(EXISTS ${PROJECT_SOURCE_DIR}/../third_party/metrohash)
-        set(XGL_METROHASH_PATH ${PROJECT_SOURCE_DIR}/../third_party/metrohash CACHE PATH "The path of metrohash.")
+    elseif(EXISTS ${THIRD_PARTY_PATH}/metrohash)
+        set(XGL_METROHASH_PATH ${THIRD_PARTY_PATH}/metrohash CACHE PATH "The path of metrohash.")
     endif()
 
     # cwpack path
     if(EXISTS ${PROJECT_SOURCE_DIR}/../CWPack)
         set(XGL_CWPACK_PATH ${PROJECT_SOURCE_DIR}/../CWPack CACHE PATH "The path of cwpack.")
-    elseif(EXISTS ${PROJECT_SOURCE_DIR}/../third_party/cwpack)
-        set(XGL_CWPACK_PATH ${PROJECT_SOURCE_DIR}/../third_party/cwpack CACHE PATH "The path of cwpack.")
+    elseif(EXISTS ${THIRD_PARTY_PATH}/cwpack)
+        set(XGL_CWPACK_PATH ${THIRD_PARTY_PATH}/cwpack CACHE PATH "The path of cwpack.")
     endif()
 endmacro()
 
@@ -184,6 +186,8 @@ macro(xgl_overrides_vkgc)
 ### For LLPC ##########################################################################################################
     set(LLPC_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_LLPC_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 
+    set(LLPC_BUILD_TOOLS ${XGL_BUILD_TOOLS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
     set(LLPC_BUILD_TESTS ${XGL_BUILD_TESTS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
     set(LLPC_BUILD_NAVI12 ${XGL_BUILD_NAVI12} CACHE BOOL "${PROJECT_NAME} override." FORCE)
@@ -204,8 +208,13 @@ macro(xgl_overrides)
 
     xgl_get_path()
 
+    if(XGL_BUILD_TESTS)
+        set(XGL_BUILD_TOOLS ON CACHE BOOL "XGL_BUILD_TOOLS override by XGL_BUILD_TESTS." FORCE)
+    endif()
+
     if(ICD_BUILD_LLPCONLY)
         set(ICD_BUILD_LLPC ON CACHE BOOL "ICD_BUILD_LLPC override." FORCE)
+        set(XGL_BUILD_TOOLS ON CACHE BOOL "XGL_BUILD_TOOLS override by ICD_BUILD_LLPCONLY." FORCE)
     endif()
 
     if(NOT ICD_BUILD_LLPC)

@@ -275,6 +275,9 @@ public:
                (GetQueueFamilyPolicy(queueFamilyIndex).supportedLayoutUsageMask | m_concurrentLayoutUsageMask);
     }
 
+    VK_FORCEINLINE uint32_t GetPossibleLayoutEngineMasks() const
+    { return m_possibleLayoutEngineMask; }
+
     Pal::ImageLayout GetTransferLayout(
         VkImageLayout                       layout,
         uint32_t                            queueFamilyIndex) const;
@@ -335,6 +338,8 @@ protected:
                                                     // mode to allow concurrent well-defined access to the image.
     uint32_t    m_concurrentLayoutUsageMask;        // Mask including all layout usage flags supported by any queue
                                                     // family in the concurrent sharing scope.
+    uint32_t    m_possibleLayoutEngineMask;         // Mask of possible engines this image may be used on.
+                                                    // Used when creating ImageViews for the image.
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(ImageBarrierPolicy);

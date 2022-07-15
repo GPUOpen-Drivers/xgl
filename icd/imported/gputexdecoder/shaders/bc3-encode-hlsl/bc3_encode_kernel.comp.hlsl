@@ -28,17 +28,24 @@
 #define ASPM_HLSL
 #endif
 
-#include "bcn_common_kernel.h"
+#define CMP_USE_LOWQUALITY
 
-[[vk::constant_id(0)]] const uint g_num_block_x = 0;
-[[vk::constant_id(1)]] const uint g_start_block_id = 0;
-[[vk::constant_id(2)]] const float g_quality = 0.0;
+#include "bcn_common_kernel.h"
 
 // Source Data
 Texture2D g_Input : register( t0 );
 
 // Compressed Output Data
 RWTexture2D<uint4> g_OutTex : register( t1 );
+
+// push constants
+[[vk::push_constant]]
+cbuffer cbParams {
+    uint  g_num_block_x;
+    uint  g_start_block_id;
+    float g_quality;
+    uint  g_padding;
+};
 
 // Processing multiple blocks at a time
 #define MAX_USED_THREAD     16  // pixels in a BC (block compressed) block
@@ -58,11 +65,13 @@ void EncodeBlocks(uint GI : SV_GroupIndex, uint3 groupID : SV_GroupID)
     uint pixelBase      = blockInGroup * MAX_USED_THREAD;                               // the first id of the pixel in this BC block in this thread group
     uint pixelInBlock   = GI - pixelBase;                                               // id of the pixel in this BC block
 
+
     uint block_y        = blockID / g_num_block_x;
     uint block_x        = blockID - block_y * g_num_block_x;
     uint base_x         = block_x * BLOCK_SIZE_X;
     uint base_y         = block_y * BLOCK_SIZE_Y;
 	uint2 outpos        = uint2(block_x, block_y);
+
 
     // Load up the pixels
     if (pixelInBlock < 16)
@@ -86,6 +95,6 @@ void EncodeBlocks(uint GI : SV_GroupIndex, uint3 groupID : SV_GroupID)
                 blockA[i]       = shared_temp[pixelBase + i].w;
         }
 
-        g_OutTex[outpos] = CompressBlockBC3_UNORM(blockRGB,blockA, g_quality,false);
+        g_OutTex[outpos] = CompressBlockBC3_UNORM(blockRGB, blockA, 0.5f, false);
     }
 }

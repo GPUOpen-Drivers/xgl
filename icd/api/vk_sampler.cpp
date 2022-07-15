@@ -150,16 +150,17 @@ VkResult Sampler::Create(
     // disableSingleMipAnisoOverride=1 ensure properly sampling with single mipmap level and anisotropic filtering.
     samplerInfo.flags.disableSingleMipAnisoOverride = 1;
 
-    samplerInfo.flags.useAnisoThreshold             = (settings.useAnisoThreshold == true) ? 1 : 0;
-    samplerInfo.anisoThreshold                      = settings.anisoThreshold;
-    samplerInfo.perfMip                             = settings.samplerPerfMip;
-    samplerInfo.flags.unnormalizedCoords            = (pCreateInfo->unnormalizedCoordinates == VK_TRUE) ? 1 : 0;
-    samplerInfo.flags.prtBlendZeroMode              = 0;
-    samplerInfo.flags.seamlessCubeMapFiltering      = 1;
-    samplerInfo.flags.truncateCoords                = ((pCreateInfo->magFilter == VK_FILTER_NEAREST) &&
-                                                       (pCreateInfo->minFilter == VK_FILTER_NEAREST) &&
-                                                       (samplerInfo.compareFunc == Pal::CompareFunc::Never))
-                                                      ? 1 : 0;
+    samplerInfo.flags.useAnisoThreshold        = (settings.useAnisoThreshold == true) ? 1 : 0;
+    samplerInfo.anisoThreshold                 = settings.anisoThreshold;
+    samplerInfo.perfMip                        = settings.samplerPerfMip;
+    samplerInfo.flags.unnormalizedCoords       = (pCreateInfo->unnormalizedCoordinates == VK_TRUE) ? 1 : 0;
+    samplerInfo.flags.prtBlendZeroMode         = 0;
+    samplerInfo.flags.seamlessCubeMapFiltering = (pCreateInfo->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT)
+                                                 ? 0 : 1;
+    samplerInfo.flags.truncateCoords           = ((pCreateInfo->magFilter == VK_FILTER_NEAREST) &&
+                                                  (pCreateInfo->minFilter == VK_FILTER_NEAREST) &&
+                                                  (samplerInfo.compareFunc == Pal::CompareFunc::Never))
+                                                 ? 1 : 0;
 
     SamplerExtStructs extStructs = {};
 

@@ -157,6 +157,10 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pOptions->fastMathFlags = shaderCreate.tuningOptions.fastMathFlags;
                 }
+                if (shaderCreate.tuningOptions.disableFastMathFlags != 0)
+                {
+                    options.pOptions->disableFastMathFlags = shaderCreate.tuningOptions.disableFastMathFlags;
+                }
                 if (shaderCreate.apply.waveSize)
                 {
                     options.pOptions->waveSize = shaderCreate.tuningOptions.waveSize;
@@ -755,7 +759,18 @@ void ShaderOptimizer::BuildAppProfileLlpc()
             i = m_appProfile.entryCount++;
             PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
             pEntry->pattern.match.always = true;
-            pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.tuningOptions.fastMathFlags = 16u;
+            pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.tuningOptions.disableFastMathFlags = 8u | 32u;
+        }
+    }
+
+    if (appProfile == AppProfile::CSGO)
+    {
+        if (gfxIpLevel >= Pal::GfxIpLevel::GfxIp10_1)
+        {
+            i = m_appProfile.entryCount++;
+            PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
+            pEntry->pattern.match.always = true;
+            pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.tuningOptions.disableFastMathFlags = 32u;
         }
     }
 }
