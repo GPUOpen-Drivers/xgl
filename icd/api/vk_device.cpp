@@ -1937,6 +1937,10 @@ VkResult Device::CreateInternalComputePipeline(
 
     pCompiler->ApplyPipelineOptions(this, 0, &pipelineBuildInfo.pipelineInfo.options);
 
+    pipelineBuildInfo.shaderProfileKey.stage         = ShaderStage::ShaderStageCompute;
+    pipelineBuildInfo.pipelineProfileKey.shaderCount = 1;
+    pipelineBuildInfo.pipelineProfileKey.pShaders    = &pipelineBuildInfo.shaderProfileKey;
+
     // Build shader module
     result = pCompiler->BuildShaderModule(
         this,

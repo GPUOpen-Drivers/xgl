@@ -39,6 +39,8 @@
 
 #include "vkgcDefs.h"
 
+#include <climits>
+
 // Forward declare PAL classes used in this file
 namespace Pal
 {
@@ -58,13 +60,15 @@ namespace vk
 
 struct ShaderOptimizerKey
 {
-    Pal::ShaderHash codeHash;      // Hash of the shader
-    size_t          codeSize;      // Size of original shader code
+    Pal::ShaderHash   codeHash;      // Hash of the shader
+    size_t            codeSize;      // Size of original shader code
+    Vkgc::ShaderStage stage;         // Shader type
 };
 
 struct PipelineOptimizerKey
 {
-    ShaderOptimizerKey shaders[ShaderStageCount];
+    ShaderOptimizerKey* pShaders;
+    uint32_t            shaderCount;
 };
 
 // This struct represents unified shader compiler options
@@ -84,6 +88,9 @@ struct PipelineShaderOptionsPtr
 class ShaderOptimizer
 {
 public:
+
+    static const uint32_t InvalidShaderIndex = UINT_MAX;
+
     ShaderOptimizer(
         Device*         pDevice,
         PhysicalDevice* pPhysicalDevice);
@@ -93,7 +100,7 @@ public:
 
     void OverrideShaderCreateInfo(
         const PipelineOptimizerKey&  pipelineKey,
-        ShaderStage                  shaderStage,
+        uint32_t                     shaderIndex,
         PipelineShaderOptionsPtr     options) const;
 
     void OverrideGraphicsPipelineCreateInfo(
@@ -112,7 +119,7 @@ private:
     void ApplyProfileToShaderCreateInfo(
         const PipelineProfile&           profile,
         const PipelineOptimizerKey&      pipelineKey,
-        ShaderStage                      shaderStage,
+        uint32_t                         shaderIndex,
         PipelineShaderOptionsPtr         options) const;
 
     void ApplyProfileToGraphicsPipelineCreateInfo(
@@ -135,12 +142,9 @@ private:
         const ShaderProfileAction&     action,
         Pal::DynamicComputeShaderInfo* pComputeShaderInfo) const;
 
-    bool ProfilePatternMatchesPipeline(
+    uint32_t GetFirstMatchingShader(
         const PipelineProfilePattern& pattern,
-        const PipelineOptimizerKey&   pipelineKey) const;
-
-    Pal::ShaderHash GetFirstMatchingShaderHash(
-        const PipelineProfilePattern& pattern,
+        uint32_t                      shaderIndex,
         const PipelineOptimizerKey&   pipelineKey) const;
 
     void BuildTuningProfile();

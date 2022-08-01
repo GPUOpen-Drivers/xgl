@@ -68,25 +68,26 @@ static bool IsDynamicStateEnabled(const uint32_t dynamicStateFlags, const Dynami
 // Builds app profile key and applies profile options.
 static void ApplyProfileOptions(
     const Device*                pDevice,
-    const ShaderStage            stage,
+    uint32_t                     shaderIndex,
+    ShaderStage                  stage,
     const Pal::ShaderHash        shaderHash,
     const size_t                 shaderSize,
     Vkgc::PipelineOptions*       pPipelineOptions,
     Vkgc::PipelineShaderInfo*    pShaderInfo,
     PipelineOptimizerKey*        pProfileKey,
-    Vkgc::NggState*              pNggState
-    )
+    Vkgc::NggState*              pNggState)
 {
-    auto&    settings  = pDevice->GetRuntimeSettings();
-    PipelineShaderOptionsPtr options = {};
-    options.pPipelineOptions = pPipelineOptions;
-    options.pOptions     = &pShaderInfo->options;
-    options.pNggState    = pNggState;
+    auto& settings = pDevice->GetRuntimeSettings();
 
-    auto& shaderKey = pProfileKey->shaders[stage];
+    PipelineShaderOptionsPtr options  = {};
+    options.pPipelineOptions          = pPipelineOptions;
+    options.pOptions                  = &pShaderInfo->options;
+    options.pNggState                 = pNggState;
+
+    auto& shaderKey = pProfileKey->pShaders[shaderIndex];
     if (settings.pipelineUseShaderHashAsProfileHash)
     {
-        const void* pModuleData = pShaderInfo->pModuleData;
+        const void* pModuleData  = pShaderInfo->pModuleData;
         shaderKey.codeHash.lower = Vkgc::IPipelineDumper::GetShaderHash(pModuleData);
         shaderKey.codeHash.upper = 0;
     }
@@ -98,10 +99,11 @@ static void ApplyProfileOptions(
         shaderKey.codeHash = shaderHash;
     }
     shaderKey.codeSize = shaderSize;
+    shaderKey.stage    = stage;
 
     // Override the compile parameters based on any app profile
     const auto* pShaderOptimizer = pDevice->GetShaderOptimizer();
-    pShaderOptimizer->OverrideShaderCreateInfo(*pProfileKey, stage, options);
+    pShaderOptimizer->OverrideShaderCreateInfo(*pProfileKey, shaderIndex, options);
 
 }
 
@@ -1658,8 +1660,8 @@ static void CopyPipelineShadersInfo(
     {
         if ((shaderMask & (1 << stage)) != 0)
         {
-            *pShaderInfosDst[stage]                        = *pShaderInfosSrc[stage];
-            pCreateInfo->pipelineProfileKey.shaders[stage] = libInfo.pipelineProfileKey.shaders[stage];
+            *pShaderInfosDst[stage]                         = *pShaderInfosSrc[stage];
+            pCreateInfo->pipelineProfileKey.pShaders[stage] = libInfo.pipelineProfileKey.pShaders[stage];
         }
     }
 }
@@ -1701,6 +1703,9 @@ static void MergePipelineOptions(const Vkgc::PipelineOptions& src, Vkgc::Pipelin
 
     dst.shadowDescriptorTableUsage   = src.shadowDescriptorTableUsage;
     dst.shadowDescriptorTablePtrHigh = src.shadowDescriptorTablePtrHigh;
+    dst.overrideThreadGroupSizeX     = src.overrideThreadGroupSizeX;
+    dst.overrideThreadGroupSizeY     = src.overrideThreadGroupSizeY;
+    dst.overrideThreadGroupSizeZ     = src.overrideThreadGroupSizeZ;
 }
 
 // =====================================================================================================================
@@ -2038,14 +2043,14 @@ void PipelineCompiler::BuildPipelineShaderInfo(
         }
 
         ApplyProfileOptions(pDevice,
+                            static_cast<uint32_t>(stage),
                             stage,
                             pShaderInfoIn->codeHash,
                             pShaderInfoIn->codeSize,
                             pPipelineOptions,
                             pShaderInfoOut,
                             pOptimizerKey,
-                            pNggState
-                            );
+                            pNggState);
 
     }
 }
@@ -2498,6 +2503,9 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     pCreateInfo->flags = pIn->flags;
 
+    pCreateInfo->pipelineProfileKey.shaderCount = VK_ARRAY_SIZE(pCreateInfo->shaderProfileKeys);
+    pCreateInfo->pipelineProfileKey.pShaders    = pCreateInfo->shaderProfileKeys;
+
     if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)
     {
         BuildVertexInputInterfaceState(pDevice, pIn, dynamicStateFlags, activeStages, pCreateInfo, pVbInfo);
@@ -2669,6 +2677,13 @@ void PipelineCompiler::ApplyPipelineOptions(
 
     pOptions->enableRelocatableShaderElf = settings.enableRelocatableShaders;
     pOptions->disableImageResourceCheck  = settings.disableImageResourceTypeCheck;
+    pOptions->forceCsThreadIdSwizzling   = settings.forceCsThreadIdSwizzling;
+    pOptions->overrideThreadGroupSizeX   = settings.overrideThreadGroupSizeX;
+    pOptions->overrideThreadGroupSizeY   = settings.overrideThreadGroupSizeY;
+    pOptions->overrideThreadGroupSizeZ   = settings.overrideThreadGroupSizeZ;
+
+    pOptions->threadGroupSwizzleMode =
+        static_cast<Vkgc::ThreadGroupSwizzleMode>(settings.forceCsThreadGroupSwizzleMode);
 
     if (pDevice->GetEnabledFeatures().robustBufferAccessExtended)
     {
@@ -2755,22 +2770,24 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
         }
     }
 
-    pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
-    pCreateInfo->pipelineInfo.cs.pModuleData =
-        ShaderModule::GetShaderData(pCreateInfo->compilerType, pShaderInfo->stage.pModuleHandle);;
+    pCreateInfo->pipelineProfileKey.shaderCount = 1;
+    pCreateInfo->pipelineProfileKey.pShaders    = &pCreateInfo->shaderProfileKey;
+    pCreateInfo->compilerType                   = CheckCompilerType(&pCreateInfo->pipelineInfo);
+    pCreateInfo->pipelineInfo.cs.pModuleData    = ShaderModule::GetShaderData(pCreateInfo->compilerType,
+                                                                              pShaderInfo->stage.pModuleHandle);
 
     ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute,
                               &pCreateInfo->pipelineInfo.cs.options);
 
     ApplyProfileOptions(pDevice,
+                        0,
                         ShaderStage::ShaderStageCompute,
                         pShaderInfo->stage.codeHash,
                         pShaderInfo->stage.codeSize,
                         nullptr,
                         &pCreateInfo->pipelineInfo.cs,
                         &pCreateInfo->pipelineProfileKey,
-                        nullptr
-                        );
+                        nullptr);
 
     return result;
 }
@@ -2961,9 +2978,14 @@ static void GetCommonPipelineCacheId(
     pHash->Update(pipelineHash);
     pHash->Update(deviceIdx);
     pHash->Update(GetCacheIdControlFlags(flags));
-    pHash->Update(*pPipelineProfileKey);
     pHash->Update(compilerType);
     pHash->Update(settingsHash);
+    pHash->Update(pPipelineProfileKey->shaderCount);
+
+    for (uint32_t shaderIdx = 0; shaderIdx < pPipelineProfileKey->shaderCount; ++shaderIdx)
+    {
+        pHash->Update(pPipelineProfileKey->pShaders[shaderIdx]);
+    }
 }
 
 // =====================================================================================================================

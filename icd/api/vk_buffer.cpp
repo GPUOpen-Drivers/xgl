@@ -95,6 +95,29 @@ VkResult Buffer::Create(
 
     if (isSparse)
     {
+        const void* pNext = pCreateInfo->pNext;
+
+        while (pNext != nullptr)
+        {
+            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+            switch (pHeader->sType)
+            {
+                case VK_STRUCTURE_TYPE_BUFFER_OPAQUE_CAPTURE_ADDRESS_CREATE_INFO:
+                {
+                    const auto* pOpaqueCreateInfo = static_cast<const VkBufferOpaqueCaptureAddressCreateInfo*>(pNext);
+
+                    gpuMemoryCreateInfo.vaRange         = Pal::VaRange::CaptureReplay;
+                    gpuMemoryCreateInfo.replayVirtAddr  = pOpaqueCreateInfo->opaqueCaptureAddress;
+
+                    break;
+                }
+            default:
+                break;
+            }
+            pNext = pHeader->pNext;
+        };
+
         // We need virtual remapping support for all sparse resources
         VK_ASSERT(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->IsVirtualRemappingSupported());
 
@@ -102,6 +125,11 @@ VkResult Buffer::Create(
         if ((pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT) != 0)
         {
             VK_ASSERT(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetPrtFeatures() & Pal::PrtFeatureBuffer);
+        }
+
+        if ((pCreateInfo->flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT) != 0)
+        {
+            gpuMemoryCreateInfo.vaRange = Pal::VaRange::CaptureReplay;
         }
 
         gpuMemoryCreateInfo.alignment          = pDevice->GetProperties().virtualMemAllocGranularity;
@@ -499,7 +527,7 @@ void Buffer::CalculateBufferFlags(
     pBufferFlags->createSparseBinding   = (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)   ? 1 : 0;
     pBufferFlags->createSparseResidency = (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
     pBufferFlags->createProtected       = (pCreateInfo->flags & VK_BUFFER_CREATE_PROTECTED_BIT)        ? 1 : 0;
-    // Note: The VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT is only used in vk_memory objects.
+    // Note: The VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT is only used for sparse buffers
 
     bool isSparse = (pCreateInfo->flags & SparseEnablingFlags) != 0;
 
@@ -641,9 +669,16 @@ VKAPI_ATTR uint64_t VKAPI_CALL vkGetBufferOpaqueCaptureAddress(
     VkDevice                                    device,
     const VkBufferDeviceAddressInfo*            pInfo)
 {
-    // Returning 0 for vkGetBufferOpaqueCaptureAddress, as this function is used by implementations that allocate
-    // VA at buffer creation. Applications should just use vkGetBufferDeviceAddress for our implementation.
-    return 0;
+    Buffer* const pBuffer = Buffer::ObjectFromHandle(pInfo->buffer);
+
+    uint64_t gpuVirtAddr = 0;
+
+    if (pBuffer->IsSparse())
+    {
+        gpuVirtAddr = pBuffer->GpuVirtAddr(DefaultDeviceIndex);
+    }
+
+    return gpuVirtAddr;
 }
 
 } // namespace entry

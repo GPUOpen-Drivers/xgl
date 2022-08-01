@@ -191,8 +191,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (pInfo->gfxLevel <= Pal::GfxIpLevel::GfxIp9)
         {
-            m_settings.forceResolveLayoutForDepthStencilTransferUsage = true;
-
             m_settings.useReleaseAcquireInterface = false;
         }
 
@@ -233,7 +231,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
             }
 
-            if (appProfile == AppProfile::DoomEternal)
+            if ((appProfile == AppProfile::DoomEternal) ||
+                (appProfile == AppProfile::SniperElite5)
+                )
             {
                 m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc;
             }
@@ -571,9 +571,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.useAnisoThreshold = true;
             m_settings.anisoThreshold = 1.0f;
             m_settings.disableResetReleaseResources = true;
-
-            m_settings.forceResolveLayoutForDepthStencilTransferUsage = false;
-
             m_settings.implicitExternalSynchronization = false;
         }
 
@@ -590,8 +587,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             m_settings.disableHtileBasedMsaaRead = true;
             m_settings.enableFullCopyDstOnly = true;
-
-            m_settings.forceResolveLayoutForDepthStencilTransferUsage = false;
         }
 
         if (appProfile == AppProfile::DiRT4)
@@ -663,6 +658,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             //PM4 optimizations give us another 1.5% perf increase
             m_settings.optimizeCmdbufMode = OptimizeCmdbufMode::EnableOptimizeCmdbuf;
 
+            m_settings.enableAceShaderPrefetch = false;
+
             // Rage 2 currently has all it's images set to VK_SHARING_MODE_CONCURRENT.
             // Forcing these images to use VK_SHARING_MODE_EXCLUSIVE gives us around 5% perf increase.
             m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusiveForNonColorAttachments;
@@ -670,7 +667,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // Disable image type checking to avoid 1% loss.
             m_settings.disableImageResourceTypeCheck = true;
 
-            m_settings.forceResolveLayoutForDepthStencilTransferUsage = false;
+            m_settings.implicitExternalSynchronization = false;
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp8)
             {
@@ -700,8 +697,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                              ForceDccFor32BppShaderStorage |
                                              ForceDccFor64BppShaderStorage);
             }
-
-            m_settings.implicitExternalSynchronization = false;
         }
 
         if (appProfile == AppProfile::RedDeadRedemption2)

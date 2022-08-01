@@ -1,0 +1,13 @@
+instructions for generating SPIRV shader using glslangValidator.
+
+ASTC decoder:
+./glslangValidator --vn AstcDecoder -e main -g0 -o AstcDecode.h -V ./AstcDecode.comp
+
+ETC2/EAC decoder:
+./glslangValidator --vn Etc2Decoder -e main -g0 -o Etc2Decode.h -V ./Etc2Decoder.comp
+
+BC3 encoder:
+./glslangValidator -D -S comp --vn Bc3Encoder -e EncodeBlocks -g0 -o Bc3Encoder.h -V ./bc3-encode-hlsl/bc3_encode_kernel.comp.hlsl
+
+ETC2 to BC3 transfer:
+./glslangValidator -D -S comp --vn Etc2ToBc3 -e TransformEtc2ToBc3 -g0 -o Etc2ToBc3.h -V ./bc3-encode-hlsl/Etc2ToBc3.comp.hlsl

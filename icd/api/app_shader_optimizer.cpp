@@ -77,16 +77,17 @@ void ShaderOptimizer::Init()
 void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
     const PipelineProfile&           profile,
     const PipelineOptimizerKey&      pipelineKey,
-    ShaderStage                      shaderStage,
+    uint32_t                         shaderIndex,
     PipelineShaderOptionsPtr         options) const
 {
     for (uint32_t entry = 0; entry < profile.entryCount; ++entry)
     {
         const PipelineProfileEntry& profileEntry = profile.pEntries[entry];
 
-        if (ProfilePatternMatchesPipeline(profileEntry.pattern, pipelineKey))
+        if (GetFirstMatchingShader(profileEntry.pattern, shaderIndex, pipelineKey) != InvalidShaderIndex)
         {
-            const auto& shaderCreate = profileEntry.action.shaders[static_cast<uint32_t>(shaderStage)].shaderCreate;
+            const Vkgc::ShaderStage stage = pipelineKey.pShaders[shaderIndex].stage;
+            const auto& shaderCreate      = profileEntry.action.shaders[static_cast<uint32_t>(stage)].shaderCreate;
 
             if (options.pOptions != nullptr)
             {
@@ -220,16 +221,16 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
 // =====================================================================================================================
 void ShaderOptimizer::OverrideShaderCreateInfo(
     const PipelineOptimizerKey&        pipelineKey,
-    ShaderStage                        shaderStage,
+    uint32_t                           shaderIndex,
     PipelineShaderOptionsPtr           options) const
 {
 
-    ApplyProfileToShaderCreateInfo(m_appProfile, pipelineKey, shaderStage, options);
+    ApplyProfileToShaderCreateInfo(m_appProfile, pipelineKey, shaderIndex, options);
 
-    ApplyProfileToShaderCreateInfo(m_tuningProfile, pipelineKey, shaderStage, options);
+    ApplyProfileToShaderCreateInfo(m_tuningProfile, pipelineKey, shaderIndex, options);
 
 #if ICD_RUNTIME_APP_PROFILE
-    ApplyProfileToShaderCreateInfo(m_runtimeProfile, pipelineKey, shaderStage, options);
+    ApplyProfileToShaderCreateInfo(m_runtimeProfile, pipelineKey, shaderIndex, options);
 #endif
 }
 
@@ -314,38 +315,47 @@ void ShaderOptimizer::ApplyProfileToGraphicsPipelineCreateInfo(
     Pal::GraphicsPipelineCreateInfo*  pPalCreateInfo,
     Pal::DynamicGraphicsShaderInfos*  pGraphicsShaderInfos) const
 {
+    uint32_t vkgcStages = VkToVkgcShaderStageMask(shaderStages);
+
     for (uint32_t entry = 0; entry < profile.entryCount; ++entry)
     {
-        const PipelineProfileEntry& profileEntry = profile.pEntries[entry];
+        const auto& profileEntry     = profile.pEntries[entry];
+        uint32_t    firstShaderMatch = GetFirstMatchingShader(profileEntry.pattern, InvalidShaderIndex, pipelineKey);
 
-        if (ProfilePatternMatchesPipeline(profileEntry.pattern, pipelineKey))
+        if (firstShaderMatch != InvalidShaderIndex)
         {
             // Apply parameters to DynamicGraphicsShaderInfo
             const auto& shaders = profileEntry.action.shaders;
 
-            if (shaderStages & VK_SHADER_STAGE_VERTEX_BIT)
+            for (uint32_t shaderIdx = 0; shaderIdx < pipelineKey.shaderCount; ++shaderIdx)
             {
-                ApplyProfileToDynamicGraphicsShaderInfo(shaders[ShaderStage::ShaderStageVertex], &pGraphicsShaderInfos->vs);
-            }
+                const auto vkgcStage = pipelineKey.pShaders[shaderIdx].stage;
 
-            if (shaderStages & VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)
-            {
-                ApplyProfileToDynamicGraphicsShaderInfo(shaders[ShaderStage::ShaderStageTessControl], &pGraphicsShaderInfos->hs);
-            }
+                if (Util::BitfieldIsSet(vkgcStages, vkgcStage))
+                {
+                    switch (vkgcStage)
+                    {
+                    case ShaderStage::ShaderStageVertex:
+                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->vs);
+                        break;
+                    case ShaderStage::ShaderStageTessControl:
+                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->hs);
+                        break;
+                    case ShaderStage::ShaderStageTessEvaluation:
+                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ds);
+                        break;
+                    case ShaderStage::ShaderStageGeometry:
+                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->gs);
+                        break;
+                    case ShaderStage::ShaderStageFragment:
+                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ps);
+                        break;
+                    default:
+                        PAL_ASSERT_ALWAYS();
+                        break;
+                    }
 
-            if (shaderStages & VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)
-            {
-                ApplyProfileToDynamicGraphicsShaderInfo(shaders[ShaderStage::ShaderStageTessEvaluation], &pGraphicsShaderInfos->ds);
-            }
-
-            if (shaderStages & VK_SHADER_STAGE_GEOMETRY_BIT)
-            {
-                ApplyProfileToDynamicGraphicsShaderInfo(shaders[ShaderStage::ShaderStageGeometry], &pGraphicsShaderInfos->gs);
-            }
-
-            if (shaderStages & VK_SHADER_STAGE_FRAGMENT_BIT)
-            {
-                ApplyProfileToDynamicGraphicsShaderInfo(shaders[ShaderStage::ShaderStageFragment], &pGraphicsShaderInfos->ps);
+                }
             }
 
             // Apply parameters to Pal::GraphicsPipelineCreateInfo
@@ -380,9 +390,10 @@ void ShaderOptimizer::ApplyProfileToComputePipelineCreateInfo(
 {
     for (uint32_t entry = 0; entry < profile.entryCount; ++entry)
     {
-        const PipelineProfileEntry& profileEntry = profile.pEntries[entry];
+        const auto& profileEntry     = profile.pEntries[entry];
+        uint32_t    firstShaderMatch = GetFirstMatchingShader(profileEntry.pattern, InvalidShaderIndex, pipelineKey);
 
-        if (ProfilePatternMatchesPipeline(profileEntry.pattern, pipelineKey))
+        if (firstShaderMatch != InvalidShaderIndex)
         {
             ApplyProfileToDynamicComputeShaderInfo(
                 profileEntry.action.shaders[ShaderStage::ShaderStageCompute],
@@ -399,80 +410,118 @@ void ShaderOptimizer::ApplyProfileToComputePipelineCreateInfo(
 }
 
 // =====================================================================================================================
-Pal::ShaderHash ShaderOptimizer::GetFirstMatchingShaderHash(
+uint32_t ShaderOptimizer::GetFirstMatchingShader(
     const PipelineProfilePattern& pattern,
+    uint32_t                      targetShader,
     const PipelineOptimizerKey&   pipelineKey) const
 {
-    for (uint32_t stage = 0; stage < ShaderStageCount; ++stage)
+    uint32_t firstMatchIndex = InvalidShaderIndex;
+    bool     pipelineMatch   = true;
+
+    if (pattern.match.always == 0)
     {
-        const ShaderProfilePattern& shaderPattern = pattern.shaders[stage];
-
-        if (shaderPattern.match.u32All != 0)
+        if (pattern.match.shaderOnly && (targetShader != InvalidShaderIndex))
         {
-            const ShaderOptimizerKey& shaderKey = pipelineKey.shaders[stage];
+            const ShaderOptimizerKey&   shaderKey     = pipelineKey.pShaders[targetShader];
+            const ShaderProfilePattern& shaderPattern = pattern.shaders[shaderKey.stage];
 
-            if (shaderPattern.match.codeHash &&
-                (Pal::ShaderHashesEqual(
-                    shaderPattern.codeHash,
-                    shaderKey.codeHash)))
+            if (Pal::ShaderHashesEqual(shaderPattern.codeHash, shaderKey.codeHash))
             {
-                return shaderKey.codeHash;
+                firstMatchIndex = targetShader;
+            }
+            else
+            {
+                pipelineMatch = false;
+            }
+        }
+        else
+        {
+            uint32_t activeMatchStages = 0;
+            uint32_t hashMatchStages   = 0;
+
+            // Set bits for stages to be matched inclusively
+            for (uint32_t stage = 0; stage < ShaderStageCount; ++stage)
+            {
+                const ShaderProfilePattern& shaderPattern = pattern.shaders[stage];
+
+                if (shaderPattern.match.u32All != 0)
+                {
+                    uint32_t stageBit = (1 << static_cast<uint32_t>(stage));
+
+                    if (shaderPattern.match.stageActive != 0)
+                    {
+                        activeMatchStages |= stageBit;
+                    }
+
+                    if (shaderPattern.match.codeHash != 0)
+                    {
+                        hashMatchStages |= stageBit;
+                    }
+                }
+            }
+
+            for (uint32_t shaderIdx = 0; shaderIdx < pipelineKey.shaderCount; ++shaderIdx)
+            {
+                const ShaderOptimizerKey&   shaderKey     = pipelineKey.pShaders[shaderIdx];
+                const ShaderProfilePattern& shaderPattern = pattern.shaders[shaderKey.stage];
+
+                if ((shaderPattern.match.u32All != 0) && (shaderKey.codeSize > 0))
+                {
+                    uint32_t notStageBit = ~(1 << static_cast<uint32_t>(shaderKey.stage));
+
+                    // Unset bit to match an active stage
+                    activeMatchStages &= notStageBit;
+
+                    // Unset bit to match a stage hash
+                    if (Pal::ShaderHashesEqual(shaderPattern.codeHash, shaderKey.codeHash))
+                    {
+                        if (firstMatchIndex == InvalidShaderIndex)
+                        {
+                            firstMatchIndex = shaderIdx;
+                        }
+
+                        hashMatchStages &= notStageBit;
+                    }
+
+                    // Fail if stage is expected to be inactive
+                    if (shaderPattern.match.stageInactive != 0)
+                    {
+                        pipelineMatch = false;
+                        break;
+                    }
+
+                    // Test by code size (less than)
+                    if ((shaderPattern.match.codeSizeLessThan != 0) &&
+                        (shaderPattern.codeSizeLessThanValue >= shaderKey.codeSize))
+                    {
+                        pipelineMatch = false;
+                        break;
+                    }
+                }
+            }
+
+            // Fail if there are any remaining stages left to match
+            if ((activeMatchStages != 0) || (hashMatchStages != 0))
+            {
+                pipelineMatch = false;
             }
         }
     }
 
-    Pal::ShaderHash emptyHash = {};
-    return emptyHash;
-}
-
-// =====================================================================================================================
-bool ShaderOptimizer::ProfilePatternMatchesPipeline(
-    const PipelineProfilePattern& pattern,
-    const PipelineOptimizerKey&   pipelineKey) const
-{
-    if (pattern.match.always)
+    // Check if pipeline was matched due to means other than shader hash
+    if (pipelineMatch && (firstMatchIndex == InvalidShaderIndex))
     {
-        return true;
-    }
-
-    for (uint32_t stage = 0; stage < ShaderStageCount; ++stage)
-    {
-        const ShaderProfilePattern& shaderPattern = pattern.shaders[stage];
-
-        if (shaderPattern.match.u32All != 0)
+        for (uint32_t shaderIdx = 0; shaderIdx < pipelineKey.shaderCount; ++shaderIdx)
         {
-            const ShaderOptimizerKey& shaderKey = pipelineKey.shaders[stage];
-
-            // Test if this stage is active in the pipeline
-            if (shaderPattern.match.stageActive && (shaderKey.codeSize == 0))
+            if (pipelineKey.pShaders[shaderIdx].codeSize > 0)
             {
-                return false;
-            }
-
-            // Test if this stage is inactive in the pipeline
-            if (shaderPattern.match.stageInactive && (shaderKey.codeSize != 0))
-            {
-                return false;
-            }
-
-            // Test if lower code hash word matches
-            if (shaderPattern.match.codeHash &&
-                (shaderPattern.codeHash.lower != shaderKey.codeHash.lower ||
-                 shaderPattern.codeHash.upper != shaderKey.codeHash.upper))
-            {
-                return false;
-            }
-
-            // Test by code size (less than)
-            if ((shaderPattern.match.codeSizeLessThan != 0) &&
-                (shaderPattern.codeSizeLessThanValue >= shaderKey.codeSize))
-            {
-                return false;
+                firstMatchIndex = shaderIdx;
+                break;
             }
         }
     }
 
-    return true;
+    return pipelineMatch ? firstMatchIndex : InvalidShaderIndex;
 }
 
 // =====================================================================================================================
@@ -536,6 +585,8 @@ void ShaderOptimizer::BuildTuningProfile()
             default:
                 VK_NEVER_CALLED();
             }
+
+            pEntry->pattern.match.shaderOnly = (shaderStage == ShaderStage::ShaderStageCompute) ? 1 : 0;
 
             VK_ASSERT(shaderStage < ShaderStage::ShaderStageCount);
 
@@ -804,15 +855,15 @@ void ShaderOptimizer::PrintProfileEntryMatch(
     Util::DbgPrintf(Util::DbgPrintCatInfoMsg, Util::DbgPrintStyleDefault,
         "%s pipeline profile entry %u triggered for pipeline:", pProfile, index);
 
-    for (uint32_t stageIdx = 0; stageIdx < ShaderStageCount; ++stageIdx)
+    for (uint32_t shaderIdx = 0; shaderIdx < key.shaderCount; ++shaderIdx)
     {
-        const auto& shader = key.shaders[stageIdx];
+        const auto& shader = key.pShaders[shaderIdx];
 
         if (shader.codeSize != 0)
         {
             const char* pStage = "???";
 
-            switch (stageIdx)
+            switch (shader.stage)
             {
             case ShaderStage::ShaderStageVertex:
                 pStage = "VS";

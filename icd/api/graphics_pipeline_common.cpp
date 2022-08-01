@@ -1120,8 +1120,8 @@ static void BuildVrsRateParams(
             static_cast<uint32_t>(Pal::VrsCombinerStage::ProvokingVertex)] =
             VkToPalShadingRateCombinerOp(pFsr->combinerOps[0]);
 
-        pInfo->immedInfo.vrsRateParams.combinerState[
-            static_cast<uint32_t>(Pal::VrsCombinerStage::Primitive)]= Pal::VrsCombiner::Passthrough;
+        pInfo->immedInfo.vrsRateParams.combinerState[static_cast<uint32_t>(
+            Pal::VrsCombinerStage::Primitive)] = Pal::VrsCombiner::Override;
 
         pInfo->immedInfo.vrsRateParams.combinerState[
             static_cast<uint32_t>(Pal::VrsCombinerStage::Image)] = VkToPalShadingRateCombinerOp(pFsr->combinerOps[1]);
@@ -1473,6 +1473,11 @@ static void BuildVertexInputInterfaceState(
         pInfo->immedInfo.inputAssemblyState.primitiveRestartEnable = (pIa->primitiveRestartEnable != VK_FALSE);
         pInfo->immedInfo.inputAssemblyState.primitiveRestartIndex  = 0xFFFFFFFF;
         pInfo->immedInfo.inputAssemblyState.topology               = VkToPalPrimitiveTopology(pIa->topology);
+
+        if (pIn->pTessellationState != nullptr)
+        {
+            pInfo->immedInfo.inputAssemblyState.patchControlPoints = pIn->pTessellationState->patchControlPoints;
+        }
 
         pInfo->pipeline.iaState.vertexBufferCount = pVbInfo->bindingTableSize;
 

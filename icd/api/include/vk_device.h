@@ -638,8 +638,7 @@ public:
     bool SupportDepthStencilResolve() const
     {
         return (IsExtensionEnabled(DeviceExtensions::KHR_DEPTH_STENCIL_RESOLVE) ||
-                (VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 2, 0)) ||
-                m_settings.forceResolveLayoutForDepthStencilTransferUsage);
+                (VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 2, 0)));
     }
 
     Pal::IQueue* PerformSwCompositing(
