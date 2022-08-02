@@ -2179,36 +2179,6 @@
       }
     },
     {
-      "Description": "Override the thread group size in x dimension for compute shaders using ray query.",
-      "Tags": [],
-      "Defaults": {
-        "Default": 0
-      },
-      "Type": "uint32",
-      "Name": "RayQueryCsThreadGroupSizeX",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Override the thread group size in y dimension for compute shaders using ray query.",
-      "Tags": [],
-      "Defaults": {
-        "Default": 0
-      },
-      "Type": "uint32",
-      "Name": "RayQueryCsThreadGroupSizeY",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Override the thread group size in z dimension for compute shaders using ray query.",
-      "Tags": [],
-      "Defaults": {
-        "Default": 0
-      },
-      "Type": "uint32",
-      "Name": "RayQueryCsThreadGroupSizeZ",
-      "Scope": "Driver"
-    },
-    {
       "Name": "DbgBarrierPostCmdEnable",
       "Description": "Triggers a CmdBarrier call after any command in the given mask.  The barrier behavior is controlled by the other DbgBarrierPost* settings in this category.  Requires VK_ENABLE_DEBUG_BARRIERS=1 to take effect. 0x8FFFFFFF: All commands (heavyweight option)",
       "Tags": [
@@ -4271,18 +4241,6 @@
       "Scope": "Driver"
     },
     {
-      "Description": "If set, a depth stencil image with transfer usage bit is implicitly allowed to be in resolve_src or resolve_dst layout.",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "ForceResolveLayoutForDepthStencilTransferUsage",
-      "Scope": "Driver"
-    },
-    {
       "Name": "RenderStateCacheEnable",
       "Description": "This bitmask denotes which subset of pipeline render state is cached at the device-level. Caching render state enables more efficient redundancy checking when recording command buffers.  This redundancy checking is mainly limited to pipeline state that is either invisible to the API (e.g. certain PAL objects) or state that the application has marked in the pipeline as non-dynamic, meaning its values are programmed during pipeline bind.",
       "Tags": [
@@ -4413,6 +4371,18 @@
       },
       "Type": "bool",
       "Name": "PrefetchShaders",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Keep prefetch enabled for ACE shaders.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Name": "EnableAceShaderPrefetch",
       "Scope": "Driver"
     },
     {
@@ -4637,6 +4607,100 @@
       "Scope": "Driver",
       "Type": "bool",
       "Name": "ForceCsThreadIdSwizzling"
+    },
+    {
+      "Name": "OverrideThreadGroupSizeX",
+      "Description": "Override ThreadGroupSizeX for wave32 and wave64",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "NotOverrideThreadGroupSizeX"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "NotOverrideThreadGroupSizeX",
+            "Value": 0,
+            "Description": "Not override the threadgroupsizeX"
+          },
+          {
+            "Name": "ThreadGroupSizeX_8",
+            "Value": 8,
+            "Description": "Override the threadgroupsizeX to 8 in wave32 or wave64"
+          },
+          {
+            "Name": "ThreadGroupSizeX_16",
+            "Value": 16,
+            "Description": "Override the threadgroupsizeX to 16 in wave64"
+          }
+        ],
+        "Name": "ThreadGroupSizeX"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideThreadGroupSizeY",
+      "Description": "Override ThreadGroupSizeY for wave32 and wave64",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "NotOverrideThreadGroupSizeY"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "NotOverrideThreadGroupSizeY",
+            "Value": 0,
+            "Description": "Not override the threadgroupsizeY"
+          },
+          {
+            "Name": "ThreadGroupSizeY_8",
+            "Value": 8,
+            "Description": "Override the threadgroupsizeY to 8 in wave32 or wave64"
+          },
+          {
+            "Name": "ThreadGroupSizeY_16",
+            "Value": 16,
+            "Description": "Override the threadgroupsizeY to 16 in wave64"
+          }
+        ],
+        "Name": "ThreadGroupSizeY"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideThreadGroupSizeZ",
+      "Description": "Override ThreadGroupSizeZ for wave32 and wave64",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "NotOverrideThreadGroupSizeZ"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "NotOverrideThreadGroupSizeZ",
+            "Value": 0,
+            "Description": "Not override the threadgroupsizeZ"
+          },
+          {
+            "Name": "ThreadGroupSizeZ_1",
+            "Value": 1,
+            "Description": "Override the threadgroupsizeZ to 1 in wave32 or wave64"
+          }
+        ],
+        "Name": "ThreadGroupSizeZ"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
     },
     {
       "Description": "Write graphics pipeline push descriptors to user data registers unless the total user data count exceeds this value. Maximum value is MaxBindingRegCount (96)",

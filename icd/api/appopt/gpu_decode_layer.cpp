@@ -148,6 +148,14 @@ void ClientDestroyInternalComputePipeline(
 
 namespace vk
 {
+// ====================================================================================================================
+static bool TransferSourceExclusive(
+    VkImageUsageFlags usage)
+{
+    return (usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
+          ((usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) == 0);
+}
+
 // =====================================================================================================================
 GpuDecoderLayer::GpuDecoderLayer(
     Device *pDevice)
@@ -1000,10 +1008,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(
     GpuDecoderLayer* pDecodeWrapper = pDevice->GetGpuDecoderLayer();
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
-    if (Formats::IsASTCFormat(format) &&
-        (pCreateInfo->usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT))
+    if (Formats::IsASTCFormat(format) && TransferSourceExclusive(pCreateInfo->usage))
     {
-        VK_ASSERT(!(pCreateInfo->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT));
         AstcMappedInfo mapInfo = {};
         Formats::GetAstcMappedInfo(format, &mapInfo);
         VkImageCreateInfo astcSrcInfo = *pCreateInfo;
@@ -1021,13 +1027,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(
             pAllocator,
             pImage);
     }
-    else if (Formats::IsEtc2Format(format) &&
-             (pCreateInfo->usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT))
+    else if (Formats::IsEtc2Format(format) && TransferSourceExclusive(pCreateInfo->usage))
     {
-        VK_ASSERT(!(pCreateInfo->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT));
         VkImageCreateInfo etc2SrcInfo = *pCreateInfo;
         etc2SrcInfo.format = getETC2SourceViewFormat(pCreateInfo->format);
-
         VkExtent3D extent = {
             (etc2SrcInfo.extent.width + 3) / 4,
             (etc2SrcInfo.extent.height + 3) / 4,
@@ -1035,7 +1038,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(
         };
 
         etc2SrcInfo.extent = extent;
-
         vkResult = DECODER_WAPPER_CALL_NEXT_LAYER(vkCreateImage)(
             device,
             &etc2SrcInfo,

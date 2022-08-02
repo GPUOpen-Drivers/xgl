@@ -79,7 +79,7 @@ static uint32_t ConvertPipePointToPipeStage(
             stageMask = Pal::PipelineStageTopOfPipe;
             break;
         // Same as Pal::HwPipePreCs and Pal::HwPipePreBlt
-        case Pal::HwPipePostIndexFetch:
+        case Pal::HwPipePostPrefetch:
             stageMask = Pal::PipelineStageFetchIndirectArgs | Pal::PipelineStageFetchIndices;
             break;
         case Pal::HwPipePreRasterization:
@@ -1213,6 +1213,8 @@ VkResult CmdBuffer::Begin(
     const PhysicalDevice*        pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
     const Pal::DeviceProperties& deviceProps     = pPhysicalDevice->PalProperties();
 
+    const RuntimeSettings&       settings        = m_pDevice->GetRuntimeSettings();
+
     Pal::CmdBufferBuildInfo   cmdInfo = {};
 
     RenderPass*  pRenderPass  = nullptr;
@@ -1223,8 +1225,14 @@ VkResult CmdBuffer::Begin(
     m_cbBeginDeviceMask = m_pDevice->GetPalDeviceMask();
 
     cmdInfo.flags.u32All = 0;
-    cmdInfo.flags.prefetchCommands = m_flags.prefetchCommands;
-    cmdInfo.flags.prefetchShaders  = m_flags.prefetchShaders;
+
+    // Disabling prefetch on compute queues by default should be better since PAL's prefetch uses DMA_DATA which causes
+    // the CP to idle and switch queues on async compute.
+    if ((settings.enableAceShaderPrefetch) || (m_palQueueType != Pal::QueueTypeCompute))
+    {
+        cmdInfo.flags.prefetchCommands = m_flags.prefetchCommands;
+        cmdInfo.flags.prefetchShaders  = m_flags.prefetchShaders;
+    }
 
     if (IsProtected())
     {
@@ -1293,8 +1301,7 @@ VkResult CmdBuffer::Begin(
                 for (uint32_t i = 0; i < inheritedStateParams.colorTargetCount; i++)
                 {
                     inheritedStateParams.colorTargetSwizzledFormats[i] =
-                        VkToPalFormat(pInheritanceRenderingInfoKHR->pColorAttachmentFormats[i],
-                                      m_pDevice->GetRuntimeSettings());
+                        VkToPalFormat(pInheritanceRenderingInfoKHR->pColorAttachmentFormats[i], settings);
 
                     inheritedStateParams.sampleCount[i] = pInheritanceRenderingInfoKHR->rasterizationSamples;
                 }
@@ -1344,7 +1351,7 @@ VkResult CmdBuffer::Begin(
         for (uint32_t i = 0; i < inheritedStateParams.colorTargetCount; i++)
         {
             inheritedStateParams.colorTargetSwizzledFormats[i] =
-                VkToPalFormat(pRenderPass->GetColorAttachmentFormat(currentSubPass, i), m_pDevice->GetRuntimeSettings());
+                VkToPalFormat(pRenderPass->GetColorAttachmentFormat(currentSubPass, i), settings);
             inheritedStateParams.sampleCount[i] = pRenderPass->GetColorAttachmentSamples(currentSubPass, i);
         }
     }
@@ -4221,10 +4228,9 @@ void CmdBuffer::ResolveImage(
         const Pal::ImageLayout palDestImageLayout = pDstImage->GetBarrierPolicy().GetTransferLayout(
             destImageLayout, GetQueueFamilyIndex());
 
-        if (pSrcImage->IsDepthStencilFormat())
-        {
-            ValidateSamplePattern(pSrcImage->GetImageSamples(), nullptr);
-        }
+        // If ever permitted by the spec, pQuadSamplePattern must be specified because the source image was created with
+        // sampleLocsAlwaysKnown set.
+        VK_ASSERT(pSrcImage->IsDepthStencilFormat() == false);
 
         for (uint32_t rectIdx = 0; rectIdx < rectCount;)
         {
@@ -4236,7 +4242,8 @@ void CmdBuffer::ResolveImage(
                 // We expect MSAA images to never have mipmaps
                 VK_ASSERT(pRects[rectIdx].srcSubresource.mipLevel == 0);
 
-                VkToPalImageResolveRegion(pRects[rectIdx], srcFormat.format, dstFormat.format, pPalRegions, &palRegionCount);
+                VkToPalImageResolveRegion(
+                    pRects[rectIdx], srcFormat.format, dstFormat.format, pPalRegions, &palRegionCount);
 
                 ++rectIdx;
             }
@@ -4709,16 +4716,14 @@ void CmdBuffer::BeginRendering(
 // =====================================================================================================================
 // Call resolve image for VK_KHR_dynamic_rendering
 void CmdBuffer::ResolveImage(
+    VkImageAspectFlags                 aspectMask,
     const DynamicRenderingAttachments& dynamicRenderingAttachments)
 {
-    // Save PAL Resolve Region
-    VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
     Pal::ImageResolveRegion regions[MaxPalDevices] = {};
 
     for (uint32_t idx = 0; idx < m_allGpuState.dynamicRenderingInstance.renderAreaCount; idx++)
     {
-        const Pal::Rect& renderArea  = m_allGpuState.dynamicRenderingInstance.renderArea[idx];
+        const Pal::Rect& renderArea = m_allGpuState.dynamicRenderingInstance.renderArea[idx];
         Pal::SubresRange subresRangeSrc = {};
         Pal::SubresRange subresRangeDst = {};
 
@@ -4742,6 +4747,26 @@ void CmdBuffer::ResolveImage(
         regions[idx].dstMipLevel    = subresRangeDst.startSubres.mipLevel;
         regions[idx].dstSlice       = subresRangeDst.startSubres.arraySlice;
         regions[idx].numSlices      = sliceCount;
+
+        if ((aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT) &&
+             dynamicRenderingAttachments.pImageView->GetImage()->HasDepthAndStencil())
+        {
+            regions[idx].srcPlane = 1;
+        }
+
+        if ((aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT) &&
+             dynamicRenderingAttachments.pResolveImageView->GetImage()->HasDepthAndStencil())
+        {
+            regions[idx].dstPlane = 1;
+        }
+
+        if (Formats::HasDepth(dynamicRenderingAttachments.pImageView->GetViewFormat()))
+        {
+            regions[idx].pQuadSamplePattern =
+                Device::GetDefaultQuadSamplePattern(
+                    dynamicRenderingAttachments.pImageView->GetImage()->GetImageSamples());
+        }
+
     }
 
     PalCmdResolveImage(
@@ -4753,28 +4778,6 @@ void CmdBuffer::ResolveImage(
         m_allGpuState.dynamicRenderingInstance.renderAreaCount,
         regions,
         m_curDeviceMask);
-
-    if (dynamicRenderingAttachments.pResolveImageView->GetImage()->IsDepthStencilFormat() &&
-        dynamicRenderingAttachments.pImageView->GetImage()->IsDepthStencilFormat())
-    {
-        for (uint32_t idx = 0; idx < m_allGpuState.dynamicRenderingInstance.renderAreaCount; idx++)
-        {
-            regions[idx].srcPlane = 1;
-            regions[idx].dstPlane = 1;
-        }
-
-        ValidateSamplePattern(dynamicRenderingAttachments.pImageView->GetImage()->GetImageSamples(), nullptr);
-
-        PalCmdResolveImage(
-            *dynamicRenderingAttachments.pImageView->GetImage(),
-            dynamicRenderingAttachments.imageLayout,
-            *dynamicRenderingAttachments.pResolveImageView->GetImage(),
-            dynamicRenderingAttachments.resolveImageLayout,
-            VkToPalResolveMode(dynamicRenderingAttachments.resolveMode),
-            m_allGpuState.dynamicRenderingInstance.renderAreaCount,
-            regions,
-            m_curDeviceMask);
-    }
 }
 
 // =====================================================================================================================
@@ -4789,7 +4792,7 @@ void CmdBuffer::PostDrawPreResolveSync()
     barrierInfo.pPipePoints = &pipePoint;
 
     Pal::BarrierTransition transition = {};
-    transition.srcCacheMask = Pal::CoherColorTarget;
+    transition.srcCacheMask = Pal::CoherColorTarget | Pal::CoherDepthStencilTarget;
     transition.dstCacheMask = Pal::CoherShader;
 
     barrierInfo.transitionCount = 1;
@@ -4818,22 +4821,31 @@ void CmdBuffer::EndRendering()
             DynamicRenderingAttachments& renderingAttachmentInfo =
                 m_allGpuState.dynamicRenderingInstance.colorAttachments[i];
 
-            if (renderingAttachmentInfo.pResolveImageView != nullptr)
+            if ((renderingAttachmentInfo.resolveMode != VK_RESOLVE_MODE_NONE) &&
+                (renderingAttachmentInfo.pResolveImageView != nullptr))
             {
-                ResolveImage(renderingAttachmentInfo);
+                ResolveImage(
+                    VK_IMAGE_ASPECT_COLOR_BIT,
+                    renderingAttachmentInfo);
             }
         }
 
         // Resolve Depth Image
-        if (m_allGpuState.dynamicRenderingInstance.depthAttachment.pResolveImageView != nullptr)
+        if ((m_allGpuState.dynamicRenderingInstance.depthAttachment.resolveMode != VK_RESOLVE_MODE_NONE) &&
+            (m_allGpuState.dynamicRenderingInstance.depthAttachment.pResolveImageView != nullptr))
         {
-            ResolveImage(m_allGpuState.dynamicRenderingInstance.depthAttachment);
+            ResolveImage(
+                VK_IMAGE_ASPECT_DEPTH_BIT,
+                m_allGpuState.dynamicRenderingInstance.depthAttachment);
         }
 
         // Resolve Stencil Image
-        if (m_allGpuState.dynamicRenderingInstance.stencilAttachment.pResolveImageView != nullptr)
+        if ((m_allGpuState.dynamicRenderingInstance.stencilAttachment.resolveMode != VK_RESOLVE_MODE_NONE) &&
+            (m_allGpuState.dynamicRenderingInstance.stencilAttachment.pResolveImageView != nullptr))
         {
-            ResolveImage(m_allGpuState.dynamicRenderingInstance.stencilAttachment);
+            ResolveImage(
+                VK_IMAGE_ASPECT_STENCIL_BIT,
+                m_allGpuState.dynamicRenderingInstance.stencilAttachment);
         }
     }
 
@@ -8057,52 +8069,60 @@ void CmdBuffer::RPResolveAttachments(
         // We expect MSAA images to never have mipmaps
         VK_ASSERT(srcAttachment.subresRange[0].startSubres.mipLevel == 0);
 
-        uint32_t aspectRegionCount                    = 0;
-        uint32_t resolvePlanes[MaxRangePerAttachment] = {};
-        const VkFormat   resolveFormat                       = srcAttachment.pView->GetViewFormat();
+        uint32_t aspectRegionCount                           = 0;
+        uint32_t srcResolvePlanes[MaxRangePerAttachment]     = {};
+        uint32_t dstResolvePlanes[MaxRangePerAttachment]     = {};
+        const VkFormat   srcResolveFormat                    = srcAttachment.pView->GetViewFormat();
+        const VkFormat   dstResolveFormat                    = dstAttachment.pView->GetViewFormat();
         Pal::ResolveMode resolveModes[MaxRangePerAttachment] = {};
 
         const Pal::MsaaQuadSamplePattern* pSampleLocations = nullptr;
 
-        if (Formats::IsDepthStencilFormat(resolveFormat) == false)
+        if (Formats::IsDepthStencilFormat(srcResolveFormat) == false)
         {
-            resolveModes[0]   = Pal::ResolveMode::Average;
-            resolvePlanes[0]  = 0;
-            aspectRegionCount = 1;
+            resolveModes[0]     = Pal::ResolveMode::Average;
+            srcResolvePlanes[0] = 0;
+            dstResolvePlanes[0] = 0;
+            aspectRegionCount   = 1;
         }
         else
         {
             const uint32_t subpass = m_renderPassInstance.subpass;
 
-            const VkResolveModeFlagBits depthResolveMode =
+            const VkResolveModeFlagBits depthResolveMode   =
                 m_allGpuState.pRenderPass->GetDepthResolveMode(subpass);
             const VkResolveModeFlagBits stencilResolveMode =
                 m_allGpuState.pRenderPass->GetStencilResolveMode(subpass);
+            const VkImageAspectFlags depthStecilAcpect     =
+                m_allGpuState.pRenderPass->GetResolveDepthStecilAspect(subpass);
 
-            if (Formats::HasDepth(resolveFormat))
+            if (Formats::HasDepth(srcResolveFormat))
             {
-                if (depthResolveMode != VK_RESOLVE_MODE_NONE)
-                {
-                    resolveModes[aspectRegionCount]    = VkToPalResolveMode(depthResolveMode);
-                    resolvePlanes[aspectRegionCount++] = 0;
-                }
-
                 // Must be specified because the source image was created with sampleLocsAlwaysKnown set
                 pSampleLocations = &m_renderPassInstance.pSamplePatterns[subpass].locations;
             }
 
-            if (Formats::HasStencil(resolveFormat) && (stencilResolveMode != VK_RESOLVE_MODE_NONE))
+            if ((depthResolveMode != VK_RESOLVE_MODE_NONE) &&
+                ((depthStecilAcpect & VK_IMAGE_ASPECT_DEPTH_BIT) != 0))
             {
-                resolveModes[aspectRegionCount]    = VkToPalResolveMode(stencilResolveMode);
-                resolvePlanes[aspectRegionCount++] = Formats::HasDepth(resolveFormat) ? 1 : 0;
-            }
-        }
+                VK_ASSERT(Formats::HasDepth(srcResolveFormat) && Formats::HasDepth(dstResolveFormat));
 
-        if (srcAttachment.pImage->IsDepthStencilFormat())
-        {
-            ValidateSamplePattern(
-                srcAttachment.pImage->GetImageSamples(),
-                &m_renderPassInstance.pSamplePatterns[m_renderPassInstance.subpass]);
+                resolveModes[aspectRegionCount]     = VkToPalResolveMode(depthResolveMode);
+                srcResolvePlanes[aspectRegionCount] = 0;
+                dstResolvePlanes[aspectRegionCount] = 0;
+                aspectRegionCount++;
+            }
+
+            if ((stencilResolveMode != VK_RESOLVE_MODE_NONE) &&
+                ((depthStecilAcpect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0))
+            {
+                VK_ASSERT(Formats::HasStencil(srcResolveFormat) && Formats::HasStencil(dstResolveFormat));
+
+                resolveModes[aspectRegionCount]     = VkToPalResolveMode(stencilResolveMode);
+                srcResolvePlanes[aspectRegionCount] = Formats::HasDepth(srcResolveFormat) ? 1 : 0;
+                dstResolvePlanes[aspectRegionCount] = Formats::HasDepth(dstResolveFormat) ? 1 : 0;
+                aspectRegionCount++;
+            }
         }
 
         // Depth and stencil might have different resolve mode, so allowing resolve each aspect independently.
@@ -8111,19 +8131,21 @@ void CmdBuffer::RPResolveAttachments(
             // During split-frame-rendering, the image to resolve could be split across multiple devices.
             Pal::ImageResolveRegion regions[MaxPalDevices];
 
-            const Pal::ImageLayout srcLayout = RPGetAttachmentLayout(params.src.attachment, resolvePlanes[aspectRegionIndex]);
-            const Pal::ImageLayout dstLayout = RPGetAttachmentLayout(params.dst.attachment, resolvePlanes[aspectRegionIndex]);
+            const Pal::ImageLayout srcLayout = RPGetAttachmentLayout(params.src.attachment,
+                                                                     srcResolvePlanes[aspectRegionIndex]);
+            const Pal::ImageLayout dstLayout = RPGetAttachmentLayout(params.dst.attachment,
+                                                                     dstResolvePlanes[aspectRegionIndex]);
 
             for (uint32_t idx = 0; idx < m_renderPassInstance.renderAreaCount; idx++)
             {
                 const Pal::Rect& renderArea = m_renderPassInstance.renderArea[idx];
 
-                regions[idx].srcPlane       = resolvePlanes[aspectRegionIndex];
+                regions[idx].srcPlane       = srcResolvePlanes[aspectRegionIndex];
                 regions[idx].srcSlice       = srcAttachment.subresRange[0].startSubres.arraySlice;
                 regions[idx].srcOffset.x    = renderArea.offset.x;
                 regions[idx].srcOffset.y    = renderArea.offset.y;
                 regions[idx].srcOffset.z    = 0;
-                regions[idx].dstPlane       = resolvePlanes[aspectRegionIndex];
+                regions[idx].dstPlane       = dstResolvePlanes[aspectRegionIndex];
                 regions[idx].dstMipLevel    = dstAttachment.subresRange[0].startSubres.mipLevel;
                 regions[idx].dstSlice       = dstAttachment.subresRange[0].startSubres.arraySlice;
                 regions[idx].dstOffset.x    = renderArea.offset.x;
@@ -9564,7 +9586,7 @@ void CmdBuffer::CmdSetPerDrawVrsRate(
         VkToPalShadingRateCombinerOp(combinerOps[0]);
 
     m_allGpuState.vrsRate.combinerState[static_cast<uint32_t>(Pal::VrsCombinerStage::Primitive)] =
-        Pal::VrsCombiner::Passthrough;
+        Pal::VrsCombiner::Override;
 
     m_allGpuState.vrsRate.combinerState[static_cast<uint32_t>(Pal::VrsCombinerStage::Image)] =
         VkToPalShadingRateCombinerOp(combinerOps[1]);

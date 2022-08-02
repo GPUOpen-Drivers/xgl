@@ -236,6 +236,12 @@ void ShaderProfile::ProfileEntryPatternToJson(PipelineProfilePattern pattern, Ut
         pWriter->Value(true);
     }
 
+    if (pattern.match.shaderOnly)
+    {
+        pWriter->Key("shaderOnly");
+        pWriter->Value(true);
+    }
+
     uint32_t i = 0;
     for (auto shader : pattern.shaders)
     {
@@ -1307,7 +1313,7 @@ SHADER_ACTION = {
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.%FieldName% = %IntValue%u;\n""",
         "jsonWriterTemplate": shaderCreateDynamicShaderInfoTemplate,
         "jsonReaderTemplate": \
-            "    if (shaderStage >= ShaderStage::ShaderStageCompute)\n    {\n" +
+            "    if (shaderStage == ShaderStage::ShaderStageCompute)\n    {\n" +
             "        pActions->dynamicShaderInfo.apply.%Action% = true;\n" +
             "        pActions->dynamicShaderInfo.%Action%       = %Value%;" +
             "\n    }\n    else\n    {\n" +
@@ -1732,6 +1738,24 @@ ENTRIES_TEMPLATE = {
                     "jsonReaderTemplate": \
                         """    pPattern->match.always = pItem->%Value%;"""
                     },
+                "shaderOnly": {
+                    "type": [bool],
+                    "entityInfo": [
+                        {
+                            "parent": "pipelineProfilePattern.anonStruct",
+                            "description": "Pattern applies only to shader hash matched",
+                            "entity": "bitField",
+                            "varName": "shaderOnly",
+                            "dataType": "uint32_t",
+                            "defaultValue": 1,
+                            "buildTypes": {},
+                        }
+                    ],
+                    "codeTemplate": """\
+                        pPipelineProfile->pEntries[%EntryNum%].pattern.match.shaderOnly = %Value%;\n""",
+                    "jsonReaderTemplate": \
+                        """    pPattern->match.shaderOnly = pItem->%Value%;"""
+                    },
                 "vs": {
                     "type": [dict],
                     "branch": SHADER_PATTERN,
@@ -1761,7 +1785,7 @@ ENTRIES_TEMPLATE = {
                     "type": [dict],
                     "branch": SHADER_PATTERN,
                     "shaderStage": "ShaderStage::ShaderStageCompute"
-                },
+                }
             },
             "action": {
                 "vs": {
@@ -1793,7 +1817,7 @@ ENTRIES_TEMPLATE = {
                     "type": [dict],
                     "branch": SHADER_ACTION,
                     "shaderStage": "ShaderStage::ShaderStageCompute"
-                },
+                }
             },
             # The "BuildTypes" key is not used by the genShaderProfile script in any way. It is included here simply to
             # mark this key as a valid key that can be a part of each entry in the entries list in profile.json files.
@@ -1872,11 +1896,14 @@ ShaderTuningStructsAndVars = {
                                         "always": ENTRIES_TEMPLATE["entries"]["pattern"]["always"]
                                     },
                                     {
+                                        "shaderOnly": ENTRIES_TEMPLATE["entries"]["pattern"]["shaderOnly"]
+                                    },
+                                    {
                                         "reserved": {
                                             "entity": "bitField",
                                             "varName": "reserved",
                                             "dataType": "uint32_t",
-                                            "defaultValue": 31,
+                                            "defaultValue": 30,
                                             "buildTypes": {},
                                         }
                                     }
@@ -1896,7 +1923,7 @@ ShaderTuningStructsAndVars = {
                     "shaders": {
                         "entity": "array",
                         "varName": "shaders",
-                        "arraySize": "ShaderStage::ShaderStageCount",
+                        "arraySize": "ShaderStage::ShaderStageNativeStageCount",
                         "arrayValue": "",
                         "dataType": "ShaderProfilePattern",
                         "buildTypes": {},
@@ -2060,7 +2087,7 @@ ShaderTuningStructsAndVars = {
                 "entity": "array",
                 "description": "Applied to ShaderCreateInfo/PipelineShaderInfo/DynamicXShaderInfo:",
                 "varName": "shaders",
-                "arraySize": "ShaderStage::ShaderStageCount",
+                "arraySize": "ShaderStage::ShaderStageNativeStageCount",
                 "arrayValue": "",
                 "dataType": "ShaderProfileAction",
                 "buildTypes": {},

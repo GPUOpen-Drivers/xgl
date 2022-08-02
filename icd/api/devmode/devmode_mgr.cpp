@@ -328,6 +328,8 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
     m_perfCountersEnabled(false),
     m_perfCounterMemLimit(0),
     m_perfCounterFrequency(0),
+    m_useStaticVmid(false),
+    m_staticVmidActive(false),
     m_perfCounterIds(pInstance->Allocator()),
     m_pipelineCaches(pInstance->Allocator())
 {
@@ -921,6 +923,19 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
 
     Device* pDevice                 = pState->pDevice;
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+
+    // Activate static VMID if supported
+    if (result == Pal::Result::Success)
+    {
+        VK_ASSERT(m_staticVmidActive == false);
+
+        if (m_useStaticVmid)
+        {
+            result = pDevice->PalDevice(DefaultDeviceIndex)->SetStaticVmidMode(true);
+
+            m_staticVmidActive = (result == Pal::Result::Success);
+        }
+    }
 
     // Notify the RGP server that we are starting a trace
     if (result == Pal::Result::Success)
@@ -1542,6 +1557,13 @@ void DevModeMgr::FinishOrAbortTrace(
     else
     {
         m_pRGPServer->EndTrace();
+    }
+
+    // Deactivate static VMID if supported (and currently active)
+    if (m_useStaticVmid && m_staticVmidActive)
+    {
+        Pal::Result palResult = pState->pDevice->PalDevice(DefaultDeviceIndex)->SetStaticVmidMode(false);
+        VK_ASSERT(palResult == Pal::Result::Success);
     }
 
     if (pState->pGpaSession != nullptr)
@@ -2179,10 +2201,15 @@ Pal::Result DevModeMgr::InitRGPTracing(
         result = InitTraceQueueResourcesForDevice(pState, &hasDebugVmid);
     }
 
-    // If we've failed to acquire the debug VMID, fail to trace
-    if (hasDebugVmid == false)
+    if (result == Pal::Result::Success)
     {
-        result = Pal::Result::ErrorInitializationFailed;
+        m_useStaticVmid = (pDevice->GetPalProperties().gfxipProperties.flags.supportStaticVmid != 0);
+
+        // If we've failed to acquire the debug VMID (and it is needed), fail to trace
+        if ((hasDebugVmid == false) && (m_useStaticVmid == false))
+        {
+            result = Pal::Result::ErrorInitializationFailed;
+        }
     }
 
     if (result != Pal::Result::Success)

@@ -267,17 +267,20 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
         SetUserDataLayout* pSetUserData = &pSetUserDataLayouts[i];
 
         // Initialize the set layout info
-        const auto& setLayoutInfo = DescriptorSetLayout::ObjectFromHandle(pIn->pSetLayouts[i])->Info();
-
         pSetUserData->setPtrRegOffset      = InvalidReg;
         pSetUserData->dynDescDataRegOffset = 0;
-        pSetUserData->dynDescCount         = setLayoutInfo.numDynamicDescriptors;
+        pSetUserData->dynDescCount         = 0;
         pSetUserData->firstRegOffset       = pInfo->userDataRegCount - pUserDataLayout->setBindingRegBase;
         pSetUserData->totalRegCount        = 0;
 
+        const DescriptorSetLayout* pDescSetLayout = DescriptorSetLayout::ObjectFromHandle(pIn->pSetLayouts[i]);
+
         // Test if this set is active in at least one stage
-        if (setLayoutInfo.activeStageMask != 0)
+        if ((pDescSetLayout != nullptr) && (pDescSetLayout->Info().activeStageMask != 0))
         {
+            const DescriptorSetLayout::CreateInfo& setLayoutInfo  = pDescSetLayout->Info();
+            pSetUserData->dynDescCount = setLayoutInfo.numDynamicDescriptors;
+
             // Optimized path to inline push descriptors if it can be done without spilling out of user data registers
             bool inlinePushDescriptorSet = false;
 
@@ -689,12 +692,6 @@ VkResult PipelineLayout::Create(
         {
             const DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pCreateInfo->pSetLayouts[i]);
 
-            // If VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT is not set, pLayout must be a valid handle
-            if ((pCreateInfo->flags & VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT) == 0)
-            {
-                VK_ASSERT(pLayout != nullptr);
-            }
-
             if (pLayout != nullptr)
             {
                 ppSetLayouts[i] = reinterpret_cast<DescriptorSetLayout*>(Util::VoidPtrInc(pSysMem, currentSetLayoutOffset));
@@ -988,7 +985,8 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
         const auto pSetUserData = &GetSetUserData(setIndex);
         const auto pSetLayout   = GetSetLayouts(setIndex);
 
-        uint32_t visibility = stageMask & VkToVkgcShaderStageMask(pSetLayout->Info().activeStageMask);
+        const uint32_t visibility =
+            (pSetLayout == nullptr) ? 0 : stageMask & VkToVkgcShaderStageMask(pSetLayout->Info().activeStageMask);
 
         if (visibility != 0)
         {

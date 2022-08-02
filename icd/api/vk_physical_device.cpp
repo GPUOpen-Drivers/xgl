@@ -4635,6 +4635,13 @@ void PhysicalDevice::GetPhysicalDeviceDriverProperties(
 
         Util::Strncpy(pDriverInfo, VULKAN_DRIVER_INFO_STR, VK_MAX_DRIVER_INFO_SIZE);
 
+    if (strlen(pDriverInfo) != 0)
+    {
+        Util::Strncat(pDriverInfo, VK_MAX_DRIVER_INFO_SIZE, " ");
+    }
+
+    Util::Strncat(pDriverInfo, VK_MAX_DRIVER_INFO_SIZE, VULKAN_DRIVER_INFO_STR_LLPC);
+
     pConformanceVersion->major     = CTS_VERSION_MAJOR;
     pConformanceVersion->minor     = CTS_VERSION_MINOR;
     pConformanceVersion->subminor  = CTS_VERSION_SUBMINOR;

@@ -218,8 +218,8 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     {
         for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
         {
-            ppShadersInfo[stage]->options.clientHash.lower = pCreateInfo->pipelineProfileKey.shaders[stage].codeHash.lower;
-            ppShadersInfo[stage]->options.clientHash.upper = pCreateInfo->pipelineProfileKey.shaders[stage].codeHash.upper;
+            ppShadersInfo[stage]->options.clientHash.lower = pCreateInfo->pipelineProfileKey.pShaders[stage].codeHash.lower;
+            ppShadersInfo[stage]->options.clientHash.upper = pCreateInfo->pipelineProfileKey.pShaders[stage].codeHash.upper;
         }
     }
 
@@ -268,11 +268,13 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     {
         if (result == VK_SUCCESS)
         {
-            char extraInfo[256];
-            ShaderOptimizerKey* pShaderKey = &pCreateInfo->pipelineProfileKey.shaders[0];
+            char                      extraInfo[256] = {};
+            const ShaderOptimizerKey* pShaderKey     = pCreateInfo->pipelineProfileKey.pShaders;
+
             Util::Snprintf(extraInfo, sizeof(extraInfo), "\n;PipelineOptimizer\n");
             Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
-            for (uint32_t i = 0; i < ShaderStageCount; i++)
+
+            for (uint32_t i = 0; i < pCreateInfo->pipelineProfileKey.shaderCount; i++)
             {
                 if (pShaderKey[i].codeHash.upper || pShaderKey[i].codeHash.lower)
                 {
@@ -348,10 +350,11 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     // while building a pipeline profile which uses the profile hash.
     if (settings.pipelineUseProfileHashAsClientHash)
     {
-        pPipelineBuildInfo->cs.options.clientHash.lower =
-            pCreateInfo->pipelineProfileKey.shaders[ShaderStage::ShaderStageCompute].codeHash.lower;
-        pPipelineBuildInfo->cs.options.clientHash.upper =
-            pCreateInfo->pipelineProfileKey.shaders[ShaderStage::ShaderStageCompute].codeHash.upper;
+        VK_ASSERT(pCreateInfo->pipelineProfileKey.shaderCount == 1);
+        VK_ASSERT(pCreateInfo->pipelineProfileKey.pShaders[0].stage == ShaderStage::ShaderStageCompute);
+
+        pPipelineBuildInfo->cs.options.clientHash.lower = pCreateInfo->pipelineProfileKey.pShaders[0].codeHash.lower;
+        pPipelineBuildInfo->cs.options.clientHash.upper = pCreateInfo->pipelineProfileKey.pShaders[0].codeHash.upper;
     }
 
     // Build pipline binary
@@ -394,12 +397,16 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     {
         if (result == VK_SUCCESS)
         {
-            char extraInfo[256];
-            ShaderOptimizerKey* pShaderKey = &pCreateInfo->pipelineProfileKey.shaders[ShaderStage::ShaderStageCompute];
+            VK_ASSERT(pCreateInfo->pipelineProfileKey.shaderCount == 1);
+            VK_ASSERT(pCreateInfo->pipelineProfileKey.pShaders[0].stage == ShaderStage::ShaderStageCompute);
+
+            char                      extraInfo[256] = {};
+            const ShaderOptimizerKey& shaderKey      = pCreateInfo->pipelineProfileKey.pShaders[0];
+
             Util::Snprintf(extraInfo, sizeof(extraInfo), "\n\n;PipelineOptimizer\n");
             Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
 
-            if (pShaderKey->codeHash.upper || pShaderKey->codeHash.lower)
+            if (shaderKey.codeHash.upper || shaderKey.codeHash.lower)
             {
                 const char* pName = GetShaderStageName(ShaderStage::ShaderStageCompute);
                 Util::Snprintf(
@@ -407,8 +414,8 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
                     sizeof(extraInfo),
                     ";%s Shader Profile Key: 0x%016" PRIX64 "%016" PRIX64 ",\n",
                     pName,
-                    pShaderKey->codeHash.upper,
-                    pShaderKey->codeHash.lower);
+                    shaderKey.codeHash.upper,
+                    shaderKey.codeHash.lower);
                 Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
             }
         }

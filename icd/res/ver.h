@@ -36,7 +36,7 @@
 #define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
 
 // Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   233
+#define VULKAN_ICD_BUILD_VERSION   235
 
 // String version is needed with leading zeros and extra termination (unicode)
 #define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
@@ -45,7 +45,8 @@
 // These values specify the driver ID and driver info string
 #define VULKAN_DRIVER_ID            VK_DRIVER_ID_AMD_OPEN_SOURCE_KHR  // "AMDOPEN"
 #define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
-#define VULKAN_DRIVER_INFO_STR      "2022.Q3.1"
+#define VULKAN_DRIVER_INFO_STR      "2022.Q3.2"
+#define VULKAN_DRIVER_INFO_STR_LLPC "(LLPC)"
 
 // These values tell which version of the conformance test the driver is compliant against
 #define CTS_VERSION_MAJOR           1

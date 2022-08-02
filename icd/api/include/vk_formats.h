@@ -70,6 +70,7 @@ struct Formats
     inline static uint32_t GetYuvPlaneCounts(VkFormat format);
     inline static bool IsASTCFormat(VkFormat format);
     inline static bool IsEtc2Format(VkFormat format);
+    inline static bool IsDvec3Or4(VkFormat format);
     inline static bool HasDepth(VkFormat format);
     inline static bool HasStencil(VkFormat format);
     inline static VkFormat GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask);
@@ -458,6 +459,32 @@ VkFormat Formats::GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask
     }
 
     return subFormat;
+}
+
+// =====================================================================================================================
+// Returns true if the format takes 2 locations in shader input/output slots.
+// The formats take more than 16 bytes always need more than one location.
+bool Formats::IsDvec3Or4(
+    VkFormat format)
+{
+    bool needsTwoLocations;
+
+    switch (format)
+    {
+    case VK_FORMAT_R64G64B64_UINT:
+    case VK_FORMAT_R64G64B64_SINT:
+    case VK_FORMAT_R64G64B64_SFLOAT:
+    case VK_FORMAT_R64G64B64A64_UINT:
+    case VK_FORMAT_R64G64B64A64_SINT:
+    case VK_FORMAT_R64G64B64A64_SFLOAT:
+        needsTwoLocations = true;
+        break;
+    default:
+        needsTwoLocations = false;
+        break;
+    }
+
+    return needsTwoLocations;
 }
 
 } // namespace vk

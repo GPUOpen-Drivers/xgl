@@ -2025,7 +2025,7 @@ inline Pal::HwPipePoint VkToPalSrcPipePoint(
     // Otherwise see if post-index-fetch signaling is enough.
     else if ((flags & ~srcPostIndexFetchFlags) == 0)
     {
-        srcPipePoint = Pal::HwPipePostIndexFetch;
+        srcPipePoint = Pal::HwPipePostPrefetch;
     }
     // Otherwise see if pre-rasterization signaling is enough.
     else if ((flags & ~srcPreRasterizationFlags) == 0)
@@ -2069,7 +2069,7 @@ inline Pal::HwPipePoint VkToPalSrcPipePointForTimestampWrite(
 
     if ((flags & srcTopOfPipeFlags) != 0)
     {
-        srcPipePoint = Pal::HwPipePostIndexFetch;
+        srcPipePoint = Pal::HwPipePostPrefetch;
     }
     else
     {
@@ -2121,7 +2121,7 @@ static const HwPipePointMappingEntry hwPipePointMappingTable[] =
 {
     // Flags that require flushing index-fetch workload.
     {
-        Pal::HwPipePostIndexFetch,
+        Pal::HwPipePostPrefetch,
         VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT                |
         VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT_KHR            |
         VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT
@@ -2205,7 +2205,7 @@ inline uint32_t VkToPalSrcPipePoints(
 // This way a target pipeline stage is selected where the wait for events happens
 inline Pal::HwPipePoint VkToPalWaitPipePoint(PipelineStageFlags flags)
 {
-    static_assert((Pal::HwPipePostIndexFetch == Pal::HwPipePreCs) && (Pal::HwPipePostIndexFetch == Pal::HwPipePreBlt),
+    static_assert((Pal::HwPipePostPrefetch == Pal::HwPipePreCs) && (Pal::HwPipePostPrefetch == Pal::HwPipePreBlt),
         "The code here assumes pre-CS and pre-blit match post-index-fetch.");
 
     // Flags that only require waiting bottom-of-pipe.
@@ -2253,7 +2253,7 @@ inline Pal::HwPipePoint VkToPalWaitPipePoint(PipelineStageFlags flags)
     // Otherwise see if post-index-fetch waiting is enough.
     else if ((flags & ~dstPostIndexFetchFlags) == 0)
     {
-        dstPipePoint = Pal::HwPipePostIndexFetch;
+        dstPipePoint = Pal::HwPipePostPrefetch;
     }
     // Otherwise we have to resort to top-of-pipe waiting.
     else

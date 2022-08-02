@@ -1335,6 +1335,7 @@ void GraphicsPipeline::BindToCmdBuffer(
         }
 
         pRenderState->inputAssemblyState.primitiveRestartIndex = m_info.inputAssemblyState.primitiveRestartIndex;
+        pRenderState->inputAssemblyState.patchControlPoints    = m_info.inputAssemblyState.patchControlPoints;
 
         if (ContainsStaticState(DynamicStatesInternal::PrimitiveTopologyExt))
         {

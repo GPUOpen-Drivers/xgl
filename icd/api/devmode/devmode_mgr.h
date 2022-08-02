@@ -329,6 +329,8 @@ private:
     bool                                m_perfCountersEnabled;      // True if perf counters are enabled
     uint64_t                            m_perfCounterMemLimit;      // Memory limit for perf counters
     uint32_t                            m_perfCounterFrequency;     // Counter sample frequency
+    bool                                m_useStaticVmid;
+    bool                                m_staticVmidActive;
 
     using PerfCounterList = Util::Vector<GpuUtil::PerfCounterId, 8, PalAllocator>;
 

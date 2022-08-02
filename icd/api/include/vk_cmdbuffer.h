@@ -1227,6 +1227,7 @@ private:
         const VkRenderingFragmentShadingRateAttachmentInfoKHR* pRenderingFragmentShadingRateAttachmentInfoKHR);
 
     void ResolveImage(
+        VkImageAspectFlags                 aspectMask,
         const DynamicRenderingAttachments& dynamicRenderingAttachments);
 
     void LoadOpClearColor(

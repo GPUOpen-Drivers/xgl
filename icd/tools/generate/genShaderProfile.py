@@ -110,7 +110,8 @@ def parseJsonProfileEntryPattern(pattern):
                                                                   type(patternValue),
                                                                   ENTRIES_TEMPLATE["entries"]["pattern"][patternKey]["type"]))
 
-            if patternKey == "always":
+            if patternKey in ["always",
+                              "shaderOnly"]:
 
                 cppCode = ENTRIES_TEMPLATE["entries"]["pattern"][patternKey]["codeTemplate"]
                 cppCode = cppCode.replace("%Value%", str(patternValue).lower())

@@ -232,10 +232,19 @@ public:
     uint32_t GetColorAttachmentSamples(uint32_t subPassIndex, uint32_t colorTarget) const;
     uint32_t GetDepthStencilAttachmentSamples(uint32_t subPassIndex) const;
     VkResolveModeFlagBits GetDepthResolveMode(uint32_t subpass) const
-        { return m_createInfo.pSubpasses[subpass].depthResolveMode; }
+    {
+        return m_createInfo.pSubpasses[subpass].depthResolveMode;
+    }
 
     VkResolveModeFlagBits GetStencilResolveMode(uint32_t subpass) const
-        { return m_createInfo.pSubpasses[subpass].stencilResolveMode; }
+    {
+        return m_createInfo.pSubpasses[subpass].stencilResolveMode;
+    }
+
+    VkImageAspectFlags GetResolveDepthStecilAspect(uint32_t subpass) const
+    {
+        return m_createInfo.pSubpasses[subpass].depthStencilResolveAttachment.aspectMask;
+    }
 
     uint32_t GetSubpassColorReferenceCount(uint32_t subPassIndex) const;
     uint32_t GetAttachmentCount() const { return m_createInfo.attachmentCount; }

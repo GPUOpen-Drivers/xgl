@@ -88,6 +88,7 @@ struct GraphicsPipelineBinaryCreateInfo
     size_t                                 mappingBufferSize;
     VkPipelineCreateFlags                  flags;
     VkFormat                               dbFormat;
+    ShaderOptimizerKey                     shaderProfileKeys[ShaderStage::ShaderStageGfxCount];
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
     FreeCompilerBinary                     freeCompilerBinary;
@@ -108,6 +109,7 @@ struct ComputePipelineBinaryCreateInfo
     void*                                  pMappingBuffer;
     size_t                                 mappingBufferSize;
     VkPipelineCreateFlags                  flags;
+    ShaderOptimizerKey                     shaderProfileKey;
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
     FreeCompilerBinary                     freeCompilerBinary;
