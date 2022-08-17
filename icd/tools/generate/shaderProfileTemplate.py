@@ -23,20 +23,20 @@
  #
  #######################################################################################################################
 
-'''This script defines a template for shader profile files.
-'''
+"""This script defines a template for shader profile files.
+"""
 
 import os
 import sys
 
-genDir = ''
+GEN_DIR = ''
 # if genDir was specified by the user
 if len(sys.argv) == 3:
-    genDir = sys.argv[2]
+    GEN_DIR = sys.argv[2]
 
-if genDir != "":
-    CopyrightFilePath = genDir + "/xgl-copyright-template.txt"
-    AppProfileHeaderFilePath = genDir + "/api/include/app_profile.h"
+if GEN_DIR != "":
+    CopyrightFilePath = GEN_DIR + "/xgl-copyright-template.txt"
+    AppProfileHeaderFilePath = GEN_DIR + "/api/include/app_profile.h"
 else:
     CopyrightFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../xgl-copyright-template.txt"
     AppProfileHeaderFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../../api/include/app_profile.h"
@@ -44,7 +44,7 @@ else:
 with open(CopyrightFilePath, encoding='utf-8') as f:
     FileHeaderCopyright = f.read()
 
-FileHeaderWarning = "\
+FILE_HEADER_WARNING = "\
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n\
 //\n\
 // WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING!\n\
@@ -57,9 +57,9 @@ FileHeaderWarning = "\
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n\
 \n"
 
-CopyrightAndWarning = FileHeaderCopyright + FileHeaderWarning
+CopyrightAndWarning = FileHeaderCopyright + FILE_HEADER_WARNING
 
-HeaderFileDoxComment = "\n\
+HEADER_FILE_DOX_COMMENT = "\n\
 /**\n\
 ************************************************************************************************************************\n\
 * @file  %FileName%.h\n\
@@ -69,7 +69,7 @@ HeaderFileDoxComment = "\n\
 */\n\
 #pragma once\n"
 
-HeaderIncludes = """
+HEADER_INCLUDES = """
 #include <sstream>
 #include <iomanip>
 
@@ -85,7 +85,7 @@ HeaderIncludes = """
 #endif
 """
 
-CppInclude = """
+CPP_INCLUDE = """
 #include \"g_shader_profile.h\"
 
 %Includes%
@@ -93,13 +93,13 @@ CppInclude = """
 using namespace Util;
 """
 
-InitializedVarTemplate   = """%DataType% %VarName% = %DefaultValue%;\n"""
-UninitializedVarTemplate = """%DataType% %VarName%;\n"""
-BitFieldVarTemplate      = """%DataType% %VarName% : %DefaultValue%;\n"""
-InitializedArrTemplate   = """%DataType% %VarName%[%ArrSize%] = %ArrValue%;\n"""
-UnInitializedArrTemplate = """%DataType% %VarName%[%ArrSize%];\n"""
+INITIALIZED_VAR_TEMPLATE = """%DataType% %VarName% = %DefaultValue%;\n"""
+UNINITIALIZED_VAR_TEMPLATE = """%DataType% %VarName%;\n"""
+BIT_FIELD_VAR_TEMPLATE = """%DataType% %VarName% : %DefaultValue%;\n"""
+INITIALIZED_ARR_TEMPLATE = """%DataType% %VarName%[%ArrSize%] = %ArrValue%;\n"""
+UNINITALIZED_ARR_TEMPLATE = """%DataType% %VarName%[%ArrSize%];\n"""
 
-ClassTemplate = """
+CLASS_TEMPLATE = """
 class %ClassName%
 {
 public:
@@ -110,66 +110,66 @@ private:
 };
 """
 
-StructTemplate = """
+STRUCT_TEMPLATE = """
 struct%StructName%
 {
 %StructDefs%
 }%StructObj%;
 """
 
-UnionTemplate = """\
+UNION_TEMPLATE = """\
 union%UnionName%
 {
 %UnionDefs%
 }%UnionObj%;
 """
 
-NamespaceVK = """
+NAMESPACE_VK = """
 namespace vk
 {
 %NamespaceDefs%
 }
 """
 
-NamespaceUtils = """
+NAMESPACE_UTILS = """
 namespace utils
 {
 class JsonOutputStream;
 }
 """
 
-FuncDecClassShaderProfilePublic = """\
+FUN_DEC_CLASS_SHADER_PROFILE_PUBLIC = """\
 void PipelineProfileToJson(PipelineProfile pipelineProfile, const char* pFilePath);
 """
 
-FuncDecSetAppProfile = """\
+FUNC_DEC_SET_APP_PROFILE = """\
 void SetAppProfile%FuncName%(PipelineProfile* pPipelineProfile);
 """
 
-SetAppProfileFunc = """
+SET_APP_PROFILE_FUNC = """
 void ShaderProfile::SetAppProfile%FuncName%(PipelineProfile* pPipelineProfile)
 {
 %FuncDefs%
 }
 """
 
-GenericGfxIpAppProfile = """
+GENERIC_GFX_IP_APP_PROFILE = """
 // The shader profile in this function will apply to all GfxIps and AsicRevisions in general
 SetAppProfile%FuncName%(pPipelineProfile);
 """
 
-GenericAsicAppProfile = """\
+GENERIC_ASIC_APP_PROFILE = """\
 // The shader profile in this function will apply to all AsicRevisions in this GfxIp level
 SetAppProfile%FuncName%(pPipelineProfile);
 """
 
-FuncDecBuildAppProfileLlpc = """\
+FUNC_DEC_BUILD_APP_PROFILE_LLPC = """\
 void BuildAppProfileLlpc(const AppProfile appProfile,
                          const Pal::GfxIpLevel gfxIpLevel,
                          const Pal::AsicRevision asicRevision,
                          PipelineProfile* pPipelineProfile);\n"""
 
-BuildAppProfileLlpcFunc = """\
+BUILD_APP_PROFILE_LLPC_FUNC = """\
 void ShaderProfile::BuildAppProfileLlpc(const AppProfile appProfile,
                                         const Pal::GfxIpLevel gfxIpLevel,
                                         const Pal::AsicRevision asicRevision,
@@ -179,7 +179,7 @@ void ShaderProfile::BuildAppProfileLlpc(const AppProfile appProfile,
 }
 """
 
-FuncDecJsonWriter = """\
+FUNC_DEC_JSON_WRITER = """\
 // Methods specific to json writer
 std::string getShaderStageName(uint32_t i);
 
@@ -193,7 +193,7 @@ void ProfileEntryActionToJson(PipelineProfileEntry entry, Util::JsonWriter* pWri
 void ProfileEntryPatternToJson(PipelineProfilePattern pattern, Util::JsonWriter* pWriter);
 """
 
-ProfileEntryActionToJsonFunc = """\
+PROFILE_ENTRY_ACTION_TO_JSON_FUNC = """\
 void ShaderProfile::ProfileEntryActionToJson(PipelineProfileEntry entry, Util::JsonWriter* pWriter)
 {
     PipelineProfilePattern pattern = entry.pattern;
@@ -226,7 +226,7 @@ void ShaderProfile::ProfileEntryActionToJson(PipelineProfileEntry entry, Util::J
 }
 """
 
-ProfileEntryPatternToJsonFunc = """\
+PROFILE_ENTRY_PATTERN_TO_JSON_FUNC = """\
 void ShaderProfile::ProfileEntryPatternToJson(PipelineProfilePattern pattern, Util::JsonWriter* pWriter)
 {
     pWriter->BeginMap(false);
@@ -265,16 +265,14 @@ void ShaderProfile::ProfileEntryPatternToJson(PipelineProfilePattern pattern, Ut
 }
 """
 
-FuncDecParseJsonProfile = \
-"""
+FUNC_DEC_PARSE_JSON_PROFILE = """\
 bool ParseJsonProfile(
     utils::Json*                 pJson,
     PipelineProfile*             pProfile,
     const VkAllocationCallbacks* pAllocator);
 """
 
-FuncDecJsonReader = \
-"""
+FUNC_DEC_JSON_READER = """\
 // Methods specific to json reader
 bool CheckValidKeys(
     utils::Json* pObject,
@@ -306,8 +304,7 @@ bool ParseJsonProfileActionShader(
     ShaderProfileAction* pActions);
 """
 
-ParseJsonShaderTuningFlagsFunc = \
-"""
+PARSE_JSON_SHADER_TUNING_FLAGS_FUNC = """\
     bool success = true;
 
     if (pJson->type == utils::JsonValueType::Object)
@@ -332,8 +329,7 @@ ParseJsonShaderTuningFlagsFunc = \
     return success;\
 """
 
-ParseJsonShaderTuningOptionsFunc = \
-"""
+PARSE_JSON_SHADER_TUNING_OPTIONS_FUNC = """\
     bool success = true;
 
     if (pJson->type == utils::JsonValueType::Object)
@@ -358,8 +354,7 @@ ParseJsonShaderTuningOptionsFunc = \
     return success;\
 """
 
-ParseJsonProfileEntryRuntimeFunc = \
-"""
+PARSE_JSON_PROFILE_ENTRY_RUNTIME_FUNC = """\
     bool success = true;
 
     static const char* ValidKeys[] =
@@ -375,7 +370,7 @@ ParseJsonProfileEntryRuntimeFunc = \
 
     return success;"""
 
-ParseJsonProfileEntryPatternFunc = """\
+PARSE_JSON_PROFILE_ENTRY_PATTERN_FUNC = """\
 bool ShaderProfile::ParseJsonProfileEntryPattern(
     utils::Json*            pJson,
     PipelineProfilePattern* pPattern)
@@ -384,7 +379,7 @@ bool ShaderProfile::ParseJsonProfileEntryPattern(
 }
 """
 
-ParseJsonProfileEntryActionFunc = """\
+PARSE_JSON_PROFILE_ENTRY_ACTION_FUNC = """\
 bool ShaderProfile::ParseJsonProfileEntryAction(
     utils::Json*           pJson,
     PipelineProfileAction* pAction)
@@ -393,7 +388,7 @@ bool ShaderProfile::ParseJsonProfileEntryAction(
 }
 """
 
-ParseJsonProfilePatternShaderFunc = """\
+PARSE_JSON_PROFILE_PATTERN_SHADER_FUNC = """\
 bool ShaderProfile::ParseJsonProfilePatternShader(
     utils::Json*          pJson,
     ShaderStage           shaderStage,
@@ -403,7 +398,7 @@ bool ShaderProfile::ParseJsonProfilePatternShader(
 }
 """
 
-ParseJsonProfileActionShaderFunc = """\
+PARSE_JSON_PROFILE_ACTION_SHADER_FUNC = """\
 bool ShaderProfile::ParseJsonProfileActionShader(
     utils::Json*         pJson,
     ShaderStage          shaderStage,
@@ -413,171 +408,171 @@ bool ShaderProfile::ParseJsonProfileActionShader(
 }
 """
 
-ConditionGameTitle = """if (appProfile == AppProfile::%GameTitle%)
+CONDITION_GAME_TITLE = """if (appProfile == AppProfile::%GameTitle%)
 {
 %Defs%\
 }
 """
 
-ConditionGfxIp = """if (gfxIpLevel == Pal::GfxIpLevel::%Gfxip%)
+CONDITION_GFX_IP = """if (gfxIpLevel == Pal::GfxIpLevel::%Gfxip%)
 {
 %Defs%\
 }
 """
 
-ConditionAsic = """if (asicRevision == Pal::AsicRevision::%Asic%)
+CONDITION_ASIC = """if (asicRevision == Pal::AsicRevision::%Asic%)
 {
     SetAppProfile%FuncName%(pPipelineProfile);
 }
 """
 
-ConditionCreateInfoApply = """\
+CONDITION_CREATE_INFO_APPLY = """\
 if (action.createInfo.apply.%Flag%)
 {
 %Defs%
 }
 """
 
-ConditionShaderCreateApply = """\
+CONDITION_SHADER_CREATE_APPLY = """\
 if (shader.shaderCreate.apply.%Flag%)
 {
 %Defs%
 }
 """
 
-ConditionDynamicShaderInfoApply = """\
+CONDITION_DYNAMIC_SHADER_INFO_APPLY = """\
 if (shader.dynamicShaderInfo.apply.%Flag%)
 {
 %Defs%
 }
 """
 
-ConditionShaderCreateTuningOptions = """\
+CONDITION_SHADER_CREATE_TUNING_OPTIONS = """\
 if (shader.shaderCreate.tuningOptions.%Flag%)
 {
 %Defs%
 }
 """
 
-ConditionShaderMatchPattern = """\
+CONDITION_SHADER_MATCH_PATTERN = """\
 if (shader.match.%Pattern%)
 {
 %Defs%
 }
 """
 
-ConditionParseJsonProfileEntryRuntime = """\
+CONDITION_PARSE_JSON_PROFILE_ENTRY_RUNTIME = """\
 if ((pItem = utils::JsonGetValue(pJson, "%Key%")) != nullptr)
 {
 %Defs%
 }
 """
 
-EntryCountTemplate = """pPipelineProfile->entryCount = %entryCount%;\n\n"""
+ENTRY_COUNT_TEMPLATE = """pPipelineProfile->entryCount = %entryCount%;\n\n"""
 
-IncrementEntryTemplate = """i = (pPipelineProfile->entryCount)++;\n"""
+INCREMENT_ENTRY_TEMPLATE = """i = (pPipelineProfile->entryCount)++;\n"""
 
-shaderCreateApplyTemplate = """\
+SHADER_CREATE_APPLY_TEMPLATE = """\
     pWriter->Key("%Flag%");
     pWriter->Value(shader.shaderCreate.apply.%Flag%);"""
 
-shaderCreateTuningOptionsTemplate = """\
+SHADER_CREATE_TUNING_OPTIONS_TEMPLATE = """\
     pWriter->Key("%Flag%");
     pWriter->Value(shader.shaderCreate.tuningOptions.%Flag%);"""
 
-shaderCreateTuningOptionsBooleanTemplate = """\
+SHADER_CREATE_TUNING_OPTIONS_BOOLEAN_TEMPLATE = """\
     pWriter->Key("%Flag%");
     pWriter->Value(true);"""
 
-shaderCreateDynamicShaderInfoTemplate = """\
+SHADER_CREATE_DYNAMIC_SHADER_INFO_TEMPLATE = """\
     pWriter->Key("%Flag%");
     pWriter->Value(shader.dynamicShaderInfo.%Flag%);"""
 
-actionCreateInfoTemplate = """\
+ACTION_CREATE_INFO_TEMPLATE = """\
     pWriter->Key("%Flag%");
     pWriter->Value(action.createInfo.%Flag%);"""
 
-ShaderCreateApplyTuningOptionsRuntimeTemplate = """\
+SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE = """\
     pActions->shaderCreate.apply.%Action%         = true;
     pActions->shaderCreate.tuningOptions.%Action% = %Value%;"""
 
-ShaderCreateTuningOptionsRuntimeTemplate = """\
+SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE = """\
     if (pItem->%ValueType% != 0)
     {
         pActions->shaderCreate.tuningOptions.%Action% = %Value%;
     }"""
 
-ShaderCreateApplyRuntimeTemplate = """\
+SHADER_CREATE_APPLY_RUNTIME_TEMPLATE = """\
     if (pItem->%ValueType% != 0)
     {
         pActions->shaderCreate.apply.%Action% = 1;
     }"""
 
-ShaderCreateApplyDynamicShaderInfoRuntimeTemplate = """\
+SHADER_CREATE_APPLY_DYNAMIC_SHADER_INFO_RUNTIME_TEMPLATE = """\
     pActions->dynamicShaderInfo.apply.%Action% = true;
     pActions->dynamicShaderInfo.%Action%       = %Value%;"""
 
-parseJsonProfileEntryPatternTemplate = """\
+PARSE_JSON_PROFILE_ENTRY_PATTERN_TEMPLATE = """\
    success &= ParseJsonProfilePatternShader(pItem, %ShaderStage%, &pPattern->shaders[%ShaderStage%]);"""
 
-parseJsonProfileEntryActionTemplate = """\
+PARSE_JSON_PROFILE_ENTRY_ACTION_TEMPLATE = """\
    success &= ParseJsonProfileActionShader(pItem, %ShaderStage%, &pAction->shaders[%ShaderStage%]);"""
 
 TypeValues = {
     "integerValue": "static_cast<uint32_t>(pItem->integerValue)",
     "booleanValue": "true"
-    }
+}
 
 BRANCHES = [
-    ]
+]
 
-def jsonEnumWriterTemplate(values, prefix=""):
-    '''Return JSON writer code generator template.'''
+def json_enum_writer_template(values, prefix=""):
+    """Return JSON writer code generator template."""
     template = ""
-    elseValue = ""
+    else_value = ""
     for value in values:
-        valueTemplate = \
+        value_template = \
             "    %Else%if (shader.shaderCreate.tuningOptions.%Flag% == %Prefix%%Value%)\n" + \
             "    {\n" + \
             "        pWriter->Key(\"%Flag%\");\n" + \
             "        pWriter->Value(\"%Value%\");\n" + \
             "    }\n"
-        template += valueTemplate \
-          .replace("%Else%", elseValue) \
-          .replace("%Prefix%", prefix) \
-          .replace("%Value%", value)
-        elseValue = "else "
+        template += value_template \
+            .replace("%Else%", else_value) \
+            .replace("%Prefix%", prefix) \
+            .replace("%Value%", value)
+        else_value = "else "
     return template
 
-def jsonEnumReaderTemplate(values, prefix=""):
-    '''Return JSON reader code generator template.'''
+def json_enum_reader_template(values, prefix=""):
+    """Return JSON reader code generator template."""
     template = \
-      "    if (pItem->pStringValue != nullptr)\n" + \
-      "    {\n"
-    elseValue = ""
+        "    if (pItem->pStringValue != nullptr)\n" + \
+        "    {\n"
+    else_value = ""
     for value in values:
-        valueTemplate = \
-          "        %Else%if (strcmp(pItem->pStringValue, \"%Value%\") == 0)\n" + \
-          "        {\n" + \
-          "            pActions->shaderCreate.apply.%Action%         = true;\n" + \
-          "            pActions->shaderCreate.tuningOptions.%Action% = %Prefix%%Value%;\n" + \
-          "        }\n"
-        template += valueTemplate \
-          .replace("%Else%", elseValue) \
-          .replace("%Prefix%", prefix) \
-          .replace("%Value%", value)
-        elseValue = "else "
+        value_template = \
+            "        %Else%if (strcmp(pItem->pStringValue, \"%Value%\") == 0)\n" + \
+            "        {\n" + \
+            "            pActions->shaderCreate.apply.%Action%         = true;\n" + \
+            "            pActions->shaderCreate.tuningOptions.%Action% = %Prefix%%Value%;\n" + \
+            "        }\n"
+        template += value_template \
+            .replace("%Else%", else_value) \
+            .replace("%Prefix%", prefix) \
+            .replace("%Value%", value)
+        else_value = "else "
     template += \
-      "        else\n" + \
-      "        {\n" + \
-      "            success = false;\n" + \
-      "        }\n"
+        "        else\n" + \
+        "        {\n" + \
+        "            success = false;\n" + \
+        "        }\n"
     template += \
-      "    }\n" + \
-      "    else\n" + \
-      "    {\n"  + \
-      "        success = false;\n" + \
-      "    }"
+        "    }\n" + \
+        "    else\n" + \
+        "    {\n" + \
+        "        success = false;\n" + \
+        "    }"
     return template
 
 ###################################################################################################################
@@ -641,9 +636,10 @@ SHADER_ACTION = {
         "buildTypes": {},
         "codeTemplate": """\
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "sgprLimit": {
@@ -671,9 +667,10 @@ SHADER_ACTION = {
         "buildTypes": {},
         "codeTemplate": """\
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "ldsSpillLimitDwords": {
@@ -702,9 +699,10 @@ SHADER_ACTION = {
         "buildTypes": {},
         "codeTemplate": """\
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "maxArraySizeForFastDynamicIndexing": {
@@ -732,9 +730,10 @@ SHADER_ACTION = {
         "buildTypes": {},
         "codeTemplate": """\
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "userDataSpillThreshold": {
@@ -762,9 +761,10 @@ SHADER_ACTION = {
         "buildTypes": {},
         "codeTemplate": """\
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "maxThreadGroupsPerComputeUnit": {
@@ -792,9 +792,10 @@ SHADER_ACTION = {
         "buildTypes": {},
         "codeTemplate": """\
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "scOptions": {
@@ -845,9 +846,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
 
     "debugMode": {
@@ -866,9 +868,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
 
     "allowReZ": {
@@ -887,9 +890,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
 
     "shaderReplaceEnabled": {
@@ -954,9 +958,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
 
     "maxOccupancyOptions": {
@@ -996,9 +1001,10 @@ SHADER_ACTION = {
         "buildTypes": {},
         "codeTemplate": """\
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "wgpMode": {
@@ -1017,9 +1023,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
 
     "waveBreakSize": {
@@ -1047,9 +1054,10 @@ SHADER_ACTION = {
         "buildTypes": {},
         "codeTemplate": """\
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "nggDisable": {
@@ -1068,9 +1076,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
 
     "nggFasterLaunchRate": {
@@ -1089,9 +1098,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
 
     "nggVertexReuse": {
@@ -1110,9 +1120,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
 
     "nggEnableFrustumCulling": {
@@ -1131,9 +1142,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
 
     "nggEnableBoxFilterCulling": {
@@ -1152,9 +1164,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
 
     "nggEnableSphereCulling": {
@@ -1173,9 +1186,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
 
     "nggEnableBackfaceCulling": {
@@ -1194,9 +1208,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
 
     "nggEnableSmallPrimFilter": {
@@ -1215,9 +1230,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = %IntValue%;\n""",
-        "jsonWriterTemplate": shaderCreateApplyTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
 
     "maxWavesPerCu": {
@@ -1244,10 +1260,12 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.apply.%FieldName% = true;
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateDynamicShaderInfoTemplate,
-        "jsonReaderTemplate": ShaderCreateApplyDynamicShaderInfoRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.apply.%FieldName% \
+= true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.%FieldName% \
+= %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_DYNAMIC_SHADER_INFO_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_DYNAMIC_SHADER_INFO_RUNTIME_TEMPLATE
     },
 
     "cuEnableMask": {
@@ -1274,9 +1292,11 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.apply.%FieldName% = true;
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateDynamicShaderInfoTemplate,
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.apply.%FieldName% \
+= true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.%FieldName% \
+= %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_DYNAMIC_SHADER_INFO_TEMPLATE,
         "jsonReaderTemplate": \
             "    if (shaderStage != ShaderStage::ShaderStageCompute)\n    {\n" +
             "        pActions->dynamicShaderInfo.apply.%Action% = true;\n" +
@@ -1309,15 +1329,58 @@ SHADER_ACTION = {
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.apply.%FieldName% = true;
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateDynamicShaderInfoTemplate,
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.apply.%FieldName% \
+= true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.%FieldName% \
+= %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_DYNAMIC_SHADER_INFO_TEMPLATE,
         "jsonReaderTemplate": \
             "    if (shaderStage == ShaderStage::ShaderStageCompute)\n    {\n" +
             "        pActions->dynamicShaderInfo.apply.%Action% = true;\n" +
             "        pActions->dynamicShaderInfo.%Action%       = %Value%;" +
             "\n    }\n    else\n    {\n" +
             "        success = false;\n    }"
+    },
+
+    "threadGroupSwizzleMode": {
+        "type": [str],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "threadGroupSwizzleMode",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {},
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "threadGroupSwizzleMode",
+                "dataType": "Vkgc::ThreadGroupSwizzleMode",
+                "defaultValue": "",
+                "jsonWritable": False,
+                "buildTypes": {},
+            },
+        ],
+        "validValues": {
+            0: "Default",
+            1: "_4x4",
+            2: "_8x8",
+            3: "_16x16"
+        },
+        "buildTypes": {},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.\n
+%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.\n
+%FieldName% = Vkgc::ThreadGroupSwizzleMode::%StrValue%;\n""",
+        "jsonWriterTemplate": json_enum_writer_template(["Default", "_4x4", "_8x8", "_16x16"],
+                                                     prefix="Vkgc::ThreadGroupSwizzleMode::"),
+        "jsonReaderTemplate": json_enum_reader_template(["Default", "_4x4", "_8x8", "_16x16"],
+                                                     prefix="Vkgc::ThreadGroupSwizzleMode::"),
     },
 
     "useSiScheduler": {
@@ -1336,9 +1399,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = true;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = true;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "reconfigWorkgroupLayout": {
@@ -1357,9 +1421,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = true;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = true;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "forceLoopUnrollCount": {
@@ -1378,9 +1443,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "enableLoadScalarizer": {
@@ -1399,9 +1465,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %BoolValue%;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %BoolValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "disableLicm": {
@@ -1420,9 +1487,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %BoolValue%;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %BoolValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "unrollThreshold": {
@@ -1441,9 +1509,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "fp32DenormalMode": {
@@ -1479,8 +1548,10 @@ SHADER_ACTION = {
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.
             %FieldName% = Vkgc::DenormalMode::%EnumValue%;\n""",
-        "jsonWriterTemplate": jsonEnumWriterTemplate(["Auto", "FlushToZero", "Preserve"], prefix="Vkgc::DenormalMode::"),
-        "jsonReaderTemplate": jsonEnumReaderTemplate(["Auto", "FlushToZero", "Preserve"], prefix="Vkgc::DenormalMode::")
+        "jsonWriterTemplate": json_enum_writer_template(["Auto", "FlushToZero", "Preserve"],
+                                                        prefix="Vkgc::DenormalMode::"),
+        "jsonReaderTemplate": json_enum_reader_template(["Auto", "FlushToZero", "Preserve"],
+                                                        prefix="Vkgc::DenormalMode::")
     },
 
     "fastMathFlags": {
@@ -1499,9 +1570,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "disableFastMathFlags": {
@@ -1520,9 +1592,10 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
-        "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
-        "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 }
 
@@ -1542,7 +1615,7 @@ SHADER_PATTERN = {
         ],
         "codeTemplate": """\
             pPipelineProfile->pEntries[%EntryNum%].pattern.shaders[%ShaderStage%].match.stageActive = %Value%;\n""",
-        "jsonWriterTemplate": \
+        "jsonWriterTemplate":
             """    pWriter->Key("stageActive");\n""" +
             "    pWriter->Value(true);",
         "jsonReaderTemplate": "    pPattern->match.stageActive = pItem->%Value%;"
@@ -1562,7 +1635,7 @@ SHADER_PATTERN = {
         ],
         "codeTemplate": """\
             pPipelineProfile->pEntries[%EntryNum%].pattern.shaders[%ShaderStage%].match.stageInactive = %Value%;\n""",
-        "jsonWriterTemplate": \
+        "jsonWriterTemplate":
             """    pWriter->Key("stageInactive");\n""" +
             "    pWriter->Value(true);",
         "jsonReaderTemplate": "    pPattern->match.stageInactive = pItem->%Value%;"
@@ -1592,12 +1665,13 @@ SHADER_PATTERN = {
             pPipelineProfile->pEntries[%EntryNum%].pattern.shaders[%ShaderStage%].match.codeHash = true;
             pPipelineProfile->pEntries[%EntryNum%].pattern.shaders[%ShaderStage%].codeHash.lower = 0x%valueLower%;
             pPipelineProfile->pEntries[%EntryNum%].pattern.shaders[%ShaderStage%].codeHash.upper = 0x%valueUpper%;\n""",
-        "jsonWriterTemplate": \
+        "jsonWriterTemplate":
             """    pWriter->Key("codeHash");\n""" +
             "    std::string codeHash = int_to_hex(shader.codeHash.upper, shader.codeHash.lower);\n" +
             "    pWriter->Value(codeHash.c_str());",
-        "jsonReaderTemplate": \
-            "    // The hash is a 128-bit value interpreted from a JSON hex string.  It should be split by a space into two\n" +
+        "jsonReaderTemplate":
+            "    // The hash is a 128-bit value interpreted from a JSON hex string.  It should be split by a " +
+            "space into two\n" +
             """    // 64-bit sections, e.g.: { "codeHash" : "0x1234567812345678 1234567812345678" }.\n""" +
             "    char* pLower64 = nullptr;\n" +
             "    pPattern->match.codeHash = true;\n" +
@@ -1627,12 +1701,13 @@ SHADER_PATTERN = {
         ],
         "codeTemplate": """\
                 pPipelineProfile->pEntries[%EntryNum%].pattern.shaders[%ShaderStage%].match.codeSizeLessThan = true;
-                pPipelineProfile->pEntries[%EntryNum%].pattern.shaders[%ShaderStage%].codeSizeLessThanValue = %Value%;\n""",
-        "jsonWriterTemplate": \
+                pPipelineProfile->pEntries[%EntryNum%].pattern.shaders[%ShaderStage%].codeSizeLessThanValue \
+= %Value%;\n""",
+        "jsonWriterTemplate":
             """    pWriter->Key("codeSizeLessThan");\n""" +
             "    size_t codeSizeLessThanValue = static_cast<size_t>(shader.codeSizeLessThanValue);\n" +
             "    pWriter->Value(codeSizeLessThanValue);",
-        "jsonReaderTemplate": \
+        "jsonReaderTemplate":
             "    pPattern->match.codeSizeLessThan = true;\n" +
             "    pPattern->codeSizeLessThanValue  = static_cast<size_t>(pItem->%Value%);"
     },
@@ -1667,7 +1742,7 @@ PIPELINE_ACTION = {
         "codeTemplate": """\
             pPipelineProfile->pEntries[%EntryNum%].action.createInfo.apply.binningOverride = true;
             pPipelineProfile->pEntries[%EntryNum%].action.createInfo.binningOverride = %EnumValue%;\n""",
-        "jsonWriterTemplate": \
+        "jsonWriterTemplate":
             """    pWriter->Key("binningOverride");\n""" +
             "    if (action.createInfo.binningOverride == Pal::BinningOverride::Default)\n    {\n" +
             "        pWriter->Value(0u);\n    }\n" +
@@ -1675,7 +1750,7 @@ PIPELINE_ACTION = {
             "        pWriter->Value(1u);\n    }\n" +
             "    else if (action.createInfo.binningOverride == Pal::BinningOverride::Enable)\n    {\n" +
             "        pWriter->Value(2u);\n    }",
-        "jsonReaderTemplate": \
+        "jsonReaderTemplate":
             "    pAction->createInfo.apply.binningOverride = true;\n" +
             "    uint32_t binningOverride                  = static_cast<uint32_t>(pItem->integerValue);\n"
             "    if (binningOverride == 0u)\n    {\n" +
@@ -1709,8 +1784,8 @@ PIPELINE_ACTION = {
         "codeTemplate": """\
             pPipelineProfile->pEntries[%EntryNum%].action.createInfo.apply.lateAllocVsLimit = true;
             pPipelineProfile->pEntries[%EntryNum%].action.createInfo.lateAllocVsLimit = %Value%;\n""",
-        "jsonWriterTemplate": actionCreateInfoTemplate,
-        "jsonReaderTemplate": \
+        "jsonWriterTemplate": ACTION_CREATE_INFO_TEMPLATE,
+        "jsonReaderTemplate":
             "    pAction->createInfo.apply.lateAllocVsLimit = true;\n" +
             "    pAction->createInfo.lateAllocVsLimit       = static_cast<uint32_t>(pItem->integerValue);"
     }
@@ -1735,7 +1810,7 @@ ENTRIES_TEMPLATE = {
                     ],
                     "codeTemplate": """\
                         pPipelineProfile->pEntries[%EntryNum%].pattern.match.always = %Value%;\n""",
-                    "jsonReaderTemplate": \
+                    "jsonReaderTemplate":
                         """    pPattern->match.always = pItem->%Value%;"""
                     },
                 "shaderOnly": {
@@ -1755,7 +1830,7 @@ ENTRIES_TEMPLATE = {
                         pPipelineProfile->pEntries[%EntryNum%].pattern.match.shaderOnly = %Value%;\n""",
                     "jsonReaderTemplate": \
                         """    pPattern->match.shaderOnly = pItem->%Value%;"""
-                    },
+                },
                 "vs": {
                     "type": [dict],
                     "branch": SHADER_PATTERN,
@@ -1873,64 +1948,64 @@ ShaderTuningStructsAndVars = {
     },
 
     "PipelineProfilePattern": {
-            "entity": "struct",
-            "description": "Defines which pattern tests are enabled",
-            "structName": "PipelineProfilePattern",
-            "objectName": "",
-            "buildTypes": {},
-            "child": [
-                {
-                    "match": {
-                        "entity": "union",
-                        "unionName": "",
-                        "objectName": "match",
-                        "buildTypes": {},
-                        "child": {
-                            "pipelineProfilePattern.anonStruct": {
-                                "entity": "struct",
-                                "structName": "",
-                                "objectName": "",
-                                "buildTypes": {},
-                                "child": [
-                                    {
-                                        "always": ENTRIES_TEMPLATE["entries"]["pattern"]["always"]
-                                    },
-                                    {
-                                        "shaderOnly": ENTRIES_TEMPLATE["entries"]["pattern"]["shaderOnly"]
+        "entity": "struct",
+        "description": "Defines which pattern tests are enabled",
+        "structName": "PipelineProfilePattern",
+        "objectName": "",
+        "buildTypes": {},
+        "child": [
+            {
+                "match": {
+                    "entity": "union",
+                    "unionName": "",
+                    "objectName": "match",
+                    "buildTypes": {},
+                    "child": {
+                        "pipelineProfilePattern.anonStruct": {
+                            "entity": "struct",
+                            "structName": "",
+                            "objectName": "",
+                            "buildTypes": {},
+                            "child": [
+                                {
+                                    "always": ENTRIES_TEMPLATE["entries"]["pattern"]["always"]
+                                },
+                                {
+                                    "shaderOnly": ENTRIES_TEMPLATE["entries"]["pattern"]["shaderOnly"]
                                     },
                                     {
                                         "reserved": {
-                                            "entity": "bitField",
-                                            "varName": "reserved",
-                                            "dataType": "uint32_t",
-                                            "defaultValue": 30,
-                                            "buildTypes": {},
-                                        }
+                                        "entity": "bitField",
+                                        "varName": "reserved",
+                                        "dataType": "uint32_t",
+                                        "defaultValue": 30,
+                                        "buildTypes": {},
                                     }
-                                ]
-                            },
-                            "u32All": {
-                                "entity": "var",
-                                "varName": "u32All",
-                                "dataType": "uint32_t",
-                                "defaultValue": "",
-                                "buildTypes": {},
-                            },
-                        }
+                                }
+                            ]
+                        },
+                        "u32All": {
+                            "entity": "var",
+                            "varName": "u32All",
+                            "dataType": "uint32_t",
+                            "defaultValue": "",
+                            "buildTypes": {},
+                        },
                     }
+                }
+            },
+            {
+                "shaders": {
+                    "entity": "array",
+                    "varName": "shaders",
+                    "arraySize": "ShaderStage::ShaderStageNativeStageCount",
+                    "arrayValue": "",
+                    "dataType": "ShaderProfilePattern",
+                    "buildTypes": {},
                 },
-                {
-                    "shaders": {
-                        "entity": "array",
-                        "varName": "shaders",
-                        "arraySize": "ShaderStage::ShaderStageNativeStageCount",
-                        "arrayValue": "",
-                        "dataType": "ShaderProfilePattern",
-                        "buildTypes": {},
-                    },
-                },
-            ]
-        },
+            },
+        ]
+    },
 
     "ShaderTuningOptions": {
         "entity": "struct",
@@ -1973,7 +2048,7 @@ ShaderTuningStructsAndVars = {
                                             "entity": "bitField",
                                             "varName": "reserved",
                                             "dataType": "uint32_t",
-                                            "defaultValue": 3,
+                                            "defaultValue": 2,
                                             "buildTypes": {},
                                         },
                                     }
@@ -2230,7 +2305,7 @@ BuildTypesTemplate = {
 # The following template includes definitions of generic functions. These are copied to source code as is.
 ###################################################################################################################
 
-JsonWriterGenericDef = """\
+JSON_WRITER_GENERIC_DEF = """\
 // =====================================================================================================================
 // Generic code for generating Json output stream and writing to Json dump file using Pal::JsonWriter
 std::string ShaderProfile::getShaderStageName(uint32_t i)
@@ -2298,8 +2373,7 @@ void ShaderProfile::PipelineProfileToJson(PipelineProfile pipelineProfile, const
 }
 """
 
-JsonReaderGenericDef = \
-"""
+JSON_READER_GENERIC_DEF = """\
 // =====================================================================================================================
 // Generic code for parsing Json dump file using json_reader.
 
@@ -2377,7 +2451,8 @@ bool ShaderProfile::ParseJsonProfile(
             {
                 if (pProfile->entryCount < pProfile->entryCapacity)
                 {
-                    success &= ParseJsonProfileEntry(pPatterns, pActions, pEntry, &pProfile->pEntries[pProfile->entryCount++]);
+                    success &= ParseJsonProfileEntry(pPatterns, pActions, pEntry, \
+&pProfile->pEntries[pProfile->entryCount++]);
                 }
                 else
                 {
@@ -2393,13 +2468,15 @@ bool ShaderProfile::ParseJsonProfile(
                         std::memset(pMemory, 0, newSize);
 
                         PipelineProfileEntry* pNewEntries = static_cast<PipelineProfileEntry*>(pMemory);
-                        std::memcpy(pNewEntries, pProfile->pEntries, pProfile->entryCount * sizeof(PipelineProfileEntry));
+                        std::memcpy(pNewEntries, pProfile->pEntries, \
+pProfile->entryCount * sizeof(PipelineProfileEntry));
                         pProfile->entryCapacity = newCapacity;
 
                         pAllocator->pfnFree(pAllocator->pUserData, pProfile->pEntries);
                         pProfile->pEntries = pNewEntries;
 
-                        success &= ParseJsonProfileEntry(pPatterns, pActions, pEntry, &pProfile->pEntries[pProfile->entryCount++]);
+                        success &= ParseJsonProfileEntry(pPatterns, pActions, pEntry, \
+&pProfile->pEntries[pProfile->entryCount++]);
                     }
                     else
                     {
@@ -2429,7 +2506,8 @@ bool ShaderProfile::ParseJsonProfileEntry(
     {
         "pattern",
         "action",
-        // BuildTypes key is added here only to maintain consistency. The value against this key (if any in JSON) is not read at runtime.
+        // BuildTypes key is added here only to maintain consistency. The value against this key (if any in JSON) \
+is not read at runtime.
         "BuildTypes"
     };
 
@@ -2481,7 +2559,7 @@ bool ShaderProfile::ParseJsonProfileEntry(
 }
 """
 
-ParseDwordArrayFunc = """
+PARSE_DWORD_ARRAY_FUNC = """
 void ShaderProfile::ParseDwordArray(
     utils::Json* pItem,
     uint32_t     maxCount,

@@ -120,7 +120,7 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     const void*                  pCode,
     const bool                   adaptForFastLink,
     ShaderModuleHandle*          pShaderModule,
-    const Util::MetroHash::Hash& hash)
+    const PipelineOptimizerKey&  profileKey)
 {
     VkResult result = VK_SUCCESS;
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
@@ -338,6 +338,16 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     if (appProfile == AppProfile::DawnOfWarIII)
     {
         pPipelineBuildInfo->options.reconfigWorkgroupLayout = true;
+    }
+
+    const auto threadGroupSwizzleMode =
+        pDevice->GetShaderOptimizer()->OverrideThreadGroupSwizzleMode(
+            ShaderStageCompute,
+            pCreateInfo->pipelineProfileKey);
+
+    if (threadGroupSwizzleMode != Vkgc::ThreadGroupSwizzleMode::Default)
+    {
+        pPipelineBuildInfo->options.threadGroupSwizzleMode = threadGroupSwizzleMode;
     }
 
     pPipelineBuildInfo->options.forceCsThreadIdSwizzling = settings.forceCsThreadIdSwizzling;

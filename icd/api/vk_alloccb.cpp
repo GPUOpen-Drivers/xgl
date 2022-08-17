@@ -49,7 +49,7 @@ namespace allocator
 // ===============================================================================================
 // Default memory allocation callback used when application does not supply a callback function
 // of its own. Currently just punts to stock new []. Alignment and alloc types are ignored.
-static void* VKAPI_PTR
+void* VKAPI_PTR
     DefaultAllocFunc(
     void*                                   pUserData,
     size_t                                  size,
@@ -95,7 +95,7 @@ static void* VKAPI_PTR
 // =====================================================================================================================
 // Default memory free callback used when application does not supply a callback function of its own. Currently just
 // punts to stock delete [].
-static void VKAPI_PTR DefaultFreeFunc(
+void VKAPI_PTR DefaultFreeFunc(
     void*                                   pUserData,
     void*                                   pMem)
 {

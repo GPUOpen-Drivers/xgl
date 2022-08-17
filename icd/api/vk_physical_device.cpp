@@ -84,6 +84,8 @@ struct DisplayModeObject
     Pal::ScreenMode palScreenMode;
 };
 
+static const char shaderHashString[] = "AMDMetroHash128";
+
 // Vulkan Spec Table 30.11: All features in optimalTilingFeatures
 constexpr VkFormatFeatureFlags AllImgFeatures =
     VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
@@ -3982,43 +3984,25 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 void PhysicalDevice::PopulateQueueFamilies()
 {
 
-    static uint32_t vkQueueFlags[] =
-    {
-        // Pal::EngineTypeUniversal
-        VK_QUEUE_GRAPHICS_BIT |
-        VK_QUEUE_COMPUTE_BIT |
-        VK_QUEUE_TRANSFER_BIT |
-        VK_QUEUE_SPARSE_BINDING_BIT,
-        // Pal::EngineTypeCompute
-        VK_QUEUE_COMPUTE_BIT |
-        VK_QUEUE_TRANSFER_BIT |
-        VK_QUEUE_SPARSE_BINDING_BIT,
-        // Pal::EngineTypeDma
-        VK_QUEUE_TRANSFER_BIT |
-        VK_QUEUE_SPARSE_BINDING_BIT,
-        // Pal::EngineTypeTimer
-        0,
-        // This featurization is required to match Pal::EngineTypeCount which is checked using static_assert below
-    };
+    uint32_t vkQueueFlags[Pal::EngineTypeCount] = {};
+    vkQueueFlags[Pal::EngineTypeUniversal]      = VK_QUEUE_GRAPHICS_BIT |
+                                                  VK_QUEUE_COMPUTE_BIT |
+                                                  VK_QUEUE_TRANSFER_BIT |
+                                                  VK_QUEUE_SPARSE_BINDING_BIT;
+    vkQueueFlags[Pal::EngineTypeCompute]        = VK_QUEUE_COMPUTE_BIT |
+                                                  VK_QUEUE_TRANSFER_BIT |
+                                                  VK_QUEUE_SPARSE_BINDING_BIT;
+    vkQueueFlags[Pal::EngineTypeDma]            = VK_QUEUE_TRANSFER_BIT |
+                                                  VK_QUEUE_SPARSE_BINDING_BIT;
+    // No flags for Pal::EngineTypeTimer, as it is a virtual
 
     // While it's possible for an engineType to support multiple queueTypes,
     // we'll simplify things by associating each engineType with a primary queueType.
-    static const Pal::QueueType palQueueTypes[] =
-    {
-        Pal::QueueTypeUniversal,
-        Pal::QueueTypeCompute,
-        Pal::QueueTypeDma,
-        Pal::QueueTypeTimer,
-
-    };
-
-    static_assert((VK_ARRAY_SIZE(vkQueueFlags) == Pal::EngineTypeCount) &&
-                  (VK_ARRAY_SIZE(palQueueTypes) == Pal::EngineTypeCount) &&
-                  (Pal::EngineTypeUniversal        == 0) &&
-                  (Pal::EngineTypeCompute          == 1) &&
-                  (Pal::EngineTypeDma              == 2) &&
-                  (Pal::EngineTypeTimer            == 3)
-        , "PAL engine types have changed, need to update the tables above");
+    Pal::QueueType palQueueTypes[Pal::EngineTypeCount] = {};
+    palQueueTypes[Pal::EngineTypeUniversal]            = Pal::QueueTypeUniversal;
+    palQueueTypes[Pal::EngineTypeCompute]              = Pal::QueueTypeCompute;
+    palQueueTypes[Pal::EngineTypeDma]                  = Pal::QueueTypeDma;
+    palQueueTypes[Pal::EngineTypeTimer]                = Pal::QueueTypeTimer;
 
     // Always enable core queue flags.  Final determination of support will be done on a per-engine basis.
     uint32_t enabledQueueFlags =
@@ -6978,6 +6962,20 @@ void PhysicalDevice::GetDeviceProperties2(
             auto* pProps = static_cast<VkPhysicalDeviceProvokingVertexPropertiesEXT*>(pNext);
             pProps->provokingVertexModePerPipeline                       = VK_TRUE;
             pProps->transformFeedbackPreservesTriangleFanProvokingVertex = VK_TRUE;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_PROPERTIES_EXT:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT*>(pNext);
+
+            memset(pProps->shaderModuleIdentifierAlgorithmUUID,
+                   0,
+                   (VK_UUID_SIZE * sizeof(uint8_t)));
+
+            memcpy(pProps->shaderModuleIdentifierAlgorithmUUID,
+                   shaderHashString,
+                   (strlen(shaderHashString) * sizeof(char)));
             break;
         }
 

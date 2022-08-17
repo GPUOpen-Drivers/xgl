@@ -164,3 +164,4 @@ VK_EXT_provoking_vertex
 VK_KHR_workgroup_memory_explicit_layout
 VK_EXT_primitives_generated_query
 VK_EXT_non_seamless_cube_map
+VK_EXT_shader_module_identifier

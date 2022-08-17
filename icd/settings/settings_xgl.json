@@ -4477,7 +4477,7 @@
       "Type": "uint32"
     },
     {
-      "Name": "UseReleaseAcquireInterface",
+      "Name": "UseAcquireReleaseInterface",
       "Description": "Enables the use of Pal::CmdReleaseThenAcquire(), Pal::CmdRelease() and Pal::CmdAcquire() barrier interfaces on supported ASICs (gfx9+).",
       "Tags": [
         "Optimization"
@@ -5502,6 +5502,21 @@
         "Default": false
       },
       "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideThreadGroupSwizzling",
+      "Description": "Override thread group swizzling on a per shader basis.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "ValidValues": {
+        "Name": "ThreadGroupSwizzleMode"
+      },
+      "Defaults": {
+        "Default": "ThreadGroupSwizzleModeDefault"
+      },
+      "Type": "enum",
       "Scope": "Driver"
     },
     {

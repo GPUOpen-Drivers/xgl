@@ -709,6 +709,8 @@ static void CopyPreRasterizationShaderState(
 {
     const GraphicsPipelineObjectCreateInfo& libInfo = pLibrary->GetPipelineObjectCreateInfo();
 
+    pInfo->immedInfo.inputAssemblyState.patchControlPoints = libInfo.immedInfo.inputAssemblyState.patchControlPoints;
+
     pInfo->pipeline.rsState            = libInfo.pipeline.rsState;
     pInfo->pipeline.viewportInfo       = libInfo.pipeline.viewportInfo;
 
@@ -1474,11 +1476,6 @@ static void BuildVertexInputInterfaceState(
         pInfo->immedInfo.inputAssemblyState.primitiveRestartIndex  = 0xFFFFFFFF;
         pInfo->immedInfo.inputAssemblyState.topology               = VkToPalPrimitiveTopology(pIa->topology);
 
-        if (pIn->pTessellationState != nullptr)
-        {
-            pInfo->immedInfo.inputAssemblyState.patchControlPoints = pIn->pTessellationState->patchControlPoints;
-        }
-
         pInfo->pipeline.iaState.vertexBufferCount = pVbInfo->bindingTableSize;
 
         pInfo->pipeline.iaState.topologyInfo.primitiveType = VkToPalPrimitiveType(pIa->topology);
@@ -1505,6 +1502,15 @@ static void BuildPreRasterizationShaderState(
     const uint32_t                      dynamicStateFlags,
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
+    if (pIn->pTessellationState != nullptr)
+    {
+        pInfo->immedInfo.inputAssemblyState.patchControlPoints = pIn->pTessellationState->patchControlPoints;
+    }
+    else
+    {
+        pInfo->immedInfo.inputAssemblyState.patchControlPoints = 0;
+    }
+
     // Build states via VkPipelineRasterizationStateCreateInfo
     BuildRasterizationState(pDevice, pIn->pRasterizationState, dynamicStateFlags, pInfo);
 

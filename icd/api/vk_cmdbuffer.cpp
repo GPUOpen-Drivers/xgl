@@ -563,7 +563,7 @@ CmdBuffer::CmdBuffer(
     // If supportSplitReleaseAcquire is true, the ASIC provides split CmdRelease() and CmdAcquire() to express barrier,
     // and CmdReleaseThenAcquire() is still valid. This flag is currently enabled for gfx10 and above.
     m_flags.useReleaseAcquire       = info.gfxipProperties.flags.supportReleaseAcquireInterface &&
-                                      settings.useReleaseAcquireInterface;
+                                      settings.useAcquireReleaseInterface;
     m_flags.useSplitReleaseAcquire  = m_flags.useReleaseAcquire &&
                                       info.gfxipProperties.flags.supportSplitReleaseAcquire;
 }
@@ -5203,12 +5203,10 @@ void CmdBuffer::WaitEvents(
         // We intentionally ignore the source stage flags (srcStagemask) as they are irrelevant in the
         // presence of event objects
 
-        barrier.flags.u32All          = 0;
         barrier.reason                = RgpBarrierExternalCmdWaitEvents;
         barrier.waitPoint             = VkToPalWaitPipePoint(dstStageMask);
         barrier.gpuEventWaitCount     = eventCount;
         barrier.ppGpuEvents           = ppGpuEvents;
-        barrier.pSplitBarrierGpuEvent = nullptr;
 
         ExecuteBarriers(&virtStackFrame,
                         memoryBarrierCount,
@@ -5400,12 +5398,10 @@ void CmdBuffer::WaitEventsSync2ToSync1(
 
             Pal::BarrierInfo barrier = {};
 
-            barrier.flags.u32All          = 0;
             barrier.reason                = RgpBarrierExternalCmdWaitEvents;
             barrier.waitPoint             = VkToPalWaitPipePoint(dstStageMask);
             barrier.gpuEventWaitCount     = eventCount;
             barrier.ppGpuEvents           = ppGpuEvents;
-            barrier.pSplitBarrierGpuEvent = nullptr;
 
             ExecuteBarriers(&virtStackFrame,
                             pThisDependencyInfo->memoryBarrierCount,
@@ -6071,7 +6067,6 @@ void CmdBuffer::PipelineBarrier(
         // Tell PAL to wait at a specific point until the given set of pipeline events has been signaled (this version
         // does not use GpuEvent objects).
         barrier.reason       = RgpBarrierExternalCmdPipelineBarrier;
-        barrier.flags.u32All = 0;
         barrier.waitPoint    = VkToPalWaitPipePoint(destStageMask);
 
         // Collect signal pipe points.
@@ -6079,7 +6074,6 @@ void CmdBuffer::PipelineBarrier(
 
         barrier.pipePointWaitCount      = VkToPalSrcPipePoints(srcStageMask, pipePoints);
         barrier.pPipePoints             = pipePoints;
-        barrier.pSplitBarrierGpuEvent   = nullptr;
 
         ExecuteBarriers(&virtStackFrame,
                         memBarrierCount,
@@ -6205,7 +6199,6 @@ void CmdBuffer::PipelineBarrierSync2ToSync1(
     // Tell PAL to wait at a specific point until the given set of pipeline events has been signaled (this version
     // does not use GpuEvent objects).
     barrier.reason       = RgpBarrierExternalCmdPipelineBarrier;
-    barrier.flags.u32All = 0;
     barrier.waitPoint    = VkToPalWaitPipePoint(dstStageMask);
 
     // Collect signal pipe points.
@@ -6213,7 +6206,6 @@ void CmdBuffer::PipelineBarrierSync2ToSync1(
 
     barrier.pipePointWaitCount      = VkToPalSrcPipePoints(srcStageMask, pipePoints);
     barrier.pPipePoints             = pipePoints;
-    barrier.pSplitBarrierGpuEvent   = nullptr;
 
     ExecuteBarriers(&virtStackFrame,
                     pDependencyInfo->memoryBarrierCount,
@@ -6361,7 +6353,6 @@ void CmdBuffer::FillTimestampQueryPool(
         Pal::CoherTimestamp;    // vkCmdWriteTimestamp (CmdWriteTimestamp)
 
     static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
-    static const Pal::BarrierFlags flags = {};
 
     // Wait for any timestamp query pool events to complete prior to filling memory
     {
@@ -6374,7 +6365,6 @@ void CmdBuffer::FillTimestampQueryPool(
 
         static const Pal::BarrierInfo Barrier =
         {
-            flags,                                  // flags
             Pal::HwPipeTop,                         // waitPoint
             1,                                      // pipePointWaitCount
             &pipePoint,                             // pPipePoints
@@ -6386,7 +6376,6 @@ void CmdBuffer::FillTimestampQueryPool(
             &Transition,                            // pTransitions
             0,                                      // globalSrcCacheMask
             0,                                      // globalDstCacheMask
-            nullptr,                                // pSplitBarrierGpuEvent
             RgpBarrierInternalPreResetQueryPoolSync // reason
         };
 
@@ -6428,7 +6417,6 @@ void CmdBuffer::FillTimestampQueryPool(
 
         static const Pal::BarrierInfo Barrier =
         {
-            flags,                                   // flags
             Pal::HwPipeTop,                          // waitPoint
             1,                                       // pipePointWaitCount
             &pipePoint,                              // pPipePoints
@@ -6440,7 +6428,6 @@ void CmdBuffer::FillTimestampQueryPool(
             &Transition,                             // pTransitions
             0,                                       // globalSrcCacheMask
             0,                                       // globalDstCacheMask
-            nullptr,                                 // pSplitBarrierGpuEvent
             RgpBarrierInternalPostResetQueryPoolSync // reason
         };
 
@@ -6839,11 +6826,9 @@ void CmdBuffer::QueryCopy(
         };
 
         static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
-        static const Pal::BarrierFlags PalBarrierFlags = {};
 
         static const Pal::BarrierInfo WriteWaitIdle =
         {
-            PalBarrierFlags,                                // flags
             Pal::HwPipePreCs,                               // waitPoint
             1,                                              // pipePointWaitCount
             &pipePoint,                                     // pPipePoints
@@ -6855,7 +6840,6 @@ void CmdBuffer::QueryCopy(
             &transition,                                    // pTransitions
             0,                                              // globalSrcCacheMask
             0,                                              // globalDstCacheMask
-            nullptr,                                        // pSplitBarrierGpuEvent
             RgpBarrierInternalPreCopyQueryPoolResultsSync   // reason
         };
 
@@ -7381,11 +7365,9 @@ void CmdBuffer::RPSyncPostLoadOpColorClear()
         {}
     };
 
-    constexpr Pal::BarrierFlags NullFlags   = {};
     static const Pal::HwPipePoint PipePoint = Pal::HwPipePostBlt;
     static const Pal::BarrierInfo Barrier   =
     {
-        NullFlags,                          // flags
         Pal::HwPipePreRasterization,        // waitPoint
         1,                                  // pipePointWaitCount
         &PipePoint,                         // pPipePoints
@@ -7397,7 +7379,6 @@ void CmdBuffer::RPSyncPostLoadOpColorClear()
         &transition,                        // pTransitions
         0,                                  // globalSrcCacheMask
         0,                                  // globalDstCacheMask
-        nullptr,                            // pSplitBarrierGpuEvent
         RgpBarrierExternalRenderPassSync    // reason
     };
 

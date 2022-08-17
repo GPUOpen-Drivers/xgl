@@ -263,6 +263,8 @@ function(xgl_compiler_options TARGET)
 
             # Do not set errno after calling math functions that are executed with a single instruction
             -fno-math-errno
+
+            -fms-extensions
         >)
 
         if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -271,7 +273,6 @@ function(xgl_compiler_options TARGET)
                 -fdiagnostics-color=always
                 -fno-threadsafe-statics
                 -fmerge-all-constants
-                -fms-extensions
             )
         elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
             target_compile_options(${TARGET} PRIVATE

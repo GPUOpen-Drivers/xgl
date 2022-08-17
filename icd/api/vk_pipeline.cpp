@@ -230,6 +230,7 @@ VkResult Pipeline::BuildShaderStageInfo(
             }
 
             const Pal::ShaderHash codeHash = ShaderModule::BuildCodeHash(pCode, codeSize);
+
             PipelineBinaryCache* pBinaryCache = (pCache == nullptr) ? nullptr : pCache->GetPipelineCache();
 
             result = pCompiler->BuildShaderModule(

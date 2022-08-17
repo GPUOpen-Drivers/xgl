@@ -302,14 +302,10 @@ static uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLayout image
                           (imageLayout == VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR)) ?
                           Pal::CoherPresent : 0);
 
-    if (accessMask & VK_ACCESS_SHADER_WRITE_BIT)
+    if (accessMask & (VK_ACCESS_SHADER_WRITE_BIT                     |
+                      VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR))
     {
         cacheMask = Pal::CoherShaderWrite;
-    }
-
-    if (accessMask & VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR)
-    {
-        cacheMask |= Pal::CoherShaderWrite;
     }
 
     if (accessMask & VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
@@ -338,12 +334,8 @@ static uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLayout image
         cacheMask |= Pal::CoherMemory | ImageLayoutToCacheMask(imageLayout);
     }
 
-    if (accessMask & VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT)
-    {
-        cacheMask |= Pal::CoherStreamOut;
-    }
-
-    if (accessMask & VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT)
+    if (accessMask & (VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT |
+                      VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT))
     {
         cacheMask |= Pal::CoherStreamOut;
     }

@@ -46,6 +46,16 @@ namespace allocator
 
 extern const VkAllocationCallbacks g_DefaultAllocCallback;
 
+void* VKAPI_PTR DefaultAllocFunc(
+    void*                                   pUserData,
+    size_t                                  size,
+    size_t                                  alignment,
+    VkSystemAllocationScope                 allocType);
+
+void VKAPI_PTR DefaultFreeFunc(
+    void*                                   pUserData,
+    void*                                   pMem);
+
 void* PAL_STDCALL PalAllocFuncDelegator(
     void*                                   pClientData,
     size_t                                  size,

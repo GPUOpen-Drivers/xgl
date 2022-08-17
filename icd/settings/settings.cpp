@@ -191,7 +191,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (pInfo->gfxLevel <= Pal::GfxIpLevel::GfxIp9)
         {
-            m_settings.useReleaseAcquireInterface = false;
+            m_settings.useAcquireReleaseInterface = false;
         }
 
         // In general, DCC is very beneficial for color attachments, 2D, 3D shader storage resources that have BPP>=32.
@@ -358,7 +358,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (((appProfile == AppProfile::WolfensteinII) ||
              (appProfile == AppProfile::WolfensteinYoungblood) ||
              (appProfile == AppProfile::Doom)) &&
-            (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1))
+            ((pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1) ||
+             (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)))
         {
             m_settings.asyncComputeQueueMaxWavesPerCu = 20;
             m_settings.nggSubgroupSizing = NggSubgroupExplicit;
@@ -653,7 +654,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         }
 
-        if (appProfile == AppProfile::Rage2 || appProfile == AppProfile::ApexEngine)
+        if (appProfile == AppProfile::Rage2)
         {
             //PM4 optimizations give us another 1.5% perf increase
             m_settings.optimizeCmdbufMode = OptimizeCmdbufMode::EnableOptimizeCmdbuf;
@@ -696,6 +697,16 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                              ForceDccFor3DShaderStorage |
                                              ForceDccFor32BppShaderStorage |
                                              ForceDccFor64BppShaderStorage);
+
+                if (pInfo->revision == Pal::AsicRevision::Navi21)
+                {
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+
+                    m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                                                  ForceDccForColorAttachments |
+                                                  ForceDccForNonColorAttachmentShaderStorage);
+                }
             }
         }
 
@@ -761,48 +772,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.modifyResourceKeyForAppProfile = true;
             m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
 
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
-            {
-                m_settings.dccBitsPerPixelThreshold = 1;
-            }
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
-            {
-                //  Doom Eternal performs better when DCC is not forced on. 2% gain on 4k.
-                m_settings.forceEnableDcc = ForceDccDefault;
-
-                // Doom Eternal performs better with NGG disabled (3% gain on 4k), likely because idTech runs it's own
-                // triangle culling and there are no options in the game to turn it off making NGG somewhat redundant.
-                m_settings.enableNgg = false;
-            }
-
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.asyncComputeQueueMaxWavesPerCu = 20;
-
-                m_settings.enableWgpMode = 0x20;
-                m_settings.csWaveSize = 64;
-                m_settings.fsWaveSize = 64;
-
-                if (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false)
-                {
-                    m_settings.resourceBarrierOptions = ResourceBarrierOptions::SkipDstCacheInv;
-                }
-            }
-            // Mall no alloc settings give a ~1% gain
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-                m_settings.enableWgpMode = 0x20;
-            }
-
-            if (pInfo->gpuType == Pal::GpuType::Discrete)
-            {
-                m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
-                m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
-            }
-
             // PM4 optimizations give us 1% gain
             m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
 
@@ -817,6 +786,61 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.backgroundFullscreenIgnorePresentErrors = true;
 
             m_settings.implicitExternalSynchronization = false;
+
+            if (pInfo->gpuType == Pal::GpuType::Discrete)
+            {
+                m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
+                m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
+            }
+
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
+            {
+                m_settings.dccBitsPerPixelThreshold = 1;
+            }
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            {
+                //  Doom Eternal performs better when DCC is not forced on. 2% gain on 4k.
+                m_settings.forceEnableDcc = ForceDccDefault;
+
+                // Doom Eternal performs better with NGG disabled (3% gain on 4k), likely because idTech runs it's own
+                // triangle culling and there are no options in the game to turn it off making NGG somewhat redundant.
+                m_settings.enableNgg = false;
+            }
+
+            if ((pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1) ||
+                (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3))
+            {
+                m_settings.asyncComputeQueueMaxWavesPerCu = 20;
+
+                m_settings.enableWgpMode = 0x20;
+                m_settings.csWaveSize = 64;
+                m_settings.fsWaveSize = 64;
+            }
+
+            if ((pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1) &&
+                (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false))
+            {
+                m_settings.resourceBarrierOptions = ResourceBarrierOptions::SkipDstCacheInv;
+            }
+
+            // Mall no alloc settings give a ~1% gain
+            if ((pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+                )
+            {
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+                m_settings.enableWgpMode = 0x20;
+            }
+
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.forceEnableDcc = (ForceDccForColorAttachments |
+                                             ForceDccFor2DShaderStorage |
+                                             ForceDccFor3DShaderStorage |
+                                             ForceDccFor64BppShaderStorage);
+            }
+
         }
 
         if (appProfile == AppProfile::IdTechLauncher)
@@ -902,32 +926,33 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
-        if ((appProfile == AppProfile::SniperElite5) &&
-            (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3))
+        if (appProfile == AppProfile::SniperElite5)
         {
-            m_settings.csWaveSize = 64;
-            m_settings.fsWaveSize = 64;
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.csWaveSize = 64;
+                m_settings.fsWaveSize = 64;
 
-            if (pInfo->revision == Pal::AsicRevision::Navi21)
-            {
-                m_settings.pipelineBinningMode = PipelineBinningModeDisable;
-            }
-
-            if (pInfo->revision == Pal::AsicRevision::Navi22)
-            {
-                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
-                                             ForceDccFor32BppShaderStorage);
-            }
-            else if (pInfo->revision == Pal::AsicRevision::Navi23)
-            {
-                m_settings.pipelineBinningMode = PipelineBinningModeDisable;
-            }
-            else if (pInfo->revision == Pal::AsicRevision::Navi24)
-            {
-                m_settings.pipelineBinningMode    = PipelineBinningModeDisable;
-                m_settings.mallNoAllocCtPolicy    = MallNoAllocCtAsSnsr;
-                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                m_settings.mallNoAllocSsrPolicy   = MallNoAllocSsrAsSnsr;
+                if (pInfo->revision == Pal::AsicRevision::Navi21)
+                {
+                    m_settings.pipelineBinningMode = PipelineBinningModeDisable;
+                }
+                else if (pInfo->revision == Pal::AsicRevision::Navi22)
+                {
+                    m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                                 ForceDccFor32BppShaderStorage);
+                }
+                else if (pInfo->revision == Pal::AsicRevision::Navi23)
+                {
+                    m_settings.pipelineBinningMode = PipelineBinningModeDisable;
+                }
+                else if (pInfo->revision == Pal::AsicRevision::Navi24)
+                {
+                    m_settings.pipelineBinningMode = PipelineBinningModeDisable;
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+                }
             }
         }
 

@@ -43,10 +43,19 @@ VkResult PrivateDataSlotEXT::Create(
 {
     PrivateDataSlotEXT*          pPrivate = nullptr;
     VkResult                     vkResult = VK_SUCCESS;
+    void*                        pMemory  = nullptr;
 
-    void* pMemory = pDevice->AllocApiObject(
-                        pAllocator,
-                        sizeof(PrivateDataSlotEXT));
+    if (pDevice->GetPrivateDataSize() != 0)
+    {
+        pMemory = pDevice->AllocApiObject(
+            pAllocator,
+            sizeof(PrivateDataSlotEXT));
+    }
+    else
+    {
+        // Feature privateData has not been enabled
+        VK_ASSERT(pDevice->GetPrivateDataSize() != 0);
+    }
 
     if (pMemory != nullptr)
     {

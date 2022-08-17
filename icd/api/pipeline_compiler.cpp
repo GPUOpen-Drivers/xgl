@@ -604,7 +604,7 @@ VkResult PipelineCompiler::BuildShaderModule(
         if (compilerMask & (1 << PipelineCompilerTypeLlpc))
         {
             result = m_compilerSolutionLlpc.BuildShaderModule(
-                pDevice, flags, codeSize, pCode, adaptForFastLink, pShaderModule, stableHash);
+                pDevice, flags, codeSize, pCode, adaptForFastLink, pShaderModule, PipelineOptimizerKey{});
         }
 
         StoreShaderModuleToCache(pDevice, flags, compilerMask, uniqueHash, pBinaryCache, pShaderModule);
@@ -2726,6 +2726,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 
     pCreateInfo->pipelineInfo.cs.pModuleData =
         ShaderModule::GetFirstValidShaderData(pShaderInfo->stage.pModuleHandle);
+
     pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pShaderInfo->stage.pSpecializationInfo;
     pCreateInfo->pipelineInfo.cs.pEntryTarget        = pShaderInfo->stage.pEntryPoint;
     pCreateInfo->pipelineInfo.cs.entryStage          = Vkgc::ShaderStageCompute;

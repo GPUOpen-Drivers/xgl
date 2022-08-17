@@ -67,7 +67,7 @@ public:
         const void*                  pCode,
         const bool                   adaptForFastLink,
         ShaderModuleHandle*          pShaderModule,
-        const Util::MetroHash::Hash& hash) override;
+        const PipelineOptimizerKey&  profileKey) override;
 
     virtual void TryEarlyCompileShaderModule(
         const Device*       pDevice,

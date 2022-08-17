@@ -24,468 +24,496 @@
  #
  #######################################################################################################################
 
-from queue import Empty
-import sys
-import os
-import json
-import argparse
-import warnings
-import textwrap
-from itertools import chain
-from shaderProfileTemplate import *
+"""
+xlg helper script to generate shader profiles.
+"""
 
-outputFile     = "g_shader_profile"
-configFileName = "profile.json"
-headerFileName = outputFile + ".h"
-sourceFileName = outputFile + ".cpp"
+import json
+import os
+import sys
+import textwrap
+import warnings
+from itertools import chain
+
+from shaderProfileTemplate import SHADER_PATTERN, ENTRIES_TEMPLATE, SHADER_ACTION, BRANCHES, PIPELINE_ACTION, \
+    INCREMENT_ENTRY_TEMPLATE, ENTRY_COUNT_TEMPLATE, UNINITIALIZED_VAR_TEMPLATE, INITIALIZED_VAR_TEMPLATE, \
+    ValidKeysForEntity, STRUCT_TEMPLATE, UNION_TEMPLATE, BIT_FIELD_VAR_TEMPLATE, INITIALIZED_ARR_TEMPLATE, \
+    CONDITION_SHADER_MATCH_PATTERN, PROFILE_ENTRY_PATTERN_TO_JSON_FUNC, CONDITION_CREATE_INFO_APPLY, \
+    PROFILE_ENTRY_ACTION_TO_JSON_FUNC, CONDITION_SHADER_CREATE_APPLY, CONDITION_SHADER_CREATE_TUNING_OPTIONS, \
+    SHADER_CREATE_TUNING_OPTIONS_BOOLEAN_TEMPLATE, UNINITALIZED_ARR_TEMPLATE, PARSE_JSON_SHADER_TUNING_FLAGS_FUNC, \
+    PARSE_JSON_SHADER_TUNING_OPTIONS_FUNC, CONDITION_PARSE_JSON_PROFILE_ENTRY_RUNTIME,\
+    PARSE_JSON_PROFILE_ENTRY_PATTERN_TEMPLATE, PARSE_JSON_PROFILE_ENTRY_PATTERN_FUNC, \
+    PARSE_JSON_PROFILE_ENTRY_RUNTIME_FUNC, PARSE_JSON_PROFILE_ENTRY_ACTION_TEMPLATE, \
+    PARSE_JSON_PROFILE_ENTRY_ACTION_FUNC, PARSE_JSON_PROFILE_PATTERN_SHADER_FUNC, TypeValues, \
+    PARSE_JSON_PROFILE_ACTION_SHADER_FUNC, BuildTypesTemplate, HEADER_FILE_DOX_COMMENT, AppProfileHeaderFilePath, \
+    FUNC_DEC_SET_APP_PROFILE, GENERIC_ASIC_APP_PROFILE, CONDITION_ASIC, GENERIC_GFX_IP_APP_PROFILE, \
+    SET_APP_PROFILE_FUNC, CONDITION_GFX_IP, CONDITION_GAME_TITLE, FUNC_DEC_JSON_READER, FUNC_DEC_JSON_WRITER, \
+    FUN_DEC_CLASS_SHADER_PROFILE_PUBLIC, FUNC_DEC_PARSE_JSON_PROFILE, FUNC_DEC_BUILD_APP_PROFILE_LLPC, \
+    BUILD_APP_PROFILE_LLPC_FUNC, JSON_WRITER_GENERIC_DEF, JSON_READER_GENERIC_DEF, NAMESPACE_VK, CPP_INCLUDE, \
+    CopyrightAndWarning, CONDITION_DYNAMIC_SHADER_INFO_APPLY, CLASS_TEMPLATE, ShaderTuningStructsAndVars, \
+    HEADER_INCLUDES, PARSE_DWORD_ARRAY_FUNC
+
+OUTPUT_FILE = "g_shader_profile"
+CONFIG_FILE_NAME = "profile.json"
+HEADER_FILE_NAME = OUTPUT_FILE + ".h"
+SOURCE_FILE_NAME = OUTPUT_FILE + ".cpp"
 
 ###################################################################################################################
 # Functions to parse app profiles from JSON files and convert to C++ structures and functions (AT COMPILE TIME)
 ###################################################################################################################
 
-# Parses stage patterns from the input json file and fetches code template from shaderProfileTemplate.py
-def parseJsonProfilePatternShader(shaderPatterns):
-    success = checkValidKeys(shaderPatterns, SHADER_PATTERN)
-    codeShaderPattern = ""
+def parse_json_profile_pattern_shader(shader_patterns: dict) -> (bool, str):
+    """
+    Parses stage patterns from the input json file and fetches code template from shaderProfileTemplate.py.
+    :param shader_patterns: The input json.
+    :return: A bool indicating if the parsing succeeded, and the parsed pattern.
+    """
+    success = check_valid_keys(shader_patterns, SHADER_PATTERN)
+    code_shader_pattern = ""
 
     if success:
-        for shaderPatternKey, shaderPatternValue in shaderPatterns.items():
+        for shader_pattern_key, shader_pattern_value in shader_patterns.items():
 
-            if type(shaderPatternValue) in SHADER_PATTERN[shaderPatternKey]["type"]:
+            if type(shader_pattern_value) in SHADER_PATTERN[shader_pattern_key]["type"]:
                 success &= True
 
             else:
                 success &= False
+                # pylint: disable=consider-using-f-string
                 warnings.warn("********** Warning: Type Mismatch for shader_pattern **********\n"
                               "Parsed Stage Pattern key: {0}\n"
                               "Parsed Stage Pattern value: {1}\n"
                               "Parsed Stage Pattern value type: {2}\n"
-                              "Expected value type: {3}\n".format(shaderPatternKey,
-                                                                  shaderPatternValue,
-                                                                  type(shaderPatternValue),
-                                                                  ENTRIES_TEMPLATE["entries"]["pattern"][shaderPatternKey]["type"]))
+                              "Expected value type: {3}\n".format(shader_pattern_key,
+                                                                  shader_pattern_value,
+                                                                  type(shader_pattern_value),
+                                                                  ENTRIES_TEMPLATE["entries"]["pattern"][
+                                                                      shader_pattern_key]["type"]))
 
-            cppCode = SHADER_PATTERN[shaderPatternKey]["codeTemplate"]
-            if shaderPatternKey == "stageActive":
-                cppCode = cppCode.replace("%Value%", str(shaderPatternValue).lower())
+            cpp_code = SHADER_PATTERN[shader_pattern_key]["codeTemplate"]
+            if shader_pattern_key == "stageActive":
+                cpp_code = cpp_code.replace("%Value%", str(shader_pattern_value).lower())
 
-            elif shaderPatternKey == "stageInactive":
-                cppCode = cppCode.replace("%Value%", str(shaderPatternValue).lower())
+            elif shader_pattern_key == "stageInactive":
+                cpp_code = cpp_code.replace("%Value%", str(shader_pattern_value).lower())
 
-            elif shaderPatternKey == "codeHash":
-                codeHash = str(shaderPatternValue).split(' ')
-                valueUpper = (codeHash[0][2:]).zfill(16).upper()
-                valueLower = codeHash[1].zfill(16).upper()
-                cppCode = cppCode.replace("%valueLower%", valueLower)
-                cppCode = cppCode.replace("%valueUpper%", valueUpper)
+            elif shader_pattern_key == "codeHash":
+                code_hash = str(shader_pattern_value).split(' ')
+                value_upper = (code_hash[0][2:]).zfill(16).upper()
+                value_lower = code_hash[1].zfill(16).upper()
+                cpp_code = cpp_code.replace("%valueLower%", value_lower)
+                cpp_code = cpp_code.replace("%valueUpper%", value_upper)
 
-            elif shaderPatternKey == "codeSizeLessThan":
-                cppCode = cppCode.replace("%Value%", str(shaderPatternValue).lower())
+            elif shader_pattern_key == "codeSizeLessThan":
+                cpp_code = cpp_code.replace("%Value%", str(shader_pattern_value).lower())
 
-            codeShaderPattern = codeShaderPattern + cppCode
+            code_shader_pattern = code_shader_pattern + cpp_code
 
-        return success, codeShaderPattern
+        return success, code_shader_pattern
 
-    else:
-        print("************Parsing failed****************")
-        return success, codeShaderPattern
+    print("************Parsing failed****************")
+    return success, code_shader_pattern
 
-# Parses patterns from the input json file and fetches code template from shaderProfileTemplate.py
-def parseJsonProfileEntryPattern(pattern):
-    success = checkValidKeys(pattern, ENTRIES_TEMPLATE["entries"]["pattern"])
-    codePattern = ""
+def parse_json_profile_entry_pattern(pattern: dict):
+    """
+    Parses patterns from the input json file and fetches code template from shaderProfileTemplate.py.
+    :param pattern: The input json.
+    :return: A bool indicating if the parsing succeeded, and the parsed pattern.
+    """
+    success = check_valid_keys(pattern, ENTRIES_TEMPLATE["entries"]["pattern"])
+    code_pattern = ""
     if success:
-        for patternKey, patternValue in pattern.items():
-            cppCode = ""
-            if type(patternValue) in ENTRIES_TEMPLATE["entries"]["pattern"][patternKey]["type"]:
+        for pattern_key, pattern_value in pattern.items():
+            cpp_code = ""
+            if type(pattern_value) in ENTRIES_TEMPLATE["entries"]["pattern"][pattern_key]["type"]:
                 success &= True
             else:
                 success &= False
+                # pylint: disable=consider-using-f-string
                 warnings.warn("********** Warning: Type Mismatch for pattern **********\n"
                               "Parsed Pattern key: {0}\n"
                               "Parsed Pattern value: {1}\n"
                               "Parsed Pattern value type: {2}\n"
-                              "Expected value type: {3}\n".format(patternKey,
-                                                                  patternValue,
-                                                                  type(patternValue),
-                                                                  ENTRIES_TEMPLATE["entries"]["pattern"][patternKey]["type"]))
+                              "Expected value type: {3}\n".format(pattern_key,
+                                                                  pattern_value,
+                                                                  type(pattern_value),
+                                                                  ENTRIES_TEMPLATE["entries"]["pattern"][pattern_key][
+                                                                      "type"]))
 
-            if patternKey in ["always",
+            if pattern_key in ["always",
                               "shaderOnly"]:
 
-                cppCode = ENTRIES_TEMPLATE["entries"]["pattern"][patternKey]["codeTemplate"]
-                cppCode = cppCode.replace("%Value%", str(patternValue).lower())
+                cpp_code = ENTRIES_TEMPLATE["entries"]["pattern"][pattern_key]["codeTemplate"]
+                cpp_code = cpp_code.replace("%Value%", str(pattern_value).lower())
 
-            elif patternKey in ["vs",
+            elif pattern_key in ["vs",
                                 "hs",
                                 "ds",
                                 "gs",
                                 "ps",
                                 "cs"]:
 
-                success, cppCode = parseJsonProfilePatternShader(patternValue)
-                shaderStage = ENTRIES_TEMPLATE["entries"]["pattern"][patternKey]["shaderStage"]
-                cppCode = cppCode.replace("%ShaderStage%", shaderStage)
+                success, cpp_code = parse_json_profile_pattern_shader(pattern_value)
+                shader_stage = ENTRIES_TEMPLATE["entries"]["pattern"][pattern_key]["shaderStage"]
+                cpp_code = cpp_code.replace("%ShaderStage%", shader_stage)
 
-            codePattern = codePattern + cppCode
+            if success is False:
+                return False, code_pattern
+            code_pattern = code_pattern + cpp_code
 
-        return success, codePattern
+        return success, code_pattern
 
-    else:
-        print("************ Parsing failed ****************")
-        return success, codePattern
+    print("************ Parsing failed ****************")
+    return success, code_pattern
 
-def parseJsonFlags(key, flags):
-    cppCode = ""
-    success = False
-    return success, cppCode
+def parse_json_flags(key, flags):
+    """
+    TODO.
+    :param key: TODO.
+    :param flags: TODO.
+    :return: TODO.
+    """
+    cpp_code = ""
+    return success, cpp_code
 
-# Parses stage actions from the input json file and fetches code template from shaderProfileTemplate.py.
-# Includes parsing options for
-# [
-#  'optStrategyFlags', 'optStrategyFlags2', 'vgprLimit', 'sgprLimit', 'ldsSpillLimitDwords',
-#  'maxArraySizeForFastDynamicIndexing',
-#  'userDataSpillThreshold', 'maxThreadGroupsPerComputeUnit', 'scOptions', 'scOptionsMask', 'trapPresent',
-#  'debugMode', 'allowReZ', 'shaderReplaceEnabled', 'fpControlFlags', 'optimizationIntent', 'disableLoopUnrolls',
-#  'enableSelectiveInline', 'maxOccupancyOptions', 'lowLatencyOptions', 'waveSize', 'wgpMode', 'waveBreakSize',
-#  'nggDisable', 'nggFasterLaunchRate', 'nggVertexReuse', 'nggEnableFrustumCulling', 'nggEnableBoxFilterCulling',
-#  'nggEnableSphereCulling', 'nggEnableBackfaceCulling', 'nggEnableSmallPrimFilter', 'enableSubvector',
-#  'enableSubvectorSharedVgprs', 'maxWavesPerCu', 'cuEnableMask', 'maxThreadGroupsPerCu', 'useSiScheduler',
-#  'reconfigWorkgroupLayout', 'forceLoopUnrollCount', 'enableLoadScalarizer', 'disableLicm', 'unrollThreshold'
-# ]
-def parseJsonProfileActionShader(shaderActions):
-    success = checkValidKeys(shaderActions, SHADER_ACTION)
-
-    result = {}
-    result['success'] = success
+def parse_json_profile_action_shader(shader_actions):
+    """
+    Parses stage actions from the input json file and fetches code template from shaderProfileTemplate.py.
+    Includes parsing options for
+    [
+        'optStrategyFlags', 'optStrategyFlags2', 'vgprLimit', 'sgprLimit', 'ldsSpillLimitDwords',
+        'maxArraySizeForFastDynamicIndexing',
+        'userDataSpillThreshold', 'maxThreadGroupsPerComputeUnit', 'scOptions', 'scOptionsMask', 'trapPresent',
+        'debugMode', 'allowReZ', 'shaderReplaceEnabled', 'fpControlFlags', 'optimizationIntent', 'disableLoopUnrolls',
+        'enableSelectiveInline', 'maxOccupancyOptions', 'lowLatencyOptions', 'waveSize', 'wgpMode', 'waveBreakSize',
+        'nggDisable', 'nggFasterLaunchRate', 'nggVertexReuse', 'nggEnableFrustumCulling', 'nggEnableBoxFilterCulling',
+        'nggEnableSphereCulling', 'nggEnableBackfaceCulling', 'nggEnableSmallPrimFilter', 'enableSubvector',
+        'enableSubvectorSharedVgprs', 'maxWavesPerCu', 'cuEnableMask', 'maxThreadGroupsPerCu', 'useSiScheduler',
+        'reconfigWorkgroupLayout', 'forceLoopUnrollCount', 'enableLoadScalarizer', 'disableLicm', 'unrollThreshold'
+    ]
+    :param shader_actions:
+    :return:
+    """
+    result_ret = {'success': check_valid_keys(shader_actions, SHADER_ACTION)}
 
     for branch in BRANCHES:
-        if branch not in result:
-            result[branch] = False
+        if branch not in result_ret:
+            result_ret[branch] = False
 
-    codeShaderAction = ""
+    code_shader_action = ""
 
-    if success:
-        for shaderActionKey, shaderActionValue in shaderActions.items():
-            cppCode = ""
-
-            if type(shaderActionValue) in SHADER_ACTION[shaderActionKey]["type"]:
-                success &= True
-
-            else:
-                success &= False
-                warnings.warn("********** Warning: Type Mismatch for shader action **********\n"
-                              "Parsed Stage Action Key: {0}\n"
-                              "Parsed Stage Action value: {1}\n"
-                              "Parsed Stage Action Value type: {2}\n"
-                              "Expected value type: {3}".format(shaderActionKey,
-                                                                shaderActionValue,
-                                                                type(shaderActionValue),
-                                                                SHADER_ACTION[shaderActionKey]["type"]))
-            result['success'] |= success
-
-            if shaderActionKey in BRANCHES:
-                if shaderActionKey == 'optStrategyFlags':
-                    result["optStrategyFlags"] = True
-                elif shaderActionKey == 'optStrategyFlags2':
-                    result["optStrategyFlags2"] = True
-                elif shaderActionKey == 'fpControlFlags':
-                    result["fpControlFlags"] = True
-                elif shaderActionKey == 'maxOccupancyOptions':
-                    result["maxOccupancyOptions"] = True
-                elif shaderActionKey == 'lowLatencyOptions':
-                    result["lowLatencyOptions"] = True
-
-            if (isinstance(shaderActionValue, int)  or
-                isinstance(shaderActionValue, list) or
-                isinstance(shaderActionValue, str)  or
-                isinstance(shaderActionValue, bool)):
-                if "codeTemplate" in SHADER_ACTION[shaderActionKey]:
-                    cppCode = SHADER_ACTION[shaderActionKey]["codeTemplate"]
-                else:
-                    cppCode = ""
-                    continue
-
-                if "%FieldName%" in cppCode:
-                    cppCode = cppCode.replace("%FieldName%", str(shaderActionKey))
-                if "%IntValue%" in cppCode:
-                    cppCode = cppCode.replace("%IntValue%", str(shaderActionValue).lower())
-                if "%EnumValue%" in cppCode:
-                    cppCode = cppCode.replace("%EnumValue%", str(SHADER_ACTION[shaderActionKey]["validValues"][shaderActionValue]))
-                if "%ListValue%" in cppCode:
-                    cppCode = cppCode.replace("%ListValue%", convertToArray(str(shaderActionValue)))
-                if "%StrValue%" in cppCode:
-                    cppCode = cppCode.replace("%StrValue%", str(shaderActionValue))
-                if "%BoolValue%" in cppCode:
-                    cppCode = cppCode.replace("%BoolValue%", str(shaderActionValue).lower())
-            else:
-                # should be a dictionary type
-                success, cppCode = parseJsonFlags(shaderActionKey, shaderActionValue)
-                result['success'] |= success
-
-            # wrap with directive only if the buildType dictionary does not contain only a compiler related build type
-            if "buildTypes" in SHADER_ACTION[shaderActionKey] \
-                and len(SHADER_ACTION[shaderActionKey]["buildTypes"]) != 0 \
-                and not isCompilerOnlyBuildType(SHADER_ACTION[shaderActionKey]["buildTypes"]):
-                cppCode = wrapWithDirective(cppCode, SHADER_ACTION[shaderActionKey]["buildTypes"])
-
-            codeShaderAction = codeShaderAction + cppCode
-        return result, codeShaderAction
-
-    else:
+    if not result_ret['success']:
         print("************Parsing failed****************")
-        return result, codeShaderAction
 
-# Parses actions from the input json file and fetches code template from shaderProfileTemplate.py
-def parseJsonProfileEntryAction(action):
-    result = {}
-    result['success'] = False
+        for key in shader_actions:
+            if key not in SHADER_ACTION:
+                raise ValueError("Failed to parse shader action : " + str(key))
 
-    for branch in BRANCHES:
-        if branch not in result:
-            result[branch] = False
+        return result_ret, code_shader_action
 
-    success = True
-    for actionKey in action:
-        if actionKey in ENTRIES_TEMPLATE["entries"]["action"]:
-            success &= True
-        elif actionKey in PIPELINE_ACTION:
-            success &= True
+    for shader_action_key, shader_action_value in shader_actions.items():
+        if not type(shader_action_value) in SHADER_ACTION[shader_action_key]["type"]:
+            result_ret['success'] = False
+            # pylint: disable=consider-using-f-string
+            warnings.warn("********** Error: Type Mismatch for shader action **********\n"
+                          "Parsed Stage Action Key: {0}\n"
+                          "Parsed Stage Action value: {1}\n"
+                          "Parsed Stage Action Value type: {2}\n"
+                          "Expected value type: {3}".format(shader_action_key,
+                                                            shader_action_value,
+                                                            type(shader_action_value),
+                                                            SHADER_ACTION[shader_action_key]["type"]))
+            raise ValueError("{0} is not {1} type with {2} value.".format(shader_action_key,
+                                                                          type(shader_action_value),
+                                                                          shader_action_value))
+
+        if shader_action_key in BRANCHES:
+            result_ret[shader_action_key] = True
+
+        if isinstance(shader_action_value, (bool, int, list, str)):
+            if "codeTemplate" in SHADER_ACTION[shader_action_key]:
+                cpp_code = SHADER_ACTION[shader_action_key]["codeTemplate"]\
+                    .replace("%FieldName%", str(shader_action_key)) \
+                    .replace("%IntValue%", str(shader_action_value).lower()) \
+                    .replace("%ListValue%", convert_to_array(str(shader_action_value))) \
+                    .replace("%StrValue%", str(shader_action_value)) \
+                    .replace("%BoolValue%", str(shader_action_value).lower())
+                # Need to special-case this, as otherwise the validValues field may not be present
+                if "%EnumValue%" in cpp_code:
+                    cpp_code = cpp_code.replace(
+                        "%EnumValue%", str(SHADER_ACTION[shader_action_key]["validValues"][shader_action_value])) \
+
+            else:
+                continue
         else:
-            success = False
+            # should be a dictionary type
+            success, cpp_code = parse_json_flags(shader_action_key, shader_action_value)
+            result_ret['success'] |= success
 
-    codeAction = ""
-    if success:
-        for actionKey, actionValue in action.items():
-            cppCode = ""
+        # wrap with directive only if the buildType dictionary does not contain only a compiler related build type
+        if "buildTypes" in SHADER_ACTION[shader_action_key] \
+                and len(SHADER_ACTION[shader_action_key]["buildTypes"]) != 0 \
+                and not is_compiler_only_build_type(SHADER_ACTION[shader_action_key]["buildTypes"]):
+            cpp_code = wrap_with_directive(cpp_code, SHADER_ACTION[shader_action_key]["buildTypes"])
 
-            if actionKey in ENTRIES_TEMPLATE["entries"]["action"]:
-                if type(actionValue) in ENTRIES_TEMPLATE["entries"]["action"][actionKey]["type"]:
-                    success &= True
-            elif actionKey in PIPELINE_ACTION:
-                if type(actionValue) in PIPELINE_ACTION[actionKey]["type"]:
-                    success &= True
-            else:
-                success &= False
-                warnings.warn("********** Warning: Type Mismatch for action **********\n")
+        code_shader_action = code_shader_action + cpp_code
+    return result_ret, code_shader_action
 
-            result['success'] |= success
-
-            if actionKey in [ "vs",
-                              "hs",
-                              "ds",
-                              "gs",
-                              "ps",
-                              "cs"]:
-                actionResult, cppCode = parseJsonProfileActionShader(actionValue)
-                success = actionResult['success']
-                result = actionResult
-                shaderStage = ENTRIES_TEMPLATE["entries"]["action"][actionKey]["shaderStage"]
-                cppCode = cppCode.replace("%ShaderStage%", shaderStage)
-
-            else:
-                if actionKey in PIPELINE_ACTION:
-                    cppCode = PIPELINE_ACTION[actionKey]["codeTemplate"]
-                    if "validValues" in PIPELINE_ACTION[actionKey]:
-                        value = PIPELINE_ACTION[actionKey]["validValues"][actionValue]
-                        cppCode = cppCode.replace("%EnumValue%", value)
-                    else:
-                        cppCode = cppCode.replace("%Value%", str(actionValue))
-
-            codeAction = codeAction + cppCode
-        return result, codeAction
-    else:
-        print("************ Parsing failed ****************")
-        return result, codeAction
-
-# Takes the entire json object as input, fetches corresponding code template from shaderProfileTemplate.py, manipulates
-# it according to tuning parameters present in the json file and finally returns a block of code that is going to reside
-# inside g_shader_profile.cpp . The block of code that is returned builds the shader profile in g_shader_profile.cpp
-def genProfile(dict, compiler, gfxip):
-    entries = dict["entries"]
-    entryCount = 0
-    cppCode = ""
-    result = {}
-    result['success'] = False
+def parse_json_profile_entry_action(action):
+    """
+    Parses actions from the input json file and fetches code template from shaderProfileTemplate.py
+    :param action:
+    :return:
+    """
+    result_ret = {'success': False}
 
     for branch in BRANCHES:
-        if branch not in result:
-            result[branch] = False
+        if branch not in result_ret:
+            result_ret[branch] = False
+
+    for action_key in action:
+        if not (action_key in ENTRIES_TEMPLATE["entries"]["action"] or action_key in PIPELINE_ACTION):
+            print("************ Parsing failed ****************")
+            return result_ret, ""
+
+    code_action = ""
+    for action_key, action_value in action.items():
+        cpp_code = ""
+
+        if not ((action_key in ENTRIES_TEMPLATE["entries"]["action"] and type(action_value) in
+                 ENTRIES_TEMPLATE["entries"]["action"][action_key]["type"]) or (
+                        action_key in PIPELINE_ACTION and type(action_value) in PIPELINE_ACTION[action_key]["type"])):
+            warnings.warn("********** Warning: Type Mismatch for action **********\n")
+            return result_ret, code_action
+
+        result_ret['success'] = True
+
+        if action_key in ["vs",
+                          "hs",
+                          "ds",
+                          "gs",
+                          "ps",
+                          "cs"]:
+            action_result, cpp_code = parse_json_profile_action_shader(action_value)
+            result_ret = action_result
+            shader_stage = ENTRIES_TEMPLATE["entries"]["action"][action_key]["shaderStage"]
+            cpp_code = cpp_code.replace("%ShaderStage%", shader_stage)
+
+        else:
+            if action_key in PIPELINE_ACTION:
+                cpp_code = PIPELINE_ACTION[action_key]["codeTemplate"]
+                if "validValues" in PIPELINE_ACTION[action_key]:
+                    value = PIPELINE_ACTION[action_key]["validValues"][action_value]
+                    cpp_code = cpp_code.replace("%EnumValue%", value)
+                else:
+                    cpp_code = cpp_code.replace("%Value%", str(action_value))
+
+        code_action = code_action + cpp_code
+    return result_ret, code_action
+
+def gen_profile(input_json, compiler, gfxip):
+    """
+    Takes the entire json object as input, fetches corresponding code template from shaderProfileTemplate.py,
+    manipulates it according to the tuning parameters present in the json file, and finally returns a block of code
+    that is going to reside inside g_shader_profile.cpp.
+    :param input_json:
+    :param compiler:
+    :param gfxip:
+    :return: Code to build the shader profile in g_shader_profile.cpp.
+    """
+    entries = input_json["entries"]
+    entry_count = 0
+    cpp_code = ""
+    result_ret = {'success': False}
+
+    for branch in BRANCHES:
+        if branch not in result_ret:
+            result_ret[branch] = False
 
     if len(entries) != 0:
         for entry in entries:
-            if checkValidKeys(entry, ENTRIES_TEMPLATE["entries"]):
+            if check_valid_keys(entry, ENTRIES_TEMPLATE["entries"]):
                 pattern = entry["pattern"]
                 action = entry["action"]
 
-                success, cppPattern = parseJsonProfileEntryPattern(pattern)
-                actionResult, cppAction = parseJsonProfileEntryAction(action)
-                for branch in actionResult:
-                    if actionResult[branch]:
-                        result[branch] = True
+                success, cpp_pattern = parse_json_profile_entry_pattern(pattern)
+                if not success:
+                    raise ValueError("JSON parsing failed")
+                action_result, cpp_action = parse_json_profile_entry_action(action)
+                for branch, result in action_result.items():
+                    if result:
+                        result_ret[branch] = True
 
                 if gfxip == "generic":
-                    cppCode = cppCode + IncrementEntryTemplate + cppPattern + cppAction + "\n"
-                    cppCode = cppCode.replace("%EntryNum%", 'i')
+                    cpp_code = cpp_code + INCREMENT_ENTRY_TEMPLATE + cpp_pattern + cpp_action + "\n"
+                    cpp_code = cpp_code.replace("%EntryNum%", 'i')
                 else:
-                    cppCode = cppCode + cppPattern + cppAction + "\n"
-                    cppCode = cppCode.replace("%EntryNum%", str(entryCount))
-                    entryCount = entryCount + 1
+                    cpp_code = cpp_code + cpp_pattern + cpp_action + "\n"
+                    cpp_code = cpp_code.replace("%EntryNum%", str(entry_count))
+                    entry_count = entry_count + 1
             else:
                 print("************ Parsing failed ****************")
 
         if gfxip == "generic":
-            entryCountTemplate = ""
+            entry_count_template = ""
         else:
-            entryCountTemplate = EntryCountTemplate.replace("%entryCount%", str(entryCount))
+            entry_count_template = ENTRY_COUNT_TEMPLATE.replace("%entryCount%", str(entry_count))
 
-        var = ""
-        varTemplate = ""
+        var_template = ""
 
         if gfxip == "generic":
-            var = InitializedVarTemplate.replace("%DataType%", 'uint32_t')
+            var = INITIALIZED_VAR_TEMPLATE.replace("%DataType%", 'uint32_t')
             var = var.replace("%VarName%", 'i')
             var = var.replace("%DefaultValue%", str(0))
-            varTemplate = varTemplate + var + "\n"
+            var_template = var_template + var + "\n"
 
-        cppCode = varTemplate + entryCountTemplate + cppCode
+        cpp_code = var_template + entry_count_template + cpp_code
 
-    return dedentAll(cppCode.rstrip("\n"))
+    return dedent_all(cpp_code.rstrip("\n"))
 
-# recursive function
-def createStructAndVarDefinitions(dictObjects, parent = None):
-    contentAll = ''
-    if not isinstance(dictObjects, list):
-       dictObjects = [dictObjects]
-    for dictObject in dictObjects:
+def create_struct_and_var_definitions(dict_objects, parent=None):
+    """
+    recursive function
+    :param dict_objects:
+    :param parent:
+    :return:
+    """
+    content_all = ''
+    if not isinstance(dict_objects, list):
+        dict_objects = [dict_objects]
+    for dict_object in dict_objects:
         content = ''
-        for key, value in dictObject.items():
+        for key, value in dict_object.items():
             if "entityInfo" in value:
                 # fetch entityInfo with the given parent name
-                value = retrieveEntityInfo(value, parent)
+                value = retrieve_entity_info(value, parent)
                 if not value:
                     continue
 
             if "entity" in value:
-                success = checkValidKeys(ValidKeysForEntity[value["entity"]], value)
+                success = check_valid_keys(ValidKeysForEntity[value["entity"]], value)
                 template = ''
                 if success:
                     if value["entity"] == "struct":
                         if value["structName"] != "":
-                            template = StructTemplate.replace("%StructName%", " " + value["structName"])
+                            template = STRUCT_TEMPLATE.replace("%StructName%", " " + value["structName"])
                         else:
-                            template = StructTemplate.replace("%StructName%", value["structName"])
+                            template = STRUCT_TEMPLATE.replace("%StructName%", value["structName"])
 
                         template = template.replace("%StructObj%", value["objectName"])
                         if value["buildTypes"]:
-                            template = wrapWithDirective(template, value["buildTypes"])
+                            template = wrap_with_directive(template, value["buildTypes"])
                         if value["child"]:
-                            structBody = createStructAndVarDefinitions(value["child"], parent=key)
+                            struct_body = create_struct_and_var_definitions(value["child"], parent=key)
                         else:
-                            structBody = ''
+                            struct_body = ''
 
-                        template = template.replace("%StructDefs%", indent(structBody))
+                        template = template.replace("%StructDefs%", indent(struct_body))
 
                     if value["entity"] == "union":
                         if value["unionName"] != "":
-                            template = StructTemplate.replace("%UnionName%", " " + value["unionName"])
+                            template = STRUCT_TEMPLATE.replace("%UnionName%", " " + value["unionName"])
                         else:
-                            template = UnionTemplate.replace("%UnionName%", value["unionName"])
+                            template = UNION_TEMPLATE.replace("%UnionName%", value["unionName"])
 
                         template = template.replace("%UnionObj%", value["objectName"])
                         if value["buildTypes"]:
-                            template = wrapWithDirective(template, value["buildTypes"])
+                            template = wrap_with_directive(template, value["buildTypes"])
                         if value["child"]:
-                            unionBody = createStructAndVarDefinitions(value["child"], parent=key)
+                            union_body = create_struct_and_var_definitions(value["child"], parent=key)
                         else:
-                            unionBody = ''
+                            union_body = ''
 
-                        template = template.replace("%UnionDefs%", indent(unionBody))
+                        template = template.replace("%UnionDefs%", indent(union_body))
 
                     if value["entity"] == "var":
                         # Initialized Variable
                         if value["defaultValue"]:
-                            template = InitializedVarTemplate.replace("%DataType%", value["dataType"])
+                            template = INITIALIZED_VAR_TEMPLATE.replace("%DataType%", value["dataType"])
                             template = template.replace("%VarName%", value["varName"])
                             template = template.replace("%DefaultValue%", str(value["defaultValue"]))
                         # Uninitialized variable
                         else:
-                            template = UninitializedVarTemplate.replace("%DataType%", value["dataType"])
+                            template = UNINITIALIZED_VAR_TEMPLATE.replace("%DataType%", value["dataType"])
                             template = template.replace("%VarName%", value["varName"])
 
                         if value["buildTypes"]:
-                            template = wrapWithDirective(template, value["buildTypes"])
+                            template = wrap_with_directive(template, value["buildTypes"])
 
                     if value["entity"] == "bitField":
-                        template = BitFieldVarTemplate.replace("%DataType%", value["dataType"])
+                        template = BIT_FIELD_VAR_TEMPLATE.replace("%DataType%", value["dataType"])
                         template = template.replace("%VarName%", value["varName"])
                         template = template.replace("%DefaultValue%", str(value["defaultValue"]))
 
                         if value["buildTypes"]:
-                            template = wrapWithDirective(template, value["buildTypes"])
+                            template = wrap_with_directive(template, value["buildTypes"])
 
                     if value["entity"] == "array":
                         # initialized array
                         if value["arrayValue"]:
-                            template = InitializedArrTemplate.replace("%DataType%", value["dataType"])
+                            template = INITIALIZED_ARR_TEMPLATE.replace("%DataType%", value["dataType"])
                             template = template.replace("%VarName%", value["varName"])
                             template = template.replace("%ArrSize%", value["arraySize"])
                             template = template.replace("%ArrValue%", value["arrayValue"])
 
                         # Uninitialized array
                         else:
-                            template = UnInitializedArrTemplate.replace("%DataType%", value["dataType"])
+                            template = UNINITALIZED_ARR_TEMPLATE.replace("%DataType%", value["dataType"])
                             template = template.replace("%VarName%", value["varName"])
                             template = template.replace("%ArrSize%", value["arraySize"])
 
                         if value["buildTypes"]:
-                            template = wrapWithDirective(template, value["buildTypes"])
+                            template = wrap_with_directive(template, value["buildTypes"])
 
                     if "description" in value:
                         if "secured" in value:
-                            template = wrapWithComment(template, value["description"], value["secured"])
+                            template = wrap_with_comment(template, value["description"], value["secured"])
                         else:
-                            template = wrapWithComment(template, value["description"], "false")
+                            template = wrap_with_comment(template, value["description"], "false")
 
                     content = content + template
                 else:
                     print("************ Parsing failed ****************")
-        contentAll = contentAll + content
+        content_all = content_all + content
 
-    return contentAll.strip("\n")
+    return content_all.strip("\n")
 
-# Reads app_profile.h from its location in the driver, and parses the AppProfile Class to retrieve the names of game
-# titles and their build type. Returns a dictionary of the form
-#  {
-#   "released": {
-#     "gameTitles": [],
-#     "buildTypes": {"andType": []}
-#    },
-#  }
-def getGameTitles(filePath):
-    content = open(filePath).readlines()
-    tmpContent = None
-    appProfileContent = None
+def get_game_titles(file_path):
+    """
+    Reads app_profile.h from its location in the driver, and parses the AppProfile Class to retrieve the names of game
+    titles and their build type.
+    :param: file_path:
+    :return: A dictionary of the form
+    {
+        "released": {
+            "gameTitles": [],
+            "buildTypes": {"andType": []}
+        },
+    }
+    """
+    with open(file_path, encoding="utf-8") as file:
+        content = file.readlines()
+        app_profile_content = None
 
-    start = -1
-    for i, line in enumerate(content):
-        if line.startswith("enum class AppProfile"):
-            start = i + 1
-        elif ("};" in line) and (start >= 0):
-            appProfileContent = content[start:i]
-            break
+        start = -1
+        for i, line in enumerate(content):
+            if line.startswith("enum class AppProfile"):
+                start = i + 1
+            elif ("};" in line) and (start >= 0):
+                app_profile_content = content[start:i]
+                break
 
-    if appProfileContent is not None:
-        gameTitleInfo = {
+    if app_profile_content is not None:
+        game_title_info = {
             "released": {
                 "gameTitles": [],
                 "buildTypes": {"andType": []}
             }
         }
 
-        hasBuildType = False
+        has_build_type = False
         directive = ""
-        for i, title in enumerate(appProfileContent):
+        for i, title in enumerate(app_profile_content):
             title = title.replace("\n", "")
             title = title.replace(" ", "")
             title = title.replace(",", "")
@@ -500,275 +528,326 @@ def getGameTitles(filePath):
                 continue
 
             if "#if" in title:
-                hasBuildType = True
+                has_build_type = True
                 directive = title.strip("#if ")
-                gameTitleInfo[directive] = {
+                game_title_info[directive] = {
                     "gameTitles": [],
                     "buildTypes": {"andType": [directive]}
                 }
                 continue
 
-            elif ("#end" in title) or ("#else" in title):
-                hasBuildType = False
+            if ("#end" in title) or ("#else" in title):
+                has_build_type = False
                 continue
 
-            if hasBuildType:
-                gameTitleInfo[directive]["gameTitles"].append(title)
+            if has_build_type:
+                game_title_info[directive]["gameTitles"].append(title)
             else:
-                gameTitleInfo["released"]["gameTitles"].append(title)
+                game_title_info["released"]["gameTitles"].append(title)
 
-        return gameTitleInfo
+        return game_title_info
 
-    else:
-        return {}
+    return {}
 
 ###################################################################################################################
 # Build methods to dump Pipeline profile of a specific (currently running) app to a JSON file
 ###################################################################################################################
 
-def buildProfileEntryPatternToJson():
-    cppCode = ""
-    conditionStr = ""
+def build_profile_entry_pattern_to_json():
+    """
+    TODO.
+    :return: TODO.
+    """
+    condition_str = ""
     defs = ""
-    patternCount = 0
-    for pattern in SHADER_PATTERN:
-        if (patternCount < len(SHADER_PATTERN) - 1):
-            conditionStr = conditionStr + "shader.match." + pattern + " ||\n"
+    pattern_count = 0
+    for pattern, value in SHADER_PATTERN.items():
+        if pattern_count < len(SHADER_PATTERN) - 1:
+            condition_str = condition_str + "shader.match." + pattern + " ||\n"
         else:
-            conditionStr = conditionStr + "shader.match." + pattern
+            condition_str = condition_str + "shader.match." + pattern
 
-        defs = defs + ConditionShaderMatchPattern.replace("%Pattern%", pattern)
-        defs = defs.replace("%Defs%", SHADER_PATTERN[pattern]["jsonWriterTemplate"])
-        patternCount += 1
+        defs = defs + CONDITION_SHADER_MATCH_PATTERN.replace("%Pattern%", pattern)
+        defs = defs.replace("%Defs%", value["jsonWriterTemplate"])
+        pattern_count += 1
 
-    cppCode = ProfileEntryPatternToJsonFunc.replace("%Condition%", indent(conditionStr,times=3))
-    cppCode = cppCode.replace("%Defs%", indent(defs, times=3))
-    return cppCode
+    cpp_code = PROFILE_ENTRY_PATTERN_TO_JSON_FUNC.replace("%Condition%", indent(condition_str, times=3))
+    cpp_code = cpp_code.replace("%Defs%", indent(defs, times=3))
+    return cpp_code
 
-# Iterates over SHADER_ACTION but dumps only the keys/actions that are declared in ShaderTuningOptions, dynamicShaderInfo
-# and shaderCreate structures. This essentially means that this key in SHADER_ACTION should have at least one of these in
-# in the parent field in entityInfo
-def buildProfileEntryActionToJson():
-    cppCode = ""
-    for action in PIPELINE_ACTION:
-        conditionStr = ""
-        for entity in PIPELINE_ACTION[action]["entityInfo"]:
+def build_profile_entry_action_to_json():
+    """
+    Iterates over SHADER_ACTION but dumps only the keys/actions that are declared in ShaderTuningOptions,
+    dynamicShaderInfo and shaderCreate structures. This essentially means that this key in SHADER_ACTION should have at
+    least one of these in the parent field in entityInfo
+    :return:
+    """
+    cpp_code = ""
+    for action, value in PIPELINE_ACTION.items():
+        for entity in value["entityInfo"]:
             if entity["parent"] == "createInfo.anonStruct":
-                conditionStr = ConditionCreateInfoApply.replace("%Defs%", PIPELINE_ACTION[action]["jsonWriterTemplate"])
-                conditionStr = conditionStr.replace("%Flag%", action)
-                cppCode = cppCode + conditionStr
+                condition_str = CONDITION_CREATE_INFO_APPLY.replace("%Defs%", value["jsonWriterTemplate"])
+                condition_str = condition_str.replace("%Flag%", action)
+                cpp_code = cpp_code + condition_str
 
-    funcDef = ProfileEntryActionToJsonFunc.replace("%CreateInfoApply%", indent(cppCode.strip("\n")))
+    func_def = PROFILE_ENTRY_ACTION_TO_JSON_FUNC.replace("%CreateInfoApply%", indent(cpp_code.strip("\n")))
 
-    cppCode = ""
-    for action in SHADER_ACTION:
-        conditionStr = ""
-        if "jsonWriterTemplate" in SHADER_ACTION[action]:
-            for entity in SHADER_ACTION[action]["entityInfo"]:
+    cpp_code = ""
+    for action, value in SHADER_ACTION.items():
+        if "jsonWriterTemplate" in value:
+            for entity in value["entityInfo"]:
                 if "jsonWritable" in entity and entity["jsonWritable"]:
                     if entity["parent"] == "shaderCreate.anonStruct":
-                        conditionStr = ConditionShaderCreateApply.replace("%Defs%", SHADER_ACTION[action]["jsonWriterTemplate"])
+                        condition_str = CONDITION_SHADER_CREATE_APPLY.replace("%Defs%", value["jsonWriterTemplate"])
 
                         if action == "optStrategyFlags":
-                            optStrategyStr = ""
-                            for key in OPT_STRATEGY_FLAGS.keys():
-                                optFlagCondStr = ConditionShaderCreateTuningOptions
-                                optFlagCondStr = optFlagCondStr.replace("%Flag%", "flags" + '.' + key)
-                                optFlagCondStr = optFlagCondStr.replace("%Defs%", shaderCreateTuningOptionsBooleanTemplate.replace("%Flag%", key))
-                                optStrategyStr += indent(optFlagCondStr)
-                            conditionStr = conditionStr.replace("%OptStrategyEntry%", optStrategyStr)
+                            opt_strategy_str = ""
+                            for key in OPT_STRATEGY_FLAGS:
+                                opt_flag_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTIONS
+                                opt_flag_cond_str = opt_flag_cond_str.replace("%Flag%", "flags" + '.' + key)
+                                opt_flag_cond_str = opt_flag_cond_str.replace(
+                                    "%Defs%", SHADER_CREATE_TUNING_OPTIONS_BOOLEAN_TEMPLATE.replace("%Flag%", key))
+                                opt_strategy_str += indent(opt_flag_cond_str)
+                            condition_str = condition_str.replace("%OptStrategyEntry%", opt_strategy_str)
                         elif action == "optStrategyFlags2":
-                            optStrategy2Str = ""
-                            for key in OPT_STRATEGY_FLAGS2.keys():
-                                optFlag2CondStr = ConditionShaderCreateTuningOptions
-                                optFlag2CondStr = optFlag2CondStr.replace("%Flag%", "flags2" + '.' + key)
-                                optFlag2CondStr = optFlag2CondStr.replace("%Defs%", shaderCreateTuningOptionsBooleanTemplate.replace("%Flag%", key))
-                                optStrategy2Str += indent(optFlag2CondStr)
-                            conditionStr = conditionStr.replace("%OptStrategy2Entry%", optStrategy2Str)
+                            opt_strategy2_str = ""
+                            for key in OPT_STRATEGY_FLAGS2:
+                                opt_flag2_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTIONS
+                                opt_flag2_cond_str = opt_flag2_cond_str.replace("%Flag%", "flags2" + '.' + key)
+                                opt_flag2_cond_str = opt_flag2_cond_str.replace(
+                                    "%Defs%", SHADER_CREATE_TUNING_OPTIONS_BOOLEAN_TEMPLATE.replace("%Flag%", key))
+                                opt_strategy2_str += indent(opt_flag2_cond_str)
+                            condition_str = condition_str.replace("%OptStrategy2Entry%", opt_strategy2_str)
 
                         elif action == "optimizationIntent":
-                            maxOccupancyStr = ""
-                            lowLatencyStr   = ""
+                            max_occupancy_str = ""
+                            low_latency_str = ""
 
-                            for key in MAX_OCCUPANCY_OPTIONS.keys():
-                                maxOccupancyCondStr = ConditionShaderCreateTuningOptions
-                                maxOccupancyCondStr = maxOccupancyCondStr.replace("%Flag%", "maxOccupancyOptions" + '.' + key)
-                                maxOccupancyCondStr = maxOccupancyCondStr.replace("%Defs%", shaderCreateTuningOptionsBooleanTemplate.replace("%Flag%", key))
-                                maxOccupancyStr += indent(maxOccupancyCondStr, times=2)
-                            conditionStr = conditionStr.replace("%MaxOccupancyOptionsEntry%", maxOccupancyStr)
+                            for key in MAX_OCCUPANCY_OPTIONS:
+                                max_occupancy_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTIONS
+                                max_occupancy_cond_str = max_occupancy_cond_str.replace(
+                                    "%Flag%", "maxOccupancyOptions" + '.' + key)
+                                max_occupancy_cond_str = max_occupancy_cond_str.replace(
+                                    "%Defs%", SHADER_CREATE_TUNING_OPTIONS_BOOLEAN_TEMPLATE.replace("%Flag%", key))
+                                max_occupancy_str += indent(max_occupancy_cond_str, times=2)
+                            condition_str = condition_str.replace("%MaxOccupancyOptionsEntry%", max_occupancy_str)
 
-                            for key in LOW_LATENCY_OPTIONS.keys():
-                                lowLatencyCondStr = ConditionShaderCreateTuningOptions
-                                lowLatencyCondStr = lowLatencyCondStr.replace("%Flag%", "lowLatencyOptions" + '.' + key)
-                                lowLatencyCondStr = lowLatencyCondStr.replace("%Defs%", shaderCreateTuningOptionsBooleanTemplate.replace("%Flag%", key))
-                                lowLatencyStr += indent(lowLatencyCondStr, times=2)
-                            conditionStr = conditionStr.replace("%LowLatencyOptionsEntry%", lowLatencyStr)
+                            for key in LOW_LATENCY_OPTIONS:
+                                low_latency_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTIONS
+                                low_latency_cond_str = low_latency_cond_str.replace(
+                                    "%Flag%", "lowLatencyOptions" + '.' + key)
+                                low_latency_cond_str = low_latency_cond_str.replace(
+                                    "%Defs%", SHADER_CREATE_TUNING_OPTIONS_BOOLEAN_TEMPLATE.replace("%Flag%", key))
+                                low_latency_str += indent(low_latency_cond_str, times=2)
+                            condition_str = condition_str.replace("%LowLatencyOptionsEntry%", low_latency_str)
                         elif action == "fpControlFlags":
-                            fpControlStr = ""
-                            for key in FP_CONTROL_FLAGS.keys():
-                                fpControlCondStr = ConditionShaderCreateTuningOptions
-                                fpControlCondStr = fpControlCondStr.replace("%Flag%", action + '.' + key)
-                                fpControlCondStr = fpControlCondStr.replace("%Defs%", shaderCreateTuningOptionsBooleanTemplate.replace("%Flag%", key))
-                                fpControlStr += indent(fpControlCondStr)
-                            conditionStr = conditionStr.replace("%fpControlOptionsEntry%", fpControlStr)
+                            fp_control_str = ""
+                            for key in FP_CONTROL_FLAGS:
+                                fp_control_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTIONS
+                                fp_control_cond_str = fp_control_cond_str.replace("%Flag%", action + '.' + key)
+                                fp_control_cond_str = fp_control_cond_str.replace(
+                                    "%Defs%", SHADER_CREATE_TUNING_OPTIONS_BOOLEAN_TEMPLATE.replace("%Flag%", key))
+                                fp_control_str += indent(fp_control_cond_str)
+                            condition_str = condition_str.replace("%fpControlOptionsEntry%", fp_control_str)
 
-                        conditionStr = conditionStr.replace("%Flag%", action)
-                        cppCode = cppCode + wrapWithDirective(conditionStr, SHADER_ACTION[action]["buildTypes"])
+                        condition_str = condition_str.replace("%Flag%", action)
+                        cpp_code = cpp_code + wrap_with_directive(condition_str, value["buildTypes"])
                         break
-                    elif entity["parent"] == "dynamicShaderInfo.anonStruct":
-                        conditionStr = ConditionDynamicShaderInfoApply.replace("%Defs%", SHADER_ACTION[action]["jsonWriterTemplate"])
-                        conditionStr = conditionStr.replace("%Flag%", action)
-                        cppCode = cppCode + wrapWithDirective(conditionStr, SHADER_ACTION[action]["buildTypes"])
+                    if entity["parent"] == "dynamicShaderInfo.anonStruct":
+                        condition_str = CONDITION_DYNAMIC_SHADER_INFO_APPLY.replace("%Defs%",
+                                                                                    value["jsonWriterTemplate"])
+                        condition_str = condition_str.replace("%Flag%", action)
+                        cpp_code = cpp_code + wrap_with_directive(condition_str, value["buildTypes"])
                         break
-                    elif entity["parent"] == "ShaderTuningOptions":
-                        conditionStr = ConditionShaderCreateTuningOptions.replace("%Defs%", SHADER_ACTION[action]["jsonWriterTemplate"])
-                        conditionStr = conditionStr.replace("%Flag%", action)
-                        cppCode = cppCode + wrapWithDirective(conditionStr, entity["buildTypes"])
+                    if entity["parent"] == "ShaderTuningOptions":
+                        condition_str = CONDITION_SHADER_CREATE_TUNING_OPTIONS.replace("%Defs%",
+                                                                                       value["jsonWriterTemplate"])
+                        condition_str = condition_str.replace("%Flag%", action)
+                        cpp_code = cpp_code + wrap_with_directive(condition_str, entity["buildTypes"])
                         break
 
-    conditionStr = ""
-    patternCount = 0
+    condition_str = ""
+    pattern_count = 0
     for pattern in SHADER_PATTERN:
-        if (patternCount < len(SHADER_PATTERN) - 1):
-            conditionStr = conditionStr + "pattern.shaders[i].match." + pattern + " ||\n"
+        if pattern_count < len(SHADER_PATTERN) - 1:
+            condition_str = condition_str + "pattern.shaders[i].match." + pattern + " ||\n"
         else:
-            conditionStr = conditionStr + "pattern.shaders[i].match." + pattern
-        patternCount += 1
+            condition_str = condition_str + "pattern.shaders[i].match." + pattern
+        pattern_count += 1
 
-    funcDef = funcDef.replace("%Condition%", indent(conditionStr,times=3))
-    funcDef = funcDef.replace("%ShaderCreateApply%", indent(cppCode.strip("\n"), times=3))
-    return funcDef
+    func_def = func_def.replace("%Condition%", indent(condition_str, times=3))
+    func_def = func_def.replace("%ShaderCreateApply%", indent(cpp_code.strip("\n"), times=3))
+    return func_def
 
-###################################################################################################################
-# Build methods to parse a JSON file and apply the read app profile to driver (AT RUNTIME)
-###################################################################################################################
-
-def parseJsonProfileEntryPatternRuntime():
-    cppCode = ""
-    validKeys = ""
+def parse_json_profile_entry_pattern_runtime():
+    """
+    TODO.
+    :return: TODO.
+    """
+    valid_keys = ""
     defs = ""
     for key in ENTRIES_TEMPLATE["entries"]["pattern"]:
-        validKeys = validKeys + '"' + key + '",\n'
-        defs = defs + ConditionParseJsonProfileEntryRuntime.replace("%Key%", key)
-        strValue = convertTypeToStrValue(ENTRIES_TEMPLATE["entries"]["pattern"][key]["type"][0])
-        if strValue == "dictValue":
-            shaderStage = ENTRIES_TEMPLATE["entries"]["pattern"][key]["shaderStage"]
-            parseJsonProfileEntryPatternTemplateCode = parseJsonProfileEntryPatternTemplate.replace("%ShaderStage%", shaderStage)
-            defs = defs.replace("%Defs%", parseJsonProfileEntryPatternTemplateCode)
+        valid_keys = valid_keys + '"' + key + '",\n'
+        defs = defs + CONDITION_PARSE_JSON_PROFILE_ENTRY_RUNTIME.replace("%Key%", key)
+        str_value = convert_type_to_str_value(ENTRIES_TEMPLATE["entries"]["pattern"][key]["type"][0])
+        if str_value == "dictValue":
+            shader_stage = ENTRIES_TEMPLATE["entries"]["pattern"][key]["shaderStage"]
+            parse_json_profile_entry_pattern_template_code = PARSE_JSON_PROFILE_ENTRY_PATTERN_TEMPLATE.replace(
+                "%ShaderStage%", shader_stage)
+            defs = defs.replace("%Defs%", parse_json_profile_entry_pattern_template_code)
         else:
             defs = defs.replace("%Defs%", ENTRIES_TEMPLATE["entries"]["pattern"][key]["jsonReaderTemplate"])
-            defs = defs.replace("%Value%", strValue)
-    cppCode = ParseJsonProfileEntryPatternFunc.replace("%FuncDefs%", ParseJsonProfileEntryRuntimeFunc)
-    cppCode = cppCode.replace("%ValidKeys%", indent(validKeys.rstrip("\n"), times=2))
-    cppCode = cppCode.replace("%Defs%", indent(defs.rstrip("\n")))
-    return cppCode
+            defs = defs.replace("%Value%", str_value)
+    cpp_code = PARSE_JSON_PROFILE_ENTRY_PATTERN_FUNC.replace("%FuncDefs%", PARSE_JSON_PROFILE_ENTRY_RUNTIME_FUNC)
+    cpp_code = cpp_code.replace("%ValidKeys%", indent(valid_keys.rstrip("\n"), times=2))
+    cpp_code = cpp_code.replace("%Defs%", indent(defs.rstrip("\n")))
+    return cpp_code
 
-def parseJsonProfileEntryActionRuntime():
-    cppCode = ""
-    validKeys = ""
+def parse_json_profile_entry_action_runtime():
+    """
+    TODO.
+    :return: TODO.
+    """
+    valid_keys = ""
     defs = ""
     for key in chain(PIPELINE_ACTION, ENTRIES_TEMPLATE["entries"]["action"]):
-        validKeys = validKeys + '"' + key + '",\n'
-        defs = defs + ConditionParseJsonProfileEntryRuntime.replace("%Key%", key)
+        valid_keys = valid_keys + '"' + key + '",\n'
+        defs = defs + CONDITION_PARSE_JSON_PROFILE_ENTRY_RUNTIME.replace("%Key%", key)
         if key in PIPELINE_ACTION:
-            strValue = convertTypeToStrValue(PIPELINE_ACTION[key]["type"][0])
-            if strValue != "unknownValue":
+            str_value = convert_type_to_str_value(PIPELINE_ACTION[key]["type"][0])
+            if str_value != "unknownValue":
                 defs = defs.replace("%Defs%", PIPELINE_ACTION[key]["jsonReaderTemplate"])
 
         elif key in ENTRIES_TEMPLATE["entries"]["action"]:
-            strValue = convertTypeToStrValue(ENTRIES_TEMPLATE["entries"]["action"][key]["type"][0])
-            if strValue == "dictValue":
-                shaderStage = ENTRIES_TEMPLATE["entries"]["action"][key]["shaderStage"]
-                parseJsonProfileEntryActionTemplateCode = parseJsonProfileEntryActionTemplate.replace("%ShaderStage%", shaderStage)
-                defs = defs.replace("%Defs%", parseJsonProfileEntryActionTemplateCode)
+            str_value = convert_type_to_str_value(ENTRIES_TEMPLATE["entries"]["action"][key]["type"][0])
+            if str_value == "dictValue":
+                shader_stage = ENTRIES_TEMPLATE["entries"]["action"][key]["shaderStage"]
+                parse_json_profile_entry_action_template_code = PARSE_JSON_PROFILE_ENTRY_ACTION_TEMPLATE.replace(
+                    "%ShaderStage%", shader_stage)
+                defs = defs.replace("%Defs%", parse_json_profile_entry_action_template_code)
             else:
                 defs = defs.replace("%Defs%", ENTRIES_TEMPLATE["entries"]["action"][key]["jsonReaderTemplate"])
-                defs = defs.replace("%Value%", strValue)
+                defs = defs.replace("%Value%", str_value)
 
-    cppCode = ParseJsonProfileEntryActionFunc.replace("%FuncDefs%", ParseJsonProfileEntryRuntimeFunc)
-    cppCode = cppCode.replace("%ValidKeys%", indent(validKeys.rstrip("\n"), times=2))
-    cppCode = cppCode.replace("%Defs%", indent(defs.rstrip("\n")))
-    return cppCode
+    cpp_code = PARSE_JSON_PROFILE_ENTRY_ACTION_FUNC.replace("%FuncDefs%", PARSE_JSON_PROFILE_ENTRY_RUNTIME_FUNC)
+    cpp_code = cpp_code.replace("%ValidKeys%", indent(valid_keys.rstrip("\n"), times=2))
+    cpp_code = cpp_code.replace("%Defs%", indent(defs.rstrip("\n")))
+    return cpp_code
 
-def parseJsonProfilePatternShaderRuntime():
-    cppCode = ""
-    validKeys = ""
+def parse_json_profile_pattern_shader_runtime():
+    """
+    TODO.
+    :return: TODO.
+    """
+    valid_keys = ""
     defs = ""
-    for pattern in SHADER_PATTERN:
-        validKeys = validKeys + '"' + pattern + '",\n'
-        defs = defs + ConditionParseJsonProfileEntryRuntime.replace("%Key%", pattern)
-        strValue = convertTypeToStrValue(SHADER_PATTERN[pattern]["type"][0])
-        conditionBody = SHADER_PATTERN[pattern]["jsonReaderTemplate"]
-        conditionBody = conditionBody.replace("%Value%", strValue)
-        defs = defs.replace("%Defs%", conditionBody)
+    for pattern, value in SHADER_PATTERN.items():
+        valid_keys = valid_keys + '"' + pattern + '",\n'
+        defs = defs + CONDITION_PARSE_JSON_PROFILE_ENTRY_RUNTIME.replace("%Key%", pattern)
+        str_value = convert_type_to_str_value(value["type"][0])
+        condition_body = value["jsonReaderTemplate"]
+        condition_body = condition_body.replace("%Value%", str_value)
+        defs = defs.replace("%Defs%", condition_body)
 
-    cppCode = ParseJsonProfilePatternShaderFunc.replace("%FuncDefs%", ParseJsonProfileEntryRuntimeFunc)
-    cppCode = cppCode.replace("%ValidKeys%", indent(validKeys.rstrip("\n"), times=2))
-    cppCode = cppCode.replace("%Defs%", indent(defs.rstrip("\n")))
-    return cppCode
+    cpp_code = PARSE_JSON_PROFILE_PATTERN_SHADER_FUNC.replace("%FuncDefs%", PARSE_JSON_PROFILE_ENTRY_RUNTIME_FUNC)
+    cpp_code = cpp_code.replace("%ValidKeys%", indent(valid_keys.rstrip("\n"), times=2))
+    cpp_code = cpp_code.replace("%Defs%", indent(defs.rstrip("\n")))
+    return cpp_code
 
-def parseJsonProfileActionShaderRuntime():
-    cppCode = ""
-    validKeys = ""
+def parse_json_profile_action_shader_runtime():
+    """
+    TODO.
+    :return: TODO.
+    """
+    valid_keys = ""
     defs = ""
-    for action in SHADER_ACTION:
-        if "jsonReaderTemplate" in SHADER_ACTION[action] and SHADER_ACTION[action]["jsonReadable"]:
-            validKeys = validKeys + '"' + action + '",\n'
-            conditionBlock = ConditionParseJsonProfileEntryRuntime.replace("%Key%", action)
-            strValue = convertTypeToStrValue(SHADER_ACTION[action]["type"][0])
-            conditionBody = SHADER_ACTION[action]["jsonReaderTemplate"]
-            conditionBody = conditionBody.replace("%Action%", action).replace("%ValueType%", strValue)
-            if strValue in TypeValues:
-                conditionBody = conditionBody.replace("%Value%", TypeValues[strValue])
-            conditionBlock = conditionBlock.replace("%Defs%", conditionBody)
-            defs = defs + wrapWithDirective(conditionBlock, SHADER_ACTION[action]["buildTypes"])
+    for action, value in SHADER_ACTION.items():
+        if "jsonReaderTemplate" in value and value["jsonReadable"]:
+            valid_keys = valid_keys + '"' + action + '",\n'
+            condition_block = CONDITION_PARSE_JSON_PROFILE_ENTRY_RUNTIME.replace("%Key%", action)
+            str_value = convert_type_to_str_value(value["type"][0])
+            condition_body = value["jsonReaderTemplate"]
+            condition_body = condition_body.replace("%Action%", action).replace("%ValueType%", str_value)
+            if str_value in TypeValues:
+                condition_body = condition_body.replace("%Value%", TypeValues[str_value])
+            condition_block = condition_block.replace("%Defs%", condition_body)
+            defs = defs + wrap_with_directive(condition_block, value["buildTypes"])
 
-    cppCode = ParseJsonProfileActionShaderFunc.replace("%FuncDefs%", ParseJsonProfileEntryRuntimeFunc)
-    cppCode = cppCode.replace("%ValidKeys%", indent(validKeys.rstrip("\n"), times=2))
-    cppCode = cppCode.replace("%Defs%", indent(defs.rstrip("\n")))
-    return cppCode
+    cpp_code = PARSE_JSON_PROFILE_ACTION_SHADER_FUNC.replace("%FuncDefs%", PARSE_JSON_PROFILE_ENTRY_RUNTIME_FUNC)
+    cpp_code = cpp_code.replace("%ValidKeys%", indent(valid_keys.rstrip("\n"), times=2))
+    cpp_code = cpp_code.replace("%Defs%", indent(defs.rstrip("\n")))
+    return cpp_code
 
 ###################################################################################################################
 # Generic functions
 ###################################################################################################################
 
-def writeToFile(text, filePath):
-    open(filePath, 'w').write(text)
+def write_to_file(text, file_path):
+    """
+    Utility function that calls open().
+    :param text: The text to write to the file.
+    :param file_path: The path to the file.
+    :return: None.
+    """
+    with open(file_path, 'w', encoding="utf-8") as file:
+        file.write(text)
 
-def readFromFile(fileToRead):
+def read_from_file(file_to_read):
+    """
+    Utility function that calls open().
+    :param file_to_read: The path to the file.
+    :return: None.
+    """
     try:
-        with open(fileToRead, 'r') as file:
+        with open(file_to_read, 'r', encoding="utf-8") as file:
             content = file.read()
-            dictObj = json.loads(content)
-            return dictObj, True
+            dict_obj = json.loads(content)
+            return dict_obj, True
 
-    except Exception as e:
-        print("\nException Occurred:\n{0} \nCould not read from file: {1}\n".format(e, fileToRead))
+    # pylint: disable=broad-except
+    except Exception as read_exception:
+        print(f"\nException Occurred:\n{read_exception } \nCould not read from file: {file_to_read}\n")
         return "", False
 
-def dedentAll(text):
-    tempText = ""
+def dedent_all(text):
+    """
+    Dedents a block of text, line-by-line.
+    :param text: The text to dedent.
+    :return: The dedented text.
+    """
+    temp_text = ""
     for line in text.splitlines(True):
-        tempText += textwrap.dedent(line)
-    return tempText
+        temp_text += textwrap.dedent(line)
+    return temp_text
 
-def convertTypeToStrValue(valType):
-    if valType == int:
+def convert_type_to_str_value(val_type):
+    """
+    Converts a type to its corresponding string value.
+    :param val_type: A Python type.
+    :return: The corresponding string, or "unknownValue" if no such string exists.
+    """
+    if val_type == int:
         return "integerValue"
-    elif valType == bool:
+    if val_type == bool:
         return "booleanValue"
-    elif valType == str:
+    if val_type == str:
         return "pStringValue"
-    elif valType == dict:
+    if val_type == dict:
         return "dictValue"
-    elif valType == list:
+    if val_type == list:
         return "listValue"
-    else:
-        warnings.warn("********** Warning: Type unknown for action. Check 'type' key for action **********\n")
-        return "unknownValue"
 
-# Checks if the keys in obj1 are also present in obj2 (list or dict)
-def checkValidKeys(obj1, obj2):
+    warnings.warn("********** Warning: Type unknown for action. Check 'type' key for action **********\n")
+    return "unknownValue"
+
+def check_valid_keys(obj1, obj2):
+    """
+    Checks if the keys in obj1 are also present in obj2 (list or dict)
+    :param obj1: A list or a dict.
+    :param obj2: A list or dict.
+    :return: True if the key is in both, False if not or if the types are incompatible.
+    """
+
     if isinstance(obj1, dict) and isinstance(obj2, dict):
         for key in [*obj1]:
             if key in [*obj2]:
@@ -777,7 +856,7 @@ def checkValidKeys(obj1, obj2):
                 return False
         return True
 
-    elif isinstance(obj1, dict) and isinstance(obj2, list):
+    if isinstance(obj1, dict) and isinstance(obj2, list):
         for key in [*obj1]:
             if key in obj2:
                 pass
@@ -785,7 +864,7 @@ def checkValidKeys(obj1, obj2):
                 return False
         return True
 
-    elif isinstance(obj1, list) and isinstance(obj2, dict):
+    if isinstance(obj1, list) and isinstance(obj2, dict):
         for key in obj1:
             if key in [*obj2]:
                 pass
@@ -793,116 +872,144 @@ def checkValidKeys(obj1, obj2):
                 return False
         return True
 
+    return False
+
 def indent(text, **kwargs):
-    ch = ' '
+    """
+    TODO.
+    :param text: TODO.
+    :param kwargs: TODO.
+    :return: TODO.
+    """
+    indent_char = ' '
 
-    if "n_spaces" in kwargs:
-        n_spaces = kwargs["n_spaces"]
-    else:
-        n_spaces = 4
-
-    if "times" in kwargs:
-        times = kwargs["times"]
-    else:
-        times = 1
+    n_spaces = kwargs.get("n_spaces", 4)
+    times = kwargs.get("times", 1)
 
     if "width" in kwargs:
         wrapper = textwrap.TextWrapper()
         wrapper.width = kwargs["width"]
-        wrapper.initial_indent = n_spaces * times * ch
-        wrapper.subsequent_indent = n_spaces * times * ch
-        contentList = wrapper.wrap(text)
+        wrapper.initial_indent = n_spaces * times * indent_char
+        wrapper.subsequent_indent = n_spaces * times * indent_char
+        content_list = wrapper.wrap(text)
 
-        for i, line in enumerate(contentList):
-            dedentedLine = dedentAll(line)
-            if dedentedLine.startswith("#if") or dedentedLine.startswith("#else") or dedentedLine.startswith("#end"):
-                contentList[i] = dedentedLine
-        return '\n'.join(contentList)
+        for i, line in enumerate(content_list):
+            dedented_line = dedent_all(line)
+            if dedented_line.startswith("#if") or dedented_line.startswith("#else") or dedented_line.startswith("#end"):
+                content_list[i] = dedented_line
+        return '\n'.join(content_list)
 
-    else:
-        padding = n_spaces * times * ch
-        content = ''
-        for line in text.splitlines(True):
-            if line.startswith("#if") or line.startswith("#else") or line.startswith("#end") or line.isspace():
-                content = content + dedentAll(line)
-            else:
-                content = content + padding + line
+    padding = n_spaces * times * indent_char
+    content = ''
+    for line in text.splitlines(True):
+        if line.startswith("#if") or line.startswith("#else") or line.startswith("#end") or line.isspace():
+            content = content + dedent_all(line)
+        else:
+            content = content + padding + line
 
-        return content
+    return content
 
-def convertToArray(txt):
+def convert_to_array(txt):
+    """
+    Replaces square brackets with curly brackets.
+    :param: The input text.
+    :return: The modified text.
+    """
     txt = txt.replace("[", "{")
     txt = txt.replace("]", "}")
     return txt
 
-def isCompilerOnlyBuildType(buildObj):
-    if isinstance(buildObj, dict):
-        if len(buildObj) == 1:
-            if "andType" in buildObj \
-                and len(buildObj["andType"]) == 1 \
-                and buildObj["andType"][0] == BuildTypesTemplate["llpc"]:
+def is_compiler_only_build_type(build_obj):
+    """
+    TODO.
+    :param build_obj: TODO.
+    :return: TODO.
+    """
+    if isinstance(build_obj, dict):
+        if len(build_obj) == 1:
+            if "andType" in build_obj \
+                    and len(build_obj["andType"]) == 1 \
+                    and build_obj["andType"][0] == BuildTypesTemplate["llpc"]:
                 return True
     return False
 
-def wrapWithDirective(content, buildObj):
-    if isinstance(buildObj, str):
-        if buildObj:
-            content = "#if "+ buildObj + "\n" + content.strip("\n") + "\n#endif\n"
+def wrap_with_directive(content, build_obj):
+    """
+    TODO.
+    :param content: TODO.
+    :param build_obj: TODO.
+    :return: TODO.
+    """
+    if isinstance(build_obj, str):
+        if build_obj:
+            content = "#if " + build_obj + "\n" + content.strip("\n") + "\n#endif\n"
 
-    elif isinstance(buildObj, dict):
-        if "andType" in buildObj:
-            if buildObj["andType"]:
-                valueIfDefTmp = ""
-                valueEndDefTmp = ""
-                for directive in buildObj["andType"]:
-                    valueIfDefTmp += "#if " + directive + "\n"
-                    valueEndDefTmp += "#endif" + "\n"
+    elif isinstance(build_obj, dict):
+        if "andType" in build_obj:
+            if build_obj["andType"]:
+                value_if_def_tmp = ""
+                value_end_def_tmp = ""
+                for directive in build_obj["andType"]:
+                    value_if_def_tmp += "#if " + directive + "\n"
+                    value_end_def_tmp += "#endif" + "\n"
 
-                content = valueIfDefTmp + content + valueEndDefTmp
+                content = value_if_def_tmp + content + value_end_def_tmp
 
-        if "orType" in buildObj:
-            if buildObj["orType"]:
-                valueIfDefTmp = "#if "
-                valueEndDefTmp = "#endif\n"
-                numOfBuildTypes = len(buildObj["orType"])
-                for i in range(numOfBuildTypes):
-                    type = buildObj["orType"][i]
-                    valueIfDefTmp += type
-                    if i < (numOfBuildTypes) -1:
-                        valueIfDefTmp += " || "
+        if "orType" in build_obj:
+            if build_obj["orType"]:
+                value_if_def_tmp = "#if "
+                value_end_def_tmp = "#endif\n"
+                num_of_build_types = len(build_obj["orType"])
+                for i in range(num_of_build_types):
+                    or_type = build_obj["orType"][i]
+                    value_if_def_tmp += or_type
+                    if i < num_of_build_types - 1:
+                        value_if_def_tmp += " || "
                     else:
-                        valueIfDefTmp += "\n"
+                        value_if_def_tmp += "\n"
 
-                content = valueIfDefTmp + content + valueEndDefTmp
+                content = value_if_def_tmp + content + value_end_def_tmp
 
-        if "custom" in buildObj:
-            if buildObj["custom"]:
-                if "startWith" in buildObj["custom"]:
-                    startWith = buildObj["custom"]["startWith"]
-                    content = startWith + "\n" + content.strip("\n")
+        if "custom" in build_obj:
+            if build_obj["custom"]:
+                if "startWith" in build_obj["custom"]:
+                    start_with = build_obj["custom"]["startWith"]
+                    content = start_with + "\n" + content.strip("\n")
 
-                if "endWith" in buildObj["custom"]:
-                    endWith = buildObj["custom"]["endWith"]
-                    content = content + "\n" + endWith + "\n"
+                if "endWith" in build_obj["custom"]:
+                    end_with = build_obj["custom"]["endWith"]
+                    content = content + "\n" + end_with + "\n"
     return content
 
-def retrieveEntityInfo(value, parent):
+def retrieve_entity_info(value, parent):
+    """
+    TODO.
+    :param value: TODO.
+    :param parent: TODO.
+    :return: TODO.
+    """
     success = False
-    entityInfo = {}
-    listOfEntityInfoObjs = value["entityInfo"]
-    if not isinstance(listOfEntityInfoObjs, list):
-        listOfEntityInfoObjs = [listOfEntityInfoObjs]
-    for entityInfo in listOfEntityInfoObjs:
-        if entityInfo["parent"] == parent:
+    entity_info = {}
+    list_of_entity_info_objs = value["entityInfo"]
+    if not isinstance(list_of_entity_info_objs, list):
+        list_of_entity_info_objs = [list_of_entity_info_objs]
+    for entity_info in list_of_entity_info_objs:
+        if entity_info["parent"] == parent:
             success = True
             break
 
     if success:
-        return entityInfo
-    else:
-        return {}
+        return entity_info
+    return {}
 
-def wrapWithComment(content, comment, secured):
+def wrap_with_comment(content, comment, secured):
+    """
+    Puts a comment with a header and footer around a block of content.
+    :param content: The content block.
+    :param comment: The comment.
+    :param secured: If the '#' character should be used to extend the comment.
+    :return: The wrapped content.
+    """
     comment = indent(comment, n_spaces=0, width=110)
     if secured == "true":
         comment = ''.join("//" + "# " + line for line in comment.splitlines(True))
@@ -916,268 +1023,274 @@ def wrapWithComment(content, comment, secured):
     return content
 
 ###################################################################################################################
-# Parse all files and generate code
-###################################################################################################################
 
 def main():
-    shaderProfileDir = ''
-    outputDir = ''
-    genDir = ''
+    """
+    Parses all files and generate code.
+    :return: Unix-style return code.
+    """
+    gen_dir = ''
 
     if len(sys.argv) >= 2:
-        shaderProfileDir = sys.argv[1]
+        shader_profile_dir = sys.argv[1]
         # if genDir was specified by the user
         if len(sys.argv) == 3:
-            genDir = sys.argv[2]
+            gen_dir = sys.argv[2]
     else:
         print("Error: include directory path in the argument \n"
-                "usage: python3 genshaderprofile.py <vulkancodebase>\\xgl\\icd\\api\\appopt\\shader_profiles\\ genDir [optional]")
+              "usage: python3 genshaderprofile.py <vulkancodebase>\\xgl\\icd\\api\\appopt\\shader_profiles\\ genDir ["
+              "optional]")
         return -1
 
-    if not os.path.isabs(shaderProfileDir):
-        shaderProfileDir = os.path.abspath(shaderProfileDir)
+    if not os.path.isabs(shader_profile_dir):
+        shader_profile_dir = os.path.abspath(shader_profile_dir)
 
-    splitShaderProfileDir = os.path.split(shaderProfileDir)
-    if splitShaderProfileDir[1] == '':
-        outputDir = os.path.split(splitShaderProfileDir[0])[0]
+    split_shader_profile_dir = os.path.split(shader_profile_dir)
+    if split_shader_profile_dir[1] == '':
+        output_dir = os.path.split(split_shader_profile_dir[0])[0]
     else:
-        outputDir = splitShaderProfileDir[0]
-    if genDir != "":
-        outputDir = genDir
+        output_dir = split_shader_profile_dir[0]
+    if gen_dir != "":
+        output_dir = gen_dir
 
-    headerDoxComment = HeaderFileDoxComment.replace("%FileName%", outputFile)
+    header_dox_comment = HEADER_FILE_DOX_COMMENT.replace("%FileName%", OUTPUT_FILE)
 
-    compilers = os.listdir(shaderProfileDir)
+    compilers = os.listdir(shader_profile_dir)
 
-    gameTitleInfo = getGameTitles(AppProfileHeaderFilePath)
-    if not gameTitleInfo:
+    game_title_info = get_game_titles(AppProfileHeaderFilePath)
+    if not game_title_info:
         print("Could Not read 'enum class AppProfile' from app_profile.h. Exiting Program")
         return -1
 
-    funcSetAppProfileGroup = ""
-    classShaderProfileBodyDict = {}
-    ifGameTitleGroupDict = {}
+    func_set_app_profile_group = ""
+    class_shader_profile_body_dict = {}
+    if_game_title_group_dict = {}
 
     for compiler in compilers:
-        compilerDir = os.path.join(shaderProfileDir, compiler)
-        gfxips = os.listdir(compilerDir)
+        compiler_dir = os.path.join(shader_profile_dir, compiler)
+        gfxips = os.listdir(compiler_dir)
 
-        gameTitlesList = []
-        ifGfxipGroupDict = {}
-        ifGenericDict = {}
+        game_titles_list = []
+        if_gfxip_group_dict = {}
+        if_generic_dict = {}
 
-        if compiler not in classShaderProfileBodyDict:
-            classShaderProfileBodyDict[compiler] = ""
+        if compiler not in class_shader_profile_body_dict:
+            class_shader_profile_body_dict[compiler] = ""
 
-        if compiler not in ifGameTitleGroupDict:
-            ifGameTitleGroupDict[compiler] = ""
+        if compiler not in if_game_title_group_dict:
+            if_game_title_group_dict[compiler] = ""
 
         for gfxip in gfxips:
-            gfxipDir = os.path.join(compilerDir, gfxip)
+            gfxip_dir = os.path.join(compiler_dir, gfxip)
 
-            gameTitlesGfxList = []
-            ifAsicGroupDict = {}
-            ifAsicGenericDict = {}
+            game_titles_gfx_list = []
+            if_asic_group_dict = {}
+            if_asic_generic_dict = {}
 
             if gfxip != "generic":
-                asics = os.listdir(os.path.join(gfxipDir))
+                asics = os.listdir(os.path.join(gfxip_dir))
             else:
                 asics = [gfxip]
 
             for asic in asics:
                 if gfxip != "generic":
-                    asicDir = os.path.join(gfxipDir, asic)
+                    asic_dir = os.path.join(gfxip_dir, asic)
                 else:
-                    asicDir = gfxipDir
+                    asic_dir = gfxip_dir
 
-                print("Parsing " + asicDir)
-                gameTitles = os.listdir(os.path.join(asicDir))
-                for title in gameTitles:
-                    gameTitleDir = os.path.join(asicDir, title)
-                    fileToRead = os.path.join(gfxip, gameTitleDir, configFileName)
-                    content, readSuccess = readFromFile(fileToRead)
+                print("Parsing " + asic_dir)
+                game_titles = os.listdir(os.path.join(asic_dir))
+                for title in game_titles:
+                    game_title_dir = os.path.join(asic_dir, title)
+                    file_to_read = os.path.join(gfxip, game_title_dir, CONFIG_FILE_NAME)
+                    content, read_success = read_from_file(file_to_read)
 
-                    if readSuccess:
-                        if title not in gameTitlesList:
-                            gameTitlesList.append(title)
-                        if title not in gameTitlesGfxList:
-                            gameTitlesGfxList.append(title)
-                        if title not in ifGfxipGroupDict:
-                            ifGfxipGroupDict[title] = ""
-                        if title not in ifGenericDict:
-                            ifGenericDict[title] = ""
-                        if title not in ifAsicGroupDict:
-                            ifAsicGroupDict[title] = ""
-                        if title not in ifAsicGenericDict:
-                            ifAsicGenericDict[title] = ""
+                    if read_success:
+                        if title not in game_titles_list:
+                            game_titles_list.append(title)
+                        if title not in game_titles_gfx_list:
+                            game_titles_gfx_list.append(title)
+                        if title not in if_gfxip_group_dict:
+                            if_gfxip_group_dict[title] = ""
+                        if title not in if_generic_dict:
+                            if_generic_dict[title] = ""
+                        if title not in if_asic_group_dict:
+                            if_asic_group_dict[title] = ""
+                        if title not in if_asic_generic_dict:
+                            if_asic_generic_dict[title] = ""
 
                         # for header file: g_shader_profile.h********************************************************
-                        funcName = compiler.title() + title + gfxip[0].upper() + gfxip[1:]
+                        func_name = compiler.title() + title + gfxip[0].upper() + gfxip[1:]
 
                         if gfxip != "generic":
                             if asic != "generic":
-                                funcName = compiler.title() + title + asic[0].upper() + asic[1:]
+                                func_name = compiler.title() + title + asic[0].upper() + asic[1:]
                             else:
-                                funcName += asic[0].upper() + asic[1:]
+                                func_name += asic[0].upper() + asic[1:]
 
-                        funcCompGameGfxAsic = FuncDecSetAppProfile.replace("%FuncName%", funcName)
+                        func_comp_game_gfx_asic = FUNC_DEC_SET_APP_PROFILE.replace("%FuncName%", func_name)
 
-                        for buildType, obj in gameTitleInfo.items():
+                        for _, obj in game_title_info.items():
                             if title in obj["gameTitles"]:
-                                funcCompGameGfxAsic = wrapWithDirective(funcCompGameGfxAsic, obj["buildTypes"])
+                                func_comp_game_gfx_asic = wrap_with_directive(func_comp_game_gfx_asic,
+                                                                              obj["buildTypes"])
 
                         if asic in BuildTypesTemplate:
-                            funcCompGameGfxAsic = wrapWithDirective(funcCompGameGfxAsic, BuildTypesTemplate[asic])
+                            func_comp_game_gfx_asic = wrap_with_directive(func_comp_game_gfx_asic,
+                                                                          BuildTypesTemplate[asic])
 
                         if gfxip in BuildTypesTemplate:
-                            funcCompGameGfxAsic = wrapWithDirective(funcCompGameGfxAsic, BuildTypesTemplate[gfxip])
+                            func_comp_game_gfx_asic = wrap_with_directive(func_comp_game_gfx_asic,
+                                                                          BuildTypesTemplate[gfxip])
 
-                        classShaderProfileBodyDict[compiler] += funcCompGameGfxAsic
+                        class_shader_profile_body_dict[compiler] += func_comp_game_gfx_asic
                         # ********************************************************************************************
 
                         # for cpp file: g_shader_profile.cpp *********************************************************
                         if asic == "generic":
-                            ifAsicGeneric = GenericAsicAppProfile.replace("%FuncName%", funcName)
-                            ifAsicGenericDict[title] = ifAsicGeneric
+                            if_asic_generic = GENERIC_ASIC_APP_PROFILE.replace("%FuncName%", func_name)
+                            if_asic_generic_dict[title] = if_asic_generic
                         else:
-                            ifAsic = ConditionAsic.replace("%Asic%", asic[0].upper() + asic[1:])
-                            ifAsic = ifAsic.replace("%FuncName%", funcName)
+                            if_asic = CONDITION_ASIC.replace("%Asic%", asic[0].upper() + asic[1:])
+                            if_asic = if_asic.replace("%FuncName%", func_name)
                             if asic in BuildTypesTemplate:
-                                ifAsic = wrapWithDirective(ifAsic, BuildTypesTemplate[asic])
-                            ifAsicGroupDict[title] = ifAsicGroupDict[title] + ifAsic
+                                if_asic = wrap_with_directive(if_asic, BuildTypesTemplate[asic])
+                            if_asic_group_dict[title] = if_asic_group_dict[title] + if_asic
 
                         if gfxip == "generic":
-                            ifGeneric = GenericGfxIpAppProfile.replace("%FuncName%", funcName)
-                            ifGenericDict[title] = ifGeneric
+                            if_generic = GENERIC_GFX_IP_APP_PROFILE.replace("%FuncName%", func_name)
+                            if_generic_dict[title] = if_generic
 
-                        appProfile = genProfile(content, compiler, gfxip)
-                        funcSetAppProfile = SetAppProfileFunc.replace("%FuncName%", funcName)
-                        funcSetAppProfile = funcSetAppProfile.replace("%FuncDefs%", indent(appProfile))
+                        app_profile = gen_profile(content, compiler, gfxip)
+                        func_set_app_profile = SET_APP_PROFILE_FUNC.replace("%FuncName%", func_name)
+                        func_set_app_profile = func_set_app_profile.replace("%FuncDefs%", indent(app_profile))
                         if compiler in BuildTypesTemplate:
-                            funcSetAppProfile = wrapWithDirective(funcSetAppProfile, BuildTypesTemplate[compiler])
+                            func_set_app_profile = wrap_with_directive(func_set_app_profile,
+                                                                       BuildTypesTemplate[compiler])
 
-                        for buildType, obj in gameTitleInfo.items():
+                        for _, obj in game_title_info.items():
                             if title in obj["gameTitles"]:
-                                funcSetAppProfile = wrapWithDirective(funcSetAppProfile, obj["buildTypes"])
+                                func_set_app_profile = wrap_with_directive(func_set_app_profile, obj["buildTypes"])
 
                         if asic in BuildTypesTemplate:
-                            funcSetAppProfile = wrapWithDirective(funcSetAppProfile, BuildTypesTemplate[asic])
+                            func_set_app_profile = wrap_with_directive(func_set_app_profile, BuildTypesTemplate[asic])
 
                         if gfxip in BuildTypesTemplate:
-                            funcSetAppProfile = wrapWithDirective(funcSetAppProfile, BuildTypesTemplate[gfxip])
+                            func_set_app_profile = wrap_with_directive(func_set_app_profile, BuildTypesTemplate[gfxip])
 
-                        funcSetAppProfileGroup = funcSetAppProfileGroup + funcSetAppProfile
+                        func_set_app_profile_group = func_set_app_profile_group + func_set_app_profile
                         # ********************************************************************************************
 
             # for cpp file: g_shader_profile.cpp******************************************************************
-            for title in gameTitlesGfxList:
+            for title in game_titles_gfx_list:
                 if gfxip != "generic":
-                    if ifAsicGenericDict[title]:
-                        ifGfxipBody = indent(ifAsicGroupDict[title] + ifAsicGenericDict[title])
+                    if if_asic_generic_dict[title]:
+                        if_gfxip_body = indent(if_asic_group_dict[title] + if_asic_generic_dict[title])
                     else:
-                        ifGfxipBody = indent(ifAsicGroupDict[title])
-                    ifGfxip = ConditionGfxIp.replace("%Gfxip%", gfxip[0].upper() + gfxip[1:])
-                    ifGfxip = ifGfxip.replace("%Defs%", ifGfxipBody)
+                        if_gfxip_body = indent(if_asic_group_dict[title])
+                    if_gfxip = CONDITION_GFX_IP.replace("%Gfxip%", gfxip[0].upper() + gfxip[1:])
+                    if_gfxip = if_gfxip.replace("%Defs%", if_gfxip_body)
                     if gfxip in BuildTypesTemplate:
-                        ifGfxip = wrapWithDirective(ifGfxip, BuildTypesTemplate[gfxip])
-                    ifGfxipGroupDict[title] = ifGfxipGroupDict[title] + ifGfxip
+                        if_gfxip = wrap_with_directive(if_gfxip, BuildTypesTemplate[gfxip])
+                    if_gfxip_group_dict[title] = if_gfxip_group_dict[title] + if_gfxip
             # ****************************************************************************************************
 
         # for cpp file: g_shader_profile.cpp******************************************************************
-        for title in gameTitlesList:
-            if ifGenericDict[title]:
-                ifGameTitleBody = indent(ifGfxipGroupDict[title] + ifGenericDict[title])
+        for title in game_titles_list:
+            if if_generic_dict[title]:
+                if_game_title_body = indent(if_gfxip_group_dict[title] + if_generic_dict[title])
             else:
-                ifGameTitleBody = indent(ifGfxipGroupDict[title])
-            ifGameTitle = ConditionGameTitle.replace("%GameTitle%", title)
-            ifGameTitle = ifGameTitle.replace("%Defs%", ifGameTitleBody)
-            for buildType, obj in gameTitleInfo.items():
+                if_game_title_body = indent(if_gfxip_group_dict[title])
+            if_game_title = CONDITION_GAME_TITLE.replace("%GameTitle%", title)
+            if_game_title = if_game_title.replace("%Defs%", if_game_title_body)
+            for _, obj in game_title_info.items():
                 if title in obj["gameTitles"]:
-                    ifGameTitle = wrapWithDirective(ifGameTitle, obj["buildTypes"])
-            ifGameTitleGroupDict[compiler] += ifGameTitle
+                    if_game_title = wrap_with_directive(if_game_title, obj["buildTypes"])
+            if_game_title_group_dict[compiler] += if_game_title
         # ****************************************************************************************************
 
     ###################################################################################################################
     # Build the Header File
     ###################################################################################################################
 
-    classShaderProfilePrivateDefs = ""
-    for compiler in classShaderProfileBodyDict:
+    class_shader_profile_private_defs = ""
+    for compiler, value in class_shader_profile_body_dict.items():
         if compiler in BuildTypesTemplate:
-            if classShaderProfileBodyDict[compiler] != "":
-                classShaderProfilePrivateDefs = classShaderProfilePrivateDefs + "\n" + \
-                                    wrapWithDirective(classShaderProfileBodyDict[compiler], BuildTypesTemplate[compiler])
+            if value != "":
+                class_shader_profile_private_defs = class_shader_profile_private_defs + "\n" + \
+                                                    wrap_with_directive(value,
+                                                                        BuildTypesTemplate[compiler])
         else:
-            classShaderProfilePrivateDefs = classShaderProfilePrivateDefs + classShaderProfileBodyDict[compiler]
+            class_shader_profile_private_defs = class_shader_profile_private_defs + value
 
-    funcDecJsonReader = (
-                         FuncDecJsonReader + "\n"
-                         )
+    func_dec_json_reader = (
+            FUNC_DEC_JSON_READER + "\n"
+    )
 
-    classShaderProfilePrivateBody = FuncDecJsonWriter + "\n" + \
-                                    wrapWithDirective(funcDecJsonReader, BuildTypesTemplate["icdRuntimeAppProfile"]) + \
-                                    classShaderProfilePrivateDefs
+    class_shader_profile_private_body = FUNC_DEC_JSON_WRITER + "\n" + wrap_with_directive(
+        func_dec_json_reader, BuildTypesTemplate["icdRuntimeAppProfile"]) + class_shader_profile_private_defs
 
-    classShaderProfilePublicBody = ( FuncDecClassShaderProfilePublic + "\n" +
-                                     wrapWithDirective(FuncDecParseJsonProfile, BuildTypesTemplate["icdRuntimeAppProfile"]) + "\n" +
-                                     wrapWithDirective(FuncDecBuildAppProfileLlpc, BuildTypesTemplate["llpc"])
-                                   )
+    class_shader_profile_public_body = (FUN_DEC_CLASS_SHADER_PROFILE_PUBLIC + "\n" +
+                                        wrap_with_directive(FUNC_DEC_PARSE_JSON_PROFILE,
+                                                            BuildTypesTemplate["icdRuntimeAppProfile"]) + "\n" +
+                                        wrap_with_directive(FUNC_DEC_BUILD_APP_PROFILE_LLPC, BuildTypesTemplate["llpc"])
+                                        )
 
-    classShaderProfile = ClassTemplate.replace("%ClassName%", "ShaderProfile")
-    classShaderProfile = classShaderProfile.replace("%ClassPublicDefs%", indent(classShaderProfilePublicBody))
-    classShaderProfile = classShaderProfile.replace("%ClassPrivateDefs%", indent(classShaderProfilePrivateBody))
+    class_shader_profile = CLASS_TEMPLATE.replace("%ClassName%", "ShaderProfile")
+    class_shader_profile = class_shader_profile.replace("%ClassPublicDefs%", indent(class_shader_profile_public_body))
+    class_shader_profile = class_shader_profile.replace("%ClassPrivateDefs%", indent(class_shader_profile_private_body))
 
-    content = createStructAndVarDefinitions(ShaderTuningStructsAndVars)
-    namespaceBody = content + "\n" + classShaderProfile
-    headerBody = NamespaceVK.replace("%NamespaceDefs%", namespaceBody)
+    content = create_struct_and_var_definitions(ShaderTuningStructsAndVars)
+    namespace_body = content + "\n" + class_shader_profile
+    header_body = NAMESPACE_VK.replace("%NamespaceDefs%", namespace_body)
 
-    headerContent = CopyrightAndWarning + headerDoxComment + HeaderIncludes + "\n" + headerBody
-    headerFilePath = os.path.join(outputDir, headerFileName)
-    writeToFile(headerContent, headerFilePath)
+    header_content = CopyrightAndWarning + header_dox_comment + HEADER_INCLUDES + "\n" + header_body
+    header_file_path = os.path.join(output_dir, HEADER_FILE_NAME)
+    write_to_file(header_content, header_file_path)
 
     ###################################################################################################################
     # Build the Source File
     ###################################################################################################################
 
-    if "llpc" in ifGameTitleGroupDict:
-        funcBuildAppProfileLlpc = BuildAppProfileLlpcFunc.replace("%FuncDefs%",
-                                                                        indent(ifGameTitleGroupDict["llpc"].rstrip("\n")))
-        funcBuildAppProfileLlpc = wrapWithDirective(funcBuildAppProfileLlpc, BuildTypesTemplate["llpc"])
+    if "llpc" in if_game_title_group_dict:
+        func_build_app_profile_llpc = BUILD_APP_PROFILE_LLPC_FUNC.replace("%FuncDefs%",
+                                                                          indent(
+                                                                              if_game_title_group_dict["llpc"].rstrip(
+                                                                                  "\n")))
+        func_build_app_profile_llpc = wrap_with_directive(func_build_app_profile_llpc, BuildTypesTemplate["llpc"])
     else:
-        funcBuildAppProfileLlpc = ""
+        func_build_app_profile_llpc = ""
 
-    funcProfileEntryActionToJson = buildProfileEntryActionToJson()
-    funcProfileEntryPatternToJson = buildProfileEntryPatternToJson()
-    funcJsonWriter = JsonWriterGenericDef + \
-                            "\n" + \
-                            funcProfileEntryPatternToJson + \
-                            "\n" + \
-                            funcProfileEntryActionToJson
+    func_profile_entry_action_to_json = build_profile_entry_action_to_json()
+    func_profile_entry_pattern_to_json = build_profile_entry_pattern_to_json()
+    func_json_writer = (JSON_WRITER_GENERIC_DEF + "\n" +
+                        func_profile_entry_pattern_to_json + "\n" +
+                        func_profile_entry_action_to_json)
 
-    funcJsonReader = (JsonReaderGenericDef + "\n" +
-                      parseJsonProfileEntryPatternRuntime() + "\n" +
-                      parseJsonProfileEntryActionRuntime() + "\n" +
-                      parseJsonProfilePatternShaderRuntime() + "\n" +
-                      parseJsonProfileActionShaderRuntime() + "\n"
-                    )
+    func_json_reader = (JSON_READER_GENERIC_DEF + "\n" +
+                        parse_json_profile_entry_pattern_runtime() + "\n" +
+                        parse_json_profile_entry_action_runtime() + "\n" +
+                        parse_json_profile_pattern_shader_runtime() + "\n" +
+                        parse_json_profile_action_shader_runtime() + "\n"
+                        )
 
-    cppBody = NamespaceVK.replace("%NamespaceDefs%", funcBuildAppProfileLlpc
-                                                     + "\n"
-                                                     + funcSetAppProfileGroup
-                                                     + "\n"
-                                                     + funcJsonWriter
-                                                     + "\n"
-                                                     + wrapWithDirective(funcJsonReader,
-                                                                         BuildTypesTemplate["icdRuntimeAppProfile"])
-                                                     )
+    cpp_body = NAMESPACE_VK.replace("%NamespaceDefs%", func_build_app_profile_llpc
+                                    + "\n"
+                                    + func_set_app_profile_group
+                                    + "\n"
+                                    + func_json_writer
+                                    + "\n"
+                                    + wrap_with_directive(func_json_reader,
+                                                          BuildTypesTemplate["icdRuntimeAppProfile"])
+                                    )
 
-    includeStr = ""
+    include_str = ""
 
-    CppIncludes = CppInclude.replace("%Includes%", includeStr)
+    cpp_includes = CPP_INCLUDE.replace("%Includes%", include_str)
 
-    cppContent = CopyrightAndWarning + CppIncludes + cppBody
-    cppFilePath = os.path.join(outputDir, sourceFileName)
-    writeToFile(cppContent, cppFilePath)
+    cpp_content = CopyrightAndWarning + cpp_includes + cpp_body
+    cpp_file_path = os.path.join(output_dir, SOURCE_FILE_NAME)
+    write_to_file(cpp_content, cpp_file_path)
     return 0
 
 if __name__ == '__main__':
@@ -1186,10 +1299,8 @@ if __name__ == '__main__':
 
     print("Generating shader profiles code ")
 
-    result = main()
-
-    if not result:
-        print("Finished generating " + headerFileName + " and " + sourceFileName)
+    if not main():
+        print("Finished generating " + HEADER_FILE_NAME + " and " + SOURCE_FILE_NAME)
     else:
         print("Error: Exiting without code generation. Driver code compilation will fail.")
-        exit(1)
+        sys.exit(1)

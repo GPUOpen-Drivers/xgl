@@ -88,7 +88,7 @@ VkResult Event::Create(
     // and CmdReleaseThenAcquire() is still valid. This flag is currently enabled for gfx10 and above.
     bool useSplitReleaseAcquire = info.gfxipProperties.flags.supportReleaseAcquireInterface &&
                                   info.gfxipProperties.flags.supportSplitReleaseAcquire &&
-                                  settings.useReleaseAcquireInterface;
+                                  settings.useAcquireReleaseInterface;
 
     if (useSplitReleaseAcquire && settings.syncTokenEnabled &&
         ((pCreateInfo->flags & VK_EVENT_CREATE_DEVICE_ONLY_BIT_KHR) != 0))

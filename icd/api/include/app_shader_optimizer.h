@@ -113,6 +113,10 @@ public:
         const PipelineOptimizerKey&      pipelineKey,
         Pal::DynamicComputeShaderInfo*   pDynamicCompueShaderInfo) const;
 
+    Vkgc::ThreadGroupSwizzleMode OverrideThreadGroupSwizzleMode(
+        ShaderStage                 shaderStage,
+        const PipelineOptimizerKey& pipelineKey) const;
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(ShaderOptimizer);
 

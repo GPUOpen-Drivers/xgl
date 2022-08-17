@@ -728,6 +728,8 @@ void DispatchTable::Init()
     INIT_DISPATCH_ALIAS(vkGetDeviceImageSparseMemoryRequirementsKHR,
                         vkGetDeviceImageSparseMemoryRequirements        );
 
+    INIT_DISPATCH_ENTRY(vkGetShaderModuleIdentifierEXT                  );
+    INIT_DISPATCH_ENTRY(vkGetShaderModuleCreateInfoIdentifierEXT        );
 }
 
 // =====================================================================================================================

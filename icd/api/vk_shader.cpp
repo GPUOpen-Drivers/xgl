@@ -76,8 +76,8 @@ static void MetroHashTo128Bit(
 // =====================================================================================================================
 // Calculate a 128-bit hash from the SPIRV code.  This is used by profile-guided compilation parameter tuning.
 Pal::ShaderHash ShaderModule::BuildCodeHash(
-    const void*  pCode,
-    const size_t codeSize)
+    const void*                  pCode,
+    const size_t                 codeSize)
 {
     Pal::ShaderHash result;
 
@@ -235,6 +235,24 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyShaderModule(
 
         ShaderModule::ObjectFromHandle(shaderModule)->Destroy(pDevice, pAllocCB);
     }
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetShaderModuleIdentifierEXT(
+    VkDevice                                    device,
+    VkShaderModule                              shaderModule,
+    VkShaderModuleIdentifierEXT*                pIdentifier)
+{
+    // TODO: implement vkGetShaderModuleIdentifierEXT
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetShaderModuleCreateInfoIdentifierEXT(
+    VkDevice                                    device,
+    const VkShaderModuleCreateInfo*             pCreateInfo,
+    VkShaderModuleIdentifierEXT*                pIdentifier)
+{
+    // TODO: implement vkGetShaderModuleCreateInfoIdentifierEXT
 }
 
 } // namespace entry

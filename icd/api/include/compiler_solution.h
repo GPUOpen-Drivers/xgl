@@ -145,7 +145,7 @@ public:
         const void*                  pCode,
         const bool                   adaptForFastLink,
         ShaderModuleHandle*          pShaderModule,
-        const Util::MetroHash::Hash& hash) = 0;
+        const PipelineOptimizerKey&  profileKey) = 0;
 
     virtual void TryEarlyCompileShaderModule(
         const Device*       pDevice,

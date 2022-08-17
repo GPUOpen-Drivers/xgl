@@ -235,6 +235,47 @@ void ShaderOptimizer::OverrideShaderCreateInfo(
 }
 
 // =====================================================================================================================
+Vkgc::ThreadGroupSwizzleMode ShaderOptimizer::OverrideThreadGroupSwizzleMode(
+    ShaderStage                 shaderStage,
+    const PipelineOptimizerKey& pipelineKey
+    ) const
+{
+    Vkgc::ThreadGroupSwizzleMode swizzleMode = Vkgc::ThreadGroupSwizzleMode::Default;
+
+    for (uint32_t entry = 0; entry < m_appProfile.entryCount; ++entry)
+    {
+        const PipelineProfileEntry& profileEntry = m_appProfile.pEntries[entry];
+
+        if (GetFirstMatchingShader(profileEntry.pattern, InvalidShaderIndex, pipelineKey) != InvalidShaderIndex)
+        {
+            const auto& shaders = profileEntry.action.shaders;
+
+            if (shaders[shaderStage].shaderCreate.apply.threadGroupSwizzleMode)
+            {
+                swizzleMode = shaders[shaderStage].shaderCreate.tuningOptions.threadGroupSwizzleMode;
+            }
+        }
+    }
+
+    for (uint32_t entry = 0; entry < m_tuningProfile.entryCount; ++entry)
+    {
+        const PipelineProfileEntry& profileEntry = m_tuningProfile.pEntries[entry];
+
+        if (GetFirstMatchingShader(profileEntry.pattern, InvalidShaderIndex, pipelineKey) != InvalidShaderIndex)
+        {
+            const auto& shaders = profileEntry.action.shaders;
+
+            if (shaders[shaderStage].shaderCreate.apply.threadGroupSwizzleMode)
+            {
+                swizzleMode = shaders[shaderStage].shaderCreate.tuningOptions.threadGroupSwizzleMode;
+            }
+        }
+    }
+
+    return swizzleMode;
+}
+
+// =====================================================================================================================
 void ShaderOptimizer::OverrideGraphicsPipelineCreateInfo(
     const PipelineOptimizerKey&       pipelineKey,
     VkShaderStageFlagBits             shaderStages,
@@ -613,6 +654,32 @@ void ShaderOptimizer::BuildTuningProfile()
             {
                 pAction->shaderCreate.apply.userDataSpillThreshold         = true;
                 pAction->shaderCreate.tuningOptions.userDataSpillThreshold = 0;
+            }
+
+            if (m_settings.overrideThreadGroupSwizzling != 0)
+            {
+                pAction->shaderCreate.apply.threadGroupSwizzleMode  = true;
+                Vkgc::ThreadGroupSwizzleMode swizzlingMode = Vkgc::ThreadGroupSwizzleMode::Default;
+
+                switch (m_settings.overrideThreadGroupSwizzling)
+                {
+                case vk::ThreadGroupSwizzleModeDefault:
+                    swizzlingMode = Vkgc::ThreadGroupSwizzleMode::Default;
+                    break;
+                case vk::ThreadGroupSwizzleMode4x4:
+                    swizzlingMode = Vkgc::ThreadGroupSwizzleMode::_4x4;
+                    break;
+                case vk::ThreadGroupSwizzleMode8x8:
+                    swizzlingMode = Vkgc::ThreadGroupSwizzleMode::_8x8;
+                    break;
+                case vk::ThreadGroupSwizzleMode16x16:
+                    swizzlingMode = Vkgc::ThreadGroupSwizzleMode::_16x16;
+                    break;
+                default:
+                    VK_NEVER_CALLED();
+                }
+
+                pAction->shaderCreate.tuningOptions.threadGroupSwizzleMode = swizzlingMode;
             }
 
             pAction->shaderCreate.apply.allowReZ                = m_settings.overrideAllowReZ;
