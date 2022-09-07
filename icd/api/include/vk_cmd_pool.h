@@ -39,6 +39,10 @@
 #include "include/vk_dispatch.h"
 #include "include/vk_alloccb.h"
 
+#if VKI_RAY_TRACING
+#include "gpurt/gpurt.h"
+#endif
+
 #include "palCmdAllocator.h"
 #include "palHashSet.h"
 

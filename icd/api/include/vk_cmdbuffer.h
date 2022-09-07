@@ -51,6 +51,9 @@
 
 #include "renderpass/renderpass_builder.h"
 
+#if VKI_RAY_TRACING
+#endif
+
 #include "palCmdBuffer.h"
 #include "palDequeImpl.h"
 #include "palGpuMemory.h"
@@ -88,6 +91,11 @@ class TimestampQueryPool;
 class SqttCmdBufferState;
 class QueryPool;
 
+#if VKI_RAY_TRACING
+class RayTracingPipeline;
+class AccelerationStructureQueryPool;
+#endif
+
 constexpr uint8_t  DefaultStencilOpValue      = 1;
 constexpr uint8_t  DefaultRefPicIndexValue    = 0xFF;
 constexpr uint8_t  DefaultIndex7BitsValue     = 0x7F;
@@ -100,6 +108,9 @@ enum PipelineBindPoint
 {
     PipelineBindCompute = 0,
     PipelineBindGraphics,
+#if VKI_RAY_TRACING
+    PipelineBindRayTracing,
+#endif
     PipelineBindCount
 };
 
@@ -237,6 +248,9 @@ struct AllGpuRenderState
     uint64_t                      boundGraphicsPipelineHash;
     const GraphicsPipeline*       pGraphicsPipeline;
     const ComputePipeline*        pComputePipeline;
+#if VKI_RAY_TRACING
+    const RayTracingPipeline*     pRayTracingPipeline;
+#endif
 
     // These tokens describe the current "static" values of pieces of Vulkan render state.  These are set by pipelines
     // that program static render state, and are reset to DynamicRenderStateToken by vkCmdSet* functions.
@@ -830,6 +844,11 @@ public:
         return m_pCmdPool->IsProtected();
     }
 
+    bool IsBackupBufferUsed() const
+    {
+        return m_flags.useBackupBuffer;
+    }
+
     VkResult Destroy(void);
 
     VK_FORCEINLINE Device* VkDevice(void) const
@@ -843,6 +862,13 @@ public:
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_pPalCmdBuffers[idx];
+    }
+
+    Pal::ICmdBuffer* BackupPalCmdBuffer(
+        uint32_t idx) const
+    {
+        VK_ASSERT(idx < static_cast<uint32_t>(MaxPalDevices));
+        return m_pBackupPalCmdBuffers[idx];
     }
 
     VK_FORCEINLINE uint32_t GetQueueFamilyIndex() const { return m_queueFamilyIndex; }
@@ -1092,6 +1118,61 @@ public:
     static PFN_vkCmdPushDescriptorSetKHR GetCmdPushDescriptorSetKHRFunc(const Device* pDevice);
     static PFN_vkCmdPushDescriptorSetWithTemplateKHR GetCmdPushDescriptorSetWithTemplateKHRFunc(const Device* pDevice);
 
+#if VKI_RAY_TRACING
+    void BuildAccelerationStructures(
+        uint32                                                  infoCount,
+        const VkAccelerationStructureBuildGeometryInfoKHR*      pInfos,
+        const VkAccelerationStructureBuildRangeInfoKHR* const*  ppBuildRangeInfos,
+        const VkDeviceAddress*                                  pIndirectDeviceAddresses,
+        const uint32*                                           pIndirectStrides,
+        const uint32* const*                                    ppMaxPrimitiveCounts);
+
+    void CopyAccelerationStructure(
+        const VkCopyAccelerationStructureInfoKHR*   pInfo);
+
+    void CopyAccelerationStructureToMemory(
+        const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo);
+
+    void CopyMemoryToAccelerationStructure(
+        const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo);
+
+    void WriteAccelerationStructuresProperties(
+        uint32_t                                    accelerationStructureCount,
+        const VkAccelerationStructureKHR*           pAccelerationStructures,
+        VkQueryType                                 queryType,
+        VkQueryPool                                 queryPool,
+        uint32_t                                    firstQuery);
+
+    void TraceRays(
+        const VkStridedDeviceAddressRegionKHR& raygenShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& missShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& hitShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& callableShaderBindingTable,
+        uint32_t                        width,
+        uint32_t                        height,
+        uint32_t                        depth);
+
+    void TraceRaysIndirect(
+        GpuRt::ExecuteIndirectArgType          indirectArgType,
+        const VkStridedDeviceAddressRegionKHR& raygenShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& missShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& hitShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& callableShaderBindingTable,
+        VkDeviceAddress                        indirectDeviceAddress);
+
+    VkResult GetRayTracingIndirectMemory(
+        gpusize                             size,
+        InternalMemory**                    ppInternalMemory);
+
+    const RayTracingPipeline* GetBoundRayTracingPipeline() const
+        { return m_allGpuState.pRayTracingPipeline; }
+
+    void FreeRayTracingIndirectMemory();
+
+    void SetRayTracingPipelineStackSize(uint32_t pipelineStackSize);
+
+#endif
+
     CmdPool* GetCmdPool() const { return m_pCmdPool; }
 
     PerGpuRenderState* PerGpuState(uint32 deviceIdx)
@@ -1119,6 +1200,11 @@ public:
         return 1 + static_cast<uint32_t>((m_pStackAllocator->Remaining() / objectSize) >> 1);
     }
 
+#if VKI_RAY_TRACING
+
+    bool HasRayTracing() const { return m_flags.hasRayTracing; }
+#endif
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(CmdBuffer);
 
@@ -1134,6 +1220,11 @@ private:
     VkResult Initialize(
         void*                           pPalMem,
         const Pal::CmdBufferCreateInfo& createInfo);
+
+    Pal::Result BackupInitialize(
+        const Pal::CmdBufferCreateInfo& createInfo);
+    void SwitchToBackupCmdBuffer();
+    void RestoreFromBackupCmdBuffer();
 
     void ResetPipelineState();
 
@@ -1274,6 +1365,12 @@ private:
         const uint32_t            queryCount,
         const uint32_t            timestampChunk);
 
+#if VKI_RAY_TRACING
+    void ResetAccelerationStructureQueryPool(
+        const AccelerationStructureQueryPool& accelerationStructureQueryPool,
+        const uint32_t                        firstQuery,
+        const uint32_t                        queryCount);
+#endif
     void ReleaseResources();
 
 #if VK_ENABLE_DEBUG_BARRIERS
@@ -1290,7 +1387,7 @@ private:
         uint32_t                                    dynamicOffsetCount,
         const uint32_t*                             pDynamicOffsets);
 
-void SetUserDataPipelineLayout(
+    void SetUserDataPipelineLayout(
         uint32_t                                    firstSet,
         uint32_t                                    setCount,
         const PipelineLayout*                       pLayout,
@@ -1380,6 +1477,77 @@ void SetUserDataPipelineLayout(
             Util::Max(PerGpuState(deviceIndex)->maxPipelineStackSize, pipelineStackSize);
     }
 
+    void BindAlternatingThreadGroupConstant();
+
+#if VKI_RAY_TRACING
+    void BuildAccelerationStructuresPerDevice(
+        const uint32_t                                          deviceIndex,
+        uint32_t                                                infoCount,
+        const VkAccelerationStructureBuildGeometryInfoKHR*      pInfos,
+        const VkAccelerationStructureBuildRangeInfoKHR* const*  ppBuildRangeInfos,
+        const VkDeviceAddress*                                  pIndirectDeviceAddresses,
+        const uint32*                                           pIndirectStrides,
+        const uint32* const*                                    ppMaxPrimitiveCounts);
+
+    void CopyAccelerationStructurePerDevice(
+        const uint32_t                              deviceIndex,
+        const VkCopyAccelerationStructureInfoKHR*   pInfo);
+
+    void CopyAccelerationStructureToMemoryPerDevice(
+        const uint32_t                                    deviceIndex,
+        const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo);
+
+    void WriteAccelerationStructuresPropertiesPerDevice (
+        const uint32_t                      deviceIndex,
+        uint32_t                            accelerationStructureCount,
+        const VkAccelerationStructureKHR*   pAccelerationStructures,
+        VkQueryType                         queryType,
+        VkQueryPool                         queryPool,
+        uint32_t                            firstQuery);
+
+    void CopyMemoryToAccelerationStructurePerDevice(
+        const uint32_t                                      deviceIndex,
+        const VkCopyMemoryToAccelerationStructureInfoKHR*   pInfo);
+
+    void TraceRaysPerDevice(
+        const uint32_t                         deviceIdx,
+        const VkStridedDeviceAddressRegionKHR& raygenShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& missShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& hitShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& callableShaderBindingTable,
+        uint32_t                               width,
+        uint32_t                               height,
+        uint32_t                               depth);
+
+    void TraceRaysIndirectPerDevice(
+        const uint32_t                         deviceIdx,
+        GpuRt::ExecuteIndirectArgType          indirectArgType,
+        const VkStridedDeviceAddressRegionKHR& raygenShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& missShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& hitShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& callableShaderBindingTable,
+        VkDeviceAddress                        indirectDeviceAddress);
+
+    void GetRayTracingDispatchArgs(
+        uint32_t                               deviceIdx,
+        const RuntimeSettings&                 settings,
+        CmdPool*                               pCmdPool,
+        const RayTracingPipeline*              pPipeline,
+        Pal::gpusize                           constGpuAddr,
+        uint32_t                               width,
+        uint32_t                               height,
+        uint32_t                               depth,
+        const VkStridedDeviceAddressRegionKHR& raygenShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& missShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& hitShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& callableShaderBindingTable,
+        GpuRt::DispatchRaysConstants*          pConstants);
+
+    void BindRayQueryConstants(
+        const Pipeline* pPipeline,
+        Pal::PipelineBindPoint bindPoint);
+#endif
+
     union CmdBufferFlags
     {
         uint32_t u32All;
@@ -1398,17 +1566,23 @@ void SetUserDataPipelineLayout(
             uint32_t preBindDefaultState                 :  1;
             uint32_t useReleaseAcquire                   :  1;
             uint32_t useSplitReleaseAcquire              :  1;
+            uint32_t useBackupBuffer : 1;
             uint32_t reserved2                           :  3;
             uint32_t isRenderingSuspended                :  1;
+#if VKI_RAY_TRACING
+            uint32_t hasRayTracing                       :  1;
+#else
             uint32_t reserved4                           :  1;
+#endif
             uint32_t reserved5                           :  1;
-            uint32_t reserved                            : 14;
+            uint32_t reserved                            : 13;
         };
     };
 
     Device* const                 m_pDevice;
     CmdPool* const                m_pCmdPool;
     uint32_t                      m_queueFamilyIndex;
+    uint32_t                      m_backupQueueFamilyIndex;
     Pal::QueueType                m_palQueueType;
     Pal::EngineType               m_palEngineType;
     uint32_t                      m_curDeviceMask;     // Device mask the command buffer is currently set to
@@ -1417,6 +1591,7 @@ void SetUserDataPipelineLayout(
     const uint32_t                m_numPalDevices;
     VkShaderStageFlags            m_validShaderStageFlags;
     Pal::ICmdBuffer*              m_pPalCmdBuffers[MaxPalDevices];
+    Pal::ICmdBuffer*              m_pBackupPalCmdBuffers[MaxPalDevices];
     VirtualStackAllocator*        m_pStackAllocator;
 
     AllGpuRenderState             m_allGpuState; // Render state tracked during command buffer building
@@ -1441,6 +1616,11 @@ void SetUserDataPipelineLayout(
 
     uint32                        m_vbWatermark;  // tracks how many vb entries need to be reset
 
+    bool                          m_reverseThreadGroupState;
+
+#if VKI_RAY_TRACING
+    Util::Vector<InternalMemory*, 16, PalAllocator> m_rayTracingIndirectList; // Ray-tracing indirect memory
+#endif
 };
 
 // =====================================================================================================================
@@ -1962,6 +2142,72 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndDebugUtilsLabelEXT(
 VKAPI_ATTR void VKAPI_CALL vkCmdInsertDebugUtilsLabelEXT(
     VkCommandBuffer                             commandBuffer,
     const VkDebugUtilsLabelEXT*                 pLabelInfo);
+
+#if VKI_RAY_TRACING
+VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysKHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkStridedDeviceAddressRegionKHR*      pRaygenShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pMissShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pHitShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pCallableShaderBindingTable,
+    uint32_t                                    width,
+    uint32_t                                    height,
+    uint32_t                                    depth);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBuildAccelerationStructuresKHR(
+    VkCommandBuffer                                         commandBuffer,
+    uint32_t                                                infoCount,
+    const VkAccelerationStructureBuildGeometryInfoKHR*      pInfos,
+    const VkAccelerationStructureBuildRangeInfoKHR* const*  ppBuildRangeInfos);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBuildAccelerationStructuresIndirectKHR(
+    VkCommandBuffer                                    commandBuffer,
+    uint32                                             infoCount,
+    const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
+    const VkDeviceAddress*                             pIndirectDeviceAddresses,
+    const uint32*                                      pIndirectStrides,
+    const uint32* const*                               ppMaxPrimitiveCounts);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyAccelerationStructureKHR(
+    VkCommandBuffer                                    commandBuffer,
+    const VkCopyAccelerationStructureInfoKHR*          pInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyAccelerationStructureToMemoryKHR(
+    VkCommandBuffer                                    commandBuffer,
+    const VkCopyAccelerationStructureToMemoryInfoKHR*  pInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyMemoryToAccelerationStructureKHR(
+    VkCommandBuffer                                    commandBuffer,
+    const VkCopyMemoryToAccelerationStructureInfoKHR*  pInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRayTracingPipelineStackSizeKHR(
+    VkCommandBuffer                                    commandBuffer,
+    uint32_t                                           pipelineStackSize);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysIndirectKHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkStridedDeviceAddressRegionKHR*      pRaygenShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pMissShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pHitShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pCallableShaderBindingTable,
+    VkDeviceAddress                             indirectDeviceAddress);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdWriteAccelerationStructuresPropertiesKHR(
+    VkCommandBuffer                                    commandBuffer,
+    uint32_t                                           accelerationStructureCount,
+    const VkAccelerationStructureKHR*                  pAccelerationStructures,
+    VkQueryType                                        queryType,
+    VkQueryPool                                        queryPool,
+    uint32_t                                           firstQuery);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyAccelerationStructureToMemoryKHR(
+    VkCommandBuffer                                   commandBuffer,
+    const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysIndirect2KHR(
+    VkCommandBuffer                             commandBuffer,
+    VkDeviceAddress                             indirectDeviceAddress);
+#endif
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetFragmentShadingRateKHR(
     VkCommandBuffer                          commandBuffer,

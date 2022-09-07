@@ -28,6 +28,7 @@
 #include "include/vk_device.h"
 #include "include/vk_graphics_pipeline.h"
 #include "include/vk_graphics_pipeline_library.h"
+#include "include/vk_instance.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_render_pass.h"
 
@@ -734,6 +735,9 @@ static void CopyPreRasterizationShaderState(
     pInfo->immedInfo.rasterizerDiscardEnable   = libInfo.immedInfo.rasterizerDiscardEnable;
 
     pInfo->flags.bresenhamEnable = libInfo.flags.bresenhamEnable;
+#if VKI_RAY_TRACING
+    pInfo->flags.hasRayTracing  |= libInfo.flags.hasRayTracing;
+#endif
 
     pInfo->staticStateMask      |= (libInfo.staticStateMask & PrsDynamicStatesMask);
 }
@@ -756,6 +760,10 @@ static void CopyFragmentShaderState(
     pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable = libInfo.immedInfo.depthStencilCreateInfo.depthBoundsEnable;
     pInfo->immedInfo.depthStencilCreateInfo.stencilEnable     = libInfo.immedInfo.depthStencilCreateInfo.stencilEnable;
     pInfo->immedInfo.vrsRateParams                            = libInfo.immedInfo.vrsRateParams;
+
+#if VKI_RAY_TRACING
+    pInfo->flags.hasRayTracing         |= libInfo.flags.hasRayTracing;
+#endif
 
     pInfo->staticStateMask            |= (libInfo.staticStateMask & FgsDynamicStatesMask);
 }
@@ -822,12 +830,14 @@ static void BuildRasterizationState(
 
         // By default rasterization is disabled, unless rasterization creation info is present
 
-        const RuntimeSettings&        settings        = pDevice->GetRuntimeSettings();
-        const PhysicalDevice*         pPhysicalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
-        const VkPhysicalDeviceLimits& limits          = pPhysicalDevice->GetLimits();
+        const RuntimeSettings&        settings         = pDevice->GetRuntimeSettings();
+        const PhysicalDevice*         pPhysicalDevice  = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+        const VkPhysicalDeviceLimits& limits           = pPhysicalDevice->GetLimits();
 
         // Enable perpendicular end caps if we report strictLines semantics
-        pInfo->pipeline.rsState.perpLineEndCapsEnable = (limits.strictLines == VK_TRUE);
+        pInfo->pipeline.rsState.perpLineEndCapsEnable  = (limits.strictLines == VK_TRUE);
+
+        pInfo->pipeline.rsState.dx10DiamondTestDisable = true;
 
         pInfo->pipeline.viewportInfo.depthClipNearEnable            = (pRs->depthClampEnable == VK_FALSE);
         pInfo->pipeline.viewportInfo.depthClipFarEnable             = (pRs->depthClampEnable == VK_FALSE);
@@ -1468,10 +1478,8 @@ static void BuildVertexInputInterfaceState(
 {
     const VkPipelineInputAssemblyStateCreateInfo* pIa = pIn->pInputAssemblyState;
 
+    if((pIa != nullptr) || (isLibrary == true))
     {
-        // According to the spec this should never be null except when mesh is enabled
-        VK_ASSERT((pIa != nullptr) || (isLibrary == true));
-
         pInfo->immedInfo.inputAssemblyState.primitiveRestartEnable = (pIa->primitiveRestartEnable != VK_FALSE);
         pInfo->immedInfo.inputAssemblyState.primitiveRestartIndex  = 0xFFFFFFFF;
         pInfo->immedInfo.inputAssemblyState.topology               = VkToPalPrimitiveTopology(pIa->topology);
@@ -1500,6 +1508,9 @@ static void BuildPreRasterizationShaderState(
     const Device*                       pDevice,
     const VkGraphicsPipelineCreateInfo* pIn,
     const uint32_t                      dynamicStateFlags,
+#if VKI_RAY_TRACING
+    const bool                          hasRayTracing,
+#endif
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
     if (pIn->pTessellationState != nullptr)
@@ -1519,6 +1530,10 @@ static void BuildPreRasterizationShaderState(
         // Build states via VkPipelineViewportStateCreateInfo
         BuildViewportState(pDevice, pIn->pViewportState, dynamicStateFlags, pInfo);
     }
+
+#if VKI_RAY_TRACING
+    pInfo->flags.hasRayTracing |= hasRayTracing;
+#endif
 
     if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::CullModeExt) == false)
     {
@@ -1551,6 +1566,9 @@ static void BuildFragmentShaderState(
     const Device*                       pDevice,
     const VkGraphicsPipelineCreateInfo* pIn,
     const uint32_t                      dynamicStateFlags,
+#if VKI_RAY_TRACING
+    const bool                          hasRayTracing,
+#endif
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
     const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
@@ -1568,6 +1586,9 @@ static void BuildFragmentShaderState(
 
     BuildVrsRateParams(pDevice, pPipelineFragmentShadingRateStateCreateInfoKHR, dynamicStateFlags, pInfo);
 
+#if VKI_RAY_TRACING
+    pInfo->flags.hasRayTracing |= hasRayTracing;
+#endif
 }
 
 // =====================================================================================================================
@@ -1754,6 +1775,10 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     GraphicsPipelineLibraryInfo libInfo;
     ExtractLibraryInfo(pIn, &libInfo);
 
+#if VKI_RAY_TRACING
+    const bool hasRayTracing = (pBinInfo == nullptr) ? false : pBinInfo->hasRayTracing;
+#endif
+
     pInfo->activeStages = GetActiveShaderStages(pIn, &libInfo);
 
     uint32_t dynamicStateFlags = GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
@@ -1775,6 +1800,9 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
         BuildPreRasterizationShaderState(pDevice,
                                          pIn,
                                          dynamicStateFlags,
+#if VKI_RAY_TRACING
+                                         hasRayTracing,
+#endif
                                          pInfo);
     }
     else if (libInfo.pPreRasterizationShaderLib != nullptr)
@@ -1794,6 +1822,9 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
             BuildFragmentShaderState(pDevice,
                                      pIn,
                                      dynamicStateFlags,
+#if VKI_RAY_TRACING
+                                     hasRayTracing,
+#endif
                                      pInfo);
         }
         else if (libInfo.pFragmentShaderLib != nullptr)

@@ -207,6 +207,46 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         }
 
+#if VKI_RAY_TRACING
+        const char* pMaxInlinedShadersEnvVar = getenv("AMD_VK_MAX_INLINED_SHADERS");
+
+        if (pMaxInlinedShadersEnvVar != nullptr)
+        {
+            m_settings.maxUnifiedNonRayGenShaders = static_cast<uint32_t>(atoi(pMaxInlinedShadersEnvVar));
+        }
+
+        const Pal::RayTracingIpLevel rayTracingIpLevel = pInfo->gfxipProperties.rayTracingIp;
+        if (rayTracingIpLevel == Pal::RayTracingIpLevel::RtIp1_1)
+        {
+            if ((m_settings.boxSortingHeuristic != BoxSortingDisabled) &&
+                (m_settings.boxSortingHeuristic != BoxSortingDisabledOnAcceptFirstHit))
+            {
+                m_settings.boxSortingHeuristic = BoxSortingClosest;
+            }
+        }
+
+        // Disable ray tracing if enableRaytracingSupport is requested but no hardware or software emulation is available.
+        if ((m_settings.enableRaytracingSupport != RaytracingNotSupported) &&
+            (m_settings.emulatedRtIpLevel == EmulatedRtIpLevelNone) &&
+            (rayTracingIpLevel == Pal::RayTracingIpLevel::None))
+        {
+            m_settings.enableRaytracingSupport = RaytracingNotSupported;
+        }
+
+        // Clamp target occupancy to [0.0, 1.0]
+        m_settings.indirectCallTargetOccupancyPerSimd = Util::Clamp(m_settings.indirectCallTargetOccupancyPerSimd, 0.0f, 1.0f);
+
+        // Max number of callee saved registers for indirect functions is 255
+        m_settings.indirectCalleeRaygen = Util::Min(255U, m_settings.indirectCalleeRaygen);
+        m_settings.indirectCalleeMiss = Util::Min(255U, m_settings.indirectCalleeMiss);
+        m_settings.indirectCalleeClosestHit = Util::Min(255U, m_settings.indirectCalleeClosestHit);
+        m_settings.indirectCalleeAnyHit = Util::Min(255U, m_settings.indirectCalleeAnyHit);
+        m_settings.indirectCalleeIntersection = Util::Min(255U, m_settings.indirectCalleeIntersection);
+        m_settings.indirectCalleeCallable = Util::Min(255U, m_settings.indirectCalleeCallable);
+        m_settings.indirectCalleeTraceRays = Util::Min(255U, m_settings.indirectCalleeTraceRays);
+
+#endif
+
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
         {
             // Enable NGG culling by default for Navi2x.
@@ -219,10 +259,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         }
 
         // Put command buffers in local for large/resizable BAR systems with > 7 GBs of local heap
-        const gpusize minLocalSize = 7ull * 1024ull * 1024ull * 1024ull;
+        constexpr gpusize _1GB = 1024ull * 1024ull * 1024ull;
 
         if ((gpuMemoryHeapPropertiesResult == Pal::Result::Success) &&
-            (heapProperties[Pal::GpuHeapLocal].heapSize > minLocalSize))
+            (heapProperties[Pal::GpuHeapLocal].heapSize > (7ull * _1GB)))
         {
             if ((appProfile != AppProfile::WorldWarZ)
                )
@@ -237,6 +277,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc;
             }
+        }
+
+        // Allow device memory overallocation for <= 2GBs of VRAM including APUs.
+        if ((heapProperties[Pal::GpuHeapLocal].heapSize +
+             heapProperties[Pal::GpuHeapInvisible].heapSize) <= (2ull * _1GB))
+        {
+            m_settings.memoryDeviceOverallocationAllowed = true;
         }
 
         if (appProfile == AppProfile::Doom)
@@ -320,6 +367,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.forceEnableDcc = ForceDccDefault;
             }
+
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                if (pInfo->revision == Pal::AsicRevision::Navi21)
+                {
+                }
+            }
         }
 
         if ((appProfile == AppProfile::WolfensteinII) ||
@@ -371,6 +425,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             m_settings.robustBufferAccess = FeatureForceEnable;
 
+            // This application oversubscribes on 4 GB cards during ALT+TAB
+            m_settings.memoryDeviceOverallocationAllowed = true;
+
             if (pInfo->revision != Pal::AsicRevision::Navi21)
             {
                 m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
@@ -400,11 +457,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 if (pInfo->revision == Pal::AsicRevision::Navi21)
                 {
                     m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage |
-                        ForceDccFor32BppShaderStorage |
-                        ForceDccForColorAttachments |
-                        ForceDccFor3DShaderStorage);
+                                                 ForceDccFor32BppShaderStorage |
+                                                 ForceDccForNonColorAttachmentShaderStorage |
+                                                 ForceDccForColorAttachments |
+                                                 ForceDccFor3DShaderStorage);
 
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
                 }
 
                 if (pInfo->revision == Pal::AsicRevision::Navi22)
@@ -765,6 +823,37 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.syncOsHdrState = false;
         }
 
+#if VKI_RAY_TRACING
+        if (appProfile == AppProfile::Quake2RTX)
+        {
+            m_settings.memoryDeviceOverallocationAllowed = true;
+
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
+
+                //////////////////////////////////////////////
+                // Ray Tracing Settings
+                m_settings.rtEnableBuildParallel = true;
+
+                m_settings.rtEnableUpdateParallel = true;
+
+                m_settings.rtEnableTriangleSplitting = true;
+
+                m_settings.useFlipHint = false;
+            }
+        }
+
+        if (appProfile == AppProfile::ControlDX12)
+        {
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.rtEnableCompilePipelineLibrary = false;
+                m_settings.rtMaxRayRecursionDepth = 2;
+            }
+        }
+#endif
+
         if (appProfile == AppProfile::DoomEternal)
         {
             m_settings.barrierFilterOptions  = SkipStrayExecutionDependencies;
@@ -786,6 +875,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.backgroundFullscreenIgnorePresentErrors = true;
 
             m_settings.implicitExternalSynchronization = false;
+
+#if VKI_RAY_TRACING
+            m_settings.indirectCallConvention = IndirectConvention0;
+#endif
 
             if (pInfo->gpuType == Pal::GpuType::Discrete)
             {
@@ -835,6 +928,16 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
             {
+#if VKI_RAY_TRACING
+                // Ray Tracing Settings
+                m_settings.rtEnableBuildParallel  = true;
+                m_settings.rtEnableUpdateParallel = true;
+                m_settings.rtEnableWaveVarying    = true;
+
+                m_settings.rtBvhBuildModeFastTrace = BvhBuildModeLinear;
+                m_settings.rtEnableTopDownBuild    = false;
+                m_settings.plocRadius              = 4;
+#endif
                 m_settings.forceEnableDcc = (ForceDccForColorAttachments |
                                              ForceDccFor2DShaderStorage |
                                              ForceDccFor3DShaderStorage |
@@ -878,6 +981,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.forceMinImageCount = 3;
 
             m_settings.enableDumbTransitionSync = false;
+            m_settings.forceDisableGlobalBarrierCacheSync = true;
         }
 
         if (appProfile == AppProfile::MetroExodus)
@@ -1010,7 +1114,6 @@ VkResult VulkanSettingsLoader::ProcessSettings(
                                                        Pal::SettingScope::Driver,
                                                        Util::ValueType::Uint,
                                                        &m_settings.forceAppProfileValue);
-
     // Check for forced application profile
     if (m_settings.forceAppProfileEnable)
     {
@@ -1130,6 +1233,24 @@ void VulkanSettingsLoader::ValidateSettings()
         m_settings.prefetchCommands = false;
     }
 
+#if VKI_RAY_TRACING
+    if (m_settings.rtBvhBuildModeOverride != BvhBuildModeOverrideDisabled)
+    {
+        BvhBuildMode buildMode = BvhBuildModeLinear;
+
+        if (m_settings.rtBvhBuildModeOverride == BvhBuildModeOverridePLOC)
+        {
+            buildMode = BvhBuildModePLOC;
+        }
+
+        m_settings.bvhBuildModeOverrideBLAS = buildMode;
+        m_settings.bvhBuildModeOverrideTLAS = buildMode;
+    }
+
+    // Clamp target occupancy to [0.0, 1.0]
+    m_settings.indirectCallTargetOccupancyPerSimd =
+        Util::Clamp(m_settings.indirectCallTargetOccupancyPerSimd, 0.0f ,1.0f);
+#endif
 }
 
 // =====================================================================================================================

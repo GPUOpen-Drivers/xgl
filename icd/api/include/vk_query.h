@@ -49,6 +49,9 @@ class DispatchableQueryPool;
 class PalQueryPool;
 class QueryPoolWithStorageView;
 class TimestampQueryPool;
+#if VKI_RAY_TRACING
+class AccelerationStructureQueryPool;
+#endif
 
 // =====================================================================================================================
 // Base class for all Vulkan query pools.  VkQueryPool handles map to this base class pointer.
@@ -89,6 +92,10 @@ public:
     inline const PalQueryPool* AsPalQueryPool() const;
     inline const QueryPoolWithStorageView* AsQueryPoolWithStorageView() const;
     inline const TimestampQueryPool* AsTimestampQueryPool() const;
+
+#if VKI_RAY_TRACING
+    inline const AccelerationStructureQueryPool* AsAccelerationStructureQueryPool() const;
+#endif
 
 protected:
     QueryPool(
@@ -208,6 +215,96 @@ private:
         void* m_pStorageView[MaxPalDevices];
 };
 
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+inline bool IsAccelerationStructureQueryType(VkQueryType queryType)
+{
+    return ((queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR) ||
+            (queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR) ||
+            (queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR) ||
+            (queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR));
+}
+
+// =====================================================================================================================
+inline bool IsAccelerationStructureSerializationType(VkQueryType queryType)
+{
+    return ((queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR) ||
+            (queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR));
+}
+
+// =====================================================================================================================
+// Query pool class for VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR query pools
+class AccelerationStructureQueryPool final : public QueryPoolWithStorageView
+{
+public:
+    static constexpr uint32_t AccelerationStructureQueryNotReady = UINT32_MAX;
+
+    VK_FORCEINLINE Pal::gpusize GpuVirtAddr(uint32_t deviceIdx) const
+    {
+        return m_internalMem.GpuVirtAddr(deviceIdx);
+    }
+
+    static VkResult Create(
+        Device*                         pDevice,
+        const VkQueryPoolCreateInfo*    pCreateInfo,
+        const VkAllocationCallbacks*    pAllocator,
+        QueryPool**                     ppQueryPool);
+
+    virtual VkResult Destroy(
+        Device*                         pDevice,
+        const VkAllocationCallbacks*    pAllocator) override;
+
+    virtual VkResult GetResults(
+        Device*             pDevice,
+        uint32_t            startQuery,
+        uint32_t            queryCount,
+        size_t              dataSize,
+        void*               pData,
+        VkDeviceSize        stride,
+        VkQueryResultFlags  flags) override;
+
+    virtual void Reset(
+        Device*     pDevice,
+        uint32_t    startQuery,
+        uint32_t    queryCount) override;
+
+    uint32_t GetSlotSize() const
+    {
+        return m_slotSize;
+    }
+
+    uint64_t GetAccelerationStructureQueryResults(
+        VkQueryType     queryType,
+        const uint64_t* pSrcData,
+        uint32_t        srcSlotOffset) const;
+
+    Pal::gpusize GetSlotOffset(uint32_t query) const
+    {
+        VK_ASSERT(query < m_entryCount);
+
+        return m_internalMem.Offset() + query * m_slotSize;
+    }
+
+    const Pal::IGpuMemory& PalMemory(uint32_t deviceIdx) const
+    {
+        return *m_internalMem.PalMemory(deviceIdx);
+    }
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(AccelerationStructureQueryPool);
+
+    AccelerationStructureQueryPool(
+        Device*           pDevice,
+        VkQueryType       queryType,
+        uint32_t          entryCount,
+        uint32_t          slotSize)
+        :
+        QueryPoolWithStorageView(pDevice, queryType, entryCount, slotSize)
+    {
+    }
+};
+#endif
+
 // =====================================================================================================================
 // Query pool class for VK_QUERY_TYPE_TIMESTAMP query pools
 class TimestampQueryPool final : public QueryPoolWithStorageView
@@ -279,6 +376,10 @@ inline const PalQueryPool* QueryPool::AsPalQueryPool() const
 {
     VK_ASSERT(m_queryType != VK_QUERY_TYPE_TIMESTAMP);
 
+#if VKI_RAY_TRACING
+    VK_ASSERT(IsAccelerationStructureQueryType(m_queryType) == false);
+#endif
+
     return static_cast<const PalQueryPool*>(this);
 }
 
@@ -293,6 +394,9 @@ inline const TimestampQueryPool* QueryPool::AsTimestampQueryPool() const
 inline const QueryPoolWithStorageView* QueryPool::AsQueryPoolWithStorageView() const
 {
     if ((m_queryType != VK_QUERY_TYPE_TIMESTAMP)
+#if VKI_RAY_TRACING
+         && (IsAccelerationStructureQueryType(m_queryType) == false)
+#endif
        )
         {
             VK_ASSERT(false);
@@ -300,6 +404,16 @@ inline const QueryPoolWithStorageView* QueryPool::AsQueryPoolWithStorageView() c
 
     return static_cast<const QueryPoolWithStorageView*>(this);
 }
+
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+inline const AccelerationStructureQueryPool* QueryPool::AsAccelerationStructureQueryPool() const
+{
+    VK_ASSERT(IsAccelerationStructureQueryType(m_queryType));
+
+    return static_cast<const AccelerationStructureQueryPool*>(this);
+}
+#endif
 
 namespace entry
 {

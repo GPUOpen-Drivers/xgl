@@ -94,6 +94,10 @@ protected:
         const PipelineLayout*                pPipelineLayout,
         PipelineBinaryInfo*                  pPipelineBinary,
         const ImmedInfo&                     immedInfo,
+#if VKI_RAY_TRACING
+        bool                                 hasRayTracing,
+        uint32_t                             dispatchRaysUserDataOffset,
+#endif
         uint32_t                             staticStateMask,
         uint64_t                             apiHash);
 
@@ -107,12 +111,16 @@ protected:
     };
 
     static void ConvertComputePipelineInfo(
-        Device*                            pDevice,
-        const VkComputePipelineCreateInfo* pIn,
-        CreateInfo*                        pOutInfo);
+        Device*                               pDevice,
+        const VkComputePipelineCreateInfo*    pIn,
+        const ComputePipelineShaderStageInfo& stageInfo,
+        CreateInfo*                           pOutInfo);
 
-    static uint64_t BuildApiHash(
-        const VkComputePipelineCreateInfo* pCreateInfo);
+    static void BuildApiHash(
+        const VkComputePipelineCreateInfo*    pCreateInfo,
+        const ComputePipelineShaderStageInfo& stageInfo,
+        Util::MetroHash::Hash*                pElfHash,
+        uint64_t*                             pApiHash);
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(ComputePipeline);

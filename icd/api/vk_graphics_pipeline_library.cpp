@@ -427,6 +427,9 @@ VkResult GraphicsPipelineLibrary::Create(
     {
         GraphicsPipelineBinaryInfo binaryInfo = {};
         binaryInfo.pOptimizerKey = &binaryCreateInfo.pipelineProfileKey;
+#if VKI_RAY_TRACING
+        binaryInfo.hasRayTracing = binaryCreateInfo.pipelineInfo.rtState.threadGroupSizeX > 0;
+#endif
 
         BuildPipelineObjectCreateInfo(
             pDevice,
@@ -440,6 +443,8 @@ VkResult GraphicsPipelineLibrary::Create(
     if (result == VK_SUCCESS)
     {
         // 4. Create partial pipeline binary for fast-link
+        void* pLlpcPipelineBuffer = nullptr;
+        binaryCreateInfo.pipelineInfo.pUserData = &pLlpcPipelineBuffer;
         CreatePartialPipelineBinary(
             pDevice,
             &libInfo,
@@ -568,7 +573,11 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
     const ShaderModuleHandle*               pTempModules,
     const TempModuleState*                  pTempModuleStates,
     PipelineLayout*                         pPipelineLayout)
+#if VKI_RAY_TRACING
+    : GraphicsPipelineCommon(false, pDevice),
+#else
     : GraphicsPipelineCommon(pDevice),
+#endif
       m_objectCreateInfo(objectInfo),
       m_pBinaryCreateInfo(pBinaryInfo),
       m_libInfo(libInfo)
@@ -578,6 +587,9 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
         pPipelineLayout,
         nullptr,
         objectInfo.staticStateMask,
+#if VKI_RAY_TRACING
+        0,
+#endif
         apiHash);
 
     memcpy(m_tempModules,      pTempModules,      ShaderStage::ShaderStageGfxCount * sizeof(ShaderModuleHandle));

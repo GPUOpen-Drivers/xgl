@@ -80,7 +80,11 @@ public:
         Pal::IQueue**           pPalTmzQueues,
         Pal::IQueueSemaphore**  pPalTmzSemaphores,
         VirtualStackAllocator*  pStackAllocator,
-        CmdBufferRing*          pCmdBufferRing);
+        CmdBufferRing*          pCmdBufferRing,
+        Pal::IQueue**           pPalBackupQueues,
+        Pal::IQueue**           pPalBackupTmzQueues,
+        Pal::IQueueSemaphore**  pSwitchToPalBackupSemaphore,
+        Pal::IQueueSemaphore**  pSwitchFromPalBackupSemaphore);
 
     ~Queue();
 
@@ -261,6 +265,10 @@ protected:
         const Pal::PresentSwapChainInfo* pPresentInfo);
 
     Pal::IQueue*                       m_pPalQueues[MaxPalDevices];
+    Pal::IQueue*                       m_pPalBackupQueues[MaxPalDevices];
+    Pal::IQueue*                       m_pPalBackupTmzQueues[MaxPalDevices];
+    Pal::IQueueSemaphore*              m_pSwitchToPalBackupSemaphore[MaxPalDevices];
+    Pal::IQueueSemaphore*              m_pSwitchFromPalBackupSemaphore[MaxPalDevices];
     Pal::IQueue*                       m_pPalTmzQueues[MaxPalDevices];
     Pal::IQueueSemaphore*              m_pPalTmzSemaphore[MaxPalDevices];
     bool                               m_tmzPerQueue;

@@ -123,7 +123,11 @@ private:
             uint32_t externalPinnedHost    : 1;   // True if backing memory for this buffer may be imported from a pinned
                                                   // host allocation.
             uint32_t usageUniformBuffer    : 1;   // VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+#if VKI_RAY_TRACING
+            uint32_t usageAccelStorage     : 1;   // VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR
+#else
             uint32_t reserved1             : 1;
+#endif
             uint32_t createSparseBinding   : 1;   // VK_BUFFER_CREATE_SPARSE_BINDING_BIT
             uint32_t createSparseResidency : 1;   // VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT
             uint32_t createProtected       : 1;   // VK_BUFFER_CREATE_PROTECTED_BIT

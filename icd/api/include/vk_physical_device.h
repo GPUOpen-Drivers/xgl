@@ -717,6 +717,11 @@ public:
     VkResult ReleaseDisplay(VkDisplayKHR display);
 #endif
 
+#if VKI_RAY_TRACING
+    bool HwSupportsRayTracing() const;
+
+#endif
+
     static DeviceExtensions::Supported GetAvailableExtensions(
         const Instance*       pInstance,
         const PhysicalDevice* pPhysicalDevice);

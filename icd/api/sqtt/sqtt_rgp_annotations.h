@@ -205,6 +205,19 @@ enum class RgpSqttMarkerEventType : uint32_t
     InternalUnknown                             = 26,       // Draw or dispatch by PAL due to a reason we do not know
     CmdDrawIndirectCountKHR                     = 27,       // vkCmdDrawIndirectCountKHR
     CmdDrawIndexedIndirectCountKHR              = 28,       // vkCmdDrawIndexedIndirectCountKHR
+#if VKI_RAY_TRACING
+    CmdTraceRaysKHR                             = 30,       // vkCmdTraceRaysKHR
+    CmdTraceRaysIndirectKHR                     = 31,       // vkCmdTraceRaysIndirectKHR
+    CmdBuildAccelerationStructuresKHR           = 32,       // vkCmdBuildAccelerationStructuresKHR
+    CmdBuildAccelerationStructuresIndirectKHR   = 33,       // vkCmdBuildAccelerationStructuresIndirectKHR
+    CmdCopyAccelerationStructureKHR             = 34,       // vkCmdCopyAccelerationStructureKHR
+    CmdCopyAccelerationStructureToMemoryKHR     = 35,       // vkCmdCopyAccelerationStructureToMemoryKHR
+    CmdCopyMemoryToAccelerationStructureKHR     = 36,       // vkCmdCopyMemoryToAccelerationStructureKHR
+#endif
+#if VKI_RAY_TRACING
+    ShaderIndirectModeMask                      = 0x800000, // Used to mark whether the shader is compiled in indirect mode or not
+                                                            // This mask can only be used with CmdTraceRaysKHR and CmdTraceRaysIndirectKHR
+#endif
     CmdUnknown                                  = 0x7fff,
     Invalid                                     = 0xffffffff
 };
@@ -582,6 +595,9 @@ enum RgpBarrierReason : uint32_t
     RgpBarrierInternalGpuEventRecycleStall        = RgpBarrierInternalBase + 2,
     RgpBarrierInternalPreCopyQueryPoolResultsSync = RgpBarrierInternalBase + 3,
     RgpBarrierInternalInstructionTraceStall       = RgpBarrierInternalBase + 4
+#if VKI_RAY_TRACING
+   ,RgpBarrierInternalRayTracingSync              = RgpBarrierInternalBase + 5
+#endif
 };
 
 };

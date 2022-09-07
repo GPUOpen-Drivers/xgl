@@ -47,6 +47,10 @@
 #include "devmode/devmode_mgr.h"
 #endif
 
+#if VKI_RAY_TRACING
+#include "raytrace/ray_tracing_device.h"
+#endif
+
 #include "sqtt/sqtt_layer.h"
 
 #include "palQueue.h"
@@ -64,7 +68,11 @@ Queue::Queue(
     Pal::IQueue**           pPalTmzQueues,
     Pal::IQueueSemaphore**  pPalTmzSemaphores,
     VirtualStackAllocator*  pStackAllocator,
-    CmdBufferRing*          pCmdBufferRing)
+    CmdBufferRing*          pCmdBufferRing,
+    Pal::IQueue**           pPalBackupQueues,
+    Pal::IQueue**           pPalBackupTmzQueues,
+    Pal::IQueueSemaphore**  pSwitchToPalBackupSemaphore,
+    Pal::IQueueSemaphore**  pSwitchFromPalBackupSemaphore)
     :
     m_lastSubmissionProtected(false),
     m_pDevice(pDevice),
@@ -93,6 +101,42 @@ Queue::Queue(
     {
         memset(&m_pPalTmzQueues, 0, sizeof(pPalTmzQueues[0]) * pDevice->NumPalDevices());
         memset(&m_pPalTmzSemaphore, 0, sizeof(pPalTmzSemaphores[0]) * pDevice->NumPalDevices());
+    }
+
+    if ((pPalBackupQueues != nullptr) &&
+        (pSwitchToPalBackupSemaphore != nullptr) &&
+        (pSwitchFromPalBackupSemaphore != nullptr))
+    {
+        memcpy(m_pPalBackupQueues, pPalBackupQueues, sizeof(pPalBackupQueues[0]) * pDevice->NumPalDevices());
+        memcpy(m_pSwitchToPalBackupSemaphore,
+            pSwitchToPalBackupSemaphore,
+            sizeof(pSwitchToPalBackupSemaphore[0]) * pDevice->NumPalDevices());
+        memcpy(m_pSwitchFromPalBackupSemaphore,
+            pSwitchFromPalBackupSemaphore,
+            sizeof(pSwitchFromPalBackupSemaphore[0]) * pDevice->NumPalDevices());
+
+        if (pPalBackupTmzQueues != nullptr)
+        {
+            memcpy(m_pPalBackupTmzQueues,
+                pPalBackupTmzQueues,
+                sizeof(pPalBackupTmzQueues[0]) * pDevice->NumPalDevices());
+        }
+        else
+        {
+            memset(&m_pPalBackupTmzQueues, 0, sizeof(pPalBackupTmzQueues[0]) * pDevice->NumPalDevices());
+        }
+    }
+    else
+    {
+        memset(&m_pPalBackupQueues, 0, sizeof(pPalBackupQueues[0]) * pDevice->NumPalDevices());
+        memset(&m_pPalBackupTmzQueues, 0, sizeof(pPalBackupTmzQueues[0]) * pDevice->NumPalDevices());
+        memset(&m_pSwitchToPalBackupSemaphore,
+            0,
+            sizeof(m_pSwitchToPalBackupSemaphore[0]) * pDevice->NumPalDevices());
+        memset(&m_pSwitchFromPalBackupSemaphore,
+            0,
+            sizeof(m_pSwitchFromPalBackupSemaphore[0]) * pDevice->NumPalDevices());
+
     }
 
     memset(&m_palFrameMetadataControl, 0, sizeof(Pal::PerSourceFrameMetadataControl));
@@ -145,6 +189,26 @@ Queue::~Queue()
         if (m_pPalTmzSemaphore[i] != nullptr)
         {
             m_pPalTmzSemaphore[i]->Destroy();
+        }
+
+        if (m_pSwitchToPalBackupSemaphore[i] != nullptr)
+        {
+            m_pSwitchToPalBackupSemaphore[i]->Destroy();
+        }
+
+        if (m_pSwitchFromPalBackupSemaphore[i] != nullptr)
+        {
+            m_pSwitchFromPalBackupSemaphore[i]->Destroy();
+        }
+
+        if (m_pPalBackupQueues[i] != nullptr)
+        {
+            m_pPalBackupQueues[i]->Destroy();
+        }
+
+        if (m_pPalBackupTmzQueues[i] != nullptr)
+        {
+            m_pPalBackupTmzQueues[i]->Destroy();
         }
     }
 
@@ -366,6 +430,9 @@ VkResult Queue::Submit(
 
             const void* pNext = submitInfo.pNext;
 
+#if VKI_RAY_TRACING
+#endif
+
             while (pNext != nullptr)
             {
                 const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
@@ -515,6 +582,8 @@ VkResult Queue::Submit(
 
             for (uint32_t deviceIdx = 0; (deviceIdx < deviceCount) && (result == VK_SUCCESS); deviceIdx++)
             {
+                Pal::Result palResult = Pal::Result::Success;
+
                 // Get the PAL command buffer object from each Vulkan object and put it
                 // in the local array before submitting to PAL.
                 DispatchableCmdBuffer* const * pCommandBuffers =
@@ -539,8 +608,79 @@ VkResult Queue::Submit(
 
                     if (cmdBuf.IsProtected() == protectedSubmit)
                     {
+#if VKI_RAY_TRACING
+                        if (cmdBuf.HasRayTracing())
+                        {
+                            pCmdBufInfos[i].isValid = true;
+                            pCmdBufInfos[i].rayTracingExecuted = true;
+                        }
+#endif
 
                         pPalCmdBuffers[perSubQueueInfo.cmdBufferCount++] = cmdBuf.PalCmdBuffer(deviceIdx);
+
+                        if (cmdBuf.IsBackupBufferUsed())
+                        {
+                            // declare backup PAL command buffer handles
+                            Pal::ICmdBuffer* pBackupPalCmdBuffer = nullptr;
+                            Pal::IQueue* pMainQueue =
+                                (cmdBuf.IsProtected() && m_tmzPerQueue) ?
+                                m_pPalTmzQueues[deviceIdx] :
+                                m_pPalQueues[deviceIdx];
+                            Pal::IQueue* pBackupQueue =
+                                (cmdBuf.IsProtected() && m_tmzPerQueue) ?
+                                m_pPalBackupTmzQueues[deviceIdx] :
+                                m_pPalBackupQueues[deviceIdx];
+
+                            //prepare backup submit info
+                            Pal::PerSubQueueSubmitInfo backupPerSubQueueInfo = {};
+                            backupPerSubQueueInfo.cmdBufferCount = 0;
+                            backupPerSubQueueInfo.ppCmdBuffers = &pBackupPalCmdBuffer;
+                            Pal::SubmitInfo backupPalSubmitInfo = {};
+                            backupPalSubmitInfo.pPerSubQueueInfo = &backupPerSubQueueInfo;
+                            backupPalSubmitInfo.perSubQueueInfoCount = 1;
+
+                            if (palResult == Pal::Result::Success)
+                            {
+                                palResult = pMainQueue->Submit(palSubmitInfo);
+                            }
+
+                            backupPerSubQueueInfo.cmdBufferCount = 1;
+                            pBackupPalCmdBuffer = cmdBuf.BackupPalCmdBuffer(deviceIdx);
+                            if (palResult == Pal::Result::Success)
+                            {
+                                palResult = pMainQueue->SignalQueueSemaphore(
+                                        m_pSwitchToPalBackupSemaphore[deviceIdx],
+                                        0);
+
+                                if (palResult == Pal::Result::Success)
+                                {
+                                    palResult = pBackupQueue->WaitQueueSemaphore(
+                                        m_pSwitchToPalBackupSemaphore[deviceIdx],
+                                        0);
+                                }
+
+                                if (palResult == Pal::Result::Success)
+                                {
+                                    palResult = pBackupQueue->Submit(backupPalSubmitInfo);
+                                }
+
+                                if (palResult == Pal::Result::Success)
+                                {
+                                    palResult = pBackupQueue->SignalQueueSemaphore(
+                                        m_pSwitchFromPalBackupSemaphore[deviceIdx],
+                                        0);
+                                }
+
+                                if (palResult == Pal::Result::Success)
+                                {
+                                    palResult = pMainQueue->WaitQueueSemaphore(
+                                        m_pSwitchFromPalBackupSemaphore[deviceIdx],
+                                        0);
+                                }
+
+                                perSubQueueInfo.cmdBufferCount = 0;
+                            }
+                        }
 
                         const uint32_t stackSizeInDwords =
                             Util::NumBytesToNumDwords(cmdBuf.PerGpuState(deviceIdx)->maxPipelineStackSize);
@@ -567,8 +707,6 @@ VkResult Queue::Submit(
                     (palSubmitInfo.fenceCount > 0)     ||
                     (waitSemaphoreCount > 0))
                 {
-                    Pal::Result palResult = Pal::Result::Success;
-
                     if (timedQueueEvents == false)
                     {
                         const Pal::DeviceProperties& deviceProps = m_pDevice->VkPhysicalDevice(deviceIdx)->PalProperties();
@@ -714,6 +852,8 @@ VkResult Queue::Submit(
                 }
             }
 
+#if VKI_RAY_TRACING
+#endif
         }
     }
 
@@ -1176,6 +1316,9 @@ VkResult Queue::Present(
             virtStackFrame.FreeArray(pPresentRects);
         }
     }
+
+#if VKI_RAY_TRACING
+#endif
 
     return result;
 }

@@ -71,6 +71,10 @@
 #include <climits>
 #include <type_traits>
 
+#if VKI_RAY_TRACING
+#include "gpurt/gpurt.h"
+#endif
+
 #include "devmode/devmode_mgr.h"
 #include "protocols/rgpProtocol.h"
 
@@ -114,6 +118,9 @@ constexpr VkFormatFeatureFlags AllBufFeatures =
     VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
     VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT |
     VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT |
+#if VKI_RAY_TRACING
+    VK_FORMAT_FEATURE_ACCELERATION_STRUCTURE_VERTEX_BUFFER_BIT_KHR |
+#endif
     VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
 
 #if PAL_ENABLE_PRINTS_ASSERTS
@@ -1181,6 +1188,16 @@ void PhysicalDevice::PopulateFormatProperties()
                 while (aspectMask != 0);
             }
         }
+
+#if VKI_RAY_TRACING
+        if (Formats::IsRTVertexFormat(format))
+        {
+            if (IsExtensionSupported(DeviceExtensions::KHR_ACCELERATION_STRUCTURE))
+            {
+                bufferFlags |= VK_FORMAT_FEATURE_ACCELERATION_STRUCTURE_VERTEX_BUFFER_BIT_KHR;
+            }
+        }
+#endif
 
         if (format == VK_FORMAT_R32_SFLOAT)
         {
@@ -3648,6 +3665,15 @@ static bool IsSingleChannelMinMaxFilteringSupported(
             pPhysicalDevice->PalProperties().gfxipProperties.flags.supportSingleChannelMinMaxFilter);
 }
 
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+bool PhysicalDevice::HwSupportsRayTracing() const
+{
+    return (m_properties.gfxipProperties.srdSizes.bvh != 0);
+}
+
+#endif
+
 // =====================================================================================================================
 // Get available device extensions or populate the specified physical device with the extensions supported by it.
 //
@@ -3854,6 +3880,22 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PRIMITIVE_TOPOLOGY_LIST_RESTART));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DYNAMIC_RENDERING));
 
+#if VKI_RAY_TRACING
+
+    bool exposeRT = sizeof(void*) == 8;
+    if ((pPhysicalDevice == nullptr) || pPhysicalDevice->HwSupportsRayTracing())
+    {
+        if (exposeRT)
+        {
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RAY_QUERY));
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RAY_TRACING_PIPELINE));
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_ACCELERATION_STRUCTURE));
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DEFERRED_HOST_OPERATIONS));
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RAY_TRACING_MAINTENANCE1));
+
+        }
+    }
+#endif
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PIPELINE_LIBRARY));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_INTEGER_DOT_PRODUCT));
@@ -4116,9 +4158,15 @@ void PhysicalDevice::PopulateQueueFamilies()
                 transferGranularityOverride   = settings.transferGranularityUniversalOverride;
                 m_queueFamilies[m_queueFamilyCount].validShaderStages = ShaderStageAllGraphics |
                                                                         VK_SHADER_STAGE_COMPUTE_BIT;
+#if VKI_RAY_TRACING
+                m_queueFamilies[m_queueFamilyCount].validShaderStages |= RayTraceShaderStages;
+#endif
                 break;
             case Pal::EngineTypeCompute:
                 pComputeQueueFamilyProperties = &m_queueFamilies[m_queueFamilyCount].properties;
+#if VKI_RAY_TRACING
+                m_queueFamilies[m_queueFamilyCount].validShaderStages |= RayTraceShaderStages;
+#endif
                 palImageLayoutFlag            = Pal::LayoutComputeEngine;
                 transferGranularityOverride   = settings.transferGranularityComputeOverride;
                 m_queueFamilies[m_queueFamilyCount].validShaderStages |= VK_SHADER_STAGE_COMPUTE_BIT;
@@ -4428,6 +4476,17 @@ void PhysicalDevice::GetPhysicalDeviceSubgroupProperties(
                             VK_SHADER_STAGE_GEOMETRY_BIT |
                             VK_SHADER_STAGE_FRAGMENT_BIT |
                             VK_SHADER_STAGE_COMPUTE_BIT;
+
+#if VKI_RAY_TRACING
+    if (IsExtensionSupported(DeviceExtensions::KHR_RAY_TRACING_PIPELINE))
+    {
+        *pSupportedStages |= VK_SHADER_STAGE_RAYGEN_BIT_KHR |
+                             VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+                             VK_SHADER_STAGE_MISS_BIT_KHR |
+                             VK_SHADER_STAGE_INTERSECTION_BIT_KHR |
+                             VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+    }
+#endif
 
     *pSupportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
                             VK_SUBGROUP_FEATURE_VOTE_BIT |
@@ -5766,6 +5825,86 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+#if VKI_RAY_TRACING
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR:
+            {
+                if (IsExtensionSupported(DeviceExtensions::KHR_RAY_TRACING_PIPELINE))
+                {
+                    auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceRayTracingPipelineFeaturesKHR*>(pHeader);
+
+                    if (updateFeatures)
+                    {
+                        pExtInfo->rayTracingPipeline                    = VK_TRUE;
+                        pExtInfo->rayTracingPipelineTraceRaysIndirect   = VK_TRUE;
+                        pExtInfo->rayTraversalPrimitiveCulling          = VK_TRUE;
+
+                        pExtInfo->rayTracingPipelineShaderGroupHandleCaptureReplay      = VK_TRUE;
+
+                        // We cannot support capture replay for indirect RT pipelines in mixed mode (reused handles
+                        // mixed with non-reused handles). That is because we have no way to gaurantee the shaders' VAs
+                        // are the same between capture and replay, we need full reused handles to do a 1-on-1 mapping
+                        // in order to replay correctly.
+                        pExtInfo->rayTracingPipelineShaderGroupHandleCaptureReplayMixed = VK_FALSE;
+                    }
+
+                    structSize = sizeof(*pExtInfo);
+                }
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR:
+            {
+                if (IsExtensionSupported(DeviceExtensions::KHR_ACCELERATION_STRUCTURE))
+                {
+                    auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceAccelerationStructureFeaturesKHR*>(pHeader);
+
+                    if (updateFeatures)
+                    {
+                        pExtInfo->accelerationStructure                                 = VK_TRUE;
+                        pExtInfo->accelerationStructureCaptureReplay                    = VK_TRUE;
+                        pExtInfo->accelerationStructureIndirectBuild                    = GetRuntimeSettings().rtEnableAccelStructIndirectBuild;
+                        pExtInfo->accelerationStructureHostCommands                     = GetRuntimeSettings().rtEnableAccelStructHostFeatures;
+                        pExtInfo->descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
+                    }
+
+                    structSize = sizeof(*pExtInfo);
+                }
+                break;
+            }
+
+#if VKI_RAY_TRACING
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR:
+            {
+                auto * pExtInfo = reinterpret_cast<VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->rayTracingMaintenance1               = VK_TRUE;
+                    pExtInfo->rayTracingPipelineTraceRaysIndirect2 = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+#endif
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR:
+            {
+                if (IsExtensionSupported(DeviceExtensions::KHR_RAY_QUERY))
+                {
+                    auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceRayQueryFeaturesKHR*>(pHeader);
+
+                    if (updateFeatures)
+                    {
+                        pExtInfo->rayQuery = VK_TRUE;
+                    }
+
+                    structSize = sizeof(*pExtInfo);
+                }
+                break;
+            }
+#endif
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceConditionalRenderingFeaturesEXT*>(pHeader);
@@ -6665,6 +6804,51 @@ void PhysicalDevice::GetDeviceProperties2(
 
             break;
         }
+
+#if VKI_RAY_TRACING
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR:
+        {
+            if (IsExtensionSupported(DeviceExtensions::KHR_RAY_TRACING_PIPELINE))
+            {
+                auto* pProps                                = static_cast<VkPhysicalDeviceRayTracingPipelinePropertiesKHR*>(pNext);
+
+                pProps->shaderGroupHandleSize               = GpuRt::RayTraceShaderIdentifierByteSize;
+                pProps->maxRayRecursionDepth                = GetRuntimeSettings().rtMaxRayRecursionDepth;
+                pProps->maxShaderGroupStride                = GpuRt::RayTraceMaxShaderRecordByteStride;
+                pProps->shaderGroupBaseAlignment            = GpuRt::RayTraceShaderRecordBaseAlignment;
+                pProps->shaderGroupHandleCaptureReplaySize  = GpuRt::RayTraceShaderIdentifierByteSize;
+                pProps->maxRayDispatchInvocationCount       = GpuRt::RayTraceRayGenShaderThreads;
+                pProps->shaderGroupHandleAlignment          = 4;
+                pProps->maxRayHitAttributeSize              = 32;
+            }
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR:
+        {
+            if (IsExtensionSupported(DeviceExtensions::KHR_ACCELERATION_STRUCTURE))
+            {
+                constexpr uint32 RayTraceMaxDescriptorSetAccelerationStructures = 0x100000;
+
+                auto* pProps = static_cast<VkPhysicalDeviceAccelerationStructurePropertiesKHR*>(pNext);
+
+                pProps->maxGeometryCount    = GpuRt::RayTraceBLASMaxGeometries;
+                pProps->maxInstanceCount    = GpuRt::RayTraceTLASMaxInstanceCount;
+                pProps->maxPrimitiveCount   = GpuRt::RayTraceBLASMaxPrimitiveCount;
+                pProps->maxPerStageDescriptorAccelerationStructures
+                                            = RayTraceMaxDescriptorSetAccelerationStructures;
+                pProps->maxPerStageDescriptorUpdateAfterBindAccelerationStructures
+                                            = RayTraceMaxDescriptorSetAccelerationStructures;
+                pProps->maxDescriptorSetAccelerationStructures
+                                            = RayTraceMaxDescriptorSetAccelerationStructures;
+                pProps->maxDescriptorSetUpdateAfterBindAccelerationStructures
+                                            = RayTraceMaxDescriptorSetAccelerationStructures;
+                pProps->minAccelerationStructureScratchOffsetAlignment
+                                            = GpuRt::RayTraceAccelerationStructureByteAlignment;
+            }
+            break;
+        }
+#endif
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES_EXT:
         {

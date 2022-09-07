@@ -31,6 +31,7 @@
 #include "include/vk_utils.h"
 #include "include/vk_formats.h"
 #include "include/vk_shader_code.h"
+#include "include/vk_instance.h"
 #include "include/khronos/vk_icd.h"
 #include "include/vk_descriptor_set_layout.h"
 #include "settings/g_settings.h"
@@ -48,6 +49,10 @@
 #include "palScreen.h"
 #include "palSwapChain.h"
 
+#if VKI_RAY_TRACING
+#include "gpurt/gpurt.h"
+#endif
+
 #include "vkgcDefs.h"
 
 namespace vk
@@ -62,6 +67,9 @@ constexpr uint32_t MaxPalAspectsPerMask         = 3;    // Images can have up to
 constexpr uint32_t MaxPalColorAspectsPerMask    = 3;    // YUV images can have up to 3 planes.
 constexpr uint32_t MaxPalDepthAspectsPerMask    = 2;    // Depth/stencil images can have up to 2 planes.
 constexpr uint32_t MaxRangePerAttachment        = 2;    // Depth/stencil images can have up to 2 planes.
+
+constexpr uint32_t PfpPipelineStages = (Pal::PipelineStageFetchIndices |
+                                        Pal::PipelineStageFetchIndirectArgs);
 
 static_assert((MaxRangePerAttachment == MaxPalDepthAspectsPerMask),
               "API's max depth/stencil ranges per attachment and PAL max depth aspects must match");
@@ -1760,6 +1768,38 @@ static VkFormat convertCompressedFormat(VkFormat format, bool useBC3)
 
 namespace convert
 {
+#if VKI_RAY_TRACING
+    // =====================================================================================================================
+    // Performs conversion of traceRayProfileRayFlags to RayTracingRayFlag
+    static uint32_t  TraceRayProfileRayFlagsToRayTracingRayFlags(
+        uint32_t                           traceRayProfileRayFlag) // [in] Input trace ray profile ray flag
+    {
+        uint32_t rayFlag = 0;
+
+        switch (traceRayProfileRayFlag)
+        {
+        case vk::TraceRayProfileFlags::TraceRayProfileForceOpaque:
+            rayFlag = Vkgc::RayTracingRayFlag::RayTracingRayFlagForceOpaque;
+            break;
+        case vk::TraceRayProfileFlags::TraceRayProfileAcceptFirstHitAndEndSearch:
+            rayFlag = Vkgc::RayTracingRayFlag::RayTracingRayFlagAcceptFirstHitAndEndSearch;
+            break;
+        case vk::TraceRayProfileFlags::TraceRayProfileSkipClosestHitShader:
+            rayFlag = Vkgc::RayTracingRayFlag::RayTracingRayFlagSkipClosestHitShader;
+            break;
+        case vk::TraceRayProfileFlags::TraceRayProfileCullFrontFacingTriangles:
+            rayFlag = Vkgc::RayTracingRayFlag::RayTracingRayFlagCullBackFacingTriangles;
+            break;
+        case vk::TraceRayProfileFlags::TraceRayProfileCullBackFacingTriangles:
+            rayFlag = Vkgc::RayTracingRayFlag::RayTracingRayFlagCullFrontFacingTriangles;
+            break;
+        default:
+            rayFlag = Vkgc::RayTracingRayFlag::RayTracingRayFlagNone;
+        }
+
+        return rayFlag;
+    }
+#endif
 }
 
 // =====================================================================================================================
@@ -2005,6 +2045,10 @@ inline Pal::HwPipePoint VkToPalSrcPipePoint(
 
     // Flags that only require signaling post-CS.
     static const PipelineStageFlags srcPostCsFlags =
+#if VKI_RAY_TRACING
+        VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR           |
+        VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
+#endif
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 
     // Flags that only require signaling post-BLT operations.
@@ -2160,6 +2204,10 @@ static const HwPipePointMappingEntry hwPipePointMappingTable[] =
     {
         Pal::HwPipePostCs,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+#if VKI_RAY_TRACING
+        | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR
+        | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR
+#endif
     },
 
     // flags that require flush Post-Blt workload.
@@ -2235,6 +2283,10 @@ inline Pal::HwPipePoint VkToPalWaitPipePoint(PipelineStageFlags flags)
         VK_PIPELINE_STAGE_2_BLIT_BIT_KHR                        |
         VK_PIPELINE_STAGE_2_CLEAR_BIT_KHR                       |
         VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR   |
+#if VKI_RAY_TRACING
+        VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR            |
+        VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR  |
+#endif
         VK_PIPELINE_STAGE_TRANSFER_BIT                          |
         VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT;
 
@@ -2264,6 +2316,133 @@ inline Pal::HwPipePoint VkToPalWaitPipePoint(PipelineStageFlags flags)
     return dstPipePoint;
 }
 
+#if VKI_RAY_TRACING
+inline uint32_t TraceRayProfileFlagsToRayFlag(
+    const RuntimeSettings& settings)
+{
+    uint32_t profileRayFlags = 0;
+
+    if (settings.rtTraceRayProfileFlags != TraceRayProfileDisable)
+    {
+        if (settings.rtTraceRayProfileFlags & TraceRayProfileForceOpaque)
+        {
+            profileRayFlags |= convert::TraceRayProfileRayFlagsToRayTracingRayFlags(TraceRayProfileForceOpaque);
+        }
+        if (settings.rtTraceRayProfileFlags & TraceRayProfileAcceptFirstHitAndEndSearch)
+        {
+            profileRayFlags |=
+                convert::TraceRayProfileRayFlagsToRayTracingRayFlags(TraceRayProfileAcceptFirstHitAndEndSearch);
+        }
+        if (settings.rtTraceRayProfileFlags & TraceRayProfileSkipClosestHitShader)
+        {
+            profileRayFlags |=
+                convert::TraceRayProfileRayFlagsToRayTracingRayFlags(TraceRayProfileSkipClosestHitShader);
+        }
+        if (settings.rtTraceRayProfileFlags & TraceRayProfileCullFrontFacingTriangles)
+        {
+            profileRayFlags |=
+                convert::TraceRayProfileRayFlagsToRayTracingRayFlags(TraceRayProfileCullFrontFacingTriangles);
+        }
+        if (settings.rtTraceRayProfileFlags & TraceRayProfileCullBackFacingTriangles)
+        {
+            profileRayFlags |=
+                convert::TraceRayProfileRayFlagsToRayTracingRayFlags(TraceRayProfileCullBackFacingTriangles);
+        }
+    }
+
+    return profileRayFlags;
+}
+
+inline uint32_t TraceRayProfileMaxIterationsToMaxIterations(
+    const RuntimeSettings& settings)
+{
+    uint32_t profileMaxIterations = 0xFFFFFFFF;
+
+    if ((settings.rtTraceRayProfileFlags != TraceRayProfileDisable) &&
+        (settings.rtTraceRayProfileFlags & TraceRayProfileForceMaxIteration))
+    {
+        profileMaxIterations = settings.rtProfileMaxIteration;
+    }
+
+    return profileMaxIterations;
+}
+#endif
+
+// =====================================================================================================================
+// Converts pipe points to src Pal::PipelineStage
+inline uint32_t ConvertPipePointToPipeStage(
+    Pal::HwPipePoint pipePoint)
+{
+    uint32_t stageMask = 0;
+
+    switch (pipePoint)
+    {
+        case Pal::HwPipeTop:
+            stageMask = Pal::PipelineStageTopOfPipe;
+            break;
+        // Same as Pal::HwPipePreCs and Pal::HwPipePreBlt
+        case Pal::HwPipePostPrefetch:
+            stageMask = Pal::PipelineStageFetchIndirectArgs;
+            break;
+        case Pal::HwPipePreRasterization:
+            stageMask = Pal::PipelineStageFetchIndices | Pal::PipelineStageVs | Pal::PipelineStageHs |
+                        Pal::PipelineStageDs | Pal::PipelineStageGs;
+            break;
+        case Pal::HwPipePostPs:
+            stageMask = Pal::PipelineStagePs;
+            break;
+        case Pal::HwPipePreColorTarget:
+            stageMask = Pal::PipelineStageLateDsTarget;
+            break;
+        case Pal::HwPipePostCs:
+            stageMask = Pal::PipelineStageCs;
+            break;
+        case Pal::HwPipePostBlt:
+            stageMask = Pal::PipelineStageBlt;
+            break;
+        case Pal::HwPipeBottom:
+            stageMask = Pal::PipelineStageBottomOfPipe;
+            break;
+    }
+
+    return stageMask;
+}
+
+// =====================================================================================================================
+// Converts wait points to dst Pal::PipelineStage
+inline uint32_t ConvertWaitPointToPipeStage(
+    Pal::HwPipePoint pipePoint)
+{
+    uint32_t stageMask = 0;
+
+    switch (pipePoint)
+    {
+        case Pal::HwPipeTop:
+            stageMask = Pal::PipelineStageTopOfPipe;
+            break;
+        // Same as Pal::HwPipePreCs and Pal::HwPipePreBlt
+        case Pal::HwPipePostPrefetch:
+            stageMask = Pal::PipelineStageCs | Pal::PipelineStageVs | Pal::PipelineStageBlt;
+            break;
+        case Pal::HwPipePreRasterization:
+            stageMask = Pal::PipelineStageEarlyDsTarget;
+            break;
+        case Pal::HwPipePostPs:
+            stageMask = Pal::PipelineStageLateDsTarget;
+            break;
+        case Pal::HwPipePreColorTarget:
+            stageMask = Pal::PipelineStageColorTarget;
+            break;
+        case Pal::HwPipePostCs:
+        case Pal::HwPipePostBlt:
+        case Pal::HwPipeBottom:
+            stageMask = Pal::PipelineStageBottomOfPipe;
+            break;
+    }
+
+    return stageMask;
+}
+
 // =====================================================================================================================
 // Converts Vulkan source pipeline stage flags to PAL pipeline stage mask.
 inline uint32_t VkToPalPipelineStageFlags(
@@ -2271,8 +2450,7 @@ inline uint32_t VkToPalPipelineStageFlags(
 {
     uint32_t palPipelineStageMask = 0;
 
-    if (stageMask & (VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR |
-                     VK_PIPELINE_STAGE_2_HOST_BIT_KHR))
+    if (stageMask & VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR)
     {
         palPipelineStageMask |= Pal::PipelineStageTopOfPipe;
     }
@@ -2294,8 +2472,9 @@ inline uint32_t VkToPalPipelineStageFlags(
                                 Pal::PipelineStageVs;
     }
 
-    if (stageMask & (VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR |
-                     VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT_KHR))
+    if (stageMask & (VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR          |
+                     VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT_KHR |
+                     VK_PIPELINE_STAGE_2_TRANSFORM_FEEDBACK_BIT_EXT))
     {
         palPipelineStageMask |= Pal::PipelineStageVs;
     }
@@ -2315,7 +2494,8 @@ inline uint32_t VkToPalPipelineStageFlags(
         palPipelineStageMask |= Pal::PipelineStageGs;
     }
 
-    if (stageMask & VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR)
+    if (stageMask & (VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR |
+                     VK_PIPELINE_STAGE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR))
     {
         palPipelineStageMask |= Pal::PipelineStageVs |
                                 Pal::PipelineStageHs |
@@ -2359,6 +2539,11 @@ inline uint32_t VkToPalPipelineStageFlags(
     }
 
     if (stageMask & (VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR
+#if VKI_RAY_TRACING
+                   | VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_COPY_BIT_KHR
+                   | VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR
+                   | VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR
+#endif
         ))
     {
         palPipelineStageMask |= Pal::PipelineStageCs;
@@ -2378,7 +2563,8 @@ inline uint32_t VkToPalPipelineStageFlags(
         palPipelineStageMask |= Pal::PipelineStageAllStages;
     }
 
-    if (stageMask & VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR)
+    if (stageMask & (VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR |
+                     VK_PIPELINE_STAGE_2_HOST_BIT_KHR))
     {
         palPipelineStageMask |= Pal::PipelineStageBottomOfPipe;
     }
@@ -3501,6 +3687,40 @@ inline uint32_t VkToVkgcShaderStageMask(VkShaderStageFlags vkShaderStageFlags)
         vkgcShaderMask |= Vkgc::ShaderStageComputeBit;
     }
 
+#if VKI_RAY_TRACING
+    expectedShaderStageCount += 6;
+
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_RAYGEN_BIT_KHR) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageRayTracingRayGenBit;
+    }
+
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_ANY_HIT_BIT_KHR) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageRayTracingAnyHitBit;
+    }
+
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageRayTracingClosestHitBit;
+    }
+
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_MISS_BIT_KHR) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageRayTracingMissBit;
+    }
+
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_INTERSECTION_BIT_KHR) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageRayTracingIntersectBit;
+    }
+
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_CALLABLE_BIT_KHR) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageRayTracingCallableBit;
+    }
+#endif
+
     VK_ASSERT(expectedShaderStageCount == Vkgc::ShaderStageCount); // Need update this function if mismatch
     return vkgcShaderMask;
 }
@@ -3540,6 +3760,40 @@ inline VkShaderStageFlags VkgcToVkShaderStageMask(uint32_t vkgcShaderStageFlags)
     {
         vkShaderMask |= VK_SHADER_STAGE_COMPUTE_BIT;
     }
+
+#if VKI_RAY_TRACING
+    expectedShaderStageCount += 6;
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageRayTracingRayGenBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+    }
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageRayTracingAnyHitBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+    }
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageRayTracingClosestHitBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    }
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageRayTracingMissBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_MISS_BIT_KHR;
+    }
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageRayTracingIntersectBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+    }
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageRayTracingCallableBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+    }
+#endif
 
     VK_ASSERT(expectedShaderStageCount == Vkgc::ShaderStageCount); // Need update this function if mismatch
     return vkShaderMask;

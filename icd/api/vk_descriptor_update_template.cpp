@@ -34,6 +34,10 @@
 #include "include/vk_device.h"
 #include "include/vk_utils.h"
 
+#if VKI_RAY_TRACING
+#include "raytrace/vk_acceleration_structure.h"
+#endif
+
 namespace vk
 {
 
@@ -176,6 +180,11 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
     case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
         pFunc = &UpdateEntryInlineUniformBlock<numPalDevices>;
         break;
+#if VKI_RAY_TRACING
+    case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+        pFunc = &UpdateEntryAccelerationStructure<numPalDevices>;
+        break;
+#endif
     default:
         VK_ASSERT(!"Unexpected descriptor type");
         break;
@@ -388,6 +397,39 @@ void DescriptorUpdateTemplate::UpdateEntryCombinedImageSampler(
     }
     while (deviceIdx < numPalDevices);
 }
+
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+    void DescriptorUpdateTemplate::UpdateEntryAccelerationStructure(
+        const Device*               pDevice,
+        VkDescriptorSet             descriptorSet,
+        const void*                 pDescriptorInfo,
+        const TemplateUpdateInfo&   entry)
+{
+    DescriptorSet<numPalDevices>*     pDstSet = DescriptorSet<numPalDevices>::ObjectFromHandle(descriptorSet);
+    const VkAccelerationStructureKHR* pAccels = static_cast<const VkAccelerationStructureKHR*>(pDescriptorInfo);
+
+    uint32_t deviceIdx = 0;
+
+    do
+    {
+        uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
+
+        DescriptorUpdate::WriteAccelerationStructureDescriptors(
+            pDevice,
+            pAccels,
+            deviceIdx,
+            pDestAddr,
+            entry.descriptorCount,
+            entry.dstBindStaDwArrayStride);
+
+        deviceIdx++;
+
+    }
+    while (deviceIdx < numPalDevices);
+}
+#endif
 
 // =====================================================================================================================
 template <size_t bufferDescSize, VkDescriptorType descriptorType, uint32_t numPalDevices>

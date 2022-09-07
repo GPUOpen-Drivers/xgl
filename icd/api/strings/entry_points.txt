@@ -243,6 +243,14 @@ vkGetBufferDeviceAddressKHR                         @device       @dext(KHR_buff
 vkGetBufferOpaqueCaptureAddressKHR                  @device       @dext(KHR_buffer_device_address)
 vkGetDeviceMemoryOpaqueCaptureAddressKHR            @device       @dext(KHR_buffer_device_address)
 
+#if VKI_RAY_TRACING
+vkCreateDeferredOperationKHR                        @device       @dext(KHR_deferred_host_operations)
+vkDestroyDeferredOperationKHR                       @device       @dext(KHR_deferred_host_operations)
+vkGetDeferredOperationResultKHR                     @device       @dext(KHR_deferred_host_operations)
+vkGetDeferredOperationMaxConcurrencyKHR             @device       @dext(KHR_deferred_host_operations)
+vkDeferredOperationJoinKHR                          @device       @dext(KHR_deferred_host_operations)
+#endif
+
 vkCreateDescriptorUpdateTemplateKHR                 @device       @dext(KHR_descriptor_update_template)
 vkDestroyDescriptorUpdateTemplateKHR                @device       @dext(KHR_descriptor_update_template)
 vkUpdateDescriptorSetWithTemplateKHR                @device       @dext(KHR_descriptor_update_template)
@@ -417,6 +425,33 @@ vkCmdEndConditionalRenderingEXT                     @device       @dext(EXT_cond
 
 vkGetPhysicalDeviceToolPropertiesEXT                @physDevice   @dext(EXT_tooling_info)
 
+#if VKI_RAY_TRACING
+vkCreateAccelerationStructureKHR                    @device       @dext(KHR_acceleration_structure)
+vkDestroyAccelerationStructureKHR                   @device       @dext(KHR_acceleration_structure)
+vkCmdBuildAccelerationStructuresKHR                 @device       @dext(KHR_acceleration_structure)
+vkCmdBuildAccelerationStructuresIndirectKHR         @device       @dext(KHR_acceleration_structure)
+vkBuildAccelerationStructuresKHR                    @device       @dext(KHR_acceleration_structure)
+vkCopyAccelerationStructureKHR                      @device       @dext(KHR_acceleration_structure)
+vkCopyAccelerationStructureToMemoryKHR              @device       @dext(KHR_acceleration_structure)
+vkCopyMemoryToAccelerationStructureKHR              @device       @dext(KHR_acceleration_structure)
+vkWriteAccelerationStructuresPropertiesKHR          @device       @dext(KHR_acceleration_structure)
+vkCmdCopyAccelerationStructureKHR                   @device       @dext(KHR_acceleration_structure)
+vkCmdCopyAccelerationStructureToMemoryKHR           @device       @dext(KHR_acceleration_structure)
+vkCmdCopyMemoryToAccelerationStructureKHR           @device       @dext(KHR_acceleration_structure)
+vkGetAccelerationStructureDeviceAddressKHR          @device       @dext(KHR_acceleration_structure)
+vkCmdWriteAccelerationStructuresPropertiesKHR       @device       @dext(KHR_acceleration_structure)
+vkGetAccelerationStructureBuildSizesKHR             @device       @dext(KHR_acceleration_structure)
+vkGetDeviceAccelerationStructureCompatibilityKHR    @device       @dext(KHR_acceleration_structure)
+
+vkCmdTraceRaysKHR                                   @device       @dext(KHR_ray_tracing_pipeline)
+vkCreateRayTracingPipelinesKHR                      @device       @dext(KHR_ray_tracing_pipeline)
+vkGetRayTracingShaderGroupHandlesKHR                @device       @dext(KHR_ray_tracing_pipeline)
+vkGetRayTracingCaptureReplayShaderGroupHandlesKHR   @device       @dext(KHR_ray_tracing_pipeline)
+vkCmdTraceRaysIndirectKHR                           @device       @dext(KHR_ray_tracing_pipeline)
+vkGetRayTracingShaderGroupStackSizeKHR              @device       @dext(KHR_ray_tracing_pipeline)
+vkCmdSetRayTracingPipelineStackSizeKHR              @device       @dext(KHR_ray_tracing_pipeline)
+#endif
+
 vkCmdSetEvent2KHR                                   @device       @dext(KHR_synchronization2)
 vkCmdResetEvent2KHR                                 @device       @dext(KHR_synchronization2)
 vkCmdWaitEvents2KHR                                 @device       @dext(KHR_synchronization2)
@@ -461,6 +496,10 @@ vkCmdPushDescriptorSetWithTemplateKHR               @device       @dext(KHR_push
 vkGetDeviceBufferMemoryRequirementsKHR              @device       @dext(KHR_maintenance4)
 vkGetDeviceImageMemoryRequirementsKHR               @device       @dext(KHR_maintenance4)
 vkGetDeviceImageSparseMemoryRequirementsKHR         @device       @dext(KHR_maintenance4)
+
+#if VKI_RAY_TRACING
+vkCmdTraceRaysIndirect2KHR                          @device       @dext(KHR_ray_tracing_maintenance1)
+#endif
 
 vkGetShaderModuleIdentifierEXT                      @device       @dext(EXT_shader_module_identifier)
 vkGetShaderModuleCreateInfoIdentifierEXT            @device       @dext(EXT_shader_module_identifier)

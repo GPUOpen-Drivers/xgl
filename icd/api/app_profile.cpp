@@ -355,6 +355,30 @@ constexpr AppProfilePatternEntry AppEngineSaschaWillemsExamples =
     "vulkanexample"
 };
 
+#if VKI_RAY_TRACING
+constexpr AppProfilePatternEntry AppEngineVKD3D =
+{
+    PatternEngineNameLower,
+    Util::MetroHash::Hash{{{
+        0x32778d0a,
+        0x05b56a84,
+        0x8f0c25bc,
+        0x1d75f3eb
+    }}}
+};
+
+constexpr AppProfilePatternEntry AppNameControlDX12 =
+{
+    PatternAppNameLower,
+    Util::MetroHash::Hash{{{
+        0x75f46e9f,
+        0x66e3de7b,
+        0x57150c75,
+        0xa990df0c
+    }}}
+};
+#endif
+
 constexpr AppProfilePatternEntry AppNameIdTechLauncher =
 {
     PatternAppNameLower,
@@ -1014,6 +1038,17 @@ AppProfilePattern AppPatternTable[] =
             PatternEnd
         }
     },
+
+#if VKI_RAY_TRACING
+    {
+        AppProfile::ControlDX12,
+        {
+            AppNameControlDX12,
+            AppEngineVKD3D,
+            PatternEnd
+        }
+    },
+#endif
 
     {
         AppProfile::AngleEngine,

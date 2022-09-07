@@ -108,6 +108,9 @@ enum class AppProfile : uint32_t
     Hyperscape,            // Hyperscape by Ubisoft
     SeriousSam4,           // Serious Sam 4 by Croteam
     SniperElite5,           // Sniper Elite 5 by Rebellion
+#if VKI_RAY_TRACING
+    ControlDX12,                 // VKD3D Control Ultimate Edition
+#endif
     Maxon,                       // Maxon
     AngleEngine,                 // Angle Engine
     CSGO,                        // Counter-Strike: Global Offensive

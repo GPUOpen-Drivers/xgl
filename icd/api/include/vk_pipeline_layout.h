@@ -87,6 +87,14 @@ struct UserDataLayout
             uint32_t specConstBufVertexRegBase;
             uint32_t specConstBufFragmentRegBase;
 
+#if VKI_RAY_TRACING
+            // Base user data register index to use for ray tracing capture replay VA mapping internal buffer
+            uint32_t rtCaptureReplayConstBufRegBase;
+#endif
+
+            // Base user data register index to use for thread group order reversal state
+            uint32_t threadGroupReversalRegBase;
+
         } compact;
 
         struct
@@ -108,9 +116,23 @@ struct UserDataLayout
             // The size of buffer required to store push constants
             uint32_t pushConstSizeInDword;
 
+#if VKI_RAY_TRACING
+            // Base user data register index to use for buffer storing ray tracing dispatch arguments
+            // The number of user data registers used is always 1
+            uint32_t dispatchRaysArgsPtrRegBase;
+#endif
+
             // Base user data register index to use for the constant buffer used in uber-fetch shader
             // The number of user data register used is always 2
             uint32_t uberFetchConstBufRegBase;
+
+#if VKI_RAY_TRACING
+            // Base user data register index to use for ray tracing capture replay VA mapping internal buffer
+            uint32_t rtCaptureReplayConstBufRegBase;
+#endif
+
+            // Base user data register index to use for thread group order reversal state
+            uint32_t threadGroupReversalRegBase;
 
         } indirect;
     };
@@ -143,6 +165,12 @@ public:
 
     // Magic number describing an invalid or unmapped user data entry
     static constexpr uint8 InvalidReg = UINT8_MAX;
+
+#if VKI_RAY_TRACING
+    static constexpr uint32_t MaxTraceRayResourceNodeCount = 16;
+    static constexpr uint32_t MaxTraceRayUserDataNodeCount = 1;
+    static constexpr uint32_t MaxTraceRayUserDataRegCount  = 1;
+#endif
 
     static constexpr size_t GetMaxResMappingRootNodeSize();
     static constexpr size_t GetMaxResMappingNodeSize();
@@ -185,6 +213,10 @@ public:
         uint32_t            numUserDataNodes;
         // Number of DescriptorRangeValue needed by all layouts in the chain
         uint32_t            numDescRangeValueNodes;
+#if VKI_RAY_TRACING
+        // Denotes if GpuRT resource mappings will need to be added to this pipeline layout
+        bool                hasRayTracing;
+#endif
     };
 
     typedef VkPipelineLayout ApiType;
@@ -193,6 +225,9 @@ public:
         const uint32_t              stageMask,
         const VbBindingInfo*        pVbInfo,
         const bool                  appendFetchShaderCb,
+#if VKI_RAY_TRACING
+        const bool                  appendRtCaptureReplayCb,
+#endif
         void*                       pBuffer,
         Vkgc::ResourceMappingData*  pResourceMapping,
         Vkgc::ResourceLayoutScheme* pLayoutScheme) const;
@@ -238,6 +273,10 @@ public:
             Util::VoidPtrInc(this, sizeof(*this) + SetUserDataLayoutSize()))[setIndex];
     }
 
+#if VKI_RAY_TRACING
+    uint32_t GetDispatchRaysUserData() const;
+#endif
+
 protected:
     static VkResult ConvertCreateInfo(
         const Device*                     pDevice,
@@ -273,6 +312,11 @@ protected:
         const Device*                     pDevice,
         const VkPipelineLayoutCreateInfo* pIn);
 
+#if VKI_RAY_TRACING
+    static bool HasRayTracing(
+        const VkPipelineLayoutCreateInfo* pIn);
+#endif
+
     PipelineLayout(
         const Device*       pDevice,
         const Info&         info,
@@ -285,6 +329,9 @@ protected:
         const uint32_t             stageMask,
         const VbBindingInfo*       pVbInfo,
         const bool                 appendFetchShaderCb,
+#if VKI_RAY_TRACING
+        const bool                 appendRtCaptureReplayCb,
+#endif
         void*                      pBuffer,
         Vkgc::ResourceMappingData* pResourceMapping) const;
 
@@ -292,6 +339,9 @@ protected:
         const uint32_t             stageMask,
         const VbBindingInfo*       pVbInfo,
         const bool                 appendFetchShaderCb,
+#if VKI_RAY_TRACING
+        const bool                 appendRtCaptureReplayCb,
+#endif
         void*                      pBuffer,
         Vkgc::ResourceMappingData* pResourceMapping) const;
 
@@ -330,6 +380,24 @@ protected:
         const uint32_t                 binding,
         Vkgc::ResourceMappingRootNode* pNode,
         uint32_t*                      pNodeCount) const;
+
+#if VKI_RAY_TRACING
+    void BuildLlpcRayTracingDispatchArgumentsMapping(
+        const uint32_t                 stageMask,
+        const uint32_t                 offsetInDwords,
+        const uint32_t                 sizeInDwords,
+        Vkgc::ResourceMappingRootNode* pRootNode,
+        uint32_t*                      pRootNodeCount,
+        Vkgc::ResourceMappingNode*     pStaNode,
+        uint32_t*                      pStaNodeCount) const;
+#endif
+
+    static void ReserveAlternatingThreadGroupUserData(
+        const Device*                     pDevice,
+        const VkPipelineLayoutCreateInfo* pPipelineLayoutInfo,
+        uint32_t*                         pUserDataNodeCount,
+        uint32_t*                         pUSerDataRegCount,
+        uint32_t*                         pThreadGroupReversalRegBase);
 
     static uint64_t BuildApiHash(
         const VkPipelineLayoutCreateInfo* pCreateInfo);

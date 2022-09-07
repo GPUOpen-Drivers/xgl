@@ -39,6 +39,10 @@
 #include "vk_conv.h"
 #include "vk_framebuffer.h"
 
+#if VKI_RAY_TRACING
+#include "raytrace/vk_acceleration_structure.h"
+#endif
+
 namespace vk
 {
 
@@ -441,6 +445,36 @@ void DescriptorUpdate::WriteBufferInfoDescriptors(
     }
 }
 
+#if VKI_RAY_TRACING
+void DescriptorUpdate::WriteAccelerationStructureDescriptors(
+    const Device*                       pDevice,
+    const VkAccelerationStructureKHR*   pDescriptors,
+    uint32_t                            deviceIdx,
+    uint32_t*                           pDestAddr,
+    uint32_t                            count,
+    uint32_t                            dwStride,
+    size_t                              descriptorStrideInBytes)
+{
+    for (uint32_t arrElem = 0; arrElem < count; ++arrElem)
+    {
+        const AccelerationStructure* pAccel = AccelerationStructure::ObjectFromHandle(
+            pDescriptors[arrElem]);
+
+        Pal::BufferViewInfo bufferViewInfo = {};
+
+        if (pAccel != nullptr)
+        {
+            bufferViewInfo.gpuAddr = pAccel->GetDeviceAddress(deviceIdx);
+            bufferViewInfo.range = pAccel->GetPrebuildInfo().resultDataMaxSizeInBytes;
+        }
+
+        pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &bufferViewInfo, pDestAddr);
+
+        pDestAddr += dwStride;
+    }
+}
+#endif
+
 // =====================================================================================================================
 // Write data to the inline uniform block
 void DescriptorUpdate::WriteInlineUniformBlock(
@@ -663,6 +697,28 @@ void DescriptorUpdate::WriteDescriptorSets(
             break;
         }
 
+#if VKI_RAY_TRACING
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+        {
+            const auto* pWriteAccelStructKHR =
+                reinterpret_cast<const VkWriteDescriptorSetAccelerationStructureKHR*>(
+                utils::GetExtensionStructure(reinterpret_cast<const VkStructHeader*>(params.pNext),
+                static_cast<VkStructureType>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR)));
+
+            VK_ASSERT(pWriteAccelStructKHR != nullptr);
+            VK_ASSERT(pWriteAccelStructKHR->accelerationStructureCount == params.descriptorCount);
+
+            WriteAccelerationStructureDescriptors(
+                pDevice,
+                pWriteAccelStructKHR->pAccelerationStructures,
+                deviceIdx,
+                pDestAddr,
+                params.descriptorCount,
+                destBinding.sta.dwArrayStride);
+
+            break;
+        }
+#endif
         default:
             VK_ASSERT(!"Unexpected descriptor type");
             break;

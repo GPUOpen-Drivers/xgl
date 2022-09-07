@@ -368,6 +368,10 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
             pObjectCreateInfo->flags.force1x1ShaderRate,
             pObjectCreateInfo->flags.customSampleLocations,
             pObjectCreateInfo->flags.isPointSizeUsed,
+#if VKI_RAY_TRACING
+            pObjectCreateInfo->flags.hasRayTracing,
+            pObjectCreateInfo->dispatchRaysUserDataOffset,
+#endif
             *pVbInfo,
             &internalBuffer,
             pPalMsaa,
@@ -480,6 +484,9 @@ VkResult GraphicsPipeline::Create(
 
         // 4. Build pipeline object create info
         binaryInfo.pOptimizerKey = &binaryCreateInfo.pipelineProfileKey;
+#if VKI_RAY_TRACING
+        binaryInfo.hasRayTracing = binaryCreateInfo.pipelineInfo.rtState.threadGroupSizeX > 0;
+#endif
 
         BuildPipelineObjectCreateInfo(
             pDevice, pCreateInfo, &vbInfo, &binaryInfo, pPipelineLayout, &objectCreateInfo);
@@ -489,6 +496,10 @@ VkResult GraphicsPipeline::Create(
             (binaryCreateInfo.pipelineInfo.enableEarlyCompile || binaryCreateInfo.pipelineInfo.enableUberFetchShader);
 
         objectCreateInfo.flags.isPointSizeUsed = binaryCreateInfo.pipelineMetadata.pointSizeUsed;
+
+#if VKI_RAY_TRACING
+        objectCreateInfo.dispatchRaysUserDataOffset = pPipelineLayout->GetDispatchRaysUserData();
+#endif
 
         // 5. Create pipeline objects
         result = CreatePipelineObjects(
@@ -900,6 +911,10 @@ GraphicsPipeline::GraphicsPipeline(
     bool                                   force1x1ShaderRate,
     bool                                   customSampleLocations,
     bool                                   isPointSizeUsed,
+#if VKI_RAY_TRACING
+    bool                                   hasRayTracing,
+    uint32_t                               dispatchRaysUserDataOffset,
+#endif
     const VbBindingInfo&                   vbInfo,
     const PipelineInternalBufferInfo*      pInternalBuffer,
     Pal::IMsaaState**                      pPalMsaa,
@@ -912,6 +927,9 @@ GraphicsPipeline::GraphicsPipeline(
     Util::MetroHash64*                     pPalPipelineHasher)
     :
     GraphicsPipelineCommon(
+#if VKI_RAY_TRACING
+        hasRayTracing,
+#endif
         pDevice),
     m_info(immedInfo),
     m_vbInfo(vbInfo),
@@ -926,6 +944,9 @@ GraphicsPipeline::GraphicsPipeline(
         pLayout,
         pBinary,
         staticStateMask,
+#if VKI_RAY_TRACING
+        dispatchRaysUserDataOffset,
+#endif
         apiHash);
 
     memcpy(m_pPalMsaa,         pPalMsaa,         sizeof(pPalMsaa[0])         * pDevice->NumPalDevices());

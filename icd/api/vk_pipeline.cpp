@@ -101,6 +101,23 @@ static_assert(VK_ARRAY_SIZE(HwStageNames) == static_cast<uint32_t>(Util::Abi::Ha
 static constexpr uint32_t ExecutableStatisticsCount = 5;
 
 // =====================================================================================================================
+// Filter VkPipelineCreateFlags to only values used for pipeline caching
+VkPipelineCreateFlags Pipeline::GetCacheIdControlFlags(
+    VkPipelineCreateFlags in)
+{
+    // The following flags should NOT affect cache computation
+    static constexpr VkPipelineCreateFlags CacheIdIgnoreFlags = { 0
+        | VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR
+        | VK_PIPELINE_CREATE_DERIVATIVE_BIT
+        | VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT
+        | VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT
+        | VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT
+    };
+
+    return in & (~CacheIdIgnoreFlags);
+}
+
+// =====================================================================================================================
 // Generates a hash using the contents of a VkSpecializationInfo struct
 void Pipeline::GenerateHashFromSpecializationInfo(
     const VkSpecializationInfo& desc,
@@ -137,6 +154,23 @@ void Pipeline::GenerateHashFromShaderStageCreateInfo(
     if (desc.pSpecializationInfo != nullptr)
     {
         GenerateHashFromSpecializationInfo(*desc.pSpecializationInfo, pHasher);
+    }
+
+}
+
+// =====================================================================================================================
+// Generates a hash using the contents of a ShaderStageInfo struct
+void Pipeline::GenerateHashFromShaderStageCreateInfo(
+    const ShaderStageInfo& stageInfo,
+    Util::MetroHash128*    pHasher)
+{
+    pHasher->Update(stageInfo.flags);
+    pHasher->Update(stageInfo.stage);
+    pHasher->Update(stageInfo.codeHash);
+
+    if (stageInfo.pSpecializationInfo != nullptr)
+    {
+        GenerateHashFromSpecializationInfo(*stageInfo.pSpecializationInfo, pHasher);
     }
 
 }
@@ -234,7 +268,7 @@ VkResult Pipeline::BuildShaderStageInfo(
             PipelineBinaryCache* pBinaryCache = (pCache == nullptr) ? nullptr : pCache->GetPipelineCache();
 
             result = pCompiler->BuildShaderModule(
-                pDevice,flags, codeSize, pCode, adaptForFastLink,
+                pDevice,flags, codeSize, pCode, adaptForFastLink, false,
                 pBinaryCache, pShaderFeedback, &pTempModules[numNewModules]);
 
             if (result != VK_SUCCESS)
@@ -292,6 +326,9 @@ void Pipeline::FreeTempModules(
 // =====================================================================================================================
 Pipeline::Pipeline(
     Device* const       pDevice,
+#if VKI_RAY_TRACING
+    bool                hasRayTracing,
+#endif
     VkPipelineBindPoint type)
     :
     m_pDevice(pDevice),
@@ -300,6 +337,10 @@ Pipeline::Pipeline(
     m_staticStateMask(0),
     m_apiHash(0),
     m_type(type),
+#if VKI_RAY_TRACING
+    m_hasRayTracing(hasRayTracing),
+    m_dispatchRaysUserDataOffset(0),
+#endif
     m_pBinary(nullptr),
     m_availableAmdIlSymbol(0)
 {
@@ -311,11 +352,17 @@ void Pipeline::Init(
     const PipelineLayout* pLayout,
     PipelineBinaryInfo*   pBinary,
     uint32_t              staticStateMask,
+#if VKI_RAY_TRACING
+    uint32_t              dispatchRaysUserDataOffset,
+#endif
     uint64_t              apiHash)
 {
     m_staticStateMask            = staticStateMask;
     m_apiHash                    = apiHash;
     m_pBinary                    = pBinary;
+#if VKI_RAY_TRACING
+    m_dispatchRaysUserDataOffset = dispatchRaysUserDataOffset;
+#endif
 
     if (pLayout != nullptr)
     {

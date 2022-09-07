@@ -35,6 +35,7 @@
 #include "include/vk_shader.h"
 #include "include/vk_sampler.h"
 #include "include/vk_utils.h"
+
 #include "palMetroHash.h"
 #include "palVectorImpl.h"
 
@@ -205,6 +206,46 @@ void PipelineLayout::ProcessPushConstantsInfo(
     *pPushConstantsSizeInBytes       = pushConstantsSizeInBytes;
     *pPushConstantsUserDataNodeCount = pushConstantsUserDataNodeCount;
 }
+
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+// Checks if GpuRT resource mappings will need to be added to this pipeline layout
+bool PipelineLayout::HasRayTracing(
+    const VkPipelineLayoutCreateInfo* pIn)
+{
+    bool rtFound = false;
+
+    for (uint32_t setIndex = 0; (setIndex < pIn->setLayoutCount) && (rtFound == false); ++setIndex)
+    {
+        if (pIn->pSetLayouts[setIndex] != VK_NULL_HANDLE)
+        {
+            const auto pSetLayout = DescriptorSetLayout::ObjectFromHandle(pIn->pSetLayouts[setIndex]);
+
+            // Test if the set layout supports the RayGen stage (required for RT pipelines)
+            // Without this check, compilation fails for RT pipelines that don't utilize trace ray
+            if (Util::TestAnyFlagSet(pSetLayout->Info().activeStageMask, VK_SHADER_STAGE_RAYGEN_BIT_KHR) == true)
+            {
+                rtFound = true;
+                break;
+            }
+
+            // Test if an acceleration structure descriptor binding is present (necessary for pipelines with ray query)
+            for (uint32_t bindingIndex = 0; bindingIndex < pSetLayout->Info().count; ++bindingIndex)
+            {
+                const DescriptorSetLayout::BindingInfo& binding = pSetLayout->Binding(bindingIndex);
+
+                if (binding.info.descriptorType == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR)
+                {
+                    rtFound = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    return rtFound;
+}
+#endif
 
 // =====================================================================================================================
 VkResult PipelineLayout::BuildCompactSchemeInfo(
@@ -405,6 +446,30 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
         pPipelineInfo->numUserDataNodes           += 1;
     }
 
+    // Allocate user data for the thread group reversal state
+    ReserveAlternatingThreadGroupUserData(
+        pDevice,
+        pIn,
+        &pPipelineInfo->numUserDataNodes,
+        &pInfo->userDataRegCount,
+        &pUserDataLayout->threadGroupReversalRegBase);
+
+#if VKI_RAY_TRACING
+    if (HasRayTracing(pIn))
+    {
+        // Reserve one node for indirect RT capture replay.
+        pPipelineInfo->numUserDataNodes                += 1;
+        pUserDataLayout->rtCaptureReplayConstBufRegBase = pInfo->userDataRegCount;
+        pInfo->userDataRegCount                        += InternalConstBufferRegCount;
+
+        // Dispatch ray args
+        pInfo->userDataRegCount         += MaxTraceRayUserDataRegCount;
+        pPipelineInfo->numUserDataNodes += MaxTraceRayUserDataNodeCount;
+        pPipelineInfo->numRsrcMapNodes  += MaxTraceRayResourceNodeCount;
+        pPipelineInfo->hasRayTracing     = true;
+    }
+#endif
+
     // Reserve user data nodes for vertex buffer table
     // Info::userDataRegCount is not increased since this node is always appended at the bottom of user data table
     // Same for constant buffer for uber-fetch shader
@@ -457,6 +522,9 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
     // 2. two user data entries for constant buffer required by uber-fetch shader (if extension or setting require)
     // 3. one user data entry for the push constant buffer pointer
     // 4. one user data entry for transform feedback buffer (if extension is enabled)
+#ifdef VKI_RAY_TRACING
+    // 5. one user data entry for ray tracing dispatch arguments (if extension is enabled)
+#endif
     // 6. MaxDescriptorSets sets of user data entries which store the information for each descriptor set. Each set
     //    contains 2 user data entry: the 1st is for the dynamic descriptors and the 2nd is for static descriptors.
     //
@@ -504,6 +572,30 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
         pPipelineInfo->numUserDataNodes          += 1;
         pInfo->userDataRegCount                  += 1;
     }
+
+    // Allocate user data for the thread group reversal state
+    ReserveAlternatingThreadGroupUserData(
+        pDevice,
+        pIn,
+        &pPipelineInfo->numUserDataNodes,
+        &pInfo->userDataRegCount,
+        &pUserDataLayout->threadGroupReversalRegBase);
+
+#if VKI_RAY_TRACING
+    if (HasRayTracing(pIn))
+    {
+        pUserDataLayout->dispatchRaysArgsPtrRegBase = pInfo->userDataRegCount;
+        pPipelineInfo->numUserDataNodes            += MaxTraceRayUserDataNodeCount;
+        pPipelineInfo->numRsrcMapNodes             += MaxTraceRayResourceNodeCount;
+        pInfo->userDataRegCount                    += MaxTraceRayUserDataRegCount;
+        pPipelineInfo->hasRayTracing                = true;
+
+        // Reserve one node for indirect RT capture replay.
+        pUserDataLayout->rtCaptureReplayConstBufRegBase = pInfo->userDataRegCount;
+        pPipelineInfo->numUserDataNodes                += 1;
+        pInfo->userDataRegCount                        += InternalConstBufferRegCount;
+    }
+#endif
 
     // Allocate user data for descriptor sets
     pUserDataLayout->setBindingPtrRegBase = pInfo->userDataRegCount;
@@ -748,6 +840,9 @@ Vkgc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorConstTexelBuffer;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+#if VKI_RAY_TRACING
+    case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+#endif
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
@@ -927,12 +1022,82 @@ void PipelineLayout::BuildLlpcInternalConstantBufferMapping(
     }
 }
 
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+// Calculates the offset for the GpuRT user data constants
+uint32_t PipelineLayout::GetDispatchRaysUserData() const
+{
+    uint32_t              dispatchRaysUserData = 0;
+    const UserDataLayout& userDataLayout       = GetInfo().userDataLayout;
+
+    if (m_pipelineInfo.hasRayTracing)
+    {
+        if (userDataLayout.scheme == PipelineLayoutScheme::Compact)
+        {
+            // The dispatch rays args is always the last entry
+            // TODO #raytracing: This means it spills first.  Probably bad for perf.
+            dispatchRaysUserData = m_info.userDataRegCount;
+        }
+        else if (userDataLayout.scheme == PipelineLayoutScheme::Indirect)
+        {
+            dispatchRaysUserData = userDataLayout.indirect.dispatchRaysArgsPtrRegBase;
+        }
+        else
+        {
+            VK_NEVER_CALLED();
+            dispatchRaysUserData = 0;
+        }
+    }
+
+    return dispatchRaysUserData;
+}
+
+// =====================================================================================================================
+// Builds the VKGC resource mapping nodes for ray tracing dispatch arguments
+void PipelineLayout::BuildLlpcRayTracingDispatchArgumentsMapping(
+    const uint32_t                 stageMask,
+    const uint32_t                 offsetInDwords,
+    const uint32_t                 sizeInDwords,
+    Vkgc::ResourceMappingRootNode* pRootNode,
+    uint32_t*                      pRootNodeCount,
+    Vkgc::ResourceMappingNode*     pStaNode,
+    uint32_t*                      pStaNodeCount
+    ) const
+{
+    const Vkgc::ResourceMappingNode TraceRayLayout[] =
+    {
+        // TODO: Replace binding and set with enum once it is defined in vkgcDefs.h
+        { Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact, 2, 0, {{93, 17}} },
+        { Vkgc::ResourceMappingNodeType::DescriptorConstBuffer, 4, 2, {{93, 0}} },
+        { Vkgc::ResourceMappingNodeType::DescriptorBuffer, 4, 6, {{93, 1}} },
+    };
+    const uint32_t TraceRayLayoutNodeCount = static_cast<uint32_t>(Util::ArrayLen(TraceRayLayout));
+
+    VK_ASSERT(TraceRayLayoutNodeCount < MaxTraceRayResourceNodeCount);
+
+    Util::FastMemCpy(pStaNode, TraceRayLayout, sizeof(TraceRayLayout));
+    *pStaNodeCount += TraceRayLayoutNodeCount;
+
+    pRootNode->node.type               = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
+    pRootNode->node.offsetInDwords     = offsetInDwords;
+    pRootNode->node.sizeInDwords       = sizeInDwords;
+    pRootNode->node.tablePtr.pNext     = pStaNode;
+    pRootNode->node.tablePtr.nodeCount = TraceRayLayoutNodeCount;
+    pRootNode->visibility              = stageMask;
+
+    ++(*pRootNodeCount);
+}
+#endif
+
 // =====================================================================================================================
 // Populates the resource mapping nodes in compact scheme
 VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
     const uint32_t             stageMask,
     const VbBindingInfo*       pVbInfo,
     const bool                 appendFetchShaderCb,
+#if VKI_RAY_TRACING
+    const bool                 appendRtCaptureReplayCb,
+#endif
     void*                      pBuffer,
     Vkgc::ResourceMappingData* pResourceMapping
     ) const
@@ -1121,6 +1286,43 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
         }
     }
 
+    if ((stageMask & Vkgc::ShaderStageComputeBit) && (userDataLayout.threadGroupReversalRegBase != InvalidReg))
+    {
+        BuildLlpcInternalConstantBufferMapping(
+            stageMask,
+            userDataLayout.threadGroupReversalRegBase,
+            7, // Vkgc::ReverseThreadGroupControlBinding
+            &pUserDataNodes[userDataNodeCount],
+            &userDataNodeCount);
+    }
+
+#if VKI_RAY_TRACING
+    if (result == VK_SUCCESS)
+    {
+        if (m_pipelineInfo.hasRayTracing)
+        {
+            if (appendRtCaptureReplayCb)
+            {
+                BuildLlpcInternalConstantBufferMapping(
+                    stageMask,
+                    userDataLayout.rtCaptureReplayConstBufRegBase,
+                    Vkgc::RtCaptureReplayInternalBufferBinding,
+                    &pUserDataNodes[userDataNodeCount],
+                    &userDataNodeCount);
+            }
+
+            BuildLlpcRayTracingDispatchArgumentsMapping(
+                stageMask,
+                m_info.userDataRegCount,
+                MaxTraceRayUserDataRegCount,
+                &pUserDataNodes[userDataNodeCount],
+                &userDataNodeCount,
+                &pResourceNodes[mappingNodeCount],
+                &mappingNodeCount);
+        }
+    }
+#endif
+
     // If you hit these assert, we precomputed an insufficient amount of scratch space during layout creation.
     VK_ASSERT(userDataNodeCount    <= m_pipelineInfo.numUserDataNodes);
     VK_ASSERT(mappingNodeCount     <= m_pipelineInfo.numRsrcMapNodes);
@@ -1140,6 +1342,9 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
     const uint32_t             stageMask,
     const VbBindingInfo*       pVbInfo,
     const bool                 appendFetchShaderCb,
+#if VKI_RAY_TRACING
+    const bool                 appendRtCaptureReplayCb,
+#endif
     void*                      pBuffer,
     Vkgc::ResourceMappingData* pResourceMapping
     ) const
@@ -1149,24 +1354,61 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
     constexpr uint32_t VbTablePtrRegCount         = 1; // PAL requires all indirect user data tables to be 1DW
     constexpr uint32_t PushConstPtrRegCount       = 1;
     constexpr uint32_t TransformFeedbackRegCount  = 1;
+    constexpr uint32_t ReverseThreadGroupRegCount = 1;
+#if VKI_RAY_TRACING
+    constexpr uint32_t DispatchRayArgsPtrRegCount = MaxTraceRayUserDataRegCount;
+#endif
     constexpr uint32_t DescSetsPtrRegCount        = 2 * SetPtrRegCount * MaxDescriptorSets;
 
-    const bool uberFetchShaderEnabled = IsUberFetchShaderEnabled<PipelineLayoutScheme::Indirect>(m_pDevice);
-    const bool transformFeedbackEnabled =
-        m_pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK);
-
-    const uint32_t vbTablePtrRegBase = 0;
-    const uint32_t uberFetchCbRegBase =
-        uberFetchShaderEnabled ? (vbTablePtrRegBase + VbTablePtrRegCount) : InvalidReg;
-    const uint32_t pushConstPtrRegBase =
-        uberFetchShaderEnabled ? uberFetchCbRegBase + InternalConstBufferRegCount : vbTablePtrRegBase + VbTablePtrRegCount;
-    const uint32_t transformFeedbackRegBase =
-        (transformFeedbackEnabled == false) ? InvalidReg : (pushConstPtrRegBase + PushConstPtrRegCount);
-    const uint32_t setBindingPtrRegBase =
-        transformFeedbackEnabled ? (transformFeedbackRegBase + TransformFeedbackRegCount) :
-                                   (pushConstPtrRegBase + PushConstPtrRegCount);
-
     const auto& userDataLayout = m_info.userDataLayout.indirect;
+
+    const bool uberFetchShaderEnabled     = IsUberFetchShaderEnabled<PipelineLayoutScheme::Indirect>(m_pDevice);
+    const bool transformFeedbackEnabled   = m_pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK);
+    const bool threadGroupReversalEnabled = userDataLayout.threadGroupReversalRegBase != InvalidReg;
+#if VKI_RAY_TRACING
+    const bool rayTracingEnabled          = m_pipelineInfo.hasRayTracing;
+#endif
+
+    uint32_t regBaseOffset = 0;
+
+    const uint32_t vbTablePtrRegBase = regBaseOffset;
+    regBaseOffset                   += vbTablePtrRegBase + VbTablePtrRegCount;
+
+    const uint32_t uberFetchCbRegBase = uberFetchShaderEnabled ? regBaseOffset : InvalidReg;
+    if (uberFetchCbRegBase != InvalidReg)
+    {
+        regBaseOffset += InternalConstBufferRegCount;
+    }
+
+    const uint32_t pushConstPtrRegBase = regBaseOffset;
+    regBaseOffset                     += PushConstPtrRegCount;
+
+    const uint32_t transformFeedbackRegBase = transformFeedbackEnabled ? regBaseOffset : InvalidReg;
+    if (transformFeedbackRegBase != InvalidReg)
+    {
+        regBaseOffset += TransformFeedbackRegCount;
+    }
+
+    const uint32_t threadGroupReversalRegBase = threadGroupReversalEnabled ? regBaseOffset : InvalidReg;
+    if (threadGroupReversalRegBase != InvalidReg)
+    {
+        regBaseOffset += ReverseThreadGroupRegCount;
+    }
+
+#if VKI_RAY_TRACING
+    const uint32_t dispatchRayArgsPtrRegBase = rayTracingEnabled ? regBaseOffset : InvalidReg;
+    if (dispatchRayArgsPtrRegBase != InvalidReg)
+    {
+        regBaseOffset += DispatchRayArgsPtrRegCount;
+    }
+
+    const uint32_t rtCaptureReplayCbRegBase = rayTracingEnabled ? regBaseOffset : InvalidReg;
+    if (rtCaptureReplayCbRegBase != InvalidReg)
+    {
+        regBaseOffset += InternalConstBufferRegCount;
+    }
+#endif
+    const uint32_t setBindingPtrRegBase = regBaseOffset;
 
     Vkgc::ResourceMappingRootNode* pUserDataNodes = static_cast<Vkgc::ResourceMappingRootNode*>(pBuffer);
     Vkgc::ResourceMappingNode* pResourceNodes =
@@ -1234,6 +1476,44 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
             &pUserDataNodes[userDataNodeCount],
             &userDataNodeCount);
     }
+
+    if (((stageMask & Vkgc::ShaderStageComputeBit) != 0) && threadGroupReversalEnabled)
+    {
+        VK_ASSERT(threadGroupReversalRegBase == userDataLayout.threadGroupReversalRegBase);
+
+        BuildLlpcInternalConstantBufferMapping(
+            stageMask,
+            threadGroupReversalRegBase,
+            7, // Vkgc::ReverseThreadGroupControlBinding
+            &pUserDataNodes[userDataNodeCount],
+            &userDataNodeCount);
+    }
+
+#if VKI_RAY_TRACING
+    // Build mapping for ray tracing dispatch arguments
+    if (rayTracingEnabled)
+    {
+        BuildLlpcRayTracingDispatchArgumentsMapping(
+            stageMask,
+            dispatchRayArgsPtrRegBase,
+            DispatchRayArgsPtrRegCount,
+            &pUserDataNodes[userDataNodeCount],
+            &userDataNodeCount,
+            &pResourceNodes[mappingNodeCount],
+            &mappingNodeCount);
+
+        if (appendRtCaptureReplayCb)
+        {
+            VK_ASSERT(rtCaptureReplayCbRegBase == userDataLayout.rtCaptureReplayConstBufRegBase);
+            BuildLlpcInternalConstantBufferMapping(
+                stageMask,
+                rtCaptureReplayCbRegBase,
+                Vkgc::RtCaptureReplayInternalBufferBinding,
+                &pUserDataNodes[userDataNodeCount],
+                &userDataNodeCount);
+        }
+    }
+#endif
 
     // Build mapping for each set of descriptors
     VK_ASSERT(setBindingPtrRegBase == userDataLayout.setBindingPtrRegBase);
@@ -1341,6 +1621,9 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     const uint32_t              stageMask,
     const VbBindingInfo*        pVbInfo,
     const bool                  appendFetchShaderCb,
+#if VKI_RAY_TRACING
+    const bool                  appendRtCaptureReplayCb,
+#endif
     void*                       pBuffer,
     Vkgc::ResourceMappingData*  pResourceMapping,
     Vkgc::ResourceLayoutScheme* pLayoutScheme
@@ -1353,14 +1636,28 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
         *pLayoutScheme = Vkgc::ResourceLayoutScheme::Compact;
 
         result = BuildCompactSchemeLlpcPipelineMapping(
-            stageMask, pVbInfo, appendFetchShaderCb, pBuffer, pResourceMapping);
+            stageMask,
+            pVbInfo,
+            appendFetchShaderCb,
+#if VKI_RAY_TRACING
+            appendRtCaptureReplayCb,
+#endif
+            pBuffer,
+            pResourceMapping);
     }
     else if (m_info.userDataLayout.scheme == PipelineLayoutScheme::Indirect)
     {
         *pLayoutScheme = Vkgc::ResourceLayoutScheme::Indirect;
 
         BuildIndirectSchemeLlpcPipelineMapping(
-            stageMask, pVbInfo, appendFetchShaderCb, pBuffer, pResourceMapping);
+            stageMask,
+            pVbInfo,
+            appendFetchShaderCb,
+#if VKI_RAY_TRACING
+            appendRtCaptureReplayCb,
+#endif
+            pBuffer,
+            pResourceMapping);
     }
     else
     {
@@ -1368,6 +1665,45 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+// Allocate user data for the thread group reversal state
+void PipelineLayout::ReserveAlternatingThreadGroupUserData(
+    const Device*                     pDevice,
+    const VkPipelineLayoutCreateInfo* pPipelineLayoutInfo,
+    uint32_t*                         pUserDataNodeCount,
+    uint32_t*                         pUSerDataRegCount,
+    uint32_t*                         pThreadGroupReversalRegBase)
+{
+    bool allocated = false;
+
+    if (pDevice->GetRuntimeSettings().enableAlternatingThreadGroupOrder)
+    {
+        for (uint32_t setIndex = 0; setIndex < pPipelineLayoutInfo->setLayoutCount; ++setIndex)
+        {
+            if (pPipelineLayoutInfo->pSetLayouts[setIndex] != VK_NULL_HANDLE)
+            {
+                const auto pSetLayout = DescriptorSetLayout::ObjectFromHandle(pPipelineLayoutInfo->pSetLayouts[setIndex]);
+
+                // Test if the set layout supports the Compute stage, as thread group reversal is only used for Compute
+                if (Util::TestAnyFlagSet(pSetLayout->Info().activeStageMask, VK_SHADER_STAGE_COMPUTE_BIT))
+                {
+                    *pThreadGroupReversalRegBase = *pUSerDataRegCount;
+                    (*pUSerDataRegCount)        += 2;
+                    (*pUserDataNodeCount)       += 1;
+
+                    allocated = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (allocated == false)
+    {
+        *pThreadGroupReversalRegBase = InvalidReg;
+    }
 }
 
 // =====================================================================================================================

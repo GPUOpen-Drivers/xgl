@@ -23,20 +23,24 @@
  #
  #######################################################################################################################
 
+include_guard()
+
 # This will become the value of PAL_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the PAL interface
-# that the ICD supports.  PAL uses this value to enable backwards-compatibility for older interface versions.  It must
-# be updated on each PAL promotion after handling all of the interface changes described in palLib.h.
-ICD_PAL_CLIENT_MAJOR_VERSION = 756
-ICD_PAL_CLIENT_MINOR_VERSION = 0
+# that the ICD supports.  PAL uses this value to enable backwards-compatibility for older interface versions.
+# It must be updated on each PAL promotion after handling all of the interface changes described in palLib.h.
+set(ICD_PAL_CLIENT_MAJOR_VERSION "758")
+set(ICD_PAL_CLIENT_MINOR_VERSION "0")
 
-# This will become the value of GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION if ICD_GPUOPEN_DEVMODE_BUILD=1.  It describes
-# the interface version of the gpuopen shared module (part of PAL) that the ICD supports.
-ICD_GPUOPEN_CLIENT_MAJOR_VERSION = 42
-ICD_GPUOPEN_CLIENT_MINOR_VERSION = 0
+# This will become the value of GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION if ICD_GPUOPEN_DEVMODE_BUILD=1.
+# It describes the interface version of the gpuopen shared module (part of PAL) that the ICD supports.
+set(ICD_GPUOPEN_CLIENT_MAJOR_VERSION "42")
 
-# This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION if ICD_BUILD_LLPC=1.  It describes the version of the
-# interface version of LLPC that the ICD supports.
-ICD_LLPC_CLIENT_MAJOR_VERSION = 53
+#if VKI_RAY_TRACING
+# This will become the value of GPURT_CLIENT_INTERFACE_MAJOR_VERSION if VKI_RAY_TRACING=1.
+# It describes the interface version of the GpuRT shared module that the ICD supports.
+set(ICD_GPURT_CLIENT_MAJOR_VERSION "26")
+#endif
 
-# When ICD_LLPC_CLIENT_MAJOR_VERSION >= 39, Set ENABLE_VKGC to 1 to use Vkgc namespace instead of Llpc namespace in ICD
-ENABLE_VKGC=1
+# This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION if ICD_BUILD_LLPC=1.
+# It describes the version of the interface version of LLPC that the ICD supports.
+set(ICD_LLPC_CLIENT_MAJOR_VERSION "53")

@@ -46,6 +46,11 @@
 
 #include "include/pipeline_binary_cache.h"
 
+#if VKI_RAY_TRACING
+#include "raytrace/vk_ray_tracing_pipeline.h"
+#include "raytrace/ray_tracing_device.h"
+#endif
+
 #include "palElfReader.h"
 #include "palPipelineAbiReader.h"
 #include "palPipelineAbiProcessorImpl.h"
@@ -64,14 +69,71 @@ static bool IsDynamicStateEnabled(const uint32_t dynamicStateFlags, const Dynami
     return dynamicStateFlags & (1 << static_cast<uint32_t>(internalState));
 }
 
+#if VKI_RAY_TRACING
+#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION < 15
+// =====================================================================================================================
+// Populates GpuRt::ShaderLibEntryInfo
+static void GpuRtShaderEntryInfo(
+    const PhysicalDevice*              pDevice,
+    const GpuRt::ShaderLibEntry        patchType,
+    const GpuRt::AccelStructMemLayout& memLayout,
+    GpuRt::ShaderLibEntryInfo&         shaderLibEntryInfo)
+{
+    shaderLibEntryInfo.type      = patchType;
+    shaderLibEntryInfo.flags     = 0;
+    shaderLibEntryInfo.memLayout = memLayout;
+
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+
+    if (settings.rtTraceRayCounterMode != TraceRayCounterDisable)
+    {
+        shaderLibEntryInfo.flags |= GpuRt::ShaderEntrySupportCounters;
+    }
+
+    // If HwIntersectRay is enabled and the HW supports it
+    if ((settings.rtEnableHwIntersectRay == true) &&
+        pDevice->HwSupportsRayTracing())
+    {
+        shaderLibEntryInfo.flags |= GpuRt::ShaderEntryHwIsect;
+    }
+
+    if (settings.rtTraceRayProfileFlags != TraceRayProfileDisable)
+    {
+        shaderLibEntryInfo.flags |= GpuRt::ShaderEntrySupportProfiling;
+    }
+
+}
+#else
+// =====================================================================================================================
+// Populates shaderLibrary input flags according to settings
+static uint32_t GpuRtShaderLibraryFlags(
+    const PhysicalDevice* pDevice)
+{
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+
+    uint32_t flags = 0;
+
+    if ((settings.rtTraceRayCounterMode != TraceRayCounterDisable) ||
+        (settings.rtTraceRayProfileFlags != TraceRayProfileDisable))
+    {
+        flags |= static_cast<uint32>(GpuRt::ShaderLibraryFeatureFlag::Developer);
+    }
+
+    if (settings.emulatedRtIpLevel > HardwareRtIpLevel1_1)
+    {
+        flags |= static_cast<uint32>(GpuRt::ShaderLibraryFeatureFlag::SoftwareTraversal);
+    }
+
+    return flags;
+}
+#endif
+#endif
+
 // =====================================================================================================================
 // Builds app profile key and applies profile options.
 static void ApplyProfileOptions(
     const Device*                pDevice,
     uint32_t                     shaderIndex,
-    ShaderStage                  stage,
-    const Pal::ShaderHash        shaderHash,
-    const size_t                 shaderSize,
     Vkgc::PipelineOptions*       pPipelineOptions,
     Vkgc::PipelineShaderInfo*    pShaderInfo,
     PipelineOptimizerKey*        pProfileKey,
@@ -83,23 +145,6 @@ static void ApplyProfileOptions(
     options.pPipelineOptions          = pPipelineOptions;
     options.pOptions                  = &pShaderInfo->options;
     options.pNggState                 = pNggState;
-
-    auto& shaderKey = pProfileKey->pShaders[shaderIndex];
-    if (settings.pipelineUseShaderHashAsProfileHash)
-    {
-        const void* pModuleData  = pShaderInfo->pModuleData;
-        shaderKey.codeHash.lower = Vkgc::IPipelineDumper::GetShaderHash(pModuleData);
-        shaderKey.codeHash.upper = 0;
-    }
-    else
-    {
-        // Populate the pipeline profile key.  The hash used by the profile is different from the default
-        // internal hash in that it only depends on the SPIRV code + entry point.  This is to reduce the
-        // chance that internal changes to our hash calculation logic drop us off pipeline profiles.
-        shaderKey.codeHash = shaderHash;
-    }
-    shaderKey.codeSize = shaderSize;
-    shaderKey.stage    = stage;
 
     // Override the compile parameters based on any app profile
     const auto* pShaderOptimizer = pDevice->GetShaderOptimizer();
@@ -561,6 +606,7 @@ VkResult PipelineCompiler::BuildShaderModule(
     size_t                          codeSize,
     const void*                     pCode,
     const bool                      adaptForFastLink,
+    bool                            isInternal,
     PipelineBinaryCache*            pBinaryCache,
     PipelineCreationFeedback*       pFeedback,
     ShaderModuleHandle*             pShaderModule)
@@ -604,7 +650,7 @@ VkResult PipelineCompiler::BuildShaderModule(
         if (compilerMask & (1 << PipelineCompilerTypeLlpc))
         {
             result = m_compilerSolutionLlpc.BuildShaderModule(
-                pDevice, flags, codeSize, pCode, adaptForFastLink, pShaderModule, PipelineOptimizerKey{});
+                pDevice, flags, codeSize, pCode, adaptForFastLink, isInternal, pShaderModule, PipelineOptimizerKey{});
         }
 
         StoreShaderModuleToCache(pDevice, flags, compilerMask, uniqueHash, pBinaryCache, pShaderModule);
@@ -743,7 +789,9 @@ bool PipelineCompiler::ReplacePipelineShaderModule(
 
         if (LoadReplaceShaderBinary(hash64, &codeSize, &pCode))
         {
-            VkResult result = BuildShaderModule(pDevice, 0, codeSize, pCode, false, nullptr, nullptr, pShaderModule);
+            VkResult result =
+                BuildShaderModule(pDevice, 0, codeSize, pCode, false, false, nullptr, nullptr, pShaderModule);
+
             if (result == VK_SUCCESS)
             {
                 pShaderInfo->pModuleData = ShaderModule::GetShaderData(compilerType, pShaderModule);
@@ -909,6 +957,7 @@ Util::Result PipelineCompiler::GetCachedPipelineBinary(
     PipelineCreationFeedback*    pPipelineFeedback)
 {
     Util::Result cacheResult = Util::Result::NotFound;
+    int64_t      startTime   = Util::GetPerfCpuTime();
 
     if (pPipelineBinaryCache != nullptr)
     {
@@ -945,6 +994,8 @@ Util::Result PipelineCompiler::GetCachedPipelineBinary(
         cacheResult = Util::Result::Success;
         m_cacheHits++;
     }
+
+    m_totalTimeSpent += Util::GetPerfCpuTime() - startTime;
 
     return cacheResult;
 }
@@ -1062,8 +1113,6 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     // PAL Pipeline caching
     Util::Result cacheResult = Util::Result::Success;
 
-    int64_t cacheTime   = 0;
-
     bool isUserCacheHit     = false;
     bool isInternalCacheHit = false;
 
@@ -1073,8 +1122,6 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     int64_t startTime = 0;
     if (shouldCompile && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr)))
     {
-        startTime = Util::GetPerfCpuTime();
-
         // Search optimized pipeline first
         if (optimizedPipelineHash != 0)
         {
@@ -1138,8 +1185,6 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
                 shouldCompile = false;
             }
         }
-
-        cacheTime = Util::GetPerfCpuTime() - startTime;
     }
 
     if (shouldCompile)
@@ -1150,6 +1195,19 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         }
         else
         {
+            for (uint32_t stage = 0; stage < ShaderStage::ShaderStageFragment; ++stage)
+            {
+                if (shaderInfos[stage]->pModuleData != nullptr)
+                {
+                    const auto* pModuleData =
+                        reinterpret_cast<const Vkgc::ShaderModuleData*>(shaderInfos[stage]->pModuleData);
+                    if (pModuleData->usage.usePointSize)
+                    {
+                        pCreateInfo->pipelineMetadata.pointSizeUsed = true;
+                        break;
+                    }
+                }
+            }
             if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
             {
                 result = m_compilerSolutionLlpc.CreateGraphicsPipelineBinary(
@@ -1240,7 +1298,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
             isInternalCacheHit);
     }
 
-    m_totalTimeSpent += shouldCompile ? compileTime : cacheTime;
+    m_totalTimeSpent += compileTime;
     m_totalBinaries++;
 
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
@@ -1313,17 +1371,17 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 {
     VkResult               result        = VK_SUCCESS;
     const RuntimeSettings& settings      = m_pPhysicalDevice->GetRuntimeSettings();
-    bool                   shouldCompile = true;
 
     pCreateInfo->pipelineInfo.deviceIndex = deviceIdx;
 
-    int64_t compileTime = 0;
+    int64_t compileTime   = 0;
     uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
 
-    void* pPipelineDumpHandle = nullptr;
-    const void* pModuleDataBak = nullptr;
+    void*              pPipelineDumpHandle       = nullptr;
+    const void*        pModuleDataBak            = nullptr;
     ShaderModuleHandle shaderModuleReplaceHandle = {};
-    bool shaderModuleReplaced = false;
+    bool               shaderModuleReplaced      = false;
+    bool               shouldCompile             = true;
 
     if ((settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash) ||
         (settings.shaderReplaceMode == ShaderReplaceShaderHashPipelineBinaryHash))
@@ -1357,43 +1415,11 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         dumpOptions.pDumpDir                 = settings.pipelineDumpDir;
         dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
         dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
-        dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
+        dumpOptions.dumpDuplicatePipelines   = settings.dumpDuplicatePipelines;
 
         Vkgc::PipelineBuildInfo pipelineInfo = {};
         pipelineInfo.pComputeInfo = &pCreateInfo->pipelineInfo;
         pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, pipelineInfo, pipelineHash);
-    }
-
-    // PAL Pipeline caching
-    Util::Result cacheResult = Util::Result::Success;
-
-    int64_t cacheTime = 0;
-
-    bool isUserCacheHit     = false;
-    bool isInternalCacheHit = false;
-
-    PipelineBinaryCache* pPipelineBinaryCache = (pPipelineCache != nullptr) ? pPipelineCache->GetPipelineCache()
-                                                                            : nullptr;
-
-    if (shouldCompile && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr)))
-    {
-        int64_t startTime = Util::GetPerfCpuTime();
-
-        GetComputePipelineCacheId(
-            deviceIdx,
-            pCreateInfo,
-            pipelineHash,
-            m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash(),
-            pCacheId);
-
-        cacheResult = GetCachedPipelineBinary(pCacheId, pPipelineBinaryCache, pPipelineBinarySize, ppPipelineBinary,
-            &isUserCacheHit, &isInternalCacheHit, &pCreateInfo->freeCompilerBinary, &pCreateInfo->pipelineFeedback);
-        if (cacheResult == Util::Result::Success)
-        {
-            shouldCompile = false;
-        }
-
-        cacheTime = Util::GetPerfCpuTime() - startTime;
     }
 
     if (shouldCompile)
@@ -1426,18 +1452,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         }
     }
 
-    if (result == VK_SUCCESS)
-    {
-        CachePipelineBinary(
-            pCacheId,
-            pPipelineBinaryCache,
-            *pPipelineBinarySize,
-            *ppPipelineBinary,
-            isUserCacheHit,
-            isInternalCacheHit);
-    }
-
-    m_totalTimeSpent += shouldCompile ? compileTime : cacheTime;
+    m_totalTimeSpent += compileTime;
     m_totalBinaries++;
 
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
@@ -1662,6 +1677,7 @@ static void CopyPipelineShadersInfo(
         {
             *pShaderInfosDst[stage]                         = *pShaderInfosSrc[stage];
             pCreateInfo->pipelineProfileKey.pShaders[stage] = libInfo.pipelineProfileKey.pShaders[stage];
+            pCreateInfo->earlyElfPackage[stage] = libInfo.earlyElfPackage[stage];
         }
     }
 }
@@ -2034,6 +2050,7 @@ void PipelineCompiler::BuildPipelineShaderInfo(
         pShaderInfoOut->pSpecializationInfo = pShaderInfoIn->pSpecializationInfo;
         pShaderInfoOut->pEntryTarget        = pShaderInfoIn->pEntryPoint;
         pShaderInfoOut->entryStage          = stage;
+
         pCompiler->ApplyDefaultShaderOptions(stage,
                                              &pShaderInfoOut->options);
 
@@ -2042,11 +2059,14 @@ void PipelineCompiler::BuildPipelineShaderInfo(
             pShaderInfoOut->options.allowVaryWaveSize = true;
         }
 
+        pDevice->GetShaderOptimizer()->CreateShaderOptimizerKey(pShaderInfoOut->pModuleData,
+                                                                pShaderInfoIn->codeHash,
+                                                                stage,
+                                                                pShaderInfoIn->codeSize,
+                                                                &pOptimizerKey->pShaders[static_cast<uint32_t>(stage)]);
+
         ApplyProfileOptions(pDevice,
                             static_cast<uint32_t>(stage),
-                            stage,
-                            pShaderInfoIn->codeHash,
-                            pShaderInfoIn->codeSize,
                             pPipelineOptions,
                             pShaderInfoOut,
                             pOptimizerKey,
@@ -2094,6 +2114,9 @@ static VkResult BuildPipelineResourceMapping(
             result = pLayout->BuildLlpcPipelineMapping(stageMask,
                                                        pVbInfo,
                                                        pCreateInfo->pipelineInfo.enableUberFetchShader,
+#if VKI_RAY_TRACING
+                                                       false,
+#endif
                                                        pCreateInfo->pTempBuffer,
                                                        &pCreateInfo->pipelineInfo.resourceMapping,
                                                        &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
@@ -2142,6 +2165,11 @@ static void BuildPipelineShadersInfo(
 
     pDevice->GetCompiler(DefaultDeviceIndex)->ApplyPipelineOptions(pDevice, pIn->flags, &pCreateInfo->pipelineInfo.options);
 
+    if (pCreateInfo->pipelineInfo.options.enableRelocatableShaderElf)
+    {
+        CompilerSolution::DisableNggCulling(&pCreateInfo->pipelineInfo.nggState);
+    }
+
     Vkgc::PipelineShaderInfo* ppShaderInfoOut[] =
     {
         &pCreateInfo->pipelineInfo.vs,
@@ -2162,6 +2190,8 @@ static void BuildPipelineShadersInfo(
                                     &pCreateInfo->pipelineProfileKey,
                                     &pCreateInfo->pipelineInfo.nggState
             );
+
+            pCreateInfo->earlyElfPackage[stage] = pShaderInfo->stages[stage].pModuleHandle->elfPackage;
         }
     }
 
@@ -2297,10 +2327,8 @@ static void BuildVertexInputInterfaceState(
     GraphicsPipelineBinaryCreateInfo*   pCreateInfo,
     VbBindingInfo*                      pVbInfo)
 {
+    if (pIn->pVertexInputState)
     {
-        // According to the spec this should never be null except when mesh is enabled
-        VK_ASSERT(pIn->pVertexInputState);
-
         pCreateInfo->pipelineInfo.pVertexInput               = pIn->pVertexInputState;
         pCreateInfo->pipelineInfo.iaState.topology           = pIn->pInputAssemblyState->topology;
         pCreateInfo->pipelineInfo.iaState.disableVertexReuse = false;
@@ -2466,6 +2494,63 @@ static void BuildExecutablePipelineState(
         pDefaultCompiler->BuildPipelineInternalBufferData(pPipelineLayout, pCreateInfo, pInternalBufferInfo);
     }
 
+#if VKI_RAY_TRACING
+    const Vkgc::PipelineShaderInfo* shaderInfos[] =
+    {
+        &pCreateInfo->pipelineInfo.vs,
+        &pCreateInfo->pipelineInfo.tcs,
+        &pCreateInfo->pipelineInfo.tes,
+        &pCreateInfo->pipelineInfo.gs,
+        &pCreateInfo->pipelineInfo.fs,
+    };
+
+    bool enableRayQuery = false;
+
+    for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
+    {
+        if (shaderInfos[stage]->pModuleData != nullptr)
+        {
+            const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>(shaderInfos[stage]->pModuleData);
+            if (pModuleData->usage.enableRayQuery)
+            {
+                enableRayQuery = true;
+                break;
+            }
+        }
+    }
+
+    if (enableRayQuery)
+    {
+        pDefaultCompiler->SetRayTracingState(pDevice, &(pCreateInfo->pipelineInfo.rtState), 0);
+
+#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION < 15
+        GpuRt::ShaderLibEntryInfo patchInfo = {};
+
+        GpuRtShaderEntryInfo(
+            pDevice->VkPhysicalDevice(DefaultDeviceIndex),
+            GpuRt::ShaderLibEntry::DxrRayQuery,
+            pDevice->RayTrace()->BuildConfig().memLayout,
+            patchInfo);
+
+        const GpuRt::PipelineShaderCode codePatch = GpuRt::Device::GetShaderLibraryData(patchInfo);
+#else
+        uint32_t flags = GpuRtShaderLibraryFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex));
+
+        const GpuRt::PipelineShaderCode codePatch = GpuRt::Device::GetShaderLibraryData(flags);
+#endif
+
+        VK_ASSERT(codePatch.dxilSize > 0);
+
+        // copy the gpurt rayquery code to the pipeline shader library
+        auto pShaderLibrary = &pCreateInfo->pipelineInfo.shaderLibrary;
+
+        pShaderLibrary->pCode = codePatch.pDxilCode;
+        pShaderLibrary->codeSize = codePatch.dxilSize;
+
+    }
+#endif
+
+    pCreateInfo->linkTimeOptimization = (pIn->flags & VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT);
 }
 
 // =====================================================================================================================
@@ -2578,6 +2663,16 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             pCreateInfo->pipelineInfo.enableUberFetchShader = false;
         }
 
+        if (libInfo.flags.isLibrary)
+        {
+            auto pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
+            pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
+            auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+            pPipelineBuildInfo->pInstance = pInstance;
+            pPipelineBuildInfo->unlinked = true;
+            CompilerSolution::DisableNggCulling(&pPipelineBuildInfo->nggState);
+        }
+
         result = BuildPipelineResourceMapping(pDevice, pPipelineLayout, availableStageMask, pVbInfo, pCreateInfo);
     }
 
@@ -2597,6 +2692,7 @@ void PipelineCompiler::SetPartialGraphicsPipelineBinaryInfo(
     const ShaderStage                 stage,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo)
 {
+    pCreateInfo->earlyElfPackage[stage] = pShaderModuleHandle->elfPackage;
 }
 
 // =====================================================================================================================
@@ -2765,26 +2861,64 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
             result = pLayout->BuildLlpcPipelineMapping(Vkgc::ShaderStageComputeBit,
                                                        nullptr,
                                                        false,
+#if VKI_RAY_TRACING
+                                                       false,
+#endif
                                                        pCreateInfo->pTempBuffer,
                                                        &pCreateInfo->pipelineInfo.resourceMapping,
                                                        &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
         }
     }
 
-    pCreateInfo->pipelineProfileKey.shaderCount = 1;
-    pCreateInfo->pipelineProfileKey.pShaders    = &pCreateInfo->shaderProfileKey;
     pCreateInfo->compilerType                   = CheckCompilerType(&pCreateInfo->pipelineInfo);
     pCreateInfo->pipelineInfo.cs.pModuleData    = ShaderModule::GetShaderData(pCreateInfo->compilerType,
                                                                               pShaderInfo->stage.pModuleHandle);
+
+#if VKI_RAY_TRACING
+    auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
+#endif
+#if VKI_RAY_TRACING
+    const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>
+        (pCreateInfo->pipelineInfo.cs.pModuleData);
+
+    if (pModuleData->usage.enableRayQuery)
+    {
+        SetRayTracingState(pDevice, &(pCreateInfo->pipelineInfo.rtState), 0);
+
+        if (pDevice->RayTrace() != nullptr)
+        {
+#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION < 15
+            GpuRt::ShaderLibEntryInfo patchInfo = {};
+
+            GpuRtShaderEntryInfo(
+                m_pPhysicalDevice,
+                GpuRt::ShaderLibEntry::DxrRayQuery,
+                pDevice->RayTrace()->BuildConfig().memLayout,
+                patchInfo);
+
+            const GpuRt::PipelineShaderCode codePatch = GpuRt::Device::GetShaderLibraryData(patchInfo);
+#else
+            uint32_t flags = GpuRtShaderLibraryFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex));
+
+            const GpuRt::PipelineShaderCode codePatch = GpuRt::Device::GetShaderLibraryData(flags);
+#endif
+            VK_ASSERT(codePatch.dxilSize > 0);
+
+            // Include the GPURT ray query code to the pipeline shader library
+            auto pShaderLibrary      = &pCreateInfo->pipelineInfo.shaderLibrary;
+
+            pShaderLibrary->pCode    = codePatch.pDxilCode;
+            pShaderLibrary->codeSize = codePatch.dxilSize;
+
+        }
+    }
+#endif
 
     ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute,
                               &pCreateInfo->pipelineInfo.cs.options);
 
     ApplyProfileOptions(pDevice,
                         0,
-                        ShaderStage::ShaderStageCompute,
-                        pShaderInfo->stage.codeHash,
-                        pShaderInfo->stage.codeSize,
                         nullptr,
                         &pCreateInfo->pipelineInfo.cs,
                         &pCreateInfo->pipelineProfileKey,
@@ -2817,10 +2951,21 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
         break;
     case ShaderStage::ShaderStageFragment:
         pShaderOptions->waveSize = settings.fsWaveSize;
+        pShaderOptions->allowReZ = settings.allowReZ;
         break;
     case ShaderStage::ShaderStageCompute:
         pShaderOptions->waveSize = settings.csWaveSize;
         break;
+#if VKI_RAY_TRACING
+    case ShaderStage::ShaderStageRayTracingRayGen:
+    case ShaderStage::ShaderStageRayTracingIntersect:
+    case ShaderStage::ShaderStageRayTracingAnyHit:
+    case ShaderStage::ShaderStageRayTracingClosestHit:
+    case ShaderStage::ShaderStageRayTracingMiss:
+    case ShaderStage::ShaderStageRayTracingCallable:
+        pShaderOptions->waveSize = settings.rtWaveSize;
+        break;
+#endif
     default:
         break;
     }
@@ -2901,6 +3046,1006 @@ void PipelineCompiler::FreeGraphicsPipelineCreateInfo(
         pCreateInfo->pTempBuffer = nullptr;
     }
 }
+
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+// Converts Vulkan ray tracing pipeline parameters to an internal structure
+VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
+    const Device*                                   pDevice,
+    const VkRayTracingPipelineCreateInfoKHR*        pIn,
+    const RayTracingPipelineShaderStageInfo*        pShaderInfo,
+    RayTracingPipelineBinaryCreateInfo*             pCreateInfo)
+{
+    VkResult result = VK_SUCCESS;
+    auto     pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+    auto&    settings = m_pPhysicalDevice->GetRuntimeSettings();
+
+    PipelineLayout* pLayout = nullptr;
+
+    VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR);
+
+    if (pIn->layout != VK_NULL_HANDLE)
+    {
+        pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
+    }
+
+    pCreateInfo->flags = pIn->flags;
+
+    bool hasLibraries  = ((pIn->pLibraryInfo != nullptr) && (pIn->pLibraryInfo->libraryCount > 0)) &&
+                         settings.rtEnableCompilePipelineLibrary;
+    bool isLibrary     = Util::TestAnyFlagSet(pIn->flags, VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) &&
+                         settings.rtEnableCompilePipelineLibrary;
+    bool hasProcedural = false;
+
+    bool isReplay      = ((pIn->groupCount > 0) && (pIn->pGroups[0].pShaderGroupCaptureReplayHandle != nullptr));
+
+    if (hasLibraries)
+    {
+        VkShaderStageFlags libraryStageMask = 0;
+
+        // Visit the library shader groups
+        for (uint32_t libraryIdx = 0; libraryIdx < pIn->pLibraryInfo->libraryCount; ++libraryIdx)
+        {
+            VkPipeline             libraryHandle     = pIn->pLibraryInfo->pLibraries[libraryIdx];
+            RayTracingPipeline*    pLibrary          = RayTracingPipeline::ObjectFromHandle(libraryHandle);
+            const ShaderGroupInfo* pShaderGroupInfos = pLibrary->GetShaderGroupInfos();
+
+            if (pLibrary->CheckHasTraceRay())
+            {
+                libraryStageMask |= VK_SHADER_STAGE_COMPUTE_BIT;
+            }
+
+            for (uint32_t groupIdx = 0; groupIdx < pLibrary->GetShaderGroupCount(); groupIdx++)
+            {
+                libraryStageMask |= pShaderGroupInfos[groupIdx].stages;
+
+                if (pShaderGroupInfos[groupIdx].type ==
+                    VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR)
+                {
+                    hasProcedural = true;
+                }
+            }
+        }
+
+        pCreateInfo->pipelineInfo.pipelineLibStageMask = VkToVkgcShaderStageMask(libraryStageMask);
+    }
+
+    // Implicitly include the SKIP_AABBS pipeline flag if there are no procedural
+    // shader groups. This should be common for triangle-only setups and will
+    // simplify the traversal routine. Note this guarantee cannot be made for
+    // pipeline libraries
+    if (settings.rtAutoSkipAabbIntersections && (isLibrary == false))
+    {
+        for (uint32_t groupIdx = 0; groupIdx < pIn->groupCount; groupIdx++)
+        {
+            if (pIn->pGroups[groupIdx].type ==
+                VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR)
+            {
+                hasProcedural = true;
+
+                break;
+            }
+        }
+
+        if (hasProcedural == false)
+        {
+            pCreateInfo->flags |= VK_PIPELINE_CREATE_RAY_TRACING_SKIP_AABBS_BIT_KHR;
+        }
+    }
+
+    ApplyPipelineOptions(pDevice, pIn->flags, &pCreateInfo->pipelineInfo.options);
+
+    pCreateInfo->pipelineInfo.options.disableImageResourceCheck = settings.disableRayTracingImageResourceTypeCheck;
+
+    pCreateInfo->pipelineInfo.maxRecursionDepth = pIn->maxPipelineRayRecursionDepth;
+    pCreateInfo->pipelineInfo.indirectStageMask = settings.rtIndirectStageMask;
+
+    pCreateInfo->pipelineInfo.isReplay = isReplay;
+
+    // pLibraryInterface must be populated (per spec) if the pipeline is a library or has libraries
+    VK_ASSERT((pIn->pLibraryInterface != nullptr) == (isLibrary || hasLibraries));
+
+    if (isLibrary || hasLibraries)
+    {
+        // When pipeline libraries are involved maxPayloadSize and maxAttributeSize are read from
+        pCreateInfo->pipelineInfo.payloadSizeMaxInLib   = pIn->pLibraryInterface->maxPipelineRayPayloadSize;
+        pCreateInfo->pipelineInfo.attributeSizeMaxInLib = pIn->pLibraryInterface->maxPipelineRayHitAttributeSize;
+    }
+
+    if (hasLibraries)
+    {
+        // pipeline library, or pipeline that contains pipeline library(s)
+        pCreateInfo->pipelineInfo.hasPipelineLibrary = true;
+    }
+    else
+    {
+        pCreateInfo->pipelineInfo.hasPipelineLibrary = false;
+    }
+
+    pCreateInfo->pipelineProfileKey.shaderCount = pShaderInfo->stageCount;
+
+    size_t pipelineInfoBufferSize = pShaderInfo->stageCount * sizeof(Vkgc::PipelineShaderInfo);
+    size_t shaderKeyBufferSize    = pCreateInfo->pipelineProfileKey.shaderCount * sizeof(ShaderOptimizerKey);
+    size_t tempBufferSize         = pipelineInfoBufferSize + shaderKeyBufferSize;
+
+    size_t genericMappingBufferSize = 0;
+    if (pLayout != nullptr)
+    {
+        genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
+
+        tempBufferSize += genericMappingBufferSize + pCreateInfo->mappingBufferSize;
+    }
+
+    // We can't have a pipeline with 0 shader stages
+    VK_ASSERT(tempBufferSize > 0);
+
+    pCreateInfo->pTempBuffer = pInstance->AllocMem(tempBufferSize,
+                                                   VK_DEFAULT_MEM_ALIGN,
+                                                   VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+    size_t tempBufferOffset = 0;
+
+    if (pCreateInfo->pTempBuffer == nullptr)
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    else
+    {
+        // NOTE: Zero the allocated space that is used to create pipeline resource mappings. Some
+        // fields of resource mapping nodes are unused for certain node types. We must initialize
+        // them to zeroes.
+        memset(pCreateInfo->pTempBuffer, 0, tempBufferSize);
+
+        if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
+        {
+            pCreateInfo->pMappingBuffer = pCreateInfo->pTempBuffer;
+            tempBufferOffset           += pCreateInfo->mappingBufferSize;
+
+            constexpr uint32_t RayTracingStageMask = Vkgc::ShaderStageRayTracingRayGenBit |
+                                                     Vkgc::ShaderStageRayTracingIntersectBit |
+                                                     Vkgc::ShaderStageRayTracingAnyHitBit |
+                                                     Vkgc::ShaderStageRayTracingClosestHitBit |
+                                                     Vkgc::ShaderStageRayTracingMissBit |
+                                                     Vkgc::ShaderStageRayTracingCallableBit;
+
+            // Build the LLPC resource mapping description. This data contains things about how shader
+            // inputs like descriptor set bindings are communicated to this pipeline in a form that
+            // LLPC can understand.
+            result = pLayout->BuildLlpcPipelineMapping(RayTracingStageMask,
+                                                       nullptr,
+                                                       false,
+#if VKI_RAY_TRACING
+                                                       isReplay,
+#endif
+                                                       Util::VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferOffset),
+                                                       &pCreateInfo->pipelineInfo.resourceMapping,
+                                                       &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
+
+            tempBufferOffset += genericMappingBufferSize;
+        }
+    }
+
+    SetRayTracingState(pDevice, &pCreateInfo->pipelineInfo.rtState, pCreateInfo->flags);
+
+    if (result == VK_SUCCESS)
+    {
+        pCreateInfo->pipelineInfo.shaderCount      = pShaderInfo->stageCount;
+        pCreateInfo->pipelineInfo.pShaderGroups    = pIn->pGroups;
+        pCreateInfo->pipelineInfo.shaderGroupCount = pIn->groupCount;
+        pCreateInfo->pipelineInfo.pShaders         = static_cast<Vkgc::PipelineShaderInfo*>(
+                                                         Util::VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferOffset));
+        tempBufferOffset                          += pipelineInfoBufferSize;
+
+        pCreateInfo->pipelineProfileKey.pShaders = static_cast<ShaderOptimizerKey*>(
+                                                       Util::VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferOffset));
+        tempBufferOffset                        += shaderKeyBufferSize;
+
+        uint32_t nonRayGenCount = 0;
+        bool shaderCanInline = (settings.rtCompileMode != RtCompileMode::RtCompileModeIndirect);
+
+        for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
+        {
+            pCreateInfo->pipelineInfo.pShaders[i].pModuleData =
+                ShaderModule::GetFirstValidShaderData(pShaderInfo->stages[i].pModuleHandle);
+            pCreateInfo->pipelineInfo.pShaders[i].pSpecializationInfo =
+                pShaderInfo->stages[i].pSpecializationInfo;
+            pCreateInfo->pipelineInfo.pShaders[i].pEntryTarget = pShaderInfo->stages[i].pEntryPoint;
+            pCreateInfo->pipelineInfo.pShaders[i].entryStage = pShaderInfo->stages[i].stage;
+
+            if (pShaderInfo->stages[i].stage != ShaderStage::ShaderStageRayTracingRayGen)
+            {
+                ++nonRayGenCount;
+            }
+
+            if (shaderCanInline && (settings.shaderInlineFlags != ShaderInlineFlags::InlineAll))
+            {
+                switch (pShaderInfo->stages[i].stage)
+                {
+                case ShaderStage::ShaderStageRayTracingRayGen:
+                    // Raygen can always be inlined.
+                    break;
+                case ShaderStage::ShaderStageRayTracingMiss:
+                    shaderCanInline =
+                        Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineMissShader);
+                    break;
+                case ShaderStage::ShaderStageRayTracingClosestHit:
+                    shaderCanInline =
+                        Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineClosestHitShader);
+                    break;
+                case ShaderStage::ShaderStageRayTracingAnyHit:
+                    shaderCanInline =
+                        Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineAnyHitShader);
+                    break;
+                case ShaderStage::ShaderStageRayTracingIntersect:
+                    shaderCanInline =
+                        Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineIntersectionShader);
+                    break;
+                case ShaderStage::ShaderStageRayTracingCallable:
+                    shaderCanInline =
+                        Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineCallableShader);
+                    break;
+                default:
+                    VK_NEVER_CALLED();
+                    break;
+                }
+            }
+        }
+
+        const uint32_t raygenCount = pShaderInfo->stageCount - nonRayGenCount;
+
+        pCreateInfo->allowShaderInlining = (shaderCanInline &&
+                                            (nonRayGenCount <= settings.maxUnifiedNonRayGenShaders) &&
+                                            (raygenCount <= settings.maxUnifiedRayGenShaders));
+        // if it is a pipeline library, or a main pipeline which would link to a library,
+        // force indirect path by set pCreateInfo->allowShaderInlining = false
+        if (isLibrary || hasLibraries)
+        {
+            pCreateInfo->allowShaderInlining = false;
+        }
+
+#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION < 15
+        GpuRt::ShaderLibEntryInfo patchInfo = {};
+
+        GpuRtShaderEntryInfo(
+            m_pPhysicalDevice,
+            GpuRt::ShaderLibEntry::TraceRays,
+            pDevice->RayTrace()->BuildConfig().memLayout,
+            patchInfo);
+
+        const GpuRt::PipelineShaderCode codePatch = GpuRt::Device::GetShaderLibraryData(patchInfo);
+#else
+        uint32_t flags = GpuRtShaderLibraryFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex));
+
+        const GpuRt::PipelineShaderCode codePatch = GpuRt::Device::GetShaderLibraryData(flags);
+#endif
+        VK_ASSERT(codePatch.dxilSize > 0);
+
+        pCreateInfo->pipelineInfo.shaderTraceRay.pCode = codePatch.pDxilCode;
+        pCreateInfo->pipelineInfo.shaderTraceRay.codeSize = codePatch.dxilSize;
+
+        {
+            pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
+        }
+
+        for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
+        {
+            ApplyDefaultShaderOptions(pShaderInfo->stages[i].stage,
+                                      &pCreateInfo->pipelineInfo.pShaders[i].options);
+        }
+
+        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
+        {
+            // TODO: move it to llpc
+            if (pCreateInfo->allowShaderInlining)
+            {
+                pCreateInfo->pipelineInfo.indirectStageMask = 0;
+            }
+
+            uint32_t vgprLimit =
+                m_compilerSolutionLlpc.GetRayTracingVgprLimit(pCreateInfo->pipelineInfo.indirectStageMask != 0);
+
+            for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
+            {
+                pCreateInfo->pipelineInfo.pShaders[i].options.vgprLimit = vgprLimit;
+            }
+        }
+
+        for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
+        {
+
+            pCreateInfo->pipelineInfo.pShaders[i].pModuleData =
+                ShaderModule::GetShaderData(pCreateInfo->compilerType, pShaderInfo->stages[i].pModuleHandle);
+
+            if (((pShaderInfo->stages[i].flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0) ||
+                (settings.rtEnableWaveVarying))
+            {
+                pCreateInfo->pipelineInfo.pShaders[i].options.allowVaryWaveSize = true;
+                pCreateInfo->pipelineInfo.pShaders[i].options.waveSize          = 32;
+            }
+
+            pDevice->GetShaderOptimizer()->CreateShaderOptimizerKey(pCreateInfo->pipelineInfo.pShaders[i].pModuleData,
+                                                                    pShaderInfo->stages[i].codeHash,
+                                                                    Vkgc::ShaderStage::ShaderStageCompute,
+                                                                    pShaderInfo->stages[i].codeSize,
+                                                                    &pCreateInfo->pipelineProfileKey.pShaders[i]);
+
+            ApplyProfileOptions(pDevice,
+                                i,
+                                &pCreateInfo->pipelineInfo.options,
+                                &pCreateInfo->pipelineInfo.pShaders[i],
+                                &pCreateInfo->pipelineProfileKey,
+                                nullptr);
+
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Creates ray tracing pipeline binary.
+VkResult PipelineCompiler::CreateRayTracingPipelineBinary(
+    Device*                             pDevice,
+    uint32_t                            deviceIdx,
+    PipelineCache*                      pPipelineCache,
+    RayTracingPipelineBinaryCreateInfo* pCreateInfo,
+    RayTracingPipelineBinary*           pPipelineBinary,
+    Util::MetroHash::Hash*              pCacheId)
+{
+    VkResult               result = VK_SUCCESS;
+    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
+    auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+    bool                   shouldCompile = true;
+
+    auto pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
+    pPipelineBuildInfo->deviceIndex = deviceIdx;
+
+    int64_t compileTime = 0;
+    uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
+    bool isUserCacheHit = false;
+    bool isInternalCacheHit = false;
+    void* pPipelineDumpHandle = nullptr;
+    void* pShaderReplaceBuf = nullptr;
+    const void** pModuleDataBak = nullptr;
+    ShaderModuleHandle* pShaderModuleReplaceHandle = nullptr;
+
+    bool shaderModuleReplaced = false;
+
+    if (settings.enablePipelineDump)
+    {
+        Vkgc::PipelineDumpOptions dumpOptions = {};
+
+        dumpOptions.pDumpDir = settings.pipelineDumpDir;
+        dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
+        dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
+        dumpOptions.dumpDuplicatePipelines = settings.dumpDuplicatePipelines;
+
+        Vkgc::PipelineBuildInfo pipelineInfo = {};
+
+        pipelineInfo.pRayTracingInfo = &pCreateInfo->pipelineInfo;
+        pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(
+            &dumpOptions, pipelineInfo, pipelineHash);
+    }
+
+    uint32_t shaderCount = pCreateInfo->pipelineInfo.shaderCount;
+
+    if ((settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash) ||
+        (settings.shaderReplaceMode == ShaderReplaceShaderHashPipelineBinaryHash))
+    {
+        if (ReplaceRayTracingPipelineBinary(pCreateInfo, pPipelineBinary, pipelineHash))
+        {
+            shouldCompile = false;
+            pCreateInfo->freeCompilerBinary = FreeWithInstanceAllocator;
+        }
+    }
+    else if (settings.shaderReplaceMode == ShaderReplaceShaderPipelineHash)
+    {
+        char pipelineHashString[64];
+        Util::Snprintf(pipelineHashString, 64, "0x%016" PRIX64, pipelineHash);
+
+        if (strstr(settings.shaderReplacePipelineHashes, pipelineHashString) != nullptr)
+        {
+            uint32_t tempBufSize = (sizeof(void*) + sizeof(ShaderModuleHandle)) * shaderCount;
+
+            pShaderReplaceBuf = pInstance->AllocMem(
+                tempBufSize,
+                VK_DEFAULT_MEM_ALIGN,
+                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+            memset(pShaderReplaceBuf, 0, sizeof(tempBufSize));
+
+            pModuleDataBak = reinterpret_cast<const void**>(pShaderReplaceBuf);
+            pShaderModuleReplaceHandle = reinterpret_cast<ShaderModuleHandle*>(
+                Util::VoidPtrInc(pShaderReplaceBuf, sizeof(void*) * shaderCount));
+
+            for (uint32_t i = 0; i < shaderCount; ++i)
+            {
+                pModuleDataBak[i] = pCreateInfo->pipelineInfo.pShaders[i].pModuleData;
+                shaderModuleReplaced |= ReplacePipelineShaderModule(
+                    pDevice,
+                    pCreateInfo->compilerType,
+                    &pCreateInfo->pipelineInfo.pShaders[i],
+                    &pShaderModuleReplaceHandle[i]);
+            }
+
+            if (shaderModuleReplaced)
+            {
+                pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
+            }
+        }
+    }
+
+    // PAL Pipeline caching
+    Util::Result cacheResult = Util::Result::Success;
+
+    PipelineBinaryCache* pPipelineBinaryCache = (pPipelineCache != nullptr) ? pPipelineCache->GetPipelineCache()
+                                                                            : nullptr;
+
+    if (shouldCompile && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr)))
+    {
+        GetRayTracingPipelineCacheId(
+            deviceIdx,
+            pDevice->NumPalDevices(),
+            pCreateInfo,
+            pipelineHash,
+            m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash(),
+            pCacheId);
+
+        Vkgc::BinaryData binData = {};
+
+        cacheResult = GetCachedPipelineBinary(
+            pCacheId,
+            pPipelineBinaryCache,
+            &binData.codeSize,
+            &binData.pCode,
+            &isUserCacheHit,
+            &isInternalCacheHit,
+            &pCreateInfo->freeCompilerBinary,
+            &pCreateInfo->pipelineFeedback);
+
+        if (cacheResult == Util::Result::Success)
+        {
+            ExtractRayTracingPipelineBinary(&binData, pPipelineBinary);
+
+            shouldCompile = false;
+        }
+    }
+
+    if (shouldCompile)
+    {
+        if (pCreateInfo->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT)
+        {
+            result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
+        }
+        else
+        {
+            if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
+            {
+                int64_t startTime = Util::GetPerfCpuTime();
+
+                // Build the LLPC pipeline
+                Llpc::RayTracingPipelineBuildOut pipelineOut         = {};
+                void*                            pLlpcPipelineBuffer = nullptr;
+
+                // Fill pipeline create info for LLPC
+                pPipelineBuildInfo->pInstance      = pInstance;
+                pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
+                pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
+
+                result = m_compilerSolutionLlpc.CreateRayTracingPipelineBinary(
+                    pDevice,
+                    deviceIdx,
+                    pPipelineCache,
+                    pCreateInfo,
+                    pPipelineBinary,
+                    pPipelineDumpHandle,
+                    pipelineHash,
+                    pCacheId,
+                    &compileTime);
+
+                compileTime = Util::GetPerfCpuTime() - startTime;
+            }
+
+            if (result == VK_SUCCESS)
+            {
+                pCreateInfo->freeCompilerBinary = FreeWithCompiler;
+            }
+        }
+    }
+
+    Vkgc::BinaryData cacheBinData = {};
+
+    if ((result == VK_SUCCESS) && (shouldCompile == true))
+    {
+        if ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr))
+        {
+            BuildRayTracingPipelineBinary(pPipelineBinary, &cacheBinData);
+
+            if (cacheBinData.pCode != nullptr)
+            {
+                CachePipelineBinary(
+                    pCacheId,
+                    pPipelineBinaryCache,
+                    cacheBinData.codeSize,
+                    cacheBinData.pCode,
+                    isUserCacheHit,
+                    isInternalCacheHit);
+            }
+        }
+    }
+
+    m_totalTimeSpent += compileTime;
+    m_totalBinaries++;
+
+    if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
+    {
+        uint32_t pipelineIndex = 0;
+
+        for (uint32_t i = 0; i < pPipelineBinary->pipelineBinCount; ++i)
+        {
+            auto pBin = &pPipelineBinary->pPipelineBins[i];
+
+            if (pBin->pCode != nullptr)
+            {
+                ReplacePipelineIsaCode(pDevice, pipelineHash, pipelineIndex, pBin->pCode, pBin->codeSize);
+
+                pipelineIndex++;
+            }
+        }
+    }
+
+    if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
+    {
+        if (result == VK_SUCCESS)
+        {
+            // Dump ELF binaries
+            for (uint32_t i = 0; i < pPipelineBinary->pipelineBinCount; ++i)
+            {
+                if (pPipelineBinary->pPipelineBins[i].pCode != nullptr)
+                {
+                    Vkgc::BinaryData pipelineBinary = {};
+                    pipelineBinary.codeSize = pPipelineBinary->pPipelineBins[i].codeSize;
+                    pipelineBinary.pCode = pPipelineBinary->pPipelineBins[i].pCode;
+                    Vkgc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, &pipelineBinary);
+                }
+            }
+
+            // Dump metadata
+            Vkgc::BinaryData pipelineMeta = {};
+
+            pipelineMeta.pCode = pPipelineBinary->pElfCache == nullptr ? cacheBinData.pCode : pPipelineBinary->pElfCache;
+
+            if (pipelineMeta.pCode == nullptr)
+            {
+                BuildRayTracingPipelineBinary(pPipelineBinary, &pipelineMeta);
+            }
+
+            pipelineMeta.codeSize = GetRayTracingPipelineMetaSize(pPipelineBinary);
+
+            Vkgc::IPipelineDumper::DumpRayTracingPipelineMetadata(pPipelineDumpHandle, &pipelineMeta);
+
+            if ((cacheBinData.pCode == nullptr) && (pPipelineBinary->pElfCache == nullptr))
+            {
+                pInstance->FreeMem(const_cast<void*>(pipelineMeta.pCode));
+            }
+        }
+
+        Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
+    }
+
+    if (shaderModuleReplaced)
+    {
+        for (uint32_t i = 0; i < pCreateInfo->pipelineInfo.shaderCount; ++i)
+        {
+            pCreateInfo->pipelineInfo.pShaders[i].pModuleData = pModuleDataBak[i];
+
+            FreeShaderModule(&pShaderModuleReplaceHandle[i]);
+        }
+    }
+
+    pInstance->FreeMem(pShaderReplaceBuf);
+
+    for (uint32_t i = 0; i < pPipelineBinary->pipelineBinCount; ++i)
+    {
+        auto pBin = &pPipelineBinary->pPipelineBins[i];
+
+        if (pBin->pCode != nullptr)
+        {
+            DropPipelineBinaryInst(pDevice, settings, pBin->pCode, pBin->codeSize);
+        }
+    }
+
+    if (cacheBinData.pCode != nullptr)
+    {
+        pInstance->FreeMem(const_cast<void*>(cacheBinData.pCode));
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Free ray tracing pipeline binary and assiocated shader group handles.
+void PipelineCompiler::FreeRayTracingPipelineBinary(
+    RayTracingPipelineBinaryCreateInfo* pCreateInfo,
+    RayTracingPipelineBinary*           pPipelineBinary)
+{
+    if (pCreateInfo->freeCompilerBinary == FreeWithCompiler)
+    {
+        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
+        {
+            m_compilerSolutionLlpc.FreeRayTracingPipelineBinary(pPipelineBinary);
+        }
+
+    }
+    else if (pCreateInfo->freeCompilerBinary == FreeWithInstanceAllocator)
+    {
+        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(pPipelineBinary->pElfCache);
+    }
+}
+
+// =====================================================================================================================
+// Free ray tracing pipeline create info object
+void PipelineCompiler::FreeRayTracingPipelineCreateInfo(
+    RayTracingPipelineBinaryCreateInfo* pCreateInfo)
+{
+    auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+
+    if (pCreateInfo->pTempBuffer != nullptr)
+    {
+        pInstance->FreeMem(pCreateInfo->pTempBuffer);
+        pCreateInfo->pTempBuffer = nullptr;
+    }
+}
+
+// =====================================================================================================================
+// Set the Rtstate info from device and gpurt info
+void PipelineCompiler::SetRayTracingState(
+    const Device*  pDevice,
+    Vkgc::RtState* pRtState,
+    uint32_t       createFlags)
+{
+    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
+    const Pal::DeviceProperties& deviceProp = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
+
+    if (deviceProp.gfxipProperties.rayTracingIp != Pal::RayTracingIpLevel::None)
+    {
+        Pal::BvhInfo bvhInfo = {};
+        bvhInfo.numNodes                 = GpuRt::RayTracingMaxNumNodes;
+        bvhInfo.boxGrowValue             = GpuRt::RayTracingBoxGrowthNumUlpsDefault;
+        bvhInfo.boxSortHeuristic         = Pal::BoxSortHeuristic::ClosestFirst;
+        bvhInfo.flags.useZeroOffset      = 1;
+        bvhInfo.flags.returnBarycentrics = 1;
+
+        // Bypass Mall cache read/write if no alloc policy is set for SRDs.
+        // This global setting applies to every BVH SRD.
+        if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocBvh))
+        {
+            bvhInfo.flags.bypassMallRead  = 1;
+            bvhInfo.flags.bypassMallWrite = 1;
+        }
+
+        m_pPhysicalDevice->PalDevice()->CreateBvhSrds(1, &bvhInfo, &(pRtState->bvhResDesc.descriptorData));
+        pRtState->bvhResDesc.dataSizeInDwords = Util::NumBytesToNumDwords(pDevice->GetProperties().descriptorSizes.bvh);
+    }
+
+    pRtState->nodeStrideShift = 7;
+    pRtState->pipelineFlags = createFlags;
+
+    VK_ASSERT(static_cast<unsigned>(1 << pRtState->nodeStrideShift) == GpuRt::RayTracingQBVH32NodeSize);
+
+    RayTracingPipeline::ConvertStaticPipelineFlags(pDevice,
+                                                   &pRtState->staticPipelineFlags,
+                                                   &pRtState->triCompressMode,
+                                                   &pRtState->counterMode,
+                                                   pRtState->pipelineFlags);
+
+    // Set the indirect function calling convention and callee saved registers per shader type from settings
+    pRtState->exportConfig.indirectCallingConvention = settings.indirectCallConvention;
+    pRtState->exportConfig.indirectCalleeSavedRegs.raygen = settings.indirectCalleeRaygen;
+    pRtState->exportConfig.indirectCalleeSavedRegs.traceRays = settings.indirectCalleeTraceRays;
+    pRtState->exportConfig.indirectCalleeSavedRegs.miss = settings.indirectCalleeMiss;
+    pRtState->exportConfig.indirectCalleeSavedRegs.closestHit = settings.indirectCalleeClosestHit;
+    pRtState->exportConfig.indirectCalleeSavedRegs.anyHit = settings.indirectCalleeAnyHit;
+    pRtState->exportConfig.indirectCalleeSavedRegs.intersection = settings.indirectCalleeIntersection;
+    pRtState->exportConfig.indirectCalleeSavedRegs.callable = settings.indirectCalleeCallable;
+    pRtState->exportConfig.enableUniformNoReturn = settings.enableUniformNoReturn;
+
+    // Set ray query swizzle
+    pRtState->rayQueryCsSwizzle = settings.rayQueryCsSwizzle;
+
+    if (settings.rtFlattenThreadGroupSize == 0)
+    {
+        if ((settings.overrideThreadGroupSizeX != 0) ||
+            (settings.overrideThreadGroupSizeY != 0) ||
+            (settings.overrideThreadGroupSizeZ != 0))
+        {
+            pRtState->threadGroupSizeX       = settings.overrideThreadGroupSizeX;
+            pRtState->threadGroupSizeY       = settings.overrideThreadGroupSizeY;
+            pRtState->threadGroupSizeZ       = settings.overrideThreadGroupSizeZ;
+        }
+        else
+        {
+            pRtState->threadGroupSizeX       = settings.rtThreadGroupSizeX;
+            pRtState->threadGroupSizeY       = settings.rtThreadGroupSizeY;
+            pRtState->threadGroupSizeZ       = settings.rtThreadGroupSizeZ;
+        }
+        pRtState->dispatchDimSwizzleMode = Vkgc::DispatchDimSwizzleMode::Native;
+    }
+    else
+    {
+        pRtState->threadGroupSizeX       = settings.rtFlattenThreadGroupSize;
+        pRtState->threadGroupSizeY       = 1;
+        pRtState->threadGroupSizeZ       = 1;
+        pRtState->dispatchDimSwizzleMode = Vkgc::DispatchDimSwizzleMode::FlattenWidthHeight;
+    }
+
+    pRtState->boxSortHeuristicMode                  = settings.boxSortingHeuristic;
+    pRtState->triCompressMode                       = settings.rtTriangleCompressionMode;
+    pRtState->outerTileSize                         = settings.rtOuterTileSize;
+    pRtState->enableRayQueryCsSwizzle               = settings.rtEnableRayQueryCsSwizzle;
+    pRtState->enableDispatchRaysInnerSwizzle        = settings.rtEnableDispatchRaysInnerSwizzle;
+    pRtState->enableDispatchRaysOuterSwizzle        = settings.rtEnableDispatchRaysOuterSwizzle;
+    pRtState->ldsStackSize                          = settings.ldsStackSize;
+    pRtState->enableOptimalLdsStackSizeForIndirect  = settings.enableOptimalLdsStackSizeForIndirect;
+    pRtState->enableOptimalLdsStackSizeForUnified   = settings.enableOptimalLdsStackSizeForUnified;
+    pRtState->dispatchRaysThreadGroupSize           = settings.dispatchRaysThreadGroupSize;
+    pRtState->ldsSizePerThreadGroup                 = deviceProp.gfxipProperties.shaderCore.ldsSizePerThreadGroup;
+
+#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION >= 15
+    CompilerSolution::UpdateRayTracingFunctionNames(pDevice, pRtState);
+#endif
+}
+
+// =====================================================================================================================
+// Replaces ray tracing pipeline from external metadata and ELF binary.
+bool PipelineCompiler::ReplaceRayTracingPipelineBinary(
+    RayTracingPipelineBinaryCreateInfo* pCreateInfo,
+    RayTracingPipelineBinary*           pPipelineBinary,
+    uint64_t                            hashCode64)
+{
+    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
+    auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+
+    char fileName[Util::MaxFileNameStrLen] = {};
+    Vkgc::IPipelineDumper::GetPipelineName(&pCreateInfo->pipelineInfo, fileName, sizeof(fileName), hashCode64);
+
+    char replaceFileName[Util::MaxPathStrLen] = {};
+    Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/%s_replace.meta", settings.shaderReplaceDir, fileName);
+
+    RayTracingPipelineBinary* pHeader = nullptr;
+    size_t headerSize = 0;
+    size_t binarySize = 0;
+
+    // Load ray-tracing pipeline metadata
+    Util::Result result = Util::File::Exists(replaceFileName) ? Util::Result::Success : Util::Result::ErrorUnavailable;
+    if (result == Util::Result::Success)
+    {
+        Util::File elfFile;
+        result = elfFile.Open(replaceFileName, Util::FileAccessRead | Util::FileAccessBinary);
+        if (result == Util::Result::Success)
+        {
+            headerSize = Util::File::GetFileSize(replaceFileName);
+            void* pAllocBuf = pInstance->AllocMem(
+                headerSize,
+                VK_DEFAULT_MEM_ALIGN,
+                VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+            elfFile.Read(pAllocBuf, headerSize, nullptr);
+            pHeader = reinterpret_cast<RayTracingPipelineBinary*>(pAllocBuf);
+        }
+    }
+
+    // Check the size of ray-tracing pipeline binaries
+    if (result == Util::Result::Success)
+    {
+        uint32_t          binaryIndex = 0;
+        Vkgc::BinaryData* pBinary     = reinterpret_cast<Vkgc::BinaryData *>(
+            VoidPtrInc(pHeader, reinterpret_cast<size_t>(pHeader->pPipelineBins)));
+
+        for (uint32_t i = 0; i < pHeader->pipelineBinCount && result == Util::Result::Success; ++i)
+        {
+            if (pBinary[i].codeSize > 0)
+            {
+                if (binaryIndex == 0)
+                {
+                    Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/%s_replace.elf",
+                        settings.shaderReplaceDir, fileName);
+                }
+                else
+                {
+                    Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/%s_replace.elf.%u",
+                        settings.shaderReplaceDir, fileName, binaryIndex);
+                }
+                result = Util::File::Exists(replaceFileName) ? Util::Result::Success : Util::Result::ErrorUnavailable;
+                if (result == Util::Result::Success)
+                {
+                    // Modify binary size and final offset according to external file
+                    pBinary[i].codeSize = Util::File::GetFileSize(replaceFileName);
+                    pBinary[i].pCode = reinterpret_cast<const void*>(headerSize + binarySize);
+                    binarySize += pBinary[i].codeSize;
+                }
+                binaryIndex++;
+            }
+        }
+    }
+
+    if (result == Util::Result::Success)
+    {
+        // Allocate final binary memory
+        void* pBinaryBuf = pInstance->AllocMem(
+            headerSize + binarySize,
+            VK_DEFAULT_MEM_ALIGN,
+            VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+        // Copy header
+        memcpy(pBinaryBuf, pHeader, headerSize);
+
+        // Copy ELF binaries
+        uint32_t          binaryIndex = 0;
+        Vkgc::BinaryData* pBinary     = reinterpret_cast<Vkgc::BinaryData*>(
+            VoidPtrInc(pHeader, reinterpret_cast<size_t>(pHeader->pPipelineBins)));
+        void*             pData       = VoidPtrInc(pBinaryBuf, headerSize);
+        for (uint32_t i = 0; i < pHeader->pipelineBinCount && result == Util::Result::Success; ++i)
+        {
+            if (pBinary[i].codeSize > 0)
+            {
+                if (binaryIndex == 0)
+                {
+                    Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/%s_replace.elf",
+                        settings.shaderReplaceDir, fileName);
+                }
+                else
+                {
+                    Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/%s_replace.elf.%u",
+                        settings.shaderReplaceDir, fileName, binaryIndex);
+                }
+
+                Util::File elfFile;
+                result = elfFile.Open(replaceFileName, Util::FileAccessRead | Util::FileAccessBinary);
+                size_t readSize = 0;
+                if (result == Util::Result::Success)
+                {
+                    elfFile.Read(pData, pBinary[i].codeSize, &readSize);
+                    VK_ASSERT(readSize == pBinary[i].codeSize);
+                    pData = VoidPtrInc(pData, pBinary[i].codeSize);
+                }
+                binaryIndex++;
+            }
+        }
+
+        if (result == Util::Result::Success)
+        {
+            Vkgc::BinaryData bin;
+            bin.pCode = pBinaryBuf;
+            bin.codeSize = headerSize + binarySize;
+            ExtractRayTracingPipelineBinary(&bin, pPipelineBinary);
+        }
+        else
+        {
+            pInstance->FreeMem(pBinaryBuf);
+        }
+    }
+
+    if (pHeader != nullptr)
+    {
+        pInstance->FreeMem(pHeader);
+    }
+
+    return result == Util::Result::Success;
+}
+
+// =====================================================================================================================
+// Extracts ray tracing pipeline from combined binary data.
+// NOTE: This function will modify the content in pBinary, i.e. this function can't be called twice for the same binary.
+void PipelineCompiler::ExtractRayTracingPipelineBinary(
+    Vkgc::BinaryData*         pBinary,
+    RayTracingPipelineBinary* pPipelineBinary)
+{
+    void* pBase = const_cast<void*>(pBinary->pCode);
+    // Copy pipeline binary
+    memcpy(pPipelineBinary, pBinary->pCode, sizeof(RayTracingPipelineBinary));
+
+    // Replace offset with real pointer
+    pPipelineBinary->shaderGroupHandle.shaderHandles = reinterpret_cast<Vkgc::RayTracingShaderIdentifier*>(
+        VoidPtrInc(pBase, reinterpret_cast<size_t>(pPipelineBinary->shaderGroupHandle.shaderHandles)));
+    pPipelineBinary->shaderPropSet.shaderProps = reinterpret_cast<Vkgc::RayTracingShaderProperty*>(
+        VoidPtrInc(pBase, reinterpret_cast<size_t>(pPipelineBinary->shaderPropSet.shaderProps)));
+    pPipelineBinary->pPipelineBins = reinterpret_cast<Vkgc::BinaryData*>(
+        VoidPtrInc(pBase, reinterpret_cast<size_t>(pPipelineBinary->pPipelineBins)));
+
+    for (uint32_t i = 0; i < pPipelineBinary->pipelineBinCount; ++i)
+    {
+        if (pPipelineBinary->pPipelineBins[i].codeSize != 0)
+        {
+            pPipelineBinary->pPipelineBins[i].pCode =
+                VoidPtrInc(pBase, reinterpret_cast<size_t>((pPipelineBinary->pPipelineBins[i].pCode)));
+        }
+    }
+
+    // Store ELF cache base pointer
+    pPipelineBinary->pElfCache = pBase;
+}
+
+// =====================================================================================================================
+// Gets ray tracing pipeline metadata size
+size_t PipelineCompiler::GetRayTracingPipelineMetaSize(
+    RayTracingPipelineBinary* pPipelineBinary) const
+{
+    return sizeof(RayTracingPipelineBinary) +
+        sizeof(Vkgc::RayTracingShaderIdentifier) * pPipelineBinary->shaderGroupHandle.shaderHandleCount +
+        sizeof(Vkgc::RayTracingShaderProperty) * pPipelineBinary->shaderPropSet.shaderCount +
+        sizeof(Vkgc::BinaryData) * pPipelineBinary->pipelineBinCount;
+}
+
+// =====================================================================================================================
+// Builds ray tracing combined binary data from RayTracingPipelineBinary struct.
+bool PipelineCompiler::BuildRayTracingPipelineBinary(
+    RayTracingPipelineBinary* pPipelineBinary,
+    Vkgc::BinaryData*         pResult)
+{
+    auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+
+    // Calculate total size
+    size_t headerSize = GetRayTracingPipelineMetaSize(pPipelineBinary);
+    size_t binarySize = 0;
+    for (uint32_t i = 0; i < pPipelineBinary->pipelineBinCount; ++i)
+    {
+        binarySize += pPipelineBinary->pPipelineBins[i].codeSize;
+    }
+
+    // Allocate memory
+    void* pAllocBuf = pInstance->AllocMem(
+        binarySize + headerSize,
+        VK_DEFAULT_MEM_ALIGN,
+        VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+    if (pAllocBuf == nullptr)
+    {
+        return false;
+    }
+
+    // Copy metadata and replace pointer with the offset in binary data.
+    RayTracingPipelineBinary* pHeader = reinterpret_cast<RayTracingPipelineBinary*>(pAllocBuf);
+    *pHeader = *pPipelineBinary;
+
+    Vkgc::RayTracingShaderIdentifier* pGroup = reinterpret_cast<Vkgc::RayTracingShaderIdentifier*>(pHeader + 1);
+    memcpy(pGroup, pPipelineBinary->shaderGroupHandle.shaderHandles,
+        sizeof(Vkgc::RayTracingShaderIdentifier) * pPipelineBinary->shaderGroupHandle.shaderHandleCount);
+    pHeader->shaderGroupHandle.shaderHandles =
+        reinterpret_cast<Vkgc::RayTracingShaderIdentifier*>(VoidPtrDiff(pGroup, pAllocBuf));
+
+    Vkgc::RayTracingShaderProperty* pProperty =
+        reinterpret_cast<Vkgc::RayTracingShaderProperty*>(pGroup + pPipelineBinary->shaderGroupHandle.shaderHandleCount);
+    memcpy(pProperty, pPipelineBinary->shaderPropSet.shaderProps,
+        sizeof(Vkgc::RayTracingShaderProperty) * pPipelineBinary->shaderPropSet.shaderCount);
+    pHeader->shaderPropSet.shaderProps =
+        reinterpret_cast<Vkgc::RayTracingShaderProperty*>(VoidPtrDiff(pProperty, pAllocBuf));
+
+    Vkgc::BinaryData* pBinary = reinterpret_cast<Vkgc::BinaryData*>(pProperty + pPipelineBinary->shaderPropSet.shaderCount);
+    memcpy(pBinary, pPipelineBinary->pPipelineBins, sizeof(Vkgc::BinaryData) * pPipelineBinary->pipelineBinCount);
+    pHeader->pPipelineBins = reinterpret_cast<Vkgc::BinaryData*>(VoidPtrDiff(pBinary, pAllocBuf));
+
+    // Copy pipeline ELF binaries
+    void* pData = pBinary + pPipelineBinary->pipelineBinCount;
+    for (uint32_t i = 0; i < pPipelineBinary->pipelineBinCount; ++i)
+    {
+        if (pBinary[i].codeSize != 0)
+        {
+            memcpy(pData, pBinary[i].pCode, pBinary[i].codeSize);
+            pBinary[i].pCode = reinterpret_cast<void*>(VoidPtrDiff(pData, pAllocBuf));
+            pData = VoidPtrInc(pData, pBinary[i].codeSize);
+        }
+        else
+        {
+            pBinary[i].pCode = nullptr;
+        }
+    }
+
+    // Fill results
+    pResult->pCode = pAllocBuf;
+    pResult->codeSize = binarySize + headerSize;
+    return true;
+}
+#endif
 
 // =====================================================================================================================
 #if ICD_GPUOPEN_DEVMODE_BUILD
@@ -3048,6 +4193,34 @@ void PipelineCompiler::GetGraphicsPipelineCacheId(
 
     hash.Finalize(pCacheId->bytes);
 }
+
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+void PipelineCompiler::GetRayTracingPipelineCacheId(
+    uint32_t                            deviceIdx,
+    uint32_t                            numDevices,
+    RayTracingPipelineBinaryCreateInfo* pCreateInfo,
+    uint64_t                            pipelineHash,
+    const Util::MetroHash::Hash&        settingsHash,
+    Util::MetroHash::Hash*              pCacheId)
+{
+    Util::MetroHash128 hash = {};
+
+    GetCommonPipelineCacheId(
+        deviceIdx,
+        pCreateInfo->flags,
+        &pCreateInfo->pipelineProfileKey,
+        pCreateInfo->compilerType,
+        pipelineHash,
+        settingsHash,
+        &hash);
+
+    hash.Update(numDevices);
+    hash.Update(pCreateInfo->pipelineInfo.options);
+
+    hash.Finalize(pCacheId->bytes);
+}
+#endif
 
 // =====================================================================================================================
 void PipelineCompiler::BuildPipelineInternalBufferData(

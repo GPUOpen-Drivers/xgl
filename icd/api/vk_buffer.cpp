@@ -256,6 +256,10 @@ void Buffer::LogBufferCreate(
         static_cast<uint32_t>(PalUsageFlag::TransformFeedbackCounterBuffer), "Usage Flag Mismatch");
     static_assert(VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT ==
         static_cast<uint32_t>(PalUsageFlag::ConditionalRendering), "Usage Flag Mismatch");
+#if VKI_RAY_TRACING
+    static_assert(VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR ==
+        static_cast<uint32_t>(PalUsageFlag::RayTracing), "Usage Flag Mismatch");
+#endif
     static_assert(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT ==
         static_cast<uint32_t>(PalUsageFlag::ShaderDeviceAddress), "Usage Flag Mismatch");
 
@@ -460,6 +464,14 @@ void Buffer::GetBufferMemoryRequirements(
                                                    limits.minUniformBufferOffsetAlignment);
     }
 
+#if VKI_RAY_TRACING
+    if (pBufferFlags->usageAccelStorage)
+    {
+        pMemoryRequirements->alignment = Util::Max(pMemoryRequirements->alignment,
+                                                   static_cast<VkDeviceSize>(GpuRt::RayTraceAccelMemoryBaseAlignment));
+    }
+#endif
+
     // MemoryRequirements cannot return smaller size than buffer size.
     // MAX_UINT64 can be used as buffer size.
     if (size > pMemoryRequirements->size)
@@ -524,6 +536,10 @@ void Buffer::CalculateBufferFlags(
     pBufferFlags->u32All = 0;
 
     pBufferFlags->usageUniformBuffer    = (pCreateInfo->usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)    ? 1 : 0;
+#if VKI_RAY_TRACING
+    pBufferFlags->usageAccelStorage     = (pCreateInfo->usage &
+                                             VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR) ? 1 : 0;
+#endif
     pBufferFlags->createSparseBinding   = (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)   ? 1 : 0;
     pBufferFlags->createSparseResidency = (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
     pBufferFlags->createProtected       = (pCreateInfo->flags & VK_BUFFER_CREATE_PROTECTED_BIT)        ? 1 : 0;

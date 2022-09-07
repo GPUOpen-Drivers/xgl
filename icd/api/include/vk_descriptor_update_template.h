@@ -142,6 +142,15 @@ private:
         const void*                 pDescriptorInfo,
         const TemplateUpdateInfo&   entry);
 
+#if VKI_RAY_TRACING
+    template <uint32_t numPalDevices>
+    static void UpdateEntryAccelerationStructure(
+        const Device*               pDevice,
+        VkDescriptorSet             descriptorSet,
+        const void*                 pDescriptorInfo,
+        const TemplateUpdateInfo&   entry);
+#endif
+
     template <size_t bufferDescSize, VkDescriptorType descriptorType, uint32_t numPalDevices>
     static void UpdateEntryTexelBuffer(
         const Device*               pDevice,

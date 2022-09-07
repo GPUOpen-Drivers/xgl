@@ -9,6 +9,12 @@
     "Pipeline Options",
     "Present",
     "SPIRV Options",
+    {
+      "Name": "Ray Tracing",
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ]
+    },
     "Debugging",
     "General",
     "Memory",
@@ -222,8 +228,112 @@
       ]
     },
     {
+      "Name": "BvhBuildMode",
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Values": [
+        {
+          "Name": "BvhBuildModeLinear",
+          "Value": 0,
+          "Description": "Use linear BVH builder"
+        },
+        {
+          "Name": "BvhBuildModePLOC",
+          "Value": 2,
+          "Description": "Use parallel locally-ordered clustering BVH builder"
+        },
+        {
+          "Name": "BvhBuildModeAuto",
+          "Value": 3,
+          "Description": "Only for override builds. If set, falls back to regular build options."
+        }
+      ]
+    },
+    {
       "Name": "MinimizeVgprUsageStrategy",
-      "Values": []
+      "Values": [
+        {
+          "BuildTypes": [
+            "VKI_RAY_TRACING"
+          ],
+          "Name": "MinimizeVgprsUsageDefault",
+          "Value": 0,
+          "Description": "Default optimal strategy"
+        },
+        {
+          "BuildTypes": [
+            "VKI_RAY_TRACING"
+          ],
+          "Name": "MinimizeVgprsUsageGcmseq",
+          "Value": 1,
+          "Description": "Enable global code motion transformation that will reduce register pressure"
+        },
+        {
+          "BuildTypes": [
+            "VKI_RAY_TRACING"
+          ],
+          "Name": "MinimizeVgprsUsageSched",
+          "Value": 2,
+          "Description": "Make scheduler favor minimizing VGPR usage"
+        },
+        {
+          "BuildTypes": [
+            "VKI_RAY_TRACING"
+          ],
+          "Name": "MinimizeVgprsUsageRegAlloc",
+          "Value": 4,
+          "Description": "Make register allocator favor minimizing VGPR usage"
+        },
+        {
+          "BuildTypes": [
+            "VKI_RAY_TRACING"
+          ],
+          "Name": "MinimizeVgprsUsageMergeChain",
+          "Value": 8,
+          "Description": "Enable merge chaining in scheduler preprocess"
+        },
+        {
+          "BuildTypes": [
+            "VKI_RAY_TRACING"
+          ],
+          "Name": "MinimizeVgprsUsagePeepHole",
+          "Value": 16,
+          "Description": "Control peephole optimizations that can affect VGPR usage"
+        },
+        {
+          "BuildTypes": [
+            "VKI_RAY_TRACING"
+          ],
+          "Name": "MinimizeVgprsUsageCubeCoord",
+          "Value": 32,
+          "Description": "Replace cubetc/cubesc/cubema/cubeid HW instructions with a sequence of ALUs"
+        },
+        {
+          "BuildTypes": [
+            "VKI_RAY_TRACING"
+          ],
+          "Name": "MinimizeVgprsUsageFactorMad",
+          "Value": 64,
+          "Description": "A common mul will be factored from a series on mads"
+        },
+        {
+          "BuildTypes": [
+            "VKI_RAY_TRACING"
+          ],
+          "Name": "MinimizeVgprsUsageVN",
+          "Value": 128,
+          "Description": "ValueNumber optimizations will be reduced, those that have tendency to increaseVGPR pressure will be disabled"
+        },
+        {
+          "BuildTypes": [
+            "VKI_RAY_TRACING"
+          ],
+          "Name": "MinimizeVgprsUsageBcm",
+          "Value": 256,
+          "Description": "Enables Bulk Code Motion phase, that moves instructions closer to their uses."
+        }
+      ]
     },
     {
       "Name": "ThreadGroupSwizzleMode",
@@ -254,6 +364,30 @@
   ],
   "Settings": [
     {
+      "Name": "EnableDumbTransitionSync",
+      "Description": "Enable synchronizing cache by adding dumb transition in the barrier",
+      "Tags": [
+        "Render Passes"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "ForceDisableGlobalBarrierCacheSync",
+      "Description": "Forces Render pass global-only barrier to not flush/inv any caches when acquire/release barrier interface is used.",
+      "Tags": [
+        "Render Passes"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Use shared CmdAllocator for all command buffers.",
       "Tags": [
         "Command Buffer Options"
@@ -264,6 +398,18 @@
       "Scope": "Driver",
       "Type": "bool",
       "Name": "UseSharedCmdAllocator"
+    },
+    {
+      "Description": "Use backup cmdbuffer for DMA command buffers.",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "UseBackupCmdbuffer"
     },
     {
       "ValidValues": {
@@ -1293,6 +1439,21 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Force ray tracing shaders to run with a particular wave size. This is ignored if subgroup operations are used by the shader, see SubgroupSize. 0  - Let compiler choose Wave32 vs Wave64 mode (default) 32 - Run in Wave32 mode 64 - Run in Wave64 mode ",
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 32
+      },
+      "Type": "uint32",
+      "Name": "RtWaveSize",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Enable NGG mode, use an implicit primitive shader on a per-pipeline type basis. Use this instead of PAL setting, NggEnableMode.",
       "Tags": [
         "SPIRV Options"
@@ -2081,8 +2242,151 @@
       "Name": "DumpDuplicatePipelines"
     },
     {
+      "Description": "Mask for enabling SPIR-V pass for internal ray tracing pipelines. The bit is corresponding to the enum defined in gpurt header.",
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "Defaults": {
+        "Default": "0xffffffffffffffff"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Scope": "Driver",
+      "Type": "uint64",
+      "Name": "RtInternalPipelineSpvPassMask"
+    },
+    {
+      "Name": "TraceRayCounterMode",
+      "VariableName": "rtTraceRayCounterMode",
+      "Type": "enum",
+      "Description": "Enable ray tracing counters. Written to the directory specified by RayTracingCapturePath. Press the RayTracingCaptureHotKey to dump when enabled.",
+      "Scope": "Driver",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "TraceRayCounterDisable"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "TraceRayCounterMode",
+        "Values": [
+          {
+            "Name": "TraceRayCounterDisable",
+            "Value": 0,
+            "Description": "Disable trace ray counters"
+          },
+          {
+            "Name": "TraceRayCounterRayHistoryLight",
+            "Value": 1,
+            "Description": "Enable ray history light logging (only logs TraceRay parameters)"
+          },
+          {
+            "Name": "TraceRayCounterRayHistoryFull",
+            "Value": 2,
+            "Description": "Enable full ray history logging (logs BVH tokens per iteration)"
+          },
+          {
+            "Name": "TraceRayCounterTraversal",
+            "Value": 3,
+            "Description": "Enable per-ray traversal counter logging."
+          }
+        ]
+      }
+    },
+    {
+      "Name": "RaytracingThreadGroupSizeX",
+      "Description": "Thread group size in x-dimension for ray tracing. This value is ignored if RaytracingFlattenThreadGroupSize is not 0.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 8
+      },
+      "Type": "uint32",
+      "Scope": "Driver",
+      "VariableName": "rtThreadGroupSizeX"
+    },
+    {
+      "Name": "RaytracingThreadGroupSizeY",
+      "Description": "Thread group size in y-dimension for ray tracing. This value is ignored if RaytracingFlattenThreadGroupSize is not 0.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 4
+      },
+      "Type": "uint32",
+      "Scope": "Driver",
+      "VariableName": "rtThreadGroupSizeY"
+    },
+    {
+      "Name": "RaytracingThreadGroupSizeZ",
+      "Description": "Thread group size in z-dimension for ray tracing. This value is ignored if RaytracingFlattenThreadGroupSize is not 0.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 1
+      },
+      "Type": "uint32",
+      "Scope": "Driver",
+      "VariableName": "rtThreadGroupSizeZ"
+    },
+    {
+      "Name": "RaytracingFlattenThreadGroupSize",
+      "Description": "Ray tracing ThreadGroup Size in mode which flatten width and height. 0 indicates this mode is off. Otherwise, it is on and indicates the size in x-dimension of thread group size. If the mode is on, RaytracingThreadGroupSizeX/Y/Z are ignored.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Scope": "Driver",
+      "VariableName": "rtFlattenThreadGroupSize"
+    },
+    {
+      "Name": "TraceRayProfileMaxIteration",
+      "Description": "Maximum trace ray loop iteration count when TraceRayProfileForceMaxIteration is set.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 4294967295
+      },
+      "Type": "uint32",
+      "Scope": "Driver",
+      "VariableName": "rtProfileMaxIteration"
+    },
+    {
       "Description": "BVH Builder NodeSort Type",
-      "Tags": [],
+      "Tags": [
+        "Ray Tracing"
+      ],
       "Defaults": {
         "Default": "BvhBuilderNodeSortOff"
       },
@@ -2126,7 +2430,9 @@
     },
     {
       "Description": "BVH Builder NodeSort Heurstic. Currently only work when NodeSortType is set to be NodeSort4WaySort.",
-      "Tags": [],
+      "Tags": [
+        "Ray Tracing"
+      ],
       "Defaults": {
         "Default": "BvhBuilderNodeSortHeuristicSurfaceAreaLargestFirst"
       },
@@ -2157,6 +2463,1085 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Enable half F32 box node.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "EnableHalfBoxNode32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "TraceRayProfileFlags",
+      "Description": "Trace ray profile flags",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "TraceRayProfileFlags",
+        "Values": [
+          {
+            "Name": "TraceRayProfileDisable",
+            "Value": 0
+          },
+          {
+            "Name": "TraceRayProfileForceOpaque",
+            "Value": 1
+          },
+          {
+            "Name": "TraceRayProfileAcceptFirstHitAndEndSearch",
+            "Value": 2
+          },
+          {
+            "Name": "TraceRayProfileSkipClosestHitShader",
+            "Value": 4
+          },
+          {
+            "Name": "TraceRayProfileCullFrontFacingTriangles",
+            "Value": 8
+          },
+          {
+            "Name": "TraceRayProfileCullBackFacingTriangles",
+            "Value": 16
+          },
+          {
+            "Name": "TraceRayProfileForceMaxIteration",
+            "Value": 32
+          }
+        ]
+      },
+      "Defaults": {
+        "Default": "TraceRayProfileDisable"
+      },
+      "Type": "enum",
+      "Scope": "Driver",
+      "VariableName": "rtTraceRayProfileFlags"
+    },
+    {
+      "Name": "RtMaxRayRecursionDepth",
+      "Description": "Max trace ray recursion depth",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 1
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "IndirectStageMask",
+      "Description": "Indicate which stages should use indirect call for recursive ray-tracing pipeline or inlining is disabled. This flag is a hint to compiler, final indirect call stages may different with initial setting.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "0xffffffff"
+      },
+      "Type": "uint32",
+      "Scope": "Driver",
+      "VariableName": "rtIndirectStageMask"
+    },
+    {
+      "Name": "IndirectCallTargetOccupancyPerSimd",
+      "Description": "Target occupancy per CU for indirect shaders. (0.0 = No Limit, 1.0 = Max Occupancy)",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 0.5
+      },
+      "Type": "float",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "RtUnifiedVgprLimit",
+      "Description": "Max number of VGPRs for unified ray tracing shaders (0xFFFFFFFF = No Limit)",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "0xFFFFFFFF"
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnableHwIntersectRay",
+      "Description": "Enables use of the BVH intersect ray instructions if they are supported by the HW.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableHwIntersectRay"
+    },
+    {
+      "Description": "Box sorting heuristic",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "BoxSortingClosest"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "BoxSortingMode",
+        "Values": [
+          {
+            "Name": "BoxSortingClosest",
+            "Value": 0,
+            "Description": "Traversal is ordered to enter the children that intersect the ray closer to the ray origin first."
+          },
+          {
+            "Name": "BoxSortingLargest",
+            "Value": 1,
+            "Description": "Traversal is ordered to enter the children that have the largest interval where the box intersects the ray first."
+          },
+          {
+            "Name": "BoxSortingMidPoint",
+            "Value": 2,
+            "Description": "Traversal is ordered to enter the children that have a midpoint in the interval where the box intersects that has the lowest intersection time before clamping."
+          },
+          {
+            "Name": "BoxSortingDisabled",
+            "Value": 3,
+            "Description": "Disable box sorting heuristic."
+          },
+          {
+            "Name": "BoxSortingLargestFirstAndClosest",
+            "Value": 4,
+            "Description": "Auto select box sort mode. If rayFlag indicates RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, choose BoxSortLargest. Otherwise choose BoxSortClosest."
+          },
+          {
+            "Name": "BoxSortingLargestFirstAndClosestMidpoint",
+            "Value": 5,
+            "Description": "Auto select box sort mode. If rayFlag indicates RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, choose BoxSortLargest. Otherwise choose BoxSortMidPoint."
+          },
+          {
+            "Name": "BoxSortingDisabledOnAcceptFirstHit",
+            "Value": 6,
+            "Description": "When BvhBuilder Node sort is enabled, turn off boxSort if rayflag allow acceptting first hit."
+          }
+        ]
+      },
+      "Type": "enum",
+      "Name": "BoxSortingHeuristic",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnableBVHCollapse",
+      "Description": "Enable BVH Collapse",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableBVHCollapse"
+    },
+    {
+      "Description": "Mode for which interior box nodes in BLAS use fp16 bounding boxes",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "Fp16BoxNodesInBlasModeNone"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "Fp16BoxNodesInBlasMode",
+        "Values": [
+          {
+            "Name": "Fp16BoxNodesInBlasModeNone",
+            "Value": 0,
+            "Description": "No interior box nodes are fp16 (so all nodes are fp32)"
+          },
+          {
+            "Name": "Fp16BoxNodesInBlasModeLeaves",
+            "Value": 1,
+            "Description": "Only leaf nodes (parents of triangles) are fp16"
+          },
+          {
+            "Name": "Fp16BoxNodesInBlasModeMixed",
+            "Value": 2,
+            "Description": "Dynamic mix of fp16 and fp32 nodes. Sets fp32 box to fp16 if conversion results in surface area grows < a threshold. Threshold set by fp16BoxNodesInBlasModeMixedThreshold"
+          },
+          {
+            "Name": "Fp16BoxNodesInBlasModeAll",
+            "Value": 3,
+            "Description": "All interior box nodes are fp16"
+          }
+        ]
+      },
+      "Type": "enum",
+      "VariableName": "rtFp16BoxNodesInBlasMode",
+      "Name": "Fp16BoxNodesInBlasMode",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Require the AllowCompaction flag for fp16BoxNodesInBlasMode to take effect.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Name": "Fp16BoxNodesRequireCompactionFlag",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "AllowFp16BoxNodesInUpdatableBVH",
+      "Description": "Allow fp16BoxNodesInBlasMode to take effect in updatable BVHs",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtAllowFp16BoxNodesInUpdatableBVH"
+    },
+    {
+      "Description": "Surface area (sa) threshold used by Fp16BoxNodesInBlasMode mode DxcFp16BoxNodesInBlasModeMixed. An interior BLAS node is converted from fp32 to fp16 when (saAsFp16 < (threshold * saAsFp32)). A value of 0 means use the default 1.5. Value is clamped from 1.0f - 8.0f",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 0.0
+      },
+      "Type": "float",
+      "VariableName": "rtFp16BoxNodesInBlasModeMixedThreshold",
+      "Name": "Fp16BoxNodesInBlasModeMixedThreshold",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable Top Down Build in TLAS",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "rtEnableTopDownBuild",
+      "Name": "EnableTopDownBuild",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable Wave Varying for RT pipelines",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "rtEnableWaveVarying",
+      "Name": "EnableWaveVarying",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable Rebraid in TLAS",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "RebraidTypeOff"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "RebraidType",
+        "Values": [
+          {
+            "Name": "RebraidTypeOff",
+            "Value": 0,
+            "Description": "No Rebraid"
+          },
+          {
+            "Name": "RebraidTypeV1",
+            "Value": 1,
+            "Description": "Version 1 Rebraid"
+          },
+          {
+            "Name": "RebraidTypeV2",
+            "Value": 2,
+            "Description": "Version 2 Rebraid"
+          }
+        ]
+      },
+      "Type": "enum",
+      "VariableName": "rtEnableTreeRebraid",
+      "Name": "EnableTreeRebraid",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Max top down build instances",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 5120
+      },
+      "Type": "uint32",
+      "Name": "MaxTopDownBuildInstances",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable Triangle Splitting",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "rtEnableTriangleSplitting",
+      "Name": "EnableTriangleSplitting",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Triangle Splitting Factor",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "1.3f"
+      },
+      "Type": "float",
+      "VariableName": "rtTriangleSplittingFactor",
+      "Name": "TriangleSplittingFactor",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnableMortonCode30",
+      "Description": "Enable Morton Code 30 bits",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableMortonCode30"
+    },
+    {
+      "Description": "Enable Variable Bits Morton Codes - Selects the largest axis per bit rather than rotating xyzxyz",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "EnableVariableBitsMortonCodes",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnablePrefixScanDLB",
+      "Description": "Enable Prefix Scan with Decoupled Look-back",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnablePrefixScanDLB"
+    },
+    {
+      "Name": "TriangleCompressionAutoMode",
+      "Description": "Set which BVH build flags are required to enable triangle compression when TriangleCompressionMode is Auto.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "TriangleCompressionAutoModeDisabled"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "TriangleCompressionAutoMode",
+        "Values": [
+          {
+            "Name": "TriangleCompressionAutoModeDefaultBuild",
+            "Value": 0,
+            "Description": "Compression is enabled for all default and FastTrace builds."
+          },
+          {
+            "Name": "TriangleCompressionAutoModeFastTrace",
+            "Value": 1,
+            "Description": "Compression is enabled for all FastTrace builds."
+          },
+          {
+            "Name": "TriangleCompressionAutoModeCompaction",
+            "Value": 2,
+            "Description": "Compression is enabled for all builds with the AllowCompaction flag."
+          },
+          {
+            "Name": "TriangleCompressionAutoModeDefaultBuildWithCompaction",
+            "Value": 3,
+            "Description": "Compression is enabled for default and FastTrace builds with the AllowCompaction flag."
+          },
+          {
+            "Name": "TriangleCompressionAutoModeFastTraceWithCompaction",
+            "Value": 4,
+            "Description": "Compression is enabled for FastTrace builds with the AllowCompaction flag."
+          },
+          {
+            "Name": "TriangleCompressionAutoModeDefaultBuildOrCompaction",
+            "Value": 5,
+            "Description": "Compression is enabled for default and FastTrace builds and all builds with the AllowCompaction flag."
+          },
+          {
+            "Name": "TriangleCompressionAutoModeFastTraceOrCompaction",
+            "Value": 6,
+            "Description": "Compression is enabled for FastTrace builds and all builds with the AllowCompaction flag."
+          },
+          {
+            "Name": "TriangleCompressionAutoModeDisabled",
+            "Value": 7,
+            "Description": "Compression disabled flag."
+          },
+          {
+            "Name": "TriangleCompressionAutoModeAlwaysEnabled",
+            "Value": 8,
+            "Description": "Compression always enabled flag."
+          }
+        ]
+      },
+      "Type": "enum",
+      "VariableName": "rtTriangleCompressionAutoMode",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Ray tracing pipeline compile mode. (Pending implementation)",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "RtCompileModeAuto"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "RtCompileMode",
+        "Values": [
+          {
+            "Name": "RtCompileModeAuto",
+            "Value": 0
+          },
+          {
+            "Name": "RtCompileModePreferUnified",
+            "Value": 1
+          },
+          {
+            "Name": "RtCompileModeIndirect",
+            "Value": 2
+          }
+        ]
+      },
+      "Type": "enum",
+      "Name": "RtCompileMode",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Max RayGen shaders in state object to use Unified pipeline before falling back to indirect",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 20
+      },
+      "Type": "uint32",
+      "Name": "MaxUnifiedRayGenShaders",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Max non RayGen shaders to inline in Unified pipeline before falling back to indirect",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 10
+      },
+      "Type": "uint32",
+      "Name": "MaxUnifiedNonRayGenShaders",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Default LDS traversal stack size per thread in DWORDs, when EnableOptimalLdsStackSizeForUnified / EnableOptimalLdsStackSizeForIndirect = false. It is clamped to a power of 2.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 16
+      },
+      "Type": "uint32",
+      "Name": "LdsStackSize",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Compiles unified pipeline, finds the number of VGPRs needed and sets the appropriate LDS traversal stack size. Could result in recompilation of unified pipeline.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Name": "EnableOptimalLdsStackSizeForUnified",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Sets the appropriate LDS traversal stack size for indirect pipelines based on IndirectCallTargetOccupancyPerSimd.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Name": "EnableOptimalLdsStackSizeForIndirect",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable BVH BuildStage Counters",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "EnableBVHBuildDebugCounters",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable Insert Barriers in BuildAccelerationStructure",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "EnableInsertBarriersInBuildAS",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Mark appropriate indirect function calls as uniform with no return.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Name": "EnableUniformNoReturn",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable reduced linkage across indirect call sites. Driver determines function parameter visibility (wherever possible) and removes unused parameters.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "EnableReducedLinkageOpt",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force using spill table for ray tracing root signatures. This will ensure all the root signatures are compatible.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "ForceUseSpillTableForRayTracingPipelineLayouts",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "TriangleCompressionMode",
+      "Description": "Modifies triangle compression algorithm if AccelerationStructureType is set to the HW-supported format DxcAccelTypeBVH4.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "NoTriangleCompression"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "TriangleCompressionMode",
+        "Values": [
+          {
+            "Name": "NoTriangleCompression",
+            "Value": 0,
+            "Description": "NoTriangleCompression is defined as storing a single triangle along with the triangle sideband data (geometryIndex, primitiveIndex, geometryFlags) inside the triangle node."
+          },
+          {
+            "Name": "PairTriangleCompression",
+            "Value": 2,
+            "Description": "PairTriangleCompression is similar to TwoTriangleCompression, except that the triangles in the node share a bounding box in the parent box node."
+          },
+          {
+            "Name": "AutoTriangleCompression",
+            "Value": 3,
+            "Description": "Auto-select triangleCompressionMode is defined as to allow enabling Triangle Compression based on BVH build flags. If the BVH build flags set to AllowCompaction | PreferFastTrace, Currently will auto select TwoTriangleCompression. Otherwise auto select NoTriangleCompression."
+          }
+        ]
+      },
+      "Type": "enum",
+      "Scope": "Driver",
+      "VariableName": "rtTriangleCompressionMode"
+    },
+    {
+      "Description": "Use a cost calculation when batching triangles for pair compression.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Name": "EnablePairCompressionCostCheck",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Override the BVH build mode for all build types",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "BvhBuildModeOverrideDisabled"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "BvhBuildModeOverride",
+        "Values": [
+          {
+            "Name": "BvhBuildModeOverrideDisabled",
+            "Value": 0,
+            "Description": "Do not override build mode"
+          },
+          {
+            "Name": "BvhBuildModeOverrideLinear",
+            "Value": 1,
+            "Description": "Force all builds to use linear BVH builder"
+          },
+          {
+            "Name": "BvhBuildModeOverridePLOC",
+            "Value": 3,
+            "Description": "Force all builds to use parallel locally-ordered clustering BVH builder"
+          }
+        ]
+      },
+      "Type": "enum",
+      "VariableName": "rtBvhBuildModeOverride",
+      "Name": "BvhBuildModeOverride",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Override the BVH build mode for BLAS",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "BvhBuildModeAuto"
+      },
+      "ValidValues": {
+        "Name": "BvhBuildMode"
+      },
+      "Type": "enum",
+      "Name": "BvhBuildModeOverrideBLAS",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Override the BVH build mode for TLAS",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "BvhBuildModeAuto"
+      },
+      "ValidValues": {
+        "Name": "BvhBuildMode"
+      },
+      "Type": "enum",
+      "Name": "BvhBuildModeOverrideTLAS",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "BvhBuildModeDefault",
+      "Description": "BVH build mode for default acceleration structure builds",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "BvhBuildModeLinear"
+      },
+      "ValidValues": {
+        "Name": "BvhBuildMode"
+      },
+      "Type": "enum",
+      "Scope": "Driver",
+      "VariableName": "rtBvhBuildModeDefault"
+    },
+    {
+      "Name": "BvhBuildModeFastTrace",
+      "Description": "BVH build mode for acceleration structure builds for fast trace",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "BvhBuildModePLOC"
+      },
+      "ValidValues": {
+        "Name": "BvhBuildMode"
+      },
+      "Type": "enum",
+      "Scope": "Driver",
+      "VariableName": "rtBvhBuildModeFastTrace"
+    },
+    {
+      "Name": "BvhBuildModeFastBuild",
+      "Description": "BVH build mode for fast acceleration structure builds",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "BvhBuildModeLinear"
+      },
+      "ValidValues": {
+        "Name": "BvhBuildMode"
+      },
+      "Type": "enum",
+      "Scope": "Driver",
+      "VariableName": "rtBvhBuildModeFastBuild"
+    },
+    {
+      "Description": "Disable validating image SRD type in shader code. Only in ray tracing shader code. Image resource type checking is neccessary depending on the HW.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "DisableRayTracingImageResourceTypeCheck",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable PBQP register allocator for ray tracing pipelines.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "EnableRayTracingPbqp",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable SC keep function calls optimization for ray tracing pipelines.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "EnableRayTracingKeepCalls",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Hint SC to choose Optimal Strategy for Shader Compilations for VGPR minimization for ray tracing pipelines.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "MinimizeVgprsUsageDefault"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "Name": "MinimizeVgprUsageStrategy"
+      },
+      "Type": "uint32",
+      "Name": "RaytracingMinVgprUsageStrategy",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Maximum number of waves per CU for RT workloads.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 0.0
+      },
+      "Type": "float",
+      "Name": "MaxWavesPerCu",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Maximum number of thread groups per CU for RT workloads.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "MaxThreadGroupsPerCu",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "The number of threadgroups to schedule on a single compute unit before moving to the next compute unit. 0 selects optimal default.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "TgScheduleCountPerCu",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable ray tracing shader inlining into trace shader.  Note: The driver can only inline shaders that do not call TraceRays() and and share the same local root signature.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "InlineAll"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "ShaderInlineFlags",
+        "Values": [
+          {
+            "Name": "InlineNone",
+            "Value": 0,
+            "Description": "Inlining disabled"
+          },
+          {
+            "Name": "InlineMissShader",
+            "Value": 1,
+            "Description": "Inline miss shaders"
+          },
+          {
+            "Name": "InlineClosestHitShader",
+            "Value": 2,
+            "Description": "Inline closesthit shaders"
+          },
+          {
+            "Name": "InlineAnyHitShader",
+            "Value": 4,
+            "Description": "Inline anyhit shaders"
+          },
+          {
+            "Name": "InlineIntersectionShader",
+            "Value": 8,
+            "Description": "Inline intersection shaders"
+          },
+          {
+            "Name": "InlineCallableShader",
+            "Value": 16,
+            "Description": "Inline callable shaders"
+          },
+          {
+            "Name": "InlineTraceRays",
+            "Value": 32,
+            "Description": "Inline TraceRays shader"
+          },
+          {
+            "Name": "InlineAll",
+            "Value": 63,
+            "Description": "Inline ALL shaders"
+          }
+        ]
+      },
+      "Type": "uint32",
+      "Name": "ShaderInlineFlags",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Re-routes all compute work to a universal queue internally.",
       "Tags": [
         "General"
@@ -2169,14 +3554,681 @@
       "Scope": "Driver"
     },
     {
+      "Name": "BvhCpuBuildMode",
+      "Description": "BVH build mode for default acceleration structure host builds",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "BvhCpuBuildModeRecursiveSAH"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "BvhCpuBuildMode",
+        "Values": [
+          {
+            "Name": "BvhCpuBuildModeRecursiveSAH",
+            "Value": 0,
+            "Description": "Use recursive SAH builder"
+          },
+          {
+            "Name": "BvhCpuBuildModeRecursiveLargestExtent",
+            "Value": 1,
+            "Description": "Use recursive largest extent builder"
+          }
+        ]
+      },
+      "Type": "enum",
+      "Scope": "Driver",
+      "VariableName": "rtBvhCpuBuildMode"
+    },
+    {
+      "Description": "Use RayQuery to implement TraceRays",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "rtUseRayQueryForTraceRays",
+      "Name": "UseRayQueryForTraceRays",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnableUpdateParallel",
+      "Description": "Enable update parallel optimization during acceleration structure builds",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableUpdateParallel"
+    },
+    {
+      "Description": "Enable parallel BVH build (no barriers)",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "rtEnableBuildParallel",
+      "Name": "EnableBuildParallel",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Waves per SIMD to launch for parallel build. 0 chooses the default.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "BuildParallelWavesPerSimd",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnableAcquireReleaseInterface",
+      "Description": "Enable Acquire/release-based barrier interface if PAL reports the ASIC supports it.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableAcquireReleaseInterface"
+    },
+    {
       "Name": "DispatchRaysThreadGroupSize",
       "Type": "uint32",
       "Description": "Thread Group size to use when calling DispatchRays",
       "Scope": "Driver",
-      "Tags": [],
+      "Tags": [
+        "Ray Tracing"
+      ],
       "Defaults": {
         "Default": 32
       }
+    },
+    {
+      "Name": "EnableAccelerationStructureScratchMemoryDump",
+      "Description": "Dumps scratch memory from acceleration structures. Written to the directory specified by BaseLogDirPath.",
+      "Tags": [
+        "RayTracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableAccelerationStructureScratchMemoryDump"
+    },
+    {
+      "Name": "EnableBuildAccelStructStats",
+      "Description": "Dump built acceleration stats. (Pending implementation)",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableBuildAccelStructStats"
+    },
+    {
+      "Name": "IndirectCallConvention",
+      "Description": "Enable indirect functions calling convention. A function with convention 1 should call functions with convention 2, and convention 2 should call convention 3. Each level will have more callee saved SGPRs. So the calling convention hierarchy is: (1) Raygen (2) TraceRay, Callable (3) AnyHit, Intersection, ClosestHit, Miss.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "IndirectConvention1"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "IndirectConvention",
+        "Values": [
+          {
+            "Name": "IndirectConvention0",
+            "Description": "Ignore indirect calling convention",
+            "Value": 0
+          },
+          {
+            "Name": "IndirectConvention1",
+            "Description": "Enable indirect calling convention",
+            "Value": 1
+          }
+        ]
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "IndirectCalleeRaygen",
+      "Description": "Number of callee saved registers for indirect Raygen shaders",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 2
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "IndirectCalleeMiss",
+      "Description": "Number of callee saved registers for indirect Miss shaders",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 40
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "IndirectCalleeClosestHit",
+      "Description": "Number of callee saved registers for indirect ClosestHit shaders",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 50
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "IndirectCalleeAnyHit",
+      "Description": "Number of callee saved registers for indirect AnyHit shaders",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 75
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "IndirectCalleeIntersection",
+      "Description": "Number of callee saved registers for indirect Intersection shaders",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 75
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "IndirectCalleeCallable",
+      "Description": "Number of callee saved registers for indirect Callable shaders",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 28
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "IndirectCalleeTraceRays",
+      "Description": "Number of callee saved registers for indirect TraceRays shader",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 28
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "IgnorePayloadLocations",
+      "Description": "When true, the payload structs will be referenced by their pointer and not their location ID.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnableCompilePipelineLibrary",
+      "Description": "Compile pipeline library as a ShaderLibrary.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableCompilePipelineLibrary"
+    },
+    {
+      "Name": "EnableRayTracingAccelerationStructureIndirectBuild",
+      "Description": "Enable ray tracing acceleration structure indirect build",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableAccelStructIndirectBuild"
+    },
+    {
+      "Name": "EnableRayTracingAccelStructHostFeatures",
+      "Description": "Enable ray tracing host-side physical device acceleration structure feature and commands",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableAccelStructHostFeatures"
+    },
+    {
+      "Name": "EnableRayQueryCsSwizzle",
+      "Description": "Determines if the driver performs swizzling logic on the thread + group indices for compute shaders that use the ray query feature.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableRayQueryCsSwizzle"
+    },
+    {
+      "Description": "Swizzling mode on the thread + group indices for compute shaders that use the ray query feature.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "ThreadGroupSwizzleMode4x4"
+      },
+      "ValidValues": {
+        "Name": "ThreadGroupSwizzleMode"
+      },
+      "Type": "enum",
+      "VariableName": "rayQueryCsSwizzle",
+      "Name": "RayQueryCsSwizzle",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnableDispatchRaysOuterSwizzle",
+      "Description": "Determines if the driver performs swizzling logic on the thread group indices used for ray tracing shaders. When this is false, a standard row major pattern is used.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableDispatchRaysOuterSwizzle"
+    },
+    {
+      "Name": "EnableDispatchRaysInnerSwizzle",
+      "Description": "Determines if the driver performs swizzling logic on the thread indices inside ray tracing thread groups. When this is false, a standard row major pattern is used.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableDispatchRaysInnerSwizzle"
+    },
+    {
+      "Name": "OuterTileSize",
+      "Description": "The size of outer tile for ray tracing shader thread swizzling.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 4
+      },
+      "Type": "uint32",
+      "Scope": "Driver",
+      "VariableName": "rtOuterTileSize"
+    },
+    {
+      "Description": "Enable ray tracing support",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "RaytracingNotSupported"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "EnableRaytracingSupport",
+        "Values": [
+          {
+            "Name": "RaytracingNotSupported",
+            "Value": 0,
+            "Description": "Disable all ray tracing support"
+          },
+          {
+            "Name": "Raytracing1_0",
+            "Value": 1,
+            "Description": "Enable ray tracing 1.0 features"
+          },
+          {
+            "Name": "Raytracing1_1",
+            "Value": 2,
+            "Description": "Enable ray tracing 1.1 features"
+          }
+        ]
+      },
+      "Type": "enum",
+      "Name": "EnableRaytracingSupport",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force software emulated RTIP level.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "EmulatedRtIpLevelNone"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "EmulatedRtIpLevel",
+        "Values": [
+          {
+            "Name": "EmulatedRtIpLevelNone",
+            "Value": 0,
+            "Description": "Use default hardware supported ray tracing IP level."
+          },
+          {
+            "Name": "HardwareRtIpLevel1_1",
+            "Value": 1,
+            "Description": "Force ray tracing IP level 1.1 feature set using hardware intrinsic."
+          },
+          {
+            "Name": "EmulatedRtIpLevel1_1",
+            "Value": 2,
+            "Description": "Emulate ray tracing IP level 1.1 feature set."
+          }
+        ]
+      },
+      "Type": "enum",
+      "Name": "EmulatedRtIpLevel",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "RebraidLengthPercentage",
+      "Description": "Length percentage to open a node when doing top-down build with rebraid enabled.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "0.1f"
+      },
+      "Type": "float",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "RebraidFactor",
+      "Description": "This factor decides how much more memory to allocate when doing top-down build with rebraid enabled.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 4
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "This factor decides how much more time to build BVH to increase quality for LTD.  1.0 is highest quality.",
+      "Tags": [
+        "RayTracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "1.0f"
+      },
+      "Type": "float",
+      "Name": "LtdQualityFactorFastTrace",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "This factor decides how much more time to build BVH to increase quality for LTD.  1.0 is highest quality.",
+      "Tags": [
+        "RayTracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "0.1f"
+      },
+      "Type": "float",
+      "Name": "LtdQualityFactorFastBuild",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "This factor decides how much more time to build BVH to increase quality for LTD.  1.0 is highest quality.",
+      "Tags": [
+        "RayTracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "0.4f"
+      },
+      "Type": "float",
+      "Name": "LtdQualityFactorDefaultBuild",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Number of size bits in morton codes.  [0-8] bits.",
+      "Tags": [
+        "RayTracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "6"
+      },
+      "Type": "uint32",
+      "Name": "NumMortonSizeBits",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Nearest neighbour search radius during PLOC.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "10"
+      },
+      "Type": "uint32",
+      "VariableName": "plocRadius",
+      "Name": "PlocRadius",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Automatically skip procedural node (AABB) leaf intersections if the pipeline has no AABB hit groups",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "rtAutoSkipAabbIntersections",
+      "Name": "AutoSkipAabbIntersections",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EmitRayTracingShaderDataToken",
+      "Description": "Emit Ray Tracing Shader Data Token",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEmitRayTracingShaderDataToken"
+    },
+    {
+      "Description": "Enable using LDS for function arguments. This is enabled for non-recursive indirect pipelines only",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "EnableLdsFuncArguments",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "DisableASCompatibilityCheck",
+      "Description": "Disables compatibility check of the src acceleration structure to the current device at deserializing stage.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
     },
     {
       "Name": "DbgBarrierPostCmdEnable",
@@ -2328,6 +4380,30 @@
             "Name": "DbgBarrierVideo",
             "Value": 67108864,
             "Description": "Any video operations"
+          },
+          {
+            "Name": "DbgBuildAccelerationStructureTLAS",
+            "Value": 134217728,
+            "Description": "Build ray tracing operations",
+            "BuildTypes": [
+              "VKI_RAY_TRACING"
+            ]
+          },
+          {
+            "Name": "DbgBuildAccelerationStructureBLAS",
+            "Value": 268435456,
+            "Description": "Build ray tracing operations",
+            "BuildTypes": [
+              "VKI_RAY_TRACING"
+            ]
+          },
+          {
+            "Name": "DbgTraceRays",
+            "Value": 536870912,
+            "Description": "Trace ray tracing operations",
+            "BuildTypes": [
+              "VKI_RAY_TRACING"
+            ]
           },
           {
             "Name": "DbgBarrierBeginRendering",
@@ -2966,13 +5042,90 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Enable Merge Sort for Morton Code sorting - If False, the default Radix Sort is used.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Name": "EnableMergeSort",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Fast BVH Build with no Morton Code sorting. Applies to BVHs with up to a wave size number of primitives.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "0"
+      },
+      "Type": "uint32",
+      "Name": "FastBuildThreshold",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "LBVH Build when number of primitives is below the threshold. Threshold does not apply when set to 0.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "0"
+      },
+      "Type": "uint32",
+      "Name": "lbvhBuildThreshold",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Apply SAH into QBVH build. Open up the nodes with larger surface area in BVH2 to be the children in QBVH.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "SahQbvh",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Max number of VGPRs for indirect shaders (0xFFFFFFFF = uses indirectCallTargetOccupancyPerSimd)",
-      "Tags": [],
+      "Tags": [
+        "Ray Tracing"
+      ],
       "Defaults": {
         "Default": "0xFFFFFFFF"
       },
       "Type": "uint32",
       "Name": "RtIndirectVgprLimit",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Acceleration structures used in TraceRay are tracked for dumping purposes. Disables tracking during Build calls.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "EnableTraceRayAccelStructTracking",
       "Scope": "Driver"
     },
     {
@@ -4703,6 +6856,24 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Force all ray tracing shaders compiled in unified mode to have swizzled thread groups.",
+      "Tags": [
+        "Optimization"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "ValidValues": {
+        "Name": "ThreadGroupSwizzleMode"
+      },
+      "Defaults": {
+        "Default": "ThreadGroupSwizzleModeDefault"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "Name": "ForceRtThreadGroupSwizzleMode"
+    },
+    {
       "Description": "Write graphics pipeline push descriptors to user data registers unless the total user data count exceeds this value. Maximum value is MaxBindingRegCount (96)",
       "Tags": [
         "Optimization"
@@ -4725,6 +6896,30 @@
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "CsInlinePushDescriptorUserDataLimit"
+    },
+    {
+      "Description": "Enable support for alternating compute shader thread group ordering.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "EnableAlternatingThreadGroupOrder"
+    },
+    {
+      "Name": "AllowReZ",
+      "Description": "If true, enables RE_Z after EARLY_Z. Valid only for pixel shaders.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
     },
     {
       "Description": "Enable GPU decompress pass for astc/etc image, it is on the vkCopyBufferToImage, and not safe depending on application.",
@@ -5520,6 +7715,18 @@
       "Scope": "Driver"
     },
     {
+      "Name": "OverrideThreadIdSwizzle",
+      "Description": "Override thread ID swizzling on a per shader basis.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Name": "ModifyResourceKeyForAppProfile",
       "Description": "If this is true, resource key will include any modifications based on runtime settings. BEWARE: Modifying this setting can invalidate resource optimizations if enabled for an app profile.",
       "Tags": [
@@ -5702,15 +7909,105 @@
       "Scope": "Driver"
     },
     {
-      "Name": "EnableDumbTransitionSync",
-      "Description": "Enable synchronizing cache by adding dumb transition in the barrier",
+      "Name": "OverrideShaderThreadGroupSizeX",
+      "Description": "Override ThreadGroupSizeX on a per shader basis.",
       "Tags": [
-        "General"
+        "Shader Tuning"
       ],
       "Defaults": {
-        "Default": true
+        "Default": "NotOverrideShaderThreadGroupSizeX"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "NotOverrideShaderThreadGroupSizeX",
+            "Value": 0
+          },
+          {
+            "Name": "ShaderThreadGroupSizeX_8",
+            "Value": 8
+          },
+          {
+            "Name": "ShaderThreadGroupSizeX_16",
+            "Value": 16
+          }
+        ],
+        "Name": "ShaderThreadGroupSizeX"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideShaderThreadGroupSizeY",
+      "Description": "Override ThreadGroupSizeY for wave32 and wave64 on a per shader basis.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "NotOverrideShaderThreadGroupSizeY"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "NotOverrideShaderThreadGroupSizeY",
+            "Value": 0
+          },
+          {
+            "Name": "ShaderThreadGroupSizeY_8",
+            "Value": 8
+          },
+          {
+            "Name": "ShaderThreadGroupSizeY_16",
+            "Value": 16
+          }
+        ],
+        "Name": "ShaderThreadGroupSizeY"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideShaderThreadGroupSizeZ",
+      "Description": "Override ShaderThreadGroupSizeZ for wave32 and wave64 on a per shader basis.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "NotOverrideShaderThreadGroupSizeZ"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "NotOverrideShaderThreadGroupSizeZ",
+            "Value": 0
+          },
+          {
+            "Name": "ShaderThreadGroupSizeZ_1",
+            "Value": 1
+          }
+        ],
+        "Name": "ShaderThreadGroupSizeZ"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "ForceInvalidAccelStruct",
+      "Description": "Forces the driver to behave as if the raytracing acceleration structure used by the application is always invalid. This will cause all TraceRay() calls to result in a miss.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
       },
       "Type": "bool",
+      "VariableName": "forceInvalidAccelStruct",
       "Scope": "Driver"
     }
   ]

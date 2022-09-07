@@ -68,6 +68,13 @@
 #include "include/graphics_pipeline_common.h"
 #include "include/internal_layer_hooks.h"
 
+#if VKI_RAY_TRACING
+#include "raytrace/ray_tracing_device.h"
+#include "raytrace/ray_tracing_util.h"
+#include "raytrace/vk_ray_tracing_pipeline.h"
+#include "raytrace/vk_acceleration_structure.h"
+#endif
+
 #include "sqtt/sqtt_layer.h"
 #include "sqtt/sqtt_mgr.h"
 #include "sqtt/sqtt_rgp_annotations.h"
@@ -274,6 +281,9 @@ Device::Device(
     m_useComputeAsTransferQueue(useComputeAsTransferQueue),
     m_useUniversalAsComputeQueue(pPhysicalDevices[DefaultDeviceIndex]->GetRuntimeSettings().useUniversalAsComputeQueue),
     m_useGlobalGpuVa(false),
+#if VKI_RAY_TRACING
+    m_pRayTrace(nullptr),
+#endif
     m_pBorderColorUsedIndexes(nullptr)
 {
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
@@ -926,6 +936,8 @@ VkResult Device::Create(
             VK_DEFAULT_MEM_ALIGN);
     }
 
+    const RuntimeSettings& settings = pPhysicalDevice->GetRuntimeSettings();
+
     for (queueFamilyIndex = 0; queueFamilyIndex < Queue::MaxQueueFamilies; queueFamilyIndex++)
     {
         for (queueIndex = 0; (queueIndex < queueCounts[queueFamilyIndex]) && (vkResult == VK_SUCCESS); queueIndex++)
@@ -970,6 +982,58 @@ VkResult Device::Create(
                     palQueueMemorySize += pPalDevices[deviceIdx]->GetQueueSemaphoreSize(tmzSemaphoreCreateInfo, &palResult);
                 }
 
+                if ((queueCreateInfo.queueType == Pal::QueueType::QueueTypeDma) && (settings.useBackupCmdbuffer))
+                {
+                    // create a backup compute queue for dma queue
+                    Pal::QueueCreateInfo backupQueueCreateInfo = {};
+
+                    ConstructQueueCreateInfo(pPhysicalDevices,
+                        deviceIdx,
+                        queueFamilyIndex,
+                        queueIndex,
+                        dedicatedComputeUnits[queueFamilyIndex][queueIndex],
+                        queuePriority[queueFamilyIndex][queueIndex],
+                        &backupQueueCreateInfo,
+                        true,
+                        false);
+
+                    palQueueMemorySize += pPalDevices[deviceIdx]->GetQueueSize(backupQueueCreateInfo, &palResult);
+
+                    // Create semaphores for switch to backup queue.
+                    Pal::QueueSemaphoreCreateInfo switchToBackupSemaphoreCreateInfo = {};
+                    switchToBackupSemaphoreCreateInfo.maxCount = 1;
+
+                    palQueueMemorySize += pPalDevices[deviceIdx]->GetQueueSemaphoreSize(
+                        switchToBackupSemaphoreCreateInfo,
+                        &palResult);
+
+                    // Create semaphores for switch from backup queue.
+                    Pal::QueueSemaphoreCreateInfo switchFromBackupSemaphoreCreateInfo = {};
+                    switchFromBackupSemaphoreCreateInfo.maxCount = 1;
+
+                    palQueueMemorySize += pPalDevices[deviceIdx]->GetQueueSemaphoreSize(
+                        switchFromBackupSemaphoreCreateInfo,
+                        &palResult);
+
+                    if ((queueFlags[queueFamilyIndex] & VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT) &&
+                        (properties.engineProperties[backupQueueCreateInfo.engineType].tmzSupportLevel ==
+                            Pal::TmzSupportLevel::PerQueue))
+                    {
+                        Pal::QueueCreateInfo backupTmzQueueCreateInfo = {};
+
+                        ConstructQueueCreateInfo(pPhysicalDevices,
+                            deviceIdx,
+                            queueFamilyIndex,
+                            queueIndex,
+                            dedicatedComputeUnits[queueFamilyIndex][queueIndex],
+                            queuePriority[queueFamilyIndex][queueIndex],
+                            &backupTmzQueueCreateInfo,
+                            true,
+                            true);
+
+                        palQueueMemorySize += pPalDevices[deviceIdx]->GetQueueSize(backupTmzQueueCreateInfo, &palResult);
+                    }
+                }
                 VK_ASSERT(palResult == Pal::Result::Success);
             }
         }
@@ -1020,7 +1084,11 @@ VkResult Device::Create(
 
         Pal::IQueue* pPalQueues[MaxPalDevices] = {};
         Pal::IQueue* pPalTmzQueues[MaxPalDevices] = {};
+        Pal::IQueue* pPalBackupQueues[MaxPalDevices] = {};
+        Pal::IQueue* pPalBackupTmzQueues[MaxPalDevices] = {};
         Pal::IQueueSemaphore* pPalTmzSemaphores[MaxPalDevices] = {};
+        Pal::IQueueSemaphore* pSwitchToPalBackupSemaphore[MaxPalDevices] = {};
+        Pal::IQueueSemaphore* pSwitchFromPalBackupSemaphore[MaxPalDevices] = {};
         size_t       palQueueMemoryOffset = 0;
         uint32       tmzQueueIndex        = 0;
 
@@ -1110,6 +1178,104 @@ VkResult Device::Create(
                             break;
                         }
                     }
+
+                    // Create a backup queue when this is a dma queue type.
+                    if ((queueCreateInfo.queueType == Pal::QueueType::QueueTypeDma) && (settings.useBackupCmdbuffer))
+                    {
+                        Pal::QueueCreateInfo backupQueueCreateInfo = {};
+
+                        palResult = CreatePalQueue(pPhysicalDevices,
+                            pPalDevices,
+                            deviceIdx,
+                            queueFamilyIndex,
+                            queueIndex,
+                            dedicatedComputeUnits[queueFamilyIndex][queueIndex],
+                            queuePriority[queueFamilyIndex][queueIndex],
+                            &backupQueueCreateInfo,
+                            pPalQueueMemory,
+                            palQueueMemoryOffset,
+                            pPalBackupQueues,
+                            executableName,
+                            executablePath,
+                            true,
+                            false);
+
+                        if (palResult != Pal::Result::Success)
+                        {
+                            break;
+                        }
+
+                        palQueueMemoryOffset += pPalDevices[deviceIdx]->GetQueueSize(backupQueueCreateInfo, &palResult);
+
+                        // Create backup semaphore for each backup queue.
+                        Pal::QueueSemaphoreCreateInfo switchToBackupSemaphoreCreateInfo = {};
+                        switchToBackupSemaphoreCreateInfo.maxCount = 1;
+
+                        palResult = pPalDevices[deviceIdx]->CreateQueueSemaphore(
+                            switchToBackupSemaphoreCreateInfo,
+                            Util::VoidPtrInc(pPalQueueMemory, palQueueMemoryOffset),
+                            &pSwitchToPalBackupSemaphore[deviceIdx]);
+
+                        palQueueMemoryOffset += pPalDevices[deviceIdx]->GetQueueSemaphoreSize(
+                            switchToBackupSemaphoreCreateInfo,
+                            &palResult);
+
+                        if (palResult != Pal::Result::Success)
+                        {
+                            break;
+                        }
+
+                        // Create backup semaphore for each backup queue.
+                        Pal::QueueSemaphoreCreateInfo switchFromBackupSemaphoreCreateInfo = {};
+                        switchFromBackupSemaphoreCreateInfo.maxCount = 1;
+
+                        palResult = pPalDevices[deviceIdx]->CreateQueueSemaphore(
+                            switchFromBackupSemaphoreCreateInfo,
+                            Util::VoidPtrInc(pPalQueueMemory, palQueueMemoryOffset),
+                            &pSwitchFromPalBackupSemaphore[deviceIdx]);
+
+                        palQueueMemoryOffset += pPalDevices[deviceIdx]->GetQueueSemaphoreSize(
+                            switchFromBackupSemaphoreCreateInfo,
+                            &palResult);
+
+                        if (palResult != Pal::Result::Success)
+                        {
+                            break;
+                        }
+
+                        if ((queueFlags[queueFamilyIndex] & VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT) &&
+                            (properties.engineProperties[backupQueueCreateInfo.engineType].tmzSupportLevel ==
+                                Pal::TmzSupportLevel::PerQueue))
+                        {
+                            Pal::QueueCreateInfo backupTmzQueueCreateInfo = {};
+
+                            palResult = CreatePalQueue(pPhysicalDevices,
+                                pPalDevices,
+                                deviceIdx,
+                                queueFamilyIndex,
+                                queueIndex,
+                                dedicatedComputeUnits[queueFamilyIndex][queueIndex],
+                                queuePriority[queueFamilyIndex][queueIndex],
+                                &backupTmzQueueCreateInfo,
+                                pPalQueueMemory,
+                                palQueueMemoryOffset,
+                                pPalBackupTmzQueues,
+                                executableName,
+                                executablePath,
+                                true,
+                                true);
+
+                            if (palResult != Pal::Result::Success)
+                            {
+                                break;
+                            }
+
+                            palQueueMemoryOffset += pPalDevices[deviceIdx]->GetQueueSize(
+                                backupTmzQueueCreateInfo,
+                                &palResult);
+
+                        }
+                    }
                 }
 
                 VirtualStackAllocator* pQueueStackAllocator = nullptr;
@@ -1152,17 +1318,24 @@ VkResult Device::Create(
                         pPalTmzQueues,
                         pPalTmzSemaphores,
                         pQueueStackAllocator,
-                        pCmdBufferRing));
+                        pCmdBufferRing,
+                        pPalBackupQueues,
+                        pPalBackupTmzQueues,
+                        pSwitchToPalBackupSemaphore,
+                        pSwitchFromPalBackupSemaphore));
 
                     pDispatchableQueues[queueFamilyIndex][queueIndex] = static_cast<DispatchableQueue*>(pApiQueueMemory);
-
                     pApiQueueMemory = Util::VoidPtrInc(pApiQueueMemory, apiQueueSize);
 
                     for (uint32_t id = 0; id < MaxPalDevices; id++)
                     {
-                        pPalTmzQueues[id]     = nullptr;
-                        pPalTmzSemaphores[id] = nullptr;
-                        pPalQueues[id]        = nullptr;
+                        pPalTmzQueues[id]                        = nullptr;
+                        pPalTmzSemaphores[id]                    = nullptr;
+                        pPalQueues[id]                           = nullptr;
+                        pPalBackupQueues[id]                     = nullptr;
+                        pPalBackupTmzQueues[id]                  = nullptr;
+                        pSwitchFromPalBackupSemaphore[id]        = nullptr;
+                        pSwitchToPalBackupSemaphore[id]          = nullptr;
                     }
 
                 }
@@ -1183,6 +1356,26 @@ VkResult Device::Create(
                         if (pPalTmzSemaphores[deviceIdx] != nullptr)
                         {
                             pPalTmzSemaphores[deviceIdx]->Destroy();
+                        }
+
+                        if (pPalBackupQueues[deviceIdx] != nullptr)
+                        {
+                            pPalBackupQueues[deviceIdx]->Destroy();
+                        }
+
+                        if (pPalBackupTmzQueues[deviceIdx] != nullptr)
+                        {
+                            pPalBackupTmzQueues[deviceIdx]->Destroy();
+                        }
+
+                        if (pSwitchFromPalBackupSemaphore[deviceIdx] != nullptr)
+                        {
+                            pSwitchFromPalBackupSemaphore[deviceIdx]->Destroy();
+                        }
+
+                        if (pSwitchToPalBackupSemaphore[deviceIdx] != nullptr)
+                        {
+                            pSwitchToPalBackupSemaphore[deviceIdx]->Destroy();
                         }
                     }
 
@@ -1245,6 +1438,37 @@ VkResult Device::Create(
 
 // =====================================================================================================================
 
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+VkResult Device::CreateRayTraceState()
+{
+    VkResult result = VK_SUCCESS;
+
+    const RuntimeSettings& settings = GetRuntimeSettings();
+
+    void* pMemory = m_pInstance->AllocMem(
+            sizeof(RayTracingDevice),
+            VK_DEFAULT_MEM_ALIGN,
+            VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+    if (pMemory == nullptr)
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        memset(pMemory, 0, sizeof(RayTracingDevice));
+
+        m_pRayTrace = VK_PLACEMENT_NEW(pMemory) RayTracingDevice(this);
+
+        result = m_pRayTrace->Init();
+    }
+
+    return result;
+}
+#endif
+
 // =====================================================================================================================
 // Bring up the Vulkan device.
 VkResult Device::Initialize(
@@ -1274,6 +1498,9 @@ VkResult Device::Initialize(
         );
     }
 
+#if VKI_RAY_TRACING
+    m_properties.rayTracingIpLevel          = deviceProps.gfxipProperties.rayTracingIp;
+#endif
     m_properties.virtualMemAllocGranularity = deviceProps.gpuMemoryProperties.virtualMemAllocGranularity;
     m_properties.virtualMemPageSize         = deviceProps.gpuMemoryProperties.virtualMemPageSize;
     m_properties.descriptorSizes.bufferView = deviceProps.gfxipProperties.srdSizes.bufferView;
@@ -1431,12 +1658,10 @@ VkResult Device::Initialize(
     }
 #endif
 
-    const Pal::DeviceProperties& palProps = pPhysicalDevice->PalProperties();
-
     if (result == VK_SUCCESS)
     {
-        // Allow overallocation by disabling tracking for apps running on APU or with the setting.
-        if ((palProps.gpuType == Pal::GpuType::Integrated) || m_settings.memoryDeviceOverallocationAllowed)
+        // Allow overallocation by disabling tracking as requested by the setting.
+        if (m_settings.memoryDeviceOverallocationAllowed)
         {
             m_allocationSizeTracking = false;
         }
@@ -1490,7 +1715,7 @@ VkResult Device::Initialize(
             {
                 m_allocationSizeTracking = false;
             }
-            else if ((m_settings.overrideHeapChoiceToLocal != 0) && (palProps.gpuType == Pal::GpuType::Discrete))
+            else if (m_settings.overrideHeapChoiceToLocal != 0)
             {
                 // This setting utilizes overallocation behavior's heap size tracking. Overallocation to the local
                 // visible heap is not desired but permitted as a precaution.
@@ -1519,6 +1744,15 @@ VkResult Device::Initialize(
         // Get the current values of driver features, from an app profile or global settings.
         UpdateFeatureSettings();
     }
+
+#if VKI_RAY_TRACING
+    if ((result == VK_SUCCESS) &&
+        (enabled.IsExtensionEnabled(DeviceExtensions::KHR_RAY_TRACING_PIPELINE) ||
+         enabled.IsExtensionEnabled(DeviceExtensions::KHR_RAY_QUERY)))
+    {
+        result = CreateRayTraceState();
+    }
+#endif
 
     if (result == VK_SUCCESS)
     {
@@ -1778,6 +2012,13 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
     }
 #endif
 
+#if VKI_RAY_TRACING
+    if (m_pRayTrace != nullptr)
+    {
+        m_pRayTrace->Destroy();
+    }
+#endif
+
     if (m_pSqttMgr != nullptr)
     {
         for (uint32_t i = 0; i < Queue::MaxQueueFamilies; ++i)
@@ -1948,6 +2189,7 @@ VkResult Device::CreateInternalComputePipeline(
         codeByteSize,
         pCode,
         false,
+        true,
         nullptr,
         nullptr,
         &shaderModule);
@@ -1970,14 +2212,62 @@ VkResult Device::CreateInternalComputePipeline(
         pCompiler->ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute,
                                              &pShaderInfo->options);
 
-        Util::MetroHash::Hash cacheId;
-        result = pCompiler->CreateComputePipelineBinary(this,
-                                                        0,
-                                                        nullptr,
-                                                        &pipelineBuildInfo,
-                                                        &pipelineBinarySize,
-                                                        &pPipelineBinary,
-                                                        &cacheId);
+#if VKI_RAY_TRACING
+        if (forceWave64)
+        {
+            pShaderInfo->options.waveSize = 64;
+        }
+#endif
+
+        // PAL Pipeline caching
+        Util::Result          cacheResult = Util::Result::NotFound;
+        Util::MetroHash::Hash cacheId     = {};
+
+        bool isUserCacheHit     = false;
+        bool isInternalCacheHit = false;
+
+        if (pCompiler->GetBinaryCache() != nullptr)
+        {
+            pCompiler->GetComputePipelineCacheId(
+                DefaultDeviceIndex,
+                &pipelineBuildInfo,
+                Vkgc::IPipelineDumper::GetPipelineHash(&pipelineBuildInfo.pipelineInfo),
+                VkPhysicalDevice(DefaultDeviceIndex)->GetSettingsLoader()->GetSettingsHash(),
+                &cacheId);
+
+            cacheResult = pCompiler->GetCachedPipelineBinary(
+                &cacheId,
+                nullptr,
+                &pipelineBinarySize,
+                &pPipelineBinary,
+                &isUserCacheHit,
+                &isInternalCacheHit,
+                &pipelineBuildInfo.freeCompilerBinary,
+                &pipelineBuildInfo.pipelineFeedback);
+        }
+
+        if (cacheResult != Util::Result::Success)
+        {
+            result = pCompiler->CreateComputePipelineBinary(
+                this,
+                DefaultDeviceIndex,
+                nullptr,
+                &pipelineBuildInfo,
+                &pipelineBinarySize,
+                &pPipelineBinary,
+                &cacheId);
+
+            if (result == VK_SUCCESS)
+            {
+                pCompiler->CachePipelineBinary(
+                    &cacheId,
+                    nullptr,
+                    pipelineBinarySize,
+                    pPipelineBinary,
+                    isUserCacheHit,
+                    isInternalCacheHit);
+            }
+        }
 
         pipelineBuildInfo.pMappingBuffer = nullptr;
     }
@@ -2109,6 +2399,23 @@ VkResult Device::CreateInternalPipelines()
         nullptr,
         &m_timestampQueryCopyPipeline);
 
+#if VKI_RAY_TRACING
+    if (result == VK_SUCCESS)
+    {
+        userDataNodes[2].node.sizeInDwords = 8;
+
+        result = CreateInternalComputePipeline(
+            sizeof(AccelerationStructureQueryPoolSpv),
+            AccelerationStructureQueryPoolSpv,
+            VK_ARRAY_SIZE(userDataNodes),
+            userDataNodes,
+            0,
+            false,
+            nullptr,
+            &m_accelerationStructureQueryCopyPipeline);
+    }
+#endif
+
     return result;
 }
 
@@ -2134,6 +2441,9 @@ void Device::DestroyInternalPipeline(
 void Device::DestroyInternalPipelines()
 {
     DestroyInternalPipeline(&m_timestampQueryCopyPipeline);
+#if VKI_RAY_TRACING
+    DestroyInternalPipeline(&m_accelerationStructureQueryCopyPipeline);
+#endif
 }
 
 // =====================================================================================================================
@@ -2621,6 +2931,88 @@ VkResult Device::CreateComputePipelines(
 
     return finalResult;
 }
+
+#if VKI_RAY_TRACING
+//=====================================================================================================================
+// Clamps LDS traversal stack size to a power of two value, based on the thread group size.
+uint32_t Device::ClampLdsStackSizeFromThreadGroupSize(
+    uint32_t ldsStackSize // LDS traversal stack size in DWORDs
+    ) const
+{
+    const Pal::DeviceProperties& props      = GetPalProperties();
+    const uint32_t threadGroupSize          = GetRuntimeSettings().dispatchRaysThreadGroupSize;
+    const uint32_t maxLdsStackSizeInBytes   = props.gfxipProperties.shaderCore.ldsSizePerThreadGroup;
+    const uint32_t ldsStackSizeInBytes      = threadGroupSize * ldsStackSize * sizeof(uint32_t);
+
+    if (ldsStackSizeInBytes > maxLdsStackSizeInBytes)
+    {
+        // 64 KB is the max LDS available so we need to clamp the number of stack entries per thread
+        // to a lower power of two value.
+        ldsStackSize = (1 << Util::Log2(maxLdsStackSizeInBytes / (threadGroupSize * sizeof(uint32_t))));
+    }
+
+    return ldsStackSize;
+}
+
+//=====================================================================================================================
+// Gets LDS size per thread in DWORDs
+// This includes the space for both the traversal stack and LDS spilling
+uint32_t Device::GetDefaultLdsSizePerThread(
+    bool isIndirect
+    ) const
+{
+    const RuntimeSettings& settings = GetRuntimeSettings();
+
+    // Initialise to default setting
+    uint32_t ldsStackSize = settings.ldsStackSize;
+
+    // Optionally resize based on target occupancy setting for indirect pipelines
+    if (isIndirect && settings.enableOptimalLdsStackSizeForIndirect)
+    {
+        ldsStackSize = GetMaxLdsForTargetOccupancy(settings.indirectCallTargetOccupancyPerSimd);
+    }
+
+    // Clamp LDS size to maximum available based on thread group size
+    uint32_t ldsSizePerTread = ClampLdsStackSizeFromThreadGroupSize(ldsStackSize);
+
+    return ldsSizePerTread;
+}
+
+//=====================================================================================================================
+// Gets LDS traversal stack size per thread in DWORDs
+uint32_t Device::GetDefaultLdsTraversalStackSize(
+    bool isIndirect
+    ) const
+{
+    uint32_t ldsSizePerTread = GetDefaultLdsSizePerThread(isIndirect);
+
+    // Clamp to power of 2
+    uint32_t ldsStackSize = 1 << Util::Log2(ldsSizePerTread);
+
+    return ldsStackSize;
+}
+
+//=====================================================================================================================
+// Calculates max LDS per thread in DWORDS that can be used for given target occupancy
+uint32_t Device::GetMaxLdsForTargetOccupancy(
+    float targetOccupancyPerSimd
+    ) const
+{
+    const RuntimeSettings& settings         = GetRuntimeSettings();
+    const auto& props                       = GetPalProperties().gfxipProperties.shaderCore;
+
+    const uint32_t targetNumWavesPerSimd    = Util::Max(1U, static_cast<uint32_t>(round(targetOccupancyPerSimd *
+        props.numWavefrontsPerSimd)));
+    const uint32_t targetNumWavesPerCu      = props.numSimdsPerCu * targetNumWavesPerSimd;
+    const uint32_t threadGroupSize          = settings.dispatchRaysThreadGroupSize;
+    const uint32_t maxLdsPerTg              = ((props.ldsSizePerCu * threadGroupSize) /
+        (targetNumWavesPerCu * props.nativeWavefrontSize));
+    const uint32_t clampedLdsPerTg          = Util::RoundDownToMultiple(maxLdsPerTg, props.ldsGranularity);
+    const uint32_t clampedLdsPerThread      = clampedLdsPerTg / (threadGroupSize * sizeof(uint32_t));
+
+    return clampedLdsPerThread;
+}
+#endif
 
 // =====================================================================================================================
 // Called in response to vkGetDeviceGroupPeerMemoryFeatures
@@ -3567,6 +3959,287 @@ void Device::UpdateFeatureSettings()
 
 }
 
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+// Creates deferred operation
+VkResult Device::CreateDeferredOperation(
+    const VkAllocationCallbacks* pAllocator,
+    VkDeferredOperationKHR*      pDeferredOperation)
+{
+    return DeferredHostOperation::Create(this, pAllocator, pDeferredOperation);
+}
+
+// =====================================================================================================================
+// Creates ray tracing pipeline objects
+VkResult Device::CreateRayTracingPipelines(
+    VkDeferredOperationKHR                      deferredOperation,
+    VkPipelineCache                             pipelineCache,
+    uint32_t                                    count,
+    const VkRayTracingPipelineCreateInfoKHR*    pCreateInfos,
+    const VkAllocationCallbacks*                pAllocator,
+    VkPipeline*                                 pPipelines)
+{
+    VK_ASSERT(pCreateInfos != nullptr);
+    VK_ASSERT(pPipelines != nullptr);
+
+    DeferredHostOperation* pDeferredOperation = DeferredHostOperation::ObjectFromHandle(deferredOperation);
+    PipelineCache* pPipelineCache = PipelineCache::ObjectFromHandle(pipelineCache);
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        // Initialize output array to VK_NULL_HANDLE
+        pPipelines[i] = VK_NULL_HANDLE;
+    }
+
+    return RayTracingPipeline::Create(
+        this,
+        pDeferredOperation,
+        pPipelineCache,
+        count,
+        pCreateInfos,
+        pAllocator,
+        pPipelines);
+}
+
+// =====================================================================================================================
+VkResult Device::CopyAccelerationStructure(
+    VkDeferredOperationKHR                    deferredOperation,
+    const VkCopyAccelerationStructureInfoKHR* pInfo)
+{
+    VkResult result;
+
+    if (GetRuntimeSettings().rtEnableAccelStructHostFeatures)
+    {
+        DeferredHostOperation* pDeferredOperation = DeferredHostOperation::ObjectFromHandle(deferredOperation);
+
+        result = AccelerationStructure::CopyAccelerationStructure(
+            this,
+            pDeferredOperation,
+            pInfo);
+    }
+    else
+    {
+        result = VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+VkResult Device::CopyAccelerationStructureToMemory(
+    VkDeferredOperationKHR                            deferredOperation,
+    const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo)
+{
+    VkResult result;
+
+    if (GetRuntimeSettings().rtEnableAccelStructHostFeatures)
+    {
+        DeferredHostOperation* pDeferredOperation = DeferredHostOperation::ObjectFromHandle(deferredOperation);
+
+        result = AccelerationStructure::CopyAccelerationStructureToMemory(
+            this,
+            pDeferredOperation,
+            pInfo);
+    }
+    else
+    {
+        result = VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+VkResult Device::CopyMemoryToAccelerationStructure(
+    VkDeferredOperationKHR                            deferredOperation,
+    const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo)
+{
+    VkResult result;
+
+    if (GetRuntimeSettings().rtEnableAccelStructHostFeatures)
+    {
+        DeferredHostOperation* pDeferredOperation = DeferredHostOperation::ObjectFromHandle(deferredOperation);
+
+        result = AccelerationStructure::CopyMemoryToAccelerationStructure(
+            this,
+            pDeferredOperation,
+            pInfo);
+    }
+    else
+    {
+        result = VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+void Device::GetDeviceAccelerationStructureCompatibility(
+    const uint8_t*                              pData,
+    VkAccelerationStructureCompatibilityKHR*    pCompatibility)
+{
+    if (m_settings.disableASCompatibilityCheck)
+    {
+        *pCompatibility = VkAccelerationStructureCompatibilityKHR::VK_ACCELERATION_STRUCTURE_COMPATIBILITY_COMPATIBLE_KHR;
+    }
+    else
+    {
+        uint64_t asVersion;
+        RayTrace()->GpuRt(DefaultDeviceIndex)->GetSerializedAccelStructVersion(static_cast<const void*>(pData), &asVersion);
+
+        const uint64_t currVersion = RayTrace()->DeviceSettings().accelerationStructureUUID;
+
+        *pCompatibility = (asVersion == currVersion) ?
+            VkAccelerationStructureCompatibilityKHR::VK_ACCELERATION_STRUCTURE_COMPATIBILITY_COMPATIBLE_KHR :
+            VkAccelerationStructureCompatibilityKHR::VK_ACCELERATION_STRUCTURE_COMPATIBILITY_INCOMPATIBLE_KHR;
+    }
+}
+
+// =====================================================================================================================
+VkResult Device::WriteAccelerationStructuresProperties(
+    uint32_t                                    accelerationStructureCount,
+    const VkAccelerationStructureKHR*           pAccelerationStructures,
+    VkQueryType                                 queryType,
+    size_t                                      dataSize,
+    void*                                       pData,
+    size_t                                      stride)
+{
+    VkResult result = VK_SUCCESS;
+
+    if (GetRuntimeSettings().rtEnableAccelStructHostFeatures)
+    {
+        uint32_t deviceIndex = 0;
+
+        GpuRt::AccelStructPostBuildInfo postBuildInfo = {};
+
+        postBuildInfo.srcAccelStructCount = 1;
+
+        switch (static_cast<uint32_t>(queryType))
+        {
+        case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR:
+            postBuildInfo.desc.infoType = GpuRt::AccelStructPostBuildInfoType::CompactedSize;
+            break;
+        case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR:
+            postBuildInfo.desc.infoType = GpuRt::AccelStructPostBuildInfoType::Serialization;
+            break;
+        default:
+            VK_NEVER_CALLED();
+            break;
+        }
+
+        void* pCpuAddr = nullptr;
+
+        for (uint32_t i = 0; i < accelerationStructureCount; i++)
+        {
+            AccelerationStructure* pAccelStructure =
+                AccelerationStructure::ObjectFromHandle(pAccelerationStructures[i]);
+
+            if (pAccelStructure->Map(deviceIndex, &pCpuAddr) == Pal::Result::Success)
+            {
+                postBuildInfo.desc.postBuildBufferAddr.pCpu = reinterpret_cast<char*>(pData) + (i * stride);
+                postBuildInfo.pSrcAccelStructCpuAddrs       = pCpuAddr;
+
+                 RayTrace()->GpuRt(deviceIndex)->EmitAccelStructPostBuildInfo(nullptr, postBuildInfo);
+
+                 pAccelStructure->Unmap(deviceIndex);
+            }
+            else
+            {
+                result = VK_ERROR_MEMORY_MAP_FAILED;
+            }
+        }
+    }
+    else
+    {
+        result = VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+VkResult Device::CreateAccelerationStructureKHR(
+    const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkAccelerationStructureKHR*                 pAccelerationStructure)
+{
+    return AccelerationStructure::CreateKHR(this, pCreateInfo, pAllocator, pAccelerationStructure);
+}
+
+// =====================================================================================================================
+VkResult Device::BuildAccelerationStructure(
+    VkDeferredOperationKHR                                   deferredOperation,
+    uint32_t                                                 infoCount,
+    const VkAccelerationStructureBuildGeometryInfoKHR*       pInfos,
+    const VkAccelerationStructureBuildRangeInfoKHR* const*   ppBuildRangeInfos)
+{
+    VkResult result;
+
+    if (GetRuntimeSettings().rtEnableAccelStructHostFeatures)
+    {
+        DeferredHostOperation* pDeferredOperation = DeferredHostOperation::ObjectFromHandle(deferredOperation);
+
+        result = AccelerationStructure::BuildAccelerationStructure(
+            this,
+            pDeferredOperation,
+            infoCount,
+            pInfos,
+            ppBuildRangeInfos);
+    }
+    else
+    {
+        result = VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+void Device::GetAccelerationStructureBuildSizesKHR(
+    VkAccelerationStructureBuildTypeKHR                  buildType,
+    const VkAccelerationStructureBuildGeometryInfoKHR*   pBuildInfo,
+    const uint32_t*                                      pMaxPrimitiveCounts,
+    VkAccelerationStructureBuildSizesInfoKHR*            pSizeInfo)
+{
+    GeometryConvertHelper         helper = {};
+    GpuRt::AccelStructBuildInputs inputs = {};
+
+    VkResult result = AccelerationStructure::ConvertBuildSizeInputs(
+        DefaultDeviceIndex,
+        *pBuildInfo,
+        pMaxPrimitiveCounts,
+        &helper,
+        &inputs);
+
+    GpuRt::AccelStructPrebuildInfo prebuild = {};
+
+    RayTrace()->GpuRt(DefaultDeviceIndex)->GetAccelStructPrebuildInfo(inputs, &prebuild);
+
+    pSizeInfo->accelerationStructureSize = prebuild.resultDataMaxSizeInBytes;
+
+    switch (buildType)
+    {
+    case VK_ACCELERATION_STRUCTURE_BUILD_TYPE_HOST_KHR:
+        pSizeInfo->buildScratchSize  = prebuild.cpuScratchSizeInBytes;
+        pSizeInfo->updateScratchSize = prebuild.cpuUpdateScratchSizeInBytes;
+        break;
+    case VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR:
+        pSizeInfo->buildScratchSize  = prebuild.scratchDataSizeInBytes;
+        pSizeInfo->updateScratchSize = prebuild.updateScratchDataSizeInBytes;
+        break;
+    case VK_ACCELERATION_STRUCTURE_BUILD_TYPE_HOST_OR_DEVICE_KHR:
+        pSizeInfo->buildScratchSize  = Util::Max(prebuild.cpuScratchSizeInBytes,
+                                                 prebuild.scratchDataSizeInBytes);
+        pSizeInfo->updateScratchSize = Util::Max(prebuild.cpuUpdateScratchSizeInBytes,
+                                                 prebuild.updateScratchDataSizeInBytes);
+        break;
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+}
+#endif
+
 // =====================================================================================================================
 // Handles logging of debug names from the DebugUtils extension
 VkResult Device::SetDebugUtilsObjectName(
@@ -4444,6 +5117,176 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
 
     return result;
 }
+
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateAccelerationStructureKHR(
+    VkDevice                                    device,
+    const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkAccelerationStructureKHR*                 pAccelerationStructure)
+{
+    Device*                      pDevice = ApiDevice::ObjectFromHandle(device);
+    const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+
+    return pDevice->CreateAccelerationStructureKHR(pCreateInfo, pAllocCB, pAccelerationStructure);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateRayTracingPipelinesKHR(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    VkPipelineCache                             pipelineCache,
+    uint32_t                                    createInfoCount,
+    const VkRayTracingPipelineCreateInfoKHR*    pCreateInfos,
+    const VkAllocationCallbacks*                pAllocator,
+    VkPipeline*                                 pPipelines)
+{
+    Device*                      pDevice = ApiDevice::ObjectFromHandle(device);
+    const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+
+    return pDevice->CreateRayTracingPipelines(
+        deferredOperation,
+        pipelineCache,
+        createInfoCount,
+        pCreateInfos,
+        pAllocCB,
+        pPipelines);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkBuildAccelerationStructuresKHR(
+    VkDevice                                                device,
+    VkDeferredOperationKHR                                  deferredOperation,
+    uint32_t                                                infoCount,
+    const VkAccelerationStructureBuildGeometryInfoKHR*      pInfos,
+    const VkAccelerationStructureBuildRangeInfoKHR* const*  ppBuildRangeInfos)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->BuildAccelerationStructure(
+        deferredOperation,
+        infoCount,
+        pInfos,
+        ppBuildRangeInfos);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyAccelerationStructureKHR(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    const VkCopyAccelerationStructureInfoKHR*   pInfo)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->CopyAccelerationStructure(deferredOperation, pInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyAccelerationStructureToMemoryKHR(
+    VkDevice                                          device,
+    VkDeferredOperationKHR                            deferredOperation,
+    const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->CopyAccelerationStructureToMemory(deferredOperation, pInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyMemoryToAccelerationStructureKHR(
+    VkDevice                                          device,
+    VkDeferredOperationKHR                            deferredOperation,
+    const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->CopyMemoryToAccelerationStructure(deferredOperation, pInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkWriteAccelerationStructuresPropertiesKHR(
+    VkDevice                                    device,
+    uint32_t                                    accelerationStructureCount,
+    const VkAccelerationStructureKHR*           pAccelerationStructures,
+    VkQueryType                                 queryType,
+    size_t                                      dataSize,
+    void*                                       pData,
+    size_t                                      stride)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->WriteAccelerationStructuresProperties(
+        accelerationStructureCount,
+        pAccelerationStructures,
+        queryType,
+        dataSize,
+        pData,
+        stride);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetRayTracingCaptureReplayShaderGroupHandlesKHR(
+    VkDevice                                    device,
+    VkPipeline                                  pipeline,
+    uint32_t                                    firstGroup,
+    uint32_t                                    groupCount,
+    size_t                                      dataSize,
+    void*                                       pData)
+{
+    // Do exactly the same as vkGetRayTracingShaderGroupHandlesKHR. It is expected that these handles show up in
+    // VkRayTracingPipelineCreateInfoKHR::VkRayTracingShaderGroupCreateInfoKHR::pShaderGroupCaptureReplayHandle when
+    // replaying and we will make use of them in vkCreateRayTracingPipelinesKHR.
+    RayTracingPipeline* pPipeline = RayTracingPipeline::ObjectFromHandle(pipeline);
+
+    // #raytracing: MGPU support - Return based on DefaultDeviceIndex since the result shouldn't vary between GPUs.
+    pPipeline->GetRayTracingShaderGroupHandles(DefaultDeviceIndex, firstGroup, groupCount, dataSize, pData);
+
+    return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceAccelerationStructureCompatibilityKHR(
+    VkDevice                                     device,
+    const VkAccelerationStructureVersionInfoKHR* pVersionInfo,
+    VkAccelerationStructureCompatibilityKHR*     pCompatibility)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    pDevice->GetDeviceAccelerationStructureCompatibility(
+        pVersionInfo->pVersionData,
+        pCompatibility);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetAccelerationStructureBuildSizesKHR(
+    VkDevice                                             device,
+    VkAccelerationStructureBuildTypeKHR                  buildType,
+    const VkAccelerationStructureBuildGeometryInfoKHR*   pBuildInfo,
+    const uint32_t*                                      pMaxPrimitiveCounts,
+    VkAccelerationStructureBuildSizesInfoKHR*            pSizeInfo)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    pDevice->GetAccelerationStructureBuildSizesKHR(
+        buildType,
+        pBuildInfo,
+        pMaxPrimitiveCounts,
+        pSizeInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDeferredOperationKHR(
+    VkDevice                                    device,
+    const VkAllocationCallbacks*                pAllocator,
+    VkDeferredOperationKHR*                     pDeferredOperation)
+{
+    Device*                      pDevice = ApiDevice::ObjectFromHandle(device);
+    const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+
+    return pDevice->CreateDeferredOperation(pAllocCB, pDeferredOperation);
+}
+#endif
 
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkGetDeviceBufferMemoryRequirements(

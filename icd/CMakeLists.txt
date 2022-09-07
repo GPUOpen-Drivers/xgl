@@ -48,6 +48,12 @@ if (BUILD_WAYLAND_SUPPORT)
     target_include_directories(xgl PUBLIC ${WAYLAND_INCLUDE_DIRS})
 endif()
 
+#if VKI_RAY_TRACING
+if (VKI_RAY_TRACING)
+    target_include_directories(xgl PRIVATE ${XGL_GPURT_PATH})
+endif()
+#endif
+
 #if VKI_GPU_DECOMPRESS
 if (VKI_GPU_DECOMPRESS)
     target_include_directories(xgl PRIVATE ${XGL_GPUTEXDECODER_PATH})
@@ -63,6 +69,13 @@ target_include_directories(xgl PRIVATE
 ### XGL Subprojects ####################################################################################################
 # PAL
 add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
+
+#if VKI_RAY_TRACING
+# GPURT
+if (VKI_RAY_TRACING)
+    add_subdirectory(${XGL_GPURT_PATH} ${PROJECT_BINARY_DIR}/gpurt)
+endif()
+#endif
 
 #if VKI_GPU_DECOMPRESS
 # GPU Texture Decode
@@ -151,6 +164,17 @@ target_sources(xgl PRIVATE
     api/icd_main.cpp
 )
 
+#if VKI_RAY_TRACING
+if (VKI_RAY_TRACING)
+    target_sources(xgl PRIVATE
+        api/raytrace/vk_acceleration_structure.cpp
+        api/raytrace/vk_ray_tracing_pipeline.cpp
+        api/raytrace/ray_tracing_device.cpp
+        api/vk_deferred_operation.cpp
+    )
+endif()
+#endif
+
 #if VKI_GPU_DECOMPRESS
 if(VKI_GPU_DECOMPRESS)
     target_sources(xgl PRIVATE
@@ -183,20 +207,20 @@ set(ICD_GEN_SHADER_PROFILE_SCRIPTS ${ICD_GENDIR}/genShaderProfile.py ${ICD_GENDI
 
 set(ICD_SHADER_PROFILE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/appopt)
 
-set(ICD_SHADER_PROFILE_SOURCE_FILES_DIR
-    ${ICD_SHADER_PROFILE_DIR}/shader_profiles
-    )
+file(GLOB_RECURSE ICD_ALL_SHADER_PROFILE_FILES
+    ${ICD_SHADER_PROFILE_DIR}/shader_profiles/profile.json
+)
 
 add_custom_command(
     OUTPUT ${ICD_SHADER_PROFILE_DIR}/g_shader_profile.cpp ${ICD_SHADER_PROFILE_DIR}/g_shader_profile.h
     COMMAND ${PYTHON_CMD} ${ICD_GENDIR}/genShaderProfile.py ${ICD_SHADER_PROFILE_DIR}/shader_profiles
-    DEPENDS ${ICD_GEN_SHADER_PROFILE_SCRIPTS} ${ICD_SHADER_PROFILE_SOURCE_FILES_DIR}
+    DEPENDS ${ICD_GEN_SHADER_PROFILE_SCRIPTS} ${ICD_ALL_SHADER_PROFILE_FILES}
     COMMENT "Generating shader profiles code from all profile.json files"
 )
 
 add_custom_target(
     GenerateShaderProfiles
-    DEPENDS ${ICD_GEN_SHADER_PROFILE_SCRIPTS} ${ICD_SHADER_PROFILE_SOURCE_FILES_DIR}
+    DEPENDS ${ICD_GEN_SHADER_PROFILE_SCRIPTS} ${ICD_ALL_SHADER_PROFILE_FILES}
     COMMENT "Checking if re-generation is required for shader profiles"
 )
 
@@ -334,6 +358,12 @@ endif()
 target_link_libraries(xgl PRIVATE vkgc)
 target_link_libraries(xgl PRIVATE pal)
 target_link_libraries(xgl PRIVATE khronos_vulkan_interface)
+
+#if VKI_RAY_TRACING
+if (VKI_RAY_TRACING)
+    target_link_libraries(xgl PRIVATE gpurt)
+endif()
+#endif
 
 #if VKI_GPU_DECOMPRESS
 if(VKI_GPU_DECOMPRESS)

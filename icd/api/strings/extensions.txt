@@ -25,6 +25,9 @@ VK_EXT_swapchain_colorspace
 VK_KHR_bind_memory2
 VK_KHR_buffer_device_address
 VK_KHR_dedicated_allocation
+#if VKI_RAY_TRACING
+VK_KHR_deferred_host_operations
+#endif
 VK_KHR_descriptor_update_template
 VK_KHR_external_memory
 VK_KHR_external_memory_fd
@@ -132,6 +135,11 @@ VK_EXT_tooling_info
 VK_EXT_shader_image_atomic_int64
 VK_EXT_pipeline_creation_cache_control
 VK_KHR_sampler_ycbcr_conversion
+#if VKI_RAY_TRACING
+VK_KHR_acceleration_structure
+VK_KHR_ray_tracing_pipeline
+VK_KHR_ray_query
+#endif
 VK_KHR_pipeline_library
 VK_KHR_shader_non_semantic_info
 VK_GOOGLE_user_type
@@ -160,6 +168,9 @@ VK_AMD_shader_early_and_late_fragment_tests
 VK_EXT_image_view_min_lod
 VK_KHR_global_priority
 VK_EXT_index_type_uint8
+#if VKI_RAY_TRACING
+VK_KHR_ray_tracing_maintenance1
+#endif
 VK_EXT_provoking_vertex
 VK_KHR_workgroup_memory_explicit_layout
 VK_EXT_primitives_generated_query

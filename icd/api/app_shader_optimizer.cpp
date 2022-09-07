@@ -74,11 +74,83 @@ void ShaderOptimizer::Init()
 }
 
 // =====================================================================================================================
+void ShaderOptimizer::CreateShaderOptimizerKey(
+    const void*            pModuleData,
+    const Pal::ShaderHash& shaderHash,
+    const ShaderStage      stage,
+    const size_t           shaderSize,
+    ShaderOptimizerKey*    pShaderKey
+    ) const
+{
+    const auto& settings = m_pDevice->GetRuntimeSettings();
+
+    if (settings.pipelineUseShaderHashAsProfileHash)
+    {
+        pShaderKey->codeHash.lower = Vkgc::IPipelineDumper::GetShaderHash(pModuleData);
+        pShaderKey->codeHash.upper = 0;
+    }
+    else
+    {
+        // Populate the pipeline profile key.  The hash used by the profile is different from the default
+        // internal hash in that it only depends on the SPIRV code + entry point.  This is to reduce the
+        // chance that internal changes to our hash calculation logic drop us off pipeline profiles.
+        pShaderKey->codeHash = shaderHash;
+    }
+    pShaderKey->codeSize = shaderSize;
+    pShaderKey->stage    = stage;
+}
+
+// =====================================================================================================================
+bool ShaderOptimizer::HasMatchingProfileEntry(
+    const PipelineProfile&      profile,
+    const PipelineOptimizerKey& pipelineKey
+    ) const
+{
+    bool foundMatch = false;
+
+    for (uint32_t entryIdx = 0; entryIdx < profile.entryCount; ++entryIdx)
+    {
+        const auto& pattern = profile.pEntries[entryIdx].pattern;
+
+        if ((GetFirstMatchingShader(pattern, InvalidShaderIndex, pipelineKey) != InvalidShaderIndex))
+        {
+            foundMatch = true;
+            break;
+        }
+    }
+
+    return foundMatch;
+}
+
+// =====================================================================================================================
+bool ShaderOptimizer::HasMatchingProfileEntry(
+    const PipelineOptimizerKey& pipelineKey
+    ) const
+{
+    bool foundMatch = HasMatchingProfileEntry(m_appProfile, pipelineKey);
+
+    if (foundMatch == false)
+    {
+        foundMatch = HasMatchingProfileEntry(m_tuningProfile, pipelineKey);
+    }
+
+#if ICD_RUNTIME_APP_PROFILE
+    if (foundMatch == false)
+    {
+        foundMatch = HasMatchingProfileEntry(m_runtimeProfile, pipelineKey);
+    }
+#endif
+
+    return foundMatch;
+}
+
+// =====================================================================================================================
 void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
     const PipelineProfile&           profile,
     const PipelineOptimizerKey&      pipelineKey,
     uint32_t                         shaderIndex,
-    PipelineShaderOptionsPtr         options) const
+    PipelineShaderOptionsPtr         options
+    ) const
 {
     for (uint32_t entry = 0; entry < profile.entryCount; ++entry)
     {
@@ -273,6 +345,85 @@ Vkgc::ThreadGroupSwizzleMode ShaderOptimizer::OverrideThreadGroupSwizzleMode(
     }
 
     return swizzleMode;
+}
+
+// =====================================================================================================================
+bool ShaderOptimizer::OverrideThreadIdSwizzleMode(
+    ShaderStage                 shaderStage,
+    const PipelineOptimizerKey& pipelineKey
+    ) const
+{
+    bool swizzleMode = false;
+
+    for (uint32_t entry = 0; entry < m_appProfile.entryCount; ++entry)
+    {
+        const PipelineProfileEntry& profileEntry = m_appProfile.pEntries[entry];
+
+        if (GetFirstMatchingShader(profileEntry.pattern, InvalidShaderIndex, pipelineKey) != InvalidShaderIndex)
+        {
+            const auto& shaders = profileEntry.action.shaders;
+
+            swizzleMode = shaders[shaderStage].shaderCreate.tuningOptions.threadIdSwizzleMode;
+        }
+    }
+
+    for (uint32_t entry = 0; entry < m_tuningProfile.entryCount; ++entry)
+    {
+        const PipelineProfileEntry& profileEntry = m_tuningProfile.pEntries[entry];
+
+        if (GetFirstMatchingShader(profileEntry.pattern, InvalidShaderIndex, pipelineKey) != InvalidShaderIndex)
+        {
+            const auto& shaders = profileEntry.action.shaders;
+
+            swizzleMode = shaders[shaderStage].shaderCreate.tuningOptions.threadIdSwizzleMode;
+        }
+    }
+
+    return swizzleMode;
+}
+
+// =====================================================================================================================
+void ShaderOptimizer::OverrideShaderThreadGroupSize(
+    ShaderStage                 shaderStage,
+    const PipelineOptimizerKey& pipelineKey,
+    uint32_t*                   pThreadGroupSizeX,
+    uint32_t*                   pThreadGroupSizeY,
+    uint32_t*                   pThreadGroupSizeZ
+    ) const
+{
+    for (uint32_t entry = 0; entry < m_appProfile.entryCount; ++entry)
+    {
+        const PipelineProfileEntry& profileEntry = m_appProfile.pEntries[entry];
+
+        if (GetFirstMatchingShader(profileEntry.pattern, InvalidShaderIndex, pipelineKey) != InvalidShaderIndex)
+        {
+            const auto& shaders = profileEntry.action.shaders;
+
+            if (shaders[shaderStage].shaderCreate.apply.overrideShaderThreadGroupSize)
+            {
+                *pThreadGroupSizeX = shaders[shaderStage].shaderCreate.tuningOptions.overrideShaderThreadGroupSizeX;
+                *pThreadGroupSizeY = shaders[shaderStage].shaderCreate.tuningOptions.overrideShaderThreadGroupSizeY;
+                *pThreadGroupSizeZ = shaders[shaderStage].shaderCreate.tuningOptions.overrideShaderThreadGroupSizeZ;
+            }
+        }
+    }
+
+    for (uint32_t entry = 0; entry < m_tuningProfile.entryCount; ++entry)
+    {
+        const PipelineProfileEntry& profileEntry = m_tuningProfile.pEntries[entry];
+
+        if (GetFirstMatchingShader(profileEntry.pattern, InvalidShaderIndex, pipelineKey) != InvalidShaderIndex)
+        {
+            const auto& shaders = profileEntry.action.shaders;
+
+            if (shaders[shaderStage].shaderCreate.apply.overrideShaderThreadGroupSize)
+            {
+                *pThreadGroupSizeX = shaders[shaderStage].shaderCreate.tuningOptions.overrideShaderThreadGroupSizeX;
+                *pThreadGroupSizeY = shaders[shaderStage].shaderCreate.tuningOptions.overrideShaderThreadGroupSizeY;
+                *pThreadGroupSizeZ = shaders[shaderStage].shaderCreate.tuningOptions.overrideShaderThreadGroupSizeZ;
+            }
+        }
+    }
 }
 
 // =====================================================================================================================
@@ -680,6 +831,30 @@ void ShaderOptimizer::BuildTuningProfile()
                 }
 
                 pAction->shaderCreate.tuningOptions.threadGroupSwizzleMode = swizzlingMode;
+            }
+
+            if (m_settings.overrideThreadIdSwizzle)
+            {
+                pAction->shaderCreate.tuningOptions.threadIdSwizzleMode = true;
+            }
+
+            if (m_settings.overrideShaderThreadGroupSizeX != 0)
+            {
+                pAction->shaderCreate.apply.overrideShaderThreadGroupSize = true;
+                pAction->shaderCreate.tuningOptions.overrideShaderThreadGroupSizeX =
+                    m_settings.overrideShaderThreadGroupSizeX;
+            }
+            if (m_settings.overrideShaderThreadGroupSizeY != 0)
+            {
+                pAction->shaderCreate.apply.overrideShaderThreadGroupSize = true;
+                pAction->shaderCreate.tuningOptions.overrideShaderThreadGroupSizeY =
+                    m_settings.overrideShaderThreadGroupSizeY;
+            }
+            if (m_settings.overrideShaderThreadGroupSizeZ != 0)
+            {
+                pAction->shaderCreate.apply.overrideShaderThreadGroupSize = true;
+                pAction->shaderCreate.tuningOptions.overrideShaderThreadGroupSizeZ =
+                    m_settings.overrideShaderThreadGroupSizeZ;
             }
 
             pAction->shaderCreate.apply.allowReZ                = m_settings.overrideAllowReZ;

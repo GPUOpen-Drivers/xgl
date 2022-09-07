@@ -212,6 +212,10 @@ protected:
         bool                                   force1x1ShaderRate,
         bool                                   customSampleLocations,
         bool                                   isPointSizeUsed,
+#if VKI_RAY_TRACING
+        bool                                   hasRayTracing,
+        uint32_t                               dispatchRaysUserDataOffset,
+#endif
         const VbBindingInfo&                   vbInfo,
         const PipelineInternalBufferInfo*      pInternalBuffer,
         Pal::IMsaaState**                      pPalMsaa,

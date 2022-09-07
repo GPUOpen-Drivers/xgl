@@ -140,6 +140,10 @@ public:
     void WaitForDriverResume();
     void PipelineCreated(Device* pDevice, Pipeline* pPipeline);
     void PipelineDestroyed(Device* pDevice, Pipeline* pPipeline);
+#if VKI_RAY_TRACING
+    void ShaderLibrariesCreated(Device* pDevice, RayTracingPipeline* pPipeline);
+    void ShaderLibrariesDestroyed(Device* pDevice, RayTracingPipeline* pPipeline);
+#endif
     void PostDeviceCreate(Device* pDevice);
     void PreDeviceDestroy(Device* pDevice);
     void NotifyPreSubmit();

@@ -27,19 +27,9 @@
 """
 
 import os
-import sys
 
-GEN_DIR = ''
-# if genDir was specified by the user
-if len(sys.argv) == 3:
-    GEN_DIR = sys.argv[2]
-
-if GEN_DIR != "":
-    CopyrightFilePath = GEN_DIR + "/xgl-copyright-template.txt"
-    AppProfileHeaderFilePath = GEN_DIR + "/api/include/app_profile.h"
-else:
-    CopyrightFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../xgl-copyright-template.txt"
-    AppProfileHeaderFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../../api/include/app_profile.h"
+CopyrightFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../xgl-copyright-template.txt"
+AppProfileHeaderFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../../api/include/app_profile.h"
 
 with open(CopyrightFilePath, encoding='utf-8') as f:
     FileHeaderCopyright = f.read()
@@ -74,7 +64,8 @@ HEADER_INCLUDES = """
 #include <iomanip>
 
 #include \"include/app_profile.h\"
-#include "include/vk_shader_code.h"
+#include \"include/vk_shader_code.h\"
+#include \"include/vk_instance.h\"
 #include \"palDevice.h\"
 
 #include \"utils/json_writer.h\"
@@ -1383,6 +1374,130 @@ SHADER_ACTION = {
                                                      prefix="Vkgc::ThreadGroupSwizzleMode::"),
     },
 
+    "threadIdSwizzleMode": {
+        "type": [bool],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "threadIdSwizzleMode",
+                "dataType": "bool",
+                "defaultValue": "",
+                "jsonWritable": False,
+                "buildTypes": {},
+            },
+        ],
+        "buildTypes": {},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.\n
+%FieldName% = %BoolValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+
+    "overrideShaderThreadGroupSize": {
+        "type": [bool],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "overrideShaderThreadGroupSize",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {},
+            },
+        ],
+        "buildTypes": {},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.\n
+%FieldName% = %BoolValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
+    },
+
+    "overrideShaderThreadGroupSizeX": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "overrideShaderThreadGroupSizeX",
+                "dataType": "uint32_t",
+                "defaultValue": 0,
+                "jsonWritable": True,
+                "buildTypes": {},
+            },
+        ],
+        "validValues": {
+            0: "Not set",
+            8: "ThreadGroupSizeX is 8",
+            16: "ThreadGroupSizeX is 16"
+        },
+        "buildTypes": {},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.
+            %FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+
+    "overrideShaderThreadGroupSizeY": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "overrideShaderThreadGroupSizeY",
+                "dataType": "uint32_t",
+                "defaultValue": 0,
+                "jsonWritable": True,
+                "buildTypes": {},
+            },
+        ],
+        "validValues": {
+            0: "Not set",
+            8: "ThreadGroupSizeY is 8",
+            16: "ThreadGroupSizeY is 16"
+        },
+        "buildTypes": {},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.
+            %FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+
+    "overrideShaderThreadGroupSizeZ": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "overrideShaderThreadGroupSizeZ",
+                "dataType": "uint32_t",
+                "defaultValue": 0,
+                "jsonWritable": True,
+                "buildTypes": {},
+            },
+        ],
+        "validValues": {
+            0: "Not set",
+            1: "ThreadGroupSizeZ is 8"
+        },
+        "buildTypes": {},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.
+            %FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+
     "useSiScheduler": {
         "type": [int],
         "jsonReadable": True,
@@ -1900,6 +2015,8 @@ ENTRIES_TEMPLATE = {
         }
 }
 
+##Now all 32bits have been used, it needs to use uint64 and add reserver bit when add new paramter in future
+
 ShaderTuningStructsAndVars = {
     "ShaderProfilePattern": {
         "entity": "struct",
@@ -2043,15 +2160,6 @@ ShaderTuningStructsAndVars = {
                                 "buildTypes": {},
                                 "child": [
                                     SHADER_ACTION,
-                                    {
-                                        "reserved1": {
-                                            "entity": "bitField",
-                                            "varName": "reserved",
-                                            "dataType": "uint32_t",
-                                            "defaultValue": 2,
-                                            "buildTypes": {},
-                                        },
-                                    }
                                 ]
                             },
                             "u32All": {

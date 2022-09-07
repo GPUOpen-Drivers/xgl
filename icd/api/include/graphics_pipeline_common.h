@@ -136,6 +136,9 @@ struct GraphicsPipelineObjectCreateInfo
     VkShaderStageFlagBits                       activeStages;
     VkFormat                                    dbFormat;
     uint32_t                                    dynamicStates;
+#if VKI_RAY_TRACING
+    uint32_t                                    dispatchRaysUserDataOffset;
+#endif
 
     union
     {
@@ -151,7 +154,12 @@ struct GraphicsPipelineObjectCreateInfo
             uint32_t   force1x1ShaderRate      : 1;
             uint32_t   sampleShadingEnable     : 1;
             uint32_t   isPointSizeUsed         : 1;
+#if VKI_RAY_TRACING
+            uint32_t   hasRayTracing           : 1;
+            uint32_t   reserved                : 21;
+#else
             uint32_t   reserved                : 22;
+#endif
         };
         uint32_t value;
     } flags;
@@ -162,6 +170,9 @@ struct GraphicsPipelineObjectCreateInfo
 struct GraphicsPipelineBinaryInfo
 {
     const PipelineOptimizerKey* pOptimizerKey;
+#if VKI_RAY_TRACING
+    bool                        hasRayTracing;
+#endif
 };
 
 // =====================================================================================================================
@@ -295,9 +306,15 @@ protected:
 
     // Constructor of GraphicsPipelineCommon
     GraphicsPipelineCommon(
+#if VKI_RAY_TRACING
+        bool          hasRayTracing,
+#endif
         Device* const pDevice)
         : Pipeline(
             pDevice,
+#if VKI_RAY_TRACING
+            hasRayTracing,
+#endif
             VK_PIPELINE_BIND_POINT_GRAPHICS)
     { }
 };

@@ -26,7 +26,7 @@
 #pragma once
 
 #include "khronos/vulkan.h"
-#include "vk_instance.h"
+#include "include/vk_instance.h"
 #include "vkgcDefs.h"
 
 namespace vk
@@ -64,6 +64,32 @@ inline ShaderStage ShaderFlagBitToStage(const VkShaderStageFlagBits& shaderBits)
     {
         stage = ShaderStage::ShaderStageCompute;
     }
+#if VKI_RAY_TRACING
+    else if (shaderBits & VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+    {
+        stage = ShaderStage::ShaderStageRayTracingRayGen;
+    }
+    else if (shaderBits & VK_SHADER_STAGE_INTERSECTION_BIT_KHR)
+    {
+        stage = ShaderStage::ShaderStageRayTracingIntersect;
+    }
+    else if (shaderBits & VK_SHADER_STAGE_ANY_HIT_BIT_KHR)
+    {
+        stage = ShaderStage::ShaderStageRayTracingAnyHit;
+    }
+    else if (shaderBits & VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
+    {
+        stage = ShaderStage::ShaderStageRayTracingClosestHit;
+    }
+    else if (shaderBits & VK_SHADER_STAGE_MISS_BIT_KHR)
+    {
+        stage = ShaderStage::ShaderStageRayTracingMiss;
+    }
+    else if (shaderBits & VK_SHADER_STAGE_CALLABLE_BIT_KHR)
+    {
+        stage = ShaderStage::ShaderStageRayTracingCallable;
+    }
+#endif
 
     return stage;
 }

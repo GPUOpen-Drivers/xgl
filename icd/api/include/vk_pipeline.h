@@ -163,9 +163,18 @@ public:
         size_t*                       pBufferSize,
         void*                         pBuffer) const;
 
+#if VKI_RAY_TRACING
+    uint32_t GetDispatchRaysUserDataOffset() const { return m_dispatchRaysUserDataOffset; }
+
+    bool HasRayTracing() const { return m_hasRayTracing; }
+#endif
+
 protected:
     Pipeline(
         Device* const         pDevice,
+#if VKI_RAY_TRACING
+        bool            hasRayTracing,
+#endif
         VkPipelineBindPoint   type);
 
     virtual ~Pipeline();
@@ -175,11 +184,21 @@ protected:
         const PipelineLayout* pLayout,
         PipelineBinaryInfo*   pBinary,
         uint32_t              staticStateMask,
+#if VKI_RAY_TRACING
+        uint32_t              dispatchRaysUserDataOffset,
+#endif
         uint64_t              apiHash);
+
+    static VkPipelineCreateFlags GetCacheIdControlFlags(
+        VkPipelineCreateFlags in);
 
     static void GenerateHashFromSpecializationInfo(
         const VkSpecializationInfo& desc,
         Util::MetroHash128*         pHasher);
+
+    static void GenerateHashFromShaderStageCreateInfo(
+        const ShaderStageInfo& stageInfo,
+        Util::MetroHash128*    pHasher);
 
     static void GenerateHashFromShaderStageCreateInfo(
         const VkPipelineShaderStageCreateInfo& desc,
@@ -214,6 +233,11 @@ protected:
                                                           // static (written at bind-time as opposed to via vkCmd*).
     uint64_t                           m_apiHash;
     VkPipelineBindPoint                m_type;
+
+#if VKI_RAY_TRACING
+    const bool                         m_hasRayTracing;
+    uint32_t                           m_dispatchRaysUserDataOffset;
+#endif
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Pipeline);

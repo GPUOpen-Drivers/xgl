@@ -49,6 +49,10 @@ class PipelineCache;
 class ShaderCache;
 class DeferredHostOperation;
 
+#if VKI_RAY_TRACING
+struct DeferredWorkload;
+#endif
+
 enum FreeCompilerBinary : uint32_t
 {
     FreeWithCompiler          = 0,
@@ -60,7 +64,8 @@ enum FreeCompilerBinary : uint32_t
 struct ShaderModuleHandle
 {
     uint32_t* pRefCount;
-    void*   pLlpcShaderModule;   // Shader module handle from LLPC
+    void*            pLlpcShaderModule; // Shader module handle from LLPC
+    Vkgc::BinaryData elfPackage;        // Generated ElfPacekage from LLPC
 };
 
 // =====================================================================================================================
@@ -91,6 +96,8 @@ struct GraphicsPipelineBinaryCreateInfo
     ShaderOptimizerKey                     shaderProfileKeys[ShaderStage::ShaderStageGfxCount];
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
+    bool                                   linkTimeOptimization;
+    Vkgc::BinaryData                       earlyElfPackage[ShaderStage::ShaderStageGfxCount];
     FreeCompilerBinary                     freeCompilerBinary;
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback[ShaderStage::ShaderStageGfxCount];
@@ -116,6 +123,38 @@ struct ComputePipelineBinaryCreateInfo
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback;
 };
+
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+struct RayTracingPipelineBinaryCreateInfo
+{
+    Vkgc::RayTracingPipelineBuildInfo      pipelineInfo;
+    void*                                  pTempBuffer;
+    void*                                  pMappingBuffer;
+    size_t                                 mappingBufferSize;
+    VkPipelineCreateFlags                  flags;
+    PipelineOptimizerKey                   pipelineProfileKey;
+    PipelineCompilerType                   compilerType;
+    FreeCompilerBinary                     freeCompilerBinary;
+    PipelineCreationFeedback               pipelineFeedback;
+    uint32_t                               maxPayloadSize;
+    uint32_t                               maxAttributeSize;
+    bool                                   allowShaderInlining;
+    bool                                   hasTraceRay;
+    DeferredWorkload*                      pDeferredWorkload;
+};
+
+// =====================================================================================================================
+struct RayTracingPipelineBinary
+{
+    uint32_t                            maxFunctionCallDepth;
+    uint32_t                            pipelineBinCount;
+    Vkgc::BinaryData*                   pPipelineBins;
+    Vkgc::RayTracingShaderGroupHandle   shaderGroupHandle;
+    Vkgc::RayTracingShaderPropertySet   shaderPropSet;
+    void*                               pElfCache;
+};
+#endif
 
 // =====================================================================================================================
 // Base class for compiler solution
@@ -144,6 +183,7 @@ public:
         size_t                       codeSize,
         const void*                  pCode,
         const bool                   adaptForFastLink,
+        bool                         isInternal,
         ShaderModuleHandle*          pShaderModule,
         const PipelineOptimizerKey&  profileKey) = 0;
 
@@ -192,7 +232,30 @@ public:
         const void*                 pPipelineBinary,
         size_t                      binarySize) = 0;
 
+#if VKI_RAY_TRACING
+    virtual VkResult CreateRayTracingPipelineBinary(
+        Device*                        pDevice,
+        uint32_t                       deviceIdx,
+        PipelineCache*                 pPipelineCache,
+        RayTracingPipelineBinaryCreateInfo*  pCreateInfo,
+        RayTracingPipelineBinary*      pPipelineBinary,
+        void*                          pPipelineDumpHandle,
+        uint64_t                       pipelineHash,
+        Util::MetroHash::Hash*         pCacheId,
+        int64_t*                       pCompileTime) = 0;
+
+    virtual void FreeRayTracingPipelineBinary(
+        RayTracingPipelineBinary* pPipelineBinary) = 0;
+#endif
+
     static void DisableNggCulling(Vkgc::NggState* pNggState);
+
+#if VKI_RAY_TRACING
+#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION >= 15
+    static void UpdateRayTracingFunctionNames(const Device* pDevice, Vkgc::RtState* pRtState);
+#endif
+    uint32_t GetRayTracingVgprLimit(bool isIndirect);
+#endif
 
 protected:
 
@@ -201,6 +264,12 @@ protected:
     Pal::GfxIpLevel    m_gfxIpLevel;           // Graphics IP level
     static const char* GetShaderStageName(ShaderStage shaderStage);
 private:
+
+#if VKI_RAY_TRACING
+#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION >= 15
+    static void SetRayTracingFunctionName(const char* pSrc, char* pDest);
+#endif
+#endif
 
     PAL_DISALLOW_COPY_AND_ASSIGN(CompilerSolution);
 };

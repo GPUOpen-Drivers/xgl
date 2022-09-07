@@ -109,6 +109,7 @@ public:
             Pal::LayoutDepthStencilTarget);
         InitEntry(VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL,
             Pal::LayoutDepthStencilTarget | Pal::LayoutShaderRead);
+
     }
 
     // Return layout usage index corresponding to the specified layout.
@@ -303,6 +304,9 @@ static uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLayout image
                           Pal::CoherPresent : 0);
 
     if (accessMask & (VK_ACCESS_SHADER_WRITE_BIT                     |
+#if VKI_RAY_TRACING
+                      VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR |
+#endif
                       VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR))
     {
         cacheMask = Pal::CoherShaderWrite;
@@ -417,6 +421,13 @@ static uint32_t DstAccessToCacheMask(AccessFlags accessMask, VkImageLayout image
     {
         cacheMask |= Pal::CoherMemory | Pal::CoherIndirectArgs;
     }
+
+#if VKI_RAY_TRACING
+    if (accessMask & VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR)
+    {
+        cacheMask |= Pal::CoherShaderRead;
+    }
+#endif
 
     if (accessMask & VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR)
     {

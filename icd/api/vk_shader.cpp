@@ -79,7 +79,7 @@ Pal::ShaderHash ShaderModule::BuildCodeHash(
     const void*                  pCode,
     const size_t                 codeSize)
 {
-    Pal::ShaderHash result;
+    Pal::ShaderHash result = {};
 
     Util::MetroHash::Hash codeHash = {};
     Util::MetroHash128::Hash(static_cast<const uint8_t*>(pCode), codeSize, codeHash.bytes);
@@ -193,7 +193,7 @@ VkResult ShaderModule::Init(const Device* pDevice, VkShaderModuleCreateFlags fla
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
     VkResult result = pCompiler->BuildShaderModule(
-        pDevice, flags, m_codeSize, m_pCode, false, nullptr, nullptr, &m_handle);
+        pDevice, flags, m_codeSize, m_pCode, false, false, nullptr, nullptr, &m_handle);
 
     if (result == VK_SUCCESS)
     {

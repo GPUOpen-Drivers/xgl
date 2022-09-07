@@ -1,0 +1,42 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x321366744f4a06a2 e247bf80584b7773"
+        }
+      },
+      "action": {
+        "cs": {
+          "maxWavesPerCu": 8
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x32c1d5da7f42b46c 4ff6d09b68384b2f"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32,
+          "maxWavesPerCu": 14
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x830e59f01649beac dc867a261b5f9b02"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    }
+  ]
+}

@@ -123,6 +123,16 @@ struct VkStructHeaderNonConst
     VkStructHeader*         pNext;
 };
 
+#if VKI_RAY_TRACING
+constexpr uint32_t RayTraceShaderStages =
+    VK_SHADER_STAGE_RAYGEN_BIT_KHR |
+    VK_SHADER_STAGE_ANY_HIT_BIT_KHR |
+    VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+    VK_SHADER_STAGE_MISS_BIT_KHR |
+    VK_SHADER_STAGE_INTERSECTION_BIT_KHR |
+    VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+#endif
+
 typedef VkPipelineStageFlags2KHR PipelineStageFlags;
 typedef VkAccessFlags2KHR        AccessFlags;
 

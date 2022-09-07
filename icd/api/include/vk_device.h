@@ -41,6 +41,9 @@
 #include "include/vk_physical_device.h"
 #include "include/vk_private_data_slot.h"
 #include "include/vk_queue.h"
+#if VKI_RAY_TRACING
+#include "include/vk_deferred_operation.h"
+#endif
 
 #include "include/app_shader_optimizer.h"
 #include "include/app_resource_optimizer.h"
@@ -100,6 +103,10 @@ class ChillMgr;
 class AsyncLayer;
 #if VKI_GPU_DECOMPRESS
 class GpuDecoderLayer;
+#endif
+
+#if VKI_RAY_TRACING
+class RayTracingDevice;
 #endif
 
 // =====================================================================================================================
@@ -185,6 +192,9 @@ public:
             size_t depthStencilView;
         } palSizes;
 
+#if VKI_RAY_TRACING
+        Pal::RayTracingIpLevel rayTracingIpLevel;
+#endif
         uint32_t               timestampQueryPoolSlotSize;
         bool                   connectThroughThunderBolt;
     };
@@ -424,6 +434,13 @@ public:
     VK_FORCEINLINE const Pal::DeviceProperties& GetPalProperties() const
         { return VkPhysicalDevice(DefaultDeviceIndex)->PalProperties(); }
 
+#if VKI_RAY_TRACING
+    uint32_t GetMaxLdsForTargetOccupancy(float targetOccupancyPerSimd) const;
+    uint32_t GetDefaultLdsSizePerThread(bool isIndirect) const;
+    uint32_t GetDefaultLdsTraversalStackSize(bool isIndirect) const;
+    uint32_t ClampLdsStackSizeFromThreadGroupSize(uint32_t ldsStackSize) const;
+#endif
+
     Pal::QueueType GetQueueFamilyPalQueueType(
         uint32_t queueFamilyIndex) const;
 
@@ -557,6 +574,18 @@ public:
     const InternalPipeline& GetTimestampQueryCopyPipeline() const
         { return m_timestampQueryCopyPipeline; }
 
+#if VKI_RAY_TRACING
+    InternalPipeline& GetInternalRayTracingPipeline()
+    {
+        return m_internalRayTracingPipeline;
+    }
+
+    const InternalPipeline& GetInternalAccelerationStructureQueryCopyPipeline() const
+    {
+        return m_accelerationStructureQueryCopyPipeline;
+    }
+#endif
+
     inline const Pal::IMsaaState* const * GetBltMsaaState(uint32_t imgSampleCount) const;
 
     bool IsExtensionEnabled(DeviceExtensions::ExtensionId id) const
@@ -656,6 +685,65 @@ public:
 
     void UpdateFeatureSettings();
 
+#if VKI_RAY_TRACING
+    VkResult CreateDeferredOperation(
+        const VkAllocationCallbacks* pAllocator,
+        VkDeferredOperationKHR*      pDeferredOperation);
+#endif
+
+#if VKI_RAY_TRACING
+    RayTracingDevice* RayTrace() const { return m_pRayTrace; }
+
+    VkResult CreateRayTracingPipelines(
+        VkDeferredOperationKHR                      deferredOperation,
+        VkPipelineCache                             pipelineCache,
+        uint32_t                                    count,
+        const VkRayTracingPipelineCreateInfoKHR*    pCreateInfos,
+        const VkAllocationCallbacks*                pAllocator,
+        VkPipeline*                                 pPipelines);
+
+    VkResult CopyAccelerationStructure(
+        VkDeferredOperationKHR                    deferredOperation,
+        const VkCopyAccelerationStructureInfoKHR* pInfo);
+
+    VkResult CopyAccelerationStructureToMemory(
+        VkDeferredOperationKHR                            deferredOperation,
+        const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo);
+
+     VkResult CopyMemoryToAccelerationStructure(
+         VkDeferredOperationKHR                            deferredOperation,
+         const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo);
+
+    VkResult CreateAccelerationStructureKHR(
+        const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
+        const VkAllocationCallbacks*                pAllocator,
+        VkAccelerationStructureKHR*                 pAccelerationStructure);
+
+    VkResult BuildAccelerationStructure(
+        VkDeferredOperationKHR                                  deferredOperation,
+        uint32_t                                                infoCount,
+        const VkAccelerationStructureBuildGeometryInfoKHR*      pInfos,
+        const VkAccelerationStructureBuildRangeInfoKHR* const*  ppBuildRangeInfos);
+
+    void GetDeviceAccelerationStructureCompatibility(
+        const uint8_t*                                      pData,
+        VkAccelerationStructureCompatibilityKHR*            pCompatibility);
+
+    VkResult WriteAccelerationStructuresProperties(
+        uint32_t                                    accelerationStructureCount,
+        const VkAccelerationStructureKHR*           pAccelerationStructures,
+        VkQueryType                                 queryType,
+        size_t                                      dataSize,
+        void*                                       pData,
+        size_t                                      stride);
+
+    void GetAccelerationStructureBuildSizesKHR(
+        VkAccelerationStructureBuildTypeKHR                  buildType,
+        const VkAccelerationStructureBuildGeometryInfoKHR*   pBuildInfo,
+        const uint32_t*                                      pMaxPrimitiveCounts,
+        VkAccelerationStructureBuildSizesInfoKHR*            pSizeInfo);
+#endif
+
     VK_FORCEINLINE VkExtent2D GetMaxVrsShadingRate() const
     {
         return m_maxVrsShadingRate;
@@ -750,6 +838,9 @@ protected:
 
     VkResult CreateBltMsaaStates();
     void DestroyInternalPipelines();
+#if VKI_RAY_TRACING
+    VkResult CreateRayTraceState();
+#endif
     void InitSamplePatternPalette(Pal::SamplePatternPalette* pPalette) const;
 
     VkResult InitSwCompositing(uint32_t deviceIdx);
@@ -779,6 +870,11 @@ protected:
     DispatchableQueue*                  m_pQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily];
 
     InternalPipeline                    m_timestampQueryCopyPipeline;
+
+#if VKI_RAY_TRACING
+    InternalPipeline                    m_internalRayTracingPipeline;
+    InternalPipeline                    m_accelerationStructureQueryCopyPipeline;
+#endif
 
     static const uint32_t BltMsaaStateCount = 4;
 
@@ -847,6 +943,10 @@ protected:
     {
         return baseClassSize + ((numDevices - 1) * sizeof(PerGpuInfo));
     }
+
+#if VKI_RAY_TRACING
+    RayTracingDevice*    m_pRayTrace;
+#endif
 
     // This is from device create info, VkDevicePrivateDataCreateInfoEXT
     uint32                              m_privateDataSlotRequestCount;
@@ -1159,6 +1259,121 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
 VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectTagEXT(
     VkDevice                                    device,
     const VkDebugUtilsObjectTagInfoEXT*         pTagInfo);
+
+#if VKI_RAY_TRACING
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateAccelerationStructureKHR(
+    VkDevice                                    device,
+    const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkAccelerationStructureKHR*                 pAccelerationStructure);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyAccelerationStructureKHR(
+    VkDevice                                    device,
+    VkAccelerationStructureKHR                  accelerationStructure,
+    const VkAllocationCallbacks*                pAllocator);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkBuildAccelerationStructuresKHR(
+    VkDevice                                                device,
+    VkDeferredOperationKHR                                  deferredOperation,
+    uint32_t                                                infoCount,
+    const VkAccelerationStructureBuildGeometryInfoKHR*      pInfos,
+    const VkAccelerationStructureBuildRangeInfoKHR* const*  ppBuildRangeInfos);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyAccelerationStructureKHR(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    const VkCopyAccelerationStructureInfoKHR*   pInfo);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyAccelerationStructureToMemoryKHR(
+    VkDevice                                          device,
+    VkDeferredOperationKHR                            deferredOperation,
+    const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyMemoryToAccelerationStructureKHR(
+    VkDevice                                          device,
+    VkDeferredOperationKHR                            deferredOperation,
+    const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateRayTracingPipelinesKHR(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    VkPipelineCache                             pipelineCache,
+    uint32_t                                    createInfoCount,
+    const VkRayTracingPipelineCreateInfoKHR*    pCreateInfos,
+    const VkAllocationCallbacks*                pAllocator,
+    VkPipeline*                                 pPipelines);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetRayTracingShaderGroupHandlesKHR(
+    VkDevice                                    device,
+    VkPipeline                                  pipeline,
+    uint32_t                                    firstGroup,
+    uint32_t                                    groupCount,
+    size_t                                      dataSize,
+    void*                                       pData);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetRayTracingCaptureReplayShaderGroupHandlesKHR(
+    VkDevice                                    device,
+    VkPipeline                                  pipeline,
+    uint32_t                                    firstGroup,
+    uint32_t                                    groupCount,
+    size_t                                      dataSize,
+    void*                                       pData);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkWriteAccelerationStructuresPropertiesKHR(
+    VkDevice                                    device,
+    uint32_t                                    accelerationStructureCount,
+    const VkAccelerationStructureKHR*           pAccelerationStructures,
+    VkQueryType                                 queryType,
+    size_t                                      dataSize,
+    void*                                       pData,
+    size_t                                      stride);
+
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceAccelerationStructureCompatibilityKHR(
+    VkDevice                                     device,
+    const VkAccelerationStructureVersionInfoKHR* pVersionInfo,
+    VkAccelerationStructureCompatibilityKHR*     pCompatibility);
+
+VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetAccelerationStructureDeviceAddressKHR(
+    VkDevice                                           device,
+    const VkAccelerationStructureDeviceAddressInfoKHR* pInfo);
+
+VKAPI_ATTR VkDeviceSize VKAPI_CALL vkGetRayTracingShaderGroupStackSizeKHR(
+    VkDevice                                           device,
+    VkPipeline                                         pipeline,
+    uint32_t                                           group,
+    VkShaderGroupShaderKHR                             groupShader);
+
+VKAPI_ATTR void VKAPI_CALL vkGetAccelerationStructureBuildSizesKHR(
+    VkDevice                                           device,
+    VkAccelerationStructureBuildTypeKHR                buildType,
+    const VkAccelerationStructureBuildGeometryInfoKHR* pBuildInfo,
+    const uint32_t*                                    pMaxPrimitiveCounts,
+    VkAccelerationStructureBuildSizesInfoKHR*          pSizeInfo);
+#endif
+
+#if VKI_RAY_TRACING
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDeferredOperationKHR(
+    VkDevice                                    device,
+    const VkAllocationCallbacks*                pAllocator,
+    VkDeferredOperationKHR*                     pDeferredOperation);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyDeferredOperationKHR(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      operation,
+    const VkAllocationCallbacks*                pAllocator);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDeferredOperationResultKHR(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      operation);
+
+VKAPI_ATTR uint32_t VKAPI_CALL vkGetDeferredOperationMaxConcurrencyKHR(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      operation);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkDeferredOperationJoinKHR(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      operation);
+#endif
 
 VKAPI_ATTR void VKAPI_CALL vkGetDeviceBufferMemoryRequirements(
     VkDevice                                    device,

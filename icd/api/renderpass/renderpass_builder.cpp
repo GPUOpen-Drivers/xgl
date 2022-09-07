@@ -885,6 +885,9 @@ static void ConvertImplicitSyncs(RPBarrierInfo* pBarrier)
         IncludePipePoint(pBarrier, Pal::HwPipeBottom);
         IncludeWaitPoint(pBarrier, Pal::HwPipePreBlt);
 
+        pBarrier->srcStageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
+        pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR;
+
         pBarrier->implicitSrcCacheMask |= pBarrier->flags.preColorResolveSync ?
                                           Pal::CoherColorTarget :
                                           Pal::CoherDepthStencilTarget;
@@ -898,6 +901,8 @@ static void ConvertImplicitSyncs(RPBarrierInfo* pBarrier)
     {
         IncludeWaitPoint(pBarrier, Pal::HwPipePreBlt);
 
+        pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_CLEAR_BIT_KHR;
+
         pBarrier->implicitDstCacheMask |= Pal::CoherClear;
     }
 
@@ -906,6 +911,12 @@ static void ConvertImplicitSyncs(RPBarrierInfo* pBarrier)
     {
         IncludePipePoint(pBarrier, Pal::HwPipePostBlt);
         IncludeWaitPoint(pBarrier, Pal::HwPipeTop);
+
+        // Just going by the above wait point, the dstStageMask would be converted to TopOfPipe, but it is not optimal.
+        // TopOfPipe causes a stall at PFP which is not really needed for images. As an optimization for Acq-Rel
+        // barriers we instead set dstStage to Blt here.
+        pBarrier->srcStageMask |= VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR;
+        pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_BLIT_BIT_KHR;
 
         pBarrier->implicitSrcCacheMask |= Pal::CoherResolveSrc;
     }
@@ -936,6 +947,9 @@ void RenderPassBuilder::PostProcessSyncPoint(
         pSyncPoint->barrier.pipePoints[pSyncPoint->barrier.pipePointCount] = Pal::HwPipeBottom;
         pSyncPoint->barrier.pipePointCount++;
 
+        pSyncPoint->barrier.srcStageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
+        pSyncPoint->barrier.dstStageMask |= VK_PIPELINE_STAGE_2_BLIT_BIT_KHR;
+
         pSyncPoint->barrier.srcAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                                              VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     }
@@ -956,7 +970,13 @@ void RenderPassBuilder::PostProcessSyncPoint(
         pSyncPoint->transitions.NumElements() > 0)
     {
         pSyncPoint->flags.active = 1;
+
+        if (pSyncPoint->barrier.dstStageMask == 0)
+        {
+            pSyncPoint->barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
+        }
     }
+
 }
 
 // =====================================================================================================================

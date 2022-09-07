@@ -156,6 +156,9 @@ uint32_t DescriptorSetLayout::GetSingleDescStaticSize(
     case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+#if VKI_RAY_TRACING
+    case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+#endif
         size = props.descriptorSizes.bufferView;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:

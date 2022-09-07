@@ -25,65 +25,6 @@
 
 include_guard()
 
-macro(xgl_get_version)
-
-    # This will become the value of PAL_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the PAL interface
-    # that the ICD supports.  PAL uses this value to enable backwards-compatibility for older interface versions.  It must
-    # be updated on each PAL promotion after handling all of the interface changes described in palLib.h.
-    file(STRINGS icd/make/importdefs PAL_MAJOR_VERSION REGEX "^ICD_PAL_CLIENT_MAJOR_VERSION = [0-9]+")
-
-    if(PAL_MAJOR_VERSION STREQUAL "")
-        message(STATUS "Failed to find ICD_PAL_CLIENT_MAJOR_VERSION")
-    else()
-        string(REGEX REPLACE "ICD_PAL_CLIENT_MAJOR_VERSION = " "" PAL_MAJOR_VERSION ${PAL_MAJOR_VERSION})
-        message(STATUS "Detected ICD_PAL_CLIENT_MAJOR_VERSION is " ${PAL_MAJOR_VERSION})
-    endif()
-
-    set(ICD_PAL_CLIENT_MAJOR_VERSION ${PAL_MAJOR_VERSION})
-
-    # Handle MINOR_VERSION in the same way
-    file(STRINGS icd/make/importdefs PAL_MINOR_VERSION REGEX "^ICD_PAL_CLIENT_MINOR_VERSION = [0-9]+")
-
-    if(PAL_MINOR_VERSION STREQUAL "")
-        message(STATUS "Failed to find ICD_PAL_CLIENT_MINOR_VERSION")
-    else()
-        string(REGEX REPLACE "ICD_PAL_CLIENT_MINOR_VERSION = " "" PAL_MINOR_VERSION ${PAL_MINOR_VERSION})
-        message(STATUS "Detected ICD_PAL_CLIENT_MINOR_VERSION is " ${PAL_MINOR_VERSION})
-    endif()
-
-    set(ICD_PAL_CLIENT_MINOR_VERSION ${PAL_MINOR_VERSION})
-
-    # This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the LLPC interface
-    # that the ICD supports.  LLPC uses this value to enable backwards-compatibility for older interface versions.  It must
-    # be updated on each LLPC promotion after handling all of the interface changes described in llpc.h
-    file(STRINGS icd/make/importdefs LLPC_MAJOR_VERSION REGEX "^ICD_LLPC_CLIENT_MAJOR_VERSION = [0-9]+")
-
-    if(LLPC_MAJOR_VERSION STREQUAL "")
-        message(STATUS "Failed to find ICD_LLPC_CLIENT_MAJOR_VERSION")
-    else()
-        string(REGEX REPLACE "ICD_LLPC_CLIENT_MAJOR_VERSION = " "" LLPC_MAJOR_VERSION ${LLPC_MAJOR_VERSION})
-        message(STATUS "Detected ICD_LLPC_CLIENT_MAJOR_VERSION is " ${LLPC_MAJOR_VERSION})
-    endif()
-
-    set(ICD_LLPC_CLIENT_MAJOR_VERSION ${LLPC_MAJOR_VERSION})
-
-# This will become the value of GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the GPUOPEN interface
-# that the ICD supports.
-    if(ICD_GPUOPEN_DEVMODE_BUILD)
-        file(STRINGS icd/make/importdefs GPUOPEN_MAJOR_VERSION REGEX "^ICD_GPUOPEN_CLIENT_MAJOR_VERSION = [0-9]+")
-
-        if(GPUOPEN_MAJOR_VERSION STREQUAL "")
-            message(STATUS "Failed to find ICD_GPUOPEN_CLIENT_MAJOR_VERSION")
-        else()
-            string(REGEX REPLACE "ICD_GPUOPEN_CLIENT_MAJOR_VERSION = " "" GPUOPEN_MAJOR_VERSION ${GPUOPEN_MAJOR_VERSION})
-            message(STATUS "Detected ICD_GPUOPEN_CLIENT_MAJOR_VERSION is " ${GPUOPEN_MAJOR_VERSION})
-        endif()
-
-        set(GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION ${GPUOPEN_MAJOR_VERSION})
-    endif()
-
-endmacro()
-
 macro(xgl_get_path)
     # icd path
     set(XGL_ICD_PATH ${PROJECT_SOURCE_DIR}/icd CACHE PATH "The path of xgl, it is read-only.")
@@ -97,6 +38,20 @@ macro(xgl_get_path)
     elseif(EXISTS ${PROJECT_SOURCE_DIR}/../pal)
         set(XGL_PAL_PATH ${PROJECT_SOURCE_DIR}/../pal CACHE PATH "Specify the path to the PAL project.")
     endif()
+
+#if VKI_RAY_TRACING
+    if(VKI_RAY_TRACING)
+        if(EXISTS ${PROJECT_SOURCE_DIR}/icd/imported/gpurt)
+            set(XGL_GPURT_PATH ${PROJECT_SOURCE_DIR}/icd/imported/gpurt CACHE PATH "Specify the path to the GPURT project.")
+        elseif(EXISTS ${PROJECT_SOURCE_DIR}/../gpurt)
+            set(XGL_GPURT_PATH ${PROJECT_SOURCE_DIR}/../gpurt CACHE PATH "Specify the path to the GPURT project.")
+        endif()
+
+        set(GPURT_DEVELOPER_MODE ON CACHE BOOL "GPURT_DEVELOPER_MODE override." FORCE)
+        set(GPURT_CLIENT_API "VULKAN" CACHE STRING "GPURT_CLIENT_API_VULKAN override." FORCE)
+        set(GPURT_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_GPURT_CLIENT_MAJOR_VERSION} CACHE STRING "GPURT_CLIENT_INTERFACE_MAJOR_VERSION override." FORCE)
+    endif()
+#endif
 
 #if VKI_GPU_DECOMPRESS
     if(VKI_GPU_DECOMPRESS)
@@ -204,7 +159,9 @@ endmacro()
 
 macro(xgl_overrides)
 
-    xgl_get_version()
+    if(ICD_GPUOPEN_DEVMODE_BUILD)
+        set(GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_GPUOPEN_CLIENT_MAJOR_VERSION})
+    endif()
 
     xgl_get_path()
 

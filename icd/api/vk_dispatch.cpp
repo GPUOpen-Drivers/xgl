@@ -574,6 +574,37 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCreateDebugUtilsMessengerEXT                  );
     INIT_DISPATCH_ENTRY(vkDestroyDebugUtilsMessengerEXT                 );
     INIT_DISPATCH_ENTRY(vkSubmitDebugUtilsMessageEXT                    );
+#if VKI_RAY_TRACING
+    INIT_DISPATCH_ENTRY(vkCreateDeferredOperationKHR);
+    INIT_DISPATCH_ENTRY(vkDestroyDeferredOperationKHR);
+    INIT_DISPATCH_ENTRY(vkGetDeferredOperationResultKHR);
+    INIT_DISPATCH_ENTRY(vkGetDeferredOperationMaxConcurrencyKHR);
+    INIT_DISPATCH_ENTRY(vkDeferredOperationJoinKHR);
+    INIT_DISPATCH_ENTRY(vkCreateAccelerationStructureKHR                 );
+    INIT_DISPATCH_ENTRY(vkDestroyAccelerationStructureKHR                );
+    INIT_DISPATCH_ENTRY(vkCmdBuildAccelerationStructuresKHR              );
+    INIT_DISPATCH_ENTRY(vkCmdBuildAccelerationStructuresIndirectKHR      );
+    INIT_DISPATCH_ENTRY(vkBuildAccelerationStructuresKHR                 );
+    INIT_DISPATCH_ENTRY(vkCopyAccelerationStructureToMemoryKHR           );
+    INIT_DISPATCH_ENTRY(vkCopyAccelerationStructureKHR                   );
+    INIT_DISPATCH_ENTRY(vkCopyMemoryToAccelerationStructureKHR           );
+    INIT_DISPATCH_ENTRY(vkWriteAccelerationStructuresPropertiesKHR       );
+    INIT_DISPATCH_ENTRY(vkCmdCopyAccelerationStructureKHR                );
+    INIT_DISPATCH_ENTRY(vkCmdCopyAccelerationStructureToMemoryKHR        );
+    INIT_DISPATCH_ENTRY(vkCmdCopyMemoryToAccelerationStructureKHR        );
+    INIT_DISPATCH_ENTRY(vkCmdTraceRaysKHR                                );
+    INIT_DISPATCH_ENTRY(vkCreateRayTracingPipelinesKHR                   );
+    INIT_DISPATCH_ENTRY(vkGetRayTracingShaderGroupHandlesKHR             );
+    INIT_DISPATCH_ENTRY(vkGetAccelerationStructureDeviceAddressKHR       );
+    INIT_DISPATCH_ENTRY(vkGetRayTracingCaptureReplayShaderGroupHandlesKHR);
+    INIT_DISPATCH_ENTRY(vkCmdWriteAccelerationStructuresPropertiesKHR    );
+    INIT_DISPATCH_ENTRY(vkCmdTraceRaysIndirectKHR                        );
+    INIT_DISPATCH_ENTRY(vkGetDeviceAccelerationStructureCompatibilityKHR );
+    INIT_DISPATCH_ENTRY(vkGetRayTracingShaderGroupStackSizeKHR           );
+    INIT_DISPATCH_ENTRY(vkCmdSetRayTracingPipelineStackSizeKHR           );
+    INIT_DISPATCH_ENTRY(vkGetAccelerationStructureBuildSizesKHR          );
+    INIT_DISPATCH_ENTRY(vkCmdTraceRaysIndirect2KHR                       );
+#endif
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutablePropertiesKHR             );
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutableStatisticsKHR             );
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutableInternalRepresentationsKHR);

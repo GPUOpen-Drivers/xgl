@@ -32,6 +32,10 @@
 #include "include/vk_device.h"
 #include "include/vk_physical_device.h"
 
+#if VKI_RAY_TRACING
+#include "raytrace/ray_tracing_device.h"
+#endif
+
 #include <climits>
 #include <cmath>
 
@@ -81,6 +85,14 @@ const char* CompilerSolution::GetShaderStageName(
         "Geometry",
         "Fragment",
         "Compute ",
+#if VKI_RAY_TRACING
+        "Raygen",
+        "Intersect",
+        "Anyhit",
+        "Closesthit",
+        "Miss",
+        "Callable"
+#endif
     };
 
     pName = ShaderStageNames[static_cast<uint32_t>(shaderStage)];
@@ -100,5 +112,136 @@ void CompilerSolution::DisableNggCulling(
     pNggState->enableSmallPrimFilter     = false;
     pNggState->enableCullDistanceCulling = false;
 }
+
+#if VKI_RAY_TRACING
+#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION >= 15
+// =====================================================================================================================
+// Parse and update RayTracingFunctionName of funcType
+void CompilerSolution::SetRayTracingFunctionName(
+    const char* pSrc,
+    char*       pDest)
+{
+    VK_ASSERT(pSrc != nullptr);
+    VK_ASSERT(pDest != nullptr);
+
+    // format is "\01?RayQueryProceed1_1@@YA_NURayQueryInternal@@IV?$vector@I$02@@@Z"
+    // input  "\01?RayQueryProceed1_1@@YA_NURayQueryInternal@@IV?$vector@I$02@@@Z"
+    // output "RayQueryProceed1_1"
+    const char* pTemp = pSrc + 2;
+
+    const char* pPostfix = strstr(pTemp, "@@");
+    if (pPostfix != nullptr)
+    {
+        size_t sz = strlen(pTemp) - strlen(pPostfix);
+        strncpy(pDest, pTemp, sz);
+        pDest[sz] = '\0';
+    }
+    else
+    {
+        VK_ASSERT(false);
+    }
+}
+
+// =====================================================================================================================
+// Parse and update RayTracingFunctionName of all funcTypes
+void CompilerSolution::UpdateRayTracingFunctionNames(
+    const Device*   pDevice,
+    Vkgc::RtState*  pRtState)
+{
+    VkResult result             = VK_ERROR_UNKNOWN;
+    GpuRt::Device* pGpurtDevice = pDevice->RayTrace()->GpuRt(DefaultDeviceIndex);
+
+    if (pGpurtDevice != nullptr)
+    {
+        const RuntimeSettings& settings = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings();
+        auto pTable                     = &pRtState->gpurtFuncTable;
+
+        Pal::RayTracingIpLevel rayTracingIp =
+            pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.rayTracingIp;
+
+        // Optionally, override RTIP level based on software emulation setting
+        switch (settings.emulatedRtIpLevel)
+        {
+        case EmulatedRtIpLevelNone:
+            break;
+        case HardwareRtIpLevel1_1:
+        case EmulatedRtIpLevel1_1:
+            rayTracingIp = Pal::RayTracingIpLevel::RtIp1_1;
+            break;
+        default:
+            VK_ASSERT(false);
+            break;
+        }
+
+        GpuRt::EntryFunctionTable entryFuncTable = {};
+        result = PalToVkResult(pGpurtDevice->QueryRayTracingEntryFunctionTable(rayTracingIp, &entryFuncTable));
+
+        VK_ASSERT(result == VK_SUCCESS);
+
+        if (settings.rtUseRayQueryForTraceRays)
+        {
+            SetRayTracingFunctionName(
+                entryFuncTable.traceRay.pTraceRayUsingRayQuery, pTable->pFunc[Vkgc::RT_ENTRY_TRACE_RAY]);
+        }
+        else
+        {
+            SetRayTracingFunctionName(
+                entryFuncTable.traceRay.pTraceRay, pTable->pFunc[Vkgc::RT_ENTRY_TRACE_RAY]);
+        }
+
+        SetRayTracingFunctionName(
+            entryFuncTable.traceRay.pTraceRayUsingHitToken, pTable->pFunc[Vkgc::RT_ENTRY_TRACE_RAY_HIT_TOKEN]);
+        SetRayTracingFunctionName(
+            entryFuncTable.rayQuery.pTraceRayInline, pTable->pFunc[Vkgc::RT_ENTRY_TRACE_RAY_INLINE]);
+        SetRayTracingFunctionName(
+            entryFuncTable.rayQuery.pProceed, pTable->pFunc[Vkgc::RT_ENTRY_RAY_QUERY_PROCEED]);
+        SetRayTracingFunctionName(
+            entryFuncTable.intrinsic.pGetInstanceID, pTable->pFunc[Vkgc::RT_ENTRY_INSTANCE_ID]);
+        SetRayTracingFunctionName(
+            entryFuncTable.intrinsic.pGetInstanceIndex, pTable->pFunc[Vkgc::RT_ENTRY_INSTANCE_INDEX]);
+        SetRayTracingFunctionName(
+            entryFuncTable.intrinsic.pGetObjectToWorldTransform,
+            pTable->pFunc[Vkgc::RT_ENTRY_OBJECT_TO_WORLD_TRANSFORM]);
+        SetRayTracingFunctionName(
+            entryFuncTable.intrinsic.pGetWorldToObjectTransform,
+            pTable->pFunc[Vkgc::RT_ENTRY_WORLD_TO_OBJECT_TRANSFORM]);
+    }
+}
+#endif
+
+uint32_t CompilerSolution::GetRayTracingVgprLimit(
+    bool isIndirect)
+{
+    const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
+    uint32_t               vgprLimit = 0;
+
+    if (isIndirect)
+    {
+        if (settings.rtIndirectVgprLimit == UINT_MAX)
+        {
+            const auto *pProps = &m_pPhysicalDevice->PalProperties().gfxipProperties.shaderCore;
+
+            const uint32 targetNumWavesPerSimd =
+                Util::Max(1U, static_cast<uint32>(
+                    round(settings.indirectCallTargetOccupancyPerSimd * pProps->numWavefrontsPerSimd)));
+
+            const uint32 targetNumVgprsPerWave =
+                Util::RoundDownToMultiple(pProps->vgprsPerSimd / targetNumWavesPerSimd, pProps->vgprAllocGranularity);
+
+            vgprLimit = Util::Min(pProps->numAvailableVgprs, targetNumVgprsPerWave);
+        }
+        else
+        {
+            vgprLimit = settings.rtIndirectVgprLimit;
+        }
+    }
+    else
+    {
+        vgprLimit = settings.rtUnifiedVgprLimit;
+    }
+
+    return vgprLimit;
+}
+#endif
 
 }

@@ -43,6 +43,10 @@
 #include "include/vk_queue.h"
 #include "include/vk_instance.h"
 #include "include/vk_extensions.h"
+#if VKI_RAY_TRACING
+#include "raytrace/vk_ray_tracing_pipeline.h"
+#include "raytrace/ray_tracing_device.h"
+#endif
 #include "sqtt/sqtt_layer.h"
 #include "sqtt/sqtt_mgr.h"
 
@@ -684,7 +688,8 @@ void SqttCmdBufferState::WriteBarrierEndMarker(
         marker.identifier           = RgpSqttMarkerIdentifierBarrierEnd;
         marker.cbId                 = m_cbId.u32All;
 
-        marker.waitOnEopTs          = operations.pipelineStalls.eopTsBottomOfPipe;
+        marker.waitOnEopTs          = (operations.pipelineStalls.eopTsBottomOfPipe &&
+                                       operations.pipelineStalls.waitOnTs);
         marker.vsPartialFlush       = operations.pipelineStalls.vsPartialFlush;
         marker.psPartialFlush       = operations.pipelineStalls.psPartialFlush;
         marker.csPartialFlush       = operations.pipelineStalls.csPartialFlush;
@@ -2079,6 +2084,212 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(
     return result;
 }
 
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateRayTracingPipelinesKHR(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    VkPipelineCache                             pipelineCache,
+    uint32_t                                    createInfoCount,
+    const VkRayTracingPipelineCreateInfoKHR*    pCreateInfos,
+    const VkAllocationCallbacks*                pAllocator,
+    VkPipeline*                                 pPipelines)
+{
+    Device* pDevice     = ApiDevice::ObjectFromHandle(device);
+    SqttMgr* pSqtt      = pDevice->GetSqttMgr();
+    DevModeMgr* pDevMgr = pDevice->VkInstance()->GetDevModeMgr();
+
+    VkResult result = SQTT_CALL_NEXT_LAYER(vkCreateRayTracingPipelinesKHR)(device, deferredOperation, pipelineCache,
+        createInfoCount, pCreateInfos, pAllocator, pPipelines);
+
+    if (pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable &&
+        ((result == VK_SUCCESS) || (result == VK_OPERATION_DEFERRED_KHR)) &&
+        (pDevMgr != nullptr))
+    {
+        for (uint32_t i = 0; i < createInfoCount; ++i)
+        {
+            if (pPipelines[i] != VK_NULL_HANDLE)
+            {
+                RayTracingPipeline* pPipeline = NonDispatchable<VkPipeline, RayTracingPipeline>::ObjectFromHandle(
+                    pPipelines[i]);
+
+                auto* pMeta = pSqtt->GetObjectMgr()->ObjectCreated(pDevice,
+                    VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT, pPipelines[i]);
+
+                if (pMeta != nullptr)
+                {
+                    memset(pMeta->pipeline.shaderModules, 0, sizeof(pMeta->pipeline.shaderModules));
+
+                    for (uint32_t stage = 0; stage < pCreateInfos[i].stageCount; ++stage)
+                    {
+                        size_t palIdx = static_cast<size_t>(VkToPalShaderType(pCreateInfos[i].pStages[stage].stage));
+
+                        pMeta->pipeline.shaderModules[palIdx] = pCreateInfos[i].pStages[stage].module;
+                    }
+                }
+
+#if ICD_GPUOPEN_DEVMODE_BUILD
+                if (result != VK_OPERATION_DEFERRED_KHR)
+                {
+                    pDevMgr->PipelineCreated(pDevice, pPipeline);
+
+                    if (pPipeline->IsInlinedShaderEnabled() == false)
+                    {
+                        pDevMgr->ShaderLibrariesCreated(pDevice, pPipeline);
+                    }
+                }
+#endif
+            }
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysKHR(
+    VkCommandBuffer                             cmdBuffer,
+    const VkStridedDeviceAddressRegionKHR*      pRaygenShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pMissShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pHitShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pCallableShaderBindingTable,
+    uint32_t                                    width,
+    uint32_t                                    height,
+    uint32_t                                    depth)
+{
+    SQTT_SETUP();
+
+    RgpSqttMarkerEventType eventType = RgpSqttMarkerEventType::CmdTraceRaysKHR;
+    if (ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->GetBoundRayTracingPipeline()->IsInlinedShaderEnabled() == false)
+    {
+        eventType |= RgpSqttMarkerEventType::ShaderIndirectModeMask;
+    }
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDispatch);
+    pSqtt->BeginEventMarkers(eventType);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdTraceRaysKHR)(cmdBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable,
+        pHitShaderBindingTable, pCallableShaderBindingTable, width, height, depth);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysIndirectKHR(
+    VkCommandBuffer                             cmdBuffer,
+    const VkStridedDeviceAddressRegionKHR*      pRaygenShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pMissShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pHitShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pCallableShaderBindingTable,
+    VkDeviceAddress                             indirectDeviceAddress)
+{
+    SQTT_SETUP();
+
+    RgpSqttMarkerEventType eventType = RgpSqttMarkerEventType::CmdTraceRaysIndirectKHR;
+    if (ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->GetBoundRayTracingPipeline()->IsInlinedShaderEnabled() == false)
+    {
+        eventType |= RgpSqttMarkerEventType::ShaderIndirectModeMask;
+    }
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDispatch);
+    pSqtt->BeginEventMarkers(eventType);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdTraceRaysIndirectKHR)(cmdBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable,
+                                            pHitShaderBindingTable, pCallableShaderBindingTable, indirectDeviceAddress);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBuildAccelerationStructuresKHR(
+    VkCommandBuffer                                         cmdBuffer,
+    uint32_t                                                infoCount,
+    const VkAccelerationStructureBuildGeometryInfoKHR*      pInfos,
+    const VkAccelerationStructureBuildRangeInfoKHR* const*  ppBuildRangeInfos)
+{
+    SQTT_SETUP();
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDispatch);
+    pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdBuildAccelerationStructuresKHR);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdBuildAccelerationStructuresKHR)(cmdBuffer, infoCount, pInfos, ppBuildRangeInfos);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBuildAccelerationStructuresIndirectKHR(
+    VkCommandBuffer                                    cmdBuffer,
+    uint32_t                                           infoCount,
+    const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
+    const VkDeviceAddress*                             pIndirectDeviceAddresses,
+    const uint32_t*                                    pIndirectStrides,
+    const uint32_t* const*                             ppMaxPrimitiveCounts)
+{
+    SQTT_SETUP();
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDispatch);
+    pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdBuildAccelerationStructuresIndirectKHR);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdBuildAccelerationStructuresIndirectKHR)(cmdBuffer, infoCount, pInfos,
+        pIndirectDeviceAddresses, pIndirectStrides, ppMaxPrimitiveCounts);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyAccelerationStructureKHR(
+    VkCommandBuffer                             cmdBuffer,
+    const VkCopyAccelerationStructureInfoKHR*   pInfo)
+{
+    SQTT_SETUP();
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDispatch);
+    pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdCopyAccelerationStructureKHR);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdCopyAccelerationStructureKHR)(cmdBuffer, pInfo);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyAccelerationStructureToMemoryKHR(
+    VkCommandBuffer                                     cmdBuffer,
+    const VkCopyAccelerationStructureToMemoryInfoKHR*   pInfo)
+{
+    SQTT_SETUP();
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDispatch);
+    pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdCopyAccelerationStructureToMemoryKHR);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdCopyAccelerationStructureToMemoryKHR)(cmdBuffer, pInfo);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyMemoryToAccelerationStructureKHR(
+    VkCommandBuffer                                     cmdBuffer,
+    const VkCopyMemoryToAccelerationStructureInfoKHR*   pInfo)
+{
+    SQTT_SETUP();
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDispatch);
+    pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdCopyMemoryToAccelerationStructureKHR);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdCopyMemoryToAccelerationStructureKHR)(cmdBuffer, pInfo);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+#endif
+
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(
     VkDevice                                    device,
@@ -2098,6 +2309,17 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(
 
             pDevMgr->PipelineDestroyed(pDevice, pPipeline);
 
+#if VKI_RAY_TRACING
+            if (pPipeline->GetType() == VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR)
+            {
+                RayTracingPipeline* pRtPipeline = RayTracingPipeline::ObjectFromHandle(pipeline);
+
+                if (pRtPipeline->IsInlinedShaderEnabled() == false)
+                {
+                    pDevMgr->ShaderLibrariesDestroyed(pDevice, pRtPipeline);
+                }
+            }
+#endif
         }
     }
 #endif
@@ -2428,6 +2650,16 @@ void SqttOverrideDispatchTable(
     SQTT_OVERRIDE_ENTRY(vkQueueInsertDebugUtilsLabelEXT);
     SQTT_OVERRIDE_ENTRY(vkCreateGraphicsPipelines);
     SQTT_OVERRIDE_ENTRY(vkCreateComputePipelines);
+#if VKI_RAY_TRACING
+    SQTT_OVERRIDE_ENTRY(vkCreateRayTracingPipelinesKHR);
+    SQTT_OVERRIDE_ENTRY(vkCmdTraceRaysKHR);
+    SQTT_OVERRIDE_ENTRY(vkCmdTraceRaysIndirectKHR);
+    SQTT_OVERRIDE_ENTRY(vkCmdBuildAccelerationStructuresKHR);
+    SQTT_OVERRIDE_ENTRY(vkCmdBuildAccelerationStructuresIndirectKHR);
+    SQTT_OVERRIDE_ENTRY(vkCmdCopyAccelerationStructureKHR);
+    SQTT_OVERRIDE_ENTRY(vkCmdCopyAccelerationStructureToMemoryKHR);
+    SQTT_OVERRIDE_ENTRY(vkCmdCopyMemoryToAccelerationStructureKHR);
+#endif
     SQTT_OVERRIDE_ENTRY(vkDestroyPipeline);
     SQTT_OVERRIDE_ENTRY(vkDebugMarkerSetObjectNameEXT);
     SQTT_OVERRIDE_ENTRY(vkDebugMarkerSetObjectTagEXT);

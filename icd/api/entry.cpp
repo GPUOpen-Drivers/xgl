@@ -926,6 +926,146 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirectByteCountEXT(
                                                                          vertexStride);
 }
 
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBuildAccelerationStructuresKHR(
+    VkCommandBuffer                                         commandBuffer,
+    uint32_t                                                infoCount,
+    const VkAccelerationStructureBuildGeometryInfoKHR*      pInfos,
+    const VkAccelerationStructureBuildRangeInfoKHR* const*  ppBuildRangeInfos)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BuildAccelerationStructures(
+        infoCount,
+        pInfos,
+        ppBuildRangeInfos,
+        nullptr,
+        nullptr,
+        nullptr);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBuildAccelerationStructuresIndirectKHR(
+    VkCommandBuffer                                    commandBuffer,
+    uint32                                             infoCount,
+    const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
+    const VkDeviceAddress*                             pIndirectDeviceAddresses,
+    const uint32*                                      pIndirectStrides,
+    const uint32* const*                               ppMaxPrimitiveCounts)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BuildAccelerationStructures(
+        infoCount,
+        pInfos,
+        nullptr,
+        pIndirectDeviceAddresses,
+        pIndirectStrides,
+        ppMaxPrimitiveCounts);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysKHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkStridedDeviceAddressRegionKHR*      pRaygenShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pMissShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pHitShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pCallableShaderBindingTable,
+    uint32_t                                    width,
+    uint32_t                                    height,
+    uint32_t                                    depth)
+{
+     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->TraceRays(
+         *pRaygenShaderBindingTable,
+         *pMissShaderBindingTable,
+         *pHitShaderBindingTable,
+         *pCallableShaderBindingTable,
+         width,
+         height,
+         depth);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysIndirectKHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkStridedDeviceAddressRegionKHR*      pRaygenShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pMissShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pHitShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pCallableShaderBindingTable,
+    VkDeviceAddress                             indirectDeviceAddress)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->TraceRaysIndirect(
+         GpuRt::ExecuteIndirectArgType::DispatchDimensions,
+         *pRaygenShaderBindingTable,
+         *pMissShaderBindingTable,
+         *pHitShaderBindingTable,
+         *pCallableShaderBindingTable,
+         indirectDeviceAddress);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyAccelerationStructureKHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyAccelerationStructureInfoKHR*   pInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CopyAccelerationStructure(pInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdWriteAccelerationStructuresPropertiesKHR(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    accelerationStructureCount,
+    const VkAccelerationStructureKHR*           pAccelerationStructures,
+    VkQueryType                                 queryType,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    firstQuery)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->WriteAccelerationStructuresProperties(
+        accelerationStructureCount,
+        pAccelerationStructures,
+        queryType,
+        queryPool,
+        firstQuery);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyAccelerationStructureToMemoryKHR(
+    VkCommandBuffer                                   commandBuffer,
+    const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CopyAccelerationStructureToMemory(pInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyMemoryToAccelerationStructureKHR(
+    VkCommandBuffer                                   commandBuffer,
+    const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CopyMemoryToAccelerationStructure(pInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRayTracingPipelineStackSizeKHR(
+    VkCommandBuffer                                   commandBuffer,
+    uint32_t                                          pipelineStackSize)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetRayTracingPipelineStackSize(pipelineStackSize);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysIndirect2KHR(
+    VkCommandBuffer                             commandBuffer,
+    VkDeviceAddress                             indirectDeviceAddress)
+{
+    VkStridedDeviceAddressRegionKHR emptyShaderBindingTable = {};
+
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->TraceRaysIndirect(
+        GpuRt::ExecuteIndirectArgType::DispatchDimenionsAndShaderTable,
+        emptyShaderBindingTable,
+        emptyShaderBindingTable,
+        emptyShaderBindingTable,
+        emptyShaderBindingTable,
+        indirectDeviceAddress);
+}
+#endif
+
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStippleEXT(
     VkCommandBuffer                             commandBuffer,

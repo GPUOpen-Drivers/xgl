@@ -35,6 +35,10 @@
 #include "include/compiler_solution.h"
 #include "include/shader_cache.h"
 
+#if VKI_RAY_TRACING
+#include "gpurt/gpurt.h"
+#endif
+
 #include "include/compiler_solution_llpc.h"
 
 #include "include/vk_shader_code.h"
@@ -71,13 +75,13 @@ constexpr uint32_t FgsShaderMask = (1 << ShaderStage::ShaderStageFragment);
 // =====================================================================================================================
 struct ShaderStageInfo
 {
-    ShaderStage                      stage;
-    const ShaderModuleHandle*        pModuleHandle;
-    Pal::ShaderHash                  codeHash;            // This hash includes entry point info
-    size_t                           codeSize;
-    const char*                      pEntryPoint;
-    VkPipelineShaderStageCreateFlags flags;
-    const VkSpecializationInfo*      pSpecializationInfo;
+    ShaderStage                                        stage;
+    const ShaderModuleHandle*                          pModuleHandle;
+    Pal::ShaderHash                                    codeHash;            // This hash includes entry point info
+    size_t                                             codeSize;
+    const char*                                        pEntryPoint;
+    VkPipelineShaderStageCreateFlags                   flags;
+    const VkSpecializationInfo*                        pSpecializationInfo;
 };
 
 // =====================================================================================================================
@@ -91,6 +95,15 @@ struct ComputePipelineShaderStageInfo
 {
     ShaderStageInfo stage;
 };
+
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+struct RayTracingPipelineShaderStageInfo
+{
+    uint32_t         stageCount;
+    ShaderStageInfo* stages;
+};
+#endif
 
 // =====================================================================================================================
 class PipelineCompiler
@@ -128,6 +141,7 @@ public:
         size_t                          codeSize,
         const void*                     pCode,
         const bool                      adaptForFastLink,
+        bool                            isInternal,
         PipelineBinaryCache*            pBinaryCache,
         PipelineCreationFeedback*       pFeedback,
         ShaderModuleHandle*             pShaderModule);
@@ -218,6 +232,32 @@ public:
 
     void FreeGraphicsPipelineCreateInfo(GraphicsPipelineBinaryCreateInfo* pCreateInfo, bool keepConvertTempMem);
 
+#if VKI_RAY_TRACING
+    VkResult ConvertRayTracingPipelineInfo(
+        const Device*                            pDevice,
+        const VkRayTracingPipelineCreateInfoKHR* pIn,
+        const RayTracingPipelineShaderStageInfo* pShaderInfo,
+        RayTracingPipelineBinaryCreateInfo*      pCreateInfo);
+
+    VkResult CreateRayTracingPipelineBinary(
+        Device*                             pDevice,
+        uint32_t                            deviceIdx,
+        PipelineCache*                      pPipelineCache,
+        RayTracingPipelineBinaryCreateInfo* pCreateInfo,
+        RayTracingPipelineBinary*           pPipelineBinary,
+        Util::MetroHash::Hash*              pCacheId);
+
+    void FreeRayTracingPipelineBinary(
+        RayTracingPipelineBinaryCreateInfo* pCreateInfo,
+        RayTracingPipelineBinary*           pPipelineBinary);
+
+    void FreeRayTracingPipelineCreateInfo(RayTracingPipelineBinaryCreateInfo* pCreateInfo);
+    void SetRayTracingState(const Device*   pDevice,
+                            Vkgc::RtState*  pRtState,
+                            uint32_t        createFlags);
+
+#endif
+
 #if ICD_GPUOPEN_DEVMODE_BUILD
     Util::Result RegisterAndLoadReinjectionBinary(
         const Pal::PipelineHash*     pInternalPipelineHash,
@@ -261,6 +301,16 @@ public:
         const Util::MetroHash::Hash&      settingsHash,
         Util::MetroHash::Hash*            pCacheId);
 
+#if VKI_RAY_TRACING
+    void GetRayTracingPipelineCacheId(
+        uint32_t                            deviceIdx,
+        uint32_t                            numDevices,
+        RayTracingPipelineBinaryCreateInfo* pCreateInfo,
+        uint64_t                            pipelineHash,
+        const Util::MetroHash::Hash&        settingsHash,
+        Util::MetroHash::Hash*              pCacheId);
+#endif
+
     static void BuildNggState(
         const Device*                     pDevice,
         const VkShaderStageFlagBits       activeStages,
@@ -279,8 +329,23 @@ public:
     void ExecuteDeferCompile(
         DeferredCompileWorkload* pWorkload);
 
-private:
-    PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
+    Util::Result GetCachedPipelineBinary(
+        const Util::MetroHash::Hash* pCacheId,
+        const PipelineBinaryCache*   pPipelineBinaryCache,
+        size_t*                      pPipelineBinarySize,
+        const void**                 ppPipelineBinary,
+        bool*                        pIsUserCacheHit,
+        bool*                        pIsInternalCacheHit,
+        FreeCompilerBinary*          pFreeCompilerBinary,
+        PipelineCreationFeedback*    pPipelineFeedback);
+
+    void CachePipelineBinary(
+        const Util::MetroHash::Hash* pCacheId,
+        PipelineBinaryCache*         pPipelineBinaryCache,
+        size_t                       pipelineBinarySize,
+        const void*                  pPipelineBinary,
+        bool                         isUserCacheHit,
+        bool                         isInternalCacheHit);
 
     template<class PipelineBuildInfo>
     bool ReplacePipelineBinary(
@@ -288,6 +353,9 @@ private:
         size_t*                  pPipelineBinarySize,
         const void**             ppPipelineBinary,
         uint64_t                 hashCode64);
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
 
     void DropPipelineBinaryInst(
         Device*                pDevice,
@@ -313,23 +381,22 @@ private:
         Vkgc::PipelineShaderInfo* pShaderInfo,
         ShaderModuleHandle*       pShaderModule);
 
-    Util::Result GetCachedPipelineBinary(
-        const Util::MetroHash::Hash* pCacheId,
-        const PipelineBinaryCache*   pPipelineBinaryCache,
-        size_t*                      pPipelineBinarySize,
-        const void**                 ppPipelineBinary,
-        bool*                        pIsUserCacheHit,
-        bool*                        pIsInternalCacheHit,
-        FreeCompilerBinary*          pFreeCompilerBinary,
-        PipelineCreationFeedback*    pPipelineFeedback);
+#if VKI_RAY_TRACING
+    bool ReplaceRayTracingPipelineBinary(
+        RayTracingPipelineBinaryCreateInfo* pCreateInfo,
+        RayTracingPipelineBinary*           pPipelineBinary,
+        uint64_t                            hashCode64);
 
-    void CachePipelineBinary(
-        const Util::MetroHash::Hash* pCacheId,
-        PipelineBinaryCache*         pPipelineBinaryCache,
-        size_t                       pipelineBinarySize,
-        const void*                  pPipelineBinary,
-        bool                         isUserCacheHit,
-        bool                         isInternalCacheHit);
+    void ExtractRayTracingPipelineBinary(
+        Vkgc::BinaryData* pBinary,
+        RayTracingPipelineBinary* pPipelineBinary);
+
+    bool BuildRayTracingPipelineBinary(
+        RayTracingPipelineBinary* pPipelineBinary,
+        Vkgc::BinaryData* pBinary);
+
+    size_t GetRayTracingPipelineMetaSize(RayTracingPipelineBinary* pPipelineBinary) const;
+#endif
 
     VkResult LoadShaderModuleFromCache(
         const Device*                   pDevice,

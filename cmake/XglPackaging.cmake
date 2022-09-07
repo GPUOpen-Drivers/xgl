@@ -29,7 +29,7 @@ set(supported_package_types
 )
 
 if(NOT PACKAGE_NAME)
-  message(WARNING "PACKAGE_NAME is not specifiled, default is amdvlk")
+  message(WARNING "PACKAGE_NAME is not specified, default is amdvlk")
   set(PACKAGE_NAME "amdvlk")
 endif()
 

@@ -51,6 +51,10 @@ macro(xgl_options)
 
     option(XGL_BUILD_CACHE_CREATOR "Build cache-creator tools?" OFF)
 
+#if VKI_RAY_TRACING
+    option(VKI_RAY_TRACING "Build vulkan with RAY_TRACING" ON)
+#endif
+
 #if VKI_GPU_DECOMPRESS
     option(VKI_GPU_DECOMPRESS "Build vulkan with GPU_DECOMPRESS" ON)
 #endif

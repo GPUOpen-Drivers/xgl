@@ -67,6 +67,14 @@ macro(xgl_set_compile_definitions)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI24=1)
     endif()
 
+#if VKI_RAY_TRACING
+    if (VKI_RAY_TRACING)
+        target_compile_definitions(xgl PRIVATE VKI_RAY_TRACING=1)
+        target_compile_definitions(xgl PRIVATE GPURT_CLIENT_CONVERT_BUILD_PARAMS=1)
+        target_compile_definitions(xgl PRIVATE GPURT_CLIENT_API_VULKAN=1)
+    endif()
+#endif
+
 #if VKI_KHR_DISPLAY
     if(VKI_KHR_DISPLAY)
         target_compile_definitions(xgl PRIVATE VKI_KHR_DISPLAY)
@@ -87,6 +95,12 @@ macro(xgl_set_compile_definitions)
     if(VKI_GPU_DECOMPRESS)
         target_compile_definitions(xgl PRIVATE VKI_GPU_DECOMPRESS)
     endif()
+#endif
+
+#if VKI_RAY_TRACING
+#endif
+
+#if VKI_RAY_TRACING
 #endif
 
     if(BUILD_WAYLAND_SUPPORT)

@@ -60,6 +60,10 @@
 #include "protocols/ddPipelineUriService.h"
 #include "protocols/ddEventServer.h"
 
+#if VKI_RAY_TRACING
+#include "raytrace/vk_ray_tracing_pipeline.h"
+#endif
+
 namespace vk
 {
 
@@ -2474,6 +2478,44 @@ void DevModeMgr::PipelineDestroyed(
         m_trace.pGpaSession->UnregisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex));
     }
 }
+
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+// Registers the shader libraries under this pipeline so the contents of each library can be written into the RGP
+// trace file.
+void DevModeMgr::ShaderLibrariesCreated(
+    Device*             pDevice,
+    RayTracingPipeline* pPipeline)
+{
+    if ((m_trace.pDevice == pDevice) &&
+        m_trace.pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable &&
+        (m_trace.pGpaSession != nullptr))
+    {
+        for (uint32_t i = 0; i < pPipeline->GetShaderLibraryCount(); ++i)
+        {
+            GpuUtil::RegisterLibraryInfo pipelineInfo = { pPipeline->GetApiHash() };
+            m_trace.pGpaSession->RegisterLibrary(pPipeline->PalShaderLibrary(i), pipelineInfo);
+        }
+    }
+}
+
+// =====================================================================================================================
+// Unregisters the shader libraries under this pipeline, recording an unload event in the RGP trace.
+void DevModeMgr::ShaderLibrariesDestroyed(
+    Device*             pDevice,
+    RayTracingPipeline* pPipeline)
+{
+    if ((m_trace.pDevice == pDevice) &&
+        m_trace.pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable &&
+        (m_trace.pGpaSession != nullptr))
+    {
+        for (uint32_t i = 0; i < pPipeline->GetShaderLibraryCount(); ++i)
+        {
+            m_trace.pGpaSession->UnregisterLibrary(pPipeline->PalShaderLibrary(i));
+        }
+    }
+}
+#endif
 
 // =====================================================================================================================
 // Retrieves the target API PSO hash from the RGP Server

@@ -37,6 +37,34 @@
 namespace vk
 {
 
+#if VKI_RAY_TRACING
+class LlpcHelperThreadProvider : public Llpc::IHelperThreadProvider
+{
+public:
+    struct HelperThreadProviderPayload
+    {
+        Llpc::IHelperThreadProvider* pHelperProvider;
+        Llpc::IHelperThreadProvider::ThreadFunction* pFunction;
+        void* pPayload;
+    };
+
+    LlpcHelperThreadProvider(DeferredWorkload* pDeferredWorkload) : m_pDeferredWorkload(pDeferredWorkload) {}
+    ~LlpcHelperThreadProvider() {}
+
+    virtual void SetTasks(ThreadFunction* pFunction, uint32_t numTasks, void* pPayload) override;
+
+    virtual bool GetNextTask(uint32_t* pTaskIndex) override;
+
+    virtual void TaskCompleted() override;
+
+    virtual void WaitForTasks() override;
+
+private:
+    DeferredWorkload* m_pDeferredWorkload;
+    HelperThreadProviderPayload m_payload;
+};
+#endif
+
 // =====================================================================================================================
 // Compiler solution for LLPC
 class CompilerSolutionLlpc final : public CompilerSolution
@@ -66,6 +94,7 @@ public:
         size_t                       codeSize,
         const void*                  pCode,
         const bool                   adaptForFastLink,
+        bool                         isInternal,
         ShaderModuleHandle*          pShaderModule,
         const PipelineOptimizerKey&  profileKey) override;
 
@@ -92,7 +121,7 @@ public:
         const Device*                           pDevice,
         const ShaderStage                       stage,
         const GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-        ShaderModuleHandle*                     pShaderModule) override { return VK_SUCCESS; }
+        ShaderModuleHandle*                     pShaderModule) override;
 
     virtual VkResult CreateComputePipelineBinary(
         Device*                          pDevice,
@@ -113,6 +142,21 @@ public:
     virtual void FreeComputePipelineBinary(
         const void*                 pPipelineBinary,
         size_t                      binarySize) override;
+#if VKI_RAY_TRACING
+    virtual VkResult CreateRayTracingPipelineBinary(
+        Device*                             pDevice,
+        uint32_t                            deviceIdx,
+        PipelineCache*                      pPipelineCache,
+        RayTracingPipelineBinaryCreateInfo* pCreateInfo,
+        RayTracingPipelineBinary*           pPipelineBinary,
+        void*                               pPipelineDumpHandle,
+        uint64_t                            pipelineHash,
+        Util::MetroHash::Hash*              pCacheId,
+        int64_t*                            pCompileTime) override;
+
+    virtual void FreeRayTracingPipelineBinary(
+        RayTracingPipelineBinary* pPipelineBinary) override;
+#endif
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(CompilerSolutionLlpc);

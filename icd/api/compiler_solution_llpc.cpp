@@ -119,6 +119,7 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     size_t                       codeSize,
     const void*                  pCode,
     const bool                   adaptForFastLink,
+    bool                         isInternal,
     ShaderModuleHandle*          pShaderModule,
     const PipelineOptimizerKey&  profileKey)
 {
@@ -138,6 +139,10 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
 
     auto pPipelineCompiler = m_pPhysicalDevice->GetCompiler();
     pPipelineCompiler->ApplyPipelineOptions(pDevice, 0, &moduleInfo.options.pipelineOptions);
+
+#if VKI_RAY_TRACING
+    moduleInfo.options.isInternalRtShader = (flags & VK_SHADER_MODULE_RAY_TRACING_INTERNAL_SHADER_BIT) ? true : false;
+#endif
 
     Vkgc::Result llpcResult = m_pLlpc->BuildShaderModule(&moduleInfo, &buildOut);
 
@@ -197,7 +202,6 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     void* pLlpcPipelineBuffer = nullptr;
 
     int64_t startTime = Util::GetPerfCpuTime();
-    // Fill pipeline create info for LLPC
     auto pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
     pPipelineBuildInfo->pInstance      = pInstance;
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
@@ -223,7 +227,47 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
         }
     }
 
-    auto llpcResult = m_pLlpc->BuildGraphicsPipeline(pPipelineBuildInfo, &pipelineOut, pPipelineDumpHandle);
+    Vkgc::Result llpcResult = Vkgc::Result::Success;
+
+    bool isEarlyCompiler = false;
+    for (uint32_t i = 0; i < Vkgc::ShaderStageGfxCount; ++i)
+    {
+        if (pCreateInfo->earlyElfPackage[i].pCode != nullptr)
+        {
+            isEarlyCompiler = true;
+            break;
+        }
+    }
+
+    if ((isEarlyCompiler == false) || pCreateInfo->linkTimeOptimization)
+    {
+        llpcResult = m_pLlpc->BuildGraphicsPipeline(pPipelineBuildInfo, &pipelineOut, pPipelineDumpHandle);
+    }
+    else
+    {
+        BinaryData elfPackage[Vkgc::UnlinkedShaderStage::UnlinkedStageCount] = {};
+
+        if (pCreateInfo->earlyElfPackage[ShaderStageVertex].pCode != nullptr)
+        {
+            elfPackage[UnlinkedStageVertexProcess] = pCreateInfo->earlyElfPackage[ShaderStageVertex];
+        }
+
+        if (pCreateInfo->earlyElfPackage[ShaderStageFragment].pCode != nullptr)
+        {
+            elfPackage[UnlinkedStageFragment] = pCreateInfo->earlyElfPackage[ShaderStageFragment];
+        }
+
+        CompilerSolution::DisableNggCulling(&pCreateInfo->pipelineInfo.nggState);
+
+        llpcResult = m_pLlpc->buildGraphicsPipelineWithElf(&pCreateInfo->pipelineInfo, &pipelineOut, elfPackage);
+
+        // Early compile failure in some cases is expected.
+        if (llpcResult != Vkgc::Result::Success)
+        {
+            llpcResult = m_pLlpc->BuildGraphicsPipeline(pPipelineBuildInfo, &pipelineOut, pPipelineDumpHandle);
+        }
+    }
+
     pCreateInfo->pipelineFeedback = {};
     memset(pCreateInfo->stageFeedback, 0, sizeof(pCreateInfo->stageFeedback));
     if (llpcResult != Vkgc::Result::Success)
@@ -298,6 +342,40 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
 }
 
 // =====================================================================================================================
+// Build ElfPackage for a specific shader module based on pipeine information
+VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
+    const Device*                           pDevice,
+    const ShaderStage                       stage,
+    const GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    ShaderModuleHandle*                     pShaderModule)
+{
+    VkResult result = VK_SUCCESS;
+
+    // Build the LLPC pipeline
+    Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
+
+    Vkgc::UnlinkedShaderStage unlinkedStage = UnlinkedStageCount;
+
+    // Belong to vertexProcess stage before fragment
+    if (stage < ShaderStage::ShaderStageFragment)
+    {
+        unlinkedStage = UnlinkedShaderStage::UnlinkedStageVertexProcess;
+    }
+    else if (stage == ShaderStage::ShaderStageFragment)
+    {
+        unlinkedStage = UnlinkedShaderStage::UnlinkedStageFragment;
+    }
+
+    auto llpcResult = m_pLlpc->buildGraphicsShaderStage(&pCreateInfo->pipelineInfo, &pipelineOut, unlinkedStage);
+    if (llpcResult == Vkgc::Result::Success)
+    {
+        pShaderModule->elfPackage = pipelineOut.pipelineBin;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 // Creates compute pipeline binary.
 VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     Device*                          pDevice,
@@ -345,12 +423,70 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
             ShaderStageCompute,
             pCreateInfo->pipelineProfileKey);
 
+    const bool threadIdSwizzleMode =
+        pDevice->GetShaderOptimizer()->OverrideThreadIdSwizzleMode(
+            ShaderStageCompute,
+            pCreateInfo->pipelineProfileKey);
+
+    uint32_t overrideShaderThreadGroupSizeX = 0;
+    uint32_t overrideShaderThreadGroupSizeY = 0;
+    uint32_t overrideShaderThreadGroupSizeZ = 0;
+
+    pDevice->GetShaderOptimizer()->OverrideShaderThreadGroupSize(
+            ShaderStageCompute,
+            pCreateInfo->pipelineProfileKey,
+            &overrideShaderThreadGroupSizeX,
+            &overrideShaderThreadGroupSizeY,
+            &overrideShaderThreadGroupSizeZ);
+
     if (threadGroupSwizzleMode != Vkgc::ThreadGroupSwizzleMode::Default)
     {
         pPipelineBuildInfo->options.threadGroupSwizzleMode = threadGroupSwizzleMode;
     }
 
-    pPipelineBuildInfo->options.forceCsThreadIdSwizzling = settings.forceCsThreadIdSwizzling;
+    if ((overrideShaderThreadGroupSizeX == NotOverrideThreadGroupSizeX) &&
+        (overrideShaderThreadGroupSizeY == NotOverrideThreadGroupSizeX) &&
+        (overrideShaderThreadGroupSizeZ == NotOverrideShaderThreadGroupSizeZ) &&
+        (settings.overrideThreadGroupSizeX == NotOverrideThreadGroupSizeX) &&
+        (settings.overrideThreadGroupSizeY == NotOverrideThreadGroupSizeY) &&
+        (settings.overrideThreadGroupSizeZ == NotOverrideThreadGroupSizeZ))
+    {
+        if (threadIdSwizzleMode)
+        {
+            pPipelineBuildInfo->options.forceCsThreadIdSwizzling = threadIdSwizzleMode;
+        }
+    }
+    else
+    {
+        pPipelineBuildInfo->options.forceCsThreadIdSwizzling = settings.forceCsThreadIdSwizzling;
+    }
+
+    if(overrideShaderThreadGroupSizeX != NotOverrideThreadGroupSizeX)
+    {
+        pPipelineBuildInfo->options.overrideThreadGroupSizeX = overrideShaderThreadGroupSizeX;
+    }
+    else
+    {
+        pPipelineBuildInfo->options.overrideThreadGroupSizeX = settings.overrideThreadGroupSizeX;
+    }
+
+    if(overrideShaderThreadGroupSizeY != NotOverrideThreadGroupSizeY)
+    {
+        pPipelineBuildInfo->options.overrideThreadGroupSizeY = overrideShaderThreadGroupSizeY;
+    }
+    else
+    {
+        pPipelineBuildInfo->options.overrideThreadGroupSizeY = settings.overrideThreadGroupSizeY;
+    }
+
+    if(overrideShaderThreadGroupSizeZ != NotOverrideThreadGroupSizeZ)
+    {
+        pPipelineBuildInfo->options.overrideThreadGroupSizeZ = overrideShaderThreadGroupSizeZ;
+    }
+    else
+    {
+        pPipelineBuildInfo->options.overrideThreadGroupSizeZ = settings.overrideThreadGroupSizeZ;
+    }
 
     // By default the client hash provided to PAL is more accurate than the one used by pipeline
     // profiles.
@@ -435,6 +571,157 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
 
     return result;
 }
+
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+void HelperThreadBuildRayTracingElf(
+    void* pPayload)
+{
+    LlpcHelperThreadProvider::HelperThreadProviderPayload* pHelperPayload =
+        static_cast<LlpcHelperThreadProvider::HelperThreadProviderPayload*>(pPayload);
+
+    pHelperPayload->pFunction(pHelperPayload->pHelperProvider, pHelperPayload->pPayload);
+}
+
+// =====================================================================================================================
+void LlpcHelperThreadProvider::SetTasks(
+    ThreadFunction* pFunction,
+    uint32_t        numTasks,
+    void*           pPayload)
+{
+    m_pDeferredWorkload->Execute = &HelperThreadBuildRayTracingElf;
+    m_payload = { this, pFunction, pPayload };
+    m_pDeferredWorkload->pPayloads = &m_payload;
+    Util::AtomicExchange(&m_pDeferredWorkload->totalInstances, numTasks);
+}
+
+// =====================================================================================================================
+bool LlpcHelperThreadProvider::GetNextTask(
+    uint32_t* pTaskIndex)
+{
+    VK_ASSERT(pTaskIndex != nullptr);
+    *pTaskIndex = Util::AtomicIncrement(&m_pDeferredWorkload->nextInstance) - 1;
+    return (*pTaskIndex < m_pDeferredWorkload->totalInstances);
+}
+
+// =====================================================================================================================
+void LlpcHelperThreadProvider::TaskCompleted()
+{
+    uint32_t completedInstances = Util::AtomicIncrement(&m_pDeferredWorkload->completedInstances);
+    if (completedInstances == m_pDeferredWorkload->totalInstances)
+    {
+        m_pDeferredWorkload->event.Set();
+    }
+}
+
+// =====================================================================================================================
+void LlpcHelperThreadProvider::WaitForTasks()
+{
+    while (m_pDeferredWorkload->completedInstances < m_pDeferredWorkload->totalInstances)
+    {
+        m_pDeferredWorkload->event.Wait(1.0f);
+    }
+}
+
+// =====================================================================================================================
+// Creates ray tracing pipeline binary.
+VkResult CompilerSolutionLlpc::CreateRayTracingPipelineBinary(
+    Device*                             pDevice,
+    uint32_t                            deviceIdx,
+    PipelineCache*                      pPipelineCache,
+    RayTracingPipelineBinaryCreateInfo* pCreateInfo,
+    RayTracingPipelineBinary*           pPipelineBinary,
+    void*                               pPipelineDumpHandle,
+    uint64_t                            pipelineHash,
+    Util::MetroHash::Hash*              pCacheId,
+    int64_t*                            pCompileTime)
+{
+    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
+    auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+
+    VkResult result = VK_SUCCESS;
+
+    LlpcHelperThreadProvider llpcHelperThreadProvider(pCreateInfo->pDeferredWorkload);
+    LlpcHelperThreadProvider* pLlpcHelperThreadProvider = nullptr;
+    if (pCreateInfo->pDeferredWorkload != nullptr)
+    {
+        pLlpcHelperThreadProvider = &llpcHelperThreadProvider;
+    }
+
+    // Build the LLPC pipeline
+    Llpc::RayTracingPipelineBuildOut  pipelineOut = {};
+    void* pLlpcPipelineBuffer = nullptr;
+
+    int64_t startTime = Util::GetPerfCpuTime();
+    // Fill pipeline create info for LLPC
+    auto pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
+    pPipelineBuildInfo->pInstance = pInstance;
+    pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
+    pPipelineBuildInfo->pUserData = &pLlpcPipelineBuffer;
+    pPipelineBuildInfo->deviceIndex = deviceIdx;
+    pPipelineBuildInfo->deviceCount = m_pPhysicalDevice->Manager()->GetDeviceCount();
+    if ((pPipelineCache != nullptr) && (settings.shaderCacheMode != ShaderCacheDisable))
+    {
+        pPipelineBuildInfo->cache = pPipelineCache->GetCacheAdapter();
+    }
+
+    auto llpcResult = m_pLlpc->BuildRayTracingPipeline(pPipelineBuildInfo,
+                                                       &pipelineOut,
+                                                       pPipelineDumpHandle,
+                                                       pLlpcHelperThreadProvider);
+    // Update "hasTracyRay" flag
+    pCreateInfo->hasTraceRay = pipelineOut.hasTraceRay;
+    if (llpcResult != Vkgc::Result::Success)
+    {
+        // There shouldn't be anything to free for the failure case
+        VK_ASSERT(pLlpcPipelineBuffer == nullptr);
+        result = VK_ERROR_INITIALIZATION_FAILED;
+    }
+    else
+    {
+        const uint32_t shaderGroupHandleSize =
+            sizeof(Vkgc::RayTracingShaderIdentifier) * pipelineOut.shaderGroupHandle.shaderHandleCount;
+
+        for (unsigned i = 0; i < pipelineOut.pipelineBinCount; ++i)
+        {
+            pPipelineBinary->pPipelineBins[i].pCode = pipelineOut.pipelineBins[i].pCode;
+            pPipelineBinary->pPipelineBins[i].codeSize = pipelineOut.pipelineBins[i].codeSize;
+        }
+        pPipelineBinary->pipelineBinCount = pipelineOut.pipelineBinCount;
+
+        auto shaderPropSetSize = pipelineOut.shaderPropSet.shaderCount * sizeof(Vkgc::RayTracingShaderProperty);
+        if (shaderPropSetSize > 0)
+        {
+            Vkgc::RayTracingShaderProperty* pShaderProp = pPipelineBinary->shaderPropSet.shaderProps;
+            memcpy(pShaderProp, pipelineOut.shaderPropSet.shaderProps, shaderPropSetSize);
+        }
+        pPipelineBinary->shaderPropSet.shaderCount = pipelineOut.shaderPropSet.shaderCount;
+
+        memcpy(pPipelineBinary->shaderGroupHandle.shaderHandles, pipelineOut.shaderGroupHandle.shaderHandles, shaderGroupHandleSize);
+        pPipelineBinary->shaderGroupHandle.shaderHandleCount = pipelineOut.shaderGroupHandle.shaderHandleCount;
+        void* pOutShaderGroup = static_cast<void*>(pipelineOut.shaderGroupHandle.shaderHandles);
+    }
+    *pCompileTime = Util::GetPerfCpuTime() - startTime;
+
+    return result;
+}
+
+// =====================================================================================================================
+void CompilerSolutionLlpc::FreeRayTracingPipelineBinary(
+    RayTracingPipelineBinary* pPipelineBinary)
+{
+    // All pipeline binaries, including the pPipelineBins list, are packed into a single allocation that starts at the
+    // first pipeline.
+    if (pPipelineBinary->pipelineBinCount > 0)
+    {
+        auto pBin = &pPipelineBinary->pPipelineBins[0];
+        if (pBin->pCode != nullptr)
+        {
+            m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pBin->pCode));
+        }
+    }
+}
+#endif
 
 // =====================================================================================================================
 void CompilerSolutionLlpc::FreeGraphicsPipelineBinary(

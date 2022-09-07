@@ -44,6 +44,9 @@
 // Forward declare PAL classes used in this file
 namespace Pal
 {
+struct DynamicGraphicsShaderInfos;
+struct DynamicComputeShaderInfo;
+struct DynamicGraphicsShaderInfo;
 };
 
 // Forward declare Vulkan classes used in this file
@@ -117,6 +120,26 @@ public:
         ShaderStage                 shaderStage,
         const PipelineOptimizerKey& pipelineKey) const;
 
+    bool OverrideThreadIdSwizzleMode(
+        ShaderStage                 shaderStage,
+        const PipelineOptimizerKey& pipelineKey) const;
+
+    void OverrideShaderThreadGroupSize(
+        ShaderStage                 shaderStage,
+        const PipelineOptimizerKey& pipelineKey,
+        uint32_t*                   pThreadGroupSizeX,
+        uint32_t*                   pThreadGroupSizeY,
+        uint32_t*                   pThreadGroupSizeZ) const;
+
+    void CreateShaderOptimizerKey(
+        const void*            pModuleData,
+        const Pal::ShaderHash& shaderHash,
+        const ShaderStage      stage,
+        const size_t           shaderSize,
+        ShaderOptimizerKey*    pShaderKey) const;
+
+    bool HasMatchingProfileEntry(const PipelineOptimizerKey& pipelineKey) const;
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(ShaderOptimizer);
 
@@ -150,6 +173,10 @@ private:
         const PipelineProfilePattern& pattern,
         uint32_t                      shaderIndex,
         const PipelineOptimizerKey&   pipelineKey) const;
+
+    bool HasMatchingProfileEntry(
+        const PipelineProfile& profile,
+        const PipelineOptimizerKey& pipelineKey) const;
 
     void BuildTuningProfile();
     void BuildAppProfile();
