@@ -994,14 +994,15 @@ public:
         uint32_t        data);
 
     void PalCmdClearColorImage(
-        const Image&            image,
-        Pal::ImageLayout        imageLayout,
-        const Pal::ClearColor&  color,
-        Pal::uint32             rangeCount,
-        const Pal::SubresRange* pRanges,
-        Pal::uint32             boxCount,
-        const Pal::Box*         pBoxes,
-        Pal::uint32             flags);
+        const Image&               image,
+        Pal::ImageLayout           imageLayout,
+        const Pal::ClearColor&     color,
+        const Pal::SwizzledFormat& clearFormat,
+        Pal::uint32                rangeCount,
+        const Pal::SubresRange*    pRanges,
+        Pal::uint32                boxCount,
+        const Pal::Box*            pBoxes,
+        Pal::uint32                flags);
 
     void PalCmdClearDepthStencil(
         const Image&            image,
@@ -2383,6 +2384,13 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplateKHR(
     VkPipelineLayout                            layout,
     uint32_t                                    set,
     const void*                                 pData);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetVertexInputEXT(
+    VkCommandBuffer                              commandBuffer,
+    uint32_t                                     vertexBindingDescriptionCount,
+    const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
+    uint32_t                                     vertexAttributeDescriptionCount,
+    const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions);
 
 } // namespace entry
 

@@ -70,40 +70,6 @@ static bool IsDynamicStateEnabled(const uint32_t dynamicStateFlags, const Dynami
 }
 
 #if VKI_RAY_TRACING
-#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION < 15
-// =====================================================================================================================
-// Populates GpuRt::ShaderLibEntryInfo
-static void GpuRtShaderEntryInfo(
-    const PhysicalDevice*              pDevice,
-    const GpuRt::ShaderLibEntry        patchType,
-    const GpuRt::AccelStructMemLayout& memLayout,
-    GpuRt::ShaderLibEntryInfo&         shaderLibEntryInfo)
-{
-    shaderLibEntryInfo.type      = patchType;
-    shaderLibEntryInfo.flags     = 0;
-    shaderLibEntryInfo.memLayout = memLayout;
-
-    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
-
-    if (settings.rtTraceRayCounterMode != TraceRayCounterDisable)
-    {
-        shaderLibEntryInfo.flags |= GpuRt::ShaderEntrySupportCounters;
-    }
-
-    // If HwIntersectRay is enabled and the HW supports it
-    if ((settings.rtEnableHwIntersectRay == true) &&
-        pDevice->HwSupportsRayTracing())
-    {
-        shaderLibEntryInfo.flags |= GpuRt::ShaderEntryHwIsect;
-    }
-
-    if (settings.rtTraceRayProfileFlags != TraceRayProfileDisable)
-    {
-        shaderLibEntryInfo.flags |= GpuRt::ShaderEntrySupportProfiling;
-    }
-
-}
-#else
 // =====================================================================================================================
 // Populates shaderLibrary input flags according to settings
 static uint32_t GpuRtShaderLibraryFlags(
@@ -126,7 +92,6 @@ static uint32_t GpuRtShaderLibraryFlags(
 
     return flags;
 }
-#endif
 #endif
 
 // =====================================================================================================================
@@ -1120,7 +1085,9 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
                                                                             : nullptr;
 
     int64_t startTime = 0;
-    if (shouldCompile && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr)))
+    if (shouldCompile
+        && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr))
+        )
     {
         // Search optimized pipeline first
         if (optimizedPipelineHash != 0)
@@ -1167,7 +1134,9 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, pipelineInfo, dumpHash);
     }
 
-    if (shouldCompile && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr)))
+    if (shouldCompile
+        && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr))
+        )
     {
         if (shouldCompile)
         {
@@ -1189,7 +1158,8 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
     if (shouldCompile)
     {
-        if (pCreateInfo->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT)
+        if ((settings.ignoreFlagFailOnPipelineCompileRequired == false) &&
+            (pCreateInfo->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT))
         {
             result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
         }
@@ -1424,7 +1394,8 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
     if (shouldCompile)
     {
-        if (pCreateInfo->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT)
+        if ((settings.ignoreFlagFailOnPipelineCompileRequired == false) &&
+            (pCreateInfo->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT))
         {
             result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
         }
@@ -2327,12 +2298,15 @@ static void BuildVertexInputInterfaceState(
     GraphicsPipelineBinaryCreateInfo*   pCreateInfo,
     VbBindingInfo*                      pVbInfo)
 {
+    if (pIn->pInputAssemblyState)
+    {
+        pCreateInfo->pipelineInfo.iaState.topology           = pIn->pInputAssemblyState->topology;
+        pCreateInfo->pipelineInfo.iaState.disableVertexReuse = false;
+    }
+
     if (pIn->pVertexInputState)
     {
         pCreateInfo->pipelineInfo.pVertexInput               = pIn->pVertexInputState;
-        pCreateInfo->pipelineInfo.iaState.topology           = pIn->pInputAssemblyState->topology;
-        pCreateInfo->pipelineInfo.iaState.disableVertexReuse = false;
-
         if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInputBindingStrideExt) == true)
         {
             pCreateInfo->pipelineInfo.dynamicVertexStride = true;
@@ -2477,11 +2451,12 @@ static void BuildExecutablePipelineState(
     // are valid in this pipeline.
     const Vkgc::GraphicsPipelineBuildInfo& pipelineInfo = pCreateInfo->pipelineInfo;
     uint32_t shaderMask = 0;
-    shaderMask |= (pipelineInfo.vs.pModuleData  != nullptr) ? ShaderStageBit::ShaderStageVertexBit      : 0;
-    shaderMask |= (pipelineInfo.tcs.pModuleData != nullptr) ? ShaderStageBit::ShaderStageTessControlBit : 0;
-    shaderMask |= (pipelineInfo.tes.pModuleData != nullptr) ? ShaderStageBit::ShaderStageTessEvalBit    : 0;
-    shaderMask |= (pipelineInfo.gs.pModuleData  != nullptr) ? ShaderStageBit::ShaderStageGeometryBit    : 0;
-    shaderMask |= (pipelineInfo.fs.pModuleData  != nullptr) ? ShaderStageBit::ShaderStageFragmentBit    : 0;
+    constexpr auto StageNone = static_cast<Vkgc::ShaderStageBit>(0);
+    shaderMask |= (pipelineInfo.vs.pModuleData  != nullptr) ? ShaderStageBit::ShaderStageVertexBit      : StageNone;
+    shaderMask |= (pipelineInfo.tcs.pModuleData != nullptr) ? ShaderStageBit::ShaderStageTessControlBit : StageNone;
+    shaderMask |= (pipelineInfo.tes.pModuleData != nullptr) ? ShaderStageBit::ShaderStageTessEvalBit    : StageNone;
+    shaderMask |= (pipelineInfo.gs.pModuleData  != nullptr) ? ShaderStageBit::ShaderStageGeometryBit    : StageNone;
+    shaderMask |= (pipelineInfo.fs.pModuleData  != nullptr) ? ShaderStageBit::ShaderStageFragmentBit    : StageNone;
     BuildCompilerInfo(pDevice, pShaderInfo, shaderMask, pCreateInfo);
 
     if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
@@ -2523,21 +2498,9 @@ static void BuildExecutablePipelineState(
     {
         pDefaultCompiler->SetRayTracingState(pDevice, &(pCreateInfo->pipelineInfo.rtState), 0);
 
-#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION < 15
-        GpuRt::ShaderLibEntryInfo patchInfo = {};
-
-        GpuRtShaderEntryInfo(
-            pDevice->VkPhysicalDevice(DefaultDeviceIndex),
-            GpuRt::ShaderLibEntry::DxrRayQuery,
-            pDevice->RayTrace()->BuildConfig().memLayout,
-            patchInfo);
-
-        const GpuRt::PipelineShaderCode codePatch = GpuRt::Device::GetShaderLibraryData(patchInfo);
-#else
         uint32_t flags = GpuRtShaderLibraryFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex));
 
-        const GpuRt::PipelineShaderCode codePatch = GpuRt::Device::GetShaderLibraryData(flags);
-#endif
+        const GpuRt::PipelineShaderCode codePatch = GpuRt::GetShaderLibraryCode(flags);
 
         VK_ASSERT(codePatch.dxilSize > 0);
 
@@ -2645,6 +2608,12 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             &pCreateInfo->pipelineInfo.gs,
             &pCreateInfo->pipelineInfo.fs,
         };
+
+        if (pIn->renderPass != VK_NULL_HANDLE)
+        {
+            const RenderPass* pRenderPass      = RenderPass::ObjectFromHandle(pIn->renderPass);
+            pCreateInfo->pipelineInfo.fs.options.forceLateZ = pRenderPass->IsForceLateZNeeded();
+        }
 
         uint32_t availableStageMask = 0;
 
@@ -2769,6 +2738,10 @@ void PipelineCompiler::ApplyPipelineOptions(
     pOptions->shadowDescriptorTablePtrHigh =
           static_cast<uint32_t>(info.gpuMemoryProperties.shadowDescTableVaStart >> 32);
 
+#if VKI_RAY_TRACING
+    pOptions->rtMaxRayLength = settings.rtMaxRayLength;
+#endif
+
     pOptions->pageMigrationEnabled = info.gpuMemoryProperties.flags.pageMigrationEnabled;
 
     pOptions->enableRelocatableShaderElf = settings.enableRelocatableShaders;
@@ -2780,6 +2753,8 @@ void PipelineCompiler::ApplyPipelineOptions(
 
     pOptions->threadGroupSwizzleMode =
         static_cast<Vkgc::ThreadGroupSwizzleMode>(settings.forceCsThreadGroupSwizzleMode);
+
+    pOptions->reverseThreadGroup = settings.enableAlternatingThreadGroupOrder;
 
     if (pDevice->GetEnabledFeatures().robustBufferAccessExtended)
     {
@@ -2887,21 +2862,9 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 
         if (pDevice->RayTrace() != nullptr)
         {
-#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION < 15
-            GpuRt::ShaderLibEntryInfo patchInfo = {};
-
-            GpuRtShaderEntryInfo(
-                m_pPhysicalDevice,
-                GpuRt::ShaderLibEntry::DxrRayQuery,
-                pDevice->RayTrace()->BuildConfig().memLayout,
-                patchInfo);
-
-            const GpuRt::PipelineShaderCode codePatch = GpuRt::Device::GetShaderLibraryData(patchInfo);
-#else
             uint32_t flags = GpuRtShaderLibraryFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex));
 
-            const GpuRt::PipelineShaderCode codePatch = GpuRt::Device::GetShaderLibraryData(flags);
-#endif
+            const GpuRt::PipelineShaderCode codePatch = GpuRt::GetShaderLibraryCode(flags);
             VK_ASSERT(codePatch.dxilSize > 0);
 
             // Include the GPURT ray query code to the pipeline shader library
@@ -3303,21 +3266,9 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
             pCreateInfo->allowShaderInlining = false;
         }
 
-#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION < 15
-        GpuRt::ShaderLibEntryInfo patchInfo = {};
-
-        GpuRtShaderEntryInfo(
-            m_pPhysicalDevice,
-            GpuRt::ShaderLibEntry::TraceRays,
-            pDevice->RayTrace()->BuildConfig().memLayout,
-            patchInfo);
-
-        const GpuRt::PipelineShaderCode codePatch = GpuRt::Device::GetShaderLibraryData(patchInfo);
-#else
         uint32_t flags = GpuRtShaderLibraryFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex));
 
-        const GpuRt::PipelineShaderCode codePatch = GpuRt::Device::GetShaderLibraryData(flags);
-#endif
+        const GpuRt::PipelineShaderCode codePatch = GpuRt::GetShaderLibraryCode(flags);
         VK_ASSERT(codePatch.dxilSize > 0);
 
         pCreateInfo->pipelineInfo.shaderTraceRay.pCode = codePatch.pDxilCode;
@@ -3481,7 +3432,9 @@ VkResult PipelineCompiler::CreateRayTracingPipelineBinary(
     PipelineBinaryCache* pPipelineBinaryCache = (pPipelineCache != nullptr) ? pPipelineCache->GetPipelineCache()
                                                                             : nullptr;
 
-    if (shouldCompile && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr)))
+    if (shouldCompile
+        && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr))
+        )
     {
         GetRayTracingPipelineCacheId(
             deviceIdx,
@@ -3513,7 +3466,8 @@ VkResult PipelineCompiler::CreateRayTracingPipelineBinary(
 
     if (shouldCompile)
     {
-        if (pCreateInfo->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT)
+        if ((settings.ignoreFlagFailOnPipelineCompileRequired == false) &&
+            (pCreateInfo->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT))
         {
             result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
         }
@@ -3791,9 +3745,7 @@ void PipelineCompiler::SetRayTracingState(
     pRtState->dispatchRaysThreadGroupSize           = settings.dispatchRaysThreadGroupSize;
     pRtState->ldsSizePerThreadGroup                 = deviceProp.gfxipProperties.shaderCore.ldsSizePerThreadGroup;
 
-#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION >= 15
     CompilerSolution::UpdateRayTracingFunctionNames(pDevice, pRtState);
-#endif
 }
 
 // =====================================================================================================================

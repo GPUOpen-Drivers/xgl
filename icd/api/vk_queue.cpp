@@ -714,9 +714,15 @@ VkResult Queue::Submit(
                         // PerQueue level tmz submission supported. Prepare this path for compute engine.
                         if (m_tmzPerQueue)
                         {
-                            const CmdBuffer& cmdBuf = *(*pCommandBuffers[0]);
+                            bool isProtected = false;
 
-                            if (cmdBuf.IsProtected())
+                            if (perSubQueueInfo.cmdBufferCount > 0)
+                            {
+                                const CmdBuffer& cmdBuf = *(*pCommandBuffers[0]);
+                                isProtected = cmdBuf.IsProtected();
+                            }
+
+                            if (isProtected)
                             {
                                 // If the previous submit is non-tmz, but the current submit is tmz, trigger queue switch.
                                 // Add semaphore between tmz and none-tmz queue, tmz queue wait non-tmz queue done.

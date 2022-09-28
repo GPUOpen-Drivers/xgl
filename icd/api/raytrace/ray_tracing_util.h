@@ -37,28 +37,6 @@ namespace vk
 #define MAKE_GPURT_VERSION(MAJOR, MINOR) ((MAJOR << 16) | MINOR)
 
 // =====================================================================================================================
-// Check if need to force fp16 mode off
-inline bool ForceFp16BoxNodesOff(
-    const Device*                        pDevice,
-    const GpuRt::AccelStructBuildInputs& inputs)
-{
-    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
-    const bool allowUpdate = inputs.flags & GpuRt::AccelStructBuildFlagAllowUpdate;
-    const bool allowCompaction = inputs.flags & GpuRt::AccelStructBuildFlagAllowCompaction;
-
-    // Disable fp16 mode if
-    // 1-) AllowUpdate set when not allowed by panel setting
-    // 2-) TLAS
-    // 3-) AllowCompaction not set when required by panel setting
-    // Otherwise, respect the fp16 mode passed in from device settings
-    const bool forceFp16BoxOffBLAS = (inputs.type == GpuRt::AccelStructType::TopLevel) ||
-                                     ((settings.rtAllowFp16BoxNodesInUpdatableBVH == false) && allowUpdate) ||
-                                     (settings.fp16BoxNodesRequireCompactionFlag && (allowCompaction == false));
-
-    return forceFp16BoxOffBLAS;
-}
-
-// =====================================================================================================================
 // Converts a Vulkan triangle compression mode setting to the GpuRT equivalent of TriangleCompressionMode
 inline GpuRt::TriangleCompressionMode ConvertGpuRtTriCompressMode(
      TriangleCompressionMode vkMode)

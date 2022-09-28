@@ -958,6 +958,18 @@
       "Scope": "Driver"
     },
     {
+      "Name": "IgnoreFlagFailOnPipelineCompileRequired",
+      "Description": "This setting can be used to ignore flag VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT in pipeline compile.",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Name": "FullscreenFrameMetadataSupport",
       "Description": "Support Fullscreen Frame Metadata.",
       "Tags": [
@@ -1752,51 +1764,69 @@
           },
           {
             "Description": "Enable for vertex shaders",
-            "Value": 1
-          },
-          {
-            "Description": "Enable for tessellation control shaders",
             "Value": 2
           },
           {
-            "Description": "Enable for tessellation evaluation shaders",
+            "Description": "Enable for tessellation control shaders",
             "Value": 4
           },
           {
-            "Description": "Enable for geometry shaders",
+            "Description": "Enable for tessellation evaluation shaders",
             "Value": 8
           },
           {
-            "Description": "Enable for fragment shaders",
+            "Description": "Enable for geometry shaders",
             "Value": 16
           },
           {
-            "Description": "Enable for compute shaders",
-            "Value": 32
-          },
-          {
-            "Description": "Enable for raygen shaders",
+            "Description": "Enable for fragment shaders",
             "Value": 64
           },
           {
-            "Description": "Enable for intersect shaders",
+            "Description": "Enable for compute shaders",
             "Value": 128
           },
           {
+            "Description": "Enable for raygen shaders",
+            "Value": 256,
+            "BuildTypes": [
+              "VKI_RAY_TRACING"
+            ]
+          },
+          {
+            "Description": "Enable for intersect shaders",
+            "Value": 512,
+            "BuildTypes": [
+              "VKI_RAY_TRACING"
+            ]
+          },
+          {
             "Description": "Enable for any hit shaders",
-            "Value": 256
+            "Value": 1024,
+            "BuildTypes": [
+              "VKI_RAY_TRACING"
+            ]
           },
           {
             "Description": "Enable for closest hit shaders",
-            "Value": 512
+            "Value": 2048,
+            "BuildTypes": [
+              "VKI_RAY_TRACING"
+            ]
           },
           {
             "Description": "Enable for miss shaders",
-            "Value": 1024
+            "Value": 4096,
+            "BuildTypes": [
+              "VKI_RAY_TRACING"
+            ]
           },
           {
             "Description": "Enable for callable shaders",
-            "Value": 2048
+            "Value": 8192,
+            "BuildTypes": [
+              "VKI_RAY_TRACING"
+            ]
           }
         ]
       },
@@ -2161,6 +2191,51 @@
       },
       "Scope": "Driver",
       "Type": "uint64"
+    },
+    {
+      "Name": "PipelineCacheCompression",
+      "Description": "PAL Compressing Cache Layer",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": "PipelineCacheCompressDisabled"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "PipelineCacheCompression",
+        "Values": [
+          {
+            "Name": "PipelineCacheCompressDisabled",
+            "Value": 0,
+            "Description": "No compression"
+          },
+          {
+            "Name": "PipelineCacheCompressInMemory",
+            "Value": 1,
+            "Description": "In-memory and on-disk compression"
+          },
+          {
+            "Name": "PipelineCacheCompressOnDisk",
+            "Value": 2,
+            "Description": "On-disk compression only"
+          }
+        ]
+      },
+      "Scope": "Driver",
+      "Type": "enum"
+    },
+    {
+      "Name": "PipelineCacheUseHighCompression",
+      "Description": "Use high compression codec",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool"
     },
     {
       "Name": "FilterPipelineDumpByType",
@@ -3063,6 +3138,21 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Percentage of LDS to use for traversal stack vs. LDS spilling for indirect AnyHit/Intersection shaders, when EnableOptimalLdsStackSizeForIndirect = true and EnableLdsSpilling = true. The LDS stack size calculated is clamped to a power of 2.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 1.0
+      },
+      "Type": "float",
+      "Name": "LdsStackSizeVsSpillingRatio",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Default LDS traversal stack size per thread in DWORDs, when EnableOptimalLdsStackSizeForUnified / EnableOptimalLdsStackSizeForIndirect = false. It is clamped to a power of 2.",
       "Tags": [
         "Ray Tracing"
@@ -3075,6 +3165,21 @@
       },
       "Type": "uint32",
       "Name": "LdsStackSize",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable spilling to LDS instead of scratch for indirect functions.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "EnableLdsSpilling",
       "Scope": "Driver"
     },
     {
@@ -5244,12 +5349,12 @@
     },
     {
       "Name": "AlwaysReportHdrFormats",
-      "Description": "Always report HDR formats(If monitor supports them) to the application.",
+      "Description": "Always report HDR formats (If monitor supports them) to the application.",
       "Tags": [
         "General"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Scope": "Driver",
       "Type": "bool"
@@ -5864,6 +5969,18 @@
       "Name": "OverrideLocalHeapSizeInGBs"
     },
     {
+      "Description": "Forces the memoryBudget value used in SW addrlib to determine the minSizeBlk for textures. It must be >= 0.0. When in [0.0, 1.0) addrlib uses legacy logic to decide minSizeBlk. When == 1.0 addrlib uses minimizeAlign. Values > 1.0 (recommended <= 3.5) will apply memory budget algorithm to addrlib. NOTE:Despite 1.5 in tests show significant texture allocation size reduction, default value 0.0 (legacy behavior) is recommended unless this is set for specific apps on specific ASICs",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": 0.0
+      },
+      "Scope": "Driver",
+      "Type": "float",
+      "Name": "ImageMemoryBudget"
+    },
+    {
       "Description": "for APU, set local and local invisibl heap size to 0, Force to use system memory.",
       "Tags": [
         "Memory"
@@ -6394,6 +6511,18 @@
       "Scope": "Driver"
     },
     {
+      "Description": "If set, a depth stencil image with transfer usage bit is implicitly allowed to be in resolve_src or resolve_dst layout.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "ForceResolveLayoutForDepthStencilTransferUsage",
+      "Scope": "Driver"
+    },
+    {
       "Name": "RenderStateCacheEnable",
       "Description": "This bitmask denotes which subset of pipeline render state is cached at the device-level. Caching render state enables more efficient redundancy checking when recording command buffers.  This redundancy checking is mainly limited to pipeline state that is either invisible to the API (e.g. certain PAL objects) or state that the application has marked in the pipeline as non-dynamic, meaning its values are programmed during pipeline bind.",
       "Tags": [
@@ -6636,7 +6765,7 @@
         "Optimization"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Scope": "Driver",
       "Type": "bool"
@@ -8008,6 +8137,22 @@
       },
       "Type": "bool",
       "VariableName": "forceInvalidAccelStruct",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "MaxRayLength",
+      "Description": "Override the maximum extent of the ray, this value overrides the application specified rayDesc.tMax value.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 0.0
+      },
+      "Type": "float",
+      "VariableName": "rtMaxRayLength",
       "Scope": "Driver"
     }
   ]

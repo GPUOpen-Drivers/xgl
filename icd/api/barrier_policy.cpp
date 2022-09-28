@@ -299,9 +299,13 @@ static uint32_t ImageLayoutToCacheMask(VkImageLayout imageLayout)
 // Converts source access flags to source cache coherency flags.
 static uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLayout imageLayout)
 {
-    uint32_t cacheMask = (((imageLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) ||
-                          (imageLayout == VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR)) ?
-                          Pal::CoherPresent : 0);
+    uint32_t cacheMask = 0;
+
+    if ((imageLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) ||
+        (imageLayout == VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR))
+    {
+        cacheMask |= Pal::CoherPresent;
+    }
 
     if (accessMask & (VK_ACCESS_SHADER_WRITE_BIT                     |
 #if VKI_RAY_TRACING
@@ -361,9 +365,13 @@ static uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLayout image
 // Converts destination access flags to destination cache coherency flags.
 static uint32_t DstAccessToCacheMask(AccessFlags accessMask, VkImageLayout imageLayout)
 {
-    uint32_t cacheMask = (((imageLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) ||
-                          (imageLayout == VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR)) ?
-                          Pal::CoherPresent : 0);
+    uint32_t cacheMask = 0;
+
+    if ((imageLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) ||
+        (imageLayout == VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR))
+    {
+        cacheMask |= Pal::CoherPresent;
+    }
 
     if (accessMask & VK_ACCESS_INDIRECT_COMMAND_READ_BIT)
     {

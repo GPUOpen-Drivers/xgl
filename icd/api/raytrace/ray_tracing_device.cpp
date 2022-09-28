@@ -75,26 +75,58 @@ VkResult RayTracingDevice::Init()
 
     for (uint32_t deviceIdx = 0; (result == VK_SUCCESS) && (deviceIdx < m_pDevice->NumPalDevices()); ++deviceIdx)
     {
-        GpuRt::DeviceInitInfo initInfo = {};
+        void* pMemory =
+            m_pDevice->VkInstance()->AllocMem(
+                GpuRt::GetDeviceSize(),
+                VK_DEFAULT_MEM_ALIGN,
+                VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
 
-        initInfo.pDeviceProperties         = &m_pDevice->VkPhysicalDevice(deviceIdx)->PalProperties();
-        initInfo.gpuIdx                    = deviceIdx;
-        initInfo.deviceSettings            = m_gpurtDeviceSettings;
-        initInfo.pPalDevice                = m_pDevice->PalDevice(deviceIdx);
-        initInfo.pPalPlatform              = m_pDevice->VkInstance()->PalPlatform();
-        initInfo.pClientUserData           = m_pDevice;
-        initInfo.pAccelStructTracker       = GetAccelStructTracker(deviceIdx);
-        initInfo.accelStructTrackerGpuAddr = GetAccelStructTrackerGpuVa(deviceIdx);
-
-        Pal::Result palResult        = m_gpuRtDevice[deviceIdx].Init(initInfo);
-
-        if (palResult != Pal::Result::Success)
+        if (pMemory == nullptr)
         {
-            VK_NEVER_CALLED();
-
-            result = VK_ERROR_INITIALIZATION_FAILED;
+            result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
         }
+        else
+        {
+            GpuRt::DeviceInitInfo initInfo = {};
 
+            initInfo.pDeviceProperties         = &m_pDevice->VkPhysicalDevice(deviceIdx)->PalProperties();
+            initInfo.gpuIdx                    = deviceIdx;
+            initInfo.deviceSettings            = m_gpurtDeviceSettings;
+            initInfo.pPalDevice                = m_pDevice->PalDevice(deviceIdx);
+            initInfo.pPalPlatform              = m_pDevice->VkInstance()->PalPlatform();
+            initInfo.pClientUserData           = m_pDevice;
+            initInfo.pAccelStructTracker       = GetAccelStructTracker(deviceIdx);
+            initInfo.accelStructTrackerGpuAddr = GetAccelStructTrackerGpuVa(deviceIdx);
+
+            GpuRt::ClientCallbacks callbacks             = {};
+            callbacks.pfnInsertRGPMarker                 = &RayTracingDevice::ClientInsertRGPMarker;
+            callbacks.pfnConvertAccelStructBuildGeometry =
+                &AccelerationStructure::ClientConvertAccelStructBuildGeometry;
+            callbacks.pfnConvertAccelStructBuildInstanceBottomLevel =
+                &AccelerationStructure::ClientConvertAccelStructBuildInstanceBottomLevel;
+            callbacks.pfnConvertAccelStructPostBuildInfo =
+                &AccelerationStructure::ClientConvertAccelStructPostBuildInfo;
+            callbacks.pfnAccelStructBuildDumpEvent       = &RayTracingDevice::ClientAccelStructBuildDumpEvent;
+            callbacks.pfnAccelStatsBuildDumpEvent        = &RayTracingDevice::ClientAccelStatsBuildDumpEvent;
+            callbacks.pfnCreateInternalComputePipeline   = &RayTracingDevice::ClientCreateInternalComputePipeline;
+            callbacks.pfnDestroyInternalComputePipeline  = &RayTracingDevice::ClientDestroyInternalComputePipeline;
+            callbacks.pfnAcquireCmdContext               = &RayTracingDevice::ClientAcquireCmdContext;
+            callbacks.pfnFlushCmdContext                 = &RayTracingDevice::ClientFlushCmdContext;
+            callbacks.pfnAllocateGpuMemory               = &RayTracingDevice::ClientAllocateGpuMemory;
+            callbacks.pfnFreeGpuMem                      = &RayTracingDevice::ClientFreeGpuMem;
+
+            Pal::Result palResult = GpuRt::CreateDevice(initInfo, callbacks, pMemory, &m_pGpuRtDevice[deviceIdx]);
+
+            if (palResult != Pal::Result::Success)
+            {
+                m_pDevice->VkInstance()->FreeMem(pMemory);
+
+                VK_NEVER_CALLED();
+
+                result = VK_ERROR_INITIALIZATION_FAILED;
+            }
+
+        }
     }
 
     return result;
@@ -170,6 +202,7 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->ltdQualityFactorFastBuild         = settings.ltdQualityFactorFastBuild;
     pDeviceSettings->ltdQualityFactorDefaultBuild      = settings.ltdQualityFactorDefaultBuild;
     pDeviceSettings->numMortonSizeBits                 = settings.numMortonSizeBits;
+    pDeviceSettings->allowFp16BoxNodesInUpdatableBvh   = settings.rtAllowFp16BoxNodesInUpdatableBVH;
 
     pDeviceSettings->enableBuildAccelStructScratchDumping = pDeviceSettings->enableBuildAccelStructDumping &&
                                                             settings.rtEnableAccelerationStructureScratchMemoryDump;
@@ -203,12 +236,18 @@ void RayTracingDevice::Destroy()
         }
     }
 
-    // Free accel struct tracker GPU memory
+    // Free accel struct tracker GPU memory and GpuRT::IDevice
     for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); ++deviceIdx)
     {
         if (m_accelStructTrackerResources[deviceIdx].pMem != nullptr)
         {
             m_pDevice->MemMgr()->FreeGpuMem(m_accelStructTrackerResources[deviceIdx].pMem);
+        }
+
+        if (m_pGpuRtDevice[deviceIdx] != nullptr)
+        {
+            m_pGpuRtDevice[deviceIdx]->Destroy();
+            m_pDevice->VkInstance()->FreeMem(m_pGpuRtDevice[deviceIdx]);
         }
     }
 
@@ -229,7 +268,7 @@ bool RayTracingDevice::AccelStructTrackerEnabled(
 {
     return (GetAccelStructTracker(deviceIdx) != nullptr) &&
             (m_pDevice->GetRuntimeSettings().enableTraceRayAccelStructTracking ||
-             m_gpuRtDevice[deviceIdx].AccelStructTraceEnabled());
+             m_pGpuRtDevice[deviceIdx]->AccelStructTraceEnabled());
 }
 
 // =====================================================================================================================
@@ -478,21 +517,15 @@ uint64_t RayTracingDevice::GetAccelerationStructureUUID(
     return static_cast<uint64_t>(gfxip) << 32 | vk::utils::GetBuildTimeHash();
 }
 
-}; // namespace vk
-
-// These GpuRtClient* functions below are required driver-provided code by the gpurt component.
-namespace GpuRt
-{
-
 // =====================================================================================================================
 // Compile one of gpurt's internal pipelines.
-Pal::Result ClientCreateInternalComputePipeline(
-    const DeviceInitInfo&       initInfo,              ///< [in]  Information about the host device
-    const PipelineBuildInfo&    buildInfo,             ///< [in]  Information about the pipeline to be built
-    const CompileTimeConstants& compileConstants,      ///< [in]  Compile time constant buffer description
-    Pal::IPipeline**            ppResultPipeline,      ///< [out] Result PAL pipeline object pointer
-    void**                      ppResultMemory)        ///< [out] (Optional) Result PAL pipeline memory,
-                                                       ///< if different from obj
+Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
+    const GpuRt::DeviceInitInfo&        initInfo,              ///< [in]  Information about the host device
+    const GpuRt::PipelineBuildInfo&     buildInfo,             ///< [in]  Information about the pipeline to be built
+    const GpuRt::CompileTimeConstants&  compileConstants,      ///< [in]  Compile time constant buffer description
+    Pal::IPipeline**                    ppResultPipeline,      ///< [out] Result PAL pipeline object pointer
+    void**                              ppResultMemory)        ///< [out] (Optional) Result PAL pipeline memory,
+                                                               ///< if different from obj
 {
     uint64_t spvPassMask =
         static_cast<vk::Device*>(initInfo.pClientUserData)->GetRuntimeSettings().rtInternalPipelineSpvPassMask;
@@ -508,13 +541,13 @@ Pal::Result ClientCreateInternalComputePipeline(
     {
         VkResult result = VK_SUCCESS;
 
-        vk::PipelineCompiler*  pCompiler          = pDevice->GetCompiler(initInfo.gpuIdx);
-        vk::ShaderModuleHandle shaderModule       = {};
-        const void*            pPipelineBinary    = nullptr;
-        size_t                 pipelineBinarySize = 0;
+        vk::PipelineCompiler* pCompiler     = pDevice->GetCompiler(initInfo.gpuIdx);
+        vk::ShaderModuleHandle shaderModule = {};
+        const void* pPipelineBinary         = nullptr;
+        size_t pipelineBinarySize           = 0;
 
-        Vkgc::ResourceMappingRootNode nodes[GpuRt::MaxInternalPipelineNodes] = {};
-        Vkgc::ResourceMappingNode subNodes[GpuRt::MaxInternalPipelineNodes] = {};
+        Vkgc::ResourceMappingRootNode nodes[GpuRt::MaxInternalPipelineNodes]    = {};
+        Vkgc::ResourceMappingNode subNodes[GpuRt::MaxInternalPipelineNodes]     = {};
         uint32_t subNodeIndex = 0;
         const uint32_t bufferSrdSizeDw = pDevice->GetProperties().descriptorSizes.bufferView / sizeof(uint32_t);
 
@@ -529,57 +562,60 @@ Pal::Result ClientCreateInternalComputePipeline(
 
             if (node.type == GpuRt::NodeType::Constant)
             {
-                nodes[nodeIndex].node.type             = Vkgc::ResourceMappingNodeType::PushConst;
-                nodes[nodeIndex].node.sizeInDwords     = node.dwSize;
-                nodes[nodeIndex].node.offsetInDwords   = node.dwOffset;
-                nodes[nodeIndex].node.srdRange.set     = Vkgc::InternalDescriptorSetId;
-                nodes[nodeIndex].node.srdRange.binding = node.binding;
+                nodes[nodeIndex].node.type              = Vkgc::ResourceMappingNodeType::PushConst;
+                nodes[nodeIndex].node.sizeInDwords      = node.dwSize;
+                nodes[nodeIndex].node.offsetInDwords    = node.dwOffset;
+                nodes[nodeIndex].node.srdRange.set      = Vkgc::InternalDescriptorSetId;
+                nodes[nodeIndex].node.srdRange.binding  = node.binding;
             }
             else if (node.type == GpuRt::NodeType::ConstantBuffer)
             {
-                nodes[nodeIndex].node.type             = Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact;
-                nodes[nodeIndex].node.sizeInDwords     = node.dwSize;
-                nodes[nodeIndex].node.offsetInDwords   = node.dwOffset;
-                nodes[nodeIndex].node.srdRange.set     = node.descSet;
-                nodes[nodeIndex].node.srdRange.binding = node.binding;
+                nodes[nodeIndex].node.type              =
+                    Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact;
+                nodes[nodeIndex].node.sizeInDwords      = node.dwSize;
+                nodes[nodeIndex].node.offsetInDwords    = node.dwOffset;
+                nodes[nodeIndex].node.srdRange.set      = node.descSet;
+                nodes[nodeIndex].node.srdRange.binding  = node.binding;
             }
             else if (node.type == GpuRt::NodeType::Uav)
             {
-                nodes[nodeIndex].node.type             = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
-                nodes[nodeIndex].node.sizeInDwords     = node.dwSize;
-                nodes[nodeIndex].node.offsetInDwords   = node.dwOffset;
-                nodes[nodeIndex].node.srdRange.set     = node.descSet;
-                nodes[nodeIndex].node.srdRange.binding = node.binding;
+                nodes[nodeIndex].node.type              =
+                    Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
+                nodes[nodeIndex].node.sizeInDwords      = node.dwSize;
+                nodes[nodeIndex].node.offsetInDwords    = node.dwOffset;
+                nodes[nodeIndex].node.srdRange.set      = node.descSet;
+                nodes[nodeIndex].node.srdRange.binding  = node.binding;
             }
             else if ((node.type == GpuRt::NodeType::ConstantBufferTable) ||
-                     (node.type == GpuRt::NodeType::UavTable) ||
-                     (node.type == GpuRt::NodeType::TypedUavTable))
+                (node.type == GpuRt::NodeType::UavTable) ||
+                (node.type == GpuRt::NodeType::TypedUavTable))
             {
-                Vkgc::ResourceMappingNode* pSubNode = &subNodes[subNodeIndex++];
-                nodes[nodeIndex].node.type             = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
-                nodes[nodeIndex].node.sizeInDwords     = 1;
-                nodes[nodeIndex].node.offsetInDwords   = node.dwOffset;
+                Vkgc::ResourceMappingNode* pSubNode      = &subNodes[subNodeIndex++];
+                nodes[nodeIndex].node.type               =
+                    Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
+                nodes[nodeIndex].node.sizeInDwords       = 1;
+                nodes[nodeIndex].node.offsetInDwords     = node.dwOffset;
                 nodes[nodeIndex].node.tablePtr.nodeCount = 1;
                 nodes[nodeIndex].node.tablePtr.pNext     = pSubNode;
 
-                switch(node.type)
+                switch (node.type)
                 {
-                    case GpuRt::NodeType::UavTable:
-                        pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
-                        break;
-                    case GpuRt::NodeType::TypedUavTable:
-                        pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
-                        break;
-                    case GpuRt::NodeType::ConstantBufferTable:
-                        pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
-                        break;
-                    default:
-                        VK_NEVER_CALLED();
+                case GpuRt::NodeType::UavTable:
+                    pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
+                    break;
+                case GpuRt::NodeType::TypedUavTable:
+                    pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
+                    break;
+                case GpuRt::NodeType::ConstantBufferTable:
+                    pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
+                    break;
+                default:
+                    VK_NEVER_CALLED();
                 }
-                pSubNode->offsetInDwords = 0;
-                pSubNode->sizeInDwords = bufferSrdSizeDw;
-                pSubNode->srdRange.set = node.descSet;
-                pSubNode->srdRange.binding =node.binding;
+                pSubNode->offsetInDwords    = 0;
+                pSubNode->sizeInDwords      = bufferSrdSizeDw;
+                pSubNode->srdRange.set      = node.descSet;
+                pSubNode->srdRange.binding  = node.binding;
             }
             else
             {
@@ -594,7 +630,7 @@ Pal::Result ClientCreateInternalComputePipeline(
                   (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildParallel));
         // Set up specialization constant info
 
-        VK_ASSERT (numConstants <= 64);
+        VK_ASSERT(numConstants <= 64);
         Util::AutoBuffer<VkSpecializationMapEntry, 64, vk::PalAllocator> mapEntries(
             numConstants,
             pDevice->VkInstance()->Allocator());
@@ -621,9 +657,9 @@ Pal::Result ClientCreateInternalComputePipeline(
         // Overide wave size for these GpuRT shader types
         if ((waveSize == vk::ShaderWaveSize::WaveSizeAuto) &&
             ((buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildBVHTD) ||
-            (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildBVHTDTR) ||
-            (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildParallel) ||
-            (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildQBVH)))
+             (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildBVHTDTR) ||
+             (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildParallel) ||
+             (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildQBVH)))
         {
             forceWave64 = true;
         }
@@ -645,10 +681,10 @@ Pal::Result ClientCreateInternalComputePipeline(
 
 // =====================================================================================================================
 // Destroy one of gpurt's internal pipelines.
-void ClientDestroyInternalComputePipeline(
-    const DeviceInitInfo& initInfo,
-    Pal::IPipeline*       pPipeline,
-    void*                 pMemory)
+void RayTracingDevice::ClientDestroyInternalComputePipeline(
+    const GpuRt::DeviceInitInfo&    initInfo,
+    Pal::IPipeline*                 pPipeline,
+    void*                           pMemory)
 {
     vk::Device* pDevice = reinterpret_cast<vk::Device*>(initInfo.pClientUserData);
 
@@ -663,7 +699,7 @@ void ClientDestroyInternalComputePipeline(
 }
 
 // =====================================================================================================================
-void ClientInsertRGPMarker(
+void RayTracingDevice::ClientInsertRGPMarker(
     Pal::ICmdBuffer* pCmdBuffer,
     const char*      pMarker,
     bool             isPush)
@@ -682,11 +718,11 @@ void ClientInsertRGPMarker(
 // Called by GPURT during BVH build/update to request the driver to give it memory wherein to dump the BVH data.
 //
 // We keep this memory around for later and write it out to files.
-Pal::Result ClientAccelStructBuildDumpEvent(
-    Pal::ICmdBuffer*            pPalCmdbuf,
-    const AccelStructInfo&      info,
-    const AccelStructBuildInfo& buildInfo,
-    Pal::gpusize*               pDumpGpuVirtAddr)
+Pal::Result RayTracingDevice::ClientAccelStructBuildDumpEvent(
+    Pal::ICmdBuffer*                    pPalCmdbuf,
+    const GpuRt::AccelStructInfo&       info,
+    const GpuRt::AccelStructBuildInfo&  buildInfo,
+    Pal::gpusize*                       pDumpGpuVirtAddr)
 {
     Pal::Result result = Pal::Result::ErrorOutOfGpuMemory;
 
@@ -697,7 +733,7 @@ Pal::Result ClientAccelStructBuildDumpEvent(
 // Called by GPURT during BVH build/update to request the driver to give it memory wherein to dump the BVH statistics.
 //
 // We keep this memory around for later and write it out to files.
-Pal::Result ClientAccelStatsBuildDumpEvent(
+Pal::Result RayTracingDevice::ClientAccelStatsBuildDumpEvent(
     Pal::ICmdBuffer*                  pPalCmdbuf,
     const GpuRt::AccelStructInfo&     info,
     Pal::IGpuMemory**                 ppGpuMem,
@@ -711,10 +747,10 @@ Pal::Result ClientAccelStatsBuildDumpEvent(
 // =====================================================================================================================
 // Client-provided function to provide exclusive access to a command context handle and command buffer from the client
 // to GPURT.
-Pal::Result ClientAcquireCmdContext(
-    const DeviceInitInfo&   initInfo,     // GpuRt device info
-    ClientCmdContextHandle* pContext,     // (out) Opaque command context handle
-    Pal::ICmdBuffer**       ppCmdBuffer)  // (out) Command buffer for GPURT to fill
+Pal::Result RayTracingDevice::ClientAcquireCmdContext(
+    const GpuRt::DeviceInitInfo&    initInfo,     // GpuRt device info
+    ClientCmdContextHandle*         pContext,     // (out) Opaque command context handle
+    Pal::ICmdBuffer**               ppCmdBuffer)  // (out) Command buffer for GPURT to fill
 {
     VK_ASSERT(initInfo.pClientUserData != nullptr);
     VK_ASSERT(ppCmdBuffer              != nullptr);
@@ -760,8 +796,8 @@ Pal::Result ClientAcquireCmdContext(
 
 // =====================================================================================================================
 // Client-provided function to submit the context's command buffer and wait for completion.
-Pal::Result ClientFlushCmdContext(
-    ClientCmdContextHandle context)
+Pal::Result RayTracingDevice::ClientFlushCmdContext(
+    ClientCmdContextHandle      context)
 {
     vk::RayTracingDevice::CmdContext* pCmdContext = reinterpret_cast<vk::RayTracingDevice::CmdContext*>(context);
 
@@ -771,13 +807,13 @@ Pal::Result ClientFlushCmdContext(
 
     if (result == Pal::Result::Success)
     {
-        Pal::CmdBufInfo            cmdBufInfo            = {};
-        Pal::PerSubQueueSubmitInfo perSubQueueSubmitInfo = {};
-        Pal::MultiSubmitInfo       submitInfo            = {};
+        Pal::CmdBufInfo            cmdBufInfo               = {};
+        Pal::PerSubQueueSubmitInfo perSubQueueSubmitInfo    = {};
+        Pal::MultiSubmitInfo       submitInfo               = {};
 
-        perSubQueueSubmitInfo.cmdBufferCount  = 1;
-        perSubQueueSubmitInfo.ppCmdBuffers    = &pCmdContext->pCmdBuffer;
-        perSubQueueSubmitInfo.pCmdBufInfoList = &cmdBufInfo;
+        perSubQueueSubmitInfo.cmdBufferCount    = 1;
+        perSubQueueSubmitInfo.ppCmdBuffers      = &pCmdContext->pCmdBuffer;
+        perSubQueueSubmitInfo.pCmdBufInfoList   = &cmdBufInfo;
 
         submitInfo.pPerSubQueueInfo     = &perSubQueueSubmitInfo;
         submitInfo.perSubQueueInfoCount = 1;
@@ -797,18 +833,18 @@ Pal::Result ClientFlushCmdContext(
 
 // =====================================================================================================================
 // Client-provided function to allocate GPU memory
-Pal::Result ClientAllocateGpuMemory(
-    const DeviceInitInfo& initInfo,     // GpuRt device info
-    uint64                sizeInBytes,  // Buffer size in bytes
-    ClientGpuMemHandle*   pGpuMem,      // (out) GPU video memory
-    Pal::gpusize*         pDestGpuVa,   // (out) Buffer GPU VA
-    void**                ppMappedData) // (out) Map data
+Pal::Result RayTracingDevice::ClientAllocateGpuMemory(
+    const GpuRt::DeviceInitInfo&    initInfo,     // GpuRt device info
+    uint64                          sizeInBytes,  // Buffer size in bytes
+    ClientGpuMemHandle*             pGpuMem,      // (out) GPU video memory
+    Pal::gpusize*                   pDestGpuVa,   // (out) Buffer GPU VA
+    void**                          ppMappedData) // (out) Map data
 {
     VK_ASSERT(initInfo.pClientUserData != nullptr);
-    VK_ASSERT(pGpuMem                  != nullptr);
+    VK_ASSERT(pGpuMem != nullptr);
 
-    Pal::Result         result          = Pal::Result::Success;
-    vk::Device*         pDevice         = static_cast<vk::Device*>(initInfo.pClientUserData);
+    Pal::Result         result = Pal::Result::Success;
+    vk::Device* pDevice = static_cast<vk::Device*>(initInfo.pClientUserData);
     vk::InternalMemory* pInternalMemory = nullptr;
 
     void* pSystemMemory = pDevice->VkInstance()->AllocMem(
@@ -828,7 +864,7 @@ Pal::Result ClientAllocateGpuMemory(
     if (result == Pal::Result::Success)
     {
         uint32_t                  deviceMask = 1 << initInfo.gpuIdx;
-        vk::InternalMemCreateInfo allocInfo  = {};
+        vk::InternalMemCreateInfo allocInfo = {};
 
         allocInfo.pal.alignment = PAL_PAGE_BYTES;
         allocInfo.pal.size      = sizeInBytes;
@@ -837,9 +873,9 @@ Pal::Result ClientAllocateGpuMemory(
 
         if (ppMappedData != nullptr)
         {
-            allocInfo.pal.heapCount          = 1;
-            allocInfo.pal.heaps[0]           = Pal::GpuHeap::GpuHeapGartCacheable;
-            allocInfo.flags.persistentMapped = true;
+            allocInfo.pal.heapCount             = 1;
+            allocInfo.pal.heaps[0]              = Pal::GpuHeap::GpuHeapGartCacheable;
+            allocInfo.flags.persistentMapped    = true;
         }
         else
         {
@@ -888,9 +924,9 @@ Pal::Result ClientAllocateGpuMemory(
 
 // =====================================================================================================================
 // Client-provided function to free GPU memory
-void ClientFreeGpuMem(
-    const DeviceInitInfo& initInfo,
-    ClientGpuMemHandle    gpuMem)
+void RayTracingDevice::ClientFreeGpuMem(
+    const GpuRt::DeviceInitInfo&    initInfo,
+    ClientGpuMemHandle              gpuMem)
 {
     vk::Device*         pDevice         = reinterpret_cast<vk::Device*>(initInfo.pClientUserData);
     vk::InternalMemory* pInternalMemory = reinterpret_cast<vk::InternalMemory*>(gpuMem);
@@ -904,5 +940,6 @@ void ClientFreeGpuMem(
     pDevice->VkInstance()->FreeMem(pInternalMemory);
 }
 
-}; // namespace GpuRt
+}; // namespace vk
+
 #endif

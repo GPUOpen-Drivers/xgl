@@ -1128,12 +1128,6 @@ VkResult GraphicsPipeline::Destroy(
 }
 
 // =====================================================================================================================
-GraphicsPipeline::~GraphicsPipeline()
-{
-
-}
-
-// =====================================================================================================================
 // Binds this graphics pipeline's state to the given command buffer (with passed in wavelimits)
 void GraphicsPipeline::BindToCmdBuffer(
     CmdBuffer*                             pCmdBuffer,

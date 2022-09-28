@@ -31,6 +31,7 @@
 
 #include "include/vk_utils.h"
 #include "settings/settings.h"
+#include "vkgcDefs.h"
 
 #include "palFile.h"
 #include "palHashMapImpl.h"
@@ -614,13 +615,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                     ForceDccFor64BppShaderStorage);
 
                 m_settings.enableNgg = 0x0;
-                m_settings.enableWgpMode = 0x20;
+                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
             }
             else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
                 m_settings.enableNgg = 0x3;
                 m_settings.nggEnableFrustumCulling = true;
-                m_settings.enableWgpMode = 0x20;
+                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
             }
         }
 
@@ -791,7 +792,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.mallNoAllocSsrPolicy   = MallNoAllocSsrAsSnsr;
                 m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
 
-                m_settings.enableWgpMode          = 0x00000020;
+                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
 
                 m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
                                              ForceDccFor2DShaderStorage |
@@ -870,8 +871,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // can't do any better than returning a non-null function pointer for them.
             m_settings.lenientInstanceFuncQuery = true;
 
-            m_settings.alwaysReportHdrFormats = true;
-
             m_settings.backgroundFullscreenIgnorePresentErrors = true;
 
             m_settings.implicitExternalSynchronization = false;
@@ -886,44 +885,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
             }
 
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
-            {
-                m_settings.dccBitsPerPixelThreshold = 1;
-            }
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
-            {
-                //  Doom Eternal performs better when DCC is not forced on. 2% gain on 4k.
-                m_settings.forceEnableDcc = ForceDccDefault;
-
-                // Doom Eternal performs better with NGG disabled (3% gain on 4k), likely because idTech runs it's own
-                // triangle culling and there are no options in the game to turn it off making NGG somewhat redundant.
-                m_settings.enableNgg = false;
-            }
-
-            if ((pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1) ||
-                (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3))
-            {
-                m_settings.asyncComputeQueueMaxWavesPerCu = 20;
-
-                m_settings.enableWgpMode = 0x20;
-                m_settings.csWaveSize = 64;
-                m_settings.fsWaveSize = 64;
-            }
-
+            // Coarse optimizations that apply to multiple GFXIPs go below
             if ((pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1) &&
                 (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false))
             {
                 m_settings.resourceBarrierOptions = ResourceBarrierOptions::SkipDstCacheInv;
-            }
-
-            // Mall no alloc settings give a ~1% gain
-            if ((pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-                )
-            {
-                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-                m_settings.enableWgpMode = 0x20;
             }
 
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
@@ -938,12 +904,42 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.rtEnableTopDownBuild    = false;
                 m_settings.plocRadius              = 4;
 #endif
-                m_settings.forceEnableDcc = (ForceDccForColorAttachments |
-                                             ForceDccFor2DShaderStorage |
-                                             ForceDccFor3DShaderStorage |
-                                             ForceDccFor64BppShaderStorage);
+
+                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
             }
 
+            // Finer GFXIP and ASIC specific optimizations go below
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
+            {
+                m_settings.dccBitsPerPixelThreshold = 1;
+            }
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            {
+                //  Doom Eternal performs better when DCC is not forced on. 2% gain on 4k.
+                m_settings.forceEnableDcc = ForceDccDefault;
+
+                // Doom Eternal performs better with NGG disabled (3% gain on 4k), likely because idTech runs it's own
+                // triangle culling and there are no options in the game to turn it off making NGG somewhat redundant.
+                m_settings.enableNgg = false;
+
+                m_settings.asyncComputeQueueMaxWavesPerCu = 20;
+
+                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+
+                m_settings.csWaveSize = 64;
+                m_settings.fsWaveSize = 64;
+            }
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.asyncComputeQueueMaxWavesPerCu = 20;
+
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+
+                m_settings.csWaveSize = 64;
+                m_settings.fsWaveSize = 64;
+            }
         }
 
         if (appProfile == AppProfile::IdTechLauncher)
@@ -967,6 +963,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             // Disable image type checking on Navi10 to avoid 1.5% loss in Detroit
             m_settings.disableImageResourceTypeCheck = true;
+
+            // This restores previous driver behavior where depth compression was disabled for VK_IMAGE_LAYOUT_GENERAL.
+            // There is an image memory barrier missing to synchronize DB metadata and L2 causing hair corruption in
+            // some scenes.
+            m_settings.forceResolveLayoutForDepthStencilTransferUsage = true;
 
             if ((pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1) &&
                 (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false))
@@ -1057,6 +1058,20 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                     m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
                     m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
                 }
+            }
+        }
+
+        if (appProfile == AppProfile::MetalGearSolid5)
+        {
+            m_settings.padVertexBuffers = true;
+        }
+
+        if (appProfile == AppProfile::YamagiQuakeII)
+        {
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.forceImageSharingMode =
+                    ForceImageSharingMode::ForceImageSharingModeExclusiveForNonColorAttachments;
             }
         }
 

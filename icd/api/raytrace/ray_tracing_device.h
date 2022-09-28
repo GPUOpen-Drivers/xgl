@@ -67,7 +67,7 @@ public:
     void Destroy();
 
     void CreateGpuRtDeviceSettings(GpuRt::DeviceSettings* pDeviceSettings);
-    GpuRt::Device* GpuRt(uint32_t deviceIdx) { return &m_gpuRtDevice[deviceIdx]; }
+    GpuRt::IDevice* GpuRt(uint32_t deviceIdx) { return m_pGpuRtDevice[deviceIdx]; }
     const GpuRt::DeviceSettings& DeviceSettings() const { return m_gpurtDeviceSettings; }
 
     Pal::Result InitCmdContext(uint32_t deviceIdx);
@@ -88,13 +88,62 @@ public:
 private:
     Device*                         m_pDevice;
 
-    GpuRt::Device                   m_gpuRtDevice[MaxPalDevices];
+    GpuRt::IDevice*                 m_pGpuRtDevice[MaxPalDevices];
     GpuRt::DeviceSettings           m_gpurtDeviceSettings;
 
     uint32_t                        m_profileRayFlags;           // Ray flag override for profiling
     uint32_t                        m_profileMaxIterations;      // Max traversal iterations
 
     CmdContext                      m_cmdContext[MaxPalDevices];
+
+    // GPURT Callback Functions
+    static Pal::Result ClientAllocateGpuMemory(
+        const GpuRt::DeviceInitInfo& initInfo,
+        uint64_t            sizeInBytes,
+        ClientGpuMemHandle* pGpuMem,
+        Pal::gpusize*       pDestGpuVa,
+        void**              ppMappedData);
+
+    static Pal::Result ClientCreateInternalComputePipeline(
+        const GpuRt::DeviceInitInfo&        initInfo,
+        const GpuRt::PipelineBuildInfo&     buildInfo,
+        const GpuRt::CompileTimeConstants&  compileConstants,
+        Pal::IPipeline**                    ppResultPipeline,
+        void**                              ppResultMemory);
+
+    static void ClientDestroyInternalComputePipeline(
+        const GpuRt::DeviceInitInfo&    initInfo,
+        Pal::IPipeline*                 pPipeline,
+        void*                           pMemory);
+
+    static void ClientInsertRGPMarker(
+        Pal::ICmdBuffer*    pCmdBuffer,
+        const char*         pMarker,
+        bool                isPush);
+
+    static Pal::Result ClientAccelStructBuildDumpEvent(
+        Pal::ICmdBuffer*                    pPalCmdbuf,
+        const GpuRt::AccelStructInfo&       info,
+        const GpuRt::AccelStructBuildInfo&  buildInfo,
+        Pal::gpusize*                       pDumpGpuVirtAddr);
+
+    static Pal::Result ClientAccelStatsBuildDumpEvent(
+        Pal::ICmdBuffer*                pPalCmdbuf,
+        const GpuRt::AccelStructInfo&   info,
+        Pal::IGpuMemory**               ppGpuMem,
+        uint64_t*                       pOffset);
+
+    static Pal::Result ClientAcquireCmdContext(
+        const GpuRt::DeviceInitInfo&    initInfo,
+        ClientCmdContextHandle*         pContext,
+        Pal::ICmdBuffer**               ppCmdBuffer);
+
+    static Pal::Result ClientFlushCmdContext(
+        ClientCmdContextHandle          context);
+
+    static void ClientFreeGpuMem(
+        const GpuRt::DeviceInitInfo&    initInfo,
+        ClientGpuMemHandle              gpuMem);
 
     AccelStructTrackerResources     m_accelStructTrackerResources[MaxPalDevices];
 };

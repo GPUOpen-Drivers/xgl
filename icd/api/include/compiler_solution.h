@@ -251,9 +251,7 @@ public:
     static void DisableNggCulling(Vkgc::NggState* pNggState);
 
 #if VKI_RAY_TRACING
-#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION >= 15
     static void UpdateRayTracingFunctionNames(const Device* pDevice, Vkgc::RtState* pRtState);
-#endif
     uint32_t GetRayTracingVgprLimit(bool isIndirect);
 #endif
 
@@ -266,9 +264,7 @@ protected:
 private:
 
 #if VKI_RAY_TRACING
-#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION >= 15
     static void SetRayTracingFunctionName(const char* pSrc, char* pDest);
-#endif
 #endif
 
     PAL_DISALLOW_COPY_AND_ASSIGN(CompilerSolution);

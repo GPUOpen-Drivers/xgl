@@ -208,7 +208,7 @@ VkResult Pipeline::BuildShaderStageInfo(
 
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
-    uint32_t numNewModules = 0;
+    uint32_t maxOutIdx = 0;
 
     const bool duplicateExistingModules = isLibrary;
     const bool adaptForFastLink         = isLibrary;
@@ -218,6 +218,8 @@ VkResult Pipeline::BuildShaderStageInfo(
         const VkPipelineShaderStageCreateInfo& stageInfo = pStages[i];
         const ShaderStage                      stage     = ShaderFlagBitToStage(stageInfo.stage);
         const uint32_t                         outIdx    = pfnGetOutputIdx(i, stage);
+
+        maxOutIdx = Util::Max(maxOutIdx, outIdx + 1);
 
         if ((stageInfo.module != VK_NULL_HANDLE) && (duplicateExistingModules == false))
         {
@@ -269,14 +271,14 @@ VkResult Pipeline::BuildShaderStageInfo(
 
             result = pCompiler->BuildShaderModule(
                 pDevice,flags, codeSize, pCode, adaptForFastLink, false,
-                pBinaryCache, pShaderFeedback, &pTempModules[numNewModules]);
+                pBinaryCache, pShaderFeedback, &pTempModules[outIdx]);
 
             if (result != VK_SUCCESS)
             {
                 break;
             }
 
-            pShaderStageInfo[outIdx].pModuleHandle = &pTempModules[numNewModules++];
+            pShaderStageInfo[outIdx].pModuleHandle = &pTempModules[outIdx];
             pShaderStageInfo[outIdx].codeHash      = ShaderModule::GetCodeHash(codeHash, stageInfo.pName);
             pShaderStageInfo[outIdx].codeSize      = codeSize;
         }
@@ -290,10 +292,7 @@ VkResult Pipeline::BuildShaderStageInfo(
 
     if (result != VK_SUCCESS)
     {
-        for (uint32_t i = 0; i < numNewModules; ++i)
-        {
-            pCompiler->FreeShaderModule(&pTempModules[i]);
-        }
+        FreeTempModules(pDevice, maxOutIdx + 1, pTempModules);
     }
 
     return result;
@@ -314,10 +313,6 @@ void Pipeline::FreeTempModules(
             if (pCompiler->IsValidShaderModule(&pTempModules[i]))
             {
                 pCompiler->FreeShaderModule(&pTempModules[i]);
-            }
-            else
-            {
-                break;
             }
         }
     }
@@ -397,16 +392,6 @@ void Pipeline::Init(
 }
 
 // =====================================================================================================================
-Pipeline::~Pipeline()
-{
-    // Destroy PAL object
-    for (uint32_t deviceIdx = 0; (deviceIdx < m_pDevice->NumPalDevices()) && (m_pPalPipeline[deviceIdx] != nullptr); deviceIdx++)
-    {
-        m_pPalPipeline[deviceIdx]->Destroy();
-    }
-}
-
-// =====================================================================================================================
 // Destroy a pipeline object.
 VkResult Pipeline::Destroy(
     Device*                      pDevice,
@@ -418,8 +403,15 @@ VkResult Pipeline::Destroy(
         m_pBinary->Destroy(pAllocator);
     }
 
-    // Call destructor
-    this->~Pipeline();
+    // Destroy PAL objects
+    for (uint32_t deviceIdx = 0;
+         (deviceIdx < m_pDevice->NumPalDevices()) && (m_pPalPipeline[deviceIdx] != nullptr);
+         deviceIdx++)
+    {
+        m_pPalPipeline[deviceIdx]->Destroy();
+    }
+
+    Util::Destructor(this);
 
     // Free memory
     pDevice->FreeApiObject(pAllocator, this);

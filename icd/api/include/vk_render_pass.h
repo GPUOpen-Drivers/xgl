@@ -197,6 +197,7 @@ struct RenderPassCreateInfo
     SubpassDependency*       pDependencies;
     uint32_t                 correlatedViewMaskCount;
     uint32_t*                pCorrelatedViewMasks;
+    bool                     needForceLateZ;
     uint64_t                 hash;
 };
 
@@ -299,6 +300,11 @@ public:
         // either all subpasses must have a non-zero view mask
         // (though some subpasses may have only one view) or all must be zero.
         return GetViewMask(0) != 0;
+    }
+
+    bool IsForceLateZNeeded() const
+    {
+        return m_createInfo.needForceLateZ;
     }
 
 protected:

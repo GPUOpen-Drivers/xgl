@@ -5888,6 +5888,19 @@ size_t PhysicalDevice::GetFeatures2(
             }
 #endif
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_ZERO_ONE_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDepthClampZeroOneFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->depthClampZeroOne = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR:
             {
                 if (IsExtensionSupported(DeviceExtensions::KHR_RAY_QUERY))

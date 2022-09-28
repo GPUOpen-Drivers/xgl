@@ -115,6 +115,8 @@ enum class DynamicStatesInternal : uint32_t
 class Pipeline
 {
 public:
+    virtual ~Pipeline() = default;
+
     virtual VkResult Destroy(
         Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
@@ -176,8 +178,6 @@ protected:
         bool            hasRayTracing,
 #endif
         VkPipelineBindPoint   type);
-
-    virtual ~Pipeline();
 
     void Init(
         Pal::IPipeline**      pPalPipeline,

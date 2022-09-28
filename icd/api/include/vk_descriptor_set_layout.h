@@ -190,9 +190,10 @@ public:
     static uint32_t GetSingleDescStaticSize(const Device* pDevice, VkDescriptorType type);
 
     static uint32_t GetDescStaticSectionDwSize(
-        const Device* pDevice,
+        const Device*                       pDevice,
         const VkDescriptorSetLayoutBinding* type,
-        const DescriptorBindingFlags bindingFlags);
+        const DescriptorBindingFlags        bindingFlags,
+        const bool                          useFullYcbrImageSampler);
 
     static uint32_t GetDescStaticSectionDwSize(
         const DescriptorSetLayout* pSrcDescSetLayout,

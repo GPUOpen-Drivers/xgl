@@ -454,8 +454,8 @@ VkResult Instance::Init(
         pPhysicalDevice->PalDevice()->GetProperties(&info);
         if (pPhysicalDevice->GetRuntimeSettings().enableSPP && info.gfxipProperties.flags.supportSpp)
         {
-            char executableName[PATH_MAX];
-            char executablePath[PATH_MAX];
+            wchar_t executableName[PATH_MAX];
+            wchar_t executablePath[PATH_MAX];
             utils::GetExecutableNameAndPath(executableName, executablePath);
             m_pPalPlatform->EnableSppProfile(executableName, executablePath);
         }

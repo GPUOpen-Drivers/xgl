@@ -115,7 +115,9 @@ enum class AppProfile : uint32_t
     AngleEngine,                 // Angle Engine
     CSGO,                        // Counter-Strike: Global Offensive
     DxvkGodOfWar,                // DXVK God of War
-    X4Foundations                // X4: Foundations by Egosoft
+    X4Foundations,               // X4: Foundations by Egosoft
+    MetalGearSolid5,             // Metal Gear Solid5 : The Phantom Pain
+    YamagiQuakeII,               // Yamagi Quake II
 };
 
 struct ProfileSettings

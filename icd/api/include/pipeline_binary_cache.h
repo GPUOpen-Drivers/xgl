@@ -203,6 +203,9 @@ private:
     VkResult InitMemoryCacheLayer(
         const RuntimeSettings& settings);
 
+    VkResult InitCompressingLayer(
+        const RuntimeSettings& settings);
+
     VkResult InitArchiveLayers(
         const char*            pDefaultCacheFilePath,
         const RuntimeSettings& settings);
@@ -243,6 +246,8 @@ private:
 #endif
 
     Util::ICacheLayer*        m_pMemoryLayer;
+
+    Util::ICacheLayer*        m_pCompressingLayer;
 
     uint32_t                  m_expectedEntries;
 

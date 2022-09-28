@@ -953,7 +953,8 @@ inline Pal::QueryPipelineStatsFlags VkToPalQueryPipelineStatsFlags(VkQueryPipeli
     (static_cast<uint32_t>(VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_EVALUATION_SHADER_INVOCATIONS_BIT) ==
         static_cast<uint32_t>(Pal::QueryPipelineStatsDsInvocations)) &&
     (static_cast<uint32_t>(VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT) ==
-        static_cast<uint32_t>(Pal::QueryPipelineStatsCsInvocations)),
+        static_cast<uint32_t>(Pal::QueryPipelineStatsCsInvocations))
+    ,
     "Need to update this function");
 
     return static_cast<Pal::QueryPipelineStatsFlags>(flags);

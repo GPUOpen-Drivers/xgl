@@ -961,7 +961,19 @@ void RenderPassBuilder::PostProcessSyncPoint(
         pSyncPoint->barrier.implicitSrcCacheMask != 0 ||
         pSyncPoint->barrier.implicitDstCacheMask != 0)
     {
-        pSyncPoint->barrier.flags.needsGlobalTransition = 1;
+        if (m_pDevice->GetPalProperties().gfxipProperties.flags.supportReleaseAcquireInterface &&
+            m_pDevice->GetRuntimeSettings().useAcquireReleaseInterface)
+        {
+            // Need a global cache transition only if there are no image transitions.
+            if (pSyncPoint->transitions.NumElements() == 0)
+            {
+                pSyncPoint->barrier.flags.needsGlobalTransition = 1;
+            }
+        }
+        else
+        {
+            pSyncPoint->barrier.flags.needsGlobalTransition = 1;
+        }
     }
 
     // The barrier is active if it does any waiting or global cache synchronization or attachment transitions
@@ -976,7 +988,6 @@ void RenderPassBuilder::PostProcessSyncPoint(
             pSyncPoint->barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
         }
     }
-
 }
 
 // =====================================================================================================================

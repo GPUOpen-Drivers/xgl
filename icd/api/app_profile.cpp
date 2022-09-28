@@ -62,6 +62,7 @@ enum AppProfilePatternType
     PatternEngineNameLower, // - Lower-case version of PatternEngineName
     PatternExeName,         // - Executable name without file extension
     PatternExeNameLower,    // - Lower-case version of PatternExeName
+    PatternStrInExeNameLower, // - Any specific string included in Lower-case PatternExeName
     PatternCount
 };
 
@@ -551,6 +552,24 @@ constexpr AppProfilePatternEntry AppEngineSniperElite5 =
 {
     PatternEngineNameLower,
     "sniper5"
+};
+
+constexpr AppProfilePatternEntry AppNameMetalGearSolid5 =
+{
+    PatternAppNameLower,
+    "mgsvtpp.exe"
+};
+
+constexpr AppProfilePatternEntry AppEngineIdTech2 =
+{
+    PatternEngineNameLower,
+    "id tech 2"
+};
+
+constexpr AppProfilePatternEntry AppNameYamagiQuake2 =
+{
+    PatternAppNameLower,
+    "quake 2"
 };
 
 constexpr AppProfilePatternEntry PatternEnd = {};
@@ -1090,7 +1109,24 @@ AppProfilePattern AppPatternTable[] =
             AppNameX4Engine,
             PatternEnd
         }
-    }
+    },
+
+    {
+        AppProfile::MetalGearSolid5,
+        {
+            AppNameMetalGearSolid5,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::YamagiQuakeII,
+        {
+            AppNameYamagiQuake2,
+            AppEngineIdTech2,
+            PatternEnd
+        }
+    },
 };
 
 static char* GetExecutableName(size_t* pLength, bool includeExtension = false);
@@ -1232,6 +1268,7 @@ AppProfile ScanApplicationProfile(
             {
                 patternMatches = false;
             }
+
         }
 
         if (patternMatches)
@@ -1421,9 +1458,9 @@ static bool QueryPalProfile(
     ProfileSettings*              pProfileSettings,
     uint32_t                      appGpuID,
     Pal::ApplicationProfileClient client,
-    char*                         exeOrCdnName) // This is the game EXE name or Content Distribution Network name.
+    const wchar_t*                exeOrCdnName) // This is the game EXE name or Content Distribution Network name.
 {
-    bool profilePresent = false;
+    bool        profilePresent = false;
     const char* rawProfile;
 
     Pal::Result result =
@@ -1447,6 +1484,24 @@ static bool QueryPalProfile(
     }
 
     return profilePresent;
+}
+// =====================================================================================================================
+static bool QueryPalProfile(
+    Instance*                     pInstance,
+    ProfileSettings*              pProfileSettings,
+    uint32_t                      appGpuID,
+    Pal::ApplicationProfileClient client,
+    const char*                   exeOrCdnName) // This is the game EXE name or Content Distribution Network name
+{
+    wchar_t exeName[Util::MaxFileNameStrLen];
+    VK_ASSERT(strlen(exeOrCdnName) < Util::MaxFileNameStrLen);
+    Mbstowcs(exeName, exeOrCdnName, Util::MaxFileNameStrLen);
+
+    return QueryPalProfile(pInstance,
+                           pProfileSettings,
+                           appGpuID,
+                           client,
+                           exeName);
 }
 
 // =====================================================================================================================
@@ -1485,7 +1540,7 @@ void ReloadAppProfileSettings(
             // TODO: This funciton isn't called very often (once at app start and when CCC settings change),
             //       but we may want to cache the CDN string rather than regenerate it every call.
             constexpr uint32_t CdnBufferSize = 150;
-            char cdnApplicationId[CdnBufferSize];
+            wchar_t cdnApplicationId[CdnBufferSize];
             bool hasValidCdnName = GpuUtil::QueryAppContentDistributionId(cdnApplicationId, CdnBufferSize);
 
             if (hasValidCdnName == true)

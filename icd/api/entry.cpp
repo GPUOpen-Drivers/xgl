@@ -1450,6 +1450,17 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplateKHR(
         pData);
 }
 
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetVertexInputEXT(
+    VkCommandBuffer                              cmdBuffer,
+    uint32_t                                     vertexBindingDescriptionCount,
+    const VkVertexInputBindingDescription2EXT* pVertexBindingDescriptions,
+    uint32_t                                     vertexAttributeDescriptionCount,
+    const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
 } // namespace entry
 
 } // namespace vk

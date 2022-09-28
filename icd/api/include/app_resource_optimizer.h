@@ -72,7 +72,9 @@ struct ResourceOptimizerKey
         uint64_t dimensions; // merged width and height
     };
 
-    uint64_t apiHash; // Hash of the *CreateInfo struct
+    uint64_t apiHash;      // Hash of the *CreateInfo struct
+    uint64_t apiHashBegin; // Begin hash for apiHashRange matching
+    uint64_t apiHashEnd;   // End hash for apiHashRange matching
 };
 
 inline bool ResourceKeysEqual(
@@ -94,8 +96,9 @@ struct ResourceProfilePattern
         {
             uint32_t always           : 1; // Pattern always hits
             uint32_t apiHash          : 1; // Test API Hash
+            uint32_t apiHashRange     : 1; // Test API Hash Range
             uint32_t dimensions       : 1; // Test dimensions
-            uint32_t reserved         : 30;
+            uint32_t reserved         : 28;
         };
         uint32_t u32All;
     } match;

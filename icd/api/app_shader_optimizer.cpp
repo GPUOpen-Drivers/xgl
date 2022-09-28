@@ -1047,13 +1047,10 @@ void ShaderOptimizer::BuildAppProfileLlpc()
 
     if (appProfile == AppProfile::ShadowOfTheTombRaider)
     {
-        if (gfxIpLevel >= Pal::GfxIpLevel::GfxIp10_3)
-        {
-            i = m_appProfile.entryCount++;
-            PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
-            pEntry->pattern.match.always = true;
-            pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.tuningOptions.disableFastMathFlags = 8u | 32u;
-        }
+        i = m_appProfile.entryCount++;
+        PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
+        pEntry->pattern.match.always = true;
+        pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.tuningOptions.disableFastMathFlags = 8u | 32u;
     }
 
     if (appProfile == AppProfile::CSGO)

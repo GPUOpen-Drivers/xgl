@@ -104,6 +104,7 @@ if sys.argv[1] == "-all":
         result = gen_settings(value)
         if result != 0:
             print("Error generating settings for " + key)
+            sys.exit(1)
 else:
     component = sys.argv[2]
     if component in settingsArgData:
@@ -111,7 +112,9 @@ else:
         result = gen_settings(settingsArgData[component])
         if result != 0:
             print("Error generating settings for " + component + ". Did you forget to check out the g_ files?")
+            sys.exit(1)
     else:
         print("Unknown component argument: " + component)
+        sys.exit(1)
 
 sys.exit(0)

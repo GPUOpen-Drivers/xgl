@@ -186,7 +186,8 @@ uint32_t DescriptorSetLayout::GetSingleDescStaticSize(
 uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(
     const Device*                       pDevice,
     const VkDescriptorSetLayoutBinding* descriptorInfo,
-    const DescriptorBindingFlags        bindingFlags)
+    const DescriptorBindingFlags        bindingFlags,
+    const bool                          useFullYcbrImageSampler)
 {
     uint32_t size = GetSingleDescStaticSize(pDevice, descriptorInfo->descriptorType);
 
@@ -204,7 +205,10 @@ uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(
             maxMultiPlaneCount = multiPlaneCount > maxMultiPlaneCount ? multiPlaneCount : maxMultiPlaneCount;
         }
 
-        size = pDevice->GetProperties().descriptorSizes.imageView;
+        if (useFullYcbrImageSampler == false)
+        {
+            size = pDevice->GetProperties().descriptorSizes.imageView;
+        }
 
         size *= maxMultiPlaneCount;
     }
@@ -511,6 +515,8 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
         }
     }
 
+    constexpr bool useFullYcbrImageSampler = false;
+
     // Bindings numbers are allowed to come in out-of-order, as well as with gaps.
     // We compute offsets using the size we've seen so far as we iterate, so we need to handle
     // the bindings in binding-number order, rather than array order. Hence we can ignore
@@ -562,7 +568,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
         // Construct the information specific to the static section of the descriptor set layout.
         ConvertBindingInfo(
             &pBinding->info,
-            GetDescStaticSectionDwSize(pDevice, &pBinding->info, pBinding->bindingFlags),
+            GetDescStaticSectionDwSize(pDevice, &pBinding->info, pBinding->bindingFlags, useFullYcbrImageSampler),
             staDescAlignmentInDw,
             &pOut->sta,
             &pBinding->sta);

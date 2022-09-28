@@ -114,7 +114,6 @@ void CompilerSolution::DisableNggCulling(
 }
 
 #if VKI_RAY_TRACING
-#if GPURT_CLIENT_INTERFACE_MAJOR_VERSION >= 15
 // =====================================================================================================================
 // Parse and update RayTracingFunctionName of funcType
 void CompilerSolution::SetRayTracingFunctionName(
@@ -148,8 +147,8 @@ void CompilerSolution::UpdateRayTracingFunctionNames(
     const Device*   pDevice,
     Vkgc::RtState*  pRtState)
 {
-    VkResult result             = VK_ERROR_UNKNOWN;
-    GpuRt::Device* pGpurtDevice = pDevice->RayTrace()->GpuRt(DefaultDeviceIndex);
+    VkResult result              = VK_ERROR_UNKNOWN;
+    GpuRt::IDevice* pGpurtDevice = pDevice->RayTrace()->GpuRt(DefaultDeviceIndex);
 
     if (pGpurtDevice != nullptr)
     {
@@ -207,7 +206,6 @@ void CompilerSolution::UpdateRayTracingFunctionNames(
             pTable->pFunc[Vkgc::RT_ENTRY_WORLD_TO_OBJECT_TRANSFORM]);
     }
 }
-#endif
 
 uint32_t CompilerSolution::GetRayTracingVgprLimit(
     bool isIndirect)

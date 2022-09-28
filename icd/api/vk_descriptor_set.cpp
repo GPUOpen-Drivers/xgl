@@ -279,7 +279,17 @@ void DescriptorUpdate::WriteImageDescriptorsYcbcr(
 
             for (uint32_t plane = 0; plane < multiPlaneCount; ++plane, pOutImageDesc += pOutImageDescStride)
             {
-                memcpy(pOutImageDesc, pImageDesc, imageDescSize);
+                static_assert(
+                    (imageDescSize == 32) || (imageDescSize == 48),
+                    "Unexpected WriteImageDescriptorsYcbcr imageDescSize specialization.");
+
+                memcpy(pOutImageDesc, pImageDesc, 32);
+
+                if (imageDescSize == 48)
+                {
+                    memset(pOutImageDesc + 8, 0, 16);
+                }
+
                 pImageDesc = Util::VoidPtrInc(pImageDesc, imageDescSize * ImageView::SrdIndexType::SrdCount);
             }
         }
@@ -466,6 +476,15 @@ void DescriptorUpdate::WriteAccelerationStructureDescriptors(
         {
             bufferViewInfo.gpuAddr = pAccel->GetDeviceAddress(deviceIdx);
             bufferViewInfo.range = pAccel->GetPrebuildInfo().resultDataMaxSizeInBytes;
+        }
+
+        // Bypass Mall cache read/write if no alloc policy is set for SRDs.
+        // This global setting applies to every BVH SRD.
+        const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+        if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocBvh))
+        {
+            bufferViewInfo.flags.bypassMallRead  = 1;
+            bufferViewInfo.flags.bypassMallWrite = 1;
         }
 
         pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &bufferViewInfo, pDestAddr);
@@ -1046,6 +1065,16 @@ void DescriptorUpdate::WriteImageDescriptors<32, true>(
 
 template
 void DescriptorUpdate::WriteImageDescriptorsYcbcr<32>(
+    const VkDescriptorImageInfo*    pDescriptors,
+    uint32_t                        deviceIdx,
+    uint32_t*                       pDestAddr,
+    uint32_t                        count,
+    uint32_t                        dwStride,
+    size_t                          descriptorStrideInBytes);
+
+// If needed the YCbCr combined image samplers can be padded with 16 bytes to match the regular comb. img. samp.
+template
+void DescriptorUpdate::WriteImageDescriptorsYcbcr<32+16>(
     const VkDescriptorImageInfo*    pDescriptors,
     uint32_t                        deviceIdx,
     uint32_t*                       pDestAddr,

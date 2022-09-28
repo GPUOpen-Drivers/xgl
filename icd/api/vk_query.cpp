@@ -100,7 +100,8 @@ VkResult PalQueryPool::Create(
         queryType                = Pal::QueryType::StreamoutStats;
         createInfo.queryPoolType = Pal::QueryPoolType::StreamoutStats;
     }
-    else if (pCreateInfo->queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT)
+    else if ((pCreateInfo->queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT)
+            )
     {
         queryType                = Pal::QueryType::PipelineStats;
         createInfo.queryPoolType = Pal::QueryPoolType::PipelineStats;

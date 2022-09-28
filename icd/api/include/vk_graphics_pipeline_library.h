@@ -68,7 +68,7 @@ private:
     struct TempModuleState
     {
         ShaderStage stage;
-        bool        needFreeBinaryOnly;
+        bool        freeBinaryOnly;
     };
 
     GraphicsPipelineLibrary(

@@ -273,10 +273,10 @@ Device::Device(
     m_pSqttMgr(nullptr),
     m_pAppOptLayer(nullptr),
     m_pBarrierFilterLayer(nullptr),
-    m_enabledFeatures(deviceFeatures),
 #if VKI_GPU_DECOMPRESS
     m_pGpuDecoderLayer(nullptr),
 #endif
+    m_enabledFeatures(deviceFeatures),
     m_allocationSizeTracking(true),
     m_useComputeAsTransferQueue(useComputeAsTransferQueue),
     m_useUniversalAsComputeQueue(pPhysicalDevices[DefaultDeviceIndex]->GetRuntimeSettings().useUniversalAsComputeQueue),
@@ -1082,13 +1082,6 @@ VkResult Device::Create(
         void* pApiQueueMemory = Util::VoidPtrInc(pMemory, apiDeviceSize);
         void* pPalQueueMemory = Util::VoidPtrInc(pApiQueueMemory, ((privateDataSize + apiQueueSize) * totalQueues));
 
-        Pal::IQueue* pPalQueues[MaxPalDevices] = {};
-        Pal::IQueue* pPalTmzQueues[MaxPalDevices] = {};
-        Pal::IQueue* pPalBackupQueues[MaxPalDevices] = {};
-        Pal::IQueue* pPalBackupTmzQueues[MaxPalDevices] = {};
-        Pal::IQueueSemaphore* pPalTmzSemaphores[MaxPalDevices] = {};
-        Pal::IQueueSemaphore* pSwitchToPalBackupSemaphore[MaxPalDevices] = {};
-        Pal::IQueueSemaphore* pSwitchFromPalBackupSemaphore[MaxPalDevices] = {};
         size_t       palQueueMemoryOffset = 0;
         uint32       tmzQueueIndex        = 0;
 
@@ -1100,6 +1093,14 @@ VkResult Device::Create(
         {
             for (queueIndex = 0; queueIndex < queueCounts[queueFamilyIndex]; queueIndex++)
             {
+                Pal::IQueue* pPalQueues[MaxPalDevices] = {};
+                Pal::IQueue* pPalTmzQueues[MaxPalDevices] = {};
+                Pal::IQueue* pPalBackupQueues[MaxPalDevices] = {};
+                Pal::IQueue* pPalBackupTmzQueues[MaxPalDevices] = {};
+                Pal::IQueueSemaphore* pPalTmzSemaphores[MaxPalDevices] = {};
+                Pal::IQueueSemaphore* pSwitchToPalBackupSemaphore[MaxPalDevices] = {};
+                Pal::IQueueSemaphore* pSwitchFromPalBackupSemaphore[MaxPalDevices] = {};
+
                 // Create the Pal queues per device
                 uint32_t deviceIdx;
                 for (deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
@@ -1326,18 +1327,6 @@ VkResult Device::Create(
 
                     pDispatchableQueues[queueFamilyIndex][queueIndex] = static_cast<DispatchableQueue*>(pApiQueueMemory);
                     pApiQueueMemory = Util::VoidPtrInc(pApiQueueMemory, apiQueueSize);
-
-                    for (uint32_t id = 0; id < MaxPalDevices; id++)
-                    {
-                        pPalTmzQueues[id]                        = nullptr;
-                        pPalTmzSemaphores[id]                    = nullptr;
-                        pPalQueues[id]                           = nullptr;
-                        pPalBackupQueues[id]                     = nullptr;
-                        pPalBackupTmzQueues[id]                  = nullptr;
-                        pSwitchFromPalBackupSemaphore[id]        = nullptr;
-                        pSwitchToPalBackupSemaphore[id]          = nullptr;
-                    }
-
                 }
                 else
                 {
@@ -2218,6 +2207,27 @@ VkResult Device::CreateInternalComputePipeline(
             pShaderInfo->options.waveSize = 64;
         }
 #endif
+
+        Pal::ShaderHash codeHash = ShaderModule::GetCodeHash(
+            ShaderModule::BuildCodeHash(pCode, codeByteSize),
+            pShaderInfo->pEntryTarget);
+
+        GetShaderOptimizer()->CreateShaderOptimizerKey(
+            pShaderInfo->pModuleData,
+            codeHash,
+            Vkgc::ShaderStage::ShaderStageCompute,
+            codeByteSize,
+            &pipelineBuildInfo.shaderProfileKey);
+
+        PipelineShaderOptionsPtr options = {};
+        options.pPipelineOptions = &pipelineBuildInfo.pipelineInfo.options;
+        options.pOptions = &pShaderInfo->options;
+
+        // Override the compile parameters based on any app profile
+        GetShaderOptimizer()->OverrideShaderCreateInfo(
+            pipelineBuildInfo.pipelineProfileKey,
+            0,
+            options);
 
         // PAL Pipeline caching
         Util::Result          cacheResult = Util::Result::NotFound;

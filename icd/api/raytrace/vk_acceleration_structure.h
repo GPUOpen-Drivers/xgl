@@ -110,6 +110,19 @@ public:
         DeferredHostOperation*                            pDeferredOperation,
         const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo);
 
+    // GPURT Callback Functions
+    static GpuRt::Geometry ClientConvertAccelStructBuildGeometry(
+        const GpuRt::AccelStructBuildInputs& inputs,
+        uint32_t                             geometryIndex);
+
+    static GpuRt::InstanceBottomLevelInfo ClientConvertAccelStructBuildInstanceBottomLevel(
+        const GpuRt::AccelStructBuildInputs&    inputs,
+        uint32_t                                instanceIndex);
+
+    static GpuRt::AccelStructPostBuildInfo ClientConvertAccelStructPostBuildInfo(
+        const GpuRt::AccelStructBuildInfo& buildInfo,
+        uint32_t                           postBuildIndex);
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(AccelerationStructure);
 
@@ -119,12 +132,25 @@ private:
         VkDeviceAddress offset,
         VkDeviceSize    size);
 
+    // GPURT Callback Functions
     static GpuRt::AccelStructType ConvertAccelerationStructureType(
         const VkAccelerationStructureTypeKHR& accelerationStructureType);
 
     static GpuRt::AccelStructBuildFlags ConvertAccelerationStructureFlags(
         const VkBuildAccelerationStructureModeKHR&  mode,
         const VkBuildAccelerationStructureFlagsKHR& flags);
+
+    static GpuRt::GpuCpuAddr ConvertBufferAddress(
+        bool                                 host,
+        const VkDeviceOrHostAddressConstKHR& addr,
+        VkDeviceSize                         offset);
+
+    static GpuRt::Geometry ClientConvertAccelStructBuildGeometryKHR(
+        bool                                            hostBuild,
+        const uint32_t                                  deviceIndex,
+        const VkAccelerationStructureGeometryKHR*       pBuildInfo,
+        const uint32_t*                                 pMaxPrimitiveCount,
+        const VkAccelerationStructureBuildRangeInfoKHR* pBuildRangeInfos);
 
     const Device*                  m_pDevice;
     const Buffer*                  m_pBuffer;

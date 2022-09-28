@@ -28,7 +28,6 @@
 #include "include/vk_device.h"
 #include "include/vk_graphics_pipeline.h"
 #include "include/vk_graphics_pipeline_library.h"
-#include "include/vk_instance.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_render_pass.h"
 
@@ -1133,7 +1132,7 @@ static void BuildVrsRateParams(
             VkToPalShadingRateCombinerOp(pFsr->combinerOps[0]);
 
         pInfo->immedInfo.vrsRateParams.combinerState[static_cast<uint32_t>(
-            Pal::VrsCombinerStage::Primitive)] = Pal::VrsCombiner::Override;
+            Pal::VrsCombinerStage::Primitive)] = VkToPalShadingRateCombinerOp(pFsr->combinerOps[0]);
 
         pInfo->immedInfo.vrsRateParams.combinerState[
             static_cast<uint32_t>(Pal::VrsCombinerStage::Image)] = VkToPalShadingRateCombinerOp(pFsr->combinerOps[1]);
@@ -1571,9 +1570,6 @@ static void BuildFragmentShaderState(
 #endif
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
-    const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
-    const uint32_t    subpass     = pIn->subpass;
-
     // Build states via VkPipelineDepthStencilStateCreateInfo
     BuildDepthStencilState(pIn->pDepthStencilState, dynamicStateFlags, pInfo);
 
@@ -2494,8 +2490,6 @@ uint64_t GraphicsPipelineCommon::BuildApiHash(
 
     baseHasher.Update(pCreateInfo->flags);
     baseHasher.Update(dynamicStateFlags);
-
-    const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pCreateInfo->renderPass);
 
     if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)
     {

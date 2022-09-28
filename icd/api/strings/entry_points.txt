@@ -383,9 +383,9 @@ vkQueueInsertDebugUtilsLabelEXT                     @device       @iext(EXT_debu
 vkCmdBeginDebugUtilsLabelEXT                        @device       @iext(EXT_debug_utils)
 vkCmdEndDebugUtilsLabelEXT                          @device       @iext(EXT_debug_utils)
 vkCmdInsertDebugUtilsLabelEXT                       @device       @iext(EXT_debug_utils)
-vkCreateDebugUtilsMessengerEXT                      @device       @iext(EXT_debug_utils)
-vkDestroyDebugUtilsMessengerEXT                     @device       @iext(EXT_debug_utils)
-vkSubmitDebugUtilsMessageEXT                        @device       @iext(EXT_debug_utils)
+vkCreateDebugUtilsMessengerEXT                      @instance     @iext(EXT_debug_utils)
+vkDestroyDebugUtilsMessengerEXT                     @instance     @iext(EXT_debug_utils)
+vkSubmitDebugUtilsMessageEXT                        @instance     @iext(EXT_debug_utils)
 
 vkGetPhysicalDeviceSurfaceCapabilities2EXT          @physDevice   @iext(EXT_display_surface_counter)
 
@@ -503,3 +503,5 @@ vkCmdTraceRaysIndirect2KHR                          @device       @dext(KHR_ray_
 
 vkGetShaderModuleIdentifierEXT                      @device       @dext(EXT_shader_module_identifier)
 vkGetShaderModuleCreateInfoIdentifierEXT            @device       @dext(EXT_shader_module_identifier)
+
+vkCmdSetVertexInputEXT                              @device       @dext(EXT_vertex_input_dynamic_state)

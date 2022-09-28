@@ -290,14 +290,12 @@ void GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 {
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
-    uint32_t tempIdx = 0;
-
     for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
     {
         if ((pShaderStageInfo->stages[i].pModuleHandle != nullptr) &&
             pCompiler->IsValidShaderModule(pShaderStageInfo->stages[i].pModuleHandle))
         {
-            VK_ASSERT(pShaderStageInfo->stages[i].pModuleHandle == &pTempModules[tempIdx]);
+            VK_ASSERT(pShaderStageInfo->stages[i].pModuleHandle == &pTempModules[i]);
 
             bool canBuildShader = (((pShaderStageInfo->stages[i].stage == ShaderStage::ShaderStageFragment) &&
                                     disableRasterization)
@@ -305,15 +303,13 @@ void GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 
             if (canBuildShader)
             {
-                // We don't take care of return result. Early compile failure in some cases is expected
+                // We don't take care of the result. Early compile failure in some cases is expected
                 pCompiler->CreateGraphicsShaderBinary(
-                    pDevice, pShaderStageInfo->stages[i].stage, pBinaryCreateInfo, &pTempModules[tempIdx]);
+                    pDevice, pShaderStageInfo->stages[i].stage, pBinaryCreateInfo, &pTempModules[i]);
             }
 
-            pTempModuleStages[tempIdx].stage              = pShaderStageInfo->stages[i].stage;
-            pTempModuleStages[tempIdx].needFreeBinaryOnly = false;
-
-            ++tempIdx;
+            pTempModuleStages[i].stage          = pShaderStageInfo->stages[i].stage;
+            pTempModuleStages[i].freeBinaryOnly = false;
         }
     }
 
@@ -326,21 +322,20 @@ void GraphicsPipelineLibrary::CreatePartialPipelineBinary(
             const ShaderModuleHandle* pParentHandle =
                 pLibInfo->pPreRasterizationShaderLib->GetShaderModuleHandle(ShaderStage::ShaderStageVertex);
 
-            VK_ASSERT(pParentHandle != nullptr);
-
+            // Parent library may don't have vertex shader if it uses mesh shader.
             if (pParentHandle != nullptr)
             {
+                constexpr uint32_t TempIdx = ShaderStage::ShaderStageVertex;
+
                 pBinaryCreateInfo->pipelineInfo.enableUberFetchShader = false;
 
-                pTempModules[tempIdx] = *pParentHandle;
+                pTempModules[TempIdx] = *pParentHandle;
 
                 pCompiler->CreateGraphicsShaderBinary(
-                    pDevice, ShaderStage::ShaderStageVertex, pBinaryCreateInfo, &pTempModules[tempIdx]);
+                    pDevice, ShaderStage::ShaderStageVertex, pBinaryCreateInfo, &pTempModules[TempIdx]);
 
-                pTempModuleStages[tempIdx].stage              = ShaderStage::ShaderStageVertex;
-                pTempModuleStages[tempIdx].needFreeBinaryOnly = true;
-
-                ++tempIdx;
+                pTempModuleStages[TempIdx].stage          = ShaderStage::ShaderStageVertex;
+                pTempModuleStages[TempIdx].freeBinaryOnly = true;
             }
         }
 
@@ -354,28 +349,30 @@ void GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 
             if (pParentHandle != nullptr)
             {
-                pTempModules[tempIdx] = *pParentHandle;
+                constexpr uint32_t TempIdx = ShaderStage::ShaderStageFragment;
+
+                pTempModules[TempIdx] = *pParentHandle;
 
                 pCompiler->CreateGraphicsShaderBinary(
-                    pDevice, ShaderStage::ShaderStageVertex, pBinaryCreateInfo, &pTempModules[tempIdx]);
+                    pDevice, ShaderStage::ShaderStageFragment, pBinaryCreateInfo, &pTempModules[TempIdx]);
 
-                pTempModuleStages[tempIdx].stage              = ShaderStage::ShaderStageFragment;
-                pTempModuleStages[tempIdx].needFreeBinaryOnly = true;
-
-                ++tempIdx;
+                pTempModuleStages[TempIdx].stage          = ShaderStage::ShaderStageFragment;
+                pTempModuleStages[TempIdx].freeBinaryOnly = true;
             }
         }
     }
 
-    for (uint32_t i = tempIdx; i < ShaderStage::ShaderStageGfxCount; ++i)
+    for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
     {
-        pTempModuleStages[i].stage = ShaderStage::ShaderStageInvalid;
-    }
-
-    for (uint32_t i = 0; i < tempIdx; ++i)
-    {
-        PipelineCompiler::SetPartialGraphicsPipelineBinaryInfo(
-            &pTempModules[i], pTempModuleStages[i].stage, pBinaryCreateInfo);
+        if (pCompiler->IsValidShaderModule(&pTempModules[i]))
+        {
+            PipelineCompiler::SetPartialGraphicsPipelineBinaryInfo(
+                &pTempModules[i], pTempModuleStages[i].stage, pBinaryCreateInfo);
+        }
+        else
+        {
+            pTempModuleStages[i].stage = ShaderStage::ShaderStageInvalid;
+        }
     }
 }
 
@@ -530,33 +527,20 @@ VkResult GraphicsPipelineLibrary::Destroy(
     Device*                      pDevice,
     const VkAllocationCallbacks* pAllocator)
 {
-    // Free the temporary newly-built shader modules
-    uint32_t newShaderCount = 0;
+    PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
+
     for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
     {
-        if ((m_tempModuleStates[i].stage != ShaderStage::ShaderStageInvalid) &&
-            (m_tempModuleStates[i].needFreeBinaryOnly == false))
+        if (m_tempModuleStates[i].stage != ShaderStage::ShaderStageInvalid)
         {
-            newShaderCount++;
-        }
-        else
-        {
-            break;
-        }
-    }
-    FreeTempModules(pDevice, newShaderCount, m_tempModules);
-
-    // Free the shader binary for the modules whose ownership is not fully belong to current library
-    for (uint32_t i = newShaderCount; i < ShaderStage::ShaderStageGfxCount; ++i)
-    {
-        if ((m_tempModuleStates[i].stage != ShaderStage::ShaderStageInvalid) &&
-            m_tempModuleStates[i].needFreeBinaryOnly)
-        {
-            PipelineCompiler::FreeGraphicsShaderBinary(m_tempModules + i);
-        }
-        else
-        {
-            break;
+            if (m_tempModuleStates[i].freeBinaryOnly)
+            {
+                PipelineCompiler::FreeGraphicsShaderBinary(m_tempModules + i);
+            }
+            else
+            {
+                pCompiler->FreeShaderModule(m_tempModules + i);
+            }
         }
     }
 

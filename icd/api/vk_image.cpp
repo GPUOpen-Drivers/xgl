@@ -245,15 +245,16 @@ void Image::ConvertImageCreateInfo(
     pPalCreateInfo->extent.width     = pCreateInfo->extent.width;
     pPalCreateInfo->extent.height    = pCreateInfo->extent.height;
 
-    pPalCreateInfo->extent.depth     = pCreateInfo->extent.depth;
-    pPalCreateInfo->imageType        = VkToPalImageType(pCreateInfo->imageType);
-    pPalCreateInfo->swizzledFormat   = VkToPalFormat(createInfoFormat, settings);
-    pPalCreateInfo->mipLevels        = pCreateInfo->mipLevels;
-    pPalCreateInfo->arraySize        = pCreateInfo->arrayLayers;
-    pPalCreateInfo->samples          = pCreateInfo->samples;
-    pPalCreateInfo->fragments        = pCreateInfo->samples;
-    pPalCreateInfo->tiling           = VkToPalImageTiling(pCreateInfo->tiling);
-    pPalCreateInfo->tilingOptMode    = pDevice->GetTilingOptMode();
+    pPalCreateInfo->extent.depth      = pCreateInfo->extent.depth;
+    pPalCreateInfo->imageType         = VkToPalImageType(pCreateInfo->imageType);
+    pPalCreateInfo->swizzledFormat    = VkToPalFormat(createInfoFormat, settings);
+    pPalCreateInfo->mipLevels         = pCreateInfo->mipLevels;
+    pPalCreateInfo->arraySize         = pCreateInfo->arrayLayers;
+    pPalCreateInfo->samples           = pCreateInfo->samples;
+    pPalCreateInfo->fragments         = pCreateInfo->samples;
+    pPalCreateInfo->tiling            = VkToPalImageTiling(pCreateInfo->tiling);
+    pPalCreateInfo->tilingOptMode     = pDevice->GetTilingOptMode();
+    pPalCreateInfo->imageMemoryBudget = settings.imageMemoryBudget;
 
     if ((pPalCreateInfo->tilingOptMode == Pal::TilingOptMode::OptForSpace) &&
         Pal::Formats::IsBlockCompressed(pPalCreateInfo->swizzledFormat.format) &&

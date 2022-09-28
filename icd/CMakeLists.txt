@@ -60,12 +60,6 @@ if (VKI_GPU_DECOMPRESS)
 endif()
 #endif
 
-target_include_directories(xgl PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    api
-    api/include
-)
-
 ### XGL Subprojects ####################################################################################################
 # PAL
 add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
@@ -231,11 +225,11 @@ set(ICD_STRING_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/strings)
 # ICD settings code generation main script
 set(ICD_GEN_STRINGS ${ICD_STRING_DIR}/generate_strings.py)
 
-set(ICD_GEN_STRINGS_OPT -w ${ICD_STRING_DIR} -d ${ICD_STRING_DIR})
-
 set(ICD_GEN_STRINGS_FILES ${ICD_GEN_STRINGS} ${ICD_STRING_DIR}/func_table_template.py)
 
-set(ICD_STRING_OUTPUT_DIR ${ICD_STRING_DIR})
+set(ICD_STRING_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/api/strings)
+
+set(ICD_GEN_STRINGS_OPT -w ${ICD_STRING_DIR} -d ${ICD_STRING_OUTPUT_DIR})
 
 set(ICD_STRING_OUTPUT_FILES ${ICD_STRING_OUTPUT_DIR}/g_entry_points_decl.h
                             ${ICD_STRING_OUTPUT_DIR}/g_entry_points_impl.h
@@ -257,7 +251,7 @@ add_custom_command(
 
 add_custom_target(
     RunVKStringsGenerator
-    DEPENDS ${ICD_GEN_STRINGS_FILES} ${ICD_STRING_SOURCE_FILES} ${ICD_STRING_OUTPUT_FILES} ${ICD_STRING_DIR}/strings.cpp
+    DEPENDS ${ICD_STRING_OUTPUT_FILES}
     COMMENT "Checking if re-generation is required for strings"
 )
 
@@ -358,6 +352,7 @@ endif()
 target_link_libraries(xgl PRIVATE vkgc)
 target_link_libraries(xgl PRIVATE pal)
 target_link_libraries(xgl PRIVATE khronos_vulkan_interface)
+target_link_libraries(xgl PRIVATE xgl_interface)
 
 #if VKI_RAY_TRACING
 if (VKI_RAY_TRACING)

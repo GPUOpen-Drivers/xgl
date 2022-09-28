@@ -195,6 +195,7 @@ PipelineBinaryCache::PipelineBinaryCache(
     m_hashMapping          { 32, &m_palAllocator },
 #endif
     m_pMemoryLayer         { nullptr },
+    m_pCompressingLayer    { nullptr },
     m_expectedEntries      { expectedEntries },
     m_pArchiveLayer        { nullptr },
     m_openFiles            { &m_palAllocator },
@@ -235,6 +236,12 @@ PipelineBinaryCache::~PipelineBinaryCache()
     {
         m_pMemoryLayer->Destroy();
         FreeMem(m_pMemoryLayer);
+    }
+
+    if (m_pCompressingLayer != nullptr)
+    {
+        m_pCompressingLayer->Destroy();
+        FreeMem(m_pCompressingLayer);
     }
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
@@ -843,6 +850,39 @@ VkResult PipelineBinaryCache::InitMemoryCacheLayer(
 }
 
 // =====================================================================================================================
+// Initialize compression layer
+VkResult PipelineBinaryCache::InitCompressingLayer(
+    const RuntimeSettings& settings)
+{
+    VK_ASSERT(m_pCompressingLayer == nullptr);
+
+    VkResult result = VK_SUCCESS;
+
+    const size_t layerSize = Util::GetCompressingCacheLayerSize();
+    void* pMem = AllocMem(layerSize);
+
+    if (pMem == nullptr)
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    else
+    {
+        Util::CompressingCacheLayerCreateInfo createInfo = {};
+        createInfo.useHighCompression = settings.pipelineCacheUseHighCompression;
+
+        result = PalToVkResult(Util::CreateCompressingCacheLayer(&createInfo, pMem, &m_pCompressingLayer));
+        VK_ASSERT(result == VK_SUCCESS);
+
+        if (result != VK_SUCCESS)
+        {
+            FreeMem(pMem);
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 // Open an archive file from disk for read
 Util::IArchiveFile* PipelineBinaryCache::OpenReadOnlyArchive(
     const char* pFilePath,
@@ -1152,35 +1192,50 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
 
                 if (pLayer != nullptr)
                 {
-                    m_openFiles.PushBack(pFile);
-                    m_archiveLayers.PushBack(pLayer);
-
-                    if (pLastReadLayer != nullptr)
+                    if (m_openFiles.PushBack(pFile) != Pal::Result::_Success)
                     {
-                        if (pLastReadLayer != pWriteLayer)
+                        pFile->Destroy();
+                        FreeMem(pFile);
+                        result = VK_ERROR_INITIALIZATION_FAILED;
+                    }
+
+                    if (m_archiveLayers.PushBack(pLayer) != Pal::Result::_Success)
+                    {
+                        pLayer->Destroy();
+                        FreeMem(pLayer);
+                        result = VK_ERROR_INITIALIZATION_FAILED;
+                    }
+
+                    if (result == VK_SUCCESS)
+                    {
+                        if (pLastReadLayer != nullptr)
                         {
-                            // Connect to previous read layer as read-through / write-through + skip
-                            pLastReadLayer->SetLoadPolicy(Util::ICacheLayer::LinkPolicy::PassCalls);
-                            pLastReadLayer->SetStorePolicy(Util::ICacheLayer::LinkPolicy::Skip | Util::ICacheLayer::LinkPolicy::PassData);
+                            if (pLastReadLayer != pWriteLayer)
+                            {
+                                // Connect to previous read layer as read-through / write-through + skip
+                                pLastReadLayer->SetLoadPolicy(Util::ICacheLayer::LinkPolicy::PassCalls);
+                                pLastReadLayer->SetStorePolicy(Util::ICacheLayer::LinkPolicy::Skip |
+                                                               Util::ICacheLayer::LinkPolicy::PassData);
+                            }
+
+                            pLastReadLayer->Link(pLayer);
                         }
 
-                        pLastReadLayer->Link(pLayer);
-                    }
+                        // Ensure the first read or write layer is set to "top" of the chain.
+                        if (m_pArchiveLayer == nullptr)
+                        {
+                            m_pArchiveLayer = pLayer;
+                        }
 
-                    // Ensure the first read or write layer is set to "top" of the chain.
-                    if (m_pArchiveLayer == nullptr)
-                    {
-                        m_pArchiveLayer = pLayer;
-                    }
-
-                    if (readOnly)
-                    {
-                        pLastReadLayer = pLayer;
-                    }
-                    else
-                    {
-                        pWriteLayer = pLayer;
-                        pLastReadLayer = pLayer;
+                        if (readOnly)
+                        {
+                            pLastReadLayer = pLayer;
+                        }
+                        else
+                        {
+                            pWriteLayer = pLayer;
+                            pLastReadLayer = pLayer;
+                        }
                     }
                 }
                 else
@@ -1218,6 +1273,12 @@ VkResult PipelineBinaryCache::InitLayers(
     bool memoryLayerOnline = (InitMemoryCacheLayer(settings) >= VK_SUCCESS);
 
     bool archiveLayerOnline = createArchiveLayers && (InitArchiveLayers(pDefaultCacheFilePath, settings) >= VK_SUCCESS);
+
+    if (((settings.pipelineCacheCompression == PipelineCacheCompressInMemory) && memoryLayerOnline) ||
+        ((settings.pipelineCacheCompression != PipelineCacheCompressDisabled) && archiveLayerOnline))
+    {
+        InitCompressingLayer(settings);
+    }
 
     return (injectionLayerOnline || memoryLayerOnline || archiveLayerOnline)
         ? VK_SUCCESS
@@ -1262,9 +1323,21 @@ VkResult PipelineBinaryCache::OrderLayers(
     Util::ICacheLayer* pBottomLayer = nullptr;
     m_pTopLayer                     = nullptr;
 
+    if ((m_pCompressingLayer != nullptr) && (result == VK_SUCCESS) &&
+        (settings.pipelineCacheCompression == PipelineCacheCompressInMemory))
+    {
+        result = AddLayerToChain(m_pCompressingLayer, &pBottomLayer);
+    }
+
     if (result == VK_SUCCESS)
     {
         result = AddLayerToChain(m_pMemoryLayer, &pBottomLayer);
+    }
+
+    if ((m_pCompressingLayer != nullptr) && (result == VK_SUCCESS) &&
+        (settings.pipelineCacheCompression == PipelineCacheCompressOnDisk))
+    {
+        result = AddLayerToChain(m_pCompressingLayer, &pBottomLayer);
     }
 
     if (result == VK_SUCCESS)

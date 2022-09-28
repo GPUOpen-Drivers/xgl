@@ -280,6 +280,17 @@ else()
     )
 endif()
 
+### xgl Interface #################################################################################################
+add_library(xgl_interface INTERFACE)
+target_include_directories(xgl_interface
+    INTERFACE
+        icd
+        icd/api
+        icd/api/include
+        # Generated string headers
+        ${CMAKE_CURRENT_BINARY_DIR}/icd/api
+)
+
 ### Identify Packge Type ##########################################################################################
 if(UNIX)
   identifyPackageType()

@@ -662,6 +662,42 @@ static size_t GetRenderPassCreateInfoRequiredMemorySize(
 }
 
 // =====================================================================================================================
+// Check if forcing lateZ is needed
+template <typename RenderPassCreateInfoType>
+static bool CheckIfForceLateZNeeded(
+    const RenderPassCreateInfoType* pCreateInfo)
+{
+    // When there is a valid "feedback loop" in renderpass, lateZ needs to be enabled
+    // In Vulkan a "feedback loop" is described as a subpass where there is at least
+    // one input attachment that is also a color or depth/stencil attachment
+    // Feedback loops are allowed and their behavior is well defined under certain conditions.
+    // When there is a feedback loop it is possible for the shaders to read
+    // the contents of the color and depth or stencil attachments
+    // from the shader during draw. Because of that possibility you have to use late-z
+
+    bool found = false;
+    for (uint32 i = 0; (i < pCreateInfo->subpassCount) && (found == false); i++)
+    {
+        if (pCreateInfo->pSubpasses[i].pDepthStencilAttachment != nullptr)
+        {
+            for (uint32 j = 0; (j < pCreateInfo->pSubpasses[i].inputAttachmentCount) && (found == false); j++)
+            {
+                for (uint32 k = 0; (k < pCreateInfo->pSubpasses[i].colorAttachmentCount) && (found == false); k++)
+                {
+                    if (pCreateInfo->pSubpasses[i].pInputAttachments[j].attachment ==
+                        pCreateInfo->pSubpasses[i].pColorAttachments[k].attachment)
+                    {
+                        found = true;
+                    }
+                }
+            }
+        }
+    }
+
+    return found;
+}
+
+// =====================================================================================================================
 // Creates a render pass
 template <typename RenderPassCreateInfoType>
 static void InitRenderPassCreateInfo(
@@ -669,33 +705,33 @@ static void InitRenderPassCreateInfo(
     const RenderPassExtCreateInfo&      renderPassExt,
     void*                               pMemoryPtr,
     size_t                              memorySize,
-    RenderPassCreateInfo*               outRenderPassInfo)
+    RenderPassCreateInfo*               pOutRenderPassInfo)
 {
     void* nextPtr = pMemoryPtr;
 
-    outRenderPassInfo->flags = pCreateInfo->flags;
+    pOutRenderPassInfo->flags = pCreateInfo->flags;
 
     // The multiview implementation does not exploit any coherence between views.
     if (renderPassExt.pMultiviewCreateInfo != nullptr)
     {
-        outRenderPassInfo->correlatedViewMaskCount = renderPassExt.pMultiviewCreateInfo->correlationMaskCount;
-        outRenderPassInfo->pCorrelatedViewMasks    = static_cast<uint32_t*>(nextPtr);
+        pOutRenderPassInfo->correlatedViewMaskCount = renderPassExt.pMultiviewCreateInfo->correlationMaskCount;
+        pOutRenderPassInfo->pCorrelatedViewMasks    = static_cast<uint32_t*>(nextPtr);
 
         memcpy(
-            outRenderPassInfo->pCorrelatedViewMasks,
+            pOutRenderPassInfo->pCorrelatedViewMasks,
             renderPassExt.pMultiviewCreateInfo->pCorrelationMasks,
-            outRenderPassInfo->correlatedViewMaskCount * sizeof(uint32_t));
+            pOutRenderPassInfo->correlatedViewMaskCount * sizeof(uint32_t));
     }
 
-    nextPtr = Util::VoidPtrInc(nextPtr, outRenderPassInfo->correlatedViewMaskCount * sizeof(uint32_t));
+    nextPtr = Util::VoidPtrInc(nextPtr, pOutRenderPassInfo->correlatedViewMaskCount * sizeof(uint32_t));
     VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
 
-    outRenderPassInfo->attachmentCount  = pCreateInfo->attachmentCount;
-    outRenderPassInfo->pAttachments     = static_cast<AttachmentDescription*>(nextPtr);
+    pOutRenderPassInfo->attachmentCount  = pCreateInfo->attachmentCount;
+    pOutRenderPassInfo->pAttachments     = static_cast<AttachmentDescription*>(nextPtr);
 
     for (uint32_t attachIndex = 0; attachIndex < pCreateInfo->attachmentCount; ++attachIndex)
     {
-        outRenderPassInfo->pAttachments[attachIndex].Init(pCreateInfo->pAttachments[attachIndex]);
+        pOutRenderPassInfo->pAttachments[attachIndex].Init(pCreateInfo->pAttachments[attachIndex]);
     }
 
     nextPtr = Util::VoidPtrInc(nextPtr, pCreateInfo->attachmentCount * sizeof(AttachmentDescription));
@@ -703,8 +739,8 @@ static void InitRenderPassCreateInfo(
     nextPtr = Util::VoidPtrAlign(nextPtr, alignof(SubpassDescription));
     VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
 
-    outRenderPassInfo->subpassCount = pCreateInfo->subpassCount;
-    outRenderPassInfo->pSubpasses   = static_cast<SubpassDescription*>(nextPtr);
+    pOutRenderPassInfo->subpassCount = pCreateInfo->subpassCount;
+    pOutRenderPassInfo->pSubpasses   = static_cast<SubpassDescription*>(nextPtr);
 
     nextPtr = Util::VoidPtrInc(nextPtr, pCreateInfo->subpassCount * sizeof(SubpassDescription));
     VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
@@ -717,14 +753,14 @@ static void InitRenderPassCreateInfo(
         const auto&    subpassDesc           = pCreateInfo->pSubpasses[subpassIndex];
         const size_t   subpassDescMemorySize = GetSubpassDescriptionBaseMemorySize(subpassDesc);
 
-        VK_PLACEMENT_NEW(&outRenderPassInfo->pSubpasses[subpassIndex]) SubpassDescription();
+        VK_PLACEMENT_NEW(&pOutRenderPassInfo->pSubpasses[subpassIndex]) SubpassDescription();
 
-        outRenderPassInfo->pSubpasses[subpassIndex].Init(
+        pOutRenderPassInfo->pSubpasses[subpassIndex].Init(
             subpassIndex,
             subpassDesc,
             renderPassExt,
-            outRenderPassInfo->pAttachments,
-            outRenderPassInfo->attachmentCount,
+            pOutRenderPassInfo->pAttachments,
+            pOutRenderPassInfo->attachmentCount,
             subpassDescMemory,
             subpassDescMemorySize);
 
@@ -736,21 +772,23 @@ static void InitRenderPassCreateInfo(
     nextPtr = Util::VoidPtrInc(nextPtr, subpassDescAllMemorySize);
     VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
 
-    outRenderPassInfo->dependencyCount = pCreateInfo->dependencyCount;
-    outRenderPassInfo->pDependencies   = static_cast<SubpassDependency*>(nextPtr);
+    pOutRenderPassInfo->dependencyCount = pCreateInfo->dependencyCount;
+    pOutRenderPassInfo->pDependencies   = static_cast<SubpassDependency*>(nextPtr);
 
     for (uint32_t depIndex = 0; depIndex < pCreateInfo->dependencyCount; ++depIndex)
     {
-        outRenderPassInfo->pDependencies[depIndex].Init(
+        pOutRenderPassInfo->pDependencies[depIndex].Init(
             depIndex,
             pCreateInfo->pDependencies[depIndex],
             renderPassExt);
     }
 
+    pOutRenderPassInfo->needForceLateZ = CheckIfForceLateZNeeded(pCreateInfo);
+
     nextPtr = Util::VoidPtrInc(nextPtr, pCreateInfo->dependencyCount * sizeof(SubpassDependency));
     VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
 
-    outRenderPassInfo->hash = GenerateRenderPassHash(outRenderPassInfo);
+    pOutRenderPassInfo->hash = GenerateRenderPassHash(pOutRenderPassInfo);
 }
 
 // =====================================================================================================================

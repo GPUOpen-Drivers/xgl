@@ -167,6 +167,13 @@ bool ResourceOptimizer::ResourcePatternMatchesResource(
         return false;
     }
 
+    if (pattern.match.apiHashRange &&
+        ((resourceKey.apiHash < pattern.targetKey.apiHashBegin) ||
+         (resourceKey.apiHash > pattern.targetKey.apiHashEnd)))
+    {
+        return false;
+    }
+
     if (pattern.match.dimensions &&
         (pattern.targetKey.dimensions != resourceKey.dimensions))
     {
@@ -270,6 +277,12 @@ void ResourceOptimizer::BuildAppProfile()
             i = m_appProfile.entryCount++;
             m_appProfile.entries[i].pattern.match.apiHash = true;
             m_appProfile.entries[i].pattern.targetKey.apiHash = 0x3a70c52a65527761;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = 1;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x14ed743568704236;
             m_appProfile.entries[i].action.resourceCreate.apply.dccMode = 1;
             m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
         }

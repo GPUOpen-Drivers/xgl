@@ -826,19 +826,15 @@ VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetAccelerationStructureDeviceAddressKHR
 }
 
 }; // namespace entry
-}; // namespace vk
-
-namespace GpuRt
-{
 
 #define SET_GEOM_FLAG(var, vkflag, gpurtFlag) \
     if (var & vkflag) \
     { \
-        geometry.flags |= GeometryFlags(gpurtFlag); \
+        geometry.flags |= GpuRt::GeometryFlags(gpurtFlag); \
     }
 
 // =====================================================================================================================
-static GpuRt::GpuCpuAddr ConvertBufferAddress(
+GpuRt::GpuCpuAddr AccelerationStructure::ConvertBufferAddress(
     bool                                 host,
     const VkDeviceOrHostAddressConstKHR& addr,
     VkDeviceSize                         offset)
@@ -858,7 +854,7 @@ static GpuRt::GpuCpuAddr ConvertBufferAddress(
 }
 
 // =====================================================================================================================
-GpuRt::Geometry ClientConvertAccelStructBuildGeometryKHR(
+GpuRt::Geometry AccelerationStructure::ClientConvertAccelStructBuildGeometryKHR(
     bool                                                    hostBuild,
     const uint32_t                                          deviceIndex,
     const VkAccelerationStructureGeometryKHR*               pBuildInfo,
@@ -1019,12 +1015,12 @@ GpuRt::Geometry ClientConvertAccelStructBuildGeometryKHR(
 }
 
 // =====================================================================================================================
-GpuRt::Geometry ClientConvertAccelStructBuildGeometry(
+GpuRt::Geometry AccelerationStructure::ClientConvertAccelStructBuildGeometry(
     const GpuRt::AccelStructBuildInputs& inputs,
     uint32_t                             geometryIndex)
 {
     // ClientConvertAccelStructBuildGeometry should be just be called for BottomLevel Structures
-    VK_ASSERT(inputs.type == AccelStructType::BottomLevel);
+    VK_ASSERT(inputs.type == GpuRt::AccelStructType::BottomLevel);
 
     const vk::GeometryConvertHelper* pHelper = static_cast<const vk::GeometryConvertHelper*>(inputs.pClientData);
 
@@ -1051,7 +1047,7 @@ GpuRt::Geometry ClientConvertAccelStructBuildGeometry(
 }
 
 // =====================================================================================================================
-GpuRt::AccelStructPostBuildInfo ClientConvertAccelStructPostBuildInfo(
+GpuRt::AccelStructPostBuildInfo AccelerationStructure::ClientConvertAccelStructPostBuildInfo(
     const GpuRt::AccelStructBuildInfo& buildInfo,
     uint32_t                           postBuildIndex)
 {
@@ -1065,8 +1061,8 @@ GpuRt::AccelStructPostBuildInfo ClientConvertAccelStructPostBuildInfo(
 }
 
 // =====================================================================================================================
-GpuRt::InstanceBottomLevelInfo ClientConvertAccelStructBuildInstanceBottomLevel(
-    const AccelStructBuildInputs& inputs,
+GpuRt::InstanceBottomLevelInfo AccelerationStructure::ClientConvertAccelStructBuildInstanceBottomLevel(
+    const GpuRt::AccelStructBuildInputs& inputs,
     uint32_t                      instanceIndex)
 {
     const vk::GeometryConvertHelper* pHelper = static_cast<const vk::GeometryConvertHelper*>(inputs.pClientData);
@@ -1091,4 +1087,4 @@ GpuRt::InstanceBottomLevelInfo ClientConvertAccelStructBuildInstanceBottomLevel(
     return blasInfo;
 }
 
-};
+}; // namespace vk

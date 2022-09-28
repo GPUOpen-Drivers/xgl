@@ -256,8 +256,6 @@ protected:
         GraphicsPipelineObjectCreateInfo*   pObjectCreateInfo,
         VkPipeline*                         pPipeline);
 
-    ~GraphicsPipeline();
-
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(GraphicsPipeline);
 

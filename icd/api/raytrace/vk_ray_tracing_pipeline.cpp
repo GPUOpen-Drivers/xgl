@@ -222,12 +222,12 @@ uint64_t RayTracingPipeline::BuildApiHash(
 
     apiHasher.Update(pCreateInfo->basePipelineIndex);
 
-    baseHasher.Finalize(reinterpret_cast<uint8_t* const>(&baseHash));
+    baseHasher.Finalize(reinterpret_cast<uint8_t*>(&baseHash));
 
     uint64_t              apiHash;
     Util::MetroHash::Hash apiHashFull;
     apiHasher.Update(baseHash);
-    apiHasher.Finalize(reinterpret_cast<uint8_t* const>(&apiHashFull));
+    apiHasher.Finalize(reinterpret_cast<uint8_t*>(&apiHashFull));
     apiHash = Util::MetroHash::Compact64(&apiHashFull);
 
     return apiHash;
@@ -1734,9 +1734,8 @@ void RayTracingPipeline::ConvertStaticPipelineFlags(
         Util::TestAnyFlagSet(pipelineFlags, VK_PIPELINE_CREATE_RAY_TRACING_SKIP_TRIANGLES_BIT_KHR),
         Util::TestAnyFlagSet(pipelineFlags, VK_PIPELINE_CREATE_RAY_TRACING_SKIP_AABBS_BIT_KHR),
         settings.rtUseRayQueryForTraceRays,
-        false,
         pDevice->RayTrace()->AccelStructTrackerEnabled(DefaultDeviceIndex),
-        (settings.rtTraceRayCounterMode != GpuRt::TraceRayCounterDisable));
+        (settings.rtTraceRayCounterMode != TraceRayCounterMode::TraceRayCounterDisable));
 
     *pStaticFlags = staticFlags;
 
