@@ -284,11 +284,11 @@ endif()
 add_library(xgl_interface INTERFACE)
 target_include_directories(xgl_interface
     INTERFACE
+        # Generated string headers
+        ${CMAKE_CURRENT_BINARY_DIR}/icd/api
         icd
         icd/api
         icd/api/include
-        # Generated string headers
-        ${CMAKE_CURRENT_BINARY_DIR}/icd/api
 )
 
 ### Identify Packge Type ##########################################################################################
