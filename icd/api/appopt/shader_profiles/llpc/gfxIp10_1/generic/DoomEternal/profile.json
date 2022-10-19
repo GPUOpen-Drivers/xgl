@@ -2,6 +2,26 @@
   "entries": [
     {
       "pattern": {
+        "always": true
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "ps": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
         "ps": {
           "codeHash": "0xcd8bed3a5b53770b 183d0a947aec968c"
         }

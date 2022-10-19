@@ -723,25 +723,22 @@ VkResult PhysicalDevice::Initialize()
 
             const Pal::gpusize forceMinLocalHeapSize = (settings.overrideLocalHeapSizeInGBs * BytesInOneGB);
 
-            const Pal::gpusize totalLocalHeapSize = heapProperties[Pal::GpuHeapLocal].heapSize +
-                                                    heapProperties[Pal::GpuHeapInvisible].heapSize;
+            const Pal::gpusize totalLocalHeapSize = heapProperties[Pal::GpuHeapLocal].logicalSize +
+                                                    heapProperties[Pal::GpuHeapInvisible].logicalSize;
 
             if (forceMinLocalHeapSize > totalLocalHeapSize)
             {
                 // If there's no local invisible heap, override the heapsize for Local visible heap,
                 // else, keep local visible heap size to whatever is reported by PAL (256 MBs) and
                 // adjust the Local invisible heap size accordingly.
-                if (heapProperties[Pal::GpuHeapInvisible].heapSize == 0)
+                if (heapProperties[Pal::GpuHeapInvisible].logicalSize == 0)
                 {
-                    heapProperties[Pal::GpuHeapLocal].heapSize         = forceMinLocalHeapSize;
-                    heapProperties[Pal::GpuHeapLocal].physicalHeapSize = forceMinLocalHeapSize;
+                    heapProperties[Pal::GpuHeapLocal].logicalSize = forceMinLocalHeapSize;
                 }
                 else
                 {
-                    heapProperties[Pal::GpuHeapInvisible].heapSize         = forceMinLocalHeapSize -
-                                                                             heapProperties[Pal::GpuHeapLocal].heapSize;
-                    heapProperties[Pal::GpuHeapInvisible].physicalHeapSize = forceMinLocalHeapSize -
-                                                                             heapProperties[Pal::GpuHeapLocal].heapSize;
+                    heapProperties[Pal::GpuHeapInvisible].logicalSize = forceMinLocalHeapSize -
+                                                                        heapProperties[Pal::GpuHeapLocal].logicalSize;
                 }
             }
         }
@@ -751,7 +748,7 @@ VkResult PhysicalDevice::Initialize()
     {
         for (uint32_t heapIdx = 0; heapIdx < Pal::GpuHeapCount; heapIdx++)
         {
-            m_memoryUsageTracker.totalMemorySize[heapIdx] = heapProperties[heapIdx].heapSize;
+            m_memoryUsageTracker.totalMemorySize[heapIdx] = heapProperties[heapIdx].logicalSize;
         }
 
         if (m_memoryUsageTracker.totalMemorySize[Pal::GpuHeapInvisible] == 0)
@@ -787,12 +784,11 @@ VkResult PhysicalDevice::Initialize()
 
         if (settings.forceUMA)
         {
-            heapProperties[Pal::GpuHeapInvisible].heapSize = 0;
-            heapProperties[Pal::GpuHeapLocal].heapSize     = 0;
+            heapProperties[Pal::GpuHeapInvisible].logicalSize = 0;
+            heapProperties[Pal::GpuHeapLocal].logicalSize     = 0;
         }
 
-        const Pal::gpusize invisHeapSize = heapProperties[Pal::GpuHeapInvisible].heapSize;
-        const Pal::gpusize localHeapSize = heapProperties[Pal::GpuHeapLocal].heapSize;
+        const Pal::gpusize invisHeapSize = heapProperties[Pal::GpuHeapInvisible].logicalSize;
 
         // Initialize memory heaps
         for (uint32_t orderedHeapIndex = 0; orderedHeapIndex < Pal::GpuHeapCount; ++orderedHeapIndex)
@@ -801,7 +797,7 @@ VkResult PhysicalDevice::Initialize()
             const Pal::GpuMemoryHeapProperties& heapProps  = heapProperties[palGpuHeap];
 
             // Initialize each heap if it exists other than GartCacheable, which we know will be shared with GartUswc.
-            if ((heapProps.heapSize > 0) && (palGpuHeap != Pal::GpuHeapGartCacheable))
+            if ((heapProps.logicalSize > 0) && (palGpuHeap != Pal::GpuHeapGartCacheable))
             {
                 uint32_t      heapIndex  = m_memoryProperties.memoryHeapCount++;
                 VkMemoryHeap& memoryHeap = m_memoryProperties.memoryHeaps[heapIndex];
@@ -809,7 +805,7 @@ VkResult PhysicalDevice::Initialize()
                 heapIndices[palGpuHeap] = heapIndex;
 
                 memoryHeap.flags = PalGpuHeapToVkMemoryHeapFlags(palGpuHeap);
-                memoryHeap.size  = heapProps.heapSize;
+                memoryHeap.size  = heapProps.logicalSize;
 
                 m_heapVkToPal[heapIndex]            = palGpuHeap;
                 m_memoryPalHeapToVkHeap[palGpuHeap] = heapIndex;
@@ -817,7 +813,7 @@ VkResult PhysicalDevice::Initialize()
                 if (palGpuHeap == Pal::GpuHeapGartUswc)
                 {
                     // These two should match because the PAL GPU heaps share the same physical memory.
-                    VK_ASSERT(memoryHeap.size == heapProperties[Pal::GpuHeapGartCacheable].heapSize);
+                    VK_ASSERT(memoryHeap.size == heapProperties[Pal::GpuHeapGartCacheable].logicalSize);
 
                     heapIndices[Pal::GpuHeapGartCacheable] = heapIndex;
                 }
@@ -853,7 +849,8 @@ VkResult PhysicalDevice::Initialize()
             {
                 uint32_t memoryTypeIndex = m_memoryProperties.memoryTypeCount++;
 
-                Pal::GpuHeap allocPalGpuHeap = ((palGpuHeap == Pal::GpuHeapInvisible) && (invisHeapSize == 0)) ? Pal::GpuHeapLocal : palGpuHeap;
+                Pal::GpuHeap allocPalGpuHeap = ((palGpuHeap == Pal::GpuHeapInvisible) && (invisHeapSize == 0)) ?
+                                                    Pal::GpuHeapLocal : palGpuHeap;
                 m_memoryVkIndexToPalHeap[memoryTypeIndex] = allocPalGpuHeap;
                 m_memoryPalHeapToVkIndexBits[allocPalGpuHeap] |= (1UL << memoryTypeIndex);
 
@@ -918,7 +915,7 @@ VkResult PhysicalDevice::Initialize()
             for (uint32_t orderedHeapIndex = 0; orderedHeapIndex < Pal::GpuHeapCount - 1; ++orderedHeapIndex)
             {
                 Pal::GpuHeap palGpuHeap     = ProtectedPriority[orderedHeapIndex];
-                const Pal::gpusize heapSize = heapProperties[palGpuHeap].heapSize;
+                const Pal::gpusize heapSize = heapProperties[palGpuHeap].logicalSize;
 
                 if ((heapSize > 0) && heapProperties[palGpuHeap].flags.supportsTmz)
                 {
@@ -1084,18 +1081,15 @@ void PhysicalDevice::PopulateGpaProperties()
                                                     static_cast<VkDeviceSize>(m_gpaProps.palProps.maxSqttSeBufferSize) :
                                                     0;
 
-        for (uint32_t perfBlock = VK_GPA_PERF_BLOCK_BEGIN_RANGE_AMD;
-                      perfBlock <= VK_GPA_PERF_BLOCK_END_RANGE_AMD;
+        for (uint32_t perfBlock = 0;
+                      perfBlock < static_cast<uint32_t>(Pal::GpuBlock::Count);
                       ++perfBlock)
         {
             const Pal::GpuBlock gpuBlock = VkToPalGpuBlock(static_cast<VkGpaPerfBlockAMD>(perfBlock));
 
-            if (gpuBlock < Pal::GpuBlock::Count)
+            if (m_gpaProps.palProps.blocks[static_cast<uint32_t>(gpuBlock)].available)
             {
-                if (m_gpaProps.palProps.blocks[static_cast<uint32_t>(gpuBlock)].available)
-                {
-                    m_gpaProps.properties.perfBlockCount++;
-                }
+                m_gpaProps.properties.perfBlockCount++;
             }
         }
     }
@@ -3776,6 +3770,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_RANGE_UNRESTRICTED));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_QUEUE_FAMILY_FOREIGN));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DESCRIPTOR_INDEXING));
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VARIABLE_POINTERS));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_ATTRIBUTE_DIVISOR));
 
@@ -4997,6 +4992,14 @@ void PhysicalDevice::GetPhysicalDeviceFloat16Int8Features(
 }
 
 // =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceMutableDescriptorTypeFeatures(
+    VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT* pMutableDescriptorTypeFeatures
+    ) const
+{
+    pMutableDescriptorTypeFeatures->mutableDescriptorType           = VK_TRUE;
+}
+
+// =====================================================================================================================
 template<typename T>
 void PhysicalDevice::GetPhysicalDeviceDescriptorIndexingFeatures(
     T pDescriptorIndexingFeatures
@@ -5303,6 +5306,23 @@ size_t PhysicalDevice::GetFeatures2(
                     GetPhysicalDeviceFloat16Int8Features(
                         &pExtInfo->shaderFloat16,
                         &pExtInfo->shaderInt8);
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            static_assert(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_VALVE ==
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT,
+                "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_VALVE must match"
+                "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT.");
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    GetPhysicalDeviceMutableDescriptorTypeFeatures(pExtInfo);
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6576,6 +6596,12 @@ void PhysicalDevice::GetDeviceProperties2(
             GetDeviceGpaProperties(pGpaProperties);
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GPA_PROPERTIES2_AMD:
+        {
+            auto* pGpaProperties = static_cast<VkPhysicalDeviceGpaProperties2AMD*>(pNext);
+            pGpaProperties->revisionId = PalProperties().revisionId;
+            break;
+        }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES:
         {
@@ -7425,21 +7451,18 @@ void PhysicalDevice::GetDeviceGpaProperties(
         uint32_t count   = Util::Min(pGpaProperties->perfBlockCount, m_gpaProps.properties.perfBlockCount);
         uint32_t written = 0;
 
-        for (uint32_t perfBlock = VK_GPA_PERF_BLOCK_BEGIN_RANGE_AMD;
-                      (perfBlock <= VK_GPA_PERF_BLOCK_END_RANGE_AMD) && (written < count);
+        for (uint32_t perfBlock = 0;
+                      (perfBlock < static_cast<uint32_t>(Pal::GpuBlock::Count)) && (written < count);
                       ++perfBlock)
         {
             const Pal::GpuBlock gpuBlock = VkToPalGpuBlock(static_cast<VkGpaPerfBlockAMD>(perfBlock));
 
-            if (gpuBlock < Pal::GpuBlock::Count)
+            if (m_gpaProps.palProps.blocks[static_cast<uint32_t>(gpuBlock)].available)
             {
-                if (m_gpaProps.palProps.blocks[static_cast<uint32_t>(gpuBlock)].available)
-                {
-                    pGpaProperties->pPerfBlocks[written++] = ConvertGpaPerfBlock(
-                        static_cast<VkGpaPerfBlockAMD>(perfBlock),
-                        gpuBlock,
-                        m_gpaProps.palProps.blocks[static_cast<uint32_t>(gpuBlock)]);
-                }
+                pGpaProperties->pPerfBlocks[written++] = ConvertGpaPerfBlock(
+                    static_cast<VkGpaPerfBlockAMD>(perfBlock),
+                    gpuBlock,
+                    m_gpaProps.palProps.blocks[static_cast<uint32_t>(gpuBlock)]);
             }
         }
     }

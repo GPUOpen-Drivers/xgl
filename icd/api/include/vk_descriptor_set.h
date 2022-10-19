@@ -293,6 +293,10 @@ public:
         size_t                          descriptorStrideInBytes = 0);
 
 #if VKI_RAY_TRACING
+    static void SetAccelerationDescriptorsBufferViewFlags(
+        const Device*                       pDevice,
+        Pal::BufferViewInfo*                pBufferViewInfo);
+
     static void WriteAccelerationStructureDescriptors(
         const Device*                       pDevice,
         const VkAccelerationStructureKHR*   pDescriptors,

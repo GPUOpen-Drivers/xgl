@@ -176,9 +176,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         memset(pInfo, 0, sizeof(Pal::DeviceProperties));
         m_pDevice->GetProperties(pInfo);
 
-        Pal::GpuMemoryHeapProperties heapProperties[Pal::GpuHeapCount] = {};
-        Pal::Result gpuMemoryHeapPropertiesResult = m_pDevice->GetGpuMemoryHeapProperties(heapProperties);
-
         // By allowing the enable/disable to be set by environment variable, any third party platform owners
         // can enable or disable the feature based on their internal feedback and not have to wait for a driver
         // update to catch issues
@@ -262,8 +259,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         // Put command buffers in local for large/resizable BAR systems with > 7 GBs of local heap
         constexpr gpusize _1GB = 1024ull * 1024ull * 1024ull;
 
-        if ((gpuMemoryHeapPropertiesResult == Pal::Result::Success) &&
-            (heapProperties[Pal::GpuHeapLocal].heapSize > (7ull * _1GB)))
+        if (pInfo->gpuMemoryProperties.barSize > (7ull * _1GB))
         {
             if ((appProfile != AppProfile::WorldWarZ)
                )
@@ -281,8 +277,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         }
 
         // Allow device memory overallocation for <= 2GBs of VRAM including APUs.
-        if ((heapProperties[Pal::GpuHeapLocal].heapSize +
-             heapProperties[Pal::GpuHeapInvisible].heapSize) <= (2ull * _1GB))
+        if (pInfo->gpuMemoryProperties.maxLocalMemSize <= (2ull * _1GB))
         {
             m_settings.memoryDeviceOverallocationAllowed = true;
         }
@@ -475,6 +470,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
                     m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
                 }
+
                 if (pInfo->revision == Pal::AsicRevision::Navi23)
                 {
                     m_settings.forceEnableDcc = (ForceDccFor32BppShaderStorage |
@@ -482,6 +478,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                         ForceDccForColorAttachments |
                         ForceDccFor3DShaderStorage);
                 }
+
                 if (pInfo->revision == Pal::AsicRevision::Navi24)
                 {
                     m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage |
@@ -670,6 +667,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
+        if (appProfile == AppProfile::ThreeKingdoms)
+        {
+            m_settings.useAcquireReleaseInterface = false;
+        }
+
         if (appProfile == AppProfile::RainbowSixSiege)
         {
             m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
@@ -695,6 +697,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                     m_settings.overrideLocalHeapSizeInGBs = 8;
                     m_settings.memoryDeviceOverallocationAllowed = true;
                 }
+
                 if (pInfo->revision == Pal::AsicRevision::Navi24)
                 {
                     m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
@@ -750,23 +753,28 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
-                m_settings.forceEnableDcc = (ForceDccForNonColorAttachmentShaderStorage |
+                m_settings.pipelineBinningMode = PipelineBinningModeDisable;
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+
+                m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
                                              ForceDccForColorAttachments |
-                                             ForceDccFor2DShaderStorage |
-                                             ForceDccFor3DShaderStorage |
+                                             ForceDccForNonColorAttachmentShaderStorage |
                                              ForceDccFor32BppShaderStorage |
                                              ForceDccFor64BppShaderStorage);
 
-                if (pInfo->revision == Pal::AsicRevision::Navi21)
+                if (pInfo->revision != Pal::AsicRevision::Navi21)
                 {
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                    m_settings.forceEnableDcc |= ForceDccFor2DShaderStorage;
                     m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                }
 
-                    m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
-                                                  ForceDccForColorAttachments |
-                                                  ForceDccForNonColorAttachmentShaderStorage);
+                {
+                    m_settings.csWaveSize = 64;
+                    m_settings.fsWaveSize = 64;
                 }
             }
+
         }
 
         if (appProfile == AppProfile::RedDeadRedemption2)
@@ -783,25 +791,23 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             // Force exclusive sharing mode - 2% gain
             m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
-
             m_settings.delayFullScreenAcquireToFirstPresent = true;
+            m_settings.implicitExternalSynchronization = false;
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
-                m_settings.mallNoAllocCtPolicy    = MallNoAllocCtAsSnsr;
-                m_settings.mallNoAllocSsrPolicy   = MallNoAllocSsrAsSnsr;
-                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-
-                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
-
-                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
-                                             ForceDccFor2DShaderStorage |
-                                             ForceDccForColorAttachments |
-                                             ForceDccForNonColorAttachmentShaderStorage |
-                                             ForceDccFor64BppShaderStorage);
+                if (pInfo->revision == Pal::AsicRevision::Navi21)
+                {
+                    m_settings.pipelineBinningMode  = PipelineBinningModeDisable;
+                    m_settings.mallNoAllocCtPolicy  = MallNoAllocCtAsSnsr;
+                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+                    m_settings.forceEnableDcc       = (ForceDccFor2DShaderStorage  |
+                                                       ForceDccFor3DShaderStorage  |
+                                                       ForceDccForColorAttachments |
+                                                       ForceDccFor64BppShaderStorage);
+                }
             }
 
-            m_settings.implicitExternalSynchronization = false;
         }
 
         if (appProfile == AppProfile::GhostReconBreakpoint)
@@ -903,8 +909,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.rtBvhBuildModeFastTrace = BvhBuildModeLinear;
                 m_settings.rtEnableTopDownBuild    = false;
                 m_settings.plocRadius              = 4;
-#endif
 
+                // 13% Gain @ 4k - Allows overlapping builds
+                m_settings.enableAceShaderPrefetch = false;
+#endif
                 m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
             }
 
@@ -927,18 +935,19 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
 
                 m_settings.csWaveSize = 64;
-                m_settings.fsWaveSize = 64;
             }
             else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
                 m_settings.asyncComputeQueueMaxWavesPerCu = 20;
-
-                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
                 m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
 
+                if (pInfo->revision != Pal::AsicRevision::Navi21)
+                {
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                }
+
                 m_settings.csWaveSize = 64;
-                m_settings.fsWaveSize = 64;
             }
         }
 
@@ -1012,7 +1021,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 {
                     m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
                 }
-
                 else if (pInfo->revision == Pal::AsicRevision::Navi22)
                 {
                     m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
@@ -1022,7 +1030,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
                     m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
                 }
-
                 else if (pInfo->revision == Pal::AsicRevision::Navi23)
                 {
                     m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;

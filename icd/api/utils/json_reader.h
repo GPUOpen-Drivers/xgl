@@ -34,10 +34,10 @@
 
 #include <stdint.h>
 
+typedef struct VkAllocationCallbacks VkAllocationCallbacks;
+
 namespace vk
 {
-
-class Instance;
 
 namespace utils
 {
@@ -69,13 +69,13 @@ struct Json
 struct JsonSettings
 {
     // Allocator function for allocating memory Json nodes.  If nullptr, malloc() is used.
-    void* (*pfnAlloc)(void* pUserData, size_t sz);
+    void* (*pfnAlloc)(const void* pUserData, size_t sz);
 
     // Free function for freeing memory used by Json nodes.  If nullptr, free() is used.
-    void (*pfnFree)(void* pUserData, void* ptr);
+    void (*pfnFree)(const void* pUserData, void* ptr);
 
     // A user-provided value to the allocator functions.
-    void* pUserData;
+    const void* pUserData;
 };
 
 // Parse a JSON string from a buffer into a tree of Json nodes.
@@ -91,13 +91,13 @@ extern size_t JsonArraySize(Json* pJson);
 extern Json* JsonArrayElement(Json* pJson, size_t index);
 
 // Helper allocator function for Vulkan instances
-extern void* JsonInstanceAlloc(void* pUserData, size_t sz);
+extern void* JsonInstanceAlloc(const void* pUserData, size_t sz);
 
 // Helper allocator function for Vulkan instances
-extern void JsonInstanceFree(void* pUserData, void* pPtr);
+extern void JsonInstanceFree(const void* pUserData, void* pPtr);
 
 // Returns a JSON settings structure compatible with allocating memory through a Vulkan instance.
-extern JsonSettings JsonMakeInstanceSettings(Instance* pInstance);
+extern JsonSettings JsonMakeInstanceSettings(const VkAllocationCallbacks* pAllocCB);
 
 // Finds an object's child value by key
 extern Json* JsonGetValue(Json* pObject, const char* pKey, bool deep = false);

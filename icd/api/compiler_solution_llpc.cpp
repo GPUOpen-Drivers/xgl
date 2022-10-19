@@ -344,10 +344,10 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
 // =====================================================================================================================
 // Build ElfPackage for a specific shader module based on pipeine information
 VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
-    const Device*                           pDevice,
-    const ShaderStage                       stage,
-    const GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-    ShaderModuleHandle*                     pShaderModule)
+    const Device*                     pDevice,
+    const ShaderStage                 stage,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    ShaderModuleHandle*               pShaderModule)
 {
     VkResult result = VK_SUCCESS;
 

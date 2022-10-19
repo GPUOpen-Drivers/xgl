@@ -1,0 +1,28 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0xE128CF59638C2E1C 22C6B575129AB32D"
+        }
+      },
+      "action": {
+        "cs": {
+          "favorLatencyHiding": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x45911829EC7E9028 123B4766DB4CD890"
+        }
+      },
+      "action": {
+        "cs": {
+          "favorLatencyHiding": true
+        }
+      }
+    }
+  ]
+}

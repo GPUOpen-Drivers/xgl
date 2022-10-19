@@ -51,7 +51,7 @@ from shaderProfileTemplate import SHADER_PATTERN, ENTRIES_TEMPLATE, SHADER_ACTIO
     FUN_DEC_CLASS_SHADER_PROFILE_PUBLIC, FUNC_DEC_PARSE_JSON_PROFILE, FUNC_DEC_BUILD_APP_PROFILE_LLPC, \
     BUILD_APP_PROFILE_LLPC_FUNC, JSON_WRITER_GENERIC_DEF, JSON_READER_GENERIC_DEF, NAMESPACE_VK, CPP_INCLUDE, \
     CopyrightAndWarning, CONDITION_DYNAMIC_SHADER_INFO_APPLY, CLASS_TEMPLATE, ShaderTuningStructsAndVars, \
-    HEADER_INCLUDES, PARSE_DWORD_ARRAY_FUNC
+    HEADER_INCLUDES, PARSE_DWORD_ARRAY_FUNC, CONDITION_SHADER_CREATE_TUNING_OPTION_FLAGS
 
 OUTPUT_FILE = "g_shader_profile"
 CONFIG_FILE_NAME = "profile.json"
@@ -189,7 +189,8 @@ def parse_json_profile_action_shader(shader_actions):
         'nggDisable', 'nggFasterLaunchRate', 'nggVertexReuse', 'nggEnableFrustumCulling', 'nggEnableBoxFilterCulling',
         'nggEnableSphereCulling', 'nggEnableBackfaceCulling', 'nggEnableSmallPrimFilter', 'enableSubvector',
         'enableSubvectorSharedVgprs', 'maxWavesPerCu', 'cuEnableMask', 'maxThreadGroupsPerCu', 'useSiScheduler',
-        'reconfigWorkgroupLayout', 'forceLoopUnrollCount', 'enableLoadScalarizer', 'disableLicm', 'unrollThreshold'
+        'disableCodeSinking', 'favorLatencyHiding', 'reconfigWorkgroupLayout', 'forceLoopUnrollCount',
+        'enableLoadScalarizer', 'disableLicm', 'unrollThreshold'
     ]
     :param shader_actions:
     :return:
@@ -603,8 +604,9 @@ def build_profile_entry_action_to_json():
                         if action == "optStrategyFlags":
                             opt_strategy_str = ""
                             for key in OPT_STRATEGY_FLAGS:
-                                opt_flag_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTIONS
-                                opt_flag_cond_str = opt_flag_cond_str.replace("%Flag%", "flags" + '.' + key)
+                                opt_flag_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTION_FLAGS
+                                opt_flag_cond_str = opt_flag_cond_str.replace(
+                                    "%Flag%", "flags" + " & " + OPT_STRATEGY_FLAGS[key]["flagName"] + ") != 0")
                                 opt_flag_cond_str = opt_flag_cond_str.replace(
                                     "%Defs%", SHADER_CREATE_TUNING_OPTIONS_BOOLEAN_TEMPLATE.replace("%Flag%", key))
                                 opt_strategy_str += indent(opt_flag_cond_str)
@@ -612,8 +614,9 @@ def build_profile_entry_action_to_json():
                         elif action == "optStrategyFlags2":
                             opt_strategy2_str = ""
                             for key in OPT_STRATEGY_FLAGS2:
-                                opt_flag2_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTIONS
-                                opt_flag2_cond_str = opt_flag2_cond_str.replace("%Flag%", "flags2" + '.' + key)
+                                opt_flag2_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTION_FLAGS
+                                opt_flag2_cond_str = opt_flag2_cond_str.replace(
+                                    "%Flag%", "flags2" + " & " + OPT_STRATEGY_FLAGS2[key]["flagName"] + ") != 0")
                                 opt_flag2_cond_str = opt_flag2_cond_str.replace(
                                     "%Defs%", SHADER_CREATE_TUNING_OPTIONS_BOOLEAN_TEMPLATE.replace("%Flag%", key))
                                 opt_strategy2_str += indent(opt_flag2_cond_str)
@@ -624,18 +627,20 @@ def build_profile_entry_action_to_json():
                             low_latency_str = ""
 
                             for key in MAX_OCCUPANCY_OPTIONS:
-                                max_occupancy_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTIONS
+                                max_occupancy_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTION_FLAGS
                                 max_occupancy_cond_str = max_occupancy_cond_str.replace(
-                                    "%Flag%", "maxOccupancyOptions" + '.' + key)
+                                    "%Flag%",
+                                    "maxOccupancyOptions" + " & " + MAX_OCCUPANCY_OPTIONS[key]["flagName"] + ") != 0")
                                 max_occupancy_cond_str = max_occupancy_cond_str.replace(
                                     "%Defs%", SHADER_CREATE_TUNING_OPTIONS_BOOLEAN_TEMPLATE.replace("%Flag%", key))
                                 max_occupancy_str += indent(max_occupancy_cond_str, times=2)
                             condition_str = condition_str.replace("%MaxOccupancyOptionsEntry%", max_occupancy_str)
 
                             for key in LOW_LATENCY_OPTIONS:
-                                low_latency_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTIONS
+                                low_latency_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTION_FLAGS
                                 low_latency_cond_str = low_latency_cond_str.replace(
-                                    "%Flag%", "lowLatencyOptions" + '.' + key)
+                                    "%Flag%",
+                                    "lowLatencyOptions" + " & " + LOW_LATENCY_OPTIONS[key]["flagName"] + ") != 0")
                                 low_latency_cond_str = low_latency_cond_str.replace(
                                     "%Defs%", SHADER_CREATE_TUNING_OPTIONS_BOOLEAN_TEMPLATE.replace("%Flag%", key))
                                 low_latency_str += indent(low_latency_cond_str, times=2)
@@ -643,8 +648,9 @@ def build_profile_entry_action_to_json():
                         elif action == "fpControlFlags":
                             fp_control_str = ""
                             for key in FP_CONTROL_FLAGS:
-                                fp_control_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTIONS
-                                fp_control_cond_str = fp_control_cond_str.replace("%Flag%", action + '.' + key)
+                                fp_control_cond_str = CONDITION_SHADER_CREATE_TUNING_OPTION_FLAGS
+                                fp_control_cond_str = fp_control_cond_str.replace(
+                                    "%Flag%", action + " & " + FP_CONTROL_FLAGS[key]["flagName"] + ") != 0")
                                 fp_control_cond_str = fp_control_cond_str.replace(
                                     "%Defs%", SHADER_CREATE_TUNING_OPTIONS_BOOLEAN_TEMPLATE.replace("%Flag%", key))
                                 fp_control_str += indent(fp_control_cond_str)
@@ -1246,6 +1252,7 @@ def main():
 
     header_content = CopyrightAndWarning + header_dox_comment + HEADER_INCLUDES + "\n" + header_body
     header_file_path = os.path.join(output_dir, HEADER_FILE_NAME)
+    os.makedirs(output_dir, exist_ok=True)
     write_to_file(header_content, header_file_path)
 
     ###################################################################################################################
@@ -1290,6 +1297,7 @@ def main():
 
     cpp_content = CopyrightAndWarning + cpp_includes + cpp_body
     cpp_file_path = os.path.join(output_dir, SOURCE_FILE_NAME)
+    os.makedirs(output_dir, exist_ok=True)
     write_to_file(cpp_content, cpp_file_path)
     return 0
 

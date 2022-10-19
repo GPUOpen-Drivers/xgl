@@ -30,7 +30,7 @@
 #include <stdlib.h>
 
 #include "json_reader.h"
-#include "vk_instance.h"
+#include "vk_utils.h"
 
 namespace vk { namespace utils {
 
@@ -50,8 +50,8 @@ static bool JsonParseArray(JsonContext* pCtx, char prefix, Json* pArray);
 // =====================================================================================================================
 // Default memory allocator using malloc().  Should never be used.
 static void* JsonDefaultAlloc(
-    void*  pUserData,
-    size_t sz)
+    const void*  pUserData,
+    size_t       sz)
 {
     return malloc(sz);
 }
@@ -59,8 +59,8 @@ static void* JsonDefaultAlloc(
 // =====================================================================================================================
 // Default memory allocator using free().  Should never be used.
 static void JsonDefaultFree(
-    void* pUserData,
-    void* ptr)
+    const void* pUserData,
+    void*       ptr)
 {
     free(ptr);
 }
@@ -731,34 +731,35 @@ Json* JsonArrayElement(Json* pJson, size_t index)
 // =====================================================================================================================
 // Helper allocator function for Vulkan instances
 void* JsonInstanceAlloc(
-    void*  pUserData,
-    size_t sz)
+    const void*  pUserData,
+    size_t       sz)
 {
-    Instance* pInstance = static_cast<Instance*>(pUserData);
+    const VkAllocationCallbacks* pAllocCB = static_cast<const VkAllocationCallbacks*>(pUserData);
 
-    return pInstance->AllocMem(sz, VK_DEFAULT_MEM_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+    return pAllocCB->pfnAllocation(pAllocCB->pUserData, sz, VK_DEFAULT_MEM_ALIGN,  VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
 }
 
 // =====================================================================================================================
 // Helper allocator function for Vulkan instances
 void JsonInstanceFree(
-    void* pUserData,
-    void* pPtr)
+    const void* pUserData,
+    void*       pPtr)
 {
-    Instance* pInstance = static_cast<Instance*>(pUserData);
+    const VkAllocationCallbacks* pAllocCB = static_cast<const VkAllocationCallbacks*>(pUserData);
 
-    pInstance->FreeMem(pPtr);
+    pAllocCB->pfnFree(pAllocCB->pUserData, pPtr);
 }
 
 // =====================================================================================================================
 // Returns a JSON settings structure compatible with allocating memory through a Vulkan instance.
-JsonSettings JsonMakeInstanceSettings(Instance* pInstance)
+JsonSettings JsonMakeInstanceSettings(
+    const VkAllocationCallbacks* pAllocCB)
 {
     JsonSettings settings = {};
 
     settings.pfnAlloc  = &JsonInstanceAlloc;
     settings.pfnFree   = &JsonInstanceFree;
-    settings.pUserData = pInstance;
+    settings.pUserData = pAllocCB;
 
     return settings;
 }

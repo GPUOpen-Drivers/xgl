@@ -897,8 +897,31 @@ public:
 
     void PalCmdReleaseThenAcquire(
         Pal::AcquireReleaseInfo* pAcquireReleaseInfo,
+        Pal::MemBarrier* const   pMemoryBarriers,
+        const Buffer** const     ppBuffers,
         Pal::ImgBarrier* const   pImageBarriers,
-        const Image** const      pTransitionImages,
+        const Image** const      ppImages,
+        uint32_t                 deviceMask);
+
+    void PalCmdAcquire(
+        Pal::AcquireReleaseInfo* pAcquireReleaseInfo,
+        uint32_t                 eventCount,
+        const VkEvent*           pEvents,
+        Pal::MemBarrier* const   pBufferBarriers,
+        const Buffer** const     ppBuffers,
+        Pal::ImgBarrier* const   pImageBarriers,
+        const Image** const      ppImages,
+        VirtualStackFrame*       pVirtStackFrame,
+        uint32_t                 deviceMask);
+
+    void PalCmdRelease(
+        Pal::AcquireReleaseInfo* pAcquireReleaseInfo,
+        uint32_t                 eventCount,
+        const VkEvent*           pEvents,
+        Pal::MemBarrier* const   pBufferBarriers,
+        const Buffer** const     ppBuffers,
+        Pal::ImgBarrier* const   pImageBarriers,
+        const Image** const      ppImages,
         uint32_t                 deviceMask);
 
     Pal::Result PalCmdBufferBegin(
@@ -1277,7 +1300,6 @@ private:
     void ExecuteAcquireRelease(
         uint32_t                     eventCount,
         const VkEvent*               pEvents,
-        uint32_t                     deviceIdx,
         uint32_t                     dependencyCount,
         const VkDependencyInfoKHR*   pDependencyInfos,
         AcquireReleaseMode           acquireReleaseMode,

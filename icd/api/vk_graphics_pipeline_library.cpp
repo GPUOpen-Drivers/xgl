@@ -290,6 +290,8 @@ void GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 {
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
+    uint32_t tempIdx = 0;
+
     for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
     {
         if ((pShaderStageInfo->stages[i].pModuleHandle != nullptr) &&

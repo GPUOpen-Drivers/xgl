@@ -456,6 +456,20 @@ void DescriptorUpdate::WriteBufferInfoDescriptors(
 }
 
 #if VKI_RAY_TRACING
+void DescriptorUpdate::SetAccelerationDescriptorsBufferViewFlags(
+    const Device*           pDevice,
+    Pal::BufferViewInfo*    pBufferViewInfo)
+{
+    // Bypass Mall cache read/write if no alloc policy is set for SRDs.
+    // This global setting applies to every BVH SRD.
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+    if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocBvh))
+    {
+        pBufferViewInfo->flags.bypassMallRead  = 1;
+        pBufferViewInfo->flags.bypassMallWrite = 1;
+    }
+}
+
 void DescriptorUpdate::WriteAccelerationStructureDescriptors(
     const Device*                       pDevice,
     const VkAccelerationStructureKHR*   pDescriptors,
@@ -478,14 +492,7 @@ void DescriptorUpdate::WriteAccelerationStructureDescriptors(
             bufferViewInfo.range = pAccel->GetPrebuildInfo().resultDataMaxSizeInBytes;
         }
 
-        // Bypass Mall cache read/write if no alloc policy is set for SRDs.
-        // This global setting applies to every BVH SRD.
-        const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
-        if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocBvh))
-        {
-            bufferViewInfo.flags.bypassMallRead  = 1;
-            bufferViewInfo.flags.bypassMallWrite = 1;
-        }
+        SetAccelerationDescriptorsBufferViewFlags(pDevice, &bufferViewInfo);
 
         pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &bufferViewInfo, pDestAddr);
 

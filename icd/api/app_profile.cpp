@@ -236,6 +236,12 @@ constexpr AppProfilePatternEntry AppNameWarHammerII =
     "totalwarhammer2"
 };
 
+constexpr AppProfilePatternEntry AppNameWarHammerIII =
+{
+    PatternAppNameLower,
+    "totalwarhammer3"
+};
+
 constexpr AppProfilePatternEntry AppEngineFeral3D =
 {
     PatternEngineNameLower,
@@ -572,6 +578,12 @@ constexpr AppProfilePatternEntry AppNameYamagiQuake2 =
     "quake 2"
 };
 
+constexpr AppProfilePatternEntry AppNameGpuCapsViewer32Bit =
+{
+    PatternAppNameLower,
+    "geexlab"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -803,6 +815,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::WarHammerII,
         {
             AppNameWarHammerII,
+            AppEngineFeral3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::WarHammerIII,
+        {
+            AppNameWarHammerIII,
             AppEngineFeral3D,
             PatternEnd
         }
@@ -1127,6 +1148,14 @@ AppProfilePattern AppPatternTable[] =
             PatternEnd
         }
     },
+
+    {
+        AppProfile::GpuCapsViewer32Bit,
+        {
+            AppNameGpuCapsViewer32Bit,
+            PatternEnd
+        }
+    }
 };
 
 static char* GetExecutableName(size_t* pLength, bool includeExtension = false);

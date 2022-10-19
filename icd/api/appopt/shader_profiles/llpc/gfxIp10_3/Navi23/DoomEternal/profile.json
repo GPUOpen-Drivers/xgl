@@ -9,6 +9,16 @@
           "waveSize": 64
         }
       }
+    },
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "ps": {
+          "waveSize": 64
+        }
+      }
     }
   ]
 }

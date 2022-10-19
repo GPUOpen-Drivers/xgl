@@ -2189,7 +2189,7 @@ VkResult Device::CreateInternalComputePipeline(
     {
         // Build pipeline binary
         auto pShaderInfo = &pipelineBuildInfo.pipelineInfo.cs;
-        pipelineBuildInfo.compilerType = PipelineCompilerTypeLlpc;
+        pipelineBuildInfo.compilerType   = PipelineCompilerTypeLlpc;
         pShaderInfo->pModuleData         = shaderModule.pLlpcShaderModule;
         pShaderInfo->pSpecializationInfo = pSpecializationInfo;
         pShaderInfo->pEntryTarget        = Vkgc::IUtil::GetEntryPointNameFromSpirvBinary(&spvBin);
@@ -2198,15 +2198,12 @@ VkResult Device::CreateInternalComputePipeline(
         pipelineBuildInfo.pipelineInfo.resourceMapping.pUserDataNodes = pUserDataNodes;
         pipelineBuildInfo.pipelineInfo.resourceMapping.userDataNodeCount = numUserDataNodes;
 
-        pCompiler->ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute,
-                                             &pShaderInfo->options);
+        pCompiler->ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute, &pShaderInfo->options);
 
-#if VKI_RAY_TRACING
         if (forceWave64)
         {
             pShaderInfo->options.waveSize = 64;
         }
-#endif
 
         Pal::ShaderHash codeHash = ShaderModule::GetCodeHash(
             ShaderModule::BuildCodeHash(pCode, codeByteSize),

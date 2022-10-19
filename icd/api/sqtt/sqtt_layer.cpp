@@ -90,6 +90,12 @@ SqttQueueState::SqttQueueState(
     m_cmdBufferMap(32, pQueue->VkDevice()->VkInstance()->GetPrivateAllocator()),
     m_pNextLayer(pQueue->VkDevice()->GetSqttMgr()->GetNextLayer())
 {
+    m_enabledMarkers = m_pDevice->GetRuntimeSettings().devModeSqttMarkerEnable;
+
+    if (SqttMgr::IsTracingSupported(m_pDevice->VkPhysicalDevice(DefaultDeviceIndex), pQueue->GetFamilyIndex()) == false)
+    {
+        m_enabledMarkers = 0;
+    }
 }
 
 // =====================================================================================================================
@@ -210,6 +216,34 @@ void SqttQueueState::SubmitUserEventMarker(RgpSqttMarkerUserEventType eventType,
     }
 
     VK_ASSERT(result == VK_SUCCESS);
+}
+
+// =====================================================================================================================
+// Writes a present API marker
+void SqttQueueState::WritePresentMarker(
+    Pal::ICmdBuffer* pCmdBuffer,
+    bool*            pAddedMarker
+    ) const
+{
+    if ((m_enabledMarkers & DevModeSqttMarkerEnablePresent) != 0)
+    {
+        RgpSqttMarkerPresent marker = {};
+
+        marker.identifier = RgpSqttMarkerIdentifierPresent;
+
+        Pal::RgpMarkerSubQueueFlags subQueueFlags = {};
+        subQueueFlags.includeMainSubQueue         = 1;
+
+        pCmdBuffer->CmdInsertRgpTraceMarker(
+            subQueueFlags,
+            static_cast<uint32_t>(sizeof(marker) / sizeof(uint32_t)),
+            &marker);
+
+        if (pAddedMarker != nullptr)
+        {
+            *pAddedMarker = true;
+        }
+    }
 }
 
 // =====================================================================================================================

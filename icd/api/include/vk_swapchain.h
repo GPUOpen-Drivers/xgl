@@ -279,6 +279,9 @@ public:
     Pal::IScreen* GetPalScreen() const
         { return m_pScreen; }
 
+    Mode GetFullScreenMode() const
+        { return m_mode; }
+
     bool TryEnterExclusive(SwapChain* pSwapChain);
     bool TryExitExclusive(SwapChain* pSwapChain);
 

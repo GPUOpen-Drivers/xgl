@@ -2447,9 +2447,15 @@ inline uint32_t ConvertWaitPointToPipeStage(
 // =====================================================================================================================
 // Converts Vulkan source pipeline stage flags to PAL pipeline stage mask.
 inline uint32_t VkToPalPipelineStageFlags(
-    PipelineStageFlags   stageMask)
+    PipelineStageFlags   stageMask,
+    bool                 isSrcStage)
 {
     uint32_t palPipelineStageMask = 0;
+
+    if (stageMask & VK_PIPELINE_STAGE_2_HOST_BIT_KHR)
+    {
+        palPipelineStageMask |= (isSrcStage ? Pal::PipelineStageTopOfPipe : Pal::PipelineStageBottomOfPipe);
+    }
 
     if (stageMask & VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR)
     {
@@ -2490,7 +2496,8 @@ inline uint32_t VkToPalPipelineStageFlags(
         palPipelineStageMask |= Pal::PipelineStageDs;
     }
 
-    if (stageMask & VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT_KHR)
+    if (stageMask & (VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT_KHR |
+                     VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT))
     {
         palPipelineStageMask |= Pal::PipelineStageGs;
     }
@@ -2540,6 +2547,7 @@ inline uint32_t VkToPalPipelineStageFlags(
     }
 
     if (stageMask & (VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR
+                   | VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT
 #if VKI_RAY_TRACING
                    | VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_COPY_BIT_KHR
                    | VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR
@@ -2564,8 +2572,8 @@ inline uint32_t VkToPalPipelineStageFlags(
         palPipelineStageMask |= Pal::PipelineStageAllStages;
     }
 
-    if (stageMask & (VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR |
-                     VK_PIPELINE_STAGE_2_HOST_BIT_KHR))
+    if (stageMask & (VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR
+                     ))
     {
         palPipelineStageMask |= Pal::PipelineStageBottomOfPipe;
     }
@@ -3075,66 +3083,64 @@ inline bool VkToPalRasterizationOrder(VkRasterizationOrderAMD order)
 }
 
 // =====================================================================================================================
-VK_TO_PAL_TABLE_I_AMD(GPA_PERF_BLOCK, GpaPerfBlockAMD, GpuBlock,
-    // =====================================================================================================================
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_CPF_AMD,          GpuBlock::Cpf)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_IA_AMD,           GpuBlock::Ia)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_VGT_AMD,          GpuBlock::Vgt)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_PA_AMD,           GpuBlock::Pa)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_SC_AMD,           GpuBlock::Sc)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_SPI_AMD,          GpuBlock::Spi)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_SQ_AMD,           GpuBlock::Sq)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_SX_AMD,           GpuBlock::Sx)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_TA_AMD,           GpuBlock::Ta)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_TD_AMD,           GpuBlock::Td)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_TCP_AMD,          GpuBlock::Tcp)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_TCC_AMD,          GpuBlock::Tcc)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_TCA_AMD,          GpuBlock::Tca)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_DB_AMD,           GpuBlock::Db)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_CB_AMD,           GpuBlock::Cb)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GDS_AMD,          GpuBlock::Gds)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_SRBM_AMD,         GpuBlock::Srbm)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GRBM_AMD,         GpuBlock::Grbm)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GRBM_SE_AMD,      GpuBlock::GrbmSe)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_RLC_AMD,          GpuBlock::Rlc)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_DMA_AMD,          GpuBlock::Dma)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_MC_AMD,           GpuBlock::Mc)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_CPG_AMD,          GpuBlock::Cpg)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_CPC_AMD,          GpuBlock::Cpc)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_WD_AMD,           GpuBlock::Wd)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_TCS_AMD,          GpuBlock::Tcs)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_ATC_AMD,          GpuBlock::Atc)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_ATC_L2_AMD,       GpuBlock::AtcL2)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_MC_VM_L2_AMD,     GpuBlock::McVmL2)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_EA_AMD,           GpuBlock::Ea)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_RPB_AMD,          GpuBlock::Rpb)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_RMI_AMD,          GpuBlock::Rmi)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_UMCCH_AMD,        GpuBlock::Umcch)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GE_AMD,           GpuBlock::Ge)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GL1A_AMD,         GpuBlock::Gl1a)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GL1C_AMD,         GpuBlock::Gl1c)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GL1CG_AMD,        GpuBlock::Gl1cg)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GL2A_AMD,         GpuBlock::Gl2a)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GL2C_AMD,         GpuBlock::Gl2c)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_CHA_AMD,          GpuBlock::Cha)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_CHC_AMD,          GpuBlock::Chc)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_CHCG_AMD,         GpuBlock::Chcg)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GUS_AMD,          GpuBlock::Gus)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GCR_AMD,          GpuBlock::Gcr)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_PH_AMD,           GpuBlock::Ph)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_UTCL1_AMD,        GpuBlock::UtcL1)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GE1_AMD,          GpuBlock::Ge1)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GE_DIST_AMD,      GpuBlock::GeDist)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_GE_SE_AMD,        GpuBlock::GeSe)
-    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_DF_MALL_AMD,      GpuBlock::DfMall)
-// =====================================================================================================================
-)
-
-// =====================================================================================================================
 inline Pal::GpuBlock VkToPalGpuBlock(
     VkGpaPerfBlockAMD perfBlock)
 {
-    return convert::GpuBlock(perfBlock);
+    static_assert(
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_CPF_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Cpf)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_IA_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Ia)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_VGT_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Vgt)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_PA_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Pa)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_SC_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Sc)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_SPI_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Spi)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_SQ_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Sq)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_SX_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Sx)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_TA_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Ta)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_TD_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Td)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_TCP_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Tcp)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_TCC_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Tcc)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_TCA_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Tca)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_DB_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Db)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_CB_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Cb)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GDS_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Gds)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_SRBM_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Srbm)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GRBM_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Grbm)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GRBM_SE_AMD) == static_cast<uint32_t>(Pal::GpuBlock::GrbmSe)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_RLC_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Rlc)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_DMA_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Dma)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_MC_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Mc)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_CPG_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Cpg)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_CPC_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Cpc)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_WD_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Wd)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_TCS_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Tcs)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_ATC_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Atc)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_ATC_L2_AMD) == static_cast<uint32_t>(Pal:: GpuBlock::AtcL2)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_MC_VM_L2_AMD) == static_cast<uint32_t>(Pal::GpuBlock::McVmL2)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_EA_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Ea)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_RPB_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Rpb)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_RMI_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Rmi)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_UMCCH_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Umcch)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GE_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Ge)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GL1A_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Gl1a)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GL1C_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Gl1c)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GL1CG_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Gl1cg)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GL2A_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Gl2a)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GL2C_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Gl2c)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_CHA_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Cha)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_CHC_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Chc)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_CHCG_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Chcg)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GUS_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Gus)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GCR_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Gcr)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_PH_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Ph)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_UTCL1_AMD) == static_cast<uint32_t>(Pal::GpuBlock::UtcL1)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GE1_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Ge1)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GE_DIST_AMD) == static_cast<uint32_t>(Pal::GpuBlock::GeDist)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GE_SE_AMD) == static_cast<uint32_t>(Pal::GpuBlock::GeSe)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_DF_MALL_AMD) == static_cast<uint32_t>(Pal::GpuBlock::DfMall))
+    ,
+    "Need to update function convert::GpuBlock");
+
+    return static_cast<Pal::GpuBlock>(perfBlock);
 }
 
 // =====================================================================================================================

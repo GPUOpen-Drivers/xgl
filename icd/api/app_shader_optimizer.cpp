@@ -202,6 +202,14 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pOptions->useSiScheduler = true;
                 }
+                if (shaderCreate.tuningOptions.disableCodeSinking)
+                {
+                    options.pOptions->disableCodeSinking = true;
+                }
+                if (shaderCreate.tuningOptions.favorLatencyHiding)
+                {
+                    options.pOptions->favorLatencyHiding = true;
+                }
                 if (shaderCreate.tuningOptions.reconfigWorkgroupLayout)
                 {
                     options.pPipelineOptions->reconfigWorkgroupLayout = true;
@@ -736,7 +744,6 @@ void ShaderOptimizer::BuildTuningProfile()
 
         if (m_settings.overrideShaderParams)
         {
-
             // Only a single entry is currently supported
             m_tuningProfile.entryCount = 1;
             auto pEntry = &m_tuningProfile.pEntries[0];
@@ -1168,7 +1175,7 @@ void ShaderOptimizer::BuildRuntimeProfile()
 
     memset(pMemory, 0, newSize);
 
-    utils::JsonSettings jsonSettings = utils::JsonMakeInstanceSettings(m_pDevice->VkInstance());
+    utils::JsonSettings jsonSettings = utils::JsonMakeInstanceSettings(pAllocCB);
     utils::Json* pJson               = nullptr;
 
     if (m_settings.pipelineProfileRuntimeFile[0] != '\0')

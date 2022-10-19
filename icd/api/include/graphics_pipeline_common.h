@@ -252,6 +252,12 @@ public:
         const GraphicsPipelineLibraryInfo* pLibInfo,
         const bool                         enableRasterization);
 
+    static constexpr VkGraphicsPipelineLibraryFlagsEXT GraphicsPipelineLibraryAll =
+        VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT    |
+        VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT |
+        VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT           |
+        VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
+
 protected:
     // Convert API information into internal create info used to create internal pipeline binary
     static VkResult BuildPipelineBinaryCreateInfo(

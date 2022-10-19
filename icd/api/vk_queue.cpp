@@ -1295,6 +1295,13 @@ VkResult Queue::Present(
             curResult = VK_SUBOPTIMAL_KHR;
         }
 
+        if ((curResult == VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT) &&
+             ((pSwapChain->GetFullscreenMgr() == nullptr) ||
+              (pSwapChain->GetFullscreenMgr()->GetFullScreenMode() != FullscreenMgr::Explicit)))
+        {
+            curResult = VK_SUCCESS;
+        }
+
         if (pPresentInfo->pResults)
         {
             pPresentInfo->pResults[curSwapchain] = curResult;

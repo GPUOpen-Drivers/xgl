@@ -329,22 +329,20 @@ VkResult SwapChain::Create(
 
     bool isPreferWindowedModeOnly = false;
 
-    Pal::SwapChainProperties swapChainProperties = {};
-    if (result == VK_SUCCESS)
+    if (result == VK_SUCCESS && (pDevice->GetRuntimeSettings().ignorePreferredPresentMode == false))
     {
+        Pal::SwapChainProperties swapChainProperties = {};
+
         result = PalToVkResult(pPalDevice->GetSwapChainInfo(
                 properties.displayableInfo.displayHandle,
                 properties.displayableInfo.windowHandle,
                 properties.displayableInfo.palPlatform,
                 &swapChainProperties));
 
-        if (pDevice->GetRuntimeSettings().ignorePreferredPresentMode == false)
-        {
             isPreferWindowedModeOnly =
                 (swapChainProperties.preferredPresentModes ==
                 static_cast<uint32_t>(Pal::PreferredPresentModeFlags::PreferWindowedPresentMode)) ?
                 true : false;
-        }
     }
 
     if (isPreferWindowedModeOnly ||

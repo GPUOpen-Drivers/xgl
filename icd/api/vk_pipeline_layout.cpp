@@ -1291,7 +1291,7 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
         BuildLlpcInternalConstantBufferMapping(
             stageMask,
             userDataLayout.threadGroupReversalRegBase,
-            7, // Vkgc::ReverseThreadGroupControlBinding
+            Vkgc::ReverseThreadGroupControlBinding,
             &pUserDataNodes[userDataNodeCount],
             &userDataNodeCount);
     }
@@ -1484,7 +1484,7 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
         BuildLlpcInternalConstantBufferMapping(
             stageMask,
             threadGroupReversalRegBase,
-            7, // Vkgc::ReverseThreadGroupControlBinding
+            Vkgc::ReverseThreadGroupControlBinding,
             &pUserDataNodes[userDataNodeCount],
             &userDataNodeCount);
     }

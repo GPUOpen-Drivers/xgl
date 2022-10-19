@@ -207,10 +207,10 @@ public:
         int64_t*                          pCompileTime) = 0;
 
     virtual VkResult CreateGraphicsShaderBinary(
-        const Device*                           pDevice,
-        const ShaderStage                       stage,
-        const GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-        ShaderModuleHandle*                     pShaderModule) = 0;
+        const Device*                     pDevice,
+        const ShaderStage                 stage,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        ShaderModuleHandle*               pShaderModule) = 0;
 
     virtual VkResult CreateComputePipelineBinary(
         Device*                     pDevice,
@@ -256,7 +256,6 @@ public:
 #endif
 
 protected:
-
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object
     Vkgc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by Vkgc
     Pal::GfxIpLevel    m_gfxIpLevel;           // Graphics IP level

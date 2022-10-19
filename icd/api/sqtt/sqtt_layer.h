@@ -81,6 +81,8 @@ public:
     void DebugLabelEnd();
     void DebugLabelInsert(const VkDebugUtilsLabelEXT* pMarkerInfo);
 
+    void WritePresentMarker(Pal::ICmdBuffer* pCmdBuffer, bool* pAddedMarker) const;
+
     const DispatchTable* GetNextLayer() const
         { return m_pNextLayer; }
 
@@ -107,6 +109,7 @@ private:
     Device*              m_pDevice;
     CmdBufferMap         m_cmdBufferMap; // Local command buffer cache
     const DispatchTable* m_pNextLayer;   // Pointer to next layer's dispatch table
+    uint32_t             m_enabledMarkers;
 };
 
 // =====================================================================================================================

@@ -241,5 +241,4 @@ uint32_t CompilerSolution::GetRayTracingVgprLimit(
     return vgprLimit;
 }
 #endif
-
 }

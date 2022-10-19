@@ -449,6 +449,9 @@ public:
         VkBool32* pShaderFloat16,
         VkBool32* pShaderInt8) const;
 
+    void GetPhysicalDeviceMutableDescriptorTypeFeatures(
+        VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT* pMutableDescriptorTypeFeatures) const;
+
     template<typename T>
     void GetPhysicalDeviceDescriptorIndexingFeatures(
         T         pDescriptorIndexingFeatures) const;

@@ -554,11 +554,6 @@ void GraphicsPipelineCommon::ExtractLibraryInfo(
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
     GraphicsPipelineLibraryInfo*        pLibInfo)
 {
-    constexpr VkGraphicsPipelineLibraryFlagsEXT GraphicsPipelineLibraryAll = 0
-        | VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT
-        | VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT
-        | VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT
-        | VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
 
     EXTRACT_VK_STRUCTURES_1(
         gfxPipeline,
@@ -1640,6 +1635,8 @@ static void BuildExecutablePipelineState(
     const uint32_t                      dynamicStateFlags,
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
+    VK_ASSERT(pBinInfo != nullptr);
+
     if (pInfo->immedInfo.rasterizerDiscardEnable == true)
     {
         pInfo->pipeline.viewportInfo.depthRange = Pal::DepthRange::ZeroToOne;
@@ -1775,10 +1772,13 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     const bool hasRayTracing = (pBinInfo == nullptr) ? false : pBinInfo->hasRayTracing;
 #endif
 
+    uint32_t libFlags = libInfo.libFlags;
+
     pInfo->activeStages = GetActiveShaderStages(pIn, &libInfo);
 
     uint32_t dynamicStateFlags = GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
 
+    libInfo.libFlags = libFlags;
     pInfo->dynamicStates = dynamicStateFlags;
 
     if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)
@@ -1826,6 +1826,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
         else if (libInfo.pFragmentShaderLib != nullptr)
         {
             CopyFragmentShaderState(libInfo.pFragmentShaderLib, pInfo);
+
         }
 
         if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)

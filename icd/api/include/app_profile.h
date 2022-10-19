@@ -68,6 +68,7 @@ enum class AppProfile : uint32_t
     ThronesOfBritannia,    // Total War Saga: Thrones of Britannia by Feral3D
     DawnOfWarIII,          // Dawn of War III by Feral3D
     WarHammerII,           // Total War: WarHammer II by Feral3D
+    WarHammerIII,          // Total War: WarHammer III by Feral3D
     AshesOfTheSingularity, // Ashes Of The Singularity
     StrangeBrigade,        // Strange Brigade
     WorldWarZ,             // WorldWarZ
@@ -118,6 +119,7 @@ enum class AppProfile : uint32_t
     X4Foundations,               // X4: Foundations by Egosoft
     MetalGearSolid5,             // Metal Gear Solid5 : The Phantom Pain
     YamagiQuakeII,               // Yamagi Quake II
+    GpuCapsViewer32Bit,          // GPU Caps Viewer demos by GeeXLab
 };
 
 struct ProfileSettings

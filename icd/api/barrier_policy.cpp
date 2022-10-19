@@ -296,10 +296,22 @@ static uint32_t ImageLayoutToCacheMask(VkImageLayout imageLayout)
 }
 
 // =====================================================================================================================
-// Converts source access flags to source cache coherency flags.
-static uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLayout imageLayout)
+// Converts access flags to cache coherency flags.
+static uint32_t AccessMaskToCacheMask(
+    AccessFlags   accessMask,
+    VkImageLayout imageLayout)
 {
     uint32_t cacheMask = 0;
+
+    constexpr AccessFlags shaderReadAccessFlags = (VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT           |
+                                                   VK_ACCESS_2_UNIFORM_READ_BIT                    |
+                                                   VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT           |
+                                                   VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR         |
+                                                   VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR         |
+#if VKI_RAY_TRACING
+                                                   VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR |
+#endif
+                                                   VK_ACCESS_2_SHADER_READ_BIT);
 
     if ((imageLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) ||
         (imageLayout == VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR))
@@ -307,140 +319,87 @@ static uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLayout image
         cacheMask |= Pal::CoherPresent;
     }
 
-    if (accessMask & (VK_ACCESS_SHADER_WRITE_BIT                     |
+    if (accessMask & (VK_ACCESS_2_SHADER_WRITE_BIT                     |
 #if VKI_RAY_TRACING
-                      VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR |
+                      VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR |
 #endif
                       VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR))
     {
-        cacheMask = Pal::CoherShaderWrite;
+        cacheMask |= Pal::CoherShaderWrite;
     }
 
-    if (accessMask & VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+    if (accessMask & (VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT))
     {
-        cacheMask |= Pal::CoherColorTarget | Pal::CoherClear;
+        cacheMask |= Pal::CoherColorTarget;
     }
 
-    if (accessMask & VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
+    if (accessMask & (VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT))
     {
-        cacheMask |= Pal::CoherDepthStencilTarget | Pal::CoherClear;
+        cacheMask |= Pal::CoherDepthStencilTarget;
     }
 
-    if (accessMask & VK_ACCESS_TRANSFER_WRITE_BIT)
+    if (accessMask & VK_ACCESS_2_TRANSFER_WRITE_BIT)
     {
-        cacheMask |= Pal::CoherCopyDst | Pal::CoherResolveDst | Pal::CoherClear | Pal::CoherShaderWrite |
+        cacheMask |= Pal::CoherCopyDst     |
+                     Pal::CoherResolveDst  |
+                     Pal::CoherClear       |
+                     Pal::CoherShaderWrite |
                      Pal::CoherTimestamp;
     }
 
-    if (accessMask & VK_ACCESS_HOST_WRITE_BIT)
+    if (accessMask & (VK_ACCESS_2_HOST_WRITE_BIT |
+                      VK_ACCESS_2_HOST_READ_BIT))
     {
         cacheMask |= Pal::CoherCpu;
     }
 
-    if (accessMask & VK_ACCESS_MEMORY_WRITE_BIT)
+    if (accessMask & VK_ACCESS_2_MEMORY_WRITE_BIT)
     {
         cacheMask |= Pal::CoherMemory | ImageLayoutToCacheMask(imageLayout);
     }
 
-    if (accessMask & (VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT |
-                      VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT))
+    if (accessMask & (VK_ACCESS_2_TRANSFORM_FEEDBACK_WRITE_BIT_EXT         |
+                      VK_ACCESS_2_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT |
+                      VK_ACCESS_2_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT))
     {
         cacheMask |= Pal::CoherStreamOut;
     }
 
-    if (accessMask & VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT)
-    {
-        cacheMask |= Pal::CoherMemory | Pal::CoherIndirectArgs;
-    }
-
-    // CoherQueueAtomic: Not used
-    // CoherTimestamp: Timestamp write syncs are handled by the timestamp-related write/query funcs and not barriers
-    // CoherCeLoad: Not used
-    // CoherCeDump: Not used
-
-    return cacheMask;
-}
-
-// =====================================================================================================================
-// Converts destination access flags to destination cache coherency flags.
-static uint32_t DstAccessToCacheMask(AccessFlags accessMask, VkImageLayout imageLayout)
-{
-    uint32_t cacheMask = 0;
-
-    if ((imageLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) ||
-        (imageLayout == VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR))
-    {
-        cacheMask |= Pal::CoherPresent;
-    }
-
-    if (accessMask & VK_ACCESS_INDIRECT_COMMAND_READ_BIT)
+    if (accessMask & (VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT |
+                      VK_ACCESS_2_CONDITIONAL_RENDERING_READ_BIT_EXT))
     {
         cacheMask |= Pal::CoherIndirectArgs;
     }
 
-    if (accessMask & VK_ACCESS_INDEX_READ_BIT)
+    if (accessMask & VK_ACCESS_2_INDEX_READ_BIT)
     {
         cacheMask |= Pal::CoherIndexData;
     }
-
-    constexpr AccessFlags shaderReadAccessFlags = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT
-                                                  | VK_ACCESS_UNIFORM_READ_BIT
-                                                  | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT
-                                                  | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR
-                                                  | VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR
-                                                  | VK_ACCESS_SHADER_READ_BIT;
 
     if (accessMask & shaderReadAccessFlags)
     {
         cacheMask |= Pal::CoherShaderRead;
     }
 
-    if (accessMask & VK_ACCESS_COLOR_ATTACHMENT_READ_BIT)
-    {
-        cacheMask |= Pal::CoherColorTarget;
-    }
-
-    if (accessMask & VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT)
-    {
-        cacheMask |= Pal::CoherDepthStencilTarget;
-    }
-
-    if (accessMask & VK_ACCESS_TRANSFER_READ_BIT)
+    if (accessMask & VK_ACCESS_2_TRANSFER_READ_BIT)
     {
         cacheMask |= Pal::CoherCopySrc | Pal::CoherResolveSrc | Pal::CoherShaderRead;
     }
 
-    if (accessMask & VK_ACCESS_HOST_READ_BIT)
-    {
-        cacheMask |= Pal::CoherCpu;
-    }
-
-    if (accessMask & VK_ACCESS_MEMORY_READ_BIT)
+    if (accessMask & VK_ACCESS_2_MEMORY_READ_BIT)
     {
         cacheMask |= Pal::CoherMemory | ImageLayoutToCacheMask(imageLayout);
     }
 
-    if (accessMask & VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT)
-    {
-        cacheMask |= Pal::CoherStreamOut;
-    }
-
-    if (accessMask & VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT)
-    {
-        cacheMask |= Pal::CoherMemory | Pal::CoherIndirectArgs;
-    }
-
-#if VKI_RAY_TRACING
-    if (accessMask & VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR)
-    {
-        cacheMask |= Pal::CoherShaderRead;
-    }
-#endif
-
-    if (accessMask & VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR)
+    if (accessMask & VK_ACCESS_2_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR)
     {
         cacheMask |= Pal::CoherSampleRate;
     }
+
+    // CoherQueueAtomic: Not used
+    // CoherTimestamp: Timestamp write syncs are handled by the timestamp-related write/query funcs and not barriers
+    // CoherCeLoad: Not used
+    // CoherCeDump: Not used
 
     return cacheMask;
 }
@@ -542,8 +501,8 @@ void BarrierPolicy::ApplyBarrierCacheFlags(
     Pal::BarrierTransition*             pResult) const
 {
     // Convert access masks to cache coherency masks and exclude any coherency flags that are not supported.
-    uint32_t srcCacheMask = SrcAccessToCacheMask(srcAccess, srcLayout) & m_supportedOutputCacheMask;
-    uint32_t dstCacheMask = DstAccessToCacheMask(dstAccess, dstLayout) & m_supportedInputCacheMask;
+    uint32_t srcCacheMask = AccessMaskToCacheMask(srcAccess, srcLayout) & m_supportedOutputCacheMask;
+    uint32_t dstCacheMask = AccessMaskToCacheMask(dstAccess, dstLayout) & m_supportedInputCacheMask;
 
     // Calculate the union of both masks that are used for handling the domains that are always kept coherent and the
     // domains that are avoided to be kept coherent unless explicitly requested.
@@ -630,20 +589,20 @@ void DeviceBarrierPolicy::InitDeviceCachePolicy(
 
     // Add all output/input caches supported by default.
     supportedOutputCacheMask   |= Pal::CoherCpu
-                                | Pal::CoherShaderWrite
-                                | Pal::CoherCopyDst
+                                | Pal::CoherShader
+                                | Pal::CoherCopy
                                 | Pal::CoherColorTarget
                                 | Pal::CoherDepthStencilTarget
-                                | Pal::CoherResolveDst
+                                | Pal::CoherResolve
                                 | Pal::CoherClear
                                 | Pal::CoherMemory;
 
     supportedInputCacheMask    |= Pal::CoherCpu
-                                | Pal::CoherShaderRead
-                                | Pal::CoherCopySrc
+                                | Pal::CoherShader
+                                | Pal::CoherCopy
                                 | Pal::CoherColorTarget
                                 | Pal::CoherDepthStencilTarget
-                                | Pal::CoherResolveSrc
+                                | Pal::CoherResolve
                                 | Pal::CoherIndirectArgs
                                 | Pal::CoherIndexData
                                 | Pal::CoherMemory;
@@ -1329,7 +1288,9 @@ void BufferBarrierPolicy::InitBufferCachePolicy(
         supportedInputCacheMask |= Pal::CoherShaderRead;
     }
 
-    if (usage & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT)
+    // Pal::CoherMemory is not needed for VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT. We should support
+    // Pal::CoherIndirectArgs instead here.
+    if (usage & (VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT))
     {
         supportedInputCacheMask |= Pal::CoherIndirectArgs;
     }
@@ -1345,8 +1306,6 @@ void BufferBarrierPolicy::InitBufferCachePolicy(
         supportedInputCacheMask  |= Pal::CoherStreamOut;
         supportedOutputCacheMask |= Pal::CoherStreamOut;
     }
-
-    // Nothing to do for VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT since Pal::CoherMemory is already set
 
     // Apply device specific supported cache masks to limit the scope.
     supportedOutputCacheMask &= pDevice->GetBarrierPolicy().GetSupportedOutputCacheMask();

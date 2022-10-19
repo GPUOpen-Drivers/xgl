@@ -5,7 +5,25 @@
         "always": true
       },
       "action": {
+        "binningOverride": 1
+      }
+    },
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
         "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "ps": {
           "waveSize": 64
         }
       }
@@ -19,6 +37,46 @@
       "action": {
         "cs": {
           "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x17d000865c71af81 521460ae1a738cad"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x06dd404ef721df42 a1dcb75982bcc0ed"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 56,
+          "waveSize": 64,
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x5f20cb2d275cc846 407d20bceb8e96b0"
+        }
+      },
+      "action": {
+        "cs": {
+          "disableLicm": true
         }
       }
     }

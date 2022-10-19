@@ -311,13 +311,13 @@ else()
     message(FATAL_ERROR "${XGL_CWPACK_PATH} cannot be found!")
 endif()
 
-# VKGC compiler
-add_subdirectory(${XGL_VKGC_PATH} ${CMAKE_BINARY_DIR}/compiler)
-
 # icd
 if(NOT ICD_BUILD_LLPCONLY)
 add_subdirectory(icd)
 endif()
+
+# VKGC compiler
+add_subdirectory(${XGL_VKGC_PATH} ${CMAKE_BINARY_DIR}/compiler)
 
 ### Generate Packages #################################################################################################
 if(UNIX)

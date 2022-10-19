@@ -229,6 +229,9 @@ void ResourceOptimizer::BuildAppProfile()
     const AppProfile        appProfile = m_pDevice->GetAppProfile();
     const Pal::GfxIpLevel   gfxIpLevel = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel;
 
+    const bool isNotPowerOfTwoMemoryBus = (Util::IsPowerOfTwo(m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->
+        PalProperties().gpuMemoryProperties.performance.vramBusBitWidth) == false);
+
     uint32_t i = 0;
 
     memset(&m_appProfile, 0, sizeof(m_appProfile));
@@ -359,12 +362,15 @@ void ResourceOptimizer::BuildAppProfile()
     {
         if (gfxIpLevel == Pal::GfxIpLevel::GfxIp10_3)
         {
-            // 00000f00000008708a03574f7d0e4d17,False,RESDCC,2,1.84%,1.84%,1.23%
-            i = m_appProfile.entryCount++;
-            m_appProfile.entries[i].pattern.match.apiHash = true;
-            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x8a03574f7d0e4d17;
-            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
-            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccEnableMode;
+            if (isNotPowerOfTwoMemoryBus == false)
+            {
+                // 00000f00000008708a03574f7d0e4d17,False,RESDCC,2,1.84%,1.84%,1.23%
+                i = m_appProfile.entryCount++;
+                m_appProfile.entries[i].pattern.match.apiHash = true;
+                m_appProfile.entries[i].pattern.targetKey.apiHash = 0x8a03574f7d0e4d17;
+                m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+                m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccEnableMode;
+            }
 
             // 00000f00000008708bcf1c20f5a6c4a7,False,RESDCC,1,0.64%,0.64%,2.02%
             i = m_appProfile.entryCount++;
@@ -377,6 +383,15 @@ void ResourceOptimizer::BuildAppProfile()
             i = m_appProfile.entryCount++;
             m_appProfile.entries[i].pattern.match.apiHash = true;
             m_appProfile.entries[i].pattern.targetKey.apiHash = 0xf1d2e696ab27d939;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+        }
+
+        if (isNotPowerOfTwoMemoryBus)
+        {
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x8a03574f7d0e4d17;
             m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
             m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
         }

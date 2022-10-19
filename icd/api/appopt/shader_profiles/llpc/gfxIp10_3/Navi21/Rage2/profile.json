@@ -26,6 +26,18 @@
     },
     {
       "pattern": {
+        "ps": {
+          "codeHash": "0x0596c40b7d193021 3788eba5a15d6542"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
         "cs": {
           "codeHash": "0xa96e3b3d24510bd0 a4f37c25eac9ee41"
         }

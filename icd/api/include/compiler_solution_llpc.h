@@ -118,10 +118,10 @@ public:
         int64_t*                          pCompileTime) override;
 
     virtual VkResult CreateGraphicsShaderBinary(
-        const Device*                           pDevice,
-        const ShaderStage                       stage,
-        const GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-        ShaderModuleHandle*                     pShaderModule) override;
+        const Device*                     pDevice,
+        const ShaderStage                 stage,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        ShaderModuleHandle*               pShaderModule) override;
 
     virtual VkResult CreateComputePipelineBinary(
         Device*                          pDevice,

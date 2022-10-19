@@ -20,7 +20,19 @@
       },
       "action": {
         "cs": {
-          "wgpMode": 1
+          "wgpMode": 2
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x3d177a356fac334d 75f708c573abe471"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
         }
       }
     },

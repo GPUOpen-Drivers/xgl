@@ -88,6 +88,8 @@ VK_EXT_queue_family_foreign
 VK_KHR_variable_pointers
 VK_EXT_vertex_attribute_divisor
 VK_EXT_descriptor_indexing
+VK_EXT_mutable_descriptor_type
+VK_VALVE_mutable_descriptor_type
 VK_KHR_create_renderpass2
 VK_KHR_8bit_storage
 VK_EXT_conservative_rasterization

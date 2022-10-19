@@ -65,7 +65,7 @@ HEADER_INCLUDES = """
 
 #include \"include/app_profile.h\"
 #include \"include/vk_shader_code.h\"
-#include \"include/vk_instance.h\"
+#include \"include/vk_utils.h\"
 #include \"palDevice.h\"
 
 #include \"utils/json_writer.h\"
@@ -78,9 +78,15 @@ HEADER_INCLUDES = """
 
 CPP_INCLUDE = """
 #include \"g_shader_profile.h\"
+#include \"settings/g_settings.h\"
 
 %Includes%
 
+namespace Bil
+{
+}
+
+using namespace Bil;
 using namespace Util;
 """
 
@@ -308,7 +314,7 @@ PARSE_JSON_SHADER_TUNING_FLAGS_FUNC = """\
         success &= CheckValidKeys(pJson, VK_ARRAY_SIZE(ValidKeys), ValidKeys);
 
         utils::Json* pItem = nullptr;
-        pFlags->u32All = 0;
+        (*pFlags) = 0;
 
 %Defs%
     }
@@ -333,7 +339,7 @@ PARSE_JSON_SHADER_TUNING_OPTIONS_FUNC = """\
         success &= CheckValidKeys(pJson, VK_ARRAY_SIZE(ValidKeys), ValidKeys);
 
         utils::Json* pItem = nullptr;
-        pOptions->u32All = 0;
+        (*pOptions) = 0;
 
 %Defs%
     }
@@ -440,6 +446,13 @@ if (shader.dynamicShaderInfo.apply.%Flag%)
 
 CONDITION_SHADER_CREATE_TUNING_OPTIONS = """\
 if (shader.shaderCreate.tuningOptions.%Flag%)
+{
+%Defs%
+}
+"""
+
+CONDITION_SHADER_CREATE_TUNING_OPTION_FLAGS = """\
+if ((shader.shaderCreate.tuningOptions.%Flag%)
 {
 %Defs%
 }
@@ -1520,6 +1533,50 @@ SHADER_ACTION = {
         "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
+    "disableCodeSinking": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "disableCodeSinking",
+                "dataType": "uint32_t",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+            },
+        ],
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = true;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+
+    "favorLatencyHiding": {
+        "type": [bool],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "favorLatencyHiding",
+                "dataType": "bool",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+            },
+        ],
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %BoolValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+
     "reconfigWorkgroupLayout": {
         "type": [int],
         "jsonReadable": True,
@@ -2403,9 +2460,6 @@ ValidKeysForEntity = {
 
 BuildTypesTemplate = {
     "llpc": "ICD_BUILD_LLPC",
-    "navi22": "VKI_BUILD_NAVI22",
-    "navi23": "VKI_BUILD_NAVI23",
-    "navi24": "VKI_BUILD_NAVI24",
     "icdRuntimeAppProfile": "ICD_RUNTIME_APP_PROFILE"
 }
 

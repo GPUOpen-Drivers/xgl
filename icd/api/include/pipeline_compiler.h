@@ -166,10 +166,10 @@ public:
         Util::MetroHash::Hash*            pCacheId);
 
     VkResult CreateGraphicsShaderBinary(
-        const Device*                           pDevice,
-        const ShaderStage                       stage,
-        const GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-        ShaderModuleHandle*                     pModule);
+        const Device*                     pDevice,
+        const ShaderStage                 stage,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        ShaderModuleHandle*               pModule);
 
     static void FreeGraphicsShaderBinary(
         ShaderModuleHandle* pShaderModule);
@@ -356,6 +356,8 @@ public:
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
+
+    static bool IsDefaultPipelineMetadata(const PipelineMetadata* pPipelineMetadata);
 
     void DropPipelineBinaryInst(
         Device*                pDevice,

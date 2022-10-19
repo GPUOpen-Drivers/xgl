@@ -195,7 +195,6 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->lbvhBuildThreshold                = settings.lbvhBuildThreshold;
     pDeviceSettings->enableBVHBuildDebugCounters       = settings.enableBVHBuildDebugCounters;
     pDeviceSettings->enableInsertBarriersInBuildAS     = settings.enableInsertBarriersInBuildAS;
-    pDeviceSettings->enableHalfBoxNode32               = settings.enableHalfBoxNode32;
     pDeviceSettings->sahQbvh                           = settings.sahQbvh;
 
     pDeviceSettings->ltdQualityFactorFastTrace         = settings.ltdQualityFactorFastTrace;
@@ -650,13 +649,10 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
 
         Vkgc::BinaryData spvBin = { buildInfo.code.spvSize, buildInfo.code.pSpvCode };
 
-        vk::ShaderWaveSize waveSize = settings.overrideWaveSize;
-
         bool forceWave64 = false;
 
         // Overide wave size for these GpuRT shader types
-        if ((waveSize == vk::ShaderWaveSize::WaveSizeAuto) &&
-            ((buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildBVHTD) ||
+        if (((buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildBVHTD) ||
              (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildBVHTDTR) ||
              (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildParallel) ||
              (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildQBVH)))

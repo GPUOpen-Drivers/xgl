@@ -135,52 +135,6 @@
       ]
     },
     {
-      "Name": "DevModeSqttMarkerEnableFlags",
-      "IsEnum": true,
-      "Values": [
-        {
-          "Name": "DevModeSqttMarkerEnableCbStart",
-          "Value": 1,
-          "Description": "Enable command buffer start instrumentation marker"
-        },
-        {
-          "Name": "DevModeSqttMarkerEnableCbEnd",
-          "Value": 2,
-          "Description": "Enable command buffer end instrumentation marker"
-        },
-        {
-          "Name": "DevModeSqttMarkerEnableEvent",
-          "Value": 4,
-          "Description": "Enable per-draw/dispatch event instrumentation markers"
-        },
-        {
-          "Name": "DevModeSqttMarkerEnableBarrier",
-          "Value": 8,
-          "Description": "Enable barrier instrumentation markers"
-        },
-        {
-          "Name": "DevModeSqttMarkerEnableGeneralApi",
-          "Value": 16,
-          "Description": "Enable general API (per entry point call) instrunmentation markers"
-        },
-        {
-          "Name": "DevModeSqttMarkerEnableUserEvent",
-          "Value": 32,
-          "Description": "Enable user event (app string) markers"
-        },
-        {
-          "Name": "DevModeSqttMarkerEnableEventWithDims",
-          "Value": 64,
-          "Description": "Enable dispatch events with thread dimensions"
-        },
-        {
-          "Name": "DevModeSqttMarkerEnablePipelineBind",
-          "Value": 256,
-          "Description": "Enable pipeline bind markers"
-        }
-      ]
-    },
-    {
       "Name": "PipelineBinningMode",
       "IsEnum": true,
       "Values": [
@@ -247,91 +201,6 @@
           "Name": "BvhBuildModeAuto",
           "Value": 3,
           "Description": "Only for override builds. If set, falls back to regular build options."
-        }
-      ]
-    },
-    {
-      "Name": "MinimizeVgprUsageStrategy",
-      "Values": [
-        {
-          "BuildTypes": [
-            "VKI_RAY_TRACING"
-          ],
-          "Name": "MinimizeVgprsUsageDefault",
-          "Value": 0,
-          "Description": "Default optimal strategy"
-        },
-        {
-          "BuildTypes": [
-            "VKI_RAY_TRACING"
-          ],
-          "Name": "MinimizeVgprsUsageGcmseq",
-          "Value": 1,
-          "Description": "Enable global code motion transformation that will reduce register pressure"
-        },
-        {
-          "BuildTypes": [
-            "VKI_RAY_TRACING"
-          ],
-          "Name": "MinimizeVgprsUsageSched",
-          "Value": 2,
-          "Description": "Make scheduler favor minimizing VGPR usage"
-        },
-        {
-          "BuildTypes": [
-            "VKI_RAY_TRACING"
-          ],
-          "Name": "MinimizeVgprsUsageRegAlloc",
-          "Value": 4,
-          "Description": "Make register allocator favor minimizing VGPR usage"
-        },
-        {
-          "BuildTypes": [
-            "VKI_RAY_TRACING"
-          ],
-          "Name": "MinimizeVgprsUsageMergeChain",
-          "Value": 8,
-          "Description": "Enable merge chaining in scheduler preprocess"
-        },
-        {
-          "BuildTypes": [
-            "VKI_RAY_TRACING"
-          ],
-          "Name": "MinimizeVgprsUsagePeepHole",
-          "Value": 16,
-          "Description": "Control peephole optimizations that can affect VGPR usage"
-        },
-        {
-          "BuildTypes": [
-            "VKI_RAY_TRACING"
-          ],
-          "Name": "MinimizeVgprsUsageCubeCoord",
-          "Value": 32,
-          "Description": "Replace cubetc/cubesc/cubema/cubeid HW instructions with a sequence of ALUs"
-        },
-        {
-          "BuildTypes": [
-            "VKI_RAY_TRACING"
-          ],
-          "Name": "MinimizeVgprsUsageFactorMad",
-          "Value": 64,
-          "Description": "A common mul will be factored from a series on mads"
-        },
-        {
-          "BuildTypes": [
-            "VKI_RAY_TRACING"
-          ],
-          "Name": "MinimizeVgprsUsageVN",
-          "Value": 128,
-          "Description": "ValueNumber optimizations will be reduced, those that have tendency to increaseVGPR pressure will be disabled"
-        },
-        {
-          "BuildTypes": [
-            "VKI_RAY_TRACING"
-          ],
-          "Name": "MinimizeVgprsUsageBcm",
-          "Value": 256,
-          "Description": "Enables Bulk Code Motion phase, that moves instructions closer to their uses."
         }
       ]
     },
@@ -2538,21 +2407,6 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Enable half F32 box node.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "EnableHalfBoxNode32",
-      "Scope": "Driver"
-    },
-    {
       "Name": "TraceRayProfileFlags",
       "Description": "Trace ray profile flags",
       "Tags": [
@@ -3485,58 +3339,6 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Enable PBQP register allocator for ray tracing pipelines.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "EnableRayTracingPbqp",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Enable SC keep function calls optimization for ray tracing pipelines.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "EnableRayTracingKeepCalls",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Hint SC to choose Optimal Strategy for Shader Compilations for VGPR minimization for ray tracing pipelines.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": "MinimizeVgprsUsageDefault"
-      },
-      "Flags": {
-        "IsHex": true,
-        "IsBitmask": true
-      },
-      "ValidValues": {
-        "Name": "MinimizeVgprUsageStrategy"
-      },
-      "Type": "uint32",
-      "Name": "RaytracingMinVgprUsageStrategy",
-      "Scope": "Driver"
-    },
-    {
       "Description": "Maximum number of waves per CU for RT workloads.",
       "Tags": [
         "Ray Tracing"
@@ -3785,7 +3587,7 @@
       "Name": "EnableAccelerationStructureScratchMemoryDump",
       "Description": "Dumps scratch memory from acceleration structures. Written to the directory specified by BaseLogDirPath.",
       "Tags": [
-        "RayTracing"
+        "Ray Tracing"
       ],
       "BuildTypes": [
         "VKI_RAY_TRACING"
@@ -4200,7 +4002,7 @@
     {
       "Description": "This factor decides how much more time to build BVH to increase quality for LTD.  1.0 is highest quality.",
       "Tags": [
-        "RayTracing"
+        "Ray Tracing"
       ],
       "BuildTypes": [
         "VKI_RAY_TRACING"
@@ -4215,7 +4017,7 @@
     {
       "Description": "This factor decides how much more time to build BVH to increase quality for LTD.  1.0 is highest quality.",
       "Tags": [
-        "RayTracing"
+        "Ray Tracing"
       ],
       "BuildTypes": [
         "VKI_RAY_TRACING"
@@ -4230,7 +4032,7 @@
     {
       "Description": "This factor decides how much more time to build BVH to increase quality for LTD.  1.0 is highest quality.",
       "Tags": [
-        "RayTracing"
+        "Ray Tracing"
       ],
       "BuildTypes": [
         "VKI_RAY_TRACING"
@@ -4245,7 +4047,7 @@
     {
       "Description": "Number of size bits in morton codes.  [0-8] bits.",
       "Tags": [
-        "RayTracing"
+        "Ray Tracing"
       ],
       "BuildTypes": [
         "VKI_RAY_TRACING"
@@ -6125,7 +5927,7 @@
       "Name": "UseFlipHint"
     },
     {
-      "Description": "If this is true, The PAL prefered present mode is ignored.",
+      "Description": "If this is true, The PAL preferred present mode is ignored.",
       "Tags": [
         "Optimization"
       ],
@@ -7199,45 +7001,61 @@
         "IsBitmask": true
       },
       "Defaults": {
-        "Default": 367
+        "Default": 879
       },
       "ValidValues": {
+        "Name": "DevModeSqttMarkerEnableFlags",
+        "IsEnum": true,
         "Values": [
           {
+            "Name": "DevModeSqttMarkerEnableCbStart",
             "Value": 1,
             "Description": "Enable command buffer start instrumentation marker"
           },
           {
+            "Name": "DevModeSqttMarkerEnableCbEnd",
             "Value": 2,
             "Description": "Enable command buffer end instrumentation marker"
           },
           {
+            "Name": "DevModeSqttMarkerEnableEvent",
             "Value": 4,
             "Description": "Enable per-draw/dispatch event instrumentation markers"
           },
           {
+            "Name": "DevModeSqttMarkerEnableBarrier",
             "Value": 8,
             "Description": "Enable barrier instrumentation markers"
           },
           {
+            "Name": "DevModeSqttMarkerEnableGeneralApi",
             "Value": 16,
             "Description": "Enable general API (per entry point call) instrunmentation markers"
           },
           {
+            "Name": "DevModeSqttMarkerEnableUserEvent",
             "Value": 32,
             "Description": "Enable user event (app string) markers"
           },
           {
+            "Name": "DevModeSqttMarkerEnableEventWithDims",
             "Value": 64,
             "Description": "Enable dispatch events with thread dimensions"
           },
           {
+            "Name": "DevModeSqttMarkerEnableBoundShaderHashes",
             "Value": 128,
             "Description": "Write bound shader hashes as user event markers"
           },
           {
+            "Name": "DevModeSqttMarkerEnablePipelineBind",
             "Value": 256,
             "Description": "Enable pipeline bind markers"
+          },
+          {
+            "Name": "DevModeSqttMarkerEnablePresent",
+            "Value": 512,
+            "Description": "Enable present markers"
           }
         ]
       },
