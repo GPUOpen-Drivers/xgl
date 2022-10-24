@@ -30,7 +30,7 @@
 # This interface library is intended be used by cache-creator, cache-info, and by the related unit tests.
 add_library(cache_creator_lib INTERFACE)
 
-list(APPEND CMAKE_MODULE_PATH "${XGL_LLVM_BUILD_PATH}/lib/cmake/llvm")
+list(APPEND CMAKE_MODULE_PATH "${XGL_LLVM_BUILD_PATH}/${CMAKE_CFG_INTDIR}/lib/cmake/llvm")
 include(LLVMConfig)
 
 # Find all the LLVM libraries necessary to use the LLVM components that we use.

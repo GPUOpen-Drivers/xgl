@@ -78,14 +78,6 @@ if (VKI_GPU_DECOMPRESS)
 endif()
 #endif
 
-# XGL cache creator tool
-if(XGL_BUILD_CACHE_CREATOR)
-    if(NOT ICD_BUILD_LLPC)
-        message(FATAL_ERROR "Cannot build cache-creator tools without LLPC")
-    endif()
-    add_subdirectory(${XGL_CACHE_CREATOR_PATH} ${CMAKE_BINARY_DIR}/tools)
-endif()
-
 ### XGL Sources ########################################################################################################
 
 ### ICD api ###################################################################
