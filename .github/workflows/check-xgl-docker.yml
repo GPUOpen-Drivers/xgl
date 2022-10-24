@@ -29,7 +29,7 @@ jobs:
         run: |
           CONFIG_LOWER=$(echo "${{ matrix.config }}" | tr "[:upper:]" "[:lower:]")
           FEATURES_LOWER=$(echo "${{ matrix.feature-set }}" | tr "+" "_")
-          TAG=$(printf "${{ matrix.base-image-template }}" "$CONFIG_LOWER" "$FEATURES_LOWER")
+          TAG=$(printf "${{ matrix.image-template }}" "$CONFIG_LOWER" "$FEATURES_LOWER")
           echo "IMAGE_TAG=$TAG" | tee -a $GITHUB_ENV
       - name: Fetch the latest prebuilt AMDVLK
         run: docker pull "amdvlkadmin/$IMAGE_TAG"
