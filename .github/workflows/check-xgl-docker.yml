@@ -15,10 +15,10 @@ jobs:
       fail-fast: false
       matrix:
         host-os:             ["ubuntu-20.04"]
-        base-image-template: ["us-docker.pkg.dev/stadia-open-source/amdvlk-public-ci/amdvlk_%s%s:nightly"]
+        image-template:      ["amdvlk_%s%s:nightly"]
         config:              [Release]
         feature-set:         ["+gcc", "+gcc+assertions",
-                              "+clang", "+clang+shadercache+ubsan+asan+assertions"]
+                              "+clang"]
     steps:
       - name: Checkout XGL
         run: |
@@ -32,10 +32,10 @@ jobs:
           TAG=$(printf "${{ matrix.base-image-template }}" "$CONFIG_LOWER" "$FEATURES_LOWER")
           echo "IMAGE_TAG=$TAG" | tee -a $GITHUB_ENV
       - name: Fetch the latest prebuilt AMDVLK
-        run: docker pull "$IMAGE_TAG"
+        run: docker pull "amdvlkadmin/$IMAGE_TAG"
       - name: Build and Test with Docker
         run: docker build . --file tools/cache_creator/docker/check_xgl.Dockerfile
-                            --build-arg AMDVLK_IMAGE="$IMAGE_TAG"
+                            --build-arg AMDVLK_IMAGE="amdvlkadmin/$IMAGE_TAG"
                             --build-arg XGL_REPO_NAME="${GITHUB_REPOSITORY}"
                             --build-arg XGL_REPO_REF="${GITHUB_REF}"
                             --build-arg XGL_REPO_SHA="${GITHUB_SHA}"
