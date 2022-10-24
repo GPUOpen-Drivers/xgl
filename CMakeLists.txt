@@ -319,6 +319,14 @@ endif()
 # VKGC compiler
 add_subdirectory(${XGL_VKGC_PATH} ${CMAKE_BINARY_DIR}/compiler)
 
+# XGL cache creator tool
+if(XGL_BUILD_CACHE_CREATOR)
+    if(NOT ICD_BUILD_LLPC)
+        message(FATAL_ERROR "Cannot build cache-creator tools without LLPC")
+    endif()
+    add_subdirectory(${XGL_CACHE_CREATOR_PATH} ${CMAKE_BINARY_DIR}/tools)
+endif()
+
 ### Generate Packages #################################################################################################
 if(UNIX)
   generateInstallTargets()
