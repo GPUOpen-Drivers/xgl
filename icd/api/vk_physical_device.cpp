@@ -723,22 +723,22 @@ VkResult PhysicalDevice::Initialize()
 
             const Pal::gpusize forceMinLocalHeapSize = (settings.overrideLocalHeapSizeInGBs * BytesInOneGB);
 
-            const Pal::gpusize totalLocalHeapSize = heapProperties[Pal::GpuHeapLocal].logicalSize +
-                                                    heapProperties[Pal::GpuHeapInvisible].logicalSize;
+            const Pal::gpusize totalLocalHeapSize = heapProperties[Pal::GpuHeapLocal].physicalSize +
+                                                    heapProperties[Pal::GpuHeapInvisible].physicalSize;
 
             if (forceMinLocalHeapSize > totalLocalHeapSize)
             {
                 // If there's no local invisible heap, override the heapsize for Local visible heap,
                 // else, keep local visible heap size to whatever is reported by PAL (256 MBs) and
                 // adjust the Local invisible heap size accordingly.
-                if (heapProperties[Pal::GpuHeapInvisible].logicalSize == 0)
+                if (heapProperties[Pal::GpuHeapInvisible].physicalSize == 0)
                 {
-                    heapProperties[Pal::GpuHeapLocal].logicalSize = forceMinLocalHeapSize;
+                    heapProperties[Pal::GpuHeapLocal].physicalSize = forceMinLocalHeapSize;
                 }
                 else
                 {
-                    heapProperties[Pal::GpuHeapInvisible].logicalSize = forceMinLocalHeapSize -
-                                                                        heapProperties[Pal::GpuHeapLocal].logicalSize;
+                    heapProperties[Pal::GpuHeapInvisible].physicalSize = forceMinLocalHeapSize -
+                                                                         heapProperties[Pal::GpuHeapLocal].physicalSize;
                 }
             }
         }
@@ -748,7 +748,7 @@ VkResult PhysicalDevice::Initialize()
     {
         for (uint32_t heapIdx = 0; heapIdx < Pal::GpuHeapCount; heapIdx++)
         {
-            m_memoryUsageTracker.totalMemorySize[heapIdx] = heapProperties[heapIdx].logicalSize;
+            m_memoryUsageTracker.totalMemorySize[heapIdx] = heapProperties[heapIdx].physicalSize;
         }
 
         if (m_memoryUsageTracker.totalMemorySize[Pal::GpuHeapInvisible] == 0)
@@ -784,11 +784,11 @@ VkResult PhysicalDevice::Initialize()
 
         if (settings.forceUMA)
         {
-            heapProperties[Pal::GpuHeapInvisible].logicalSize = 0;
-            heapProperties[Pal::GpuHeapLocal].logicalSize     = 0;
+            heapProperties[Pal::GpuHeapInvisible].physicalSize = 0;
+            heapProperties[Pal::GpuHeapLocal].physicalSize     = 0;
         }
 
-        const Pal::gpusize invisHeapSize = heapProperties[Pal::GpuHeapInvisible].logicalSize;
+        const Pal::gpusize invisHeapSize = heapProperties[Pal::GpuHeapInvisible].physicalSize;
 
         // Initialize memory heaps
         for (uint32_t orderedHeapIndex = 0; orderedHeapIndex < Pal::GpuHeapCount; ++orderedHeapIndex)
@@ -797,7 +797,7 @@ VkResult PhysicalDevice::Initialize()
             const Pal::GpuMemoryHeapProperties& heapProps  = heapProperties[palGpuHeap];
 
             // Initialize each heap if it exists other than GartCacheable, which we know will be shared with GartUswc.
-            if ((heapProps.logicalSize > 0) && (palGpuHeap != Pal::GpuHeapGartCacheable))
+            if ((heapProps.physicalSize > 0) && (palGpuHeap != Pal::GpuHeapGartCacheable))
             {
                 uint32_t      heapIndex  = m_memoryProperties.memoryHeapCount++;
                 VkMemoryHeap& memoryHeap = m_memoryProperties.memoryHeaps[heapIndex];
@@ -805,7 +805,7 @@ VkResult PhysicalDevice::Initialize()
                 heapIndices[palGpuHeap] = heapIndex;
 
                 memoryHeap.flags = PalGpuHeapToVkMemoryHeapFlags(palGpuHeap);
-                memoryHeap.size  = heapProps.logicalSize;
+                memoryHeap.size  = heapProps.physicalSize;
 
                 m_heapVkToPal[heapIndex]            = palGpuHeap;
                 m_memoryPalHeapToVkHeap[palGpuHeap] = heapIndex;
@@ -813,7 +813,7 @@ VkResult PhysicalDevice::Initialize()
                 if (palGpuHeap == Pal::GpuHeapGartUswc)
                 {
                     // These two should match because the PAL GPU heaps share the same physical memory.
-                    VK_ASSERT(memoryHeap.size == heapProperties[Pal::GpuHeapGartCacheable].logicalSize);
+                    VK_ASSERT(memoryHeap.size == heapProperties[Pal::GpuHeapGartCacheable].physicalSize);
 
                     heapIndices[Pal::GpuHeapGartCacheable] = heapIndex;
                 }
@@ -915,7 +915,7 @@ VkResult PhysicalDevice::Initialize()
             for (uint32_t orderedHeapIndex = 0; orderedHeapIndex < Pal::GpuHeapCount - 1; ++orderedHeapIndex)
             {
                 Pal::GpuHeap palGpuHeap     = ProtectedPriority[orderedHeapIndex];
-                const Pal::gpusize heapSize = heapProperties[palGpuHeap].logicalSize;
+                const Pal::gpusize heapSize = heapProperties[palGpuHeap].physicalSize;
 
                 if ((heapSize > 0) && heapProperties[palGpuHeap].flags.supportsTmz)
                 {
@@ -3665,7 +3665,6 @@ bool PhysicalDevice::HwSupportsRayTracing() const
 {
     return (m_properties.gfxipProperties.srdSizes.bvh != 0);
 }
-
 #endif
 
 // =====================================================================================================================
@@ -4482,6 +4481,12 @@ void PhysicalDevice::GetPhysicalDeviceSubgroupProperties(
                              VK_SHADER_STAGE_CALLABLE_BIT_KHR;
     }
 #endif
+
+    if (IsExtensionSupported(DeviceExtensions::EXT_MESH_SHADER))
+    {
+        *pSupportedStages |= VK_SHADER_STAGE_TASK_BIT_EXT |
+                             VK_SHADER_STAGE_MESH_BIT_EXT;
+    }
 
     *pSupportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
                             VK_SUBGROUP_FEATURE_VOTE_BIT |
@@ -6382,6 +6387,25 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceMeshShaderFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    // Task and Mesh stages share the same flag in gfxProperties
+                    pExtInfo->taskShader = PalProperties().gfxipProperties.flags.supportTaskShader;
+                    pExtInfo->meshShader = PalProperties().gfxipProperties.flags.supportMeshShader;
+
+                    pExtInfo->multiviewMeshShader                    = VK_TRUE;
+                    pExtInfo->primitiveFragmentShadingRateMeshShader = VK_TRUE;
+                    pExtInfo->meshShaderQueries                      = VK_FALSE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_FEATURES_KHR:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR*>(pHeader);
@@ -6392,6 +6416,20 @@ size_t PhysicalDevice::GetFeatures2(
                     pExtInfo->workgroupMemoryExplicitLayoutScalarBlockLayout = VK_TRUE;
                     pExtInfo->workgroupMemoryExplicitLayout8BitAccess        = VK_TRUE;
                     pExtInfo->workgroupMemoryExplicitLayout16BitAccess       = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceFaultFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->deviceFault             = VK_TRUE;
+                    pExtInfo->deviceFaultVendorBinary = VK_FALSE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6411,6 +6449,58 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->vertexInputDynamicState = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceExtendedDynamicState3FeaturesEXT*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->extendedDynamicState3TessellationDomainOrigin         = VK_TRUE;
+                    pExtInfo->extendedDynamicState3DepthClampEnable                 = VK_TRUE;
+                    pExtInfo->extendedDynamicState3PolygonMode                      = VK_TRUE;
+                    pExtInfo->extendedDynamicState3RasterizationSamples             = VK_TRUE;
+                    pExtInfo->extendedDynamicState3SampleMask                       = VK_TRUE;
+                    pExtInfo->extendedDynamicState3AlphaToCoverageEnable            = VK_TRUE;
+                    pExtInfo->extendedDynamicState3AlphaToOneEnable                 = VK_TRUE;
+                    pExtInfo->extendedDynamicState3LogicOpEnable                    = VK_TRUE;
+                    pExtInfo->extendedDynamicState3ColorBlendEnable                 = VK_TRUE;
+                    pExtInfo->extendedDynamicState3ColorBlendEquation               = VK_TRUE;
+                    pExtInfo->extendedDynamicState3ColorWriteMask                   = VK_TRUE;
+                    pExtInfo->extendedDynamicState3RasterizationStream              = VK_TRUE;
+                    pExtInfo->extendedDynamicState3ConservativeRasterizationMode    = VK_TRUE;
+                    pExtInfo->extendedDynamicState3ExtraPrimitiveOverestimationSize = VK_TRUE;
+                    pExtInfo->extendedDynamicState3DepthClipEnable                  = VK_TRUE;
+                    pExtInfo->extendedDynamicState3SampleLocationsEnable            = VK_TRUE;
+                    pExtInfo->extendedDynamicState3ColorBlendAdvanced               = VK_FALSE;
+                    pExtInfo->extendedDynamicState3ProvokingVertexMode              = VK_TRUE;
+                    pExtInfo->extendedDynamicState3LineRasterizationMode            = VK_TRUE;
+                    pExtInfo->extendedDynamicState3LineStippleEnable                = VK_TRUE;
+                    pExtInfo->extendedDynamicState3DepthClipNegativeOneToOne        = VK_TRUE;
+                    pExtInfo->extendedDynamicState3ViewportWScalingEnable           = VK_FALSE;
+                    pExtInfo->extendedDynamicState3ViewportSwizzle                  = VK_FALSE;
+                    pExtInfo->extendedDynamicState3CoverageToColorEnable            = VK_FALSE;
+                    pExtInfo->extendedDynamicState3CoverageToColorLocation          = VK_FALSE;
+                    pExtInfo->extendedDynamicState3CoverageModulationMode           = VK_FALSE;
+                    pExtInfo->extendedDynamicState3CoverageModulationTableEnable    = VK_FALSE;
+                    pExtInfo->extendedDynamicState3CoverageModulationTable          = VK_FALSE;
+                    pExtInfo->extendedDynamicState3CoverageReductionMode            = VK_FALSE;
+                    pExtInfo->extendedDynamicState3RepresentativeFragmentTestEnable = VK_FALSE;
+                    pExtInfo->extendedDynamicState3ShadingRateImageEnable           = VK_FALSE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
             default:
             {
                 // skip any unsupported extension structures
@@ -7202,6 +7292,73 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceMeshShaderPropertiesEXT*>(pNext);
+            const Pal::DeviceProperties& palProps = PalProperties();
+
+            pProps->maxTaskWorkGroupTotalCount            = m_limits.maxComputeWorkGroupCount[0] *
+                                                            m_limits.maxComputeWorkGroupInvocations;
+            pProps->maxTaskWorkGroupCount[0]              = m_limits.maxComputeWorkGroupCount[0];
+            pProps->maxTaskWorkGroupCount[1]              = m_limits.maxComputeWorkGroupCount[1];
+            pProps->maxTaskWorkGroupCount[2]              = m_limits.maxComputeWorkGroupCount[2];
+            pProps->maxTaskWorkGroupInvocations           = m_limits.maxComputeWorkGroupInvocations;
+            pProps->maxTaskWorkGroupSize[0]               = m_limits.maxComputeWorkGroupSize[0];
+            pProps->maxTaskWorkGroupSize[1]               = m_limits.maxComputeWorkGroupSize[1];
+            pProps->maxTaskWorkGroupSize[2]               = m_limits.maxComputeWorkGroupSize[2];
+
+            pProps->maxTaskPayloadSize                    = 16384;
+
+            pProps->maxTaskPayloadAndSharedMemorySize     = pProps->maxTaskPayloadSize +
+                                                            m_limits.maxComputeSharedMemorySize;
+            pProps->maxMeshWorkGroupTotalCount            = m_limits.maxComputeWorkGroupCount[0] *
+                                                            m_limits.maxComputeWorkGroupInvocations;
+            pProps->maxMeshWorkGroupCount[0]              = m_limits.maxComputeWorkGroupCount[0];
+            pProps->maxMeshWorkGroupCount[1]              = m_limits.maxComputeWorkGroupCount[1];
+            pProps->maxMeshWorkGroupCount[2]              = m_limits.maxComputeWorkGroupCount[2];
+
+            pProps->maxMeshWorkGroupInvocations           = 256;
+            pProps->maxMeshWorkGroupSize[0]               = 256;
+            pProps->maxMeshWorkGroupSize[1]               = 256;
+            pProps->maxMeshWorkGroupSize[2]               = 256;
+
+            pProps->maxMeshOutputMemorySize               = m_limits.maxComputeSharedMemorySize;
+            pProps->maxMeshPayloadAndOutputMemorySize     = pProps->maxTaskPayloadSize +
+                                                            m_limits.maxComputeSharedMemorySize;
+            // Need to reserve 1 component slot for primitive_indices
+            pProps->maxMeshOutputComponents               = m_limits.maxGeometryOutputComponents - 1;
+            pProps->maxMeshOutputVertices                 = 256;
+            pProps->maxMeshOutputPrimitives               = 256;
+
+            {
+                pProps->maxMeshOutputLayers               = 8;
+            }
+
+            pProps->maxMeshMultiviewViewCount             = Pal::MaxViewInstanceCount;
+            pProps->meshOutputPerVertexGranularity        = palProps.gfxipProperties.shaderCore.ldsGranularity;
+            pProps->meshOutputPerPrimitiveGranularity     = palProps.gfxipProperties.shaderCore.ldsGranularity;
+
+            // Need to reserve 4 dwords for mesh_prim_count and mesh_vert_count
+            pProps->maxTaskSharedMemorySize           = m_limits.maxComputeSharedMemorySize - (4 * sizeof(uint32_t));
+            pProps->maxMeshSharedMemorySize           = m_limits.maxComputeSharedMemorySize - (4 * sizeof(uint32_t));
+            pProps->maxMeshPayloadAndSharedMemorySize = m_limits.maxComputeSharedMemorySize - (4 * sizeof(uint32_t));
+
+            // Use default value for now
+            pProps->maxPreferredTaskWorkGroupInvocations  = pProps->maxTaskWorkGroupInvocations;
+            pProps->maxPreferredMeshWorkGroupInvocations  = pProps->maxMeshWorkGroupInvocations;
+            pProps->prefersLocalInvocationVertexOutput    = true;
+            pProps->prefersLocalInvocationPrimitiveOutput = true;
+            pProps->prefersCompactVertexOutput            = true;
+            pProps->prefersCompactPrimitiveOutput         = true;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceExtendedDynamicState3PropertiesEXT*>(pNext);
+            pProps->dynamicPrimitiveTopologyUnrestricted = GetRuntimeSettings().dynamicPrimitiveTopologyUnrestricted;
+            break;
+        }
         default:
             break;
         }

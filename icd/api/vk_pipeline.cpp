@@ -63,12 +63,12 @@ static const char* HwStageNames[] =
 static const char* ApiStageNames[] =
 {
     ".cs",
-    ".reserved", ///< @internal Reserved for future features.  Do not use!
+    ".ts",
     ".vs",
     ".hs",
     ".ds",
     ".gs",
-    ".reserved", ///< @internal Reserved for future features.  Do not use!
+    ".ms",
     ".ps"
 };
 
@@ -79,14 +79,12 @@ static constexpr struct
 } IndexShaderStages[] =
 {
     { Pal::ApiShaderStageCompute,                 Util::Abi::ApiShaderType::Cs },
-    ///< @internal Reserved for future features.  Do not use!
-    { static_cast<Pal::ShaderStageFlagBits>(0x0), static_cast<Util::Abi::ApiShaderType>(0x0) },
+    { Pal::ApiShaderStageTask,                    Util::Abi::ApiShaderType::Task },
     { Pal::ApiShaderStageVertex,                  Util::Abi::ApiShaderType::Vs },
     { Pal::ApiShaderStageHull,                    Util::Abi::ApiShaderType::Hs },
     { Pal::ApiShaderStageDomain,                  Util::Abi::ApiShaderType::Ds },
     { Pal::ApiShaderStageGeometry,                Util::Abi::ApiShaderType::Gs },
-    ///< @internal Reserved for future features.  Do not use!
-    { static_cast<Pal::ShaderStageFlagBits>(0x0), static_cast<Util::Abi::ApiShaderType>(0x0) },
+    { Pal::ApiShaderStageMesh,                    Util::Abi::ApiShaderType::Mesh },
     { Pal::ApiShaderStagePixel,                   Util::Abi::ApiShaderType::Ps },
 };
 
@@ -346,7 +344,7 @@ void Pipeline::Init(
     Pal::IPipeline**      pPalPipeline,
     const PipelineLayout* pLayout,
     PipelineBinaryInfo*   pBinary,
-    uint32_t              staticStateMask,
+    uint64_t              staticStateMask,
 #if VKI_RAY_TRACING
     uint32_t              dispatchRaysUserDataOffset,
 #endif
@@ -458,6 +456,9 @@ VkResult Pipeline::GetShaderDisassembly(
         case Pal::ShaderType::Compute:
             apiShaderType = Util::Abi::ApiShaderType::Cs;
             break;
+        case Pal::ShaderType::Task:
+            apiShaderType = Util::Abi::ApiShaderType::Task;
+            break;
         case Pal::ShaderType::Vertex:
             apiShaderType = Util::Abi::ApiShaderType::Vs;
             break;
@@ -469,6 +470,9 @@ VkResult Pipeline::GetShaderDisassembly(
             break;
         case Pal::ShaderType::Geometry:
             apiShaderType = Util::Abi::ApiShaderType::Gs;
+            break;
+        case Pal::ShaderType::Mesh:
+            apiShaderType = Util::Abi::ApiShaderType::Mesh;
             break;
         case Pal::ShaderType::Pixel:
             apiShaderType = Util::Abi::ApiShaderType::Ps;

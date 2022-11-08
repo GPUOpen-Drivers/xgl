@@ -16,7 +16,7 @@
       },
       "action": {
         "cs": {
-          "useSiScheduler": 1,
+          "useSiScheduler": true,
           "waveSize": 32
         }
       }
@@ -29,7 +29,7 @@
       },
       "action": {
         "cs": {
-          "useSiScheduler": 1,
+          "useSiScheduler": true,
           "waveSize": 32
         }
       }
@@ -67,7 +67,7 @@
       "action": {
         "ps": {
           "waveSize": 32,
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -105,7 +105,8 @@
       "action": {
         "cs": {
           "maxWavesPerCu": 14,
-          "useSiScheduler": 1
+          "useSiScheduler": true,
+          "unrollThreshold": 1600
         }
       }
     },
@@ -117,7 +118,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },

@@ -193,10 +193,12 @@ static GraphicsPipelineBinaryCreateInfo* DumpGraphicsPipelineBinaryCreateInfo(
     {
         const Vkgc::PipelineShaderInfo* pInShaderInfos[] =
         {
+            &pBinInfo->pipelineInfo.task,
             &pBinInfo->pipelineInfo.vs,
             &pBinInfo->pipelineInfo.tcs,
             &pBinInfo->pipelineInfo.tes,
             &pBinInfo->pipelineInfo.gs,
+            &pBinInfo->pipelineInfo.mesh,
             &pBinInfo->pipelineInfo.fs,
         };
 
@@ -242,10 +244,12 @@ static GraphicsPipelineBinaryCreateInfo* DumpGraphicsPipelineBinaryCreateInfo(
 
             Vkgc::PipelineShaderInfo* pOutShaderInfos[] =
             {
+                &pCreateInfo->pipelineInfo.task,
                 &pCreateInfo->pipelineInfo.vs,
                 &pCreateInfo->pipelineInfo.tcs,
                 &pCreateInfo->pipelineInfo.tes,
                 &pCreateInfo->pipelineInfo.gs,
+                &pCreateInfo->pipelineInfo.mesh,
                 &pCreateInfo->pipelineInfo.fs,
             };
 
@@ -442,8 +446,6 @@ VkResult GraphicsPipelineLibrary::Create(
     if (result == VK_SUCCESS)
     {
         // 4. Create partial pipeline binary for fast-link
-        void* pLlpcPipelineBuffer = nullptr;
-        binaryCreateInfo.pipelineInfo.pUserData = &pLlpcPipelineBuffer;
         CreatePartialPipelineBinary(
             pDevice,
             &libInfo,
@@ -592,10 +594,12 @@ const ShaderModuleHandle* GraphicsPipelineLibrary::GetShaderModuleHandle(
 
     switch (stage)
     {
+    case ShaderStage::ShaderStageTask:
     case ShaderStage::ShaderStageVertex:
     case ShaderStage::ShaderStageTessControl:
     case ShaderStage::ShaderStageTessEval:
     case ShaderStage::ShaderStageGeometry:
+    case ShaderStage::ShaderStageMesh:
         libFlag = VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT;
         break;
     case ShaderStage::ShaderStageFragment:

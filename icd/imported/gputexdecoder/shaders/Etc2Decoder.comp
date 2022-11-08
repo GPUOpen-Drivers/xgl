@@ -24,8 +24,8 @@
 #extension GL_EXT_samplerless_texture_functions : require
 layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 
-layout(set = 0, binding = 0) writeonly uniform image2D uOutput;
-layout(set = 0, binding = 1) uniform utexture2D uInput;
+layout(set = 0, binding = 0) writeonly uniform image2DArray uOutput;
+layout(set = 0, binding = 1) uniform utexture2DArray uInput;
 layout(set = 0, binding = 2) uniform utextureBuffer etc2SrcBuffer2D;
 
 struct BufferCopyData
@@ -53,12 +53,12 @@ layout(push_constant) uniform constants
     bool           isBufferSrc;
 } copyData;
 
-ivec2 build_coord()
+ivec3 build_coord()
 {
-    ivec2 base = ivec2(gl_WorkGroupID.xy) * 8;
+    ivec3 base = ivec3((gl_WorkGroupID.xy) * 8, gl_WorkGroupID.z);
     base.x += 4 * (int(gl_LocalInvocationID.z) & 1);
     base.y += 2 * (int(gl_LocalInvocationID.z) & 2);
-    base += ivec2(gl_LocalInvocationID.xy);
+    base += ivec3(gl_LocalInvocationID.xy, 0);
     return base;
 }
 
@@ -157,19 +157,19 @@ int decode_eac_signed(uvec2 payload, int linear_pixel)
 
 void main()
 {
-    ivec2 coord = build_coord();
-    ivec2 tile_coord = coord >> 2;
-    ivec2 pixel_coord = coord & 3;
+    ivec3 coord = build_coord();
+    ivec3 tile_coord = ivec3(coord.xy >> 2, coord.z);
+    ivec2 pixel_coord = coord.xy & 3;
     int linear_pixel = 4 * pixel_coord.x + pixel_coord.y;
 
     if (copyData.isBufferSrc)
     {
-        if (any(greaterThanEqual(tile_coord, uvec2(copyData.bufferData.extent.xy))))
+        if (any(greaterThanEqual(tile_coord, uvec3(copyData.bufferData.extent.xyz))))
             return;
     }
     else
     {
-        if (any(greaterThanEqual(tile_coord, uvec2(copyData.imageData.extent.xy))))
+        if (any(greaterThanEqual(tile_coord, uvec3(copyData.imageData.extent.xyz))))
             return;
     }
 
@@ -177,12 +177,12 @@ void main()
 
     if (copyData.isBufferSrc)
     {
-        int p = tile_coord.y * copyData.bufferData.pitch.x + tile_coord.x;
+        int p = tile_coord.z * copyData.bufferData.pitch.y + tile_coord.y * copyData.bufferData.pitch.x + tile_coord.x;
         payload = texelFetch(etc2SrcBuffer2D, p);
     }
     else
     {
-        payload = texelFetch(uInput, tile_coord + copyData.imageData.srcOffset.xy, 0);
+        payload = texelFetch(uInput, tile_coord + copyData.imageData.srcOffset.xyz, 0);
     }
 
     //EAC format early out
@@ -396,10 +396,10 @@ void main()
 
     if (copyData.isBufferSrc)
     {
-        imageStore(uOutput, (coord.xy + copyData.bufferData.offset.xy), outColor);
+        imageStore(uOutput, coord + copyData.bufferData.offset.xyz, outColor);
     }
     else
     {
-        imageStore(uOutput, coord + copyData.imageData.dstOffset.xy, outColor);
+        imageStore(uOutput, coord + copyData.imageData.dstOffset.xyz, outColor);
     }
 }

@@ -100,6 +100,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance_SG(
         const VkInstanceCreateInfo* pInstanceCreateInfo;
     };
 
+#if defined(__unix__)
+    const char* pEnv = getenv("AMD_VULKAN_ICD");
+    const bool preferRadv = pEnv && (strcmp(pEnv, "RADV") == 0);
+    if ((preferRadv == false) && (getenv("VK_DRIVER_FILES") == nullptr) && (getenv("VK_ICD_FILENAMES") == nullptr))
+    {
+        setenv("RADV_FORCE_FAMILY", "navi10", 0);
+    }
+#endif
+
     for (pInstanceCreateInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
     {
         switch (static_cast<int>(pHeader->sType))
@@ -416,7 +425,7 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
             result = pEnumPhysDeviceGroupsFunc(instance, &physicalDeviceGroupCount, pLayerPhysicalDeviceGroups);
         }
 
-        if ((result == VK_SUCCESS))
+        if (result == VK_SUCCESS)
         {
             bool processDevices = false;
 

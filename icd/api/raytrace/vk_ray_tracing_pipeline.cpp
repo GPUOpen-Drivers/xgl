@@ -537,7 +537,7 @@ VkResult RayTracingPipeline::CreateImpl(
         }
         uint32_t totalGroupCount = pipelineCreateInfo.groupCount + pipelineLibGroupCount;
         size_t shaderGroupArraySize = totalGroupCount * GpuRt::RayTraceShaderIdentifierByteSize;
-        if (pipelineCreateInfo.groupCount > 0)
+        if (totalGroupCount > 0)
         {
             pShaderGroups[0] =
                 static_cast<Vkgc::RayTracingShaderIdentifier*>(
@@ -546,18 +546,26 @@ VkResult RayTracingPipeline::CreateImpl(
                         shaderGroupArraySize * m_pDevice->NumPalDevices(),
                         VK_DEFAULT_MEM_ALIGN,
                         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
-            pipelineBinary[0].shaderGroupHandle.shaderHandles = pShaderGroups[0];
-            pipelineBinary[0].shaderGroupHandle.shaderHandleCount = pipelineCreateInfo.groupCount;
-            if (pipelineBinary[0].shaderGroupHandle.shaderHandles == nullptr)
+
+            if (pShaderGroups[0] == nullptr)
             {
                 result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+
+            if (pipelineCreateInfo.groupCount > 0)
+            {
+                pipelineBinary[0].shaderGroupHandle.shaderHandles     = pShaderGroups[0];
+                pipelineBinary[0].shaderGroupHandle.shaderHandleCount = pipelineCreateInfo.groupCount;
             }
 
             for (uint32_t deviceIdx = 1; deviceIdx < m_pDevice->NumPalDevices(); ++deviceIdx)
             {
                 pShaderGroups[deviceIdx] = pShaderGroups[deviceIdx - 1] + totalGroupCount;
-                pipelineBinary[deviceIdx].shaderGroupHandle.shaderHandles = pShaderGroups[deviceIdx];
-                pipelineBinary[deviceIdx].shaderGroupHandle.shaderHandleCount = pipelineCreateInfo.groupCount;
+                if (pipelineCreateInfo.groupCount > 0)
+                {
+                    pipelineBinary[deviceIdx].shaderGroupHandle.shaderHandles     = pShaderGroups[deviceIdx];
+                    pipelineBinary[deviceIdx].shaderGroupHandle.shaderHandleCount = pipelineCreateInfo.groupCount;
+                }
             }
         }
 

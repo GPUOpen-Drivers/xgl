@@ -141,7 +141,14 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     pPipelineCompiler->ApplyPipelineOptions(pDevice, 0, &moduleInfo.options.pipelineOptions);
 
 #if VKI_RAY_TRACING
-    moduleInfo.options.isInternalRtShader = (flags & VK_SHADER_MODULE_RAY_TRACING_INTERNAL_SHADER_BIT) ? true : false;
+    if ((flags & VK_SHADER_MODULE_RAY_TRACING_INTERNAL_SHADER_BIT) != 0)
+    {
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 55
+        moduleInfo.options.pipelineOptions.internalRtShaders = true;
+#else
+        moduleInfo.options.isInternalRtShader = true;
+#endif
+    }
 #endif
 
     Vkgc::Result llpcResult = m_pLlpc->BuildShaderModule(&moduleInfo, &buildOut);
@@ -175,6 +182,11 @@ void CompilerSolutionLlpc::FreeShaderModule(ShaderModuleHandle* pShaderModule)
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
     pInstance->FreeMem(pShaderModule->pLlpcShaderModule);
+
+    if (pShaderModule->elfPackage.codeSize > 0)
+    {
+        pInstance->FreeMem(const_cast<void*>(pShaderModule->elfPackage.pCode));
+    }
 }
 
 // =====================================================================================================================
@@ -287,6 +299,10 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
                 (pipelineOut.pipelineCacheAccess == Llpc::CacheAccessInfo::CacheHit);
         }
         UpdateStageCreationFeedback(pCreateInfo->stageFeedback,
+                                    pPipelineBuildInfo->task,
+                                    pipelineOut.stageCacheAccesses,
+                                    ShaderStage::ShaderStageTask);
+        UpdateStageCreationFeedback(pCreateInfo->stageFeedback,
                                     pPipelineBuildInfo->vs,
                                     pipelineOut.stageCacheAccesses,
                                     ShaderStage::ShaderStageVertex);
@@ -302,6 +318,10 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
                                     pPipelineBuildInfo->gs,
                                     pipelineOut.stageCacheAccesses,
                                     ShaderStage::ShaderStageGeometry);
+        UpdateStageCreationFeedback(pCreateInfo->stageFeedback,
+                                    pPipelineBuildInfo->mesh,
+                                    pipelineOut.stageCacheAccesses,
+                                    ShaderStage::ShaderStageMesh);
         UpdateStageCreationFeedback(pCreateInfo->stageFeedback,
                                     pPipelineBuildInfo->fs,
                                     pipelineOut.stageCacheAccesses,
@@ -487,6 +507,17 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     {
         pPipelineBuildInfo->options.overrideThreadGroupSizeZ = settings.overrideThreadGroupSizeZ;
     }
+
+#if VKI_RAY_TRACING
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 55
+    // Propagate internal shader compilation options from module to pipeline
+    const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>(pPipelineBuildInfo->cs.pModuleData);
+    if (pModuleData != nullptr)
+    {
+        pPipelineBuildInfo->options.internalRtShaders = pModuleData->usage.isInternalRtShader;
+    }
+#endif
+#endif
 
     // By default the client hash provided to PAL is more accurate than the one used by pipeline
     // profiles.

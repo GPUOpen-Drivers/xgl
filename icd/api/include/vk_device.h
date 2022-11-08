@@ -135,24 +135,25 @@ public:
     {
         struct
         {
-            uint32                robustBufferAccess            : 1;
-            uint32                sparseBinding                 : 1;
+            uint32                robustBufferAccess                   : 1;
+            uint32                sparseBinding                        : 1;
             // The state of enabled feature VK_EXT_scalar_block_layout.
-            uint32                scalarBlockLayout             : 1;
+            uint32                scalarBlockLayout                    : 1;
             // Attachment Fragment Shading Rate feature in VK_KHR_variable_rate_shading
-            uint32                attachmentFragmentShadingRate : 1;
+            uint32                attachmentFragmentShadingRate        : 1;
             // The states of enabled feature DEVICE_COHERENT_MEMORY_FEATURES_AMD which is defined by
             // extensions VK_AMD_device_coherent_memory
-            uint32                deviceCoherentMemory          : 1;
+            uint32                deviceCoherentMemory                 : 1;
             // The state of enabled features in VK_EXT_robustness2.
-            uint32                robustBufferAccessExtended    : 1;
-            uint32                robustImageAccessExtended     : 1;
-            uint32                nullDescriptorExtended        : 1;
+            uint32                robustBufferAccessExtended           : 1;
+            uint32                robustImageAccessExtended            : 1;
+            uint32                nullDescriptorExtended               : 1;
             // True if EXT_MEMORY_PRIORITY or EXT_PAGEABLE_DEVICE_LOCAL_MEMORY is enabled.
-            uint32                appControlledMemPriority      : 1;
-            uint32                mustWriteImmutableSamplers    : 1;
-            uint32                strictImageSizeRequirements   : 1;
-            uint32                reserved                      : 21;
+            uint32                appControlledMemPriority             : 1;
+            uint32                mustWriteImmutableSamplers           : 1;
+            uint32                strictImageSizeRequirements          : 1;
+            uint32                dynamicPrimitiveTopologyUnrestricted : 1;
+            uint32                reserved                             : 20;
         };
 
         uint32 u32All;
@@ -820,6 +821,10 @@ public:
 
     Pal::TilingOptMode GetTilingOptMode() const;
 
+    VkResult GetDeviceFaultInfoEXT(
+        VkDeviceFaultCountsEXT* pFaultCounts,
+        VkDeviceFaultInfoEXT*   pFaultInfo);
+
 protected:
     Device(
         uint32_t                         deviceCount,
@@ -958,6 +963,11 @@ protected:
     InternalMemory                      m_memoryPalBorderColorPalette;
     bool*                               m_pBorderColorUsedIndexes;
     Util::Mutex                         m_borderColorMutex;
+
+    bool                                m_retrievedFaultData;
+#if VK_IS_PAL_VERSION_AT_LEAST(772, 0)
+    Pal::PageFaultStatus                m_pageFaultStatus;
+#endif
 
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.
@@ -1401,6 +1411,11 @@ VKAPI_ATTR void VKAPI_CALL vkSetDeviceMemoryPriorityEXT(
     VkDevice                                    device,
     VkDeviceMemory                              memory,
     float                                       priority);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceFaultInfoEXT(
+    VkDevice                                    device,
+    VkDeviceFaultCountsEXT*                     pFaultCounts,
+    VkDeviceFaultInfoEXT*                       pFaultInfo);
 
 } // namespace entry
 

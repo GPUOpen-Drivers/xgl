@@ -100,8 +100,8 @@ VkResult PalQueryPool::Create(
         queryType                = Pal::QueryType::StreamoutStats;
         createInfo.queryPoolType = Pal::QueryPoolType::StreamoutStats;
     }
-    else if ((pCreateInfo->queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT)
-            )
+    else if ((pCreateInfo->queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT) ||
+             (pCreateInfo->queryType == VK_QUERY_TYPE_MESH_PRIMITIVES_GENERATED_EXT))
     {
         queryType                = Pal::QueryType::PipelineStats;
         createInfo.queryPoolType = Pal::QueryPoolType::PipelineStats;
@@ -123,6 +123,11 @@ VkResult PalQueryPool::Create(
     }
 
     createInfo.enabledStats = VkToPalQueryPipelineStatsFlags(enabledStats);
+
+    if (pCreateInfo->queryType == VK_QUERY_TYPE_MESH_PRIMITIVES_GENERATED_EXT)
+    {
+        createInfo.enabledStats |= Pal::QueryPipelineStatsMsPrimitives;
+    }
 
     createInfo.flags.enableCpuAccess = true;
 

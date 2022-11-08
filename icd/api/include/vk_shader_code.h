@@ -63,6 +63,14 @@ inline ShaderStage ShaderFlagBitToStage(const VkShaderStageFlagBits& shaderBits)
     {
         stage = ShaderStage::ShaderStageCompute;
     }
+    else if (shaderBits & VK_SHADER_STAGE_TASK_BIT_EXT)
+    {
+        stage = ShaderStage::ShaderStageTask;
+    }
+    else if (shaderBits & VK_SHADER_STAGE_MESH_BIT_EXT)
+    {
+        stage = ShaderStage::ShaderStageMesh;
+    }
 #if VKI_RAY_TRACING
     else if (shaderBits & VK_SHADER_STAGE_RAYGEN_BIT_KHR)
     {

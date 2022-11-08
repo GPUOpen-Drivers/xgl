@@ -477,8 +477,8 @@ Pal::Result Device::GpuDecodeImage(
 
             Pal::ImageViewInfo imageView[2] = {};
 
-            BuildImageViewInfo(&imageView[0], pDstImage, palDstSubResId, dstFormat, true);
-            BuildImageViewInfo(&imageView[1], pSrcImage, palSrcSubResId, srcFormat, false);
+            BuildImageViewInfo(&imageView[0], pDstImage, palDstSubResId, copyRegion.numSlices, dstFormat, true);
+            BuildImageViewInfo(&imageView[1], pSrcImage, palSrcSubResId, copyRegion.numSlices, srcFormat, false);
 
             m_info.pPalDevice->CreateImageViewSrds(2, imageView, pUserData);
 
@@ -512,8 +512,10 @@ Pal::Result Device::GpuDecodeImage(
             // extent in block
             uint32 threadGroupsX = pPalImageRegions[idx].extent.width;
             uint32 threadGroupsY = pPalImageRegions[idx].extent.height;
+            uint32 threadGroupsZ = Util::Max(pPalImageRegions[idx].extent.depth,
+                pPalImageRegions[idx].numSlices);
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, 1);
+            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
         }
     }
     else if ((type == InternalTexConvertCsType::ConvertETC2ToRGBA8) ||
@@ -546,8 +548,8 @@ Pal::Result Device::GpuDecodeImage(
 
             Pal::ImageViewInfo imageView[2] = {};
 
-            BuildImageViewInfo(&imageView[0], pDstImage, palDstSubResId, dstFormat, true);
-            BuildImageViewInfo(&imageView[1], pSrcImage, palSrcSubResId, srcFormat, false);
+            BuildImageViewInfo(&imageView[0], pDstImage, palDstSubResId, copyRegion.numSlices, dstFormat, true);
+            BuildImageViewInfo(&imageView[1], pSrcImage, palSrcSubResId, copyRegion.numSlices, srcFormat, false);
 
             m_info.pPalDevice->CreateImageViewSrds(2, imageView, pUserData);
 
@@ -584,8 +586,10 @@ Pal::Result Device::GpuDecodeImage(
 
             uint32 threadGroupsX = (pPalImageRegions[idx].extent.width + 1) / 2;
             uint32 threadGroupsY = (pPalImageRegions[idx].extent.height + 1) / 2;
+            uint32 threadGroupsZ = Util::Max(pPalImageRegions[idx].extent.depth,
+                pPalImageRegions[idx].numSlices);
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, 1);
+            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
         }
     }
     else
@@ -615,8 +619,8 @@ Pal::Result Device::GpuDecodeImage(
             dstFormat.swizzle.a = Pal::ChannelSwizzle::W;
 
             Pal::ImageViewInfo imageView[2] = {};
-            BuildImageViewInfo(&imageView[0], pSrcImage, palSrcSubResId, srcFormat, false);
-            BuildImageViewInfo(&imageView[1], pDstImage, palSrcSubResId, dstFormat, true);
+            BuildImageViewInfo(&imageView[0], pSrcImage, palSrcSubResId, copyRegion.numSlices, srcFormat, false);
+            BuildImageViewInfo(&imageView[1], pDstImage, palSrcSubResId, copyRegion.numSlices, dstFormat, true);
 
             m_info.pPalDevice->CreateImageViewSrds(2, imageView, pUserData);
 
@@ -662,10 +666,6 @@ Pal::Result Device::GpuDecodeBuffer(
     m_pPalCmdBuffer = pCmdBuffer;
     m_pPalCmdBuffer->CmdSaveComputeState(Pal::ComputeStateAll);
 
-    // only handle 2D texture with one slice copy by now
-    PAL_ASSERT(pPalBufferRegionsIn->numSlices == 1);
-    PAL_ASSERT(pPalBufferRegionsIn->imageExtent.depth == 1);
-
     uint32* pUserData = nullptr;
     BindPipeline(type, constInfo);
 
@@ -686,7 +686,8 @@ Pal::Result Device::GpuDecodeBuffer(
             Pal::SubresId palDstSubResId          = copyRegion.imageSubres;
             Pal::SwizzledFormat dstFormat         = pDstImage->GetImageCreateInfo().swizzledFormat;
 
-            Pal::gpusize range = ((pPalBufferRegionsIn[idx].imageExtent.height - 1) * pPalBufferRegionsIn[idx].gpuMemoryRowPitch) +
+            Pal::gpusize range = ((pPalBufferRegionsIn[idx].imageExtent.depth - 1) * pPalBufferRegionsIn[idx].gpuMemoryDepthPitch) +
+                ((pPalBufferRegionsIn[idx].imageExtent.height - 1) * pPalBufferRegionsIn[idx].gpuMemoryRowPitch) +
                 (pPalBufferRegionsIn[idx].imageExtent.width * viewBpp);
 
             BuildTypedBufferViewInfo(
@@ -701,7 +702,7 @@ Pal::Result Device::GpuDecodeBuffer(
 
             Pal::ImageViewInfo imageView = {};
 
-            BuildImageViewInfo(&imageView, pDstImage, palDstSubResId, dstFormat, true);
+            BuildImageViewInfo(&imageView, pDstImage, palDstSubResId, copyRegion.numSlices, dstFormat, true);
 
             m_info.pPalDevice->CreateImageViewSrds(1, &imageView, pUserData);
 
@@ -713,8 +714,8 @@ Pal::Result Device::GpuDecodeBuffer(
             PAL_ASSERT((pPalBufferRegionsIn[idx].gpuMemoryRowPitch / viewBpp) >= 1);
 
             uint32_t copyData[12] = {
-                uint32_t(pPalBufferRegionsIn[idx].imageOffset.x),
-                uint32_t(pPalBufferRegionsIn[idx].imageOffset.y),
+                uint32_t(pPalBufferRegionsIn[idx].imageOffset.x * constInfo.pConstants[0]),
+                uint32_t(pPalBufferRegionsIn[idx].imageOffset.y * constInfo.pConstants[1]),
                 uint32_t(pPalBufferRegionsIn[idx].imageOffset.z),
                 0, // unused
                 pPalBufferRegionsIn[idx].imageExtent.width,
@@ -722,7 +723,7 @@ Pal::Result Device::GpuDecodeBuffer(
                 pPalBufferRegionsIn[idx].imageExtent.depth,
                 0, // unused
                 static_cast<uint32_t>(pPalBufferRegionsIn[idx].gpuMemoryRowPitch / viewBpp),
-                static_cast<uint32_t>(pPalBufferRegionsIn[idx].gpuMemoryDepthPitch),
+                static_cast<uint32_t>(pPalBufferRegionsIn[idx].gpuMemoryDepthPitch / viewBpp),
                 0, // unused
                 0  // unused
             };
@@ -737,10 +738,12 @@ Pal::Result Device::GpuDecodeBuffer(
 
             m_pPalCmdBuffer->CmdSetUserData(Pal::PipelineBindPoint::Compute, 1, PushConstASTCToRGBA , &pushConstant[0]);
 
-            uint32 threadGroupsX = pPalBufferRegionsIn[idx].imageExtent.width * 4;
-            uint32 threadGroupsY = pPalBufferRegionsIn[idx].imageExtent.height * 4;
+            uint32 threadGroupsX = pPalBufferRegionsIn[idx].imageExtent.width;
+            uint32 threadGroupsY = pPalBufferRegionsIn[idx].imageExtent.height;
+            uint32 threadGroupsZ = Util::Max(pPalBufferRegionsIn[idx].imageExtent.depth,
+                pPalBufferRegionsIn[idx].numSlices);
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, 1);
+            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
         }
     }
     else
@@ -785,13 +788,14 @@ Pal::Result Device::GpuDecodeBuffer(
                 dstFormat.swizzle.a = Pal::ChannelSwizzle::W;
             }
 
-            BuildImageViewInfo(&imageView, pDstImage, palDstSubResId, dstFormat, true);
+            BuildImageViewInfo(&imageView, pDstImage, palDstSubResId, copyRegion.numSlices, dstFormat, true);
 
             m_info.pPalDevice->CreateImageViewSrds(1, &imageView, pUserData);
 
             pUserData += (2 * m_imageViewSizeInDwords);
 
-            Pal::gpusize range = ((pPalBufferRegionsIn[idx].imageExtent.height - 1) * pPalBufferRegionsIn[idx].gpuMemoryRowPitch) +
+            Pal::gpusize range = ((pPalBufferRegionsIn[idx].imageExtent.depth - 1) * pPalBufferRegionsIn[idx].gpuMemoryDepthPitch) +
+                ((pPalBufferRegionsIn[idx].imageExtent.height - 1) * pPalBufferRegionsIn[idx].gpuMemoryRowPitch) +
                 (pPalBufferRegionsIn[idx].imageExtent.width * viewBpp);
 
             BuildTypedBufferViewInfo(
@@ -816,7 +820,7 @@ Pal::Result Device::GpuDecodeBuffer(
                 pPalBufferRegionsIn[idx].imageExtent.depth,
                 0, // unused
                 static_cast<uint32_t>(pPalBufferRegionsIn[idx].gpuMemoryRowPitch / viewBpp),
-                static_cast<uint32_t>(pPalBufferRegionsIn[idx].gpuMemoryDepthPitch),
+                static_cast<uint32_t>(pPalBufferRegionsIn[idx].gpuMemoryDepthPitch / viewBpp),
                 0, // unused
                 0  // unused
             };
@@ -836,8 +840,10 @@ Pal::Result Device::GpuDecodeBuffer(
 
             uint32 threadGroupsX = (pPalBufferRegionsIn[idx].imageExtent.width + 1) / 2;
             uint32 threadGroupsY = (pPalBufferRegionsIn[idx].imageExtent.height + 1) / 2;
+            uint32 threadGroupsZ = Util::Max(pPalBufferRegionsIn[idx].imageExtent.depth,
+                pPalBufferRegionsIn[idx].numSlices);
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, 1);
+            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
         }
     }
 
@@ -1193,6 +1199,7 @@ void Device::BuildImageViewInfo(
     Pal::ImageViewInfo*  pInfo,
     const Pal::IImage*   pImage,
     const Pal::SubresId& subresId,
+    uint32               numSlices,
     Pal::SwizzledFormat  swizzledFormat,
     bool                 isShaderWriteable) const
 {
@@ -1204,7 +1211,7 @@ void Device::BuildImageViewInfo(
     pInfo->subresRange.numPlanes = 1;
 #endif
     pInfo->subresRange.numMips   = 1;
-    pInfo->subresRange.numSlices = 1;
+    pInfo->subresRange.numSlices = numSlices;
     pInfo->swizzledFormat        = swizzledFormat;
 
     // ASTC/ETC only uses compute shaders, where the write-out surface is assumed to be write-only.

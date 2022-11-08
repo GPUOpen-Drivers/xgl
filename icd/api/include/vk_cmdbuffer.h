@@ -138,6 +138,11 @@ struct PipelineBindState
     VkDescriptorSet pushDescriptorSet;
     void*           pPushDescriptorSetMemory;
     size_t          pushDescriptorSetMaxSize;
+    // Cached copy of the uber fetch shader internal memory
+    void*           pUberFetchShaderInternalData;
+    size_t          uberFetchShaderInternalDataSize;
+    // Whether dynamic vertex input is enabled in current pipeline
+    bool            hasDynamicVertexInput;
 };
 
 union DirtyGraphicsState
@@ -405,6 +410,20 @@ public:
         VkBuffer                                    countBuffer,
         VkDeviceSize                                countOffset);
 
+    void DrawMeshTasks(
+        uint32_t                                    x,
+        uint32_t                                    y,
+        uint32_t                                    z);
+
+    template<bool useBufferCount>
+    void DrawMeshTasksIndirect(
+        VkBuffer                                    buffer,
+        VkDeviceSize                                offset,
+        uint32_t                                    count,
+        uint32_t                                    stride,
+        VkBuffer                                    countBuffer,
+        VkDeviceSize                                countOffset);
+
     void Dispatch(
         uint32_t                                    x,
         uint32_t                                    y,
@@ -633,6 +652,12 @@ public:
     void SetStencilReference(
         VkStencilFaceFlags                          faceMask,
         uint32_t                                    stencilReference);
+
+    void SetVertexInput(
+        uint32_t                                     vertexBindingDescriptionCount,
+        const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
+        uint32_t                                     vertexAttributeDescriptionCount,
+        const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions);
 
     void SetEvent(
         VkEvent                                     event,
@@ -953,6 +978,20 @@ public:
         uint32_t firstInstance,
         uint32_t instanceCount,
         uint32_t drawId);
+
+    void PalCmdDrawMeshTasks(
+        uint32_t x,
+        uint32_t y,
+        uint32_t z);
+
+    template<bool useBufferCount>
+    void PalCmdDrawMeshTasksIndirect(
+        VkBuffer     buffer,
+        VkDeviceSize offset,
+        uint32_t     count,
+        uint32_t     stride,
+        VkBuffer     countBuffer,
+        VkDeviceSize countOffset);
 
     void PalCmdDispatch(
         uint32_t x,
@@ -1309,6 +1348,7 @@ private:
     {
         RebindUserDataDescriptorSets = 0x1,
         RebindUserDataPushConstants  = 0x2,
+        RebindUberFetchInternalMem   = 0x4,
         RebindUserDataAll            = ~0u
     };
 
@@ -1870,6 +1910,28 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirectCount(
     uint32_t                                    maxDrawCount,
     uint32_t                                    stride);
 
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawMeshTasksEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    groupCountX,
+    uint32_t                                    groupCountY,
+    uint32_t                                    groupCountZ);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawMeshTasksIndirectEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    uint32_t                                    drawCount,
+    uint32_t                                    stride);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawMeshTasksIndirectCountEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    VkBuffer                                    countBuffer,
+    VkDeviceSize                                countBufferOffset,
+    uint32_t                                    maxDrawCount,
+    uint32_t                                    stride);
+
 VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    x,
@@ -2406,6 +2468,93 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplateKHR(
     VkPipelineLayout                            layout,
     uint32_t                                    set,
     const void*                                 pData);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetTessellationDomainOriginEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkTessellationDomainOrigin          domainOrigin);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthClampEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            depthClampEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetPolygonModeEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkPolygonMode                       polygonMode);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRasterizationSamplesEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkSampleCountFlagBits               rasterizationSamples);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetSampleMaskEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkSampleCountFlagBits               samples,
+    const VkSampleMask*                 pSampleMask);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetAlphaToCoverageEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            alphaToCoverageEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetAlphaToOneEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            alphaToOneEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLogicOpEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            logicOpEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetColorBlendEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    uint32_t                            firstAttachment,
+    uint32_t                            attachmentCount,
+    const VkBool32*                     pColorBlendEnables);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetColorBlendEquationEXT(
+    VkCommandBuffer                     commandBuffer,
+    uint32_t                            firstAttachment,
+    uint32_t                            attachmentCount,
+    const VkColorBlendEquationEXT*      pColorBlendEquations);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetColorWriteMaskEXT(
+    VkCommandBuffer                     commandBuffer,
+    uint32_t                            firstAttachment,
+    uint32_t                            attachmentCount,
+    const  VkColorComponentFlags*       pColorWriteMasks);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRasterizationStreamEXT(
+    VkCommandBuffer                     commandBuffer,
+    uint32_t                            rasterizationStream);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetConservativeRasterizationModeEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkConservativeRasterizationModeEXT  conservativeRasterizationMode);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetExtraPrimitiveOverestimationSizeEXT(
+    VkCommandBuffer                     commandBuffer,
+    float                               extraPrimitiveOverestimationSize);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthClipEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            depthClipEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetSampleLocationsEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            sampleLocationsEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetProvokingVertexModeEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkProvokingVertexModeEXT            provokingVertexMode);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLineRasterizationModeEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkLineRasterizationModeEXT          lineRasterizationMode);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStippleEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            stippledLineEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthClipNegativeOneToOneEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            negativeOneToOne);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetVertexInputEXT(
     VkCommandBuffer                              commandBuffer,

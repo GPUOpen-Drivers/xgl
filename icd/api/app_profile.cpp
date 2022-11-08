@@ -578,10 +578,22 @@ constexpr AppProfilePatternEntry AppNameYamagiQuake2 =
     "quake 2"
 };
 
+constexpr AppProfilePatternEntry AppNameBattlefield1 =
+{
+    PatternAppNameLower,
+    "bf1.exe"
+};
+
 constexpr AppProfilePatternEntry AppNameGpuCapsViewer32Bit =
 {
     PatternAppNameLower,
     "geexlab"
+};
+
+constexpr AppProfilePatternEntry AppNameDDraceNetwork =
+{
+    PatternAppNameLower,
+    "ddnet"
 };
 
 constexpr AppProfilePatternEntry PatternEnd = {};
@@ -1150,9 +1162,26 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::Battlefield1,
+        {
+            AppNameBattlefield1,
+            AppEngineDXVK,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::GpuCapsViewer32Bit,
         {
             AppNameGpuCapsViewer32Bit,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::DDraceNetwork,
+        {
+            AppNameDDraceNetwork,
             PatternEnd
         }
     }

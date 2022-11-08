@@ -252,6 +252,7 @@ private:
         Pal::ImageViewInfo*  pInfo,
         const Pal::IImage*   pImage,
         const Pal::SubresId& subresId,
+        uint32               numSlices,
         Pal::SwizzledFormat  swizzledFormat,
         bool                 isShaderWriteable) const;
 

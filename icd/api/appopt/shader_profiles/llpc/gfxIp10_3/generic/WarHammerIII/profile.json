@@ -8,7 +8,7 @@
       },
       "action": {
         "ps": {
-          "disableCodeSinking": 1
+          "disableCodeSinking": true
         }
       }
     }

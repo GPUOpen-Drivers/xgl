@@ -257,6 +257,18 @@
       "Scope": "Driver"
     },
     {
+      "Name": "RpBarrierCheckAccessMasks",
+      "Description": "Allow issuing barriers for any image transitions that have no layout transitions but still have different src and dst cache masks. This prevents some required RP transitions from being skipped.",
+      "Tags": [
+        "Render Passes"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Use shared CmdAllocator for all command buffers.",
       "Tags": [
         "Command Buffer Options"
@@ -839,6 +851,18 @@
       "Scope": "Driver"
     },
     {
+      "Name": "DynamicPrimitiveTopologyUnrestricted",
+      "Description": "Whether enable dynamicPrimitiveTopologyUnrestricted in driver",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Name": "FullscreenFrameMetadataSupport",
       "Description": "Support Fullscreen Frame Metadata.",
       "Tags": [
@@ -1248,6 +1272,18 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Force task shaders to run with a particular wave size. This is ignored if subgroup operations are used by the shader, see SubgroupSize. 0  - Let compiler choose Wave32 vs Wave64 mode (default) 32 - Run in Wave32 mode 64 - Run in Wave64 mode ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 32
+      },
+      "Type": "uint32",
+      "Name": "TaskWaveSize",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Force vertex shaders to run with a particular wave size. This is ignored if subgroup operations are used by the shader, see SubgroupSize. 0  - Let compiler choose Wave32 vs Wave64 mode (default) 32 - Run in Wave32 mode 64 - Run in Wave64 mode ",
       "Tags": [
         "SPIRV Options"
@@ -1293,6 +1329,18 @@
       },
       "Type": "uint32",
       "Name": "GsWaveSize",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force mesh shaders to run with a particular wave size. This is ignored if subgroup operations are used by the shader, see SubgroupSize. 0  - Let compiler choose Wave32 vs Wave64 mode (default) 32 - Run in Wave32 mode 64 - Run in Wave64 mode ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 32
+      },
+      "Type": "uint32",
+      "Name": "MeshWaveSize",
       "Scope": "Driver"
     },
     {
@@ -1632,6 +1680,10 @@
             "Value": 0
           },
           {
+            "Description": "Enable for task shaders",
+            "Value": 1
+          },
+          {
             "Description": "Enable for vertex shaders",
             "Value": 2
           },
@@ -1646,6 +1698,10 @@
           {
             "Description": "Enable for geometry shaders",
             "Value": 16
+          },
+          {
+            "Description": "Enable for mesh shaders",
+            "Value": 32
           },
           {
             "Description": "Enable for fragment shaders",
@@ -4313,6 +4369,16 @@
             ]
           },
           {
+            "Name": "DbgBarrierDrawMeshTasks",
+            "Value": 1073741824,
+            "Description": "Any draw mesh tasks"
+          },
+          {
+            "Name": "DbgBarrierDrawMeshTasksIndirect",
+            "Value": 2147483648,
+            "Description": "Any indirect draw mesh tasks"
+          },
+          {
             "Name": "DbgBarrierBeginRendering",
             "Value": 4294967296,
             "Description": "Begin rendering"
@@ -4757,21 +4823,6 @@
             "Description": "Default barrier queues"
           },
           {
-            "Name": "CombinedAccessMasks",
-            "Value": 16384,
-            "Description": "Ignore Vulkan separate access mask rule"
-          },
-          {
-            "Name": "SkipDstCacheInv",
-            "Value": 32768,
-            "Description": "Do not invalidate dest caches if src cache was not updated"
-          },
-          {
-            "Name": "PreferFlushOverInv",
-            "Value": 8192,
-            "Description": "By default we invalidate input caches to accomodate the Vulkan separate access mask rule. When this is set we'll instead flush all output caches instead to achieve the same goal. Mutually exclusive with SkipDstCacheInv. May or may not be beneficial for certain applications."
-          },
-          {
             "Name": "Gfx6KeepShaderCoher",
             "Value": 256,
             "Description": "Keep shader domain always coherent on GFX6-GFX8 thus avoiding L2 cache flushes/invalidations in shader-to-shader barrier cases at the expense of always flushing/invalidating L1 caches. This does NOT violate the Vulkan separate access mask rule. This behavior is likely preferred on GFX6-GFX8."
@@ -4790,6 +4841,21 @@
             "Name": "Gfx9AvoidCpuMemoryCoher",
             "Value": 2048,
             "Description": "Avoid CPU and memory domain coherency on GFX9+ unless corresponding flags are explicitly requested to lower the number of L2 cache flushes/invalidations. This does NOT violate the Vulkan separate access mask rule. This behavior is preferred on GFX9+ as all other accesses go through the L2."
+          },
+          {
+            "Name": "PreferFlushOverInv",
+            "Value": 8192,
+            "Description": "By default we invalidate input caches to accomodate the Vulkan separate access mask rule. When this is set we'll instead flush all output caches instead to achieve the same goal. Mutually exclusive with SkipDstCacheInv. May or may not be beneficial for certain applications."
+          },
+          {
+            "Name": "CombinedAccessMasks",
+            "Value": 16384,
+            "Description": "Ignore Vulkan separate access mask rule"
+          },
+          {
+            "Name": "SkipDstCacheInv",
+            "Value": 32768,
+            "Description": "Do not invalidate dest caches if src cache was not updated. This should be enabled by default for Legacy barriers only."
           }
         ],
         "Name": "ResourceBarrierOptions"
@@ -7342,6 +7408,11 @@
         "IsEnum": true,
         "Values": [
           {
+            "Name": "TaskShader",
+            "Value": 0,
+            "Description": "Task Shader"
+          },
+          {
             "Name": "VertexShader",
             "Value": 1,
             "Description": "Vertex Shader"
@@ -7360,6 +7431,11 @@
             "Name": "GeometryShader",
             "Value": 4,
             "Description": "Geometry Shader"
+          },
+          {
+            "Name": "MeshShader",
+            "Value": 5,
+            "Description": "Mesh Shader"
           },
           {
             "Name": "FragmentShader",
@@ -7483,6 +7559,78 @@
       },
       "Type": "bool",
       "Name": "OverrideEnableLoadScalarizer",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Disable LLVM backend's code sinking",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "OverrideDisableCodeSinking",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Force LLPC loop unroll count",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "OverrideForceLoopUnrollCount",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Force LLPC unroll threshold",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "OverrideUnrollThreshold",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Force LLPC fast math flags",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "OverrideFastMathFlags",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Disable LLPC fast math flags",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "OverrideDisableFastMathFlags",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Favour latency hiding over register pressure",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "OverrideFavorLatencyHiding",
       "Scope": "Driver"
     },
     {
@@ -7939,6 +8087,18 @@
         "Name": "ShaderThreadGroupSizeZ"
       },
       "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "ForceDisableAnisoFilter",
+      "Description": "Forces the driver to disable anisotropy filter while creating samplers.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
       "Scope": "Driver"
     },
     {

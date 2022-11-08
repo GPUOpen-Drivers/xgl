@@ -9,7 +9,7 @@
       "action": {
         "cs": {
           "maxWavesPerCu": 8,
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -22,7 +22,7 @@
       "action": {
         "cs": {
           "vgprLimit": 48,
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },

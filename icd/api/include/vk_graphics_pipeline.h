@@ -204,7 +204,7 @@ protected:
         Pal::IPipeline**                       pPalPipeline,
         const PipelineLayout*                  pLayout,
         const GraphicsPipelineObjectImmedInfo& immedInfo,
-        uint32_t                               staticStateMask,
+        uint64_t                               staticStateMask,
         bool                                   bindDepthStencilObject,
         bool                                   bindTriangleRasterState,
         bool                                   bindStencilRefMasks,

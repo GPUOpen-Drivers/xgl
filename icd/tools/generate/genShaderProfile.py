@@ -33,6 +33,7 @@ import os
 import sys
 import textwrap
 import warnings
+import pathlib
 from itertools import chain
 
 from shaderProfileTemplate import SHADER_PATTERN, ENTRIES_TEMPLATE, SHADER_ACTION, BRANCHES, PIPELINE_ACTION, \
@@ -795,6 +796,9 @@ def write_to_file(text, file_path):
     :param file_path: The path to the file.
     :return: None.
     """
+    parent_dir = pathlib.Path(file_path).parent
+    os.makedirs(parent_dir, exist_ok=True)
+
     with open(file_path, 'w', encoding="utf-8") as file:
         file.write(text)
 

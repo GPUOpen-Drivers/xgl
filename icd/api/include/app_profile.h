@@ -119,7 +119,9 @@ enum class AppProfile : uint32_t
     X4Foundations,               // X4: Foundations by Egosoft
     MetalGearSolid5,             // Metal Gear Solid5 : The Phantom Pain
     YamagiQuakeII,               // Yamagi Quake II
+    Battlefield1,                // Battlefield 1
     GpuCapsViewer32Bit,          // GPU Caps Viewer demos by GeeXLab
+    DDraceNetwork,               // DDrace Network
 };
 
 struct ProfileSettings

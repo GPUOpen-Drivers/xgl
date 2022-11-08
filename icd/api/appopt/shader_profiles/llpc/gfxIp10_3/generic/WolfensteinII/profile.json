@@ -5,7 +5,14 @@
         "always": true
       },
       "action": {
-        "binningOverride": 1
+        "binningOverride": 1,
+        "cs": {
+          "disableCodeSinking": true
+        },
+        "ps": {
+          "disableCodeSinking": true,
+          "useSiScheduler": true
+        }
       }
     },
     {
@@ -18,7 +25,8 @@
       "action": {
         "cs": {
           "waveSize": 64,
-          "wgpMode": 1
+          "wgpMode": 1,
+          "favorLatencyHiding": true
         }
       }
     },

@@ -238,6 +238,52 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirectCount(
         countOffset);
 }
 
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawMeshTasksEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    groupCountX,
+    uint32_t                                    groupCountY,
+    uint32_t                                    groupCountZ)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->DrawMeshTasks(
+        groupCountX,
+        groupCountY,
+        groupCountZ);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawMeshTasksIndirectEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    uint32_t                                    drawCount,
+    uint32_t                                    stride)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->DrawMeshTasksIndirect<false>(
+        buffer,
+        offset,
+        drawCount,
+        stride,
+        VK_NULL_HANDLE,
+        0);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawMeshTasksIndirectCountEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    VkBuffer                                    countBuffer,
+    VkDeviceSize                                countBufferOffset,
+    uint32_t                                    maxDrawCount,
+    uint32_t                                    stride)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->DrawMeshTasksIndirect<true>(
+        buffer,
+        offset,
+        maxDrawCount,
+        stride,
+        countBuffer,
+        countBufferOffset);
+}
+
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(
     VkCommandBuffer                             cmdBuffer,
@@ -1451,14 +1497,185 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplateKHR(
 }
 
 // =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetTessellationDomainOriginEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkTessellationDomainOrigin          domainOrigin)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthClampEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            depthClampEnable)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetPolygonModeEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkPolygonMode                       polygonMode)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRasterizationSamplesEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkSampleCountFlagBits               rasterizationSamples)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetSampleMaskEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkSampleCountFlagBits               samples,
+    const VkSampleMask*                 pSampleMask)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetAlphaToCoverageEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            alphaToCoverageEnable)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetAlphaToOneEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            alphaToOneEnable)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLogicOpEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            logicOpEnable)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetColorBlendEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    uint32_t                            firstAttachment,
+    uint32_t                            attachmentCount,
+    const VkBool32*                     pColorBlendEnables)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetColorBlendEquationEXT(
+    VkCommandBuffer                     commandBuffer,
+    uint32_t                            firstAttachment,
+    uint32_t                            attachmentCount,
+    const VkColorBlendEquationEXT*      pColorBlendEquations)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetColorWriteMaskEXT(
+    VkCommandBuffer                     commandBuffer,
+    uint32_t                            firstAttachment,
+    uint32_t                            attachmentCount,
+    const  VkColorComponentFlags*       pColorWriteMasks)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRasterizationStreamEXT(
+    VkCommandBuffer                     commandBuffer,
+    uint32_t                            rasterizationStream)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetConservativeRasterizationModeEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkConservativeRasterizationModeEXT  conservativeRasterizationMode)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetExtraPrimitiveOverestimationSizeEXT(
+    VkCommandBuffer                     commandBuffer,
+    float                               extraPrimitiveOverestimationSize)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthClipEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            depthClipEnable)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetSampleLocationsEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            sampleLocationsEnable)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetProvokingVertexModeEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkProvokingVertexModeEXT            provokingVertexMode)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLineRasterizationModeEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkLineRasterizationModeEXT          lineRasterizationMode)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStippleEnableEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            stippledLineEnable)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthClipNegativeOneToOneEXT(
+    VkCommandBuffer                     commandBuffer,
+    VkBool32                            negativeOneToOne)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdSetVertexInputEXT(
-    VkCommandBuffer                              cmdBuffer,
+    VkCommandBuffer                              commandBuffer,
     uint32_t                                     vertexBindingDescriptionCount,
-    const VkVertexInputBindingDescription2EXT* pVertexBindingDescriptions,
+    const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
     uint32_t                                     vertexAttributeDescriptionCount,
     const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetVertexInput(vertexBindingDescriptionCount,
+                                                                  pVertexBindingDescriptions,
+                                                                  vertexAttributeDescriptionCount,
+                                                                  pVertexAttributeDescriptions);
+
 }
 
 } // namespace entry

@@ -9,7 +9,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1,
+          "useSiScheduler": true,
           "unrollThreshold": 900
         }
       }
@@ -35,7 +35,7 @@
       "action": {
         "ps": {
           "disableLoopUnrolls": 1,
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -74,7 +74,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1,
+          "useSiScheduler": true,
           "unrollThreshold": 900
         }
       }
@@ -88,7 +88,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -101,7 +101,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -114,7 +114,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -166,7 +166,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -179,7 +179,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     }

@@ -94,7 +94,8 @@ struct PhysicalDeviceGpaProperties
 
 // =====================================================================================================================
 // Shader stage bit that represents all graphics stages
-static const uint32 ShaderStageAllGraphics =
+static const uint32 ShaderStageAllGraphics = VK_SHADER_STAGE_TASK_BIT_EXT |
+                                             VK_SHADER_STAGE_MESH_BIT_EXT |
                                              VK_SHADER_STAGE_ALL_GRAPHICS;
 
 // =====================================================================================================================
@@ -722,7 +723,6 @@ public:
 
 #if VKI_RAY_TRACING
     bool HwSupportsRayTracing() const;
-
 #endif
 
     static DeviceExtensions::Supported GetAvailableExtensions(

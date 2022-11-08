@@ -954,6 +954,10 @@ inline Pal::QueryPipelineStatsFlags VkToPalQueryPipelineStatsFlags(VkQueryPipeli
         static_cast<uint32_t>(Pal::QueryPipelineStatsDsInvocations)) &&
     (static_cast<uint32_t>(VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT) ==
         static_cast<uint32_t>(Pal::QueryPipelineStatsCsInvocations))
+    && (static_cast<uint32_t>(VK_QUERY_PIPELINE_STATISTIC_TASK_SHADER_INVOCATIONS_BIT_EXT) ==
+        static_cast<uint32_t>(Pal::QueryPipelineStatsTsInvocations))
+    && (static_cast<uint32_t>(VK_QUERY_PIPELINE_STATISTIC_MESH_SHADER_INVOCATIONS_BIT_EXT) ==
+        static_cast<uint32_t>(Pal::QueryPipelineStatsMsInvocations))
     ,
     "Need to update this function");
 
@@ -2479,9 +2483,13 @@ inline uint32_t VkToPalPipelineStageFlags(
                                 Pal::PipelineStageVs;
     }
 
+    if (stageMask & VK_PIPELINE_STAGE_2_TRANSFORM_FEEDBACK_BIT_EXT)
+    {
+        palPipelineStageMask |= Pal::PipelineStageStreamOut;
+    }
+
     if (stageMask & (VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR          |
-                     VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT_KHR |
-                     VK_PIPELINE_STAGE_2_TRANSFORM_FEEDBACK_BIT_EXT))
+                     VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT_KHR))
     {
         palPipelineStageMask |= Pal::PipelineStageVs;
     }
@@ -3694,6 +3702,18 @@ inline uint32_t VkToVkgcShaderStageMask(VkShaderStageFlags vkShaderStageFlags)
         vkgcShaderMask |= Vkgc::ShaderStageComputeBit;
     }
 
+    expectedShaderStageCount += 2;
+
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_TASK_BIT_EXT) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageTaskBit;
+    }
+
+    if ((vkShaderStageFlags & VK_SHADER_STAGE_MESH_BIT_EXT) != 0)
+    {
+        vkgcShaderMask |= Vkgc::ShaderStageMeshBit;
+    }
+
 #if VKI_RAY_TRACING
     expectedShaderStageCount += 6;
 
@@ -3766,6 +3786,18 @@ inline VkShaderStageFlags VkgcToVkShaderStageMask(uint32_t vkgcShaderStageFlags)
     if ((vkgcShaderStageFlags & Vkgc::ShaderStageComputeBit) != 0)
     {
         vkShaderMask |= VK_SHADER_STAGE_COMPUTE_BIT;
+    }
+
+    expectedShaderStageCount += 2;
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageTaskBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_TASK_BIT_EXT;
+    }
+
+    if ((vkgcShaderStageFlags & Vkgc::ShaderStageMeshBit) != 0)
+    {
+        vkShaderMask |= VK_SHADER_STAGE_MESH_BIT_EXT;
     }
 
 #if VKI_RAY_TRACING

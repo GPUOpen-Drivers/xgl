@@ -69,8 +69,6 @@ macro(xgl_options)
     if (NOT WIN32)
         option(BUILD_WAYLAND_SUPPORT "Build XGL with Wayland support" ON)
 
-        option(BUILD_XLIB_XRANDR_SUPPORT "Build Xlib with xrandr 1.6 support" OFF)
-
         option(BUILD_DRI3_SUPPORT "Build XGL with Dri3 support" ON)
     endif()
 

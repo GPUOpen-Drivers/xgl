@@ -29,7 +29,7 @@
       "action": {
         "binningOverride": 1,
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -54,7 +54,7 @@
       "action": {
         "ps": {
           "vgprLimit": 84,
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -92,7 +92,7 @@
       "action": {
         "binningOverride": 1,
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -127,7 +127,7 @@
       "action": {
         "cs": {
           "waveSize": 64,
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },

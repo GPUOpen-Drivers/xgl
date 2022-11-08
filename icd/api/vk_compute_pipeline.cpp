@@ -109,7 +109,7 @@ ComputePipeline::ComputePipeline(
     bool                                 hasRayTracing,
     uint32_t                             dispatchRaysUserDataOffset,
 #endif
-    uint32_t                             staticStateMask,
+    uint64_t                             staticStateMask,
     uint64_t                             apiHash)
     :
     Pipeline(

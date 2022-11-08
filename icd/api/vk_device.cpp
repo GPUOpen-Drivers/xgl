@@ -284,7 +284,8 @@ Device::Device(
 #if VKI_RAY_TRACING
     m_pRayTrace(nullptr),
 #endif
-    m_pBorderColorUsedIndexes(nullptr)
+    m_pBorderColorUsedIndexes(nullptr),
+    m_retrievedFaultData(false)
 {
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
 
@@ -434,9 +435,10 @@ VkResult Device::Create(
     const VkAllocationCallbacks*    pAllocator,
     DispatchableDevice**            ppDevice)
 {
-    Pal::Result palResult = Pal::Result::Success;
-    uint32_t queueCounts[Queue::MaxQueueFamilies] = {};
-    uint32_t queueFlags[Queue::MaxQueueFamilies] = {};
+    Pal::Result    palResult                            = Pal::Result::Success;
+    DeviceFeatures deviceFeatures                       = {};
+    uint32_t       queueCounts[Queue::MaxQueueFamilies] = {};
+    uint32_t       queueFlags[Queue::MaxQueueFamilies]  = {};
 
     // initialize queue priority with the default value VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT.
     VkQueueGlobalPriorityEXT queuePriority[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
@@ -478,6 +480,14 @@ VkResult Device::Create(
                   enabledDeviceExtensions.IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1)             == false);
     }
 
+    if (enabledDeviceExtensions.IsExtensionEnabled(DeviceExtensions::EXT_EXTENDED_DYNAMIC_STATE3))
+    {
+        if (pPhysicalDevice->GetRuntimeSettings().dynamicPrimitiveTopologyUnrestricted)
+        {
+            deviceFeatures.dynamicPrimitiveTopologyUnrestricted = true;
+        }
+    }
+
     uint32_t                          numDevices                      = 1;
     PhysicalDevice*                   pPhysicalDevices[MaxPalDevices] = { pPhysicalDevice              };
     Pal::IDevice*                     pPalDevices[MaxPalDevices]      = { pPhysicalDevice->PalDevice() };
@@ -485,7 +495,6 @@ VkResult Device::Create(
     const VkPhysicalDeviceFeatures*   pEnabledFeatures                = pCreateInfo->pEnabledFeatures;
     VkMemoryOverallocationBehaviorAMD overallocationBehavior          = VK_MEMORY_OVERALLOCATION_BEHAVIOR_DEFAULT_AMD;
     bool                              pageableDeviceLocalMemory       = false;
-    DeviceFeatures                    deviceFeatures                  = {};
 
     uint32                            privateDataSlotRequestCount           = 0;
     bool                              privateDataEnabled                    = false;
@@ -4129,6 +4138,12 @@ VkResult Device::WriteAccelerationStructuresProperties(
         case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR:
             postBuildInfo.desc.infoType = GpuRt::AccelStructPostBuildInfoType::Serialization;
             break;
+        case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR:
+            postBuildInfo.desc.infoType = GpuRt::AccelStructPostBuildInfoType::CurrentSize;
+            break;
+        case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR:
+            postBuildInfo.desc.infoType = GpuRt::AccelStructPostBuildInfoType::BottomLevelASPointerCount;
+            break;
         default:
             VK_NEVER_CALLED();
             break;
@@ -4146,9 +4161,9 @@ VkResult Device::WriteAccelerationStructuresProperties(
                 postBuildInfo.desc.postBuildBufferAddr.pCpu = reinterpret_cast<char*>(pData) + (i * stride);
                 postBuildInfo.pSrcAccelStructCpuAddrs       = pCpuAddr;
 
-                 RayTrace()->GpuRt(deviceIndex)->EmitAccelStructPostBuildInfo(nullptr, postBuildInfo);
+                RayTrace()->GpuRt(deviceIndex)->EmitAccelStructPostBuildInfo(nullptr, postBuildInfo);
 
-                 pAccelStructure->Unmap(deviceIndex);
+                pAccelStructure->Unmap(deviceIndex);
             }
             else
             {
@@ -4462,6 +4477,81 @@ Pal::TilingOptMode Device::GetTilingOptMode() const
     return m_enabledFeatures.strictImageSizeRequirements ?
         Pal::TilingOptMode::OptForSpace :
         m_settings.imageTilingOptMode;
+}
+
+// =====================================================================================================================
+VkResult Device::GetDeviceFaultInfoEXT(
+    VkDeviceFaultCountsEXT* pFaultCounts,
+    VkDeviceFaultInfoEXT*   pFaultInfo)
+{
+    VkResult result = VK_SUCCESS;
+
+#if VK_IS_PAL_VERSION_AT_LEAST(772, 0)
+    // subsequent calls need to return the same data
+    if (m_retrievedFaultData == false)
+    {
+        m_pageFaultStatus.flags.pageFault = false
+        Pal::Result stateResult = PalDevice(DefaultDeviceIndex)->CheckExecutionState(&m_pageFaultStatus);
+
+        if ((stateResult == Pal::Result::ErrorGpuPageFaultDetected) && m_pageFaultStatus.flags.pageFault == true)
+        {
+            m_retrievedFaultData = true;
+        }
+    }
+
+    if (m_pageFaultStatus.flags.pageFault == false)
+    {
+        pFaultCounts->addressInfoCount = 0;
+        pFaultCounts->vendorInfoCount  = 0;
+        pFaultCounts->vendorBinarySize = 0;
+
+        if (pFaultInfo != nullptr)
+        {
+            strcpy(pFaultInfo->description, "No fault detected");
+        }
+    }
+    else if (pFaultInfo == nullptr)
+    {
+        pFaultCounts->addressInfoCount  = 1;
+        pFaultCounts->vendorInfoCount   = 0;
+        pFaultCounts->vendorBinarySize  = 0;
+    }
+    else if (pFaultCounts->addressInfoCount < 1)
+    {
+        pFaultCounts->addressInfoCount  = 0;
+        pFaultCounts->vendorInfoCount   = 0;
+        pFaultCounts->vendorBinarySize  = 0;
+
+        result = VK_INCOMPLETE;
+    }
+    else
+    {
+        pFaultCounts->addressInfoCount  = 1;
+        pFaultCounts->vendorInfoCount   = 0;
+        pFaultCounts->vendorBinarySize  = 0;
+        {
+            strcpy(pFaultInfo->description, "GPU fault");
+        }
+
+        VkDeviceFaultAddressInfoEXT* pAddressInfo = pFaultInfo->pAddressInfos;
+
+        pAddressInfo->addressType = m_pageFaultStatus.flags.readFault ? VK_DEVICE_FAULT_ADDRESS_TYPE_READ_INVALID_EXT :
+                                                                        VK_DEVICE_FAULT_ADDRESS_TYPE_WRITE_INVALID_EXT;
+        pAddressInfo->reportedAddress   = static_cast<VkDeviceAddress>(m_pageFaultStatus.faultAddress);
+        pAddressInfo->addressPrecision  = 4096;
+    }
+#else
+    pFaultCounts->addressInfoCount  = 0;
+    pFaultCounts->vendorInfoCount   = 0;
+    pFaultCounts->vendorBinarySize  = 0;
+
+    if (pFaultInfo != nullptr)
+    {
+        strcpy(pFaultInfo->description, "No fault detected");
+    }
+#endif
+
+    return result;
 }
 
 /**
@@ -5341,6 +5431,16 @@ VKAPI_ATTR void VKAPI_CALL vkSetDeviceMemoryPriorityEXT(
 {
     Memory* pMemory = Memory::ObjectFromHandle(memory);
     pMemory->SetPriority(MemoryPriority::FromVkMemoryPriority(priority), false);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceFaultInfoEXT(
+    VkDevice                                    device,
+    VkDeviceFaultCountsEXT*                     pFaultCounts,
+    VkDeviceFaultInfoEXT*                       pFaultInfo)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    return pDevice->GetDeviceFaultInfoEXT(pFaultCounts, pFaultInfo);
 }
 
 } // entry

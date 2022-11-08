@@ -501,7 +501,34 @@ vkGetDeviceImageSparseMemoryRequirementsKHR         @device       @dext(KHR_main
 vkCmdTraceRaysIndirect2KHR                          @device       @dext(KHR_ray_tracing_maintenance1)
 #endif
 
+vkCmdDrawMeshTasksEXT                               @device       @dext(EXT_mesh_shader)
+vkCmdDrawMeshTasksIndirectEXT                       @device       @dext(EXT_mesh_shader)
+vkCmdDrawMeshTasksIndirectCountEXT                  @device       @dext(EXT_mesh_shader)
+
+vkGetDeviceFaultInfoEXT                             @device       @dext(EXT_device_fault)
+
 vkGetShaderModuleIdentifierEXT                      @device       @dext(EXT_shader_module_identifier)
 vkGetShaderModuleCreateInfoIdentifierEXT            @device       @dext(EXT_shader_module_identifier)
+
+vkCmdSetTessellationDomainOriginEXT                 @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetDepthClampEnableEXT                         @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetPolygonModeEXT                              @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetRasterizationSamplesEXT                     @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetSampleMaskEXT                               @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetAlphaToCoverageEnableEXT                    @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetAlphaToOneEnableEXT                         @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetLogicOpEnableEXT                            @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetColorBlendEnableEXT                         @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetColorBlendEquationEXT                       @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetColorWriteMaskEXT                           @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetRasterizationStreamEXT                      @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetConservativeRasterizationModeEXT            @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetExtraPrimitiveOverestimationSizeEXT         @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetDepthClipEnableEXT                          @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetSampleLocationsEnableEXT                    @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetProvokingVertexModeEXT                      @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetLineRasterizationModeEXT                    @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetLineStippleEnableEXT                        @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetDepthClipNegativeOneToOneEXT                @device       @dext(EXT_extended_dynamic_state3)
 
 vkCmdSetVertexInputEXT                              @device       @dext(EXT_vertex_input_dynamic_state)

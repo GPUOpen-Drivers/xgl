@@ -68,7 +68,7 @@
       },
       "action": {
         "vs": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     }

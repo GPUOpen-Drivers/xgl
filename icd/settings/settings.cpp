@@ -681,7 +681,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // Ignore suboptimal swapchain size to fix crash on task switch
             m_settings.ignoreSuboptimalSwapchainSize = true;
 
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
+            {
+                m_settings.imageTilingOptMode = Pal::TilingOptMode::OptForSpeed;
+            }
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
                 m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
                     ForceDccForColorAttachments |
@@ -708,10 +712,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                     m_settings.overrideLocalHeapSizeInGBs = 8;
                     m_settings.memoryDeviceOverallocationAllowed = true;
                 }
-            }
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
-            {
-                m_settings.imageTilingOptMode = Pal::TilingOptMode::OptForSpeed;
             }
 
         }
@@ -794,20 +794,17 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.delayFullScreenAcquireToFirstPresent = true;
             m_settings.implicitExternalSynchronization = false;
 
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
             {
-                if (pInfo->revision == Pal::AsicRevision::Navi21)
-                {
-                    m_settings.pipelineBinningMode  = PipelineBinningModeDisable;
-                    m_settings.mallNoAllocCtPolicy  = MallNoAllocCtAsSnsr;
-                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-                    m_settings.forceEnableDcc       = (ForceDccFor2DShaderStorage  |
-                                                       ForceDccFor3DShaderStorage  |
-                                                       ForceDccForColorAttachments |
-                                                       ForceDccFor64BppShaderStorage);
-                }
-            }
+                m_settings.pipelineBinningMode  = PipelineBinningModeDisable;
+                m_settings.mallNoAllocCtPolicy  = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+                m_settings.forceEnableDcc       = (ForceDccFor2DShaderStorage  |
+                                                   ForceDccFor3DShaderStorage  |
+                                                   ForceDccForColorAttachments |
+                                                   ForceDccFor64BppShaderStorage);
 
+            }
         }
 
         if (appProfile == AppProfile::GhostReconBreakpoint)
@@ -848,7 +845,14 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.rtEnableTriangleSplitting = true;
 
                 m_settings.useFlipHint = false;
+
+                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                             ForceDccFor3DShaderStorage |
+                                             ForceDccForColorAttachments |
+                                             ForceDccFor64BppShaderStorage);
+
             }
+
         }
 
         if (appProfile == AppProfile::ControlDX12)
@@ -858,6 +862,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.rtEnableCompilePipelineLibrary = false;
                 m_settings.rtMaxRayRecursionDepth = 2;
             }
+
         }
 #endif
 
@@ -895,7 +900,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if ((pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1) &&
                 (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false))
             {
-                m_settings.resourceBarrierOptions = ResourceBarrierOptions::SkipDstCacheInv;
+                m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::Gfx9AvoidCpuMemoryCoher;
             }
 
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
@@ -981,7 +986,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if ((pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1) &&
                 (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false))
             {
-                m_settings.resourceBarrierOptions = ResourceBarrierOptions::SkipDstCacheInv;
+                m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::Gfx9AvoidCpuMemoryCoher;
             }
         }
 
@@ -998,6 +1003,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             // A larger minImageCount can get a performance gain for game Metro Exodus.
             m_settings.forceMinImageCount = 3;
+
         }
 
         if (appProfile == AppProfile::X4Foundations)
@@ -1080,6 +1086,16 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.forceImageSharingMode =
                     ForceImageSharingMode::ForceImageSharingModeExclusiveForNonColorAttachments;
             }
+        }
+
+        if (appProfile == AppProfile::Battlefield1)
+        {
+            m_settings.forceDisableAnisoFilter = true;
+        }
+
+        if (appProfile == AppProfile::DDraceNetwork)
+        {
+            m_settings.ignorePreferredPresentMode = true;
         }
 
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
@@ -1273,6 +1289,13 @@ void VulkanSettingsLoader::ValidateSettings()
     m_settings.indirectCallTargetOccupancyPerSimd =
         Util::Clamp(m_settings.indirectCallTargetOccupancyPerSimd, 0.0f ,1.0f);
 #endif
+
+    // SkipDstCacheInv should not be enabled by default when acquire-release barrier interface is used, because PAL
+    // implements this optimization.
+    if (m_settings.useAcquireReleaseInterface)
+    {
+        m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::SkipDstCacheInv;
+    }
 }
 
 // =====================================================================================================================

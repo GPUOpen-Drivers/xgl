@@ -1024,13 +1024,22 @@ SHADER_ACTION = {
                 "jsonWritable": True,
                 "buildTypes": {},
             },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "wgpMode",
+                "dataType": "uint32_t",
+                "defaultValue": "",
+                "buildTypes": {},
+            },
         ],
         "buildTypes": {},
         "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
-= %IntValue%;\n""",
-        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
-        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "waveBreakSize": {
@@ -1512,14 +1521,23 @@ SHADER_ACTION = {
     },
 
     "useSiScheduler": {
-        "type": [int],
+        "type": [bool],
         "jsonReadable": True,
         "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "useSiScheduler",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
             {
                 "parent": "ShaderTuningOptions",
                 "entity": "var",
                 "varName": "useSiScheduler",
-                "dataType": "uint32_t",
+                "dataType": "bool",
                 "defaultValue": "",
                 "jsonWritable": True,
                 "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
@@ -1527,21 +1545,31 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
 .%FieldName% = true;\n""",
         "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
-        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "disableCodeSinking": {
-        "type": [int],
+        "type": [bool],
         "jsonReadable": True,
         "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "disableCodeSinking",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
             {
                 "parent": "ShaderTuningOptions",
                 "entity": "var",
                 "varName": "disableCodeSinking",
-                "dataType": "uint32_t",
+                "dataType": "bool",
                 "defaultValue": "",
                 "jsonWritable": True,
                 "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
@@ -1549,16 +1577,26 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
 .%FieldName% = true;\n""",
         "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
-        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "favorLatencyHiding": {
         "type": [bool],
         "jsonReadable": True,
         "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "favorLatencyHiding",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
             {
                 "parent": "ShaderTuningOptions",
                 "entity": "var",
@@ -1571,21 +1609,31 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
 .%FieldName% = %BoolValue%;\n""",
         "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
-        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "reconfigWorkgroupLayout": {
-        "type": [int],
+        "type": [bool],
         "jsonReadable": True,
         "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "reconfigWorkgroupLayout",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
             {
                 "parent": "ShaderTuningOptions",
                 "entity": "var",
                 "varName": "reconfigWorkgroupLayout",
-                "dataType": "uint32_t",
+                "dataType": "bool",
                 "defaultValue": "",
                 "jsonWritable": True,
                 "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
@@ -1593,16 +1641,26 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
 .%FieldName% = true;\n""",
         "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
-        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "forceLoopUnrollCount": {
         "type": [int],
         "jsonReadable": True,
         "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "forceLoopUnrollCount",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
             {
                 "parent": "ShaderTuningOptions",
                 "entity": "var",
@@ -1615,16 +1673,26 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
 .%FieldName% = %IntValue%u;\n""",
         "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
-        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "enableLoadScalarizer": {
         "type": [bool],
         "jsonReadable": True,
         "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "enableLoadScalarizer",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
             {
                 "parent": "ShaderTuningOptions",
                 "entity": "var",
@@ -1637,16 +1705,26 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
 .%FieldName% = %BoolValue%;\n""",
         "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
-        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "disableLicm": {
         "type": [bool],
         "jsonReadable": True,
         "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "disableLicm",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
             {
                 "parent": "ShaderTuningOptions",
                 "entity": "var",
@@ -1659,16 +1737,26 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
 .%FieldName% = %BoolValue%;\n""",
         "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
-        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "unrollThreshold": {
         "type": [int],
         "jsonReadable": True,
         "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "unrollThreshold",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
             {
                 "parent": "ShaderTuningOptions",
                 "entity": "var",
@@ -1681,10 +1769,11 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
 .%FieldName% = %IntValue%u;\n""",
         "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
-        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "fp32DenormalMode": {
@@ -1731,6 +1820,15 @@ SHADER_ACTION = {
         "jsonReadable": True,
         "entityInfo": [
             {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "fastMathFlags",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
+            {
                 "parent": "ShaderTuningOptions",
                 "entity": "var",
                 "varName": "fastMathFlags",
@@ -1742,16 +1840,26 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
 .%FieldName% = %IntValue%u;\n""",
         "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
-        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
     "disableFastMathFlags": {
         "type": [int],
         "jsonReadable": True,
         "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "disableFastMathFlags",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
             {
                 "parent": "ShaderTuningOptions",
                 "entity": "var",
@@ -1764,10 +1872,11 @@ SHADER_ACTION = {
         ],
         "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
         "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
 .%FieldName% = %IntValue%u;\n""",
         "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
-        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 }
 
@@ -2475,6 +2584,8 @@ std::string ShaderProfile::getShaderStageName(uint32_t i)
     //returns shader stage name
     switch (i)
     {
+    case ShaderStage::ShaderStageTask:
+        return "ts";
     case ShaderStage::ShaderStageVertex:
         return "vs";
     case ShaderStage::ShaderStageTessControl:
@@ -2483,6 +2594,8 @@ std::string ShaderProfile::getShaderStageName(uint32_t i)
         return "ds";
     case ShaderStage::ShaderStageGeometry:
         return "gs";
+    case ShaderStage::ShaderStageMesh:
+        return "ms";
     case ShaderStage::ShaderStageFragment:
         return "ps";
     case ShaderStage::ShaderStageCompute:

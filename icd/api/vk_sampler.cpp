@@ -114,8 +114,9 @@ VkResult Sampler::Create(
     samplerInfo.filterMode       = Pal::TexFilterMode::Blend;  // Initialize "legacy" behavior
     Vkgc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData = nullptr;
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+    VkBool32 anisotropyEnable    = (settings.forceDisableAnisoFilter == false) ? pCreateInfo->anisotropyEnable : VK_FALSE;
 
-    samplerInfo.filter     = VkToPalTexFilter(pCreateInfo->anisotropyEnable,
+    samplerInfo.filter     = VkToPalTexFilter(anisotropyEnable,
                                               pCreateInfo->magFilter,
                                               pCreateInfo->minFilter,
                                               pCreateInfo->mipmapMode);
@@ -141,7 +142,7 @@ VkResult Sampler::Create(
         samplerInfo.flags.preciseAniso = 0;
         break;
     case DisablePreciseAnisoAfOnly:
-        samplerInfo.flags.preciseAniso = (pCreateInfo->anisotropyEnable == VK_FALSE) ? 1 : 0;
+        samplerInfo.flags.preciseAniso = (anisotropyEnable == VK_FALSE) ? 1 : 0;
         break;
     default:
         break;

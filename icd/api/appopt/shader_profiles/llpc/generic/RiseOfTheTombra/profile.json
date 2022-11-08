@@ -35,7 +35,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -48,7 +48,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -61,7 +61,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -74,7 +74,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -87,7 +87,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -100,7 +100,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -113,7 +113,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -126,7 +126,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -139,7 +139,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -152,7 +152,7 @@
       },
       "action": {
         "cs": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -165,7 +165,7 @@
       },
       "action": {
         "cs": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -178,7 +178,7 @@
       },
       "action": {
         "vs": {
-          "useSiScheduler": 1,
+          "useSiScheduler": true,
           "enableLoadScalarizer": true
         }
       }
@@ -192,7 +192,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1,
+          "useSiScheduler": true,
           "enableLoadScalarizer": true
         }
       }
@@ -219,7 +219,7 @@
       },
       "action": {
         "vs": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -232,7 +232,7 @@
       },
       "action": {
         "vs": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -245,7 +245,7 @@
       },
       "action": {
         "vs": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -258,7 +258,7 @@
       },
       "action": {
         "vs": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -271,7 +271,7 @@
       },
       "action": {
         "vs": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -284,7 +284,7 @@
       },
       "action": {
         "vs": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     }

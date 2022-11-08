@@ -50,10 +50,15 @@ VkResult DescriptorUpdateTemplate::Create(
 {
     VkResult                    result      = VK_SUCCESS;
     const uint32_t              numEntries  = pCreateInfo->descriptorUpdateEntryCount;
-    const DescriptorSetLayout*  pLayout     = DescriptorSetLayout::ObjectFromHandle(pCreateInfo->descriptorSetLayout);
     const size_t                apiSize     = sizeof(DescriptorUpdateTemplate);
     const size_t                entriesSize = numEntries * sizeof(TemplateUpdateInfo);
     const size_t                objSize     = apiSize + entriesSize;
+    const DescriptorSetLayout*  pLayout     =
+        (pCreateInfo->templateType == VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET) ?
+        DescriptorSetLayout::ObjectFromHandle(pCreateInfo->descriptorSetLayout)          :
+        PipelineLayout::ObjectFromHandle(pCreateInfo->pipelineLayout)->GetSetLayouts(pCreateInfo->set);
+
+    VK_ASSERT(pLayout != nullptr);
 
     void* pSysMem = pDevice->AllocApiObject(pAllocator, objSize);
 

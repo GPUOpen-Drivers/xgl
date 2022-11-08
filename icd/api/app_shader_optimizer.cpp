@@ -198,47 +198,52 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pOptions->disableLoopUnroll = true;
                 }
-                if (shaderCreate.tuningOptions.useSiScheduler)
+                if (shaderCreate.apply.useSiScheduler)
                 {
-                    options.pOptions->useSiScheduler = true;
+                    options.pOptions->useSiScheduler = shaderCreate.tuningOptions.useSiScheduler;
                 }
-                if (shaderCreate.tuningOptions.disableCodeSinking)
+                if (shaderCreate.apply.disableCodeSinking)
                 {
-                    options.pOptions->disableCodeSinking = true;
+                    options.pOptions->disableCodeSinking = shaderCreate.tuningOptions.disableCodeSinking;
                 }
-                if (shaderCreate.tuningOptions.favorLatencyHiding)
+                if (shaderCreate.apply.favorLatencyHiding)
                 {
-                    options.pOptions->favorLatencyHiding = true;
+                    options.pOptions->favorLatencyHiding = shaderCreate.tuningOptions.favorLatencyHiding;
                 }
-                if (shaderCreate.tuningOptions.reconfigWorkgroupLayout)
+                if (shaderCreate.apply.reconfigWorkgroupLayout)
                 {
-                    options.pPipelineOptions->reconfigWorkgroupLayout = true;
+                    options.pPipelineOptions->reconfigWorkgroupLayout =
+                        shaderCreate.tuningOptions.reconfigWorkgroupLayout;
                 }
-                if (shaderCreate.tuningOptions.enableLoadScalarizer)
+                if (shaderCreate.apply.enableLoadScalarizer)
                 {
-                    options.pOptions->enableLoadScalarizer = true;
+                    options.pOptions->enableLoadScalarizer = shaderCreate.tuningOptions.enableLoadScalarizer;
                 }
-                if (shaderCreate.tuningOptions.forceLoopUnrollCount != 0)
+                if (shaderCreate.apply.forceLoopUnrollCount != 0)
                 {
                     options.pOptions->forceLoopUnrollCount = shaderCreate.tuningOptions.forceLoopUnrollCount;
                 }
-                if (shaderCreate.tuningOptions.disableLicm)
+                if (shaderCreate.apply.disableLicm)
                 {
-                    options.pOptions->disableLicm = true;
+                    options.pOptions->disableLicm = shaderCreate.tuningOptions.disableLicm;
                 }
-                if (shaderCreate.tuningOptions.unrollThreshold != 0)
+                if (shaderCreate.apply.unrollThreshold != 0)
                 {
                     options.pOptions->unrollThreshold = shaderCreate.tuningOptions.unrollThreshold;
                 }
-                if (shaderCreate.apply.fp32DenormalMode)
+                if (shaderCreate.apply.ldsSpillLimitDwords != 0)
+                {
+                    options.pOptions->ldsSpillLimitDwords = shaderCreate.tuningOptions.ldsSpillLimitDwords;
+                }
+                if (shaderCreate.apply.fp32DenormalMode != 0)
                 {
                     options.pOptions->fp32DenormalMode = shaderCreate.tuningOptions.fp32DenormalMode;
                 }
-                if (shaderCreate.tuningOptions.fastMathFlags != 0)
+                if (shaderCreate.apply.fastMathFlags != 0)
                 {
                     options.pOptions->fastMathFlags = shaderCreate.tuningOptions.fastMathFlags;
                 }
-                if (shaderCreate.tuningOptions.disableFastMathFlags != 0)
+                if (shaderCreate.apply.disableFastMathFlags != 0)
                 {
                     options.pOptions->disableFastMathFlags = shaderCreate.tuningOptions.disableFastMathFlags;
                 }
@@ -249,7 +254,7 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
 
                 if (shaderCreate.apply.wgpMode)
                 {
-                    options.pOptions->wgpMode = true;
+                    options.pOptions->wgpMode = shaderCreate.tuningOptions.wgpMode;
                 }
 
                 if (shaderCreate.apply.waveBreakSize)
@@ -535,6 +540,9 @@ void ShaderOptimizer::ApplyProfileToGraphicsPipelineCreateInfo(
                 {
                     switch (vkgcStage)
                     {
+                    case ShaderStage::ShaderStageTask:
+                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ts);
+                        break;
                     case ShaderStage::ShaderStageVertex:
                         ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->vs);
                         break;
@@ -546,6 +554,9 @@ void ShaderOptimizer::ApplyProfileToGraphicsPipelineCreateInfo(
                         break;
                     case ShaderStage::ShaderStageGeometry:
                         ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->gs);
+                        break;
+                    case ShaderStage::ShaderStageMesh:
+                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ms);
                         break;
                     case ShaderStage::ShaderStageFragment:
                         ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ps);
@@ -763,6 +774,9 @@ void ShaderOptimizer::BuildTuningProfile()
             uint32_t shaderStage = ShaderStage::ShaderStageFragment;
             switch (m_settings.overrideShaderStage)
             {
+            case ShaderMode::TaskShader:
+                shaderStage = ShaderStage::ShaderStageTask;
+                break;
             case ShaderMode::VertexShader:
                 shaderStage = ShaderStage::ShaderStageVertex;
                 break;
@@ -774,6 +788,9 @@ void ShaderOptimizer::BuildTuningProfile()
                 break;
             case ShaderMode::GeometryShader:
                 shaderStage = ShaderStage::ShaderStageGeometry;
+                break;
+            case ShaderMode::MeshShader:
+                shaderStage = ShaderStage::ShaderStageMesh;
                 break;
             case ShaderMode::FragmentShader:
                 shaderStage = ShaderStage::ShaderStageFragment;
@@ -869,22 +886,54 @@ void ShaderOptimizer::BuildTuningProfile()
 
             if (m_settings.overrideUseSiScheduler)
             {
-                pAction->shaderCreate.tuningOptions.useSiScheduler = true;
+                pAction->shaderCreate.apply.useSiScheduler = true;
+                pAction->shaderCreate.tuningOptions.useSiScheduler = m_settings.overrideUseSiScheduler;
             }
-
             if (m_settings.overrideReconfigWorkgroupLayout)
             {
-                pAction->shaderCreate.tuningOptions.reconfigWorkgroupLayout = true;
+                pAction->shaderCreate.apply.reconfigWorkgroupLayout = true;
+                pAction->shaderCreate.tuningOptions.reconfigWorkgroupLayout =
+                    m_settings.overrideReconfigWorkgroupLayout;
             }
-
             if (m_settings.overrideDisableLicm)
             {
-                pAction->shaderCreate.tuningOptions.disableLicm = true;
+                pAction->shaderCreate.apply.disableLicm = true;
+                pAction->shaderCreate.tuningOptions.disableLicm = m_settings.overrideDisableLicm;
             }
-
             if (m_settings.overrideEnableLoadScalarizer)
             {
-                pAction->shaderCreate.tuningOptions.enableLoadScalarizer = true;
+                pAction->shaderCreate.apply.enableLoadScalarizer = true;
+                pAction->shaderCreate.tuningOptions.enableLoadScalarizer = m_settings.overrideEnableLoadScalarizer;
+            }
+            if (m_settings.overrideDisableCodeSinking)
+            {
+                pAction->shaderCreate.apply.disableCodeSinking = true;
+                pAction->shaderCreate.tuningOptions.disableCodeSinking = m_settings.overrideDisableCodeSinking;
+            }
+            if (m_settings.overrideFavorLatencyHiding)
+            {
+                pAction->shaderCreate.apply.favorLatencyHiding = true;
+                pAction->shaderCreate.tuningOptions.favorLatencyHiding = m_settings.overrideFavorLatencyHiding;
+            }
+            if (m_settings.overrideForceLoopUnrollCount != 0)
+            {
+                pAction->shaderCreate.apply.forceLoopUnrollCount = true;
+                pAction->shaderCreate.tuningOptions.forceLoopUnrollCount = m_settings.overrideForceLoopUnrollCount;
+            }
+            if (m_settings.overrideUnrollThreshold != 0)
+            {
+                pAction->shaderCreate.apply.unrollThreshold = true;
+                pAction->shaderCreate.tuningOptions.unrollThreshold = m_settings.overrideUnrollThreshold;
+            }
+            if (m_settings.overrideFastMathFlags != 0)
+            {
+                pAction->shaderCreate.apply.fastMathFlags = true;
+                pAction->shaderCreate.tuningOptions.fastMathFlags = m_settings.overrideFastMathFlags;
+            }
+            if (m_settings.overrideDisableFastMathFlags != 0)
+            {
+                pAction->shaderCreate.apply.disableFastMathFlags = true;
+                pAction->shaderCreate.tuningOptions.disableFastMathFlags = m_settings.overrideDisableFastMathFlags;
             }
 
             switch (m_settings.overrideWaveSize)
@@ -908,9 +957,9 @@ void ShaderOptimizer::BuildTuningProfile()
             case WgpMode::WgpModeAuto:
                 break;
             case WgpMode::WgpModeCu:
-                break;
             case WgpMode::WgpModeWgp:
                 pAction->shaderCreate.apply.wgpMode = true;
+                pAction->shaderCreate.tuningOptions.wgpMode = m_settings.overrideWgpMode;
                 break;
             default:
                 VK_NEVER_CALLED();
@@ -1111,6 +1160,9 @@ void ShaderOptimizer::PrintProfileEntryMatch(
 
             switch (shader.stage)
             {
+            case ShaderStage::ShaderStageTask:
+                pStage = "TS";
+                break;
             case ShaderStage::ShaderStageVertex:
                 pStage = "VS";
                 break;
@@ -1122,6 +1174,9 @@ void ShaderOptimizer::PrintProfileEntryMatch(
                 break;
             case ShaderStage::ShaderStageGeometry:
                 pStage = "GS";
+                break;
+            case ShaderStage::ShaderStageMesh:
+                pStage = "MS";
                 break;
             case ShaderStage::ShaderStageFragment:
                 pStage = "PS";

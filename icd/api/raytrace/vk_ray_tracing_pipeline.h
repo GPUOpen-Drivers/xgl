@@ -265,7 +265,7 @@ protected:
     struct CreateInfo
     {
         ImmedInfo                              immedInfo;
-        uint32_t                               staticStateMask;
+        uint64_t                               staticStateMask;
         Pal::ComputePipelineCreateInfo         pipeline;
         const PipelineLayout*                  pLayout;
 

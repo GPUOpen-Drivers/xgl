@@ -34,7 +34,7 @@
       "action": {
         "binningOverride": 1,
         "ps": {
-          "useSiScheduler": 1,
+          "useSiScheduler": true,
           "disableLicm": true
         }
       }

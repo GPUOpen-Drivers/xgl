@@ -996,6 +996,38 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(
 }
 
 // ====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(
+    VkCommandBuffer                             cmdBuffer,
+    VkImage                                     srcImage,
+    VkImageLayout                               srcImageLayout,
+    VkBuffer                                    dstBuffer,
+    uint32_t                                    regionCount,
+    const VkBufferImageCopy*                    pRegions)
+{
+    CmdBuffer* pCmdBuffer           = ApiCmdBuffer::ObjectFromHandle(cmdBuffer);
+    Device* pDevice                 = pCmdBuffer->VkDevice();
+    Image*  pSrcImage               = Image::ObjectFromHandle(srcImage);
+    GpuDecoderLayer* pDecodeWrapper = pDevice->GetGpuDecoderLayer();
+
+    if (Formats::IsEtc2Format(pSrcImage->GetFormat()) || Formats::IsASTCFormat(pSrcImage->GetFormat()))
+    {
+        // When software decompression is enabled, data stored in images with ETC2 or ASTC format were
+        // decompressed as R8G8B8A8. The behavior of copying the modified date out to a buffer does not
+        // meet most applications' intention, while it still under the risk of out-of-range copying.
+        // Therefore, as a work around, skip the vkCmdCopyImageToBuffer when the srcImage format is ETC or Astc.
+    }
+    else
+    {
+        DECODER_WAPPER_CALL_NEXT_LAYER(vkCmdCopyImageToBuffer(cmdBuffer,
+                                                              srcImage,
+                                                              srcImageLayout,
+                                                              dstBuffer,
+                                                              regionCount,
+                                                              pRegions));
+    }
+}
+
+// ====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(
     VkDevice                     device,
     const VkImageCreateInfo*     pCreateInfo,
@@ -1089,6 +1121,7 @@ void GpuDecoderLayer::OverrideDispatchTable(
     DECODER_WAPPER_OVERRIDE_ENTRY(vkDestroyImage);
     DECODER_WAPPER_OVERRIDE_ENTRY(vkCmdCopyImage);
     DECODER_WAPPER_OVERRIDE_ENTRY(vkCmdCopyBufferToImage);
+    DECODER_WAPPER_OVERRIDE_ENTRY(vkCmdCopyImageToBuffer);
 }
 } // namespace vk
 #endif /* VKI_GPU_DECOMPRESS */

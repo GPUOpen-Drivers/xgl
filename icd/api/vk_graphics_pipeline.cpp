@@ -487,6 +487,7 @@ VkResult GraphicsPipeline::Create(
 #if VKI_RAY_TRACING
         binaryInfo.hasRayTracing = binaryCreateInfo.pipelineInfo.rtState.threadGroupSizeX > 0;
 #endif
+        binaryInfo.hasMesh       = binaryCreateInfo.pipelineInfo.mesh.pModuleData != nullptr;
 
         BuildPipelineObjectCreateInfo(
             pDevice, pCreateInfo, &vbInfo, &binaryInfo, pPipelineLayout, &objectCreateInfo);
@@ -730,10 +731,12 @@ VkResult GraphicsPipeline::BuildDeferCompileWorkload(
 
         PipelineShaderInfo* pShaderInfo[] =
         {
+            &pCreateInfo->binaryCreateInfo.pipelineInfo.task,
             &pCreateInfo->binaryCreateInfo.pipelineInfo.vs,
             &pCreateInfo->binaryCreateInfo.pipelineInfo.tcs,
             &pCreateInfo->binaryCreateInfo.pipelineInfo.tes,
             &pCreateInfo->binaryCreateInfo.pipelineInfo.gs,
+            &pCreateInfo->binaryCreateInfo.pipelineInfo.mesh,
             &pCreateInfo->binaryCreateInfo.pipelineInfo.fs,
         };
 
@@ -903,7 +906,7 @@ GraphicsPipeline::GraphicsPipeline(
     Pal::IPipeline**                       pPalPipeline,
     const PipelineLayout*                  pLayout,
     const GraphicsPipelineObjectImmedInfo& immedInfo,
-    uint32_t                               staticStateMask,
+    uint64_t                               staticStateMask,
     bool                                   bindDepthStencilObject,
     bool                                   bindTriangleRasterState,
     bool                                   bindStencilRefMasks,

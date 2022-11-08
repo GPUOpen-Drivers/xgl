@@ -62,10 +62,12 @@ class PipelineBinaryCache;
 // The shader stages of Pre-Rasterization Shaders section
 constexpr uint32_t PrsShaderMask =
     (0
+    | (1 << ShaderStage::ShaderStageTask)
     | (1 << ShaderStage::ShaderStageVertex)
     | (1 << ShaderStage::ShaderStageTessControl)
     | (1 << ShaderStage::ShaderStageTessEval)
     | (1 << ShaderStage::ShaderStageGeometry)
+    | (1 << ShaderStage::ShaderStageMesh)
     );
 
 // =====================================================================================================================
@@ -315,6 +317,7 @@ public:
         const Device*                     pDevice,
         const VkShaderStageFlagBits       activeStages,
         const bool                        isConservativeOverestimation,
+        const bool                        unrestrictedPrimitiveTopology,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo);
 
     static void BuildPipelineShaderInfo(
@@ -353,6 +356,22 @@ public:
         size_t*                  pPipelineBinarySize,
         const void**             ppPipelineBinary,
         uint64_t                 hashCode64);
+
+    static size_t GetMaxUberFetchShaderInternalDataSize();
+
+    static size_t GetUberFetchShaderInternalDataSize(const VkPipelineVertexInputStateCreateInfo* pVertexInput);
+
+    uint32_t BuildUberFetchShaderInternalData(
+        uint32_t                                     vertexBindingDescriptionCount,
+        const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
+        uint32_t                                     vertexAttributeDescriptionCount,
+        const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions,
+        void*                                        pUberFetchShaderInternalData) const;
+
+    uint32_t BuildUberFetchShaderInternalData(
+        const VkPipelineVertexInputStateCreateInfo* pVertexInput,
+        bool                                        dynamicStride,
+        void*                                       pUberFetchShaderInternalData) const;
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
@@ -422,6 +441,16 @@ private:
         const uint32_t                  compilerMask,
         const Util::MetroHash::Hash&    uniqueHash);
 
+    template<class VertexInputBinding, class VertexInputAttribute, class VertexInputDivisor>
+    uint32_t BuildUberFetchShaderInternalDataImp(
+        uint32_t                    vertexBindingDescriptionCount,
+        const VertexInputBinding*   pVertexBindingDescriptions,
+        uint32_t                    vertexAttributeDescriptionCount,
+        const VertexInputAttribute* pVertexAttributeDescriptions,
+        uint32_t                    vertexDivisorDescriptionCount,
+        const VertexInputDivisor*   pVertexDivisorDescriptions,
+        bool                        isDynamicStride,
+        void*                       pUberFetchShaderInternalData) const;
     // -----------------------------------------------------------------------------------------------------------------
 
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object

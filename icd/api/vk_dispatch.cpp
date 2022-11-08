@@ -623,7 +623,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdSetLineStippleEXT                          );
 
     INIT_DISPATCH_ENTRY(vkSetDeviceMemoryPriorityEXT                    );
-
+    INIT_DISPATCH_ENTRY(vkGetDeviceFaultInfoEXT                         );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT  );
     INIT_DISPATCH_ENTRY(vkGetCalibratedTimestampsEXT                    );
 
@@ -759,9 +759,33 @@ void DispatchTable::Init()
     INIT_DISPATCH_ALIAS(vkGetDeviceImageSparseMemoryRequirementsKHR,
                         vkGetDeviceImageSparseMemoryRequirements        );
 
+    INIT_DISPATCH_ENTRY(vkCmdDrawMeshTasksEXT                           );
+    INIT_DISPATCH_ENTRY(vkCmdDrawMeshTasksIndirectEXT                   );
+    INIT_DISPATCH_ENTRY(vkCmdDrawMeshTasksIndirectCountEXT              );
+
     INIT_DISPATCH_ENTRY(vkGetShaderModuleIdentifierEXT                  );
     INIT_DISPATCH_ENTRY(vkGetShaderModuleCreateInfoIdentifierEXT        );
 
+    INIT_DISPATCH_ENTRY(vkCmdSetTessellationDomainOriginEXT             );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthClampEnableEXT                     );
+    INIT_DISPATCH_ENTRY(vkCmdSetPolygonModeEXT                          );
+    INIT_DISPATCH_ENTRY(vkCmdSetRasterizationSamplesEXT                 );
+    INIT_DISPATCH_ENTRY(vkCmdSetSampleMaskEXT                           );
+    INIT_DISPATCH_ENTRY(vkCmdSetAlphaToCoverageEnableEXT                );
+    INIT_DISPATCH_ENTRY(vkCmdSetAlphaToOneEnableEXT                     );
+    INIT_DISPATCH_ENTRY(vkCmdSetLogicOpEnableEXT                        );
+    INIT_DISPATCH_ENTRY(vkCmdSetColorBlendEnableEXT                     );
+    INIT_DISPATCH_ENTRY(vkCmdSetColorBlendEquationEXT                   );
+    INIT_DISPATCH_ENTRY(vkCmdSetColorWriteMaskEXT                       );
+    INIT_DISPATCH_ENTRY(vkCmdSetRasterizationStreamEXT                  );
+    INIT_DISPATCH_ENTRY(vkCmdSetConservativeRasterizationModeEXT        );
+    INIT_DISPATCH_ENTRY(vkCmdSetExtraPrimitiveOverestimationSizeEXT     );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthClipEnableEXT                      );
+    INIT_DISPATCH_ENTRY(vkCmdSetSampleLocationsEnableEXT                );
+    INIT_DISPATCH_ENTRY(vkCmdSetProvokingVertexModeEXT                  );
+    INIT_DISPATCH_ENTRY(vkCmdSetLineRasterizationModeEXT                );
+    INIT_DISPATCH_ENTRY(vkCmdSetLineStippleEnableEXT                    );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthClipNegativeOneToOneEXT            );
     INIT_DISPATCH_ENTRY(vkCmdSetVertexInputEXT);
 }
 

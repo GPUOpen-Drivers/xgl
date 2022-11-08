@@ -53,7 +53,8 @@ static bool IsUberFetchShaderEnabled(const Device* pDevice)
 
     if (pDevice->GetRuntimeSettings().enableUberFetchShader ||
         (pDevice->GetRuntimeSettings().enableEarlyCompile && (scheme == PipelineLayoutScheme::Compact)) ||
-        pDevice->IsExtensionEnabled(DeviceExtensions::EXT_GRAPHICS_PIPELINE_LIBRARY)
+        pDevice->IsExtensionEnabled(DeviceExtensions::EXT_GRAPHICS_PIPELINE_LIBRARY) ||
+        pDevice->IsExtensionEnabled(DeviceExtensions::EXT_VERTEX_INPUT_DYNAMIC_STATE)
     )
     {
         enabled = true;

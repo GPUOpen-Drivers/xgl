@@ -48,7 +48,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },

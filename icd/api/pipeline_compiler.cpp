@@ -64,9 +64,9 @@ namespace vk
 
 // =====================================================================================================================
 // Helper function used to check whether a specific dynamic state is set
-static bool IsDynamicStateEnabled(const uint32_t dynamicStateFlags, const DynamicStatesInternal internalState)
+static bool IsDynamicStateEnabled(const uint64_t dynamicStateFlags, const DynamicStatesInternal internalState)
 {
-    return dynamicStateFlags & (1 << static_cast<uint32_t>(internalState));
+    return dynamicStateFlags & (1ULL << static_cast<uint32_t>(internalState));
 }
 
 #if VKI_RAY_TRACING
@@ -1024,10 +1024,12 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
     Vkgc::PipelineShaderInfo* shaderInfos[ShaderStage::ShaderStageGfxCount] =
     {
+        &pCreateInfo->pipelineInfo.task,
         &pCreateInfo->pipelineInfo.vs,
         &pCreateInfo->pipelineInfo.tcs,
         &pCreateInfo->pipelineInfo.tes,
         &pCreateInfo->pipelineInfo.gs,
+        &pCreateInfo->pipelineInfo.mesh,
         &pCreateInfo->pipelineInfo.fs,
     };
 
@@ -1516,43 +1518,49 @@ VkResult PipelineCompiler::SetPipelineCreationFeedbackInfo(
 
         if (pPipelineCreationFeadbackCreateInfo->pipelineStageCreationFeedbackCount != 0)
         {
-        auto *stageCreationFeedbacks = pPipelineCreationFeadbackCreateInfo->pPipelineStageCreationFeedbacks;
-        if ((stageCount == 0) && (stageCreationFeedbacks != nullptr))
-        {
-            UpdatePipelineCreationFeedback(&stageCreationFeedbacks[0], pStageFeedback);
-        }
-        else if (stageCount != 0)
-        {
-            VK_ASSERT(stageCount <= ShaderStage::ShaderStageGfxCount);
-            for (uint32_t i = 0; i < stageCount; ++i)
+            auto *stageCreationFeedbacks = pPipelineCreationFeadbackCreateInfo->pPipelineStageCreationFeedbacks;
+            if ((stageCount == 0) && (stageCreationFeedbacks != nullptr))
             {
-                uint32_t feedbackStage = 0;
-                VK_ASSERT(pStages[i].sType == VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO);
-                switch (pStages[i].stage)
+                UpdatePipelineCreationFeedback(&stageCreationFeedbacks[0], pStageFeedback);
+            }
+            else if (stageCount != 0)
+            {
+                VK_ASSERT(stageCount <= ShaderStage::ShaderStageGfxCount);
+                for (uint32_t i = 0; i < stageCount; ++i)
                 {
-                    case VK_SHADER_STAGE_VERTEX_BIT:
-                        feedbackStage = ShaderStage::ShaderStageVertex;
-                        break;
-                    case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
-                        feedbackStage = ShaderStage::ShaderStageTessControl;
-                        break;
-                    case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
-                        feedbackStage = ShaderStage::ShaderStageTessEval;
-                        break;
-                    case VK_SHADER_STAGE_GEOMETRY_BIT:
-                        feedbackStage = ShaderStage::ShaderStageGeometry;
-                        break;
-                    case VK_SHADER_STAGE_FRAGMENT_BIT:
-                        feedbackStage = ShaderStage::ShaderStageFragment;
-                        break;
-                    default:
-                        VK_NEVER_CALLED();
-                        break;
+                    uint32_t feedbackStage = 0;
+                    VK_ASSERT(pStages[i].sType == VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO);
+                    switch (pStages[i].stage)
+                    {
+                        case VK_SHADER_STAGE_TASK_BIT_EXT:
+                            feedbackStage = ShaderStage::ShaderStageTask;
+                            break;
+                        case VK_SHADER_STAGE_VERTEX_BIT:
+                            feedbackStage = ShaderStage::ShaderStageVertex;
+                            break;
+                        case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
+                            feedbackStage = ShaderStage::ShaderStageTessControl;
+                            break;
+                        case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
+                            feedbackStage = ShaderStage::ShaderStageTessEval;
+                            break;
+                        case VK_SHADER_STAGE_GEOMETRY_BIT:
+                            feedbackStage = ShaderStage::ShaderStageGeometry;
+                            break;
+                        case VK_SHADER_STAGE_MESH_BIT_EXT:
+                            feedbackStage = ShaderStage::ShaderStageMesh;
+                            break;
+                        case VK_SHADER_STAGE_FRAGMENT_BIT:
+                            feedbackStage = ShaderStage::ShaderStageFragment;
+                            break;
+                        default:
+                            VK_NEVER_CALLED();
+                            break;
+                    }
+                    UpdatePipelineCreationFeedback(&stageCreationFeedbacks[i], &pStageFeedback[feedbackStage]);
                 }
-                UpdatePipelineCreationFeedback(&stageCreationFeedbacks[i], &pStageFeedback[feedbackStage]);
             }
         }
-    }
     }
     return VK_SUCCESS;
 }
@@ -1625,19 +1633,23 @@ static void CopyPipelineShadersInfo(
 
     Vkgc::PipelineShaderInfo* pShaderInfosDst[] =
     {
+        &pCreateInfo->pipelineInfo.task,
         &pCreateInfo->pipelineInfo.vs,
         &pCreateInfo->pipelineInfo.tcs,
         &pCreateInfo->pipelineInfo.tes,
         &pCreateInfo->pipelineInfo.gs,
+        &pCreateInfo->pipelineInfo.mesh,
         &pCreateInfo->pipelineInfo.fs,
     };
 
     const Vkgc::PipelineShaderInfo* pShaderInfosSrc[] =
     {
+        &libInfo.pipelineInfo.task,
         &libInfo.pipelineInfo.vs,
         &libInfo.pipelineInfo.tcs,
         &libInfo.pipelineInfo.tes,
         &libInfo.pipelineInfo.gs,
+        &libInfo.pipelineInfo.mesh,
         &libInfo.pipelineInfo.fs,
     };
 
@@ -1762,7 +1774,7 @@ static void CopyFragmentOutputInterfaceState(
 // =====================================================================================================================
 static void BuildRasterizationState(
     const VkPipelineRasterizationStateCreateInfo* pRs,
-    const uint32_t                                dynamicStateFlags,
+    const uint64_t                                dynamicStateFlags,
     bool*                                         pIsConservativeOverestimation,
     GraphicsPipelineBinaryCreateInfo*             pCreateInfo)
 {
@@ -1902,7 +1914,7 @@ static void BuildMultisampleStateInFoi(
 static void BuildViewportState(
     const Device*                            pDevice,
     const VkPipelineViewportStateCreateInfo* pVs,
-    const uint32_t                           dynamicStateFlags,
+    const uint64_t                           dynamicStateFlags,
     GraphicsPipelineBinaryCreateInfo*        pCreateInfo)
 {
     if (pVs != nullptr)
@@ -1915,12 +1927,19 @@ void PipelineCompiler::BuildNggState(
     const Device*                     pDevice,
     const VkShaderStageFlagBits       activeStages,
     const bool                        isConservativeOverestimation,
+    const bool                        unrestrictedPrimitiveTopology,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo)
 {
     const RuntimeSettings&       settings   = pDevice->GetRuntimeSettings();
     const Pal::DeviceProperties& deviceProp = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
 
-    if (deviceProp.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+    // NOTE: To support unrestrict dynamic primtive topology, we need full disable NGG on gfx10.
+    bool disallowNgg = unrestrictedPrimitiveTopology;
+    if (disallowNgg)
+    {
+        pCreateInfo->pipelineInfo.nggState.enableNgg = false;
+    }
+    else if (deviceProp.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
     {
         const bool hasGs   = activeStages & VK_SHADER_STAGE_GEOMETRY_BIT;
         const bool hasTess = activeStages & VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
@@ -2107,10 +2126,12 @@ static void BuildCompilerInfo(
 {
     Vkgc::PipelineShaderInfo* ppShaderInfoOut[] =
     {
+        &pCreateInfo->pipelineInfo.task,
         &pCreateInfo->pipelineInfo.vs,
         &pCreateInfo->pipelineInfo.tcs,
         &pCreateInfo->pipelineInfo.tes,
         &pCreateInfo->pipelineInfo.gs,
+        &pCreateInfo->pipelineInfo.mesh,
         &pCreateInfo->pipelineInfo.fs,
     };
 
@@ -2131,6 +2152,7 @@ template <uint32_t shaderMask>
 static void BuildPipelineShadersInfo(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
+    const uint32_t                         dynamicStateFlags,
     const GraphicsPipelineShaderStageInfo* pShaderInfo,
     GraphicsPipelineBinaryCreateInfo*      pCreateInfo)
 {
@@ -2142,10 +2164,12 @@ static void BuildPipelineShadersInfo(
 
     Vkgc::PipelineShaderInfo* ppShaderInfoOut[] =
     {
+        &pCreateInfo->pipelineInfo.task,
         &pCreateInfo->pipelineInfo.vs,
         &pCreateInfo->pipelineInfo.tcs,
         &pCreateInfo->pipelineInfo.tes,
         &pCreateInfo->pipelineInfo.gs,
+        &pCreateInfo->pipelineInfo.mesh,
         &pCreateInfo->pipelineInfo.fs,
     };
 
@@ -2181,7 +2205,8 @@ static void BuildPipelineShadersInfo(
     if (pDevice->GetRuntimeSettings().enableUberFetchShader ||
         pDevice->GetRuntimeSettings().enableEarlyCompile ||
         (((pCreateInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) == 0) &&
-         ((pCreateInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) != 0))
+         ((pCreateInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) != 0)) ||
+        (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInputExt) == true)
         )
     {
         pCreateInfo->pipelineInfo.enableUberFetchShader = true;
@@ -2292,7 +2317,7 @@ static void BuildColorBlendState(
 static void BuildVertexInputInterfaceState(
     const Device*                       pDevice,
     const VkGraphicsPipelineCreateInfo* pIn,
-    const uint32_t                      dynamicStateFlags,
+    const uint64_t                      dynamicStateFlags,
     const VkShaderStageFlagBits         activeStages,
     GraphicsPipelineBinaryCreateInfo*   pCreateInfo,
     VbBindingInfo*                      pVbInfo)
@@ -2303,15 +2328,25 @@ static void BuildVertexInputInterfaceState(
         pCreateInfo->pipelineInfo.iaState.disableVertexReuse = false;
     }
 
-    if (pIn->pVertexInputState)
+    if ((activeStages & VK_SHADER_STAGE_MESH_BIT_EXT) == 0)
     {
-        pCreateInfo->pipelineInfo.pVertexInput               = pIn->pVertexInputState;
-        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInputBindingStrideExt) == true)
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInputExt) == true)
         {
-            pCreateInfo->pipelineInfo.dynamicVertexStride = true;
+            // Vertex buffer table entry pointer is dependent on bindingTableSize in PAL.
+            // So, force size to max size when dynamic vertex input is enabled.
+            pVbInfo->bindingCount = 0;
+            pVbInfo->bindingTableSize = Pal::MaxVertexBuffers;
         }
+        else if (pIn->pVertexInputState)
+        {
+            pCreateInfo->pipelineInfo.pVertexInput               = pIn->pVertexInputState;
+            if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInputBindingStrideExt) == true)
+            {
+                pCreateInfo->pipelineInfo.dynamicVertexStride = true;
+            }
 
-        BuildLlpcVertexInputDescriptors(pDevice, pIn->pVertexInputState, pVbInfo);
+            BuildLlpcVertexInputDescriptors(pDevice, pIn->pVertexInputState, pVbInfo);
+        }
     }
 }
 
@@ -2320,12 +2355,15 @@ static void BuildPreRasterizationShaderState(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
     const GraphicsPipelineShaderStageInfo* pShaderInfo,
-    const uint32_t                         dynamicStateFlags,
+    const uint64_t                         dynamicStateFlags,
     const VkShaderStageFlagBits            activeStages,
     GraphicsPipelineBinaryCreateInfo*      pCreateInfo)
 {
     const RenderPass* pRenderPass                  = RenderPass::ObjectFromHandle(pIn->renderPass);
     bool              isConservativeOverestimation = false;
+    bool              unrestrictedPrimitiveTopology =
+        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::PrimitiveTopologyExt) &&
+        pDevice->GetEnabledFeatures().dynamicPrimitiveTopologyUnrestricted;
 
     BuildRasterizationState(pIn->pRasterizationState, dynamicStateFlags, &isConservativeOverestimation, pCreateInfo);
 
@@ -2334,7 +2372,8 @@ static void BuildPreRasterizationShaderState(
         BuildViewportState(pDevice, pIn->pViewportState, dynamicStateFlags, pCreateInfo);
     }
 
-    PipelineCompiler::BuildNggState(pDevice, activeStages, isConservativeOverestimation, pCreateInfo);
+    PipelineCompiler::BuildNggState(
+        pDevice, activeStages, isConservativeOverestimation, unrestrictedPrimitiveTopology, pCreateInfo);
 
     if (activeStages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
     {
@@ -2348,7 +2387,8 @@ static void BuildPreRasterizationShaderState(
 
         if (pPipelineTessellationStateCreateInfo != nullptr)
         {
-            pCreateInfo->pipelineInfo.iaState.patchControlPoints = pPipelineTessellationStateCreateInfo->patchControlPoints;
+            pCreateInfo->pipelineInfo.iaState.patchControlPoints =
+                pPipelineTessellationStateCreateInfo->patchControlPoints;
         }
 
         if (pPipelineTessellationDomainOriginStateCreateInfo)
@@ -2357,14 +2397,15 @@ static void BuildPreRasterizationShaderState(
             // framebuffer and image coordinate origins are in the upper left.  This has since been fixed, but
             // an extension exists to use the previous behavior.  Doing so with flat shading would likely appear
             // incorrect, but Vulkan specifies that the provoking vertex is undefined when tessellation is active.
-            if (pPipelineTessellationDomainOriginStateCreateInfo->domainOrigin == VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT)
+            if (pPipelineTessellationDomainOriginStateCreateInfo->domainOrigin ==
+                VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT)
             {
                 pCreateInfo->pipelineInfo.iaState.switchWinding = true;
             }
         }
     }
 
-    BuildPipelineShadersInfo<PrsShaderMask>(pDevice, pIn, pShaderInfo, pCreateInfo);
+    BuildPipelineShadersInfo<PrsShaderMask>(pDevice, pIn, dynamicStateFlags, pShaderInfo, pCreateInfo);
 
     BuildCompilerInfo(pDevice, pShaderInfo, PrsShaderMask, pCreateInfo);
 
@@ -2387,7 +2428,7 @@ static void BuildFragmentShaderState(
 
     BuildDepthStencilState(pIn->pDepthStencilState, pCreateInfo);
 
-    BuildPipelineShadersInfo<FgsShaderMask>(pDevice, pIn, pShaderInfo, pCreateInfo);
+    BuildPipelineShadersInfo<FgsShaderMask>(pDevice, pIn, 0, pShaderInfo, pCreateInfo);
 
     BuildCompilerInfo(pDevice, pShaderInfo, FgsShaderMask, pCreateInfo);
 }
@@ -2425,7 +2466,7 @@ static void BuildExecutablePipelineState(
     const VkGraphicsPipelineCreateInfo*    pIn,
     const GraphicsPipelineShaderStageInfo* pShaderInfo,
     const PipelineLayout*                  pPipelineLayout,
-    const uint32_t                         dynamicStateFlags,
+    const uint64_t                         dynamicStateFlags,
     GraphicsPipelineBinaryCreateInfo*      pCreateInfo,
     PipelineInternalBufferInfo*            pInternalBufferInfo)
 {
@@ -2451,10 +2492,12 @@ static void BuildExecutablePipelineState(
     const Vkgc::GraphicsPipelineBuildInfo& pipelineInfo = pCreateInfo->pipelineInfo;
     uint32_t shaderMask = 0;
     constexpr auto StageNone = static_cast<Vkgc::ShaderStageBit>(0);
+    shaderMask |= (pipelineInfo.task.pModuleData != nullptr) ? ShaderStageBit::ShaderStageTaskBit       : StageNone;
     shaderMask |= (pipelineInfo.vs.pModuleData  != nullptr) ? ShaderStageBit::ShaderStageVertexBit      : StageNone;
     shaderMask |= (pipelineInfo.tcs.pModuleData != nullptr) ? ShaderStageBit::ShaderStageTessControlBit : StageNone;
     shaderMask |= (pipelineInfo.tes.pModuleData != nullptr) ? ShaderStageBit::ShaderStageTessEvalBit    : StageNone;
     shaderMask |= (pipelineInfo.gs.pModuleData  != nullptr) ? ShaderStageBit::ShaderStageGeometryBit    : StageNone;
+    shaderMask |= (pipelineInfo.mesh.pModuleData != nullptr) ? ShaderStageBit::ShaderStageMeshBit       : StageNone;
     shaderMask |= (pipelineInfo.fs.pModuleData  != nullptr) ? ShaderStageBit::ShaderStageFragmentBit    : StageNone;
     BuildCompilerInfo(pDevice, pShaderInfo, shaderMask, pCreateInfo);
 
@@ -2471,10 +2514,12 @@ static void BuildExecutablePipelineState(
 #if VKI_RAY_TRACING
     const Vkgc::PipelineShaderInfo* shaderInfos[] =
     {
+        &pCreateInfo->pipelineInfo.task,
         &pCreateInfo->pipelineInfo.vs,
         &pCreateInfo->pipelineInfo.tcs,
         &pCreateInfo->pipelineInfo.tes,
         &pCreateInfo->pipelineInfo.gs,
+        &pCreateInfo->pipelineInfo.mesh,
         &pCreateInfo->pipelineInfo.fs,
     };
 
@@ -2546,7 +2591,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     uint32_t libFlags = libInfo.libFlags;
     VkShaderStageFlagBits activeStages = GraphicsPipelineCommon::GetActiveShaderStages(pIn, &libInfo);
-    uint32_t dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
+    uint64_t dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
 
     libInfo.libFlags = libFlags;
     pCreateInfo->flags = pIn->flags;
@@ -2608,10 +2653,12 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         {
             const Vkgc::PipelineShaderInfo* shaderInfos[] =
             {
+                &pCreateInfo->pipelineInfo.task,
                 &pCreateInfo->pipelineInfo.vs,
                 &pCreateInfo->pipelineInfo.tcs,
                 &pCreateInfo->pipelineInfo.tes,
                 &pCreateInfo->pipelineInfo.gs,
+                &pCreateInfo->pipelineInfo.mesh,
                 &pCreateInfo->pipelineInfo.fs,
             };
 
@@ -2911,6 +2958,9 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
 
     switch (stage)
     {
+    case ShaderStage::ShaderStageTask:
+        pShaderOptions->waveSize = settings.taskWaveSize;
+      break;
     case ShaderStage::ShaderStageVertex:
         pShaderOptions->waveSize = settings.vsWaveSize;
         break;
@@ -2923,6 +2973,9 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
     case ShaderStage::ShaderStageGeometry:
         pShaderOptions->waveSize = settings.gsWaveSize;
         break;
+    case ShaderStage::ShaderStageMesh:
+        pShaderOptions->waveSize = settings.meshWaveSize;
+      break;
     case ShaderStage::ShaderStageFragment:
         pShaderOptions->waveSize = settings.fsWaveSize;
         pShaderOptions->allowReZ = settings.allowReZ;
@@ -4146,10 +4199,12 @@ void PipelineCompiler::GetGraphicsPipelineCacheId(
         settingsHash,
         &hash);
 
+    hash.Update(pCreateInfo->pipelineInfo.task.options);
     hash.Update(pCreateInfo->pipelineInfo.vs.options);
     hash.Update(pCreateInfo->pipelineInfo.tes.options);
     hash.Update(pCreateInfo->pipelineInfo.tcs.options);
     hash.Update(pCreateInfo->pipelineInfo.gs.options);
+    hash.Update(pCreateInfo->pipelineInfo.mesh.options);
     hash.Update(pCreateInfo->pipelineInfo.fs.options);
     hash.Update(pCreateInfo->pipelineInfo.options);
     hash.Update(pCreateInfo->pipelineInfo.nggState);
@@ -4251,4 +4306,289 @@ bool PipelineCompiler::IsDefaultPipelineMetadata(
         (pPipelineMetadata->pointSizeUsed == false);
 }
 
+// =====================================================================================================================
+// Gets max size of uber-fetch shader internal data.
+size_t PipelineCompiler::GetMaxUberFetchShaderInternalDataSize()
+{
+    return sizeof(Vkgc::UberFetchShaderAttribInfo) * Vkgc::MaxVertexAttribs;
+}
+
+// =====================================================================================================================
+// Gets the uber-fetch shader internal data size according to vertex input info.
+size_t PipelineCompiler::GetUberFetchShaderInternalDataSize(
+    const VkPipelineVertexInputStateCreateInfo* pVertexInput)
+{
+    size_t memSize = 0;
+
+    if ((pVertexInput != nullptr) && (pVertexInput->vertexAttributeDescriptionCount > 0))
+    {
+        // Calculate internal data size
+        uint32_t maxLocation = 0;
+        for (uint32_t i = 0; i < pVertexInput->vertexAttributeDescriptionCount; i++)
+        {
+            auto pAttrib = &pVertexInput->pVertexAttributeDescriptions[i];
+
+            if (pAttrib->location >= maxLocation)
+            {
+                maxLocation = Formats::IsDvec3Or4(pAttrib->format) ? pAttrib->location + 1 : pAttrib->location;
+            }
+        }
+        VK_ASSERT(maxLocation < Vkgc::MaxVertexAttribs);
+
+        memSize = static_cast<uint32_t>(sizeof(Vkgc::UberFetchShaderAttribInfo) * (maxLocation + 1));
+    }
+
+    return memSize;
+}
+
+// =====================================================================================================================
+template<class VertexInputBinding>
+static const VertexInputBinding* GetVertexInputBinding(
+    uint32_t                  binding,
+    uint32_t                  vertexBindingDescriptionCount,
+    const VertexInputBinding* pVertexBindingDescriptions)
+{
+    const VertexInputBinding* pBinding = nullptr;
+    for (uint32_t i = 0; i < vertexBindingDescriptionCount; i++)
+    {
+        if (pVertexBindingDescriptions[i].binding == binding)
+        {
+            pBinding = &pVertexBindingDescriptions[i];
+            break;
+        }
+    }
+
+    VK_ASSERT(pBinding != nullptr);
+    return pBinding;
+}
+
+// =====================================================================================================================
+template<class VertexInputDivisor>
+static uint32_t GetVertexInputDivisor(
+    uint32_t                  binding,
+    uint32_t                  vertexDivisorDescriptionCount,
+    const VertexInputDivisor* pVertexDivisorDescriptions)
+{
+    uint32_t divisor = 1;
+
+    for (uint32_t i = 0; i < vertexDivisorDescriptionCount; i++)
+    {
+        if (pVertexDivisorDescriptions[i].binding == binding)
+        {
+            divisor = pVertexDivisorDescriptions[i].divisor;
+            break;
+        }
+    }
+
+    return divisor;
+}
+
+// =====================================================================================================================
+// Implementation of build uber-fetch shdaer internal data.
+template<class VertexInputBinding, class VertexInputAttribute, class VertexInputDivisor>
+uint32_t PipelineCompiler::BuildUberFetchShaderInternalDataImp(
+    uint32_t                    vertexBindingDescriptionCount,
+    const VertexInputBinding*   pVertexBindingDescriptions,
+    uint32_t                    vertexAttributeDescriptionCount,
+    const VertexInputAttribute* pVertexAttributeDescriptions,
+    uint32_t                    vertexDivisorDescriptionCount,
+    const VertexInputDivisor*   pVertexDivisorDescriptions,
+    bool                        isDynamicStride,
+    void*                       pUberFetchShaderInternalData) const
+{
+    const auto& settings = m_pPhysicalDevice->GetRuntimeSettings();
+
+    bool requirePerIntanceFetch = false;
+    bool requirePerCompFetch = false;
+
+    uint32_t maxLocation = 0;
+
+    for (uint32_t i = 0; i < vertexAttributeDescriptionCount; i++)
+    {
+        Vkgc::UberFetchShaderAttribInfo attribInfo = {};
+        auto pAttrib  = &pVertexAttributeDescriptions[i];
+        auto pBinding = GetVertexInputBinding(pAttrib->binding, vertexBindingDescriptionCount, pVertexBindingDescriptions);
+        auto attribFormatInfo =
+            GetUberFetchShaderFormatInfo(&m_uberFetchShaderInfoFormatMap, pAttrib->format, pBinding->stride == 0);
+        void* pAttribInternalData =
+            Util::VoidPtrInc(pUberFetchShaderInternalData, sizeof(Vkgc::UberFetchShaderAttribInfo) * pAttrib->location);
+
+        if (pAttrib->location >= maxLocation)
+        {
+            maxLocation = Formats::IsDvec3Or4(pAttrib->format) ? pAttrib->location + 1 : pAttrib->location;
+        }
+
+        VK_ASSERT(attribFormatInfo.bufferFormat != 0);
+        attribInfo.binding = pAttrib->binding;
+        attribInfo.offset = pAttrib->offset;
+        attribInfo.componentMask = (1 << attribFormatInfo.componentCount) - 1;
+        attribInfo.componentSize = attribFormatInfo.componentSize;
+        if ((attribFormatInfo.unpackedBufferFormat == 0) ||
+            (attribFormatInfo.isPacked == false))
+        {
+            // This format only support one kind load (either packed only or per-channel only)
+            attribInfo.bufferFormat = attribFormatInfo.bufferFormat;
+            attribInfo.isPacked = attribFormatInfo.isPacked;
+        }
+        else
+        {
+            uint32_t stride = pBinding->stride;
+            if (isDynamicStride)
+            {
+                stride = settings.forceAlignedForDynamicStride ? 0 : 1;
+            }
+
+            if (((stride % attribFormatInfo.alignment) == 0) &&
+                ((pAttrib->offset % attribFormatInfo.alignment) == 0))
+            {
+                attribInfo.bufferFormat = attribFormatInfo.bufferFormat;
+                attribInfo.isPacked = true;
+            }
+            else
+            {
+                attribInfo.bufferFormat = attribFormatInfo.unpackedBufferFormat;
+                attribInfo.isPacked = false;
+            }
+        }
+
+        switch (pAttrib->format)
+        {
+        case VK_FORMAT_B8G8R8A8_UNORM:
+        case VK_FORMAT_B8G8R8A8_SNORM:
+        case VK_FORMAT_B8G8R8A8_USCALED:
+        case VK_FORMAT_B8G8R8A8_SSCALED:
+        case VK_FORMAT_B8G8R8A8_UINT:
+        case VK_FORMAT_B8G8R8A8_SINT:
+            attribInfo.isBgra = true;
+            break;
+        default:
+            break;
+        }
+
+        attribInfo.isFixed = false;
+        attribInfo.isCurrent = false;
+        if (pBinding->inputRate == VK_VERTEX_INPUT_RATE_VERTEX)
+        {
+            attribInfo.perInstance = false;
+            attribInfo.instanceDivisor = 0;
+        }
+        else
+        {
+            attribInfo.perInstance = true;
+            uint32_t stepRate = GetVertexInputDivisor(
+                pAttrib->binding, vertexDivisorDescriptionCount, pVertexDivisorDescriptions);
+
+            if (stepRate == 0)
+            {
+                attribInfo.instanceDivisor = 0;
+            }
+            else
+            {
+                union
+                {
+                    float    divisorRcpf;
+                    uint32_t divisorRcpU;
+                };
+                divisorRcpf = 1.0000f / stepRate;
+                attribInfo.instanceDivisor = divisorRcpU;
+            }
+        }
+
+        memcpy(pAttribInternalData, &attribInfo, sizeof(attribInfo));
+        if (Formats::IsDvec3Or4(pAttrib->format))
+        {
+            attribInfo.offset += 16;
+            memcpy(Util::VoidPtrInc(pAttribInternalData, sizeof(Vkgc::UberFetchShaderAttribInfo)),
+                &attribInfo,
+                sizeof(attribInfo));
+        }
+
+        if (attribInfo.perInstance)
+        {
+            requirePerIntanceFetch = true;
+        }
+
+        if (attribInfo.isPacked == false)
+        {
+            requirePerCompFetch = true;
+        }
+    }
+
+    bool success = true;
+    if (settings.disablePerInstanceFetch)
+    {
+        if (requirePerIntanceFetch)
+        {
+            success = false;
+        }
+    }
+
+    if (settings.disablePerCompFetch)
+    {
+        if (requirePerCompFetch)
+        {
+            success = false;
+        }
+    }
+
+    uint32_t internalMemSize = 0;
+    if (success && (vertexAttributeDescriptionCount > 0))
+    {
+        internalMemSize = static_cast<uint32_t>(sizeof(Vkgc::UberFetchShaderAttribInfo) * (maxLocation + 1));
+    }
+
+    return internalMemSize;
+}
+
+// =====================================================================================================================
+// Builds uber-fetch shader internal data according to dynamic vertex input info.
+uint32_t PipelineCompiler::BuildUberFetchShaderInternalData(
+    uint32_t                                     vertexBindingDescriptionCount,
+    const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
+    uint32_t                                     vertexAttributeDescriptionCount,
+    const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions,
+    void*                                        pUberFetchShaderInternalData) const
+{
+    return BuildUberFetchShaderInternalDataImp(vertexBindingDescriptionCount,
+        pVertexBindingDescriptions,
+        vertexAttributeDescriptionCount,
+        pVertexAttributeDescriptions,
+        vertexBindingDescriptionCount,
+        pVertexBindingDescriptions,
+        false,
+        pUberFetchShaderInternalData);
+}
+
+// =====================================================================================================================
+// Build uber-fetch shder internal data according to pipeline vertex input info.
+uint32_t PipelineCompiler::BuildUberFetchShaderInternalData(
+    const VkPipelineVertexInputStateCreateInfo* pVertexInput,
+    bool                                        dynamicStride,
+    void*                                       pUberFetchShaderInternalData) const
+{
+    const VkPipelineVertexInputDivisorStateCreateInfoEXT* pVertexDivisor = nullptr;
+    const vk::VkStructHeader* pStructHeader =
+        reinterpret_cast<const vk::VkStructHeader*>(pVertexInput->pNext);
+    while (pStructHeader != nullptr)
+    {
+        if (pStructHeader->sType == VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT)
+        {
+            pVertexDivisor = reinterpret_cast<const VkPipelineVertexInputDivisorStateCreateInfoEXT*>(pStructHeader);
+            break;
+        }
+        else
+        {
+            pStructHeader = pStructHeader->pNext;
+        }
+    }
+
+    return BuildUberFetchShaderInternalDataImp(pVertexInput->vertexBindingDescriptionCount,
+                                               pVertexInput->pVertexBindingDescriptions,
+                                               pVertexInput->vertexAttributeDescriptionCount,
+                                               pVertexInput->pVertexAttributeDescriptions,
+                                               pVertexDivisor != nullptr ? pVertexDivisor->vertexBindingDivisorCount : 0,
+                                               pVertexDivisor != nullptr ? pVertexDivisor->pVertexBindingDivisors : nullptr,
+                                               dynamicStride,
+                                               pUberFetchShaderInternalData);
+}
 }

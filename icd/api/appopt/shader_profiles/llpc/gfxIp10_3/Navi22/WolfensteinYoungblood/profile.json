@@ -9,6 +9,35 @@
           "waveSize": 64
         }
       }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x6b7a33f6880d2379 1647af746badb1e4"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": true,
+          "vgprLimit": 72,
+          "ldsSpillLimitDwords": 4096
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x623c2a0008628e23 c0e71a4aa2eb148"
+        }
+      },
+      "action": {
+        "cs": {
+          "maxWavesPerCu": 14,
+          "useSiScheduler": true,
+          "unrollThreshold": 1600
+        }
+      }
     }
   ]
 }

@@ -39,25 +39,29 @@ namespace vk
 // =====================================================================================================================
 // Allocate shader converter and patch's output, it is an callback function.
 //
-// NOTE: It must be called only once for each shader conversion or IL patching. The base address of allocated memory
+// NOTE: It is called for each shader conversion or IL patching. The base address of allocated memory
 // is stored in user data's ppSystemData.
 void* VKAPI_CALL AllocateShaderOutput(
     void*     pInstance,
     void*     pUserData,
     size_t    size)
 {
-    void** ppSystemData = reinterpret_cast<void**>(pUserData);
-    // Make sure this function is called only once
-    VK_ASSERT(ppSystemData != nullptr);
-    VK_ASSERT(*ppSystemData == nullptr);
-
     // Allocate system memory
-    *ppSystemData = reinterpret_cast<Instance*>(pInstance)->AllocMem(
+    void* pSystemData = reinterpret_cast<Instance*>(pInstance)->AllocMem(
         size,
         VK_DEFAULT_MEM_ALIGN,
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
-    return *ppSystemData;
+    void** ppUserData = reinterpret_cast<void**>(pUserData);
+
+    if (ppUserData != nullptr)
+    {
+        // Make sure this function is called only once
+        VK_ASSERT(*ppUserData == nullptr);
+        *ppUserData = pSystemData;
+    }
+
+    return pSystemData;
 }
 
 // =====================================================================================================================

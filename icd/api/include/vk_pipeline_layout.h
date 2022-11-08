@@ -139,6 +139,24 @@ struct UserDataLayout
 };
 
 // =====================================================================================================================
+inline uint32_t GetUberFetchShaderUserData(
+    const UserDataLayout* pLayout)
+{
+    return (pLayout->scheme == PipelineLayoutScheme::Compact) ?
+        pLayout->compact.uberFetchConstBufRegBase : pLayout->indirect.uberFetchConstBufRegBase;
+}
+
+// =====================================================================================================================
+inline void SetUberFetchShaderUserData(
+    UserDataLayout* pLayout,
+    uint32_t        regBase)
+{
+    uint32_t* pRegBaseAddr = (pLayout->scheme == PipelineLayoutScheme::Compact) ?
+        &pLayout->compact.uberFetchConstBufRegBase : &pLayout->indirect.uberFetchConstBufRegBase;
+    *pRegBaseAddr = regBase;
+}
+
+// =====================================================================================================================
 // API implementation of Vulkan pipeline layout objects.
 //
 // Pipeline layout objects provide composite information of all descriptor set layouts across all pipeline

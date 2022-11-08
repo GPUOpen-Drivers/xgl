@@ -987,6 +987,26 @@ void RenderPassBuilder::PostProcessSyncPoint(
         {
             pSyncPoint->barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
         }
+
+        if (pSyncPoint->barrier.srcStageMask == 0)
+        {
+            if(pSyncPoint->transitions.NumElements() > 0)
+            {
+                // RPBarrierInfo consists of one set of src/dst stage masks which currently applies to each transition
+                // in RPSyncPoint(). PAL now supports specifying src/dst stage masks for each individual image
+                // transition. Since with this change we will loop over each transition to check for undefined 'prev'
+                // layout, there might be some cases where we add unnecessary stalls for at least some transitions.
+                for (auto it = pSyncPoint->transitions.Begin(); it.Get() != nullptr; it.Next())
+                {
+                    RPTransitionInfo* info = it.Get();
+
+                    if ((info->prevLayout.layout == VK_IMAGE_LAYOUT_UNDEFINED))
+                    {
+                        pSyncPoint->barrier.srcStageMask |= pSyncPoint->barrier.dstStageMask;
+                    }
+                }
+            }
+        }
     }
 }
 

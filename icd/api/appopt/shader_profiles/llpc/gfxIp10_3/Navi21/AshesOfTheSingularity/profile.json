@@ -12,7 +12,7 @@
           "waveSize": 32,
           "wgpMode": 1,
           "maxWavesPerCu": 12,
-          "useSiScheduler": 1,
+          "useSiScheduler": true,
           "enableLoadScalarizer": true
         }
       }
@@ -29,7 +29,7 @@
           "waveSize": 32,
           "wgpMode": 1,
           "maxWavesPerCu": 10,
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -80,7 +80,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     }

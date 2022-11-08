@@ -9,7 +9,7 @@
       "action": {
         "cs": {
           "wgpMode": 1,
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },

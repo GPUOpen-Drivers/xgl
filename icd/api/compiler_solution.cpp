@@ -79,10 +79,12 @@ const char* CompilerSolution::GetShaderStageName(
 
     static const char* ShaderStageNames[] =
     {
+        "Task    ",
         "Vertex  ",
         "Tessellation control",
         "Tessellation evaluation",
         "Geometry",
+        "Mesh    ",
         "Fragment",
         "Compute ",
 #if VKI_RAY_TRACING

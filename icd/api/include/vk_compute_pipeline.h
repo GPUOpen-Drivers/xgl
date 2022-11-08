@@ -98,14 +98,14 @@ protected:
         bool                                 hasRayTracing,
         uint32_t                             dispatchRaysUserDataOffset,
 #endif
-        uint32_t                             staticStateMask,
+        uint64_t                             staticStateMask,
         uint64_t                             apiHash);
 
     // Converted creation info parameters of the Vulkan compute pipeline
     struct CreateInfo
     {
         ImmedInfo                              immedInfo;
-        uint32_t                               staticStateMask;
+        uint64_t                               staticStateMask;
         Pal::ComputePipelineCreateInfo         pipeline;
         const PipelineLayout*                  pLayout;
     };

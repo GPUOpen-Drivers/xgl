@@ -107,6 +107,7 @@ enum class DynamicStatesInternal : uint32_t
     RasterizerDiscardEnableExt,
     PrimitiveRestartEnableExt,
     DepthBiasEnableExt,
+    VertexInputExt,
     DynamicStatesInternalCount
 };
 
@@ -150,10 +151,10 @@ public:
     // VK_DYNAMIC_STATE_*) should be programmed by the pipeline when it is bound (instead of by the application via
     // vkCmdSet*).
     bool ContainsStaticState(DynamicStatesInternal dynamicState) const
-        { return ((m_staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) != 0); }
+        { return ((m_staticStateMask & (1ULL << static_cast<uint32_t>(dynamicState))) != 0); }
 
     bool ContainsDynamicState(DynamicStatesInternal dynamicState) const
-        { return ((m_staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) == 0); }
+        { return ((m_staticStateMask & (1ULL << static_cast<uint32_t>(dynamicState))) == 0); }
 
     uint32_t GetAvailableAmdIlSymbol() const { return m_availableAmdIlSymbol; }
 
@@ -183,7 +184,7 @@ protected:
         Pal::IPipeline**      pPalPipeline,
         const PipelineLayout* pLayout,
         PipelineBinaryInfo*   pBinary,
-        uint32_t              staticStateMask,
+        uint64_t              staticStateMask,
 #if VKI_RAY_TRACING
         uint32_t              dispatchRaysUserDataOffset,
 #endif
@@ -229,7 +230,7 @@ protected:
     UserDataLayout                     m_userDataLayout;
     Pal::IPipeline*                    m_pPalPipeline[MaxPalDevices];
     uint64_t                           m_palPipelineHash; // Unique hash for Pal::Pipeline
-    uint32_t                           m_staticStateMask; // Bitfield to detect which subset of pipeline state is
+    uint64_t                           m_staticStateMask; // Bitfield to detect which subset of pipeline state is
                                                           // static (written at bind-time as opposed to via vkCmd*).
     uint64_t                           m_apiHash;
     VkPipelineBindPoint                m_type;

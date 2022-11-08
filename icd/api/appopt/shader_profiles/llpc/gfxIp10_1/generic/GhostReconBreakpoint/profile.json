@@ -22,7 +22,7 @@
       "action": {
         "ps": {
           "waveSize": 32,
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },
@@ -34,7 +34,7 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": 1
+          "useSiScheduler": true
         }
       }
     },

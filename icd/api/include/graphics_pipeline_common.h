@@ -173,6 +173,7 @@ struct GraphicsPipelineBinaryInfo
 #if VKI_RAY_TRACING
     bool                        hasRayTracing;
 #endif
+    bool                        hasMesh;
 };
 
 // =====================================================================================================================
@@ -238,7 +239,7 @@ public:
         uint32_t*                                   pDepthSampleCount);
 
     // Get the dynamics states specified by API info
-    static uint32_t GetDynamicStateFlags(
+    static uint64_t GetDynamicStateFlags(
         const VkPipelineDynamicStateCreateInfo* pDy,
         const GraphicsPipelineLibraryInfo*      pLibInfo);
 
