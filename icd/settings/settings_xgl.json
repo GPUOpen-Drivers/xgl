@@ -4056,51 +4056,6 @@
       "Scope": "Driver"
     },
     {
-      "Description": "This factor decides how much more time to build BVH to increase quality for LTD.  1.0 is highest quality.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": "1.0f"
-      },
-      "Type": "float",
-      "Name": "LtdQualityFactorFastTrace",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "This factor decides how much more time to build BVH to increase quality for LTD.  1.0 is highest quality.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": "0.1f"
-      },
-      "Type": "float",
-      "Name": "LtdQualityFactorFastBuild",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "This factor decides how much more time to build BVH to increase quality for LTD.  1.0 is highest quality.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": "0.4f"
-      },
-      "Type": "float",
-      "Name": "LtdQualityFactorDefaultBuild",
-      "Scope": "Driver"
-    },
-    {
       "Description": "Number of size bits in morton codes.  [0-8] bits.",
       "Tags": [
         "Ray Tracing"

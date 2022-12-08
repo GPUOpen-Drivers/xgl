@@ -78,10 +78,44 @@ struct PipelineCreationFeedback
 };
 
 // =====================================================================================================================
+// Information required by the VB table manager that is defined by the graphics pipeline
+struct VbBindingInfo
+{
+    uint32_t bindingTableSize;
+    uint32_t bindingCount;
+
+    struct
+    {
+        uint32_t slot;
+        uint32_t byteStride;
+    } bindings[Pal::MaxVertexBuffers];
+};
+
+constexpr uint32_t MaxPipelineInternalBufferCount = 4;
+struct InternalBufferEntry
+{
+    uint32_t userDataOffset;
+    uint32_t bufferOffset;
+};
+
+struct PipelineInternalBufferInfo
+{
+    uint32_t            internalBufferCount;
+    InternalBufferEntry internalBufferEntries[MaxPipelineInternalBufferCount];
+    uint32_t            dataSize;
+    void* pData;
+};
+
+// =====================================================================================================================
 // Represents pipeline metadata included in the pipeline ELF.
 struct PipelineMetadata
 {
-    bool     pointSizeUsed;
+
+    bool                       pointSizeUsed;
+    VbBindingInfo              vbInfo;
+    bool                       enableEarlyCompile;
+    bool                       enableUberFetchShader;
+    PipelineInternalBufferInfo internalBufferInfo;
 };
 
 // =====================================================================================================================
@@ -93,8 +127,7 @@ struct GraphicsPipelineBinaryCreateInfo
     size_t                                 mappingBufferSize;
     VkPipelineCreateFlags                  flags;
     VkFormat                               dbFormat;
-    ShaderOptimizerKey                     shaderProfileKeys[ShaderStage::ShaderStageGfxCount];
-    PipelineOptimizerKey                   pipelineProfileKey;
+    PipelineOptimizerKey*                  pPipelineProfileKey;
     PipelineCompilerType                   compilerType;
     bool                                   linkTimeOptimization;
     Vkgc::BinaryData                       earlyElfPackage[ShaderStage::ShaderStageGfxCount];
@@ -105,7 +138,7 @@ struct GraphicsPipelineBinaryCreateInfo
     VkGraphicsPipelineLibraryFlagsEXT      libFlags;    // These flags indicate the section(s) included in pipeline
                                                         // (library).  Including the sections in the referenced
                                                         // libraries.
-    PipelineMetadata                       pipelineMetadata;
+    PipelineMetadata*                      pBinaryMetadata;
 };
 
 // =====================================================================================================================
@@ -116,8 +149,7 @@ struct ComputePipelineBinaryCreateInfo
     void*                                  pMappingBuffer;
     size_t                                 mappingBufferSize;
     VkPipelineCreateFlags                  flags;
-    ShaderOptimizerKey                     shaderProfileKey;
-    PipelineOptimizerKey                   pipelineProfileKey;
+    const PipelineOptimizerKey*            pPipelineProfileKey;
     PipelineCompilerType                   compilerType;
     FreeCompilerBinary                     freeCompilerBinary;
     PipelineCreationFeedback               pipelineFeedback;
@@ -133,7 +165,7 @@ struct RayTracingPipelineBinaryCreateInfo
     void*                                  pMappingBuffer;
     size_t                                 mappingBufferSize;
     VkPipelineCreateFlags                  flags;
-    PipelineOptimizerKey                   pipelineProfileKey;
+    const PipelineOptimizerKey*            pPipelineProfileKey;
     PipelineCompilerType                   compilerType;
     FreeCompilerBinary                     freeCompilerBinary;
     PipelineCreationFeedback               pipelineFeedback;

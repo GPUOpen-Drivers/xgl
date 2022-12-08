@@ -58,6 +58,10 @@ struct DeferGraphicsPipelineCreateInfo
     GraphicsPipelineBinaryCreateInfo binaryCreateInfo;
     GraphicsPipelineShaderStageInfo  shaderStageInfo;
     GraphicsPipelineObjectCreateInfo objectCreateInfo;
+    Util::MetroHash::Hash            elfHash;
+    ShaderOptimizerKey               shaderOptimizerKeys[ShaderStage::ShaderStageGfxCount];
+    PipelineOptimizerKey             pipelineOptimizerKey;
+    PipelineMetadata                 binaryMetadata;
 };
 
 // =====================================================================================================================
@@ -205,15 +209,8 @@ protected:
         const PipelineLayout*                  pLayout,
         const GraphicsPipelineObjectImmedInfo& immedInfo,
         uint64_t                               staticStateMask,
-        bool                                   bindDepthStencilObject,
-        bool                                   bindTriangleRasterState,
-        bool                                   bindStencilRefMasks,
-        bool                                   bindInputAssemblyState,
-        bool                                   force1x1ShaderRate,
-        bool                                   customSampleLocations,
-        bool                                   isPointSizeUsed,
+        GraphicsPipelineObjectFlags            flags,
 #if VKI_RAY_TRACING
-        bool                                   hasRayTracing,
         uint32_t                               dispatchRaysUserDataOffset,
 #endif
         const VbBindingInfo&                   vbInfo,
@@ -222,7 +219,6 @@ protected:
         Pal::IColorBlendState**                pPalColorBlend,
         Pal::IDepthStencilState**              pPalDepthStencil,
         uint32_t                               coverageSamples,
-        bool                                   viewIndexFromDeviceIndex,
         PipelineBinaryInfo*                    pBinary,
         uint64_t                               apiHash,
         Util::MetroHash64*                     pPalPipelineHasher);
@@ -235,12 +231,15 @@ protected:
         const VkGraphicsPipelineCreateInfo*            pCreateInfo,
         const GraphicsPipelineShaderStageInfo*         pShaderInfo,
         const PipelineLayout*                          pPipelineLayout,
+        const Util::MetroHash::Hash*                   pElfHash,
+        PipelineOptimizerKey*                          pPipelineOptimizerKey,
         GraphicsPipelineBinaryCreateInfo*              pBinaryCreateInfo,
         PipelineCache*                                 pPipelineCache,
         const VkPipelineCreationFeedbackCreateInfoEXT* pCreationFeedbackInfo,
         Util::MetroHash::Hash*                         pCacheIds,
         size_t*                                        pPipelineBinarySizes,
-        const void**                                   pPipelineBinaries);
+        const void**                                   ppPipelineBinaries,
+        PipelineMetadata*                              pBinaryMetadata);
 
     static VkResult CreatePipelineObjects(
         Device*                             pDevice,
@@ -253,6 +252,7 @@ protected:
         const void**                        pPipelineBinaries,
         PipelineCache*                      pPipelineCache,
         const Util::MetroHash::Hash*        pCacheIds,
+        uint64_t                            apiPsoHash,
         GraphicsPipelineObjectCreateInfo*   pObjectCreateInfo,
         VkPipeline*                         pPipeline);
 
@@ -264,7 +264,8 @@ private:
         PipelineCache*                    pPipelineCache,
         GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
         GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
-        GraphicsPipelineObjectCreateInfo* pObjectCreateInfo);
+        GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
+        Util::MetroHash::Hash*            pElfHash);
 
     static VkResult CreatePalPipelineObjects(
         Device*                           pDevice,
@@ -293,7 +294,8 @@ private:
         PipelineCache*                    pPipelineCache,
         GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
         GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
-        GraphicsPipelineObjectCreateInfo* pObjectCreateInfo);
+        GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
+        Util::MetroHash::Hash*            pElfHash);
 
     static void ExecuteDeferCreateOptimizedPipeline(void* pPayload);
 
@@ -307,21 +309,8 @@ private:
     uint64_t                        m_optimizedPipelineHash;           // Pipeline hash of optimized PAL pipelines
     Util::Mutex                     m_pipelineSwitchLock;              // Lock for optimized pipeline and default pipeline
     DeferredCompileWorkload         m_deferWorkload;                   // Workload of deferred compiled
-    union
-    {
-        uint8 value;
-        struct
-        {
-            uint8 viewIndexFromDeviceIndex : 1;
-            uint8 bindDepthStencilObject   : 1;
-            uint8 bindTriangleRasterState  : 1;
-            uint8 bindStencilRefMasks      : 1;
-            uint8 bindInputAssemblyState   : 1;
-            uint8 customSampleLocations    : 1;
-            uint8 force1x1ShaderRate       : 1;
-            uint8 isPointSizeUsed          : 1;
-        };
-    } m_flags;
+
+    GraphicsPipelineObjectFlags     m_flags;
 };
 
 } // namespace vk

@@ -1,0 +1,16 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "vs": {
+          "codeHash": "0x80b79a74ea090a2f bb2bf534c38301fe"
+        }
+      },
+      "action": {
+        "vs": {
+          "aggressiveInvariantLoads": "DisableOptimization"
+        }
+      }
+    }
+  ]
+}

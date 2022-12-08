@@ -34,7 +34,7 @@
       },
       "action": {
         "ps": {
-          "disableLoopUnrolls": 1,
+          "disableLoopUnrolls": true,
           "useSiScheduler": true
         }
       }
@@ -48,7 +48,7 @@
       },
       "action": {
         "ps": {
-          "disableLoopUnrolls": 1
+          "disableLoopUnrolls": true
         }
       }
     },
@@ -61,7 +61,7 @@
       },
       "action": {
         "ps": {
-          "disableLoopUnrolls": 1
+          "disableLoopUnrolls": true
         }
       }
     },
@@ -127,7 +127,7 @@
       },
       "action": {
         "ps": {
-          "disableLoopUnrolls": 1
+          "disableLoopUnrolls": true
         }
       }
     },

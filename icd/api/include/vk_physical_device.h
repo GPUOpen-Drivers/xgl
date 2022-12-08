@@ -735,6 +735,9 @@ public:
     const DeviceExtensions::Supported& GetAllowedExtensions() const
         { return m_allowedExtensions; }
 
+    const DeviceExtensions::Supported& GetIgnoredExtensions() const
+        { return m_ignoredExtensions; }
+
     bool IsExtensionSupported(DeviceExtensions::ExtensionId id) const
         { return m_supportedExtensions.IsExtensionSupported(id); }
 
@@ -857,6 +860,7 @@ protected:
 
     DeviceExtensions::Supported      m_supportedExtensions;
     DeviceExtensions::Supported      m_allowedExtensions;
+    DeviceExtensions::Supported      m_ignoredExtensions;
 
     // Device properties related to the VK_AMD_gpu_perf_api_interface extension
     PhysicalDeviceGpaProperties      m_gpaProps;

@@ -514,6 +514,13 @@ void Image::ConvertImageCreateInfo(
         pPalCreateInfo->metadataMode = Pal::MetadataMode::Disabled;
     }
 
+    // Disable metadata for avoiding corruption if one image is sampled and rendered
+    // in the same draw.
+    if ((pCreateInfo->usage & VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT) != 0)
+    {
+        pPalCreateInfo->metadataMode = Pal::MetadataMode::Disabled;
+    }
+
     // Apply per application (or run-time) options
     pDevice->GetResourceOptimizer()->OverrideImageCreateInfo(resourceKey, pPalCreateInfo);
 }

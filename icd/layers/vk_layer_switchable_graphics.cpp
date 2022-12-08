@@ -103,7 +103,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance_SG(
 #if defined(__unix__)
     const char* pEnv = getenv("AMD_VULKAN_ICD");
     const bool preferRadv = pEnv && (strcmp(pEnv, "RADV") == 0);
-    if ((preferRadv == false) && (getenv("VK_DRIVER_FILES") == nullptr) && (getenv("VK_ICD_FILENAMES") == nullptr))
+    if ((preferRadv == false) &&
+        (((getenv("VK_DRIVER_FILES") == nullptr) && (getenv("VK_ICD_FILENAMES") == nullptr)) ||
+         (getenv("STEAM_RUNTIME_LIBRARY_PATH") != nullptr)))
     {
         setenv("RADV_FORCE_FAMILY", "navi10", 0);
     }

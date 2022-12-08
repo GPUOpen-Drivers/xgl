@@ -213,6 +213,8 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
     void* pLlpcPipelineBuffer = nullptr;
 
+    const auto& pipelineProfileKey = *pCreateInfo->pPipelineProfileKey;
+
     int64_t startTime = Util::GetPerfCpuTime();
     auto pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
     pPipelineBuildInfo->pInstance      = pInstance;
@@ -234,8 +236,8 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     {
         for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
         {
-            ppShadersInfo[stage]->options.clientHash.lower = pCreateInfo->pipelineProfileKey.pShaders[stage].codeHash.lower;
-            ppShadersInfo[stage]->options.clientHash.upper = pCreateInfo->pipelineProfileKey.pShaders[stage].codeHash.upper;
+            ppShadersInfo[stage]->options.clientHash.lower = pipelineProfileKey.pShaders[stage].codeHash.lower;
+            ppShadersInfo[stage]->options.clientHash.upper = pipelineProfileKey.pShaders[stage].codeHash.upper;
         }
     }
 
@@ -333,12 +335,12 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
         if (result == VK_SUCCESS)
         {
             char                      extraInfo[256] = {};
-            const ShaderOptimizerKey* pShaderKey     = pCreateInfo->pipelineProfileKey.pShaders;
+            const ShaderOptimizerKey* pShaderKey     = pipelineProfileKey.pShaders;
 
             Util::Snprintf(extraInfo, sizeof(extraInfo), "\n;PipelineOptimizer\n");
             Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
 
-            for (uint32_t i = 0; i < pCreateInfo->pipelineProfileKey.shaderCount; i++)
+            for (uint32_t i = 0; i < pipelineProfileKey.shaderCount; i++)
             {
                 if (pShaderKey[i].codeHash.upper || pShaderKey[i].codeHash.lower)
                 {
@@ -419,6 +421,8 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
 
     int64_t startTime = Util::GetPerfCpuTime();
 
+    const auto& pipelineProfileKey = *pCreateInfo->pPipelineProfileKey;
+
     // Build the LLPC pipeline
     Llpc::ComputePipelineBuildOut  pipelineOut         = {};
     void*                          pLlpcPipelineBuffer = nullptr;
@@ -441,12 +445,12 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     const auto threadGroupSwizzleMode =
         pDevice->GetShaderOptimizer()->OverrideThreadGroupSwizzleMode(
             ShaderStageCompute,
-            pCreateInfo->pipelineProfileKey);
+            pipelineProfileKey);
 
     const bool threadIdSwizzleMode =
         pDevice->GetShaderOptimizer()->OverrideThreadIdSwizzleMode(
             ShaderStageCompute,
-            pCreateInfo->pipelineProfileKey);
+            pipelineProfileKey);
 
     uint32_t overrideShaderThreadGroupSizeX = 0;
     uint32_t overrideShaderThreadGroupSizeY = 0;
@@ -454,7 +458,7 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
 
     pDevice->GetShaderOptimizer()->OverrideShaderThreadGroupSize(
             ShaderStageCompute,
-            pCreateInfo->pipelineProfileKey,
+            pipelineProfileKey,
             &overrideShaderThreadGroupSizeX,
             &overrideShaderThreadGroupSizeY,
             &overrideShaderThreadGroupSizeZ);
@@ -527,11 +531,11 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     // while building a pipeline profile which uses the profile hash.
     if (settings.pipelineUseProfileHashAsClientHash)
     {
-        VK_ASSERT(pCreateInfo->pipelineProfileKey.shaderCount == 1);
-        VK_ASSERT(pCreateInfo->pipelineProfileKey.pShaders[0].stage == ShaderStage::ShaderStageCompute);
+        VK_ASSERT(pipelineProfileKey.shaderCount == 1);
+        VK_ASSERT(pipelineProfileKey.pShaders[0].stage == ShaderStage::ShaderStageCompute);
 
-        pPipelineBuildInfo->cs.options.clientHash.lower = pCreateInfo->pipelineProfileKey.pShaders[0].codeHash.lower;
-        pPipelineBuildInfo->cs.options.clientHash.upper = pCreateInfo->pipelineProfileKey.pShaders[0].codeHash.upper;
+        pPipelineBuildInfo->cs.options.clientHash.lower = pipelineProfileKey.pShaders[0].codeHash.lower;
+        pPipelineBuildInfo->cs.options.clientHash.upper = pipelineProfileKey.pShaders[0].codeHash.upper;
     }
 
     // Build pipline binary
@@ -574,11 +578,11 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     {
         if (result == VK_SUCCESS)
         {
-            VK_ASSERT(pCreateInfo->pipelineProfileKey.shaderCount == 1);
-            VK_ASSERT(pCreateInfo->pipelineProfileKey.pShaders[0].stage == ShaderStage::ShaderStageCompute);
+            VK_ASSERT(pipelineProfileKey.shaderCount == 1);
+            VK_ASSERT(pipelineProfileKey.pShaders[0].stage == ShaderStage::ShaderStageCompute);
 
             char                      extraInfo[256] = {};
-            const ShaderOptimizerKey& shaderKey      = pCreateInfo->pipelineProfileKey.pShaders[0];
+            const ShaderOptimizerKey& shaderKey      = pipelineProfileKey.pShaders[0];
 
             Util::Snprintf(extraInfo, sizeof(extraInfo), "\n\n;PipelineOptimizer\n");
             Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);

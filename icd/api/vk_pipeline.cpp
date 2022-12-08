@@ -154,6 +154,32 @@ void Pipeline::GenerateHashFromShaderStageCreateInfo(
         GenerateHashFromSpecializationInfo(*desc.pSpecializationInfo, pHasher);
     }
 
+    if (desc.pNext != nullptr)
+    {
+        const void* pNext = desc.pNext;
+
+        while (pNext != nullptr)
+        {
+            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+            switch (static_cast<uint32_t>(pHeader->sType))
+            {
+            case VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO:
+            {
+                const auto* pRequiredSubgroupSizeInfo =
+                    static_cast<const VkPipelineShaderStageRequiredSubgroupSizeCreateInfo*>(pNext);
+                pHasher->Update(pRequiredSubgroupSizeInfo->sType);
+                pHasher->Update(pRequiredSubgroupSizeInfo->requiredSubgroupSize);
+
+                break;
+            }
+            default:
+                break;
+            }
+
+            pNext = pHeader->pNext;
+        }
+    }
 }
 
 // =====================================================================================================================
@@ -165,12 +191,12 @@ void Pipeline::GenerateHashFromShaderStageCreateInfo(
     pHasher->Update(stageInfo.flags);
     pHasher->Update(stageInfo.stage);
     pHasher->Update(stageInfo.codeHash);
+    pHasher->Update(stageInfo.waveSize);
 
     if (stageInfo.pSpecializationInfo != nullptr)
     {
         GenerateHashFromSpecializationInfo(*stageInfo.pSpecializationInfo, pHasher);
     }
-
 }
 
 // =====================================================================================================================
@@ -218,6 +244,18 @@ VkResult Pipeline::BuildShaderStageInfo(
         const uint32_t                         outIdx    = pfnGetOutputIdx(i, stage);
 
         maxOutIdx = Util::Max(maxOutIdx, outIdx + 1);
+
+        EXTRACT_VK_STRUCTURES_0(
+            requiredSubgroupSize,
+            PipelineShaderStageRequiredSubgroupSizeCreateInfo,
+            static_cast<const VkPipelineShaderStageRequiredSubgroupSizeCreateInfo*>(stageInfo.pNext),
+            PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO);
+
+        if (pPipelineShaderStageRequiredSubgroupSizeCreateInfo != nullptr)
+        {
+            pShaderStageInfo[outIdx].waveSize =
+                pPipelineShaderStageRequiredSubgroupSizeCreateInfo->requiredSubgroupSize;
+        }
 
         if ((stageInfo.module != VK_NULL_HANDLE) && (duplicateExistingModules == false))
         {
@@ -285,7 +323,6 @@ VkResult Pipeline::BuildShaderStageInfo(
         pShaderStageInfo[outIdx].pEntryPoint         = stageInfo.pName;
         pShaderStageInfo[outIdx].flags               = stageInfo.flags;
         pShaderStageInfo[outIdx].pSpecializationInfo = stageInfo.pSpecializationInfo;
-
     }
 
     if (result != VK_SUCCESS)
@@ -676,9 +713,9 @@ static void ConvertShaderInfoStatistics(
 
     if (palStats.shaderStageMask & Pal::ApiShaderStageCompute)
     {
-        pStats->computeWorkGroupSize[0] = palStats.cs.numThreadsPerGroupX;
-        pStats->computeWorkGroupSize[1] = palStats.cs.numThreadsPerGroupY;
-        pStats->computeWorkGroupSize[2] = palStats.cs.numThreadsPerGroupZ;
+        pStats->computeWorkGroupSize[0] = palStats.cs.numThreadsPerGroup.x;
+        pStats->computeWorkGroupSize[1] = palStats.cs.numThreadsPerGroup.y;
+        pStats->computeWorkGroupSize[2] = palStats.cs.numThreadsPerGroup.z;
     }
 }
 
@@ -748,6 +785,38 @@ uint32_t Pipeline::GetShaderSymbolAvailability(
     }
 
     return shaderMask;
+}
+
+// =====================================================================================================================
+// Generate a cache ID using an elf hash as a baseline. Environment characteristics are added here that are not
+// accounted for by the platform kay
+void Pipeline::ElfHashToCacheId(
+    const Device*                pDevice,
+    uint32_t                     deviceIdx,
+    const Util::MetroHash::Hash& elfHash,
+    const Util::MetroHash::Hash& settingsHash,
+    const PipelineOptimizerKey&  pipelineOptimizerKey,
+    Util::MetroHash::Hash*       pCacheId)
+{
+    Util::MetroHash128 hasher = {};
+    hasher.Update(elfHash);
+    hasher.Update(deviceIdx);
+    hasher.Update(settingsHash);
+
+    // Incorporate any tuning profiles
+    pDevice->GetShaderOptimizer()->CalculateMatchingProfileEntriesHash(pipelineOptimizerKey, &hasher);
+
+    // Extensions and features whose enablement affects compiler inputs (and hence the binary)
+    hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO));
+    hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT));
+    hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_PRIMITIVES_GENERATED_QUERY));
+    hasher.Update(pDevice->GetEnabledFeatures().scalarBlockLayout);
+    hasher.Update(pDevice->GetEnabledFeatures().robustBufferAccess);
+    hasher.Update(pDevice->GetEnabledFeatures().robustBufferAccessExtended);
+    hasher.Update(pDevice->GetEnabledFeatures().robustImageAccessExtended);
+    hasher.Update(pDevice->GetEnabledFeatures().nullDescriptorExtended);
+
+    hasher.Finalize(pCacheId->bytes);
 }
 
 namespace entry

@@ -620,9 +620,9 @@ void SqttCmdBufferState::PalDrawDispatchCallback(
         {
             WriteEventWithDimsMarker(
                 m_currentEventType,
-                drawDispatch.dispatch.groupDims[0],
-                drawDispatch.dispatch.groupDims[1],
-                drawDispatch.dispatch.groupDims[2],
+                drawDispatch.dispatch.groupDims.x,
+                drawDispatch.dispatch.groupDims.y,
+                drawDispatch.dispatch.groupDims.z,
                 drawDispatch.subQueueFlags);
         }
         else

@@ -9,7 +9,7 @@
       },
       "action": {
         "cs": {
-          "disableLoopUnrolls": 1
+          "disableLoopUnrolls": true
         }
       }
     },

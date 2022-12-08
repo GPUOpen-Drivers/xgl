@@ -88,26 +88,48 @@ enum class DynamicStatesInternal : uint32_t
     StencilCompareMask,
     StencilWriteMask,
     StencilReference,
-    SampleLocationsExt,
+    SampleLocations,
     FragmentShadingRateStateKhr,
-    LineStippleExt,
+    LineStipple,
     ViewportCount,
     ScissorCount,
-    CullModeExt,
-    FrontFaceExt,
-    PrimitiveTopologyExt,
-    VertexInputBindingStrideExt,
-    DepthTestEnableExt,
-    DepthWriteEnableExt,
-    DepthCompareOpExt,
-    DepthBoundsTestEnableExt,
-    StencilTestEnableExt,
-    StencilOpExt,
-    ColorWriteEnableExt,
-    RasterizerDiscardEnableExt,
-    PrimitiveRestartEnableExt,
-    DepthBiasEnableExt,
-    VertexInputExt,
+    CullMode,
+    FrontFace,
+    PrimitiveTopology,
+    VertexInputBindingStride,
+    DepthTestEnable,
+    DepthWriteEnable,
+    DepthCompareOp,
+    DepthBoundsTestEnable,
+    StencilTestEnable,
+    StencilOp,
+    ColorWriteEnable,
+    RasterizerDiscardEnable,
+    PrimitiveRestartEnable,
+    DepthBiasEnable,
+    VertexInput,
+    TessellationDomainOrigin,
+    DepthClampEnable,
+    PolygonMode,
+    RasterizationSamples,
+    SampleMask,
+    AlphaToCoverageEnable,
+    AlphaToOneEnable,
+    LogicOp,
+    LogicOpEnable,
+    ColorBlendEnable,
+    ColorBlendEquation,
+    ColorWriteMask,
+    RasterizationStream,
+    ConservativeRasterizationMode,
+    ExtraPrimitiveOverestimationSize,
+    DepthClipEnable,
+    SampleLocationsEnable,
+    ProvokingVertexMode,
+    LineRasterizationMode,
+    LineStippleEnable,
+    DepthClipNegativeOneToOne,
+
     DynamicStatesInternalCount
 };
 
@@ -122,7 +144,7 @@ public:
         Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
-    const UserDataLayout* GetUserDataLayout(void) const { return &m_userDataLayout; }
+    const UserDataLayout* GetUserDataLayout() const { return &m_userDataLayout; }
 
     static VK_FORCEINLINE Pipeline* BaseObjectFromHandle(VkPipeline pipeline)
         { return reinterpret_cast<Pipeline*>(pipeline); }
@@ -171,6 +193,14 @@ public:
 
     bool HasRayTracing() const { return m_hasRayTracing; }
 #endif
+
+    static void ElfHashToCacheId(
+        const Device*                pDevice,
+        uint32_t                     deviceIdx,
+        const Util::MetroHash::Hash& elfHash,
+        const Util::MetroHash::Hash& settingsHash,
+        const PipelineOptimizerKey&  pipelineOptimizerKey,
+        Util::MetroHash::Hash*       pCacheId);
 
 protected:
     Pipeline(

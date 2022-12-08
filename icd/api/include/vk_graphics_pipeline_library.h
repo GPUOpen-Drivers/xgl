@@ -57,10 +57,13 @@ public:
     VkGraphicsPipelineLibraryFlagsEXT GetLibraryFlags() const
         { return m_pBinaryCreateInfo->libFlags; }
 
-    uint32_t GetDynamicStates() const
+    uint64_t GetDynamicStates() const
         { return m_objectCreateInfo.dynamicStates; }
 
     const ShaderModuleHandle* GetShaderModuleHandle(const ShaderStage stage) const;
+
+    const Util::MetroHash::Hash* GetElfHash() const
+        { return &m_elfHash; }
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(GraphicsPipelineLibrary);
@@ -76,16 +79,17 @@ private:
         const GraphicsPipelineObjectCreateInfo& objectInfo,
         const GraphicsPipelineBinaryCreateInfo* pBinaryInfo,
         const GraphicsPipelineLibraryInfo&      libInfo,
+        const Util::MetroHash::Hash&            elfHash,
         const uint64_t                          apiHash,
         const ShaderModuleHandle*               pTempModules,
         const TempModuleState*                  pTempModuleStates,
         PipelineLayout*                         pPipelineLayout);
 
-    static void CreatePartialPipelineBinary(
+    static VkResult CreatePartialPipelineBinary(
         const Device*                          pDevice,
+        const VkGraphicsPipelineCreateInfo*    pCreateInfo,
         const GraphicsPipelineLibraryInfo*     pLibInfo,
         const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
-        const bool                             disableRasterization,
         GraphicsPipelineBinaryCreateInfo*      pBinaryCreateInfo,
         ShaderModuleHandle*                    pTempModules,
         TempModuleState*                       pTempModuleStages);
@@ -95,6 +99,7 @@ private:
     const GraphicsPipelineLibraryInfo       m_libInfo;
     ShaderModuleHandle                      m_tempModules[ShaderStage::ShaderStageGfxCount];
     TempModuleState                         m_tempModuleStates[ShaderStage::ShaderStageGfxCount];
+    const Util::MetroHash::Hash             m_elfHash;
 };
 
 }

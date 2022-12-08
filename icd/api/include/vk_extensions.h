@@ -164,6 +164,7 @@ public:
         const char* const* const    extensionNames,
         uint32_t                    extensionNameCount,
         const Supported&            supported,
+        const Supported&            ignored,
         Enabled*                    pEnabled)
     {
         bool invalidExtensionRequested = false;
@@ -177,14 +178,24 @@ public:
             for (j = 0; j < T::Count; ++j)
             {
                 const typename T::ExtensionId id = static_cast<typename T::ExtensionId>(j);
+                const bool isExtensionIgnored = ignored.IsExtensionSupported(id);
 
-                if (supported.IsExtensionSupported(id))
+                if (supported.IsExtensionSupported(id) && (isExtensionIgnored == false))
                 {
                     supported.GetExtensionInfo(id, &ext);
 
                     if (strcmp(extensionNames[i], ext.extensionName) == 0)
                     {
                         pEnabled->EnableExtension(id);
+                        break;
+                    }
+                }
+                else if (isExtensionIgnored)
+                {
+                    ignored.GetExtensionInfo(id, &ext);
+
+                    if (strcmp(extensionNames[i], ext.extensionName) == 0)
+                    {
                         break;
                     }
                 }
@@ -329,6 +340,7 @@ public:
 
         // EXT Extensions
         EXT_4444_FORMATS,
+        EXT_ATTACHMENT_FEEDBACK_LOOP_LAYOUT,
         EXT_BORDER_COLOR_SWIZZLE,
         EXT_CALIBRATED_TIMESTAMPS,
         EXT_COLOR_WRITE_ENABLE,

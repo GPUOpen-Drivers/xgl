@@ -166,6 +166,7 @@ public:
     }
 
     static const InstanceExtensions::Supported& GetSupportedExtensions();
+    static const InstanceExtensions::Supported& GetIgnoredExtensions();
 
     bool IsDeviceExtensionAvailable(DeviceExtensions::ExtensionId id) const;
 
@@ -303,6 +304,7 @@ private:
     const uint32_t                      m_apiVersion;               // Requested Vulkan API version
     const uint32_t                      m_appVersion;               // Application Version
     const InstanceExtensions::Enabled   m_enabledExtensions;        // Enabled instance extensions
+
     DispatchTable                       m_dispatchTable;            // Instance dispatch table
 
     union

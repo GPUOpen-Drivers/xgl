@@ -145,6 +145,56 @@ bool ShaderOptimizer::HasMatchingProfileEntry(
 }
 
 // =====================================================================================================================
+void ShaderOptimizer::CalculateMatchingProfileEntriesHash(
+    const PipelineProfile&      profile,
+    const PipelineOptimizerKey& pipelineKey,
+    Util::MetroHash128*         pHasher
+    ) const
+{
+    for (uint32_t entryIdx = 0; entryIdx < profile.entryCount; ++entryIdx)
+    {
+        const auto& pattern = profile.pEntries[entryIdx].pattern;
+
+        for (uint32_t shaderIdx = 0; shaderIdx < pipelineKey.shaderCount; ++shaderIdx)
+        {
+            if ((GetFirstMatchingShader(pattern, shaderIdx, pipelineKey) != InvalidShaderIndex))
+            {
+                const auto& action       = profile.pEntries[entryIdx].action;
+                const auto& shaderAction = action.shaders[static_cast<uint32_t>(pipelineKey.pShaders[shaderIdx].stage)];
+
+                pHasher->Update(action.createInfo);
+                pHasher->Update(shaderAction.dynamicShaderInfo);
+                pHasher->Update(shaderAction.pipelineShader);
+                pHasher->Update(shaderAction.shaderCreate);
+
+                if (shaderAction.shaderReplace.pCode != nullptr)
+                {
+                    pHasher->Update(
+                        static_cast<const uint8_t*>(shaderAction.shaderReplace.pCode),
+                        shaderAction.shaderReplace.sizeInBytes);
+                }
+
+                // Include the shaderIdx in case the same entry moves to a different shader
+                pHasher->Update(shaderIdx);
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
+void ShaderOptimizer::CalculateMatchingProfileEntriesHash(
+    const PipelineOptimizerKey& pipelineKey,
+    Util::MetroHash128*         pHasher
+    ) const
+{
+    CalculateMatchingProfileEntriesHash(m_appProfile, pipelineKey, pHasher);
+    CalculateMatchingProfileEntriesHash(m_tuningProfile, pipelineKey, pHasher);
+#if ICD_RUNTIME_APP_PROFILE
+    CalculateMatchingProfileEntriesHash(m_runtimeProfile, pipelineKey, pHasher);
+#endif
+}
+
+// =====================================================================================================================
 void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
     const PipelineProfile&           profile,
     const PipelineOptimizerKey&      pipelineKey,
@@ -205,6 +255,14 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 if (shaderCreate.apply.disableCodeSinking)
                 {
                     options.pOptions->disableCodeSinking = shaderCreate.tuningOptions.disableCodeSinking;
+                }
+                if (shaderCreate.apply.nsaThreshold)
+                {
+                    options.pOptions->nsaThreshold = shaderCreate.tuningOptions.nsaThreshold;
+                }
+                if (shaderCreate.apply.aggressiveInvariantLoads)
+                {
+                    options.pOptions->aggressiveInvariantLoads = shaderCreate.tuningOptions.aggressiveInvariantLoads;
                 }
                 if (shaderCreate.apply.favorLatencyHiding)
                 {
@@ -498,6 +556,15 @@ void ShaderOptimizer::ApplyProfileToDynamicComputeShaderInfo(
     const ShaderProfileAction&     action,
     Pal::DynamicComputeShaderInfo* pComputeShaderInfo) const
 {
+    if (action.dynamicShaderInfo.apply.maxWavesPerCu)
+    {
+        pComputeShaderInfo->maxWavesPerCu = static_cast<float>(action.dynamicShaderInfo.maxWavesPerCu);
+    }
+
+    if (action.dynamicShaderInfo.apply.maxThreadGroupsPerCu)
+    {
+        pComputeShaderInfo->maxThreadGroupsPerCu = action.dynamicShaderInfo.maxThreadGroupsPerCu;
+    }
 }
 
 // =====================================================================================================================
@@ -505,6 +572,10 @@ void ShaderOptimizer::ApplyProfileToDynamicGraphicsShaderInfo(
     const ShaderProfileAction&      action,
     Pal::DynamicGraphicsShaderInfo* pGraphicsShaderInfo) const
 {
+    if (action.dynamicShaderInfo.apply.maxWavesPerCu)
+    {
+        pGraphicsShaderInfo->maxWavesPerCu = static_cast<float>(action.dynamicShaderInfo.maxWavesPerCu);
+    }
 
     if (action.dynamicShaderInfo.apply.cuEnableMask)
     {
@@ -1106,6 +1177,7 @@ void ShaderOptimizer::BuildAppProfileLlpc()
         i = m_appProfile.entryCount++;
         PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
         pEntry->pattern.match.always = true;
+        pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.apply.disableFastMathFlags = true;
         pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.tuningOptions.disableFastMathFlags = 8u | 32u;
     }
 
@@ -1116,6 +1188,7 @@ void ShaderOptimizer::BuildAppProfileLlpc()
             i = m_appProfile.entryCount++;
             PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
             pEntry->pattern.match.always = true;
+            pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.disableFastMathFlags = true;
             pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.tuningOptions.disableFastMathFlags = 32u;
         }
     }

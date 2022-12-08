@@ -38,6 +38,19 @@
           "unrollThreshold": 1600
         }
       }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x15ed07fc5a652d5b fb9aadd786b3883a"
+        }
+      },
+      "action": {
+        "cs": {
+          "useSiScheduler": true,
+          "disableCodeSinking": true
+        }
+      }
     }
   ]
 }

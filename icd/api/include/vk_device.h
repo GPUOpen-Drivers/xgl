@@ -965,9 +965,7 @@ protected:
     Util::Mutex                         m_borderColorMutex;
 
     bool                                m_retrievedFaultData;
-#if VK_IS_PAL_VERSION_AT_LEAST(772, 0)
     Pal::PageFaultStatus                m_pageFaultStatus;
-#endif
 
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.

@@ -467,6 +467,7 @@ VkResult Device::Create(
         if (!DeviceExtensions::EnableExtensions(pCreateInfo->ppEnabledExtensionNames,
                                                 pCreateInfo->enabledExtensionCount,
                                                 pPhysicalDevice->GetAllowedExtensions(),
+                                                pPhysicalDevice->GetIgnoredExtensions(),
                                                 &enabledDeviceExtensions))
         {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -2164,11 +2165,13 @@ VkResult Device::CreateInternalComputePipeline(
 {
     VK_ASSERT(numUserDataNodes <= VK_ARRAY_SIZE(pInternalPipeline->userDataNodeOffsets));
 
-    VkResult             result              = VK_SUCCESS;
-    PipelineCompiler*    pCompiler           = GetCompiler(DefaultDeviceIndex);
-    ShaderModuleHandle   shaderModule        = {};
-    const void*          pPipelineBinary     = nullptr;
-    size_t               pipelineBinarySize  = 0;
+    VkResult             result               = VK_SUCCESS;
+    PipelineCompiler*    pCompiler            = GetCompiler(DefaultDeviceIndex);
+    ShaderModuleHandle   shaderModule         = {};
+    const void*          pPipelineBinary      = nullptr;
+    size_t               pipelineBinarySize   = 0;
+    ShaderOptimizerKey   shaderOptimzierKey   = {};
+    PipelineOptimizerKey pipelineOptimizerKey = {};
 
     void*                pPipelineMem        = nullptr;
 
@@ -2176,9 +2179,10 @@ VkResult Device::CreateInternalComputePipeline(
 
     pCompiler->ApplyPipelineOptions(this, 0, &pipelineBuildInfo.pipelineInfo.options);
 
-    pipelineBuildInfo.shaderProfileKey.stage         = ShaderStage::ShaderStageCompute;
-    pipelineBuildInfo.pipelineProfileKey.shaderCount = 1;
-    pipelineBuildInfo.pipelineProfileKey.pShaders    = &pipelineBuildInfo.shaderProfileKey;
+    shaderOptimzierKey.stage              = ShaderStage::ShaderStageCompute;
+    pipelineOptimizerKey.shaderCount      = 1;
+    pipelineOptimizerKey.pShaders         = &shaderOptimzierKey;
+    pipelineBuildInfo.pPipelineProfileKey = &pipelineOptimizerKey;
 
     // Build shader module
     result = pCompiler->BuildShaderModule(
@@ -2223,7 +2227,7 @@ VkResult Device::CreateInternalComputePipeline(
             codeHash,
             Vkgc::ShaderStage::ShaderStageCompute,
             codeByteSize,
-            &pipelineBuildInfo.shaderProfileKey);
+            &shaderOptimzierKey);
 
         PipelineShaderOptionsPtr options = {};
         options.pPipelineOptions = &pipelineBuildInfo.pipelineInfo.options;
@@ -2231,7 +2235,7 @@ VkResult Device::CreateInternalComputePipeline(
 
         // Override the compile parameters based on any app profile
         GetShaderOptimizer()->OverrideShaderCreateInfo(
-            pipelineBuildInfo.pipelineProfileKey,
+            pipelineOptimizerKey,
             0,
             options);
 
@@ -4486,11 +4490,10 @@ VkResult Device::GetDeviceFaultInfoEXT(
 {
     VkResult result = VK_SUCCESS;
 
-#if VK_IS_PAL_VERSION_AT_LEAST(772, 0)
     // subsequent calls need to return the same data
     if (m_retrievedFaultData == false)
     {
-        m_pageFaultStatus.flags.pageFault = false
+        m_pageFaultStatus.flags.pageFault = false;
         Pal::Result stateResult = PalDevice(DefaultDeviceIndex)->CheckExecutionState(&m_pageFaultStatus);
 
         if ((stateResult == Pal::Result::ErrorGpuPageFaultDetected) && m_pageFaultStatus.flags.pageFault == true)
@@ -4540,16 +4543,6 @@ VkResult Device::GetDeviceFaultInfoEXT(
         pAddressInfo->reportedAddress   = static_cast<VkDeviceAddress>(m_pageFaultStatus.faultAddress);
         pAddressInfo->addressPrecision  = 4096;
     }
-#else
-    pFaultCounts->addressInfoCount  = 0;
-    pFaultCounts->vendorInfoCount   = 0;
-    pFaultCounts->vendorBinarySize  = 0;
-
-    if (pFaultInfo != nullptr)
-    {
-        strcpy(pFaultInfo->description, "No fault detected");
-    }
-#endif
 
     return result;
 }

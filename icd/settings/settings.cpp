@@ -205,6 +205,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         }
 
+        // Enable DXGI present for HG configurations as CASO (Cross Adapter Scan Out) can provide a
+        // good performance boost.
+
 #if VKI_RAY_TRACING
         const char* pMaxInlinedShadersEnvVar = getenv("AMD_VK_MAX_INLINED_SHADERS");
 

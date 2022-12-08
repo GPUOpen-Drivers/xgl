@@ -223,6 +223,14 @@ static GraphicsPipelineBinaryCreateInfo* DumpGraphicsPipelineBinaryCreateInfo(
             objSize += (specializationInfoSizes[stage] + entryTargetSizes[stage]);
         }
 
+        // Calculate the size used by underlying memory of optimizer keys
+        const uint32_t shaderKeyCount = pBinInfo->pPipelineProfileKey->shaderCount;
+        const size_t   shaderKeyBytes = sizeof(ShaderOptimizerKey) * shaderKeyCount;
+        objSize += sizeof(PipelineOptimizerKey) + shaderKeyBytes;
+
+        // Calculate the size used by underlying binary metadata
+        objSize += sizeof(PipelineMetadata);
+
         if (pSize != nullptr)
         {
             *pSize = objSize + sizeof(GraphicsPipelineBinaryCreateInfo);
@@ -272,6 +280,21 @@ static GraphicsPipelineBinaryCreateInfo* DumpGraphicsPipelineBinaryCreateInfo(
                     pSystemMem = Util::VoidPtrInc(pSystemMem, entryTargetSizes[stage]);
                 }
             }
+
+            pCreateInfo->pPipelineProfileKey = static_cast<PipelineOptimizerKey*>(pSystemMem);
+
+            pSystemMem = Util::VoidPtrInc(pSystemMem, sizeof(PipelineOptimizerKey));
+
+            pCreateInfo->pPipelineProfileKey->shaderCount = shaderKeyCount;
+            pCreateInfo->pPipelineProfileKey->pShaders    = static_cast<ShaderOptimizerKey*>(pSystemMem);
+            memcpy(pSystemMem, pBinInfo->pPipelineProfileKey->pShaders, shaderKeyBytes);
+
+            pSystemMem = Util::VoidPtrInc(pSystemMem, shaderKeyBytes);
+
+            pCreateInfo->pBinaryMetadata = static_cast<PipelineMetadata*>(pSystemMem);
+            memcpy(pSystemMem, pBinInfo->pBinaryMetadata, sizeof(PipelineMetadata));
+
+            pSystemMem = Util::VoidPtrInc(pSystemMem, sizeof(PipelineMetadata));
         }
     }
     else if (pSize != nullptr)
@@ -283,16 +306,18 @@ static GraphicsPipelineBinaryCreateInfo* DumpGraphicsPipelineBinaryCreateInfo(
 }
 
 // =====================================================================================================================
-void GraphicsPipelineLibrary::CreatePartialPipelineBinary(
+VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
     const Device*                           pDevice,
+    const VkGraphicsPipelineCreateInfo*     pCreateInfo,
     const GraphicsPipelineLibraryInfo*      pLibInfo,
     const GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
-    const bool                              disableRasterization,
     GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
     ShaderModuleHandle*                     pTempModules,
     TempModuleState*                        pTempModuleStages)
 {
-    PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
+    VkResult          result            = VK_SUCCESS;
+    PipelineCompiler* pCompiler         = pDevice->GetCompiler(DefaultDeviceIndex);
+    uint32_t          dynamicStateFlags = GetDynamicStateFlags(pCreateInfo->pDynamicState, pLibInfo);
 
     uint32_t tempIdx = 0;
 
@@ -304,13 +329,13 @@ void GraphicsPipelineLibrary::CreatePartialPipelineBinary(
             VK_ASSERT(pShaderStageInfo->stages[i].pModuleHandle == &pTempModules[i]);
 
             bool canBuildShader = (((pShaderStageInfo->stages[i].stage == ShaderStage::ShaderStageFragment) &&
-                                    disableRasterization)
+                                    IsRasterizationDisabled(pCreateInfo, pLibInfo, dynamicStateFlags))
                                    == false);
 
-            if (canBuildShader)
+            if (canBuildShader && (result == VK_SUCCESS))
             {
                 // We don't take care of the result. Early compile failure in some cases is expected
-                pCompiler->CreateGraphicsShaderBinary(
+                result = pCompiler->CreateGraphicsShaderBinary(
                     pDevice, pShaderStageInfo->stages[i].stage, pBinaryCreateInfo, &pTempModules[i]);
             }
 
@@ -329,7 +354,7 @@ void GraphicsPipelineLibrary::CreatePartialPipelineBinary(
                 pLibInfo->pPreRasterizationShaderLib->GetShaderModuleHandle(ShaderStage::ShaderStageVertex);
 
             // Parent library may don't have vertex shader if it uses mesh shader.
-            if (pParentHandle != nullptr)
+            if ((pParentHandle != nullptr) && (result == VK_SUCCESS))
             {
                 constexpr uint32_t TempIdx = ShaderStage::ShaderStageVertex;
 
@@ -337,7 +362,7 @@ void GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 
                 pTempModules[TempIdx] = *pParentHandle;
 
-                pCompiler->CreateGraphicsShaderBinary(
+                result = pCompiler->CreateGraphicsShaderBinary(
                     pDevice, ShaderStage::ShaderStageVertex, pBinaryCreateInfo, &pTempModules[TempIdx]);
 
                 pTempModuleStages[TempIdx].stage          = ShaderStage::ShaderStageVertex;
@@ -353,13 +378,13 @@ void GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 
             VK_ASSERT(pParentHandle != nullptr);
 
-            if (pParentHandle != nullptr)
+            if ((pParentHandle != nullptr) && (result == VK_SUCCESS))
             {
                 constexpr uint32_t TempIdx = ShaderStage::ShaderStageFragment;
 
                 pTempModules[TempIdx] = *pParentHandle;
 
-                pCompiler->CreateGraphicsShaderBinary(
+                result = pCompiler->CreateGraphicsShaderBinary(
                     pDevice, ShaderStage::ShaderStageFragment, pBinaryCreateInfo, &pTempModules[TempIdx]);
 
                 pTempModuleStages[TempIdx].stage          = ShaderStage::ShaderStageFragment;
@@ -380,6 +405,8 @@ void GraphicsPipelineLibrary::CreatePartialPipelineBinary(
             pTempModuleStages[i].stage = ShaderStage::ShaderStageInvalid;
         }
     }
+
+    return result;
 }
 
 // =====================================================================================================================
@@ -392,71 +419,101 @@ VkResult GraphicsPipelineLibrary::Create(
 {
     uint64 startTimeTicks = Util::GetPerfCpuTime();
 
-    VkResult                          result           = VK_SUCCESS;
-    uint64_t                          apiPsoHash       = 0;
-    size_t                            apiSize          = 0;
-    void*                             pSysMem          = nullptr;
+    VkResult result  = VK_SUCCESS;
+    size_t   apiSize = 0;
+    void*    pSysMem = nullptr;
 
     GraphicsPipelineLibraryInfo libInfo;
     ExtractLibraryInfo(pCreateInfo, &libInfo);
 
-    // 1. Get pipeline layout
-    PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
-
-    // 2. Fill GraphicsPipelineBinaryCreateInfo
     GraphicsPipelineBinaryCreateInfo binaryCreateInfo = {};
     GraphicsPipelineShaderStageInfo  shaderStageInfo = {};
     ShaderModuleHandle               tempModules[ShaderStage::ShaderStageGfxCount] = {};
     TempModuleState                  tempModuleStates[ShaderStage::ShaderStageGfxCount] = {};
-    VbBindingInfo                    vbInfo = {};
-    PipelineInternalBufferInfo       internalBufferInfo = {};
+
+    // 1. Build shader stage infos
     if (result == VK_SUCCESS)
     {
-        result = BuildPipelineBinaryCreateInfo(
-            pDevice,
-            pCreateInfo,
-            pPipelineLayout,
-            pPipelineCache,
-            &binaryCreateInfo,
-            &shaderStageInfo,
-            &vbInfo,
-            &internalBufferInfo,
-            tempModules);
+        result = BuildShaderStageInfo(pDevice,
+                                      pCreateInfo->stageCount,
+                                      pCreateInfo->pStages,
+                                      pCreateInfo->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR,
+                                      [](const uint32_t inputIdx, const uint32_t stageIdx)
+                                      {
+                                          return stageIdx;
+                                      },
+                                      shaderStageInfo.stages,
+                                      tempModules,
+                                      pPipelineCache,
+                                      binaryCreateInfo.stageFeedback);
     }
 
-    // 3. Fill GraphicsPipelineObjectCreateInfo
+    // 2. Build ShaderOptimizer pipeline key
+    PipelineOptimizerKey pipelineOptimizerKey = {};
+    ShaderOptimizerKey   shaderOptimizerKeys[ShaderStage::ShaderStageGfxCount] = {};
+    if (result == VK_SUCCESS)
+    {
+        static_assert(
+            VK_ARRAY_SIZE(shaderOptimizerKeys) == VK_ARRAY_SIZE(shaderStageInfo.stages),
+            "Please ensure stage count matches between gfx profile key and shader stage info.");
+
+        GeneratePipelineOptimizerKey(
+            pDevice,
+            pCreateInfo,
+            &shaderStageInfo,
+            shaderOptimizerKeys,
+            &pipelineOptimizerKey);
+    }
+
+    // 3. Build API and ELF hashes
+    uint64_t              apiPsoHash = {};
+    Util::MetroHash::Hash elfHash    = {};
+    BuildApiHash(pCreateInfo, &apiPsoHash, &elfHash);
+
+    // 4. Get pipeline layout
+    PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
+
+    // 5. Populate binary create info
+    PipelineMetadata binaryMetadata = {};
+    if (result == VK_SUCCESS)
+    {
+        result = pDevice->GetCompiler(DefaultDeviceIndex)->ConvertGraphicsPipelineInfo(
+            pDevice,
+            pCreateInfo,
+            &shaderStageInfo,
+            pPipelineLayout,
+            &pipelineOptimizerKey,
+            &binaryMetadata,
+            &binaryCreateInfo);
+    }
+
     GraphicsPipelineObjectCreateInfo objectCreateInfo = {};
     if (result == VK_SUCCESS)
     {
-        GraphicsPipelineBinaryInfo binaryInfo = {};
-        binaryInfo.pOptimizerKey = &binaryCreateInfo.pipelineProfileKey;
-#if VKI_RAY_TRACING
-        binaryInfo.hasRayTracing = binaryCreateInfo.pipelineInfo.rtState.threadGroupSizeX > 0;
-#endif
-
-        BuildPipelineObjectCreateInfo(
+        // 6. Create partial pipeline binary for fast-link
+        void* pLlpcPipelineBuffer = nullptr;
+        binaryCreateInfo.pipelineInfo.pUserData = &pLlpcPipelineBuffer;
+        result = CreatePartialPipelineBinary(
             pDevice,
             pCreateInfo,
-            &vbInfo,
-            &binaryInfo,
-            pPipelineLayout,
-            &objectCreateInfo);
+            &libInfo,
+            &shaderStageInfo,
+            &binaryCreateInfo,
+            tempModules,
+            tempModuleStates);
     }
 
     if (result == VK_SUCCESS)
     {
-        // 4. Create partial pipeline binary for fast-link
-        CreatePartialPipelineBinary(
+        // 7. Build pipeline object create info
+        BuildPipelineObjectCreateInfo(
             pDevice,
-            &libInfo,
+            pCreateInfo,
             &shaderStageInfo,
-            objectCreateInfo.immedInfo.rasterizerDiscardEnable,
-            &binaryCreateInfo,
-            tempModules,
-            tempModuleStates);
-
-        // 5. Create pipeline object
-        apiPsoHash = BuildApiHash(pCreateInfo, &objectCreateInfo);
+            pPipelineLayout,
+            &pipelineOptimizerKey,
+            &binaryMetadata,
+            &objectCreateInfo);
 
         // Calculate object size
         apiSize = sizeof(GraphicsPipelineLibrary);
@@ -484,6 +541,7 @@ VkResult GraphicsPipelineLibrary::Create(
             objectCreateInfo,
             pBinInfo,
             libInfo,
+            elfHash,
             apiPsoHash,
             tempModules,
             tempModuleStates,
@@ -557,6 +615,7 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
     const GraphicsPipelineObjectCreateInfo& objectInfo,
     const GraphicsPipelineBinaryCreateInfo* pBinaryInfo,
     const GraphicsPipelineLibraryInfo&      libInfo,
+    const Util::MetroHash::Hash&            elfHash,
     const uint64_t                          apiHash,
     const ShaderModuleHandle*               pTempModules,
     const TempModuleState*                  pTempModuleStates,
@@ -568,7 +627,8 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
 #endif
       m_objectCreateInfo(objectInfo),
       m_pBinaryCreateInfo(pBinaryInfo),
-      m_libInfo(libInfo)
+      m_libInfo(libInfo),
+      m_elfHash(elfHash)
 {
     Pipeline::Init(
         nullptr,

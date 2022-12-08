@@ -2,18 +2,20 @@
   "entries": [
     {
       "pattern": {
-        "always": true
+        "ps": {
+          "codeHash": "0x3750559b33d6c366 198c0842f95c0bcc"
+        }
       },
       "action": {
         "ps": {
-          "unrollThreshold": 2150
+          "disableCodeSinking": true
         }
       }
     },
     {
       "pattern": {
         "vs": {
-          "codeHash": "0xcde8cb95ff89cd64 b2e6f758475f2c36"
+          "codeHash": "0x22444f165cd9cbac e48682e90ff9e744"
         }
       },
       "action": {
@@ -25,7 +27,7 @@
     {
       "pattern": {
         "vs": {
-          "codeHash": "0x4b070f72d05e4f5c 12017c5c15abf55d"
+          "codeHash": "0xb722827255660d51 9173f0ef17de7e00"
         }
       },
       "action": {

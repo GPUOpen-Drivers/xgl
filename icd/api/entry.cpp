@@ -1517,7 +1517,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetPolygonModeEXT(
     VkCommandBuffer                     commandBuffer,
     VkPolygonMode                       polygonMode)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetPolygonMode(polygonMode);
 }
 
 // =====================================================================================================================
@@ -1525,7 +1525,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetRasterizationSamplesEXT(
     VkCommandBuffer                     commandBuffer,
     VkSampleCountFlagBits               rasterizationSamples)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetRasterizationSamples(rasterizationSamples);
 }
 
 // =====================================================================================================================
@@ -1534,7 +1534,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetSampleMaskEXT(
     VkSampleCountFlagBits               samples,
     const VkSampleMask*                 pSampleMask)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetSampleMask(samples, pSampleMask);
 }
 
 // =====================================================================================================================
@@ -1568,7 +1568,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetColorBlendEnableEXT(
     uint32_t                            attachmentCount,
     const VkBool32*                     pColorBlendEnables)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetColorBlendEnable(firstAttachment,
+                                                                       attachmentCount,
+                                                                       pColorBlendEnables);
 }
 
 // =====================================================================================================================
@@ -1578,7 +1580,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetColorBlendEquationEXT(
     uint32_t                            attachmentCount,
     const VkColorBlendEquationEXT*      pColorBlendEquations)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetColorBlendEquation(firstAttachment,
+                                                                         attachmentCount,
+                                                                            pColorBlendEquations);
 }
 
 // =====================================================================================================================
@@ -1604,7 +1608,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetConservativeRasterizationModeEXT(
     VkCommandBuffer                     commandBuffer,
     VkConservativeRasterizationModeEXT  conservativeRasterizationMode)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetConservativeRasterizationMode(conservativeRasterizationMode);
 }
 
 // =====================================================================================================================
@@ -1612,7 +1616,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetExtraPrimitiveOverestimationSizeEXT(
     VkCommandBuffer                     commandBuffer,
     float                               extraPrimitiveOverestimationSize)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->
+        SetExtraPrimitiveOverestimationSize(extraPrimitiveOverestimationSize);
 }
 
 // =====================================================================================================================
@@ -1628,7 +1633,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetSampleLocationsEnableEXT(
     VkCommandBuffer                     commandBuffer,
     VkBool32                            sampleLocationsEnable)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetSampleLocationsEnable(sampleLocationsEnable);
 }
 
 // =====================================================================================================================
@@ -1636,7 +1641,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetProvokingVertexModeEXT(
     VkCommandBuffer                     commandBuffer,
     VkProvokingVertexModeEXT            provokingVertexMode)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetProvokingVertexMode(provokingVertexMode);
 }
 
 // =====================================================================================================================
@@ -1652,7 +1657,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStippleEnableEXT(
     VkCommandBuffer                     commandBuffer,
     VkBool32                            stippledLineEnable)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetLineStippleEnable(stippledLineEnable);
 }
 
 // =====================================================================================================================

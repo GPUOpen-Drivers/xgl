@@ -351,6 +351,7 @@ PhysicalDevice::PhysicalDevice(
     m_eqaaSupported(true),
     m_supportedExtensions(),
     m_allowedExtensions(),
+    m_ignoredExtensions(),
     m_compiler(this),
     m_memoryUsageTracker {},
     m_pipelineCacheUUID {},
@@ -4514,8 +4515,8 @@ void PhysicalDevice::GetPhysicalDeviceSubgroupSizeControlProperties(
     // No limits on the maximum number of subgroups allowed within a workgroup.
     *pMaxComputeWorkgroupSubgroups = UINT32_MAX;
 
-    // Do not support setting a required subgroup size in any stage.
-    *pRequiredSubgroupSizeStages = 0;
+    // We currently only support compute shader for setting subgroup size.
+    *pRequiredSubgroupSizeStages = VK_SHADER_STAGE_COMPUTE_BIT;
 }
 
 // =====================================================================================================================
@@ -6471,12 +6472,12 @@ size_t PhysicalDevice::GetFeatures2(
                     pExtInfo->extendedDynamicState3RasterizationSamples             = VK_TRUE;
                     pExtInfo->extendedDynamicState3SampleMask                       = VK_TRUE;
                     pExtInfo->extendedDynamicState3AlphaToCoverageEnable            = VK_TRUE;
-                    pExtInfo->extendedDynamicState3AlphaToOneEnable                 = VK_TRUE;
+                    pExtInfo->extendedDynamicState3AlphaToOneEnable                 = VK_FALSE;
                     pExtInfo->extendedDynamicState3LogicOpEnable                    = VK_TRUE;
                     pExtInfo->extendedDynamicState3ColorBlendEnable                 = VK_TRUE;
                     pExtInfo->extendedDynamicState3ColorBlendEquation               = VK_TRUE;
                     pExtInfo->extendedDynamicState3ColorWriteMask                   = VK_TRUE;
-                    pExtInfo->extendedDynamicState3RasterizationStream              = VK_TRUE;
+                    pExtInfo->extendedDynamicState3RasterizationStream              = VK_FALSE;
                     pExtInfo->extendedDynamicState3ConservativeRasterizationMode    = VK_TRUE;
                     pExtInfo->extendedDynamicState3ExtraPrimitiveOverestimationSize = VK_TRUE;
                     pExtInfo->extendedDynamicState3DepthClipEnable                  = VK_TRUE;
@@ -6501,6 +6502,19 @@ size_t PhysicalDevice::GetFeatures2(
                 structSize = sizeof(*pExtInfo);
                 break;
             }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->attachmentFeedbackLoopLayout = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures

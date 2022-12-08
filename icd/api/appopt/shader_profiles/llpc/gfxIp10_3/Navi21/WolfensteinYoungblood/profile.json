@@ -17,7 +17,7 @@
       "action": {
         "cs": {
           "useSiScheduler": true,
-          "waveSize": 32
+          "disableCodeSinking": true
         }
       }
     },
@@ -29,20 +29,7 @@
       },
       "action": {
         "cs": {
-          "useSiScheduler": true,
-          "waveSize": 32
-        }
-      }
-    },
-    {
-      "pattern": {
-        "cs": {
-          "codeHash": "0x8d8b60de0782642b f143d8ecd6de6b11"
-        }
-      },
-      "action": {
-        "cs": {
-          "waveSize": 32
+          "useSiScheduler": true
         }
       }
     },
@@ -118,7 +105,9 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": true
+          "useSiScheduler": true,
+          "vgprLimit": 72,
+          "ldsSpillLimitDwords": 4096
         }
       }
     },

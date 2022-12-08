@@ -53,7 +53,7 @@ void ComputePipeline::BuildApiHash(
     // Set up the ELF hash, which is used for indexing the pipeline cache
     Util::MetroHash128 elfHasher = {};
 
-    // Hash any set flags that do not affect the resulting ELF
+    // Hash only flags needed for pipeline caching
     elfHasher.Update(GetCacheIdControlFlags(pCreateInfo->flags));
 
     GenerateHashFromShaderStageCreateInfo(stageInfo.stage, &elfHasher);
@@ -68,9 +68,10 @@ void ComputePipeline::BuildApiHash(
     apiHasher.Update(*pElfHash);
 
     // Hash flags not accounted for in the elf hash
-    elfHasher.Update(pCreateInfo->flags);
+    apiHasher.Update(pCreateInfo->flags);
 
-    if ((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
+    if (((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) != 0) &&
+        (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
     {
         apiHasher.Update(ComputePipeline::ObjectFromHandle(pCreateInfo->basePipelineHandle)->GetApiHash());
     }
@@ -95,7 +96,6 @@ void ComputePipeline::ConvertComputePipelineInfo(
     {
         pOutInfo->pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
     }
-
 }
 
 // =====================================================================================================================
@@ -155,12 +155,14 @@ VkResult ComputePipeline::Create(
     const void*                     pPipelineBinaries[MaxPalDevices]   = {};
     Util::MetroHash::Hash           cacheId[MaxPalDevices]             = {};
     PipelineCompiler*               pDefaultCompiler                   = pDevice->GetCompiler(DefaultDeviceIndex);
+    const RuntimeSettings&          settings                           = pDevice->GetRuntimeSettings();
     ComputePipelineBinaryCreateInfo binaryCreateInfo                   = {};
+    PipelineOptimizerKey            pipelineOptimizerKey               = {};
+    ShaderOptimizerKey              shaderOptimizerKey                 = {};
     ShaderModuleHandle              tempModule                         = {};
     VkResult                        result                             = VK_SUCCESS;
 
     ComputePipelineShaderStageInfo shaderInfo = {};
-
     result = BuildShaderStageInfo(pDevice,
         1,
         &pCreateInfo->stage,
@@ -186,14 +188,14 @@ VkResult ComputePipeline::Create(
         ShaderModule::GetFirstValidShaderData(shaderInfo.stage.pModuleHandle));
 
     // Set up the PipelineProfileKey for applying tuning parameters
-    binaryCreateInfo.pipelineProfileKey.shaderCount = 1;
-    binaryCreateInfo.pipelineProfileKey.pShaders    = &binaryCreateInfo.shaderProfileKey;
+    pipelineOptimizerKey.shaderCount = 1;
+    pipelineOptimizerKey.pShaders    = &shaderOptimizerKey;
 
     pDevice->GetShaderOptimizer()->CreateShaderOptimizerKey(pModuleData,
                                                             shaderInfo.stage.codeHash,
                                                             Vkgc::ShaderStage::ShaderStageCompute,
                                                             shaderInfo.stage.codeSize,
-                                                            &binaryCreateInfo.shaderProfileKey);
+                                                            &shaderOptimizerKey);
 
     // Load or create the pipeline binary
     PipelineBinaryCache* pPipelineBinaryCache = (pPipelineCache != nullptr) ? pPipelineCache->GetPipelineCache()
@@ -204,25 +206,20 @@ VkResult ComputePipeline::Create(
         bool isUserCacheHit     = false;
         bool isInternalCacheHit = false;
 
-        Util::MetroHash128 hasher = {};
-        hasher.Update(elfHash);
-        hasher.Update(deviceIdx);
-
-        // Extensions and features whose enablement affects compiler inputs (and hence the binary)
-        hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO));
-        hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT));
-        hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_PRIMITIVES_GENERATED_QUERY));
-        hasher.Update(pDevice->GetEnabledFeatures().scalarBlockLayout);
-        hasher.Update(pDevice->GetEnabledFeatures().robustBufferAccess);
-        hasher.Update(pDevice->GetEnabledFeatures().robustBufferAccessExtended);
-        hasher.Update(pDevice->GetEnabledFeatures().robustImageAccessExtended);
-        hasher.Update(pDevice->GetEnabledFeatures().nullDescriptorExtended);
-
-        hasher.Finalize(cacheId[deviceIdx].bytes);
-
         {
             Util::Result cacheResult = Util::Result::NotFound;
 
+            ElfHashToCacheId(
+                pDevice,
+                deviceIdx,
+                elfHash,
+                pDevice->VkPhysicalDevice(deviceIdx)->GetSettingsLoader()->GetSettingsHash(),
+                pipelineOptimizerKey,
+                &cacheId[deviceIdx]);
+
+            bool forceCompilation = settings.enablePipelineDump;
+
+            if (forceCompilation == false)
             {
                 // Search the pipeline binary cache
                 cacheResult = pDevice->GetCompiler(deviceIdx)->GetCachedPipelineBinary(
@@ -241,25 +238,20 @@ VkResult ComputePipeline::Create(
             {
                 if (binaryCreateInfo.pTempBuffer == nullptr)
                 {
-                    if (result == VK_SUCCESS)
-                    {
-                        result = pDefaultCompiler->ConvertComputePipelineInfo(
-                            pDevice, pCreateInfo, &shaderInfo, &binaryCreateInfo);
-                    }
+                    result = pDefaultCompiler->ConvertComputePipelineInfo(
+                        pDevice, pCreateInfo, &shaderInfo, &pipelineOptimizerKey, &binaryCreateInfo);
                 }
 
-                result = pDevice->GetCompiler(deviceIdx)->CreateComputePipelineBinary(
-                    pDevice,
-                    deviceIdx,
-                    pPipelineCache,
-                    &binaryCreateInfo,
-                    &pipelineBinarySizes[deviceIdx],
-                    &pPipelineBinaries[deviceIdx],
-                    &cacheId[deviceIdx]);
-
-                if (result != VK_SUCCESS)
+                if (result == VK_SUCCESS)
                 {
-                    return result;
+                    result = pDevice->GetCompiler(deviceIdx)->CreateComputePipelineBinary(
+                        pDevice,
+                        deviceIdx,
+                        pPipelineCache,
+                        &binaryCreateInfo,
+                        &pipelineBinarySizes[deviceIdx],
+                        &pPipelineBinaries[deviceIdx],
+                        &cacheId[deviceIdx]);
                 }
             }
         }
@@ -285,8 +277,8 @@ VkResult ComputePipeline::Create(
 
         // Override pipeline creation parameters based on pipeline profile
         pDevice->GetShaderOptimizer()->OverrideComputePipelineCreateInfo(
-            binaryCreateInfo.pipelineProfileKey,
-            nullptr);
+            pipelineOptimizerKey,
+            &localPipelineInfo.immedInfo.computeShaderInfo);
     }
 
     // Get the pipeline and shader size from PAL and allocate memory.
@@ -468,7 +460,6 @@ VkResult ComputePipeline::Create(
             &binaryCreateInfo.pipelineFeedback,
             &binaryCreateInfo.stageFeedback);
 
-        const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
         // The hash is same as pipline dump file name, we can easily analyze further.
         AmdvlkLog(settings.logTagIdMask, PipelineCompileTime, "0x%016llX-%llu", apiPsoHash, duration);
     }

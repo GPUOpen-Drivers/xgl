@@ -39,6 +39,10 @@
 
 #include "vkgcDefs.h"
 
+#if PAL_ENABLE_PRINTS_ASSERTS
+#include "palMutex.h"
+#endif
+
 #include <climits>
 
 // Forward declare PAL classes used in this file
@@ -47,6 +51,11 @@ namespace Pal
 struct DynamicGraphicsShaderInfos;
 struct DynamicComputeShaderInfo;
 struct DynamicGraphicsShaderInfo;
+};
+
+namespace Util
+{
+class MetroHash128;
 };
 
 // Forward declare Vulkan classes used in this file
@@ -140,6 +149,10 @@ public:
 
     bool HasMatchingProfileEntry(const PipelineOptimizerKey& pipelineKey) const;
 
+    void CalculateMatchingProfileEntriesHash(
+        const PipelineOptimizerKey& pipelineKey,
+        Util::MetroHash128*         pHasher) const;
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(ShaderOptimizer);
 
@@ -175,8 +188,13 @@ private:
         const PipelineOptimizerKey&   pipelineKey) const;
 
     bool HasMatchingProfileEntry(
-        const PipelineProfile& profile,
+        const PipelineProfile&      profile,
         const PipelineOptimizerKey& pipelineKey) const;
+
+    void CalculateMatchingProfileEntriesHash(
+        const PipelineProfile&      profile,
+        const PipelineOptimizerKey& pipelineKey,
+        Util::MetroHash128*         pHasher) const;
 
     void BuildTuningProfile();
     void BuildAppProfile();

@@ -197,9 +197,6 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->enableInsertBarriersInBuildAS     = settings.enableInsertBarriersInBuildAS;
     pDeviceSettings->sahQbvh                           = settings.sahQbvh;
 
-    pDeviceSettings->ltdQualityFactorFastTrace         = settings.ltdQualityFactorFastTrace;
-    pDeviceSettings->ltdQualityFactorFastBuild         = settings.ltdQualityFactorFastBuild;
-    pDeviceSettings->ltdQualityFactorDefaultBuild      = settings.ltdQualityFactorDefaultBuild;
     pDeviceSettings->numMortonSizeBits                 = settings.numMortonSizeBits;
     pDeviceSettings->allowFp16BoxNodesInUpdatableBvh   = settings.rtAllowFp16BoxNodesInUpdatableBVH;
 

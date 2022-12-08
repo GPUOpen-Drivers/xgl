@@ -159,7 +159,9 @@ union DirtyGraphicsState
         uint32 colorWriteEnable        :  1;
         uint32 rasterizerDiscardEnable :  1;
         uint32 samplePattern           :  1;
-        uint32 reserved                : 22;
+        uint32 colorBlend              :  1;
+        uint32 msaa                    :  1;
+        uint32 reserved                : 20;
     };
 
     uint32 u32All;
@@ -168,6 +170,16 @@ union DirtyGraphicsState
 struct DynamicDepthStencil
 {
     Pal::IDepthStencilState* pPalDepthStencil[MaxPalDevices];
+};
+
+struct DynamicColorBlend
+{
+    Pal::IColorBlendState* pPalColorBlend[MaxPalDevices];
+};
+
+struct DynamicMsaa
+{
+    Pal::IMsaaState* pPalMsaa[MaxPalDevices];
 };
 
 // Members of CmdBufferRenderState that are different for each GPU
@@ -289,8 +301,11 @@ struct AllGpuRenderState
     Pal::DepthStencilStateCreateInfo depthStencilCreateInfo;
     Pal::VrsRateParams               vrsRate;
     Pal::ColorWriteMaskParams        colorWriteMaskParams;
+    Pal::ColorBlendStateCreateInfo   colorBlendCreateInfo;
+    Pal::MsaaStateCreateInfo         msaaCreateInfo;
     SamplePattern                    samplePattern;
-
+    VkBool32                         sampleLocationsEnable;
+    float                            minSampleShading;
 };
 
 // State tracked during a render pass instance when building a command buffer.
@@ -659,6 +674,40 @@ public:
         uint32_t                                     vertexAttributeDescriptionCount,
         const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions);
 
+    void SetColorBlendEnable(
+        uint32_t                            firstAttachment,
+        uint32_t                            attachmentCount,
+        const VkBool32*                     pColorBlendEnables);
+
+    void SetColorBlendEquation(
+        uint32_t                            firstAttachment,
+        uint32_t                            attachmentCount,
+        const VkColorBlendEquationEXT*      pColorBlendEquations);
+
+    void SetRasterizationSamples(
+        VkSampleCountFlagBits               rasterizationSamples);
+
+    void SetSampleMask(
+        VkSampleCountFlagBits               samples,
+        const VkSampleMask*                 pSampleMask);
+
+    void SetConservativeRasterizationMode(
+        VkConservativeRasterizationModeEXT  conservativeRasterizationMode);
+
+    void SetExtraPrimitiveOverestimationSize(
+        float                               extraPrimitiveOverestimationSize);
+
+    void SetLineStippleEnable(
+        VkBool32                            stippledLineEnable);
+
+    void SetPolygonMode(
+        VkPolygonMode                       polygonMode);
+
+    void SetProvokingVertexMode(
+        VkProvokingVertexModeEXT            provokingVertexMode);
+
+    void SetSampleLocationsEnable(
+        VkBool32                            sampleLocationsEnable);
     void SetEvent(
         VkEvent                                     event,
         PipelineStageFlags                          stageMask);
@@ -1676,6 +1725,8 @@ private:
 #endif
 
     Util::Vector<DynamicDepthStencil, 16, PalAllocator> m_palDepthStencilState;
+    Util::Vector<DynamicColorBlend, 16, PalAllocator>   m_palColorBlendState;
+    Util::Vector<DynamicMsaa, 16, PalAllocator>         m_palMsaaState;
 
     uint32                        m_vbWatermark;  // tracks how many vb entries need to be reset
 

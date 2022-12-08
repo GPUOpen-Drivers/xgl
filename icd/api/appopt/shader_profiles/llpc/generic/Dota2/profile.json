@@ -9,7 +9,7 @@
       },
       "action": {
         "ps": {
-          "disableLoopUnrolls": 1
+          "disableLoopUnrolls": true
         }
       }
     }

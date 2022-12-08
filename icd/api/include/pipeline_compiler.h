@@ -52,7 +52,6 @@ class PipelineLayout;
 class PipelineCache;
 class ShaderModule;
 class PipelineCompiler;
-struct VbBindingInfo;
 struct PipelineInternalBufferInfo;
 struct ShaderModuleHandle;
 
@@ -84,6 +83,7 @@ struct ShaderStageInfo
     const char*                                        pEntryPoint;
     VkPipelineShaderStageCreateFlags                   flags;
     const VkSpecializationInfo*                        pSpecializationInfo;
+    size_t                                             waveSize;
 };
 
 // =====================================================================================================================
@@ -103,7 +103,7 @@ struct ComputePipelineShaderStageInfo
 struct RayTracingPipelineShaderStageInfo
 {
     uint32_t         stageCount;
-    ShaderStageInfo* stages;
+    ShaderStageInfo* pStages;
 };
 #endif
 
@@ -205,9 +205,9 @@ public:
         const VkGraphicsPipelineCreateInfo*             pIn,
         const GraphicsPipelineShaderStageInfo*          pShaderInfo,
         const PipelineLayout*                           pPipelineLayout,
-        GraphicsPipelineBinaryCreateInfo*               pCreateInfo,
-        VbBindingInfo*                                  pVbInfo,
-        PipelineInternalBufferInfo*                     pInternalBufferInfo);
+        PipelineOptimizerKey*                           pPipelineProfileKey,
+        PipelineMetadata*                               pBinaryMetadata,
+        GraphicsPipelineBinaryCreateInfo*               pCreateInfo);
 
     static void SetPartialGraphicsPipelineBinaryInfo(
         const ShaderModuleHandle*         pShaderModuleHandle,
@@ -218,6 +218,7 @@ public:
         const Device*                                   pDevice,
         const VkComputePipelineCreateInfo*              pIn,
         const ComputePipelineShaderStageInfo*           pShaderInfo,
+        const PipelineOptimizerKey*                     pPipelineProfileKey,
         ComputePipelineBinaryCreateInfo*                pInfo);
 
     void FreeComputePipelineBinary(
@@ -239,6 +240,7 @@ public:
         const Device*                            pDevice,
         const VkRayTracingPipelineCreateInfoKHR* pIn,
         const RayTracingPipelineShaderStageInfo* pShaderInfo,
+        const PipelineOptimizerKey*              pPipelineProfileKey,
         RayTracingPipelineBinaryCreateInfo*      pCreateInfo);
 
     VkResult CreateRayTracingPipelineBinary(
@@ -254,9 +256,19 @@ public:
         RayTracingPipelineBinary*           pPipelineBinary);
 
     void FreeRayTracingPipelineCreateInfo(RayTracingPipelineBinaryCreateInfo* pCreateInfo);
-    void SetRayTracingState(const Device*   pDevice,
-                            Vkgc::RtState*  pRtState,
-                            uint32_t        createFlags);
+
+    void SetRayTracingState(
+        const Device*                       pDevice,
+        Vkgc::RtState*                      pRtState,
+        uint32_t                            createFlags);
+
+    void ExtractRayTracingPipelineBinary(
+        Vkgc::BinaryData*                   pBinary,
+        RayTracingPipelineBinary*           pPipelineBinary);
+
+    bool BuildRayTracingPipelineBinary(
+        const RayTracingPipelineBinary*     pPipelineBinary,
+        Vkgc::BinaryData*                   pBinary);
 
 #endif
 
@@ -286,8 +298,7 @@ public:
 
     void BuildPipelineInternalBufferData(
         const PipelineLayout*             pPipelineLayout,
-        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-        PipelineInternalBufferInfo*       pInternalBufferInfo);
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo);
 
     void GetComputePipelineCacheId(
         uint32_t                         deviceIdx,
@@ -325,7 +336,7 @@ public:
         const ShaderStageInfo*                        pShaderInfoIn,
         Vkgc::PipelineShaderInfo*                     pShaderInfoOut,
         Vkgc::PipelineOptions*                        pPipelineOptions,
-        PipelineOptimizerKey*                         pOptimizerKey,
+        const PipelineOptimizerKey*                   pOptimizerKey,
         Vkgc::NggState*                               pNggState
         );
 
@@ -373,10 +384,24 @@ public:
         bool                                        dynamicStride,
         void*                                       pUberFetchShaderInternalData) const;
 
+    static void ReadBinaryMetadata(
+        const Device*     pDevice,
+        const void*       pElfBinary,
+        const size_t      binarySize,
+        PipelineMetadata* pMetadata);
+
+    static VkResult WriteBinaryMetadata(
+        const Device*                     pDevice,
+        GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
+        const void**                      ppElfBinary,
+        size_t*                           pBinarySize,
+        PipelineMetadata*                 pMetadata);
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
 
-    static bool IsDefaultPipelineMetadata(const PipelineMetadata* pPipelineMetadata);
+    static bool IsDefaultPipelineMetadata(
+        const PipelineMetadata* pPipelineMetadata);
 
     void DropPipelineBinaryInst(
         Device*                pDevice,
@@ -408,15 +433,7 @@ private:
         RayTracingPipelineBinary*           pPipelineBinary,
         uint64_t                            hashCode64);
 
-    void ExtractRayTracingPipelineBinary(
-        Vkgc::BinaryData* pBinary,
-        RayTracingPipelineBinary* pPipelineBinary);
-
-    bool BuildRayTracingPipelineBinary(
-        RayTracingPipelineBinary* pPipelineBinary,
-        Vkgc::BinaryData* pBinary);
-
-    size_t GetRayTracingPipelineMetaSize(RayTracingPipelineBinary* pPipelineBinary) const;
+    size_t GetRayTracingPipelineMetaSize(const RayTracingPipelineBinary* pPipelineBinary) const;
 #endif
 
     VkResult LoadShaderModuleFromCache(

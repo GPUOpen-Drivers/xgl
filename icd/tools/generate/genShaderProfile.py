@@ -191,7 +191,7 @@ def parse_json_profile_action_shader(shader_actions):
         'nggEnableSphereCulling', 'nggEnableBackfaceCulling', 'nggEnableSmallPrimFilter', 'enableSubvector',
         'enableSubvectorSharedVgprs', 'maxWavesPerCu', 'cuEnableMask', 'maxThreadGroupsPerCu', 'useSiScheduler',
         'disableCodeSinking', 'favorLatencyHiding', 'reconfigWorkgroupLayout', 'forceLoopUnrollCount',
-        'enableLoadScalarizer', 'disableLicm', 'unrollThreshold'
+        'enableLoadScalarizer', 'disableLicm', 'unrollThreshold', 'nsaThreshold', 'aggressiveInvariantLoads'
     ]
     :param shader_actions:
     :return:

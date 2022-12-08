@@ -947,7 +947,7 @@ SHADER_ACTION = {
     },
 
     "disableLoopUnrolls": {
-        "type": [int],
+        "type": [bool],
         "jsonReadable": True,
         "entityInfo": [
             {
@@ -1877,6 +1877,80 @@ SHADER_ACTION = {
 .%FieldName% = %IntValue%u;\n""",
         "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
         "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+
+    "nsaThreshold": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "nsaThreshold",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "nsaThreshold",
+                "dataType": "uint32_t",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+            },
+        ],
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+
+    "aggressiveInvariantLoads": {
+        "type": [str],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "aggressiveInvariantLoads",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "aggressiveInvariantLoads",
+                "dataType": "Vkgc::InvariantLoads",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+            },
+        ],
+        "validValues": {
+            0: "Auto",
+            1: "EnableOptimization",
+            2: "DisableOptimization",
+            3: "ClearInvariants"
+        },
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = Vkgc::InvariantLoads::%StrValue%;\n""",
+        "jsonWriterTemplate": json_enum_writer_template(
+            ["Auto", "EnableOptimization", "DisableOptimization", "ClearInvariants"],
+            prefix="Vkgc::InvariantLoads::"),
+        "jsonReaderTemplate": json_enum_reader_template(
+            ["Auto", "EnableOptimization", "DisableOptimization", "ClearInvariants"],
+            prefix="Vkgc::InvariantLoads::")
     },
 }
 

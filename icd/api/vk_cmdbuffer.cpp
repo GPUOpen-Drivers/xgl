@@ -497,12 +497,15 @@ CmdBuffer::CmdBuffer(
     m_numPalDevices(pDevice->NumPalDevices()),
     m_validShaderStageFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetValidShaderStages(queueFamilyIndex)),
     m_pStackAllocator(nullptr),
+    m_allGpuState { },
     m_flags(),
     m_recordingResult(VK_SUCCESS),
     m_pSqttState(nullptr),
     m_renderPassInstance(pDevice->VkInstance()->Allocator()),
     m_pTransformFeedbackState(nullptr),
     m_palDepthStencilState(pDevice->VkInstance()->Allocator()),
+    m_palColorBlendState(pDevice->VkInstance()->Allocator()),
+    m_palMsaaState(pDevice->VkInstance()->Allocator()),
     m_reverseThreadGroupState(false)
 #if VKI_RAY_TRACING
     , m_rayTracingIndirectList(pDevice->VkInstance()->Allocator())
@@ -705,16 +708,11 @@ VkResult CmdBuffer::Initialize(
     {
         m_flags.is2ndLvl = groupCreateInfo.flags.nested;
 
-        // Clear all stencilRefMasks bytes to zero to silence a Valgrind error.
-        memset(&m_allGpuState.stencilRefMasks, 0, sizeof(m_allGpuState.stencilRefMasks));
-
         m_allGpuState.stencilRefMasks.flags.u8All = 0xff;
 
         // Set up the default front/back op values == 1
         m_allGpuState.stencilRefMasks.frontOpValue = DefaultStencilOpValue;
         m_allGpuState.stencilRefMasks.backOpValue = DefaultStencilOpValue;
-
-        memset(m_allGpuState.pipelineState, 0, sizeof(m_allGpuState.pipelineState));
     }
 
     // Initialize SQTT command buffer state if thread tracing support is enabled (gpuopen developer mode).
@@ -1053,7 +1051,7 @@ void CmdBuffer::PalCmdDrawMeshTasks(
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
     {
-        PalCmdBuffer(deviceGroup.Index())->CmdDispatchMesh(x, y, z);
+        PalCmdBuffer(deviceGroup.Index())->CmdDispatchMesh({ x, y, z });
     }
     while (deviceGroup.IterateNext());
 }
@@ -1107,7 +1105,7 @@ void CmdBuffer::PalCmdDispatch(
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
     {
-        PalCmdBuffer(deviceGroup.Index())->CmdDispatch(x, y, z);
+        PalCmdBuffer(deviceGroup.Index())->CmdDispatch({ x, y, z });
     }
     while (deviceGroup.IterateNext());
 }
@@ -1124,7 +1122,9 @@ void CmdBuffer::PalCmdDispatchOffset(
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
     {
-        PalCmdBuffer(deviceGroup.Index())->CmdDispatchOffset(base_x, base_y, base_z, size_x, size_y, size_z);
+        PalCmdBuffer(deviceGroup.Index())->CmdDispatchOffset({ base_x, base_y, base_z },
+                                                             { size_x, size_y, size_z },
+                                                             { size_x, size_y, size_z });
     }
     while (deviceGroup.IterateNext());
 }
@@ -1546,6 +1546,14 @@ VkResult CmdBuffer::Begin(
         result = m_pCmdPool->MarkCmdBufBegun(this);
     }
 
+    if (result == Pal::Result::Success)
+    {
+        if (m_pStackAllocator == nullptr)
+        {
+            result = m_pDevice->VkInstance()->StackMgr()->AcquireAllocator(&m_pStackAllocator);
+        }
+    }
+
     DbgBarrierPreCmd(DbgBarrierCmdBufStart);
 
     VK_ASSERT(result == Pal::Result::Success);
@@ -1553,14 +1561,6 @@ VkResult CmdBuffer::Begin(
     if (m_pSqttState != nullptr)
     {
         m_pSqttState->Begin(pBeginInfo);
-    }
-
-    if (result == Pal::Result::Success)
-    {
-        if (m_pStackAllocator == nullptr)
-        {
-            result = m_pDevice->VkInstance()->StackMgr()->AcquireAllocator(&m_pStackAllocator);
-        }
     }
 
     if (result == Pal::Result::Success)
@@ -1583,12 +1583,14 @@ VkResult CmdBuffer::Begin(
 
             for (uint32_t i = 0; i < m_allGpuState.dynamicRenderingInstance.colorAttachmentCount; ++i)
             {
-                DynamicRenderingAttachments& dynamicAttachment =
-                    m_allGpuState.dynamicRenderingInstance.colorAttachments[i];
+                DynamicRenderingAttachments* pDynamicAttachment =
+                    &m_allGpuState.dynamicRenderingInstance.colorAttachments[i];
 
-                dynamicAttachment.attachmentFormat     = pInheritanceRenderingInfoKHR->pColorAttachmentFormats[i];
-                dynamicAttachment.rasterizationSamples = pInheritanceRenderingInfoKHR->rasterizationSamples;
+                pDynamicAttachment->pImageView           = nullptr;
+                pDynamicAttachment->attachmentFormat     = pInheritanceRenderingInfoKHR->pColorAttachmentFormats[i];
+                pDynamicAttachment->rasterizationSamples = pInheritanceRenderingInfoKHR->rasterizationSamples;
             }
+
             m_allGpuState.dynamicRenderingInstance.depthAttachment.attachmentFormat     =
                 (pInheritanceRenderingInfoKHR->depthAttachmentFormat != VK_FORMAT_UNDEFINED) ?
                 pInheritanceRenderingInfoKHR->depthAttachmentFormat :
@@ -1710,6 +1712,7 @@ VkResult CmdBuffer::Begin(
         m_allGpuState.samplePattern.sampleCount   = 1;
         m_allGpuState.samplePattern.locations     =
             *Device::GetDefaultQuadSamplePattern(m_allGpuState.samplePattern.sampleCount);
+        m_allGpuState.sampleLocationsEnable = VK_FALSE;
 
         PalCmdSetMsaaQuadSamplePattern(m_allGpuState.samplePattern.sampleCount, m_allGpuState.samplePattern.locations);
 
@@ -1782,6 +1785,7 @@ void CmdBuffer::ResetPipelineState()
         m_allGpuState.pipelineState[bindIdx].boundSetCount    = 0;
         m_allGpuState.pipelineState[bindIdx].pushedConstCount = 0;
         m_allGpuState.pipelineState[bindIdx].dynamicBindInfo  = {};
+        m_allGpuState.pipelineState[bindIdx].hasDynamicVertexInput = false;
 
         bindIdx++;
     }
@@ -1970,7 +1974,7 @@ void CmdBuffer::RebindPipeline()
         {
             pPipeline->BindToCmdBuffer(this, pPipeline->GetBindInfo());
 
-            if (pPipeline->ContainsStaticState(DynamicStatesInternal::VertexInputBindingStrideExt))
+            if (pPipeline->ContainsStaticState(DynamicStatesInternal::VertexInputBindingStride))
             {
                 UpdateVertexBufferStrides(pPipeline);
             }
@@ -1978,10 +1982,9 @@ void CmdBuffer::RebindPipeline()
             pNewUserDataLayout = pPipeline->GetUserDataLayout();
 
             // Update dynamic vertex input state and check whether need rebind uber-fetch shader internal memory
-            if (pPipeline->ContainsDynamicState(DynamicStatesInternal::VertexInputExt))
+            PipelineBindState* pBindState = &m_allGpuState.pipelineState[PipelineBindGraphics];
+            if (pPipeline->ContainsDynamicState(DynamicStatesInternal::VertexInput))
             {
-                PipelineBindState* pBindState = &m_allGpuState.pipelineState[PipelineBindGraphics];
-
                 if (pBindState->hasDynamicVertexInput == false)
                 {
                     if (pBindState->uberFetchShaderInternalDataSize > 0)
@@ -2000,6 +2003,10 @@ void CmdBuffer::RebindPipeline()
                         rebindFlags |= RebindUberFetchInternalMem;
                     }
                 }
+            }
+            else
+            {
+                pBindState->hasDynamicVertexInput = false;
             }
         }
         else
@@ -2383,12 +2390,25 @@ void CmdBuffer::ReleaseResources()
 
     for (uint32_t i = 0; i < m_palDepthStencilState.NumElements(); ++i)
     {
-        DynamicDepthStencil palDepthStencilState = m_palDepthStencilState.At(i);
-
-        pRSCache->DestroyDepthStencilState(palDepthStencilState.pPalDepthStencil, pInstance->GetAllocCallbacks());
+        pRSCache->DestroyDepthStencilState(
+            m_palDepthStencilState.At(i).pPalDepthStencil, pInstance->GetAllocCallbacks());
     }
 
     m_palDepthStencilState.Clear();
+
+    for (uint32_t i = 0; i < m_palColorBlendState.NumElements(); ++i)
+    {
+        pRSCache->DestroyColorBlendState(m_palColorBlendState.At(i).pPalColorBlend, pInstance->GetAllocCallbacks());
+    }
+
+    m_palColorBlendState.Clear();
+
+    for (uint32_t i = 0; i < m_palMsaaState.NumElements(); ++i)
+    {
+        pRSCache->DestroyMsaaState(m_palMsaaState.At(i).pPalMsaa, pInstance->GetAllocCallbacks());
+    }
+
+    m_palMsaaState.Clear();
 
     // Release per-attachment render pass instance memory
     if (m_renderPassInstance.pAttachments != nullptr)
@@ -3879,7 +3899,7 @@ void CmdBuffer::ClearDynamicRenderingImages(
         // Detect if color clear or depth clear
         if ((clearInfo.aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) != 0)
         {
-            DynamicRenderingAttachments& attachment =
+            const DynamicRenderingAttachments& attachment =
                 m_allGpuState.dynamicRenderingInstance.colorAttachments[clearInfo.colorAttachment];
 
             // Clear only if the referenced attachment index is active
@@ -3941,8 +3961,10 @@ void CmdBuffer::ClearDynamicRenderingImages(
         }
         else
         {
-            DynamicRenderingAttachments& depthAttachment   = m_allGpuState.dynamicRenderingInstance.depthAttachment;
-            DynamicRenderingAttachments& stencilAttachment = m_allGpuState.dynamicRenderingInstance.stencilAttachment;
+            const DynamicRenderingAttachments& depthAttachment   =
+                m_allGpuState.dynamicRenderingInstance.depthAttachment;
+            const DynamicRenderingAttachments& stencilAttachment =
+                m_allGpuState.dynamicRenderingInstance.stencilAttachment;
 
             // Depth and Stencil Views are the same if both exist
             Pal::ImageLayout imageLayout       = {};
@@ -4049,34 +4071,27 @@ void CmdBuffer::ClearDynamicRenderingBoundAttachments(
             // Detect if color clear or depth clear
             if ((clearInfo.aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) != 0)
             {
-                DynamicRenderingAttachments& attachment =
-                    m_allGpuState.dynamicRenderingInstance.colorAttachments[clearInfo.colorAttachment];
-
                 // Fill in bound target information for this target, but don't clear yet
                 const uint32_t tgtIdx = clearInfo.colorAttachment;
 
                 // Clear only if the attachment reference is active
-                if (tgtIdx != VK_ATTACHMENT_UNUSED)
+                if (tgtIdx < m_allGpuState.dynamicRenderingInstance.colorAttachmentCount)
                 {
-                    Pal::BoundColorTarget target = {};
-                    target.targetIndex           = tgtIdx;
-                    const ImageView* pImageView  =
-                        m_allGpuState.dynamicRenderingInstance.colorAttachments[tgtIdx].pImageView;
-                    target.swizzledFormat        = VkToPalFormat(
-                        ((pImageView != nullptr)    ?
-                        pImageView->GetViewFormat() :
-                        m_allGpuState.dynamicRenderingInstance.colorAttachments[tgtIdx].attachmentFormat),
-                        m_pDevice->GetRuntimeSettings());
-                    target.samples =
-                        m_allGpuState.dynamicRenderingInstance.colorAttachments[tgtIdx].rasterizationSamples;
+                    const auto& attachment = m_allGpuState.dynamicRenderingInstance.colorAttachments[tgtIdx];
 
-                    target.fragments =
-                        m_allGpuState.dynamicRenderingInstance.colorAttachments[tgtIdx].rasterizationSamples;
+                    if (attachment.attachmentFormat != VK_FORMAT_UNDEFINED)
+                    {
+                        Pal::BoundColorTarget target = {};
 
-                    target.clearValue =
-                        VkToPalClearColor(&clearInfo.clearValue.color, target.swizzledFormat);
+                        target.targetIndex    = tgtIdx;
+                        target.swizzledFormat =
+                            VkToPalFormat(attachment.attachmentFormat, m_pDevice->GetRuntimeSettings());
+                        target.samples        = attachment.rasterizationSamples;
+                        target.fragments      = attachment.rasterizationSamples;
+                        target.clearValue     = VkToPalClearColor(&clearInfo.clearValue.color, target.swizzledFormat);
 
-                    colorTargets.PushBack(target);
+                        colorTargets.PushBack(target);
+                    }
                 }
             }
             else // Depth-stencil clear
@@ -4938,6 +4953,7 @@ void CmdBuffer::StoreAttachmentInfo(
             0,
             this);
 
+        pDynamicRenderingAttachement->attachmentFormat   = pColorImage->GetFormat();
         pDynamicRenderingAttachement->resolveMode        = renderingAttachmentInfo.resolveMode;
         pDynamicRenderingAttachement->pImageView         = pImageView;
         pDynamicRenderingAttachement->imageLayout        = colorImageLayout;
@@ -5218,7 +5234,7 @@ void CmdBuffer::EndRendering()
         // Resolve Color Images
         for (uint32_t i = 0; i < m_allGpuState.dynamicRenderingInstance.colorAttachmentCount; ++i)
         {
-            DynamicRenderingAttachments& renderingAttachmentInfo =
+            const DynamicRenderingAttachments& renderingAttachmentInfo =
                 m_allGpuState.dynamicRenderingInstance.colorAttachments[i];
 
             if ((renderingAttachmentInfo.resolveMode != VK_RESOLVE_MODE_NONE) &&
@@ -7670,7 +7686,7 @@ void CmdBuffer::QueryCopy(
 
         uint32_t threadGroupCount = Util::Max(1U, (queryCount + ThreadsPerGroup - 1) / ThreadsPerGroup);
 
-        PalCmdBuffer(deviceIdx)->CmdDispatch(threadGroupCount, 1, 1);
+        PalCmdBuffer(deviceIdx)->CmdDispatch({ threadGroupCount, 1, 1 });
 
         // Restore compute state
         PalCmdBuffer(deviceIdx)->CmdRestoreComputeState(Pal::ComputeStatePipelineAndUserData);
@@ -7746,7 +7762,7 @@ void CmdBuffer::SetSampleLocations(
 {
     VK_ASSERT((m_allGpuState.pGraphicsPipeline != nullptr) &&
               (m_allGpuState.pGraphicsPipeline->ContainsStaticState(
-                    DynamicStatesInternal::SampleLocationsExt) == false));
+                    DynamicStatesInternal::SampleLocations) == false));
 
     Pal::MsaaQuadSamplePattern locations;
     uint32_t sampleLocationsPerPixel = (uint32_t)pSampleLocationsInfo->sampleLocationsPerPixel;
@@ -10114,7 +10130,7 @@ void CmdBuffer::SetVertexInput(
                 pBindState->uberFetchShaderInternalDataSize == 0);
 
             // Upload internal memory
-            if (pBindState->hasDynamicVertexInput)
+            if (pBindState->hasDynamicVertexInput && (m_allGpuState.pGraphicsPipeline != nullptr))
             {
                 VK_ASSERT(GetUberFetchShaderUserData(&pBindState->userDataLayout) != PipelineLayout::InvalidReg);
 
@@ -10140,7 +10156,8 @@ void CmdBuffer::SetVertexInput(
             for (uint32 bindex = 0; bindex < vertexBindingDescriptionCount; ++bindex)
             {
                 uint32 byteStride = pVertexBindingDescriptions[bindex].stride;
-                Pal::BufferViewInfo* pBinding = &pVbBindings[bindex];
+                uint32 binding = pVertexBindingDescriptions[bindex].binding;
+                Pal::BufferViewInfo* pBinding = &pVbBindings[binding];
 
                 if (pBinding->stride != byteStride)
                 {
@@ -10148,8 +10165,8 @@ void CmdBuffer::SetVertexInput(
 
                     if (pBinding->gpuAddr != 0)
                     {
-                        firstChanged = Util::Min(firstChanged, bindex);
-                        lastChanged = Util::Max(lastChanged, bindex);
+                        firstChanged = Util::Min(firstChanged, binding);
+                        lastChanged = Util::Max(lastChanged, binding);
                     }
 
                     if (padVertexBuffers && (pBinding->stride != 0))
@@ -10925,6 +10942,8 @@ void CmdBuffer::GetRayTracingDispatchArgs(
     pConstants->infoData.callableTable.baseAddress   = callableSbt.deviceAddress;
     pConstants->infoData.callableTable.strideInBytes = static_cast<uint32_t>(callableSbt.stride);
     pConstants->infoData.traceRayGpuVa               = pPipeline->GetTraceRayGpuVa(deviceIdx);
+    pConstants->infoData.profile.maxIterations       = m_pDevice->RayTrace()->GetProfileMaxIterations();
+    pConstants->infoData.profile.rayFlags            = m_pDevice->RayTrace()->GetProfileRayFlags();
 
     pConstants->descriptorTable.dispatchRaysConstGpuVa = constGpuAddr +
                                                          offsetof(GpuRt::DispatchRaysConstants, infoData);
@@ -10932,8 +10951,6 @@ void CmdBuffer::GetRayTracingDispatchArgs(
     memcpy(pConstants->descriptorTable.accelStructTrackerSrd,
            m_pDevice->RayTrace()->GetAccelStructTrackerSrd(deviceIdx),
            sizeof(pConstants->descriptorTable.accelStructTrackerSrd));
-
-    pConstants->infoData.profile     = {};
 
     static_assert(uint32_t(GpuRt::TraceRayCounterDisable) == uint32_t(TraceRayCounterDisable),
                   "Wrong enum value, TraceRayCounterDisable != GpuRt::TraceRayCounterDisable");
@@ -11006,7 +11023,7 @@ void CmdBuffer::TraceRaysPerDevice(
 
     pPipeline->GetDispatchSize(&dispatchSizeX, &dispatchSizeY, &dispatchSizeZ, width, height, depth);
 
-    PalCmdBuffer(deviceIdx)->CmdDispatch(dispatchSizeX, dispatchSizeY, dispatchSizeZ);
+    PalCmdBuffer(deviceIdx)->CmdDispatch({ dispatchSizeX, dispatchSizeY, dispatchSizeZ });
 
     DbgBarrierPostCmd(DbgTraceRays);
 }
@@ -11316,7 +11333,9 @@ void CmdBuffer::ValidateStates()
 {
     if (m_allGpuState.dirtyGraphics.u32All != 0)
     {
-        Pal::IDepthStencilState* pPalDepthStencil[MaxPalDevices] = {};
+        const DynamicDepthStencil* pDepthStencil = nullptr;
+        const DynamicColorBlend*   pColorBlend   = nullptr;
+        const DynamicMsaa*         pMsaa         = nullptr;
 
         utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
         do
@@ -11406,59 +11425,46 @@ void CmdBuffer::ValidateStates()
             {
                 RenderStateCache* pRSCache = m_pDevice->GetRenderStateCache();
 
-                // Check pPalDepthStencil[0] should be fine since pPalDepthStencil[i] would be nullptr when
-                // pPalDepthStencil[0] is nullptr.
-                if (pPalDepthStencil[0] == nullptr)
+                if (pDepthStencil == nullptr)
                 {
-                    bool depthStencilExist = false;
+                    DynamicDepthStencil depthStencil = {};
 
                     pRSCache->CreateDepthStencilState(m_allGpuState.depthStencilCreateInfo,
                                                       m_pDevice->VkInstance()->GetAllocCallbacks(),
                                                       VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
-                                                      pPalDepthStencil);
+                                                      depthStencil.pPalDepthStencil);
 
                     // Check if pPalDepthStencil is already in the m_allGpuState.palDepthStencilState, destroy it
                     // and use the old one if yes. The destroy is not expensive since it's just a refCount--.
                     for (uint32_t i = 0; i < m_palDepthStencilState.NumElements(); ++i)
                     {
-                        const DynamicDepthStencil palDepthStencilState = m_palDepthStencilState.At(i);
+                        const DynamicDepthStencil& palDepthStencilState = m_palDepthStencilState.At(i);
 
                         // Check device0 only should be sufficient
-                        if (palDepthStencilState.pPalDepthStencil[0] == pPalDepthStencil[0])
+                        if (palDepthStencilState.pPalDepthStencil[0] == depthStencil.pPalDepthStencil[0])
                         {
-                            depthStencilExist = true;
-
-                            pRSCache->DestroyDepthStencilState(pPalDepthStencil,
+                            pRSCache->DestroyDepthStencilState(depthStencil.pPalDepthStencil,
                                                                m_pDevice->VkInstance()->GetAllocCallbacks());
 
-                            for (uint32_t j = 0; j < MaxPalDevices; ++j)
-                            {
-                                pPalDepthStencil[j] = palDepthStencilState.pPalDepthStencil[j];
-                            }
+                            pDepthStencil = &palDepthStencilState;
                             break;
                         }
                     }
 
                     // Add it to the m_palDepthStencilState if it doesn't exist
-                    if (!depthStencilExist)
+                    if (pDepthStencil == nullptr)
                     {
-                        DynamicDepthStencil palDepthStencilState = {};
-
-                        for (uint32_t i = 0; i < MaxPalDevices; ++i)
-                        {
-                            palDepthStencilState.pPalDepthStencil[i] = pPalDepthStencil[i];
-                        }
-
-                        m_palDepthStencilState.PushBack(palDepthStencilState);
+                        m_palDepthStencilState.PushBack(depthStencil);
+                        pDepthStencil = &m_palDepthStencilState.Back();
                     }
                 }
 
-                VK_ASSERT(pPalDepthStencil[0] != nullptr);
+                VK_ASSERT(pDepthStencil != nullptr);
 
                 PalCmdBindDepthStencilState(
                         m_pPalCmdBuffers[deviceIdx],
                         deviceIdx,
-                        pPalDepthStencil[deviceIdx]);
+                        pDepthStencil->pPalDepthStencil[deviceIdx]);
             }
 
             if (m_allGpuState.dirtyGraphics.colorWriteEnable)
@@ -11484,8 +11490,111 @@ void CmdBuffer::ValidateStates()
             {
                 PalCmdBuffer(deviceGroup.Index())->CmdSetMsaaQuadSamplePattern(
                     m_allGpuState.samplePattern.sampleCount,
-                    m_allGpuState.samplePattern.locations);
+                    m_allGpuState.sampleLocationsEnable ?
+                        m_allGpuState.samplePattern.locations :
+                        *Device::GetDefaultQuadSamplePattern(m_allGpuState.samplePattern.sampleCount));
             }
+
+            if (m_allGpuState.dirtyGraphics.colorBlend)
+            {
+                DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
+
+                RenderStateCache* pRSCache = m_pDevice->GetRenderStateCache();
+
+                if (pColorBlend == nullptr)
+                {
+                    DynamicColorBlend colorBlend = {};
+
+                    pRSCache->CreateColorBlendState(m_allGpuState.colorBlendCreateInfo,
+                        m_pDevice->VkInstance()->GetAllocCallbacks(),
+                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
+                        colorBlend.pPalColorBlend);
+
+                    // Check if pPalColorBlend is already in the m_palColorBlendState, destroy it and use the old one
+                    // if yes.The destroy is not expensive since it's just a refCount--.
+                    for (uint32_t i = 0; i < m_palColorBlendState.NumElements(); ++i)
+                    {
+                        const DynamicColorBlend& palColorBlendState = m_palColorBlendState.At(i);
+
+                        // Check device0 only should be sufficient
+                        if (palColorBlendState.pPalColorBlend[0] == colorBlend.pPalColorBlend[0])
+                        {
+                            pRSCache->DestroyColorBlendState(colorBlend.pPalColorBlend,
+                                m_pDevice->VkInstance()->GetAllocCallbacks());
+
+                            pColorBlend = &palColorBlendState;
+                            break;
+                        }
+                    }
+
+                    // Add it to the m_palColorBlendState if it doesn't exist
+                    if (pColorBlend == nullptr)
+                    {
+                        m_palColorBlendState.PushBack(colorBlend);
+                        pColorBlend = &m_palColorBlendState.Back();
+                    }
+                }
+
+                VK_ASSERT(pColorBlend != nullptr);
+
+                PalCmdBindColorBlendState(
+                    m_pPalCmdBuffers[deviceIdx],
+                    deviceIdx,
+                    pColorBlend->pPalColorBlend[deviceIdx]);
+
+                DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+            }
+
+            if (m_allGpuState.dirtyGraphics.msaa)
+            {
+                DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
+
+                RenderStateCache* pRSCache = m_pDevice->GetRenderStateCache();
+
+                if (pMsaa == nullptr)
+                {
+                    DynamicMsaa msaa = {};
+
+                    pRSCache->CreateMsaaState(m_allGpuState.msaaCreateInfo,
+                        m_pDevice->VkInstance()->GetAllocCallbacks(),
+                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
+                        msaa.pPalMsaa);
+
+                    // Check if pPalMsaa is already in the m_palMsaaState, destroy it and use the old one if yes.
+                    // The destroy is not expensive since it's just a refCount--.
+                    for (uint32_t i = 0; i < m_palMsaaState.NumElements(); ++i)
+                    {
+                        const DynamicMsaa& palMsaaState = m_palMsaaState.At(i);
+
+                        // Check device0 only should be sufficient
+                        if (palMsaaState.pPalMsaa[0] == msaa.pPalMsaa[0])
+                        {
+                            pRSCache->DestroyMsaaState(msaa.pPalMsaa,
+                                m_pDevice->VkInstance()->GetAllocCallbacks());
+
+                            pMsaa = &palMsaaState;
+                            break;
+                        }
+                    }
+
+                    // Add it to the m_palMsaaState if it doesn't exist
+                    if (pMsaa == nullptr)
+                    {
+                        m_palMsaaState.PushBack(msaa);
+                        pMsaa = &m_palMsaaState.Back();
+                    }
+                }
+
+                VK_ASSERT(pMsaa != nullptr);
+
+                PalCmdBindMsaaState(
+                    m_pPalCmdBuffers[deviceIdx],
+                    deviceIdx,
+                    pMsaa->pPalMsaa[deviceIdx]);
+
+                DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+            }
+
         }
         while (deviceGroup.IterateNext());
 
@@ -11538,7 +11647,9 @@ void CmdBuffer::ValidateSamplePattern(
         {
             PalCmdSetMsaaQuadSamplePattern(
                 m_allGpuState.samplePattern.sampleCount,
-                m_allGpuState.samplePattern.locations);
+                m_allGpuState.sampleLocationsEnable ?
+                    m_allGpuState.samplePattern.locations :
+                    *Device::GetDefaultQuadSamplePattern(m_allGpuState.samplePattern.sampleCount));
 
             m_allGpuState.dirtyGraphics.samplePattern = 0;
         }
@@ -11754,6 +11865,205 @@ void CmdBuffer::SetDepthBiasEnableEXT(
     }
 
     m_allGpuState.staticTokens.triangleRasterState = DynamicRenderStateToken;
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetColorBlendEnable(
+    uint32_t                            firstAttachment,
+    uint32_t                            attachmentCount,
+    const VkBool32*                     pColorBlendEnables)
+{
+    uint32_t lastAttachment = Util::Min(firstAttachment + attachmentCount, Pal::MaxColorTargets);
+    for (uint32_t i = firstAttachment; i < lastAttachment; i++)
+    {
+        if (m_allGpuState.colorBlendCreateInfo.targets[i].blendEnable !=
+            static_cast<bool>(pColorBlendEnables[i - firstAttachment]))
+        {
+            m_allGpuState.colorBlendCreateInfo.targets[i].blendEnable =
+                static_cast<bool>(pColorBlendEnables[i - firstAttachment]);
+            m_allGpuState.dirtyGraphics.colorBlend = 1;
+        }
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetColorBlendEquation(
+    uint32_t                            firstAttachment,
+    uint32_t                            attachmentCount,
+    const VkColorBlendEquationEXT*      pColorBlendEquations)
+{
+    uint32_t lastAttachment = Util::Min(firstAttachment + attachmentCount, Pal::MaxColorTargets);
+    for (uint32_t i = firstAttachment; i < lastAttachment; i++)
+    {
+        const VkColorBlendEquationEXT& colorBlendEquation = pColorBlendEquations[i - firstAttachment];
+        auto                           pTarget            = &m_allGpuState.colorBlendCreateInfo.targets[i];
+
+        Pal::Blend     srcBlendColor  = VkToPalBlend(colorBlendEquation.srcColorBlendFactor);
+        Pal::Blend     dstBlendColor  = VkToPalBlend(colorBlendEquation.dstColorBlendFactor);
+        Pal::BlendFunc blendFuncColor = VkToPalBlendFunc(colorBlendEquation.colorBlendOp);
+        Pal::Blend     srcBlendAlpha  = VkToPalBlend(colorBlendEquation.srcAlphaBlendFactor);
+        Pal::Blend     dstBlendAlpha  = VkToPalBlend(colorBlendEquation.dstAlphaBlendFactor);
+        Pal::BlendFunc blendFuncAlpha = VkToPalBlendFunc(colorBlendEquation.alphaBlendOp);
+
+        if ((pTarget->srcBlendColor  != srcBlendColor) ||
+            (pTarget->dstBlendColor  != dstBlendColor) ||
+            (pTarget->blendFuncColor != blendFuncColor) ||
+            (pTarget->srcBlendAlpha  != srcBlendAlpha) ||
+            (pTarget->dstBlendAlpha  != dstBlendAlpha) ||
+            (pTarget->blendFuncAlpha != blendFuncAlpha))
+
+        {
+            pTarget->srcBlendColor  = srcBlendColor;
+            pTarget->dstBlendColor  = dstBlendColor;
+            pTarget->blendFuncColor = blendFuncColor;
+            pTarget->srcBlendAlpha  = srcBlendAlpha;
+            pTarget->dstBlendAlpha  = dstBlendAlpha;
+            pTarget->blendFuncAlpha = blendFuncAlpha;
+            m_allGpuState.dirtyGraphics.colorBlend = 1;
+        }
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetRasterizationSamples(
+    VkSampleCountFlagBits               rasterizationSamples)
+{
+    const uint32_t rasterizationSampleCount = rasterizationSamples;
+
+    if (rasterizationSampleCount != m_allGpuState.msaaCreateInfo.coverageSamples)
+    {
+        m_allGpuState.msaaCreateInfo.coverageSamples = rasterizationSampleCount;
+        m_allGpuState.msaaCreateInfo.exposedSamples = rasterizationSampleCount;
+        if (m_allGpuState.minSampleShading > 0.0f)
+        {
+            m_allGpuState.msaaCreateInfo.pixelShaderSamples =
+                Pow2Pad(static_cast<uint32_t>(ceil(rasterizationSampleCount * m_allGpuState.minSampleShading)));
+        }
+        else
+        {
+            m_allGpuState.msaaCreateInfo.pixelShaderSamples = 1;
+        }
+
+        m_allGpuState.msaaCreateInfo.depthStencilSamples = rasterizationSampleCount;
+        m_allGpuState.msaaCreateInfo.shaderExportMaskSamples = rasterizationSampleCount;
+        m_allGpuState.msaaCreateInfo.alphaToCoverageSamples = rasterizationSampleCount;
+        m_allGpuState.msaaCreateInfo.occlusionQuerySamples = rasterizationSampleCount;
+        m_allGpuState.msaaCreateInfo.flags.enable1xMsaaSampleLocations = (rasterizationSampleCount == 1);
+
+        m_allGpuState.dirtyGraphics.msaa = 1;
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetSampleMask(
+    VkSampleCountFlagBits               samples,
+    const VkSampleMask*                 pSampleMask)
+{
+    if (m_allGpuState.msaaCreateInfo.sampleMask != *pSampleMask)
+    {
+        m_allGpuState.msaaCreateInfo.sampleMask = *pSampleMask;
+        m_allGpuState.dirtyGraphics.msaa = 1;
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetConservativeRasterizationMode(
+    VkConservativeRasterizationModeEXT  conservativeRasterizationMode)
+{
+    VK_ASSERT(m_pDevice->IsExtensionEnabled(DeviceExtensions::EXT_CONSERVATIVE_RASTERIZATION));
+    bool enableConservativeRasterization = false;
+    Pal::ConservativeRasterizationMode conservativeMode = Pal::ConservativeRasterizationMode::Overestimate;
+    switch (conservativeRasterizationMode)
+    {
+    case VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT:
+        {
+            enableConservativeRasterization = false;
+        }
+        break;
+    case VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT:
+        {
+            enableConservativeRasterization = true;
+            conservativeMode = Pal::ConservativeRasterizationMode::Overestimate;
+        }
+        break;
+    case VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT:
+        {
+            enableConservativeRasterization = true;
+            conservativeMode = Pal::ConservativeRasterizationMode::Underestimate;
+        }
+        break;
+    default:
+        break;
+    }
+
+    if ((m_allGpuState.msaaCreateInfo.flags.enableConservativeRasterization != enableConservativeRasterization) ||
+        (enableConservativeRasterization &&
+            (conservativeMode != m_allGpuState.msaaCreateInfo.conservativeRasterizationMode)))
+    {
+        m_allGpuState.msaaCreateInfo.flags.enableConservativeRasterization = enableConservativeRasterization;
+        m_allGpuState.msaaCreateInfo.conservativeRasterizationMode         = conservativeMode;
+        m_allGpuState.dirtyGraphics.msaa                                   = 1;
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetExtraPrimitiveOverestimationSize(
+    float                               extraPrimitiveOverestimationSize)
+{
+    // Do nothing
+    return;
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetLineStippleEnable(
+    VkBool32                            stippledLineEnable)
+{
+    if (m_allGpuState.msaaCreateInfo.flags.enableLineStipple != stippledLineEnable)
+    {
+        m_allGpuState.msaaCreateInfo.flags.enableLineStipple = stippledLineEnable;
+        m_allGpuState.dirtyGraphics.msaa                     = 1;
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetPolygonMode(
+    VkPolygonMode                       polygonMode)
+{
+    Pal::FillMode fillMode = VkToPalFillMode(polygonMode);
+    if (m_allGpuState.triangleRasterState.frontFillMode != fillMode)
+    {
+        m_allGpuState.triangleRasterState.frontFillMode = fillMode;
+        m_allGpuState.triangleRasterState.backFillMode = fillMode;
+        m_allGpuState.dirtyGraphics.rasterState = 1;
+    }
+
+    m_allGpuState.staticTokens.triangleRasterState = DynamicRenderStateToken;
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetProvokingVertexMode(
+    VkProvokingVertexModeEXT            provokingVertexMode)
+{
+    Pal::ProvokingVertex provokingVertex =
+            static_cast<Pal::ProvokingVertex>(provokingVertexMode);
+    if (m_allGpuState.triangleRasterState.provokingVertex != provokingVertex)
+    {
+        m_allGpuState.triangleRasterState.provokingVertex = provokingVertex;
+        m_allGpuState.dirtyGraphics.rasterState = 1;
+    }
+
+    m_allGpuState.staticTokens.triangleRasterState = DynamicRenderStateToken;
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetSampleLocationsEnable(
+    VkBool32                            sampleLocationsEnable)
+{
+    if (m_allGpuState.sampleLocationsEnable != sampleLocationsEnable)
+    {
+        m_allGpuState.sampleLocationsEnable = sampleLocationsEnable;
+        m_allGpuState.dirtyGraphics.samplePattern = 1;
+    }
 }
 
 // =====================================================================================================================

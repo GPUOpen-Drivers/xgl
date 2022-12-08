@@ -179,6 +179,7 @@ VkResult Instance::Create(
         if (!InstanceExtensions::EnableExtensions(pCreateInfo->ppEnabledExtensionNames,
                                                   pCreateInfo->enabledExtensionCount,
                                                   Instance::GetSupportedExtensions(),
+                                                  Instance::GetIgnoredExtensions(),
                                                   &enabledInstanceExtensions))
         {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -367,6 +368,12 @@ VkResult Instance::Init(
 #if ICD_GPUOPEN_DEVMODE_BUILD
     createInfo.flags.supportRgpTraces = 1;
 #endif
+
+    //Check the KHR_DISPALY extension, and then determine whether to open the primaryNode.
+    if (IsExtensionEnabled(InstanceExtensions::KHR_DISPLAY) == false)
+    {
+        createInfo.flags.dontOpenPrimaryNode = 1;
+    }
 
     createInfo.clientApiId = Pal::ClientApi::Vulkan;
 
@@ -789,6 +796,13 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
     }
 
     return supportedExtensions;
+}
+
+const InstanceExtensions::Supported& Instance::GetIgnoredExtensions()
+{
+    static InstanceExtensions::Supported ignoredExtensions;
+
+    return ignoredExtensions;
 }
 
 // =====================================================================================================================

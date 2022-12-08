@@ -240,13 +240,16 @@ protected:
         Device* const   pDevice);
 
     void Init(
-        Pal::IPipeline**                     pPalPipeline,
+        Pal::IPipeline**                     ppPalPipeline,
         uint32_t                             shaderLibraryCount,
-        Pal::IShaderLibrary**                pPalShaderLibrary,
+        Pal::IShaderLibrary**                ppPalShaderLibrary,
         const PipelineLayout*                pPipelineLayout,
         PipelineBinaryInfo*                  pPipelineBinary,
+        const ShaderOptimizerKey*            pShaderOptKeys,
         const ImmedInfo&                     immedInfo,
-        uint32_t                             staticStateMask,
+        uint64_t                             staticStateMask,
+        uint32_t                             nativeShaderCount,
+        uint32_t                             totalShaderCount,
         uint32_t                             shaderGroupCount,
         Vkgc::RayTracingShaderIdentifier*    pShaderGroupHandles[MaxPalDevices],
         ShaderGroupStackSizes*               pShaderGroupStackSizes[MaxPalDevices],
@@ -254,12 +257,25 @@ protected:
         uint32_t                             attributeSize,
         Pal::gpusize                         traceRayGpuVas[MaxPalDevices],
         uint32_t                             dispatchRaysUserDataOffset,
-        uint64_t                             apiHash);
+        uint64_t                             apiHash,
+        const Util::MetroHash::Hash&         elfHash);
 
     uint32_t UpdateShaderGroupIndex(uint32_t shader, uint32_t idx);
 
     VkResult BuildCaptureReplayVaMappingBufferData(Vkgc::RayTracingShaderIdentifier* pShaderGroupHandles,
                                                    const VkAllocationCallbacks*      pAllocator);
+
+    const Util::MetroHash::Hash& GetElfHash() const
+        { return m_elfHash; }
+
+    const ShaderOptimizerKey* GetShaderOptKeys() const
+        { return m_pShaderOptKeys; }
+
+    uint32_t GetNativeShaderCount() const
+        { return m_nativeShaderCount; }
+
+    uint32_t GetTotalShaderCount() const
+        { return m_totalShaderCount; }
 
     // Converted creation info parameters of the Vulkan ray tracing pipeline
     struct CreateInfo
@@ -272,10 +288,6 @@ protected:
         void*                                  pTempBuffer;
 
         bool                                   deferralRequested;
-        //size_t*                                pipelineBinarySizes;
-        //const void**                           pPipelineBinaries;
-        //Vkgc::RayTracingShaderProperty*        pShaderProps[MaxPalDevices];
-        //gpusize                                traceRayGpuVas[MaxPalDevices];
     };
 
     static void ConvertRayTracingPipelineInfo(
@@ -290,8 +302,10 @@ protected:
         size_t                             pipelineBinarySizes[MaxPalDevices],
         void*                              pPipelineBinaries[MaxPalDevices]);
 
-    static uint64_t BuildApiHash(
-        const VkRayTracingPipelineCreateInfoKHR* pCreateInfo);
+    static void BuildApiHash(
+        const VkRayTracingPipelineCreateInfoKHR* pCreateInfo,
+        Util::MetroHash::Hash*                   pElfHash,
+        uint64_t*                                pApiHash);
 
     // Return true if the shader id was found and mapped to a gpu address.
     static bool MapShaderIdToGpuVa(
@@ -306,12 +320,16 @@ private:
     PAL_DISALLOW_COPY_AND_ASSIGN(RayTracingPipeline);
 
     ImmedInfo                         m_info; // Immediate state that will go in CmdSet* functions
+    const ShaderOptimizerKey*         m_pShaderOptKeys;
 
     // Shader Groups
     uint32_t                          m_shaderGroupCount;
     Vkgc::RayTracingShaderIdentifier* m_pShaderGroupHandles[MaxPalDevices];
     ShaderGroupStackSizes*            m_pShaderGroupStackSizes[MaxPalDevices];
     ShaderGroupInfo*                  m_pShaderGroupInfos;
+
+    uint32_t                          m_nativeShaderCount;  // number of non-library shaders
+    uint32_t                          m_totalShaderCount;   // all shaders, including libraries
 
     uint32_t                          m_attributeSize;
     Pal::gpusize                      m_traceRayGpuVas[MaxPalDevices];
@@ -321,6 +339,7 @@ private:
 
     PipelineImplCreateInfo            m_createInfo;
     bool                              m_hasTraceRay;
+    Util::MetroHash::Hash             m_elfHash;
 
     CaptureReplayVaMappingBufferInfo  m_captureReplayVaMappingBufferInfo;
 };

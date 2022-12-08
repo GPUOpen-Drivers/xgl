@@ -279,11 +279,6 @@ VKAPI_ATTR uint64_t VKAPI_CALL vkGetDeviceMemoryOpaqueCaptureAddress(
     const VkDeviceMemoryOpaqueCaptureAddressInfo*    pInfo);
 
 #if defined(__unix__)
-VKAPI_ATTR void VKAPI_CALL vkGetDeviceMemoryFDAMD(
-    VkDevice                                device,
-    VkDeviceMemory                          memory,
-    int*                                    pFD);
-
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdKHR(
     VkDevice                                device,
     const VkMemoryGetFdInfoKHR*             pGetFdInfo,

@@ -510,12 +510,12 @@ Pal::Result Device::GpuDecodeImage(
             m_pPalCmdBuffer->CmdSetUserData(Pal::PipelineBindPoint::Compute, 1, PushConstASTCToRGBA , &pushConstant[0]);
 
             // extent in block
-            uint32 threadGroupsX = pPalImageRegions[idx].extent.width;
-            uint32 threadGroupsY = pPalImageRegions[idx].extent.height;
-            uint32 threadGroupsZ = Util::Max(pPalImageRegions[idx].extent.depth,
+            const uint32 threadGroupsX = pPalImageRegions[idx].extent.width;
+            const uint32 threadGroupsY = pPalImageRegions[idx].extent.height;
+            const uint32 threadGroupsZ = Util::Max(pPalImageRegions[idx].extent.depth,
                 pPalImageRegions[idx].numSlices);
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
+            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, threadGroupsY, threadGroupsZ });
         }
     }
     else if ((type == InternalTexConvertCsType::ConvertETC2ToRGBA8) ||
@@ -584,12 +584,12 @@ Pal::Result Device::GpuDecodeImage(
 
             m_pPalCmdBuffer->CmdSetUserData(Pal::PipelineBindPoint::Compute, 1, PushConstETC2ToRGBA , &pushConstant[0]);
 
-            uint32 threadGroupsX = (pPalImageRegions[idx].extent.width + 1) / 2;
-            uint32 threadGroupsY = (pPalImageRegions[idx].extent.height + 1) / 2;
-            uint32 threadGroupsZ = Util::Max(pPalImageRegions[idx].extent.depth,
+            const uint32 threadGroupsX = (pPalImageRegions[idx].extent.width + 1) / 2;
+            const uint32 threadGroupsY = (pPalImageRegions[idx].extent.height + 1) / 2;
+            const uint32 threadGroupsZ = Util::Max(pPalImageRegions[idx].extent.depth,
                 pPalImageRegions[idx].numSlices);
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
+            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, threadGroupsY, threadGroupsZ });
         }
     }
     else
@@ -637,11 +637,11 @@ Pal::Result Device::GpuDecodeImage(
 
             m_pPalCmdBuffer->CmdSetUserData(Pal::PipelineBindPoint::Compute, 1, PushConstRGBAToBC3 , &pushConstant[0]);
 
-            uint32 width         = pPalImageRegions[idx].extent.width * 4;
-            uint32 height        = pPalImageRegions[idx].extent.height * 4;
-            uint32 threadGroupsX = (width * height + 63) / 64;
+            uint32 width               = pPalImageRegions[idx].extent.width * 4;
+            uint32 height              = pPalImageRegions[idx].extent.height * 4;
+            const uint32 threadGroupsX = (width * height + 63) / 64;
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, 1, 1);
+            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, 1, 1 });
         }
     }
 
@@ -738,12 +738,12 @@ Pal::Result Device::GpuDecodeBuffer(
 
             m_pPalCmdBuffer->CmdSetUserData(Pal::PipelineBindPoint::Compute, 1, PushConstASTCToRGBA , &pushConstant[0]);
 
-            uint32 threadGroupsX = pPalBufferRegionsIn[idx].imageExtent.width;
-            uint32 threadGroupsY = pPalBufferRegionsIn[idx].imageExtent.height;
-            uint32 threadGroupsZ = Util::Max(pPalBufferRegionsIn[idx].imageExtent.depth,
+            const uint32 threadGroupsX = pPalBufferRegionsIn[idx].imageExtent.width;
+            const uint32 threadGroupsY = pPalBufferRegionsIn[idx].imageExtent.height;
+            const uint32 threadGroupsZ = Util::Max(pPalBufferRegionsIn[idx].imageExtent.depth,
                 pPalBufferRegionsIn[idx].numSlices);
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
+            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, threadGroupsY, threadGroupsZ });
         }
     }
     else
@@ -838,12 +838,12 @@ Pal::Result Device::GpuDecodeBuffer(
 
             m_pPalCmdBuffer->CmdSetUserData(Pal::PipelineBindPoint::Compute, 1, PushConstETC2ToBC3 , &pushConstant[0]);
 
-            uint32 threadGroupsX = (pPalBufferRegionsIn[idx].imageExtent.width + 1) / 2;
-            uint32 threadGroupsY = (pPalBufferRegionsIn[idx].imageExtent.height + 1) / 2;
-            uint32 threadGroupsZ = Util::Max(pPalBufferRegionsIn[idx].imageExtent.depth,
+            const uint32 threadGroupsX = (pPalBufferRegionsIn[idx].imageExtent.width + 1) / 2;
+            const uint32 threadGroupsY = (pPalBufferRegionsIn[idx].imageExtent.height + 1) / 2;
+            const uint32 threadGroupsZ = Util::Max(pPalBufferRegionsIn[idx].imageExtent.depth,
                 pPalBufferRegionsIn[idx].numSlices);
 
-            m_pPalCmdBuffer->CmdDispatch(threadGroupsX, threadGroupsY, threadGroupsZ);
+            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, threadGroupsY, threadGroupsZ });
         }
     }
 

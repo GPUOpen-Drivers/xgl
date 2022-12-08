@@ -1421,7 +1421,6 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceMemoryCommitment(
 }
 
 #if defined(__unix__)
-
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdKHR(
     VkDevice                                device,
     const VkMemoryGetFdInfoKHR*             pGetFdInfo,

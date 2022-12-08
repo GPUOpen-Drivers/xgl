@@ -54,35 +54,6 @@ struct SamplePattern
 };
 
 // =====================================================================================================================
-// Information required by the VB table manager that is defined by the graphics pipeline
-struct VbBindingInfo
-{
-    uint32_t bindingTableSize;
-    uint32_t bindingCount;
-
-    struct
-    {
-        uint32_t slot;
-        uint32_t byteStride;
-    } bindings[Pal::MaxVertexBuffers];
-};
-
-constexpr uint32_t MaxPipelineInternalBufferCount = 4;
-struct InternalBufferEntry
-{
-    uint32_t userDataOffset;
-    uint32_t bufferOffset;
-};
-
-struct PipelineInternalBufferInfo
-{
-    uint32_t            internalBufferCount;
-    InternalBufferEntry internalBufferEntries[MaxPipelineInternalBufferCount];
-    uint32_t            dataSize;
-    void*               pData;
-};
-
-// =====================================================================================================================
 // Immediate state info that will be written during Bind() but is not
 // encapsulated within a state object.
 struct GraphicsPipelineObjectImmedInfo
@@ -101,8 +72,11 @@ struct GraphicsPipelineObjectImmedInfo
     Pal::DynamicGraphicsShaderInfos       graphicsShaderInfos;
     Pal::VrsRateParams                    vrsRateParams;
     Pal::DepthStencilStateCreateInfo      depthStencilCreateInfo;
+    Pal::MsaaStateCreateInfo              msaaCreateInfo;
+    Pal::ColorBlendStateCreateInfo        blendCreateInfo;
     bool                                  rasterizerDiscardEnable;
     bool                                  checkDeferCompilePipeline;
+    float                                 minSampleShading;
 
     // Static pipeline parameter token values.  These can be used to efficiently redundancy check static pipeline
     // state programming during pipeline binds.
@@ -123,46 +97,50 @@ struct GraphicsPipelineObjectImmedInfo
 };
 
 // =====================================================================================================================
+// General flags for graphics pipeline create and static state.
+union GraphicsPipelineObjectFlags
+{
+    struct
+    {
+        uint32_t   bresenhamEnable          : 1;
+        uint32_t   bindDepthStencilObject   : 1;
+        uint32_t   bindTriangleRasterState  : 1;
+        uint32_t   bindStencilRefMasks      : 1;
+        uint32_t   bindInputAssemblyState   : 1;
+        uint32_t   customMultiSampleState   : 1;
+        uint32_t   customSampleLocations    : 1;
+        uint32_t   force1x1ShaderRate       : 1;
+        uint32_t   sampleShadingEnable      : 1;
+        uint32_t   isPointSizeUsed          : 1;
+        uint32_t   bindColorBlendObject     : 1;
+        uint32_t   bindMsaaObject           : 1;
+        uint32_t   viewIndexFromDeviceIndex : 1;
+#if VKI_RAY_TRACING
+        uint32_t   hasRayTracing            : 1;
+        uint32_t   reserved                 : 18;
+#else
+        uint32_t   reserved                 : 19;
+#endif
+    };
+    uint32_t value;
+};
+
+// =====================================================================================================================
 // Creation info parameters for all the necessary state objects encapsulated
 // by the Vulkan graphics pipeline.
 struct GraphicsPipelineObjectCreateInfo
 {
     Pal::GraphicsPipelineCreateInfo             pipeline;
-    Pal::MsaaStateCreateInfo                    msaa;
-    Pal::ColorBlendStateCreateInfo              blend;
     GraphicsPipelineObjectImmedInfo             immedInfo;
-    uint32_t                                    staticStateMask;
+    uint64_t                                    staticStateMask;
     uint32_t                                    sampleCoverage;
     VkShaderStageFlagBits                       activeStages;
     VkFormat                                    dbFormat;
-    uint32_t                                    dynamicStates;
+    uint64_t                                    dynamicStates;
 #if VKI_RAY_TRACING
     uint32_t                                    dispatchRaysUserDataOffset;
 #endif
-
-    union
-    {
-        struct
-        {
-            uint32_t   bresenhamEnable         : 1;
-            uint32_t   bindDepthStencilObject  : 1;
-            uint32_t   bindTriangleRasterState : 1;
-            uint32_t   bindStencilRefMasks     : 1;
-            uint32_t   bindInputAssemblyState  : 1;
-            uint32_t   customMultiSampleState  : 1;
-            uint32_t   customSampleLocations   : 1;
-            uint32_t   force1x1ShaderRate      : 1;
-            uint32_t   sampleShadingEnable     : 1;
-            uint32_t   isPointSizeUsed         : 1;
-#if VKI_RAY_TRACING
-            uint32_t   hasRayTracing           : 1;
-            uint32_t   reserved                : 21;
-#else
-            uint32_t   reserved                : 22;
-#endif
-        };
-        uint32_t value;
-    } flags;
+    GraphicsPipelineObjectFlags                 flags;
 };
 
 // =====================================================================================================================
@@ -260,31 +238,29 @@ public:
         VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
 
 protected:
-    // Convert API information into internal create info used to create internal pipeline binary
-    static VkResult BuildPipelineBinaryCreateInfo(
-        const Device*                       pDevice,
-        const VkGraphicsPipelineCreateInfo* pCreateInfo,
-        const PipelineLayout*               pPipelineLayout,
-        PipelineCache*                      pPipelineCache,
-        GraphicsPipelineBinaryCreateInfo*   pBinInfo,
-        GraphicsPipelineShaderStageInfo*    pShaderInfo,
-        VbBindingInfo*                      pVbInfo,
-        PipelineInternalBufferInfo*         pInternalBufferInfo,
-        ShaderModuleHandle*                 pTempModules);
-
     // Convert API information into internal create info used to create internal pipeline object
     static void BuildPipelineObjectCreateInfo(
-        const Device*                       pDevice,
-        const VkGraphicsPipelineCreateInfo* pIn,
-        const VbBindingInfo*                pVbInfo,
-        const GraphicsPipelineBinaryInfo*   pBinInfo,
-        const PipelineLayout*               pPipelineLayout,
-        GraphicsPipelineObjectCreateInfo*   pObjInfo);
+        const Device*                          pDevice,
+        const VkGraphicsPipelineCreateInfo*    pIn,
+        const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
+        const PipelineLayout*                  pPipelineLayout,
+        const PipelineOptimizerKey*            pOptimizerKey,
+        const PipelineMetadata*                pBinMeta,
+        GraphicsPipelineObjectCreateInfo*      pObjInfo);
+
+    // Populates the profile key for tuning graphics pipelines
+    static void GeneratePipelineOptimizerKey(
+        const Device*                          pDevice,
+        const VkGraphicsPipelineCreateInfo*    pCreateInfo,
+        const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
+        ShaderOptimizerKey*                    pShaderKeys,
+        PipelineOptimizerKey*                  pPipelineKey);
 
     // Generates the API PSO hash using the contents of the VkGraphicsPipelineCreateInfo struct
-    static uint64_t BuildApiHash(
-        const VkGraphicsPipelineCreateInfo*     pCreateInfo,
-        const GraphicsPipelineObjectCreateInfo* pInfo);
+    static void BuildApiHash(
+        const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        uint64_t*                           pApiHash,
+        Util::MetroHash::Hash*              elfHash);
 
     // Generate API PSO hash for state of vertex input interface section
     static void GenerateHashForVertexInputInterfaceState(
@@ -295,7 +271,8 @@ protected:
     // Generate API PSO hash for state of pre-rasterization shaders section
     static void GenerateHashForPreRasterizationShadersState(
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,
-        const GraphicsPipelineObjectCreateInfo* pInfo,
+        const GraphicsPipelineLibraryInfo*      pLibInfo,
+        uint32_t                                dynamicStateFlags,
         Util::MetroHash128*                     pBaseHasher,
         Util::MetroHash128*                     pApiHasher);
 
@@ -310,6 +287,12 @@ protected:
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
         Util::MetroHash128*                 pBaseHasher,
         Util::MetroHash128*                 pApiHasher);
+
+    // Checks if rasterization is dynamically disabled
+    static bool IsRasterizationDisabled(
+        const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        const GraphicsPipelineLibraryInfo*  pLibInfo,
+        uint64_t                            dynamicStateFlags);
 
     // Constructor of GraphicsPipelineCommon
     GraphicsPipelineCommon(
