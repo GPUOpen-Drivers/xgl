@@ -169,6 +169,11 @@ void CompilerSolution::UpdateRayTracingFunctionNames(
         case EmulatedRtIpLevel1_1:
             rayTracingIp = Pal::RayTracingIpLevel::RtIp1_1;
             break;
+#if VKI_BUILD_GFX11
+        case EmulatedRtIpLevel2_0:
+            rayTracingIp = Pal::RayTracingIpLevel::RtIp2_0;
+            break;
+#endif
         default:
             VK_ASSERT(false);
             break;

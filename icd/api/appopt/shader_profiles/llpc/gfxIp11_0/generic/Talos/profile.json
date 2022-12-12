@@ -1,0 +1,26 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x0bbce6fd9ad36ffc 3b5ffeb59cf52b9e"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "cs": {
+          "threadGroupSwizzleMode": "_4x4"
+        }
+      }
+    }
+  ]
+}

@@ -2643,6 +2643,12 @@ ValidKeysForEntity = {
 
 BuildTypesTemplate = {
     "llpc": "ICD_BUILD_LLPC",
+#if VKI_BUILD_NAVI31
+    "Navi31": "VKI_BUILD_NAVI31",
+#endif
+#if VKI_BUILD_GFX11
+    "gfxIp11_0": "VKI_BUILD_GFX11",
+#endif
     "icdRuntimeAppProfile": "ICD_RUNTIME_APP_PROFILE"
 }
 

@@ -4554,6 +4554,13 @@ void PhysicalDevice::GetPhysicalDeviceDotProduct8Properties(
     *pIntegerDotProductAccumulatingSaturating8BitSignedAccelerated          = VK_FALSE;
     *pIntegerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated = VK_FALSE;
 
+#if VKI_BUILD_GFX11
+    if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
+    {
+        *pIntegerDotProduct8BitMixedSignednessAccelerated = VK_TRUE;
+    }
+    else
+#endif
     {
         *pIntegerDotProduct8BitMixedSignednessAccelerated = VK_FALSE;
     }
@@ -4578,6 +4585,13 @@ void PhysicalDevice::GetPhysicalDeviceDotProduct4x8Properties(
     *pIntegerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated          = VK_FALSE;
     *pIntegerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated = VK_FALSE;
 
+#if VKI_BUILD_GFX11
+    if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
+    {
+        *pIntegerDotProduct4x8BitPackedMixedSignednessAccelerated = VK_TRUE;
+    }
+    else
+#endif
     {
         *pIntegerDotProduct4x8BitPackedMixedSignednessAccelerated = VK_FALSE;
     }
@@ -4594,6 +4608,9 @@ void PhysicalDevice::GetPhysicalDeviceDotProduct16Properties(
 ) const
 {
     const VkBool32 int16DotSupport = ((PalProperties().gfxipProperties.flags.support16BitInstructions)
+#if VKI_BUILD_GFX11
+        && (PalProperties().gfxLevel < Pal::GfxIpLevel::GfxIp11_0)
+#endif
         ) ? VK_TRUE : VK_FALSE;
 
     *pIntegerDotProduct16BitUnsignedAccelerated                              = int16DotSupport;
@@ -7344,6 +7361,13 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->maxMeshOutputVertices                 = 256;
             pProps->maxMeshOutputPrimitives               = 256;
 
+ #if VKI_BUILD_GFX11
+            if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
+            {
+                pProps->maxMeshOutputLayers               = m_limits.maxFramebufferLayers;
+            }
+            else
+#endif
             {
                 pProps->maxMeshOutputLayers               = 8;
             }

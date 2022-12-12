@@ -238,6 +238,12 @@ VkResult PipelineCompiler::Initialize()
         m_gfxIp.major = 10;
         m_gfxIp.minor = 3;
         break;
+#if VKI_BUILD_GFX11
+    case Pal::GfxIpLevel::GfxIp11_0:
+        m_gfxIp.major = 11;
+        m_gfxIp.minor = 0;
+        break;
+#endif
 
     default:
         VK_NEVER_CALLED();
@@ -1558,6 +1564,9 @@ static void MergePipelineOptions(const Vkgc::PipelineOptions& src, Vkgc::Pipelin
     dst.extendedRobustness.nullDescriptor     |= src.extendedRobustness.nullDescriptor;
     dst.extendedRobustness.robustBufferAccess |= src.extendedRobustness.robustBufferAccess;
     dst.extendedRobustness.robustImageAccess  |= src.extendedRobustness.robustImageAccess;
+#if VKI_BUILD_GFX11
+    dst.optimizeTessFactor                    |= src.optimizeTessFactor;
+#endif
     dst.enableInterpModePatch                 |= src.enableInterpModePatch;
     dst.pageMigrationEnabled                  |= src.pageMigrationEnabled;
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 53
@@ -1797,6 +1806,11 @@ void PipelineCompiler::BuildNggState(
 
     // NOTE: To support unrestrict dynamic primtive topology, we need full disable NGG on gfx10.
     bool disallowNgg = unrestrictedPrimitiveTopology;
+#if VKI_BUILD_GFX11
+    // On gfx11, we needn't program GS output primitive type on VsPs pipeline, so we can support unrestrict dynamic
+    // primtive topology with NGG.
+    disallowNgg = (disallowNgg && (deviceProp.gfxLevel < Pal::GfxIpLevel::GfxIp11_0));
+#endif
     if (disallowNgg)
     {
         pCreateInfo->pipelineInfo.nggState.enableNgg = false;
@@ -2654,6 +2668,9 @@ void PipelineCompiler::ApplyPipelineOptions(
 
     pOptions->enableRelocatableShaderElf = settings.enableRelocatableShaders;
     pOptions->disableImageResourceCheck  = settings.disableImageResourceTypeCheck;
+#if VKI_BUILD_GFX11
+    pOptions->optimizeTessFactor         = settings.optimizeTessFactor;
+#endif
     pOptions->forceCsThreadIdSwizzling   = settings.forceCsThreadIdSwizzling;
     pOptions->overrideThreadGroupSizeX   = settings.overrideThreadGroupSizeX;
     pOptions->overrideThreadGroupSizeY   = settings.overrideThreadGroupSizeY;
@@ -3520,6 +3537,9 @@ void PipelineCompiler::SetRayTracingState(
         bvhInfo.boxSortHeuristic         = Pal::BoxSortHeuristic::ClosestFirst;
         bvhInfo.flags.useZeroOffset      = 1;
         bvhInfo.flags.returnBarycentrics = 1;
+#if VKI_BUILD_GFX11
+        bvhInfo.flags.pointerFlags       = settings.rtEnableNodePointerFlags;
+#endif
 
         // Bypass Mall cache read/write if no alloc policy is set for SRDs.
         // This global setting applies to every BVH SRD.
@@ -3596,6 +3616,26 @@ void PipelineCompiler::SetRayTracingState(
     pRtState->dispatchRaysThreadGroupSize           = settings.dispatchRaysThreadGroupSize;
     pRtState->ldsSizePerThreadGroup                 = deviceProp.gfxipProperties.shaderCore.ldsSizePerThreadGroup;
     pRtState->maxRayLength                          = settings.rtMaxRayLength;
+
+#if VKI_BUILD_GFX11
+    // Enable hardware traversal stack on RTIP 2.0+
+    if (settings.emulatedRtIpLevel > EmulatedRtIpLevel1_1)
+    {
+        pRtState->enableRayTracingHwTraversalStack = 1;
+    }
+
+    if (deviceProp.gfxipProperties.rayTracingIp >= Pal::RayTracingIpLevel::RtIp2_0)
+    {
+        if (settings.emulatedRtIpLevel == HardwareRtIpLevel1_1)
+        {
+            pRtState->enableRayTracingHwTraversalStack = 0;
+        }
+        else
+        {
+            pRtState->enableRayTracingHwTraversalStack = 1;
+        }
+    }
+#endif
 
     CompilerSolution::UpdateRayTracingFunctionNames(pDevice, pRtState);
 }

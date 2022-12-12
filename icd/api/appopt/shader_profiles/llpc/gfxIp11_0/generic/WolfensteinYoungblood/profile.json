@@ -1,0 +1,58 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x6b7a33f6880d2379 1647af746badb1e4"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xabccebba528ecbf7 50813e92360e956e"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 48,
+          "useSiScheduler": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xda18b129e7454401 da893d5d28f70704"
+        }
+      },
+      "action": {
+        "cs": {
+          "maxWavesPerCu": 8
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x623c2a0008628e23 c0e71a4aa2eb148"
+        }
+      },
+      "action": {
+        "cs": {
+          "maxWavesPerCu": 14,
+          "useSiScheduler": true,
+          "unrollThreshold": 1600
+        }
+      }
+    }
+  ]
+}

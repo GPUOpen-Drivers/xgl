@@ -39,6 +39,14 @@ macro(xgl_options)
 
     option(XGL_BUILD_NAVI12 "Build vulkan for Navi12" ON)
 
+#if VKI_BUILD_GFX11
+    option(XGL_BUILD_GFX11 "Build vulkan for GFX11" ON)
+#endif
+
+#if VKI_BUILD_NAVI31
+    option(XGL_BUILD_NAVI31 "Build vulkan for Navi31" ON)
+#endif
+
     option(XGL_BUILD_TESTS "Build tests?" OFF)
 
     option(XGL_BUILD_TOOLS "Build tools?" OFF)

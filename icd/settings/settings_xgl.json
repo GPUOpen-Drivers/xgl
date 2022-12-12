@@ -1846,6 +1846,21 @@
       "Name": "EnableSpvValidation"
     },
     {
+      "Description": "GFX10 plus-specific tessellation factor optimization.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "OptimizeTessFactor",
+      "BuildTypes": [
+        "VKI_BUILD_GFX11"
+      ]
+    },
+    {
       "Description": "[BIL ONLY] Zero initialize AMD IL registers. ",
       "Tags": [
         "SPIRV Options"
@@ -2592,6 +2607,23 @@
       "Type": "bool",
       "Scope": "Driver",
       "VariableName": "rtEnableHwIntersectRay"
+    },
+    {
+      "Name": "EnableNodePointerFlags",
+      "Description": "Encode flags into pointer bits",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX11"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "VariableName": "rtEnableNodePointerFlags"
     },
     {
       "Description": "Box sorting heuristic",
@@ -4018,6 +4050,14 @@
             "Name": "EmulatedRtIpLevel1_1",
             "Value": 2,
             "Description": "Emulate ray tracing IP level 1.1 feature set."
+          },
+          {
+            "Name": "EmulatedRtIpLevel2_0",
+            "Value": 3,
+            "Description": "Emulate ray tracing IP level 2.0 feature set.",
+            "BuildTypes": [
+              "VKI_BUILD_GFX11"
+            ]
           }
         ]
       },

@@ -55,6 +55,18 @@ macro(xgl_set_compile_definitions)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI12=1)
     endif()
 
+#if VKI_BUILD_GFX11
+    if(XGL_BUILD_GFX11)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_GFX11=1)
+    endif()
+#endif
+
+#if VKI_BUILD_NAVI31
+    if(XGL_BUILD_NAVI31)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI31=1)
+    endif()
+#endif
+
 #if VKI_RAY_TRACING
     if (VKI_RAY_TRACING)
         target_compile_definitions(xgl PRIVATE VKI_RAY_TRACING=1)

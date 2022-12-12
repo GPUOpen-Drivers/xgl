@@ -1,0 +1,68 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0xE128CF59638C2E1C 22C6B575129AB32D"
+        }
+      },
+      "action": {
+        "cs": {
+          "favorLatencyHiding": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x45911829EC7E9028 123B4766DB4CD890"
+        }
+      },
+      "action": {
+        "cs": {
+          "favorLatencyHiding": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x59b0428f3cd67115 310d150c5fe4134b"
+        }
+      },
+      "action": {
+        "cs": {
+          "useSiScheduler": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x9ad5144cc78368a0 7701746dcf8cce1e"
+        }
+      },
+      "action": {
+        "cs": {
+          "maxWavesPerCu": 4,
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x22cdbcc4784fcaab 88f70575c05dde23"
+        }
+      },
+      "action": {
+        "cs": {
+          "maxWavesPerCu": 4
+        }
+      }
+    }
+  ]
+}

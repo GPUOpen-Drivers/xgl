@@ -1,0 +1,18 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x8d8b60de0782642b f143d8ecd6de6b11"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 48,
+          "useSiScheduler": true
+        }
+      }
+    }
+  ]
+}

@@ -497,7 +497,6 @@ CmdBuffer::CmdBuffer(
     m_numPalDevices(pDevice->NumPalDevices()),
     m_validShaderStageFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetValidShaderStages(queueFamilyIndex)),
     m_pStackAllocator(nullptr),
-    m_allGpuState { },
     m_flags(),
     m_recordingResult(VK_SUCCESS),
     m_pSqttState(nullptr),
@@ -708,11 +707,16 @@ VkResult CmdBuffer::Initialize(
     {
         m_flags.is2ndLvl = groupCreateInfo.flags.nested;
 
+        // Clear all stencilRefMasks bytes to zero to silence a Valgrind error.
+        memset(&m_allGpuState.stencilRefMasks, 0, sizeof(m_allGpuState.stencilRefMasks));
+
         m_allGpuState.stencilRefMasks.flags.u8All = 0xff;
 
         // Set up the default front/back op values == 1
         m_allGpuState.stencilRefMasks.frontOpValue = DefaultStencilOpValue;
         m_allGpuState.stencilRefMasks.backOpValue = DefaultStencilOpValue;
+
+        memset(m_allGpuState.pipelineState, 0, sizeof(m_allGpuState.pipelineState));
     }
 
     // Initialize SQTT command buffer state if thread tracing support is enabled (gpuopen developer mode).

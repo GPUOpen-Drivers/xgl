@@ -234,6 +234,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.enableRaytracingSupport = RaytracingNotSupported;
         }
 
+#if VKI_BUILD_GFX11
+        // RTIP 2.0+ is always expected to support hardware traversal stack
+        VK_ASSERT((rayTracingIpLevel <= Pal::RayTracingIpLevel::RtIp1_1) ||
+                  (pInfo->gfxipProperties.flags.supportRayTraversalStack == 1));
+#endif
+
         // Clamp target occupancy to [0.0, 1.0]
         m_settings.indirectCallTargetOccupancyPerSimd = Util::Clamp(m_settings.indirectCallTargetOccupancyPerSimd, 0.0f, 1.0f);
 
@@ -258,6 +264,18 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.nggCompactionMode = NggCompactDisable;
 
         }
+
+#if VKI_BUILD_GFX11
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        {
+            // Enable NGG compactionless mode for Navi3x
+            m_settings.nggCompactionMode = NggCompactDisable;
+
+            // Hardcode wave sizes per shader stage until the ML model is trained and perf lab testing is done
+            m_settings.csWaveSize = 64;
+            m_settings.fsWaveSize = 64;
+        }
+#endif
 
         // Put command buffers in local for large/resizable BAR systems with > 7 GBs of local heap
         constexpr gpusize _1GB = 1024ull * 1024ull * 1024ull;
@@ -373,6 +391,21 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 {
                 }
             }
+#if VKI_BUILD_GFX11
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+
+#if VKI_BUILD_NAVI31
+                if (pInfo->revision == Pal::AsicRevision::Navi31)
+                {
+                    {
+                        m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                        m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+                    }
+                }
+#endif
+            }
+#endif
         }
 
         if ((appProfile == AppProfile::WolfensteinII) ||
@@ -493,6 +526,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 }
             }
 
+#if VKI_BUILD_GFX11
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+                m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::SkipDstCacheInv;
+            }
+#endif
+
             m_settings.implicitExternalSynchronization = false;
         }
 
@@ -600,6 +640,18 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                              ForceDccForColorAttachments |
                                              ForceDccFor32BppShaderStorage);
             }
+#if VKI_BUILD_GFX11
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+#if VKI_BUILD_NAVI31
+                if (pInfo->revision == Pal::AsicRevision::Navi31)
+                {
+                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+                    m_settings.pipelineBinningMode = PipelineBinningModeEnable;
+                }
+#endif
+            }
+#endif
         }
 
         if (appProfile == AppProfile::ZombieArmy4)
@@ -778,6 +830,20 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 }
             }
 
+#if VKI_BUILD_GFX11
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+                m_settings.pipelineBinningMode = PipelineBinningModeDisable;
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+
+                m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                                             ForceDccForColorAttachments |
+                                             ForceDccForNonColorAttachmentShaderStorage |
+                                             ForceDccFor32BppShaderStorage |
+                                             ForceDccFor64BppShaderStorage);
+            }
+#endif
         }
 
         if (appProfile == AppProfile::RedDeadRedemption2)
@@ -807,6 +873,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                                    ForceDccForColorAttachments |
                                                    ForceDccFor64BppShaderStorage);
 
+#if VKI_BUILD_GFX11
+                if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+                {
+                    m_settings.forceEnableDcc      |= ForceDccForNonColorAttachmentShaderStorage;
+                }
+#endif
             }
         }
 
@@ -856,6 +928,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             }
 
+#if VKI_BUILD_GFX11
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+                // Gives ~0.5% gain at 4k
+                m_settings.enableAceShaderPrefetch = false;
+            }
+#endif
         }
 
         if (appProfile == AppProfile::ControlDX12)
@@ -866,6 +945,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.rtMaxRayRecursionDepth = 2;
             }
 
+#if VKI_BUILD_GFX11
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+                // Gives ~2.22% gain at 1080p
+                m_settings.enableAceShaderPrefetch = false;
+            }
+#endif
         }
 #endif
 
@@ -957,6 +1043,19 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
                 m_settings.csWaveSize = 64;
             }
+#if VKI_BUILD_GFX11
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+
+                // Mall no alloc settings give a ~1% gain
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+
+                // This provides ~6% gain at 4k
+                m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
+            }
+#endif
         }
 
         if (appProfile == AppProfile::IdTechLauncher)
@@ -1007,6 +1106,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // A larger minImageCount can get a performance gain for game Metro Exodus.
             m_settings.forceMinImageCount = 3;
 
+#if VKI_BUILD_GFX11
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+                // Gives ~0.9% gain at 1080p
+                m_settings.enableAceShaderPrefetch = false;
+            }
+#endif
         }
 
         if (appProfile == AppProfile::X4Foundations)
@@ -1075,6 +1181,19 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                     m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
                 }
             }
+#if VKI_BUILD_GFX11
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+#if VKI_BUILD_NAVI31
+                if (pInfo->revision == Pal::AsicRevision::Navi31)
+                {
+                    // This provides ~4.2% gain at 4k
+                    m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                }
+#endif
+            }
+#endif
         }
 
         if (appProfile == AppProfile::MetalGearSolid5)

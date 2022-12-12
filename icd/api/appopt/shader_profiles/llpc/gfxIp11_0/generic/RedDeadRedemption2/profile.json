@@ -1,0 +1,92 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0xe63764d8ab075d10 2c2fb8c0ca4995e4"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0xfd3d6fd85419a887 550d6f775d85b05c"
+        }
+      },
+      "action": {
+        "cs": {
+          "wgpMode": 2
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x3d177a356fac334d 75f708c573abe471"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xdf68dfd3aa548e8f d59706aea9453f02"
+        }
+      },
+      "action": {
+        "ps": {
+          "allowReZ": 1,
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x0ac33e936d12791e 4b5872346173e04a"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xae188551d7b56e7f 6b8c4c0bff97cd9b"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xcb6b71cf1d45ede1 b45c86d78c780ddf"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32,
+          "useSiScheduler": true
+        }
+      }
+    }
+  ]
+}

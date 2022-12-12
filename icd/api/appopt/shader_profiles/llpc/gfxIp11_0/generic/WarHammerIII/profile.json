@@ -1,0 +1,16 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x3750559b33d6c366 198c0842f95c0bcc"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableCodeSinking": true
+        }
+      }
+    }
+  ]
+}
