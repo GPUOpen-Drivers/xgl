@@ -13,7 +13,7 @@
 ; CHECK-OBJDUMP: Registered Targets
 
 ; RUN: llvm-readelf --version | FileCheck -check-prefix=CHECK-READELF %s
-; CHECK-READELF: Default target:
+; CHECK-READELF: LLVM version
 
 ; SPIR-V
 ; Version: 1.0

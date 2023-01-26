@@ -53,6 +53,9 @@
 #ifdef setbit
 #undef setbit
 #endif
+#ifdef DestroyAll
+#undef DestroyAll
+#endif
 #endif
 
 // Internal (under development) extension definitions

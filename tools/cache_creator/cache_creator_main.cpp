@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
   // ICD-side changes.
   auto cacheCreatorOrErr = cc::RelocatableCacheCreator::Create(
       DeviceId, uuid, {},
-      llvm::makeMutableArrayRef((*outFileBufferOrErr)->getBufferStart(), (*outFileBufferOrErr)->getBufferSize()));
+      llvm::MutableArrayRef((*outFileBufferOrErr)->getBufferStart(), (*outFileBufferOrErr)->getBufferSize()));
   if (auto err = cacheCreatorOrErr.takeError()) {
     llvm::errs() << "Error:\t" << err << "\n";
     llvm::consumeError(std::move(err));
