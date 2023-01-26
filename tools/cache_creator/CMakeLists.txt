@@ -72,7 +72,10 @@ target_sources(cache_creator_lib INTERFACE cache_creator.cpp cache_info.cpp)
 # Note that running the cache-creator tool doesn't require a Vulkan device to be installed.
 add_executable(cache-creator)
 target_sources(cache-creator PRIVATE cache_creator_main.cpp)
-target_link_libraries(cache-creator PRIVATE cache_creator_lib)
+llvm_map_components_to_libnames(llvm_libs
+    BinaryFormat
+)
+target_link_libraries(cache-creator PRIVATE cache_creator_lib ${llvm_libs})
 
 # This executable analyzes pipeline binary cache files produced either by the ICD or by the cache-creator tool.
 # We use the output in automated regression tests but it may also be useful in manual analysis/debugging.
@@ -80,7 +83,7 @@ target_link_libraries(cache-creator PRIVATE cache_creator_lib)
 # Note that running the cache-info tool doesn't require a Vulkan device to be installed.
 add_executable(cache-info)
 target_sources(cache-info PRIVATE cache_info_main.cpp)
-target_link_libraries(cache-info PRIVATE cache_creator_lib)
+target_link_libraries(cache-info PRIVATE cache_creator_lib ${llvm_libs})
 
 # Build cache creator tools whenever we build XGL.
 add_dependencies(xgl cache-creator cache-info)

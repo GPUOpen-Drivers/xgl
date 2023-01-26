@@ -220,7 +220,7 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const BinaryCachePrivateHea
 
   os << "=== Pipeline Binary Cache Private Header ===\n"
      << "header length:\t" << sizeof(header) << "\n"
-     << "hash ID:\t" << llvm::format_bytes(header.hashId, llvm::None, sizeof(header.hashId)) << "\n"
+     << "hash ID:\t" << llvm::format_bytes(header.hashId, std::nullopt, sizeof(header.hashId)) << "\n"
      << "content size:\t" << info.contentBlobSize << "\n";
   return os;
 }

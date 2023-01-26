@@ -121,7 +121,7 @@ UuidString uuidToHexString(llvm::ArrayRef<uint8_t> uuid) {
   UuidString res;
   llvm::raw_svector_ostream os(res);
   for (size_t groupSize : {4, 2, 2, 2, 6}) {
-    os << llvm::format_bytes(uuid.take_front(groupSize), llvm::None,
+    os << llvm::format_bytes(uuid.take_front(groupSize), std::nullopt,
                              /* NumPerLine = */ 16, /* BytesPerLine = */ 6);
     uuid = uuid.drop_front(groupSize);
     if (!uuid.empty())
@@ -202,7 +202,7 @@ static llvm::Expected<llvm::VersionTuple> extractLlpcVersion(llvm::msgpack::MapD
   llvm::VersionTuple versionTuple;
   if (versionTuple.tryParse(node.getString()))
     return createBadPalMetadataError();
-  if (!versionTuple.getMinor().hasValue())
+  if (!versionTuple.getMinor().has_value())
     return createBadPalMetadataError();
   return versionTuple;
 }
