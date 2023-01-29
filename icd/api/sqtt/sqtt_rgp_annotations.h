@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2015-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2015-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -214,6 +214,9 @@ enum class RgpSqttMarkerEventType : uint32_t
     CmdCopyAccelerationStructureToMemoryKHR     = 35,       // vkCmdCopyAccelerationStructureToMemoryKHR
     CmdCopyMemoryToAccelerationStructureKHR     = 36,       // vkCmdCopyMemoryToAccelerationStructureKHR
 #endif
+    CmdDrawMeshTasksEXT                         = 41,       // vkCmdDrawMeshTasksEXT
+    CmdDrawMeshTasksIndirectCountEXT            = 42,       // vkCmdDrawMeshTasksIndirectCountEXT
+    CmdDrawMeshTasksIndirectEXT                 = 43,       // vkCmdDrawMeshTasksIndirectEXT
 #if VKI_RAY_TRACING
     ShaderIndirectModeMask                      = 0x800000, // Used to mark whether the shader is compiled in indirect mode or not
                                                             // This mask can only be used with CmdTraceRaysKHR and CmdTraceRaysIndirectKHR
@@ -351,7 +354,11 @@ struct RgpSqttMarkerBarrierEnd
             uint32_t invalDb              : 1;  // Invalidate DB caches (including htile)
             uint32_t numLayoutTransitions : 16; // Number of layout transitions following this packet
             uint32_t invalGl1             : 1;  // Invalidate L1.
-            uint32_t reserved             : 5;  // Reserved for future expansion. Always 0
+            uint32_t waitOnTs             : 1;  // Wait on a timestamp event (EOP or EOS) at the ME.
+            uint32_t eopTsBottomOfPipe    : 1;  // Barrier issued an end-of-pipe event that can be waited on
+            uint32_t eosTsPsDone          : 1;  // Timestamp when PS waves are done.
+            uint32_t eosTsCsDone          : 1;  // Timestamp when CS waves are done.
+            uint32_t reserved             : 1;  // Reserved for future expansion. Always 0
         };
 
         uint32_t  dword02;                // The second dword
@@ -499,6 +506,9 @@ enum class RgpSqttMarkerGeneralApiType : uint32_t
     CmdSetStencilReference              = 43,
     CmdDrawIndirectCountKHR             = 44,
     CmdDrawIndexedIndirectCountKHR      = 45,
+    CmdDrawMeshTasksEXT                 = 47,
+    CmdDrawMeshTasksIndirectCountEXT    = 48,
+    CmdDrawMeshTasksIndirectEXT         = 49,
 
     Invalid = 0xffffffff
 };

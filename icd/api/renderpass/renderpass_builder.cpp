@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -42,6 +42,13 @@
 
 namespace vk
 {
+
+constexpr VkPipelineStageFlags2 AllShaderStages =
+    VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT                  |
+    VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT    |
+    VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT |
+    VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT                |
+    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
 
 // =====================================================================================================================
 RenderPassBuilder::RenderPassBuilder(
@@ -687,7 +694,8 @@ Pal::Result RenderPassBuilder::BuildResolveAttachmentReferences(
 
             if ((dst.attachment != VK_ATTACHMENT_UNUSED) && (src.attachment != VK_ATTACHMENT_UNUSED))
             {
-                result = TrackAttachmentUsage(subpass,
+                result = TrackAttachmentUsage(
+                    subpass,
                     AttachRefResolveSrc,
                     src.attachment,
                     srcLayout,
@@ -985,7 +993,18 @@ void RenderPassBuilder::PostProcessSyncPoint(
 
         if (pSyncPoint->barrier.dstStageMask == 0)
         {
-            pSyncPoint->barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
+            if (pSyncPoint->flags.top && (pSyncPoint->transitions.NumElements() > 0))
+            {
+                // If a transition occurs when entering a subpass (top == 1), it must be synced before the attachment
+                // is accessed. If we're leaving the subpass, chances are there's another barrier down the line that
+                // will sync the image correctly.
+                pSyncPoint->barrier.dstStageMask = AllShaderStages;
+            }
+            else
+            {
+                // BOTTOM_OF_PIPE in dst mask is effectively NONE.
+                pSyncPoint->barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
+            }
         }
 
         if (pSyncPoint->barrier.srcStageMask == 0)
@@ -1000,7 +1019,7 @@ void RenderPassBuilder::PostProcessSyncPoint(
                 {
                     RPTransitionInfo* info = it.Get();
 
-                    if ((info->prevLayout.layout == VK_IMAGE_LAYOUT_UNDEFINED))
+                    if (info->prevLayout.layout == VK_IMAGE_LAYOUT_UNDEFINED)
                     {
                         pSyncPoint->barrier.srcStageMask |= pSyncPoint->barrier.dstStageMask;
                     }
@@ -1333,6 +1352,8 @@ RenderPassBuilder::SubpassState::SubpassState(
     flags.u32All = 0;
 
     memset(&bindTargets, 0, sizeof(bindTargets));
+
+    syncTop.flags.top = 1;
 }
 
 // =====================================================================================================================

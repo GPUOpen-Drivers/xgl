@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -302,6 +302,13 @@ VkResult Memory::Create(
         }
 
         pNext = pHeader->pNext;
+    }
+
+    // For the descriptor table VA range for descriptor buffers
+    if (pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMaskForDescriptorBuffers() &
+        (1 << pAllocInfo->memoryTypeIndex))
+    {
+        createInfo.vaRange = Pal::VaRange::DescriptorTable;
     }
 
     // Check for OOM before actually allocating to avoid overhead. Do not account for the memory allocation yet

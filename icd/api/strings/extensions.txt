@@ -124,6 +124,7 @@ VK_EXT_shader_atomic_float
 VK_EXT_shader_atomic_float2
 VK_KHR_shader_clock
 VK_KHR_shader_integer_dot_product
+VK_KHR_fragment_shader_barycentric
 VK_KHR_shader_subgroup_extended_types
 VK_KHR_spirv_1_4
 VK_EXT_texel_buffer_alignment
@@ -160,6 +161,7 @@ VK_EXT_primitive_topology_list_restart
 VK_KHR_dynamic_rendering
 VK_KHR_format_feature_flags2
 VK_EXT_extended_dynamic_state2
+VK_EXT_descriptor_buffer
 VK_EXT_graphics_pipeline_library
 VK_KHR_copy_commands2
 VK_EXT_ycbcr_image_arrays

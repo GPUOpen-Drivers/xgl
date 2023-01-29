@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -515,7 +515,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
         }
     }
 
-    constexpr bool useFullYcbrImageSampler = false;
+    const bool useFullYcbrImageSampler = ((pIn->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0);
 
     // Bindings numbers are allowed to come in out-of-order, as well as with gaps.
     // We compute offsets using the size we've seen so far as we iterate, so we need to handle

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -262,8 +262,12 @@ protected:
 
     uint32_t UpdateShaderGroupIndex(uint32_t shader, uint32_t idx);
 
-    VkResult BuildCaptureReplayVaMappingBufferData(Vkgc::RayTracingShaderIdentifier* pShaderGroupHandles,
-                                                   const VkAllocationCallbacks*      pAllocator);
+    VkResult ProcessCaptureReplayHandles(Vkgc::RayTracingShaderIdentifier*     pShaderGroupHandles,
+                                         const VkPipelineLibraryCreateInfoKHR* pLibraryInfo,
+                                         const VkAllocationCallbacks*          pAllocator);
+
+    const CaptureReplayVaMappingBufferInfo& GetCaptureReplayVaMappingBufferInfo() const
+        { return m_captureReplayVaMappingBufferInfo; }
 
     const Util::MetroHash::Hash& GetElfHash() const
         { return m_elfHash; }

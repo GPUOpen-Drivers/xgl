@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -150,6 +150,11 @@ public:
     uint32_t GetMemoryTypeMaskForExternalSharing() const
     {
         return m_memoryTypeMaskForExternalSharing;
+    }
+
+    uint32_t GetMemoryTypeMaskForDescriptorBuffers() const
+    {
+        return m_memoryTypeMaskForDescriptorBuffers;
     }
 
     bool GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndexBits) const
@@ -810,6 +815,7 @@ protected:
     Pal::GpuHeap                     m_memoryVkIndexToPalHeap[VK_MAX_MEMORY_TYPES];
     Pal::GpuHeap                     m_heapVkToPal[VkMemoryHeapNum];
     VkPhysicalDeviceMemoryProperties m_memoryProperties;
+    uint32_t                         m_memoryTypeMaskForDescriptorBuffers;
 
     VulkanSettingsLoader*            m_pSettingsLoader;
     VkPhysicalDeviceLimits           m_limits;

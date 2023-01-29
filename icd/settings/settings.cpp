@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -998,7 +998,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 // Ray Tracing Settings
                 m_settings.rtEnableBuildParallel  = true;
                 m_settings.rtEnableUpdateParallel = true;
-                m_settings.rtEnableWaveVarying    = true;
 
                 m_settings.rtBvhBuildModeFastTrace = BvhBuildModeLinear;
                 m_settings.rtEnableTopDownBuild    = false;
@@ -1407,6 +1406,9 @@ void VulkanSettingsLoader::ValidateSettings()
         m_settings.bvhBuildModeOverrideTLAS = buildMode;
     }
 
+#if VKI_RAY_TRACING
+#endif
+
     // Clamp target occupancy to [0.0, 1.0]
     m_settings.indirectCallTargetOccupancyPerSimd =
         Util::Clamp(m_settings.indirectCallTargetOccupancyPerSimd, 0.0f ,1.0f);
@@ -1470,7 +1472,7 @@ void VulkanSettingsLoader::FinalizeSettings(
     const DeviceExtensions::Enabled& enabledExtensions)
 {
     if (enabledExtensions.IsExtensionEnabled(DeviceExtensions::KHR_PUSH_DESCRIPTOR)
-		)
+    || enabledExtensions.IsExtensionEnabled(DeviceExtensions::EXT_DESCRIPTOR_BUFFER))
     {
         m_settings.enableFmaskBasedMsaaRead = false;
     }

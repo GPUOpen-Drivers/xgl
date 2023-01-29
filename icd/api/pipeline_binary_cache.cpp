@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -819,10 +819,7 @@ VkResult PipelineBinaryCache::InitMemoryCacheLayer(
     createInfo.maxMemorySize       = SIZE_MAX;
 #endif
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 711
     createInfo.expectedEntries     = m_expectedEntries;
-#endif
-
     createInfo.evictOnFull         = true;
     createInfo.evictDuplicates     = true;
 

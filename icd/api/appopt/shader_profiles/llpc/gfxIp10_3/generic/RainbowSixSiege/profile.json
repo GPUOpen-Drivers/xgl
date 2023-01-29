@@ -1,0 +1,100 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "vs": {
+          "codeHash": "0x20e308bfed28116b 07fc541b1939bb21"
+        }
+      },
+      "action": {
+        "vs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x073BCE2F2EAD486B 16E0F84A01D0587F"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "codeHash": "0x4A12638C54615C6C F3C3EAC2425C09FF"
+        }
+      },
+      "action": {
+        "vs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x989C42782537210A 95735F6FB95C7771"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "codeHash": "0x18B1C67C215E6135 93FC014EC2355ADC"
+        }
+      },
+      "action": {
+        "vs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x70A7414DBF8A2903 85C3B0A7F65CB8EC"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "codeHash": "0xEFE79E1D1A647920 3E49498F389B5B36"
+        }
+      },
+      "action": {
+        "vs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xD404AE6135AAA74E 0AB63222604C2453"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    }
+  ]
+}

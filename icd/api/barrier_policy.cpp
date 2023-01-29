@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -308,6 +308,7 @@ static uint32_t AccessMaskToCacheMask(
                                                    VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT           |
                                                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR         |
                                                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR         |
+                                                   VK_ACCESS_2_DESCRIPTOR_BUFFER_READ_BIT_EXT      |
 #if VKI_RAY_TRACING
                                                    VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR |
 #endif

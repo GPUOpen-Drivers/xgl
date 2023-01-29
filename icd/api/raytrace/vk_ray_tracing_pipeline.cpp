@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -488,7 +488,7 @@ VkResult RayTracingPipeline::CreateImpl(
             }
         }
 
-        if (nativeShaderCount > 0)
+        if (totalShaderCount > 0)
         {
             auto placement = utils::PlacementHelper<3>(
                 nullptr,
@@ -1281,9 +1281,10 @@ VkResult RayTracingPipeline::CreateImpl(
                         // Replaying in indirect mode, the replayer will upload VAs that is calculated when capturing to
                         // SBT, we need to map them to new VAs newly generated which are actually in used.
                         // Group count has to match for us to do a one-on-one mapping.
-                        VK_ASSERT(totalGroupCount == m_createInfo.GetGroupCount());
-                        result = BuildCaptureReplayVaMappingBufferData(pShaderGroups[DefaultDeviceIndex],
-                                                                       pAllocator);
+                        VK_ASSERT(totalGroupCount == (m_createInfo.GetGroupCount() + pipelineLibGroupCount));
+                        result = ProcessCaptureReplayHandles(pShaderGroups[DefaultDeviceIndex],
+                                                             pCreateInfo->pLibraryInfo,
+                                                             pAllocator);
                     }
                 }
 #if ICD_GPUOPEN_DEVMODE_BUILD
@@ -1370,7 +1371,7 @@ VkResult RayTracingPipeline::CreateImpl(
         }
 
         // Free the temporary memory for shader modules
-        if (nativeShaderCount > 0)
+        if (totalShaderCount > 0)
         {
             // Free the temporary newly-built shader modules
             FreeTempModules(m_pDevice, nativeShaderCount, pTempModules);
@@ -1990,9 +1991,14 @@ void RayTracingPipeline::GetDispatchSize(
 }
 
 // =====================================================================================================================
-VkResult RayTracingPipeline::BuildCaptureReplayVaMappingBufferData(
-    Vkgc::RayTracingShaderIdentifier* pShaderGroupHandles,
-    const VkAllocationCallbacks*      pAllocator)
+// Processes capture replay group handle by doing:
+//     1. Build a captured VA -> replaying VA mapping buffer.
+//     2. Replace group handles with captured ones (to match spec behavior that vkGetRayTracingShaderGroupHandlesKHR
+//        should return the captured handles.
+VkResult RayTracingPipeline::ProcessCaptureReplayHandles(
+    Vkgc::RayTracingShaderIdentifier*     pShaderGroupHandles,
+    const VkPipelineLibraryCreateInfoKHR* pLibraryInfo,
+    const VkAllocationCallbacks*          pAllocator)
 {
     VkResult result = VK_SUCCESS;
 
@@ -2000,7 +2006,7 @@ VkResult RayTracingPipeline::BuildCaptureReplayVaMappingBufferData(
     uint32_t groupCount = m_createInfo.GetGroupCount();
 
     // Calculate total data size
-    uint32_t entryCount = 0;
+    uint32_t totalEntryCount = 0;
     Util::Vector<Vkgc::RayTracingCaptureReplayVaMappingEntry, 16, PalAllocator>
         entries(m_pDevice->VkInstance()->Allocator());
 
@@ -2019,30 +2025,65 @@ VkResult RayTracingPipeline::BuildCaptureReplayVaMappingBufferData(
         {
             VK_ASSERT(capturedGroupHandle->shaderId != RayTracingInvalidShaderId);
             entries.PushBack({ capturedGroupHandle->shaderId, pShaderGroupHandles[i].shaderId });
-            entryCount++;
+            totalEntryCount++;
         }
 
         if (pShaderGroupHandles[i].anyHitId != RayTracingInvalidShaderId)
         {
             VK_ASSERT(capturedGroupHandle->anyHitId != RayTracingInvalidShaderId);
             entries.PushBack({ capturedGroupHandle->anyHitId, pShaderGroupHandles[i].anyHitId });
-            entryCount++;
+            totalEntryCount++;
         }
 
         if (pShaderGroupHandles[i].intersectionId != RayTracingInvalidShaderId)
         {
             VK_ASSERT(capturedGroupHandle->intersectionId != RayTracingInvalidShaderId);
             entries.PushBack({ capturedGroupHandle->intersectionId, pShaderGroupHandles[i].intersectionId });
-            entryCount++;
+            totalEntryCount++;
+        }
+
+        // NOTE: Per spec, vkGetRayTracingShaderGroupHandlesKHR should return identical handles when replaying as
+        // capturing. Here we replay the generated handles with given ones, this should be safe as they are unused
+        // elsewhere than vkGetRayTracingShaderGroupHandlesKHR.
+        pShaderGroupHandles[i].shaderId = capturedGroupHandle->shaderId;
+        pShaderGroupHandles[i].anyHitId = capturedGroupHandle->anyHitId;
+        pShaderGroupHandles[i].intersectionId = capturedGroupHandle->intersectionId;
+    }
+
+    // If there is any library, merge its mapping buffer info into this one.
+    if ((m_pDevice->GetRuntimeSettings().rtEnableCompilePipelineLibrary == true) &&
+        (pLibraryInfo != nullptr))
+    {
+        for (uint32_t i = 0; i < pLibraryInfo->libraryCount; i++)
+        {
+            RayTracingPipeline* pPipelineLib = RayTracingPipeline::ObjectFromHandle(pLibraryInfo->pLibraries[i]);
+            if (pPipelineLib == nullptr)
+            {
+                continue;
+            }
+
+            CaptureReplayVaMappingBufferInfo libMappingBufferInfo = pPipelineLib->GetCaptureReplayVaMappingBufferInfo();
+            if (libMappingBufferInfo.dataSize > 0)
+            {
+                Vkgc::RayTracingCaptureReplayVaMappingEntry* libEntries =
+                    reinterpret_cast<Vkgc::RayTracingCaptureReplayVaMappingEntry*>(libMappingBufferInfo.pData);
+                uint32_t libEntryCount = static_cast<uint32_t>(libEntries->capturedGpuVa);
+                ++libEntries;
+                for (uint32_t libEntryIdx = 0; libEntryIdx < libEntryCount; libEntryIdx++)
+                {
+                    entries.PushBack(libEntries[libEntryIdx]);
+                    totalEntryCount++;
+                }
+            }
         }
     }
 
-    entries.At(0).capturedGpuVa = entryCount;
-    entryCount++;
+    entries.At(0).capturedGpuVa = totalEntryCount;
+    totalEntryCount++;
 
     m_captureReplayVaMappingBufferInfo.pData = pAllocator->pfnAllocation(
         pAllocator->pUserData,
-        entryCount * sizeof(Vkgc::RayTracingCaptureReplayVaMappingEntry),
+        totalEntryCount * sizeof(Vkgc::RayTracingCaptureReplayVaMappingEntry),
         VK_DEFAULT_MEM_ALIGN,
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
@@ -2053,7 +2094,8 @@ VkResult RayTracingPipeline::BuildCaptureReplayVaMappingBufferData(
 
     if (result == VK_SUCCESS)
     {
-        m_captureReplayVaMappingBufferInfo.dataSize = entryCount * sizeof(Vkgc::RayTracingCaptureReplayVaMappingEntry);
+        m_captureReplayVaMappingBufferInfo.dataSize =
+            totalEntryCount * sizeof(Vkgc::RayTracingCaptureReplayVaMappingEntry);
         memcpy(m_captureReplayVaMappingBufferInfo.pData, entries.Data(), m_captureReplayVaMappingBufferInfo.dataSize);
     }
 

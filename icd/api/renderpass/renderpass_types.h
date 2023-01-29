@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -153,7 +153,9 @@ union RPSyncPointFlags
     struct
     {
         uint32_t active   : 1;  // True if this sync point needs to be handled
-        uint32_t reserved : 31;
+        uint32_t top      : 1;  // True if this is the top sync point
+
+        uint32_t reserved : 30;
     };
     uint32_t u32All;
 };

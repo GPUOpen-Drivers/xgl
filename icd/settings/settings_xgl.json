@@ -1035,6 +1035,18 @@
       "Type": "bool"
     },
     {
+      "Name": "DisableInstanceDivisorOpt",
+      "Description": "Disable instance divisor optimization in uber fetch shader.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
       "Name": "ForceAlignedForDynamicStride",
       "Description": "Force vertex stride is aligned when dynamic vertex stride is enabled",
       "Tags": [
@@ -2800,22 +2812,6 @@
       "Type": "bool",
       "VariableName": "rtEnableTopDownBuild",
       "Name": "EnableTopDownBuild",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Enable Wave Varying for RT pipelines",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "VariableName": "rtEnableWaveVarying",
-      "Name": "EnableWaveVarying",
       "Scope": "Driver"
     },
     {

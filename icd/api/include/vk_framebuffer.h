@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -97,6 +97,11 @@ public:
         return m_globalScissorParams;
     }
 
+    bool Imageless() const
+    {
+        return ((m_flags & VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT) != 0);
+    }
+
 protected:
     Framebuffer(const VkFramebufferCreateInfo& info, Attachment* pAttachments, const RuntimeSettings& runTimeSettings);
 
@@ -119,9 +124,10 @@ private:
         return Util::Pow2Align(sizeof(Framebuffer), alignof(Attachment));
     }
 
-    const uint32_t            m_attachmentCount;
-    Pal::GlobalScissorParams  m_globalScissorParams;
-    const RuntimeSettings&    m_settings;
+    const uint32_t                  m_attachmentCount;
+    Pal::GlobalScissorParams        m_globalScissorParams;
+    const RuntimeSettings&          m_settings;
+    const VkFramebufferCreateFlags  m_flags;
 };
 
 namespace entry

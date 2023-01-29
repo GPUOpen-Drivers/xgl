@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -134,7 +134,8 @@ Framebuffer::Framebuffer(const VkFramebufferCreateInfo& info,
                          Attachment*                    pAttachments,
                          const RuntimeSettings&         runTimeSettings)
         : m_attachmentCount (info.attachmentCount),
-		  m_settings(runTimeSettings)
+          m_settings(runTimeSettings),
+          m_flags(info.flags)
 {
     m_globalScissorParams.scissorRegion.offset.x      = 0;
     m_globalScissorParams.scissorRegion.offset.y      = 0;

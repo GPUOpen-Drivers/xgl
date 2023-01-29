@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -176,8 +176,10 @@ public:
         { return m_vbInfo; }
 
     void BindToCmdBuffer(
-        CmdBuffer*                             pCmdBuffer,
-        const Pal::DynamicGraphicsShaderInfos& graphicsShaderInfos) const;
+        CmdBuffer* pCmdBuffer) const;
+
+    const Pal::IPipeline* GetPalPipeline(uint32_t deviceIdx) const
+        { return  UseOptimizedPipeline() ? m_pOptimizedPipeline[deviceIdx] : m_pPalPipeline[deviceIdx]; }
 
     const Pal::DynamicGraphicsShaderInfos& GetBindInfo() const { return m_info.graphicsShaderInfos; }
 

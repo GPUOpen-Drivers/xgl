@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -63,6 +63,8 @@ class  SwapChain;
 class  FrtcFramePacer;
 class  TurboSync;
 class  SqttQueueState;
+class  PhysicalDevice;
+class  Memory;
 
 // =====================================================================================================================
 // A Vulkan queue.
@@ -76,17 +78,86 @@ public:
         uint32_t                queueFamilyIndex,
         uint32_t                queueIndex,
         uint32_t                queueFlags,
-        Pal::IQueue**           pPalQueues,
-        Pal::IQueue**           pPalTmzQueues,
-        Pal::IQueueSemaphore**  pPalTmzSemaphores,
+        Pal::IQueue**           ppPalQueues,
+        Pal::IQueue**           ppPalTmzQueues,
+        Pal::IQueueSemaphore**  ppPalTmzSemaphores,
         VirtualStackAllocator*  pStackAllocator,
         CmdBufferRing*          pCmdBufferRing,
-        Pal::IQueue**           pPalBackupQueues,
-        Pal::IQueue**           pPalBackupTmzQueues,
-        Pal::IQueueSemaphore**  pSwitchToPalBackupSemaphore,
-        Pal::IQueueSemaphore**  pSwitchFromPalBackupSemaphore);
+        Pal::IQueue**           ppPalBackupQueues,
+        Pal::IQueue**           ppPalBackupTmzQueues,
+        Pal::IQueueSemaphore**  ppSwitchToPalBackupSemaphore,
+        Pal::IQueueSemaphore**  ppSwitchFromPalBackupSemaphore,
+        const bool              isDeviceIndependent);
+
+    static VkResult Create(
+        Device*                        pDevice,
+        const VkAllocationCallbacks*   pAllocator,
+        const uint32_t                 flags,
+        const uint32_t                 queueFamilyIndex,
+        const uint32_t                 engineIndex,
+        const VkQueueGlobalPriorityKHR globalPriority,
+        const uint32_t                 dedicatedComputeUnits,
+        const bool                     isDeviceIndependent,
+        VkQueue*                       pQueue);
+
+    static void ConstructQueueCreateInfo(
+        const PhysicalDevice&          physicalDevice,
+        const uint32_t                 queueFamilyIndex,
+        const uint32_t                 queueIndex,
+        const uint32_t                 dedicatedComputeUnits,
+        const VkQueueGlobalPriorityKHR queuePriority,
+        Pal::QueueCreateInfo*          pQueueCreateInfo,
+        const bool                     useComputeAsTransferQueue,
+        const bool                     isTmzQueue);
+
+    static Pal::Result CreatePalQueue(
+        const PhysicalDevice&          physicalDevice,
+        Pal::IDevice*                  pPalDevice,
+        const uint32_t                 queueFamilyIndex,
+        const uint32_t                 queueIndex,
+        const uint32_t                 dedicatedComputeUnit,
+        const VkQueueGlobalPriorityKHR queuePriority,
+        Pal::QueueCreateInfo*          pQueueCreateInfo,
+        void*                          pPalQueueMemory,
+        const size_t                   palQueueMemoryOffset,
+        Pal::IQueue**                  ppPalQueue,
+        const wchar_t*                 pExecutableName,
+        const wchar_t*                 pExecutablePath,
+        const bool                     useComputeAsTransferQueue,
+        const bool                     isTmzQueue);
+
+    static VkResult GetPalQueueMemorySize(
+        const Device*                  pDevice,
+        const uint32_t                 queueFamilyIndex,
+        const uint32_t                 queueIndex,
+        const uint32_t                 dedicatedComputeUnits,
+        const VkQueueGlobalPriorityKHR globalPriority,
+        const uint32_t                 flags,
+        size_t*                        palQueueMemorySize);
+
+    static Pal::Result CreatePalQueues(
+        const Device*                  pDevice,
+        const uint32_t                 queueFamilyIndex,
+        const uint32_t                 queueIndex,
+        const uint32_t                 dedicatedComputeUnits,
+        const VkQueueGlobalPriorityKHR globalPriority,
+        const uint32_t                 flags,
+        size_t*                        pPalQueueMemoryOffset,
+        uint32_t*                      pDeviceIdx,
+        void*                          pPalQueueMemory,
+        Pal::IQueue**                  ppPalQueuesBase,
+        Pal::IQueue**                  ppPalTmzQueues,
+        Pal::IQueueSemaphore**         ppPalTmzSemaphores,
+        Pal::IQueue**                  ppPalBackupQueues,
+        Pal::IQueue**                  ppPalBackupTmzQueues,
+        Pal::IQueueSemaphore**         ppSwitchToPalBackupSemaphore,
+        Pal::IQueueSemaphore**         ppSwitchFromPalBackupSemaphore);
 
     ~Queue();
+
+    void Destroy(
+        Device*                      pDevice,
+        const VkAllocationCallbacks* pAllocator);
 
     template<typename SubmitInfoType>
     VkResult Submit(
@@ -168,11 +239,20 @@ public:
     SqttQueueState* GetSqttState()
         { return m_pSqttState; }
 
+    bool IsDeviceIndependent() const
+    {
+        return m_isDeviceIndependent;
+    }
+
     VkResult SubmitInternalCmdBuf(
         CmdBufferRing*             pCmdBufferRing,
         uint32_t                   deviceIdx,
         const Pal::CmdBufInfo&     cmdBufInfo,
         CmdBufState*               pCmdBufState);
+
+    VkResult SynchronizeBackBuffer(
+        Memory*  pMemory,
+        uint32_t deviceIdx);
 
 protected:
     // This is a helper structure during a virtual remap (sparse bind) call to batch remaps into
@@ -284,6 +364,8 @@ protected:
     Pal::ICmdBuffer*                   m_pDummyCmdBuffer[MaxPalDevices];
     SqttQueueState*                    m_pSqttState; // Per-queue state for handling SQ thread-tracing annotations
     CmdBufferRing*                     m_pCmdBufferRing;
+
+    const bool                         m_isDeviceIndependent;
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Queue);
