@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2020-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2020-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -1072,6 +1072,9 @@ SHADER_ACTION = {
         "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
         "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
+
+#if VKI_RAY_TRACING
+#endif
 
     "nggDisable": {
         "type": [int],

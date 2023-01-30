@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -77,6 +77,10 @@ struct GraphicsPipelineObjectImmedInfo
     bool                                  rasterizerDiscardEnable;
     bool                                  checkDeferCompilePipeline;
     float                                 minSampleShading;
+    uint32_t                              colorWriteEnable;
+    uint32_t                              colorWriteMask;
+    VkLogicOp                             logicOp;
+    bool                                  logicOpEnable;
 
     // Static pipeline parameter token values.  These can be used to efficiently redundancy check static pipeline
     // state programming during pipeline binds.
@@ -115,11 +119,12 @@ union GraphicsPipelineObjectFlags
         uint32_t   bindColorBlendObject     : 1;
         uint32_t   bindMsaaObject           : 1;
         uint32_t   viewIndexFromDeviceIndex : 1;
+        uint32_t   perpLineEndCapsEnable    : 1;
 #if VKI_RAY_TRACING
         uint32_t   hasRayTracing            : 1;
-        uint32_t   reserved                 : 18;
+        uint32_t   reserved                 : 17;
 #else
-        uint32_t   reserved                 : 19;
+        uint32_t   reserved                 : 18;
 #endif
     };
     uint32_t value;

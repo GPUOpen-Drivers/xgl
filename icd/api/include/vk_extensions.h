@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -292,6 +292,7 @@ public:
         KHR_EXTERNAL_SEMAPHORE_FD,
         KHR_EXTERNAL_SEMAPHORE_WIN32,
         KHR_FORMAT_FEATURE_FLAGS2,
+        KHR_FRAGMENT_SHADER_BARYCENTRIC,
         KHR_FRAGMENT_SHADING_RATE,
         KHR_GET_MEMORY_REQUIREMENTS2,
         KHR_GLOBAL_PRIORITY,
@@ -352,6 +353,7 @@ public:
         EXT_DEPTH_CLIP_CONTROL,
         EXT_DEPTH_CLIP_ENABLE,
         EXT_DEPTH_RANGE_UNRESTRICTED,
+        EXT_DESCRIPTOR_BUFFER,
         EXT_DESCRIPTOR_INDEXING,
         EXT_DEVICE_FAULT,
         EXT_EXTENDED_DYNAMIC_STATE,

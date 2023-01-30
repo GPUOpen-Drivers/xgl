@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -525,6 +525,10 @@ void Buffer::GetBufferMemoryRequirements(
         pMemoryRequirements->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD);
     }
 
+    if (pBufferFlags->usageDescriptor)
+    {
+        pMemoryRequirements->memoryTypeBits &= pDevice->GetMemoryTypeMaskForDescriptorBuffers();
+    }
 }
 
 void Buffer::CalculateBufferFlags(
@@ -540,6 +544,10 @@ void Buffer::CalculateBufferFlags(
     pBufferFlags->usageAccelStorage     = (pCreateInfo->usage &
                                              VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR) ? 1 : 0;
 #endif
+    pBufferFlags->usageDescriptor       = (pCreateInfo->usage &
+                                             (VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+                                              VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT  |
+                                              VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT)) ? 1 : 0;
     pBufferFlags->createSparseBinding   = (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)   ? 1 : 0;
     pBufferFlags->createSparseResidency = (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
     pBufferFlags->createProtected       = (pCreateInfo->flags & VK_BUFFER_CREATE_PROTECTED_BIT)        ? 1 : 0;

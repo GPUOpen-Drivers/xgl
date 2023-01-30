@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -33,6 +33,7 @@
 #include "include/vk_physical_device.h"
 #include "include/vk_shader.h"
 #include "include/vk_pipeline_cache.h"
+#include "include/graphics_pipeline_common.h"
 
 #include <inttypes.h>
 
@@ -210,8 +211,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     VkResult result = VK_SUCCESS;
 
     // Build the LLPC pipeline
-    Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
-    void* pLlpcPipelineBuffer = nullptr;
+    Llpc::GraphicsPipelineBuildOut pipelineOut = {};
 
     const auto& pipelineProfileKey = *pCreateInfo->pPipelineProfileKey;
 
@@ -219,7 +219,6 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     auto pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
     pPipelineBuildInfo->pInstance      = pInstance;
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
-    pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
     pPipelineBuildInfo->iaState.deviceIndex = deviceIdx;
     if ((pPipelineCache != nullptr) && (settings.shaderCacheMode != ShaderCacheDisable))
     {
@@ -286,8 +285,6 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     memset(pCreateInfo->stageFeedback, 0, sizeof(pCreateInfo->stageFeedback));
     if (llpcResult != Vkgc::Result::Success)
     {
-        // There shouldn't be anything to free for the failure case
-        VK_ASSERT(pLlpcPipelineBuffer == nullptr);
         result = VK_ERROR_INITIALIZATION_FAILED;
     }
     else
@@ -424,13 +421,11 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     const auto& pipelineProfileKey = *pCreateInfo->pPipelineProfileKey;
 
     // Build the LLPC pipeline
-    Llpc::ComputePipelineBuildOut  pipelineOut         = {};
-    void*                          pLlpcPipelineBuffer = nullptr;
+    Llpc::ComputePipelineBuildOut pipelineOut = {};
 
     // Fill pipeline create info for LLPC
     pPipelineBuildInfo->pInstance      = pInstance;
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
-    pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
     if ((pPipelineCache != nullptr) && (settings.shaderCacheMode != ShaderCacheDisable))
     {
         pPipelineBuildInfo->cache = pPipelineCache->GetCacheAdapter();
@@ -544,8 +539,6 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     pCreateInfo->stageFeedback = {};
     if (llpcResult != Vkgc::Result::Success)
     {
-        // There shouldn't be anything to free for the failure case
-        VK_ASSERT(pLlpcPipelineBuffer == nullptr);
         if (llpcResult == Vkgc::Result::ErrorOutOfMemory)
         {
             result = VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -572,7 +565,6 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
                 (pipelineOut.stageCacheAccess == Llpc::CacheAccessInfo::CacheHit);
         }
     }
-    VK_ASSERT(*ppPipelineBinary == pLlpcPipelineBuffer);
 
     if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
     {
@@ -684,15 +676,13 @@ VkResult CompilerSolutionLlpc::CreateRayTracingPipelineBinary(
     }
 
     // Build the LLPC pipeline
-    Llpc::RayTracingPipelineBuildOut  pipelineOut = {};
-    void* pLlpcPipelineBuffer = nullptr;
+    Llpc::RayTracingPipelineBuildOut pipelineOut = {};
 
     int64_t startTime = Util::GetPerfCpuTime();
     // Fill pipeline create info for LLPC
     auto pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
     pPipelineBuildInfo->pInstance = pInstance;
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
-    pPipelineBuildInfo->pUserData = &pLlpcPipelineBuffer;
     pPipelineBuildInfo->deviceIndex = deviceIdx;
     pPipelineBuildInfo->deviceCount = m_pPhysicalDevice->Manager()->GetDeviceCount();
     if ((pPipelineCache != nullptr) && (settings.shaderCacheMode != ShaderCacheDisable))
@@ -708,8 +698,6 @@ VkResult CompilerSolutionLlpc::CreateRayTracingPipelineBinary(
     pCreateInfo->hasTraceRay = pipelineOut.hasTraceRay;
     if (llpcResult != Vkgc::Result::Success)
     {
-        // There shouldn't be anything to free for the failure case
-        VK_ASSERT(pLlpcPipelineBuffer == nullptr);
         result = VK_ERROR_INITIALIZATION_FAILED;
     }
     else
@@ -947,6 +935,65 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
     m_pLlpc = pCompiler;
 
     return (llpcResult == Vkgc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
+}
+
+// =====================================================================================================================
+// Write internal data for pipeline
+void CompilerSolutionLlpc::BuildPipelineInternalBufferData(
+    const PipelineCompiler*           pCompiler,
+    const uint32_t                    uberFetchConstBufRegBase,
+    const uint32_t                    specConstBufVertexRegBase,
+    const uint32_t                    specConstBufFragmentRegBase,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo)
+{
+    auto                  pInstance = m_pPhysicalDevice->VkInstance();
+    uint32_t internalBufferSize = 0;
+
+    // NOTE: Using instance divisor may get an incorrect result, disabled it on LLPC.
+    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
+    VK_ASSERT(settings.disableInstanceDivisorOpt);
+
+    const VkPipelineVertexInputStateCreateInfo* pVertexInput = nullptr;
+    if (pCreateInfo->pipelineInfo.enableUberFetchShader || pCreateInfo->pipelineInfo.enableEarlyCompile)
+    {
+        pVertexInput = pCreateInfo->pipelineInfo.pVertexInput;
+        internalBufferSize += pCompiler->GetUberFetchShaderInternalDataSize(pVertexInput);
+    }
+    auto pInternalBufferInfo = &(pCreateInfo->pBinaryMetadata->internalBufferInfo);
+    pInternalBufferInfo->dataSize = internalBufferSize;
+
+    if (internalBufferSize > 0)
+    {
+        pInternalBufferInfo->pData = pInstance->AllocMem(internalBufferSize,
+            VK_DEFAULT_MEM_ALIGN,
+            VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+        if (pInternalBufferInfo->pData == nullptr)
+        {
+            pCreateInfo->pipelineInfo.enableEarlyCompile = false;
+            pCreateInfo->pipelineInfo.enableUberFetchShader = false;
+        }
+    }
+
+    uint32_t internalBufferOffset = 0;
+    if ((pInternalBufferInfo->pData) &&
+        (pVertexInput != nullptr) &&
+        (pVertexInput->vertexAttributeDescriptionCount > 0))
+    {
+        uint32_t uberFetchShaderInternalDataSize = pCompiler->BuildUberFetchShaderInternalData(
+            pVertexInput, pCreateInfo->pipelineInfo.dynamicVertexStride, pInternalBufferInfo->pData);
+
+        if (uberFetchShaderInternalDataSize == 0)
+        {
+            pCreateInfo->pipelineInfo.enableUberFetchShader = false;
+        }
+        else
+        {
+            auto pBufferEntry = &pInternalBufferInfo->internalBufferEntries[pInternalBufferInfo->internalBufferCount++];
+            pBufferEntry->userDataOffset = uberFetchConstBufRegBase;
+            pBufferEntry->bufferOffset = internalBufferOffset;
+            internalBufferOffset += uberFetchShaderInternalDataSize;
+        }
+    }
 }
 
 // =====================================================================================================================

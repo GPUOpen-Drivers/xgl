@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -153,7 +153,8 @@ public:
             uint32                mustWriteImmutableSamplers           : 1;
             uint32                strictImageSizeRequirements          : 1;
             uint32                dynamicPrimitiveTopologyUnrestricted : 1;
-            uint32                reserved                             : 20;
+            uint32                graphicsPipelineLibrary              : 1;
+            uint32                reserved                             : 19;
         };
 
         uint32 u32All;
@@ -378,7 +379,8 @@ public:
         const DeviceExtensions::Enabled&            enabled,
         const VkMemoryOverallocationBehaviorAMD     overallocationBehavior,
         bool                                        bufferDeviceAddressMultiDeviceEnabled,
-        bool                                        pageableDeviceLocalMemory);
+        bool                                        pageableDeviceLocalMemory,
+        const VkAllocationCallbacks*                pAllocator);
 
     void InitDispatchTable();
 
@@ -462,6 +464,11 @@ public:
     uint32_t GetMemoryTypeMaskMatching(VkMemoryPropertyFlags flags) const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMaskMatching(flags);
+    }
+
+    uint32_t GetMemoryTypeMaskForDescriptorBuffers() const
+    {
+        return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMaskForDescriptorBuffers();
     }
 
     uint32_t GetMemoryTypeMaskForExternalSharing() const
@@ -652,6 +659,9 @@ public:
     bool IsAllocationSizeTrackingEnabled() const
         { return m_allocationSizeTracking; }
 
+    bool UseComputeAsTransfer() const
+        { return m_useComputeAsTransferQueue; }
+
     bool UseStridedCopyQueryResults() const
         { return (m_properties.timestampQueryPoolSlotSize == 32); }
 
@@ -802,28 +812,13 @@ public:
         const VkSpecializationInfo*    pSpecializationInfo,
         InternalPipeline*              pInternalPipeline);
 
-    static Pal::Result CreatePalQueue(
-        PhysicalDevice**           pPhysicalDevices,
-        Pal::IDevice**             pPalDevices,
-        uint32_t                   deviceIdx,
-        uint32_t                   queueFamilyIndex,
-        uint32_t                   queueIndex,
-        uint32_t                   dedicatedComputeUnit,
-        VkQueueGlobalPriorityEXT   queuePriority,
-        Pal::QueueCreateInfo*      pQueueCreateInfo,
-        void*                      pPalQueueMemory,
-        size_t                     palQueueMemoryOffset,
-        Pal::IQueue**              pPalQueues,
-        wchar_t*                   executableName,
-        wchar_t*                   executablePath,
-        bool                       useComputeAsTransferQueue,
-        bool                       isTmzQueue);
-
     Pal::TilingOptMode GetTilingOptMode() const;
 
     VkResult GetDeviceFaultInfoEXT(
         VkDeviceFaultCountsEXT* pFaultCounts,
         VkDeviceFaultInfoEXT*   pFaultInfo);
+
+    const PipelineLayout* GetNullPipelineLayout() const { return m_pNullPipelineLayout; }
 
 protected:
     Device(
@@ -967,9 +962,15 @@ protected:
     bool                                m_retrievedFaultData;
     Pal::PageFaultStatus                m_pageFaultStatus;
 
+    // Null pipeline layout for pipeline Library. We can use this if the pipeline library create info doesn't have
+    // a pipeline layout specified.
+    PipelineLayout* m_pNullPipelineLayout;
+
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.
     PerGpuInfo              m_perGpu[1];
+
+    // NOTE: Please don't add anything here. m_perGpu[1] must be the last.
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Device);

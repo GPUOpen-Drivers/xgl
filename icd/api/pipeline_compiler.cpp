@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -94,6 +94,9 @@ static uint32_t GpuRtShaderLibraryFlags(
 }
 #endif
 
+#if VKI_RAY_TRACING
+#endif
+
 // =====================================================================================================================
 // Builds app profile key and applies profile options.
 static void ApplyProfileOptions(
@@ -111,10 +114,13 @@ static void ApplyProfileOptions(
     options.pOptions                  = &pShaderInfo->options;
     options.pNggState                 = pNggState;
 
-    // Override the compile parameters based on any app profile
-    const auto* pShaderOptimizer = pDevice->GetShaderOptimizer();
-    pShaderOptimizer->OverrideShaderCreateInfo(*pProfileKey, shaderIndex, options);
+    if (pProfileKey->pShaders != nullptr)
+    {
+        // Override the compile parameters based on any app profile
+        const auto* pShaderOptimizer = pDevice->GetShaderOptimizer();
+        pShaderOptimizer->OverrideShaderCreateInfo(*pProfileKey, shaderIndex, options);
 
+    }
 }
 
 // =====================================================================================================================
@@ -149,6 +155,7 @@ PipelineCompiler::PipelineCompiler(
     , m_totalBinaries(0)
     , m_totalTimeSpent(0)
     , m_uberFetchShaderInfoFormatMap(8, pPhysicalDevice->Manager()->VkInstance()->Allocator())
+    , m_uberFetchShaderInternalDataMap(8, pPhysicalDevice->Manager()->VkInstance()->Allocator())
     , m_shaderModuleHandleMap(8, pPhysicalDevice->Manager()->VkInstance()->Allocator())
 {
 
@@ -299,6 +306,11 @@ VkResult PipelineCompiler::Initialize()
 
     if (result == VK_SUCCESS)
     {
+        result = PalToVkResult(m_uberFetchShaderInternalDataMap.Init());
+    }
+
+    if (result == VK_SUCCESS)
+    {
         result = InitializeUberFetchShaderFormatTable(m_pPhysicalDevice, &m_uberFetchShaderInfoFormatMap);
     }
 
@@ -319,9 +331,11 @@ void PipelineCompiler::Destroy()
 
     DestroyPipelineBinaryCache();
 
+   auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+
+    Util::MutexAuto mutexLock(&m_cacheLock);
     if (m_pPhysicalDevice->GetRuntimeSettings().enableEarlyCompile)
     {
-        Util::MutexAuto mutexLock(&m_shaderModuleCacheLock);
         for (auto it = m_shaderModuleHandleMap.Begin(); it.Get() != nullptr; it.Next())
         {
             VK_ASSERT(it.Get()->value.pRefCount != nullptr);
@@ -329,7 +343,6 @@ void PipelineCompiler::Destroy()
             if (*(it.Get()->value.pRefCount) == 1)
             {
                 // Force use un-lock version of FreeShaderModule.
-                auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
                 pInstance->FreeMem(it.Get()->value.pRefCount);
                 it.Get()->value.pRefCount = nullptr;
                 FreeShaderModule(&it.Get()->value);
@@ -341,6 +354,12 @@ void PipelineCompiler::Destroy()
         }
         m_shaderModuleHandleMap.Reset();
     }
+
+    for (auto it = m_uberFetchShaderInternalDataMap.Begin(); it.Get() != nullptr; it.Next())
+    {
+        pInstance->FreeMem(const_cast<void*>(it.Get()->value.pCode));
+    }
+    m_uberFetchShaderInternalDataMap.Reset();
 }
 
 // =====================================================================================================================
@@ -457,7 +476,7 @@ VkResult PipelineCompiler::LoadShaderModuleFromCache(
         // 1. Look up in internal cache m_shaderModuleHandleMap.
         if (supportInternalModuleCache)
         {
-            Util::MutexAuto mutexLock(&m_shaderModuleCacheLock);
+            Util::MutexAuto mutexLock(&m_cacheLock);
 
             ShaderModuleHandle* pHandle = m_shaderModuleHandleMap.FindKey(shaderModuleCacheHash);
             if (pHandle != nullptr)
@@ -493,7 +512,7 @@ VkResult PipelineCompiler::LoadShaderModuleFromCache(
                     pInstance->AllocMem(sizeof(uint32_t), VK_DEFAULT_MEM_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_CACHE));
                 if (pShaderModule->pRefCount != nullptr)
                 {
-                    Util::MutexAuto mutexLock(&m_shaderModuleCacheLock);
+                    Util::MutexAuto mutexLock(&m_cacheLock);
 
                     // Initialize the reference count to two: one for the runtime cache and one for this shader module.
                     *pShaderModule->pRefCount = 2;
@@ -511,7 +530,7 @@ VkResult PipelineCompiler::LoadShaderModuleFromCache(
 
         // 6. Store binary in application cache if cache hits but not hits in application cache here. This is because
         //    PipelineCompiler::StoreShaderModuleToCache() would not be called if cache hits.
-        if ((cacheResult == Util::Result::Success) && (hitApplicationCache == false))
+        if ((cacheResult == Util::Result::Success) && (hitApplicationCache == false) && (pBinaryCache != nullptr))
         {
         }
     }
@@ -551,7 +570,7 @@ void PipelineCompiler::StoreShaderModuleToCache(
                 pInstance->AllocMem(sizeof(uint32_t), VK_DEFAULT_MEM_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_CACHE));
             if (pShaderModule->pRefCount != nullptr)
             {
-                Util::MutexAuto mutexLock(&m_shaderModuleCacheLock);
+                Util::MutexAuto mutexLock(&m_cacheLock);
                 // Initialize the reference count to two: one for the runtime cache and one for this shader module.
                 *pShaderModule->pRefCount = 2;
                 auto palResult = m_shaderModuleHandleMap.Insert(shaderModuleCacheHash, *pShaderModule);
@@ -681,7 +700,7 @@ void PipelineCompiler::FreeShaderModule(
 {
     if (pShaderModule->pRefCount != nullptr)
     {
-        Util::MutexAuto mutexLock(&m_shaderModuleCacheLock);
+        Util::MutexAuto mutexLock(&m_cacheLock);
         if (*pShaderModule->pRefCount > 1)
         {
             (*pShaderModule->pRefCount)--;
@@ -1550,33 +1569,35 @@ static void CopyVertexInputInterfaceState(
 }
 
 // =====================================================================================================================
-static void MergePipelineOptions(const Vkgc::PipelineOptions& src, Vkgc::PipelineOptions& dst)
+static void MergePipelineOptions(
+    const Vkgc::PipelineOptions& src,
+    Vkgc::PipelineOptions*       pDst)
 {
-    dst.includeDisassembly                    |= src.includeDisassembly;
-    dst.scalarBlockLayout                     |= src.scalarBlockLayout;
-    dst.reconfigWorkgroupLayout               |= src.reconfigWorkgroupLayout;
-    dst.forceCsThreadIdSwizzling              |= src.forceCsThreadIdSwizzling;
-    dst.includeIr                             |= src.includeIr;
-    dst.robustBufferAccess                    |= src.robustBufferAccess;
-    dst.enableRelocatableShaderElf            |= src.enableRelocatableShaderElf;
-    dst.disableImageResourceCheck             |= src.disableImageResourceCheck;
-    dst.enableScratchAccessBoundsChecks       |= src.enableScratchAccessBoundsChecks;
-    dst.extendedRobustness.nullDescriptor     |= src.extendedRobustness.nullDescriptor;
-    dst.extendedRobustness.robustBufferAccess |= src.extendedRobustness.robustBufferAccess;
-    dst.extendedRobustness.robustImageAccess  |= src.extendedRobustness.robustImageAccess;
+    pDst->includeDisassembly                    |= src.includeDisassembly;
+    pDst->scalarBlockLayout                     |= src.scalarBlockLayout;
+    pDst->reconfigWorkgroupLayout               |= src.reconfigWorkgroupLayout;
+    pDst->forceCsThreadIdSwizzling              |= src.forceCsThreadIdSwizzling;
+    pDst->includeIr                             |= src.includeIr;
+    pDst->robustBufferAccess                    |= src.robustBufferAccess;
+    pDst->enableRelocatableShaderElf            |= src.enableRelocatableShaderElf;
+    pDst->disableImageResourceCheck             |= src.disableImageResourceCheck;
+    pDst->enableScratchAccessBoundsChecks       |= src.enableScratchAccessBoundsChecks;
+    pDst->extendedRobustness.nullDescriptor     |= src.extendedRobustness.nullDescriptor;
+    pDst->extendedRobustness.robustBufferAccess |= src.extendedRobustness.robustBufferAccess;
+    pDst->extendedRobustness.robustImageAccess  |= src.extendedRobustness.robustImageAccess;
 #if VKI_BUILD_GFX11
-    dst.optimizeTessFactor                    |= src.optimizeTessFactor;
+    pDst->optimizeTessFactor                    |= src.optimizeTessFactor;
 #endif
-    dst.enableInterpModePatch                 |= src.enableInterpModePatch;
-    dst.pageMigrationEnabled                  |= src.pageMigrationEnabled;
+    pDst->enableInterpModePatch                 |= src.enableInterpModePatch;
+    pDst->pageMigrationEnabled                  |= src.pageMigrationEnabled;
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 53
-    dst.optimizationLevel                     |= src.optimizationLevel;
+    pDst->optimizationLevel                     |= src.optimizationLevel;
 #endif
-    dst.shadowDescriptorTableUsage   = src.shadowDescriptorTableUsage;
-    dst.shadowDescriptorTablePtrHigh = src.shadowDescriptorTablePtrHigh;
-    dst.overrideThreadGroupSizeX     = src.overrideThreadGroupSizeX;
-    dst.overrideThreadGroupSizeY     = src.overrideThreadGroupSizeY;
-    dst.overrideThreadGroupSizeZ     = src.overrideThreadGroupSizeZ;
+    pDst->shadowDescriptorTableUsage   = src.shadowDescriptorTableUsage;
+    pDst->shadowDescriptorTablePtrHigh = src.shadowDescriptorTablePtrHigh;
+    pDst->overrideThreadGroupSizeX     = src.overrideThreadGroupSizeX;
+    pDst->overrideThreadGroupSizeY     = src.overrideThreadGroupSizeY;
+    pDst->overrideThreadGroupSizeZ     = src.overrideThreadGroupSizeZ;
 }
 
 // =====================================================================================================================
@@ -1595,7 +1616,7 @@ static void CopyPreRasterizationShaderState(
     pCreateInfo->pipelineInfo.enableUberFetchShader           = libInfo.pipelineInfo.enableUberFetchShader;
     pCreateInfo->rasterizationStream                          = libInfo.rasterizationStream;
 
-    MergePipelineOptions(libInfo.pipelineInfo.options, pCreateInfo->pipelineInfo.options);
+    MergePipelineOptions(libInfo.pipelineInfo.options, &pCreateInfo->pipelineInfo.options);
 
     CopyPipelineShadersInfo<PrsShaderMask>(pLibrary, pCreateInfo);
 }
@@ -1619,7 +1640,7 @@ static void CopyFragmentShaderState(
     pCreateInfo->pipelineInfo.dsState.front             = libInfo.pipelineInfo.dsState.front;
     pCreateInfo->pipelineInfo.dsState.back              = libInfo.pipelineInfo.dsState.back;
 
-    MergePipelineOptions(libInfo.pipelineInfo.options, pCreateInfo->pipelineInfo.options);
+    MergePipelineOptions(libInfo.pipelineInfo.options, &pCreateInfo->pipelineInfo.options);
 
     CopyPipelineShadersInfo<FgsShaderMask>(pLibrary, pCreateInfo);
 }
@@ -1732,8 +1753,6 @@ static void BuildMultisampleStateInFgs(
                 pCreateInfo->pipelineInfo.rsState.pixelShaderSamples = 1;
             }
 
-            pCreateInfo->pipelineInfo.rsState.numSamples = pMs->rasterizationSamples;
-
             // NOTE: The sample pattern index here is actually the offset of sample position pair. This is
             // different from the field of creation info of image view. For image view, the sample pattern
             // index is really table index of the sample pattern.
@@ -1741,6 +1760,7 @@ static void BuildMultisampleStateInFgs(
                 Device::GetDefaultSamplePatternIndex(subpassCoverageSampleCount) * Pal::MaxMsaaRasterizerSamples;
         }
 
+        pCreateInfo->pipelineInfo.rsState.numSamples = pMs->rasterizationSamples;
         pCreateInfo->pipelineInfo.options.enableInterpModePatch = false;
 
         if (pCreateInfo->pipelineInfo.rsState.perSampleShading)
@@ -1773,9 +1793,14 @@ static void BuildMultisampleStateInFgs(
 // =====================================================================================================================
 static void BuildMultisampleStateInFoi(
     const VkPipelineMultisampleStateCreateInfo* pMs,
+    uint64_t                                    dynamicStateFlags,
     GraphicsPipelineBinaryCreateInfo*           pCreateInfo)
 {
-    if (pMs != nullptr)
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::AlphaToCoverageEnable) == true)
+    {
+        pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable = true;
+    }
+    else if (pMs != nullptr)
     {
         pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable = (pMs->alphaToCoverageEnable == VK_TRUE);
     }
@@ -1919,12 +1944,8 @@ void PipelineCompiler::BuildPipelineShaderInfo(
         pShaderInfoOut->entryStage          = stage;
 
         pCompiler->ApplyDefaultShaderOptions(stage,
+                                             pShaderInfoIn->flags,
                                              &pShaderInfoOut->options);
-
-        if ((pShaderInfoIn->flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0)
-        {
-            pShaderInfoOut->options.allowVaryWaveSize = true;
-        }
 
         ApplyProfileOptions(pDevice,
                             static_cast<uint32_t>(stage),
@@ -2092,13 +2113,15 @@ static void BuildColorBlendState(
 {
     bool dualSourceBlendEnabled = false;
 
-    if (pCb != nullptr)
+    if ((pCb != nullptr) || (pRendering != nullptr))
     {
-        const uint32_t numColorTargets = Util::Min(pCb->attachmentCount, Pal::MaxColorTargets);
+        const uint32_t numColorTargets = (pRendering != nullptr) ?
+            Util::Min(pRendering->colorAttachmentCount, Pal::MaxColorTargets) :
+            Util::Min(pCb->attachmentCount, Pal::MaxColorTargets);
 
         for (uint32_t i = 0; i < numColorTargets; ++i)
         {
-            const VkPipelineColorBlendAttachmentState& src = pCb->pAttachments[i];
+
             auto pLlpcCbDst = &pCreateInfo->pipelineInfo.cbState.target[i];
 
             VkFormat cbFormat = VK_FORMAT_UNDEFINED;
@@ -2119,17 +2142,38 @@ static void BuildColorBlendState(
             // and attachment zero, which can be set to VK_ATTACHMENT_UNUSED.
             if (cbFormat != VK_FORMAT_UNDEFINED)
             {
-                pLlpcCbDst->format = cbFormat;
+                VkColorComponentFlags colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+                                                       VK_COLOR_COMPONENT_G_BIT |
+                                                       VK_COLOR_COMPONENT_B_BIT |
+                                                       VK_COLOR_COMPONENT_A_BIT;
 
-                pLlpcCbDst->blendEnable = (src.blendEnable == VK_TRUE) ||
-                    IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable);
-                pLlpcCbDst->blendSrcAlphaToColor =
-                    GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.srcAlphaBlendFactor) ||
-                    GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.dstAlphaBlendFactor) ||
-                    GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.srcColorBlendFactor) ||
-                    GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.dstColorBlendFactor) ||
-                    IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation);
-                pLlpcCbDst->channelWriteMask = src.colorWriteMask;
+                if (pCb != nullptr)
+                {
+                    const VkPipelineColorBlendAttachmentState& src = pCb->pAttachments[i];
+                    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorWriteMask) == false)
+                    {
+                        colorWriteMask = src.colorWriteMask;
+                    }
+
+                    pLlpcCbDst->blendEnable = (src.blendEnable == VK_TRUE) ||
+                        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable);
+                    pLlpcCbDst->blendSrcAlphaToColor =
+                        GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.srcAlphaBlendFactor) ||
+                        GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.dstAlphaBlendFactor) ||
+                        GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.srcColorBlendFactor) ||
+                        GraphicsPipelineCommon::IsSrcAlphaUsedInBlend(src.dstColorBlendFactor) ||
+                        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation);
+                }
+                else
+                {
+                    pLlpcCbDst->blendEnable =
+                        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable);
+                    pLlpcCbDst->blendSrcAlphaToColor =
+                        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation);
+                }
+
+                pLlpcCbDst->format = cbFormat;
+                pLlpcCbDst->channelWriteMask = colorWriteMask;
             }
             else if (i == 0)
             {
@@ -2163,8 +2207,11 @@ static void BuildColorBlendState(
             }
         }
 
-        // TODO: Support dual source blend with DynamicStates ColorBlendEnableExt or ColorBlendEquationExt.
-        dualSourceBlendEnabled = GraphicsPipelineCommon::GetDualSourceBlendEnableState(pDevice, pCb);
+        if (pCb != nullptr)
+        {
+            // TODO: Support dual source blend with DynamicStates ColorBlendEnable or ColorBlendEquation.
+            dualSourceBlendEnabled = GraphicsPipelineCommon::GetDualSourceBlendEnableState(pDevice, pCb);
+        }
     }
 
     pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable = dualSourceBlendEnabled;
@@ -2261,7 +2308,8 @@ static void BuildPreRasterizationShaderState(
                 pPipelineTessellationStateCreateInfo->patchControlPoints;
         }
 
-        if (pPipelineTessellationDomainOriginStateCreateInfo)
+        if (pPipelineTessellationDomainOriginStateCreateInfo &&
+            (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::TessellationDomainOrigin) == false))
         {
             // Vulkan 1.0 incorrectly specified the tessellation u,v coordinate origin as lower left even though
             // framebuffer and image coordinate origins are in the upper left.  This has since been fixed, but
@@ -2318,7 +2366,7 @@ static void BuildFragmentOutputInterfaceState(
         reinterpret_cast<const VkPipelineRenderingCreateInfoKHR*>(pIn->pNext),
         PIPELINE_RENDERING_CREATE_INFO_KHR)
 
-    BuildMultisampleStateInFoi(pIn->pMultisampleState, pCreateInfo);
+    BuildMultisampleStateInFoi(pIn->pMultisampleState, dynamicStateFlags, pCreateInfo);
 
     BuildColorBlendState(pDevice,
                          pIn->pColorBlendState,
@@ -2371,11 +2419,6 @@ static void BuildExecutablePipelineState(
     shaderMask |= (pipelineInfo.mesh.pModuleData != nullptr) ? ShaderStageBit::ShaderStageMeshBit       : StageNone;
     shaderMask |= (pipelineInfo.fs.pModuleData  != nullptr) ? ShaderStageBit::ShaderStageFragmentBit    : StageNone;
     BuildCompilerInfo(pDevice, pShaderInfo, shaderMask, pCreateInfo);
-
-    if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
-    {
-        pCreateInfo->pipelineInfo.enableUberFetchShader = false;
-    }
 
     if (pCreateInfo->pipelineInfo.enableUberFetchShader)
     {
@@ -2735,11 +2778,6 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
         pCreateInfo->pipelineInfo.cs.options.allowVaryWaveSize = true;
     }
 
-    if ((pShaderInfo->stage.flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0)
-    {
-        pCreateInfo->pipelineInfo.cs.options.allowVaryWaveSize = true;
-    }
-
     if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
     {
 
@@ -2813,6 +2851,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     if (result == VK_SUCCESS)
     {
         ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute,
+                                  pShaderInfo->stage.flags,
                                   &pCreateInfo->pipelineInfo.cs.options);
 
         ApplyProfileOptions(pDevice,
@@ -2829,8 +2868,9 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 // =====================================================================================================================
 // Set any non-zero shader option defaults
 void PipelineCompiler::ApplyDefaultShaderOptions(
-    ShaderStage                  stage,
-    Vkgc::PipelineShaderOptions* pShaderOptions) const
+    ShaderStage                      stage,
+    VkPipelineShaderStageCreateFlags flags,
+    Vkgc::PipelineShaderOptions*     pShaderOptions) const
 {
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
 
@@ -2881,6 +2921,13 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
     pShaderOptions->wgpMode           = ((settings.enableWgpMode & (1 << stage)) != 0);
     pShaderOptions->waveBreakSize     = static_cast<Vkgc::WaveBreakSize>(settings.waveBreakSize);
     pShaderOptions->disableLoopUnroll = settings.disableLoopUnrolls;
+
+    if (((flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT) != 0) &&
+        (((flags & VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT) != 0) ||
+         (m_pPhysicalDevice->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 3, 0))))
+    {
+        pShaderOptions->allowVaryWaveSize = true;
+    }
 }
 
 // =====================================================================================================================
@@ -3131,8 +3178,6 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
         }
     }
 
-    SetRayTracingState(pDevice, &pCreateInfo->pipelineInfo.rtState, pCreateInfo->flags);
-
     if (result == VK_SUCCESS)
     {
         pCreateInfo->pipelineInfo.shaderCount = pShaderInfo->stageCount;
@@ -3220,6 +3265,7 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
         for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
         {
             ApplyDefaultShaderOptions(pShaderInfo->pStages[i].stage,
+                pShaderInfo->pStages[i].flags,
                 &pCreateInfo->pipelineInfo.pShaders[i].options);
         }
 
@@ -3243,15 +3289,6 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
         {
             for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
             {
-                const auto AllowVaryingSubgroupSizesFlag =
-                    VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT;
-
-                if (((pShaderInfo->pStages[i].flags & AllowVaryingSubgroupSizesFlag) != 0) ||
-                    (settings.rtEnableWaveVarying))
-                {
-                    pCreateInfo->pipelineInfo.pShaders[i].options.allowVaryWaveSize = true;
-                    pCreateInfo->pipelineInfo.pShaders[i].options.waveSize          = 32;
-                }
 
                 ApplyProfileOptions(pDevice,
                                     i,
@@ -3262,6 +3299,9 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
             }
 
         }
+
+        SetRayTracingState(pDevice, &pCreateInfo->pipelineInfo.rtState, pCreateInfo->flags);
+
     }
 
     return result;
@@ -3372,13 +3412,11 @@ VkResult PipelineCompiler::CreateRayTracingPipelineBinary(
                 int64_t startTime = Util::GetPerfCpuTime();
 
                 // Build the LLPC pipeline
-                Llpc::RayTracingPipelineBuildOut pipelineOut         = {};
-                void*                            pLlpcPipelineBuffer = nullptr;
+                Llpc::RayTracingPipelineBuildOut pipelineOut = {};
 
                 // Fill pipeline create info for LLPC
                 pPipelineBuildInfo->pInstance      = pInstance;
                 pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
-                pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
 
                 result = m_compilerSolutionLlpc.CreateRayTracingPipelineBinary(
                     pDevice,
@@ -4033,6 +4071,7 @@ void PipelineCompiler::GetGraphicsPipelineCacheId(
     hash.Update(pCreateInfo->pipelineInfo.nggState);
     hash.Update(pCreateInfo->dbFormat);
     hash.Update(pCreateInfo->pipelineInfo.dynamicVertexStride);
+    hash.Update(pCreateInfo->pipelineInfo.enableUberFetchShader);
     hash.Update(pCreateInfo->pipelineInfo.rsState);
 
     hash.Update(pCreateInfo->pBinaryMetadata->pointSizeUsed);
@@ -4096,7 +4135,13 @@ void PipelineCompiler::BuildPipelineInternalBufferData(
 
     if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
     {
-        VK_NOT_IMPLEMENTED;
+        m_compilerSolutionLlpc.BuildPipelineInternalBufferData(
+            this,
+            fetchShaderConstBufRegBase,
+            specConstBufVertexRegBase,
+            specConstBufFragmentRegBase,
+            pCreateInfo);
+
     }
 
 }
@@ -4456,13 +4501,20 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalDataImp(
             }
             else
             {
-                union
+                if (settings.disableInstanceDivisorOpt)
                 {
-                    float    divisorRcpf;
-                    uint32_t divisorRcpU;
-                };
-                divisorRcpf = 1.0000f / stepRate;
-                attribInfo.instanceDivisor = divisorRcpU;
+                    attribInfo.instanceDivisor = stepRate;
+                }
+                else
+                {
+                    union
+                    {
+                        float    divisorRcpf;
+                        uint32_t divisorRcpU;
+                    };
+                    divisorRcpf = 1.0000f / stepRate;
+                    attribInfo.instanceDivisor = divisorRcpU;
+                }
             }
         }
 
@@ -4513,22 +4565,91 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalDataImp(
 }
 
 // =====================================================================================================================
+// Calculate the hash of dynamic vertex input info
+static uint64_t GetDynamicVertexInputHash(
+    uint32_t                                     vertexBindingDescriptionCount,
+    const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
+    uint32_t                                     vertexAttributeDescriptionCount,
+    const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions)
+{
+    Util::MetroHash::Hash hash = {};
+    if (vertexBindingDescriptionCount > 0)
+    {
+        VK_ASSERT(vertexAttributeDescriptionCount > 0);
+        Util::MetroHash64 hasher;
+        hasher.Update(reinterpret_cast<const uint8_t*>(pVertexBindingDescriptions),
+            sizeof(VkVertexInputBindingDescription2EXT) * vertexBindingDescriptionCount);
+        hasher.Update(reinterpret_cast<const uint8_t*>(pVertexAttributeDescriptions),
+            sizeof(VkVertexInputAttributeDescription2EXT) * vertexAttributeDescriptionCount);
+        hasher.Finalize(hash.bytes);
+    }
+    return hash.qwords[0];
+}
+
+// =====================================================================================================================
 // Builds uber-fetch shader internal data according to dynamic vertex input info.
 uint32_t PipelineCompiler::BuildUberFetchShaderInternalData(
     uint32_t                                     vertexBindingDescriptionCount,
     const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
     uint32_t                                     vertexAttributeDescriptionCount,
     const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions,
-    void*                                        pUberFetchShaderInternalData) const
+    void*                                        pUberFetchShaderInternalData)
 {
-    return BuildUberFetchShaderInternalDataImp(vertexBindingDescriptionCount,
-        pVertexBindingDescriptions,
-        vertexAttributeDescriptionCount,
-        pVertexAttributeDescriptions,
-        vertexBindingDescriptionCount,
-        pVertexBindingDescriptions,
-        false,
-        pUberFetchShaderInternalData);
+    uint64_t hash64 = GetDynamicVertexInputHash(vertexBindingDescriptionCount,
+                                                pVertexBindingDescriptions,
+                                                vertexAttributeDescriptionCount,
+                                                pVertexAttributeDescriptions);
+
+    Vkgc::BinaryData* pBinaryData = nullptr;
+    bool existed = false;
+    uint32_t dataSize = 0;
+
+    if (hash64 != 0)
+    {
+        Util::MutexAuto mutexLock(&m_cacheLock);
+
+        Util::Result result = m_uberFetchShaderInternalDataMap.FindAllocate(hash64, &existed, &pBinaryData);
+        if (result == Util::Result::Success)
+        {
+            if (existed)
+            {
+                memcpy(pUberFetchShaderInternalData, pBinaryData->pCode, pBinaryData->codeSize);
+                dataSize = pBinaryData->codeSize;
+            }
+            else
+            {
+                dataSize = BuildUberFetchShaderInternalDataImp(vertexBindingDescriptionCount,
+                    pVertexBindingDescriptions,
+                    vertexAttributeDescriptionCount,
+                    pVertexAttributeDescriptions,
+                    vertexBindingDescriptionCount,
+                    pVertexBindingDescriptions,
+                    false,
+                    pUberFetchShaderInternalData);
+
+                void* pCacheData = m_pPhysicalDevice->VkInstance()->AllocMem(dataSize,
+                    VK_DEFAULT_MEM_ALIGN,
+                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+                if (pCacheData != nullptr)
+                {
+                    memcpy(pCacheData, pUberFetchShaderInternalData, dataSize);
+                    pBinaryData->pCode = pCacheData;
+                    pBinaryData->codeSize = dataSize;
+                }
+                else
+                {
+                    VK_NEVER_CALLED();
+                }
+            }
+        }
+        else
+        {
+            VK_NEVER_CALLED();
+        }
+    }
+
+    return dataSize;
 }
 
 // =====================================================================================================================

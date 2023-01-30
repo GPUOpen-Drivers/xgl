@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2015-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2015-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -402,6 +402,7 @@ VkResult Instance::Init(
 
         m_properties.supportNonSwapChainPresents = platformProps.supportNonSwapChainPresents;
         m_properties.supportExplicitPresentMode  = platformProps.explicitPresentModes;
+        m_properties.supportBlockIfFlipping      = platformProps.supportBlockIfFlipping;
     }
 
     if (status == VK_SUCCESS)

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -236,6 +236,7 @@ public:
     void FreeGraphicsPipelineCreateInfo(GraphicsPipelineBinaryCreateInfo* pCreateInfo, bool keepConvertTempMem);
 
 #if VKI_RAY_TRACING
+
     VkResult ConvertRayTracingPipelineInfo(
         const Device*                            pDevice,
         const VkRayTracingPipelineCreateInfoKHR* pIn,
@@ -287,8 +288,9 @@ public:
     uint32_t GetCompilerCollectionMask();
 
     void ApplyDefaultShaderOptions(
-        ShaderStage                  stage,
-        Vkgc::PipelineShaderOptions* pShaderOptions) const;
+        ShaderStage                      stage,
+        VkPipelineShaderStageCreateFlags flags,
+        Vkgc::PipelineShaderOptions*     pShaderOptions) const;
 
     Vkgc::GfxIpVersion& GetGfxIp() { return m_gfxIp; }
 
@@ -377,7 +379,7 @@ public:
         const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
         uint32_t                                     vertexAttributeDescriptionCount,
         const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions,
-        void*                                        pUberFetchShaderInternalData) const;
+        void*                                        pUberFetchShaderInternalData);
 
     uint32_t BuildUberFetchShaderInternalData(
         const VkPipelineVertexInputStateCreateInfo* pVertexInput,
@@ -470,6 +472,12 @@ private:
         void*                       pUberFetchShaderInternalData) const;
     // -----------------------------------------------------------------------------------------------------------------
 
+    typedef Util::HashMap<Util::MetroHash::Hash, ShaderModuleHandle, PalAllocator, Util::JenkinsHashFunc>
+        ShaderModuleHandleMap;
+
+    typedef Util::HashMap<uint64_t, Vkgc::BinaryData, PalAllocator, Util::JenkinsHashFunc>
+        UberFetchShaderInternalDataMap;
+
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object
     Vkgc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by Vkgcf
     DeferCompileManager m_deferCompileMgr;     // Defer compile thread manager
@@ -484,12 +492,12 @@ private:
     int64_t              m_totalTimeSpent;     // Accumulation of time spent either loading or compiling pipeline
                                                // binaries
 
-    UberFetchShaderFormatInfoMap m_uberFetchShaderInfoFormatMap;  // Uber fetch shader format info map
+    Util::Mutex                    m_cacheLock;
 
-    typedef Util::HashMap<Util::MetroHash::Hash, ShaderModuleHandle, PalAllocator, Util::JenkinsHashFunc> ShaderModuleHandleMap;
+    UberFetchShaderFormatInfoMap   m_uberFetchShaderInfoFormatMap;  // Uber fetch shader format info map
+    UberFetchShaderInternalDataMap m_uberFetchShaderInternalDataMap;// Uber fetch shader internal data cache
 
-    Util::Mutex           m_shaderModuleCacheLock;
-    ShaderModuleHandleMap m_shaderModuleHandleMap;
+    ShaderModuleHandleMap          m_shaderModuleHandleMap;
 
 }; // class PipelineCompiler
 

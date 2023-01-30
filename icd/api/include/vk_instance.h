@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -87,6 +87,7 @@ public:
         uint32_t  supportNonSwapChainPresents :  1;     // Tells whether the platform support present without swap chain
         uint32_t  supportExplicitPresentMode  :  1;     // Tells whether the platform support client to specific the
                                                         // present mode.
+        uint32_t  supportBlockIfFlipping      :  1;     // Support blockIfFlipping during queue submissions.
         uint32_t  reserved                    : 30;
     };
 

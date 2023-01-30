@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -256,13 +256,6 @@ void Image::ConvertImageCreateInfo(
     pPalCreateInfo->tilingOptMode     = pDevice->GetTilingOptMode();
     pPalCreateInfo->imageMemoryBudget = settings.imageMemoryBudget;
 
-    if ((pPalCreateInfo->tilingOptMode == Pal::TilingOptMode::OptForSpace) &&
-        Pal::Formats::IsBlockCompressed(pPalCreateInfo->swizzledFormat.format) &&
-        (palProperties.gfxLevel > Pal::GfxIpLevel::GfxIp9))
-    {
-        pPalCreateInfo->tilingOptMode = Pal::TilingOptMode::Balanced;
-    }
-
     if ((pCreateInfo->imageType == VK_IMAGE_TYPE_3D) &&
         (pCreateInfo->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT)))
     {
@@ -296,6 +289,16 @@ void Image::ConvertImageCreateInfo(
     {
         pPalCreateInfo->flags.invariant        = 1;
         pPalCreateInfo->flags.optimalShareable = 1;
+    }
+
+    if (((pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT) == 0)            &&
+        ((pCreateInfo->flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) != 0) &&
+        (pCreateInfo->mipLevels > 1)                                                  &&
+        Pal::Formats::IsBlockCompressed(pPalCreateInfo->swizzledFormat.format)        &&
+        (palProperties.gfxLevel > Pal::GfxIpLevel::GfxIp9)                            &&
+        (pCreateInfo->imageType == VK_IMAGE_TYPE_3D))
+    {
+        pPalCreateInfo->flags.view3dAs2dArray = 1;
     }
 
     ExternalMemoryFlags externalFlags;
@@ -1560,7 +1563,6 @@ void Image::GetSparseMemoryRequirements(
     {
         const uint32_t       aspectsToReportCount = Util::Min(*pNumRequirements, usedAspectsCount);
         uint32_t             reportedAspectsCount = 0;
-        VkMemoryRequirements memReqs = GetMemoryRequirements();
 
         // Get the memory layout of the sparse image
 
@@ -1927,7 +1929,8 @@ void Image::CalculateMemoryRequirements(
     GetPalImageMemoryRequirements(pDevice, pInfo->pCreateInfo, pMemoryRequirements);
 
     if (pDevice->GetEnabledFeatures().strictImageSizeRequirements &&
-        Formats::IsDepthStencilFormat(pInfo->pCreateInfo->format))
+        Formats::IsDepthStencilFormat(pInfo->pCreateInfo->format) &&
+        ((pInfo->pCreateInfo->flags & SparseEnablingFlags) == 0))
     {
         CalculateAlignedMemoryRequirements(
             pDevice,

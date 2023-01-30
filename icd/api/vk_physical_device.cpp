@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -32,6 +32,7 @@
 #include "include/khronos/vulkan.h"
 #include "include/color_space_helper.h"
 #include "include/vk_buffer_view.h"
+#include "include/vk_descriptor_buffer.h"
 #include "include/vk_dispatch.h"
 #include "include/vk_device.h"
 #include "include/vk_physical_device.h"
@@ -338,6 +339,7 @@ PhysicalDevice::PhysicalDevice(
     m_pPalDevice(pPalDevice),
     m_memoryTypeMask(0),
     m_memoryTypeMaskForExternalSharing(0),
+    m_memoryTypeMaskForDescriptorBuffers(0),
     m_pSettingsLoader(pSettingsLoader),
     m_sampleLocationSampleCounts(0),
     m_vrHighPrioritySubEngineIndex(UINT32_MAX),
@@ -1193,6 +1195,31 @@ void PhysicalDevice::PopulateFormatProperties()
             }
         }
 #endif
+
+        // In Vulkan atomics are allowed only on single-component formats
+        const auto enabledAtomicFormat = (format == VK_FORMAT_R32_SINT) ||
+                                         (format == VK_FORMAT_R32_UINT) ||
+                                         (format == VK_FORMAT_R32_SFLOAT) ||
+                                         (format == VK_FORMAT_R64_SINT) ||
+                                         (format == VK_FORMAT_R64_UINT) ||
+                                         (format == VK_FORMAT_R64_SFLOAT);
+
+        if (enabledAtomicFormat == false)
+        {
+            const auto disabledAtomicFeatures = VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT |
+                                                VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT;
+
+            linearFlags  &= ~disabledAtomicFeatures;
+            optimalFlags &= ~disabledAtomicFeatures;
+            bufferFlags  &= ~disabledAtomicFeatures;
+        }
+
+        if ((format == VK_FORMAT_R32_SINT) || (format == VK_FORMAT_R32_UINT))
+        {
+            // Make sure required by specification formats are supported
+            VK_ASSERT((optimalFlags & VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT) != 0);
+            VK_ASSERT((bufferFlags & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT) != 0);
+        }
 
         if (format == VK_FORMAT_R32_SFLOAT)
         {
@@ -3892,6 +3919,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     }
 #endif
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PIPELINE_LIBRARY));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_CLAMP_ZERO_ONE));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_INTEGER_DOT_PRODUCT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COPY_COMMANDS2));
@@ -3937,6 +3965,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     }
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INDEX_TYPE_UINT8));
 
+     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_FRAGMENT_SHADER_BARYCENTRIC));
      availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_NON_SEAMLESS_CUBE_MAP));
 
     bool disableAMDVendorExtensions = false;
@@ -4008,6 +4037,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         }
 
     }
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ATTACHMENT_FEEDBACK_LOOP_LAYOUT));
 
     return availableExtensions;
 }
@@ -4782,7 +4813,7 @@ void PhysicalDevice::GetPhysicalDeviceDescriptorIndexingProperties(
     pDescriptorIndexingProperties->shaderStorageBufferArrayNonUniformIndexingNative     = VK_FALSE;
     pDescriptorIndexingProperties->shaderStorageImageArrayNonUniformIndexingNative      = VK_FALSE;
     pDescriptorIndexingProperties->shaderInputAttachmentArrayNonUniformIndexingNative   = VK_FALSE;
-    pDescriptorIndexingProperties->robustBufferAccessUpdateAfterBind                    = VK_FALSE;
+    pDescriptorIndexingProperties->robustBufferAccessUpdateAfterBind                    = VK_TRUE;
     pDescriptorIndexingProperties->quadDivergentImplicitLod                             = VK_FALSE;
     pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindSamplers         = UINT32_MAX;
     pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindUniformBuffers   = UINT32_MAX;
@@ -4927,7 +4958,7 @@ void PhysicalDevice::GetPhysicalDeviceMultiviewFeatures(
     ) const
 {
     *pMultiview                   = VK_TRUE;
-    *pMultiviewGeometryShader     = VK_FALSE;
+    *pMultiviewGeometryShader     = VK_TRUE;
     *pMultiviewTessellationShader = VK_TRUE;
 }
 
@@ -4937,7 +4968,7 @@ void PhysicalDevice::GetPhysicalDeviceVariablePointerFeatures(
     VkBool32* pVariablePointers
     ) const
 {
-    *pVariablePointers = VK_TRUE;
+    *pVariablePointers              = VK_TRUE;
     *pVariablePointersStorageBuffer = VK_TRUE;
 }
 
@@ -6122,6 +6153,23 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDescriptorBufferFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    const bool captureReplay = PalProperties().gfxipProperties.flags.supportCaptureReplay;
+                    pExtInfo->descriptorBuffer                   = VK_TRUE;
+                    pExtInfo->descriptorBufferCaptureReplay      = captureReplay ? VK_TRUE : VK_FALSE;
+                    pExtInfo->descriptorBufferImageLayoutIgnored = VK_FALSE;
+                    pExtInfo->descriptorBufferPushDescriptors    = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDynamicRenderingFeaturesKHR*>(pHeader);
@@ -6333,6 +6381,19 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     pExtInfo->pageableDeviceLocalMemory = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->fragmentShaderBarycentric = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6648,7 +6709,7 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
     {
         if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)
         {
-            pTextureLODGatherFormatProperties->supportsTextureGatherLODBiasAMD = true;
+            pTextureLODGatherFormatProperties->supportsTextureGatherLODBiasAMD = VK_TRUE;
         }
         else
         {
@@ -6925,10 +6986,10 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->maxTransformFeedbackBufferSize             = 0xffffffff;
             pProps->maxTransformFeedbackBuffers                = Pal::MaxStreamOutTargets;
             pProps->maxTransformFeedbackStreams                = Pal::MaxStreamOutTargets;
-            pProps->transformFeedbackDraw                      = true;
-            pProps->transformFeedbackQueries                   = true;
-            pProps->transformFeedbackStreamsLinesTriangles     = true;
-            pProps->transformFeedbackRasterizationStreamSelect = false;
+            pProps->transformFeedbackDraw                      = VK_TRUE;
+            pProps->transformFeedbackQueries                   = VK_TRUE;
+            pProps->transformFeedbackStreamsLinesTriangles     = VK_TRUE;
+            pProps->transformFeedbackRasterizationStreamSelect = VK_FALSE;
             break;
         }
 
@@ -7282,6 +7343,58 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceDescriptorBufferPropertiesEXT*>(pNext);
+
+            pProps->combinedImageSamplerDescriptorSingleArray = VK_TRUE;
+            pProps->bufferlessPushDescriptors                 = VK_TRUE;
+            pProps->allowSamplerImageViewPostSubmitCreation   = VK_TRUE;
+
+            // Since all descriptors are currently 16 or 32 bytes set the descriptorBufferOffsetAlignment to 16
+            // would prevent descriptors from straddling 64 byte boundaries.
+            pProps->descriptorBufferOffsetAlignment         = 16;
+            pProps->maxDescriptorBufferBindings             = MaxDescriptorSets;
+            pProps->maxResourceDescriptorBufferBindings     = MaxDescriptorSets;
+            pProps->maxSamplerDescriptorBufferBindings      = MaxDescriptorSets;
+            pProps->maxEmbeddedImmutableSamplerBindings     = MaxDescriptorSets;
+            pProps->maxEmbeddedImmutableSamplers            = UINT_MAX;
+
+            pProps->bufferCaptureReplayDescriptorDataSize                = sizeof(uint32_t);
+            pProps->imageCaptureReplayDescriptorDataSize                 = sizeof(uint32_t);
+            pProps->imageViewCaptureReplayDescriptorDataSize             = sizeof(uint32_t);
+            pProps->samplerCaptureReplayDescriptorDataSize               = sizeof(uint32_t);
+            pProps->accelerationStructureCaptureReplayDescriptorDataSize = sizeof(uint32_t);
+
+            const Pal::DeviceProperties& palProps = PalProperties();
+
+            VK_ASSERT(palProps.gfxipProperties.srdSizes.sampler    <= 32);
+            VK_ASSERT(palProps.gfxipProperties.srdSizes.imageView  <= 64);
+            VK_ASSERT(palProps.gfxipProperties.srdSizes.bufferView <= 64);
+
+            pProps->samplerDescriptorSize                    = palProps.gfxipProperties.srdSizes.sampler;
+            pProps->combinedImageSamplerDescriptorSize       = palProps.gfxipProperties.srdSizes.sampler +
+                                                               palProps.gfxipProperties.srdSizes.imageView;
+            pProps->sampledImageDescriptorSize               = palProps.gfxipProperties.srdSizes.imageView;
+            pProps->storageImageDescriptorSize               = palProps.gfxipProperties.srdSizes.imageView;
+            pProps->uniformTexelBufferDescriptorSize         = palProps.gfxipProperties.srdSizes.bufferView;
+            pProps->robustUniformTexelBufferDescriptorSize   = palProps.gfxipProperties.srdSizes.bufferView;
+            pProps->storageTexelBufferDescriptorSize         = palProps.gfxipProperties.srdSizes.bufferView;
+            pProps->robustStorageTexelBufferDescriptorSize   = palProps.gfxipProperties.srdSizes.bufferView;
+            pProps->uniformBufferDescriptorSize              = palProps.gfxipProperties.srdSizes.bufferView;
+            pProps->robustUniformBufferDescriptorSize        = palProps.gfxipProperties.srdSizes.bufferView;
+            pProps->storageBufferDescriptorSize              = palProps.gfxipProperties.srdSizes.bufferView;
+            pProps->robustStorageBufferDescriptorSize        = palProps.gfxipProperties.srdSizes.bufferView;
+            pProps->inputAttachmentDescriptorSize            = palProps.gfxipProperties.srdSizes.imageView;
+            pProps->accelerationStructureDescriptorSize      = palProps.gfxipProperties.srdSizes.bufferView;
+            pProps->maxSamplerDescriptorBufferRange          = UINT_MAX;
+            pProps->maxResourceDescriptorBufferRange         = UINT_MAX;
+            pProps->resourceDescriptorBufferAddressSpaceSize = UINT_MAX;
+            pProps->samplerDescriptorBufferAddressSpaceSize  = UINT_MAX;
+            pProps->descriptorBufferAddressSpaceSize         = UINT_MAX;
+            break;
+        }
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT:
         {
             if (IsExtensionSupported(DeviceExtensions::EXT_GRAPHICS_PIPELINE_LIBRARY))
@@ -7306,6 +7419,13 @@ void PhysicalDevice::GetDeviceProperties2(
             auto* pProps = static_cast<VkPhysicalDeviceProvokingVertexPropertiesEXT*>(pNext);
             pProps->provokingVertexModePerPipeline                       = VK_TRUE;
             pProps->transformFeedbackPreservesTriangleFanProvokingVertex = VK_TRUE;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_PROPERTIES_KHR:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR*>(pNext);
+            pProps->triStripVertexOrderIndependentOfProvokingVertex = VK_FALSE;
             break;
         }
 
@@ -7384,10 +7504,10 @@ void PhysicalDevice::GetDeviceProperties2(
             // Use default value for now
             pProps->maxPreferredTaskWorkGroupInvocations  = pProps->maxTaskWorkGroupInvocations;
             pProps->maxPreferredMeshWorkGroupInvocations  = pProps->maxMeshWorkGroupInvocations;
-            pProps->prefersLocalInvocationVertexOutput    = true;
-            pProps->prefersLocalInvocationPrimitiveOutput = true;
-            pProps->prefersCompactVertexOutput            = true;
-            pProps->prefersCompactPrimitiveOutput         = true;
+            pProps->prefersLocalInvocationVertexOutput    = VK_TRUE;
+            pProps->prefersLocalInvocationPrimitiveOutput = VK_TRUE;
+            pProps->prefersCompactVertexOutput            = VK_TRUE;
+            pProps->prefersCompactPrimitiveOutput         = VK_TRUE;
             break;
         }
 
@@ -8238,8 +8358,8 @@ VkResult PhysicalDevice::GetDisplayProperties(
         properties[i].physicalResolution.width  = props.physicalResolution.width;
         properties[i].physicalResolution.height = props.physicalResolution.height;
         properties[i].supportedTransforms       = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-        properties[i].planeReorderPossible      = false;
-        properties[i].persistentContent         = false;
+        properties[i].planeReorderPossible      = VK_FALSE;
+        properties[i].persistentContent         = VK_FALSE;
     }
 
     *pPropertyCount = loopCount;

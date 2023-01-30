@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1333,6 +1333,49 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOp(
 }
 
 // =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorBuffersEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    bufferCount,
+    const VkDescriptorBufferBindingInfoEXT*     pBindingInfos)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BindDescriptorBuffers(
+        bufferCount,
+        pBindingInfos);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDescriptorBufferOffsetsEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipelineLayout                            layout,
+    uint32_t                                    firstSet,
+    uint32_t                                    setCount,
+    const uint32_t*                             pBufferIndices,
+    const VkDeviceSize*                         pOffsets)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDescriptorBufferOffsets(
+        pipelineBindPoint,
+        layout,
+        firstSet,
+        setCount,
+        pBufferIndices,
+        pOffsets);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorBufferEmbeddedSamplersEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipelineLayout                            layout,
+    uint32_t                                    set)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BindDescriptorBufferEmbeddedSamplers(
+        pipelineBindPoint,
+        layout,
+        set);
+}
+
+// =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdSetColorWriteEnableEXT(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    attachmentCount,
@@ -1370,7 +1413,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetLogicOpEXT(
     VkCommandBuffer                             commandBuffer,
     VkLogicOp                                   logicOp)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetLogicOp(logicOp);
 }
 
 // =====================================================================================================================
@@ -1501,7 +1544,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetTessellationDomainOriginEXT(
     VkCommandBuffer                     commandBuffer,
     VkTessellationDomainOrigin          domainOrigin)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetTessellationDomainOrigin(domainOrigin);
 }
 
 // =====================================================================================================================
@@ -1509,7 +1552,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthClampEnableEXT(
     VkCommandBuffer                     commandBuffer,
     VkBool32                            depthClampEnable)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDepthClampEnable(depthClampEnable);
 }
 
 // =====================================================================================================================
@@ -1542,7 +1585,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetAlphaToCoverageEnableEXT(
     VkCommandBuffer                     commandBuffer,
     VkBool32                            alphaToCoverageEnable)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetAlphaToCoverageEnable(alphaToCoverageEnable);
 }
 
 // =====================================================================================================================
@@ -1558,7 +1601,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetLogicOpEnableEXT(
     VkCommandBuffer                     commandBuffer,
     VkBool32                            logicOpEnable)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetLogicOpEnable(logicOpEnable);
 }
 
 // =====================================================================================================================
@@ -1592,7 +1635,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetColorWriteMaskEXT(
     uint32_t                            attachmentCount,
     const  VkColorComponentFlags*       pColorWriteMasks)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetColorWriteMask(firstAttachment,
+                                                                     attachmentCount,
+                                                                     pColorWriteMasks);
 }
 
 // =====================================================================================================================
@@ -1625,7 +1670,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthClipEnableEXT(
     VkCommandBuffer                     commandBuffer,
     VkBool32                            depthClipEnable)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDepthClipEnable(depthClipEnable);
 }
 
 // =====================================================================================================================
@@ -1649,7 +1694,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetLineRasterizationModeEXT(
     VkCommandBuffer                     commandBuffer,
     VkLineRasterizationModeEXT          lineRasterizationMode)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetLineRasterizationMode(lineRasterizationMode);
 }
 
 // =====================================================================================================================
@@ -1665,7 +1710,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthClipNegativeOneToOneEXT(
     VkCommandBuffer                     commandBuffer,
     VkBool32                            negativeOneToOne)
 {
-    VK_NOT_IMPLEMENTED;
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDepthClipNegativeOneToOne(negativeOneToOne);
 }
 
 // =====================================================================================================================

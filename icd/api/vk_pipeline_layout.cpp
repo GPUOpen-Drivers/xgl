@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1012,7 +1012,7 @@ void PipelineLayout::BuildLlpcInternalConstantBufferMapping(
 {
     if (stageMask != 0)
     {
-        pNode->node.type             = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
+        pNode->node.type             = Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact;
         pNode->node.offsetInDwords   = offsetInDwords;
         pNode->node.sizeInDwords     = InternalConstBufferRegCount;
         pNode->node.srdRange.set     = Vkgc::InternalDescriptorSetId;
@@ -1129,7 +1129,7 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
             BuildLlpcInternalConstantBufferMapping(
                 Vkgc::ShaderStageVertexBit,
                 userDataLayout.specConstBufVertexRegBase,
-                SpecConstVertexInternalBufferBindingId,
+                Vkgc::SpecConstInternalBufferBindingId + ShaderStage::ShaderStageVertex,
                 &pUserDataNodes[userDataNodeCount],
                 &userDataNodeCount);
         }
@@ -1139,7 +1139,7 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
             BuildLlpcInternalConstantBufferMapping(
                 Vkgc::ShaderStageFragmentBit,
                 userDataLayout.specConstBufFragmentRegBase,
-                SpecConstFragmentInternalBufferBindingId,
+                Vkgc::SpecConstInternalBufferBindingId + ShaderStage::ShaderStageFragment,
                 &pUserDataNodes[userDataNodeCount],
                 &userDataNodeCount);
         }

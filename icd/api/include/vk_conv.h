@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -257,17 +257,17 @@ inline Pal::PrimitiveType VkToPalPrimitiveType(
 // =====================================================================================================================
 VK_TO_PAL_TABLE_COMPLEX(  PRIMITIVE_TOPOLOGY, PrimitiveTopology,  Pal::PrimitiveTopology, PrimitiveTopology,
 // =====================================================================================================================
-VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_POINT_LIST,                      PrimitiveTopology::PointList                              )
-VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_LINE_LIST,                       PrimitiveTopology::LineList                               )
-VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_LINE_STRIP,                      PrimitiveTopology::LineStrip                              )
-VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,                   PrimitiveTopology::TriangleList                           )
-VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,                  PrimitiveTopology::TriangleStrip                          )
-VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,                    PrimitiveTopology::TriangleFan                            )
-VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,        PrimitiveTopology::LineListAdj                            )
-VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY,       PrimitiveTopology::LineStripAdj                           )
-VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,    PrimitiveTopology::TriangleListAdj                        )
-VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY,   PrimitiveTopology::TriangleStripAdj                       )
-VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_PATCH_LIST,                      PrimitiveTopology::Patch                                  )
+VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_POINT_LIST,                      PrimitiveTopology::PointList                   )
+VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_LINE_LIST,                       PrimitiveTopology::LineList                    )
+VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_LINE_STRIP,                      PrimitiveTopology::LineStrip                   )
+VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,                   PrimitiveTopology::TriangleList                )
+VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,                  PrimitiveTopology::TriangleStrip               )
+VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,                    PrimitiveTopology::TriangleFan                 )
+VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,        PrimitiveTopology::LineListAdj                 )
+VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY,       PrimitiveTopology::LineStripAdj                )
+VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,    PrimitiveTopology::TriangleListAdj             )
+VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY,   PrimitiveTopology::TriangleStripAdj            )
+VK_TO_PAL_ENTRY_X(  PRIMITIVE_TOPOLOGY_PATCH_LIST,                      PrimitiveTopology::Patch                       )
 // =====================================================================================================================
 )
 
@@ -331,9 +331,9 @@ inline Pal::BorderColorType VkToPalBorderColorType(VkBorderColor borderColor)
 
 VK_TO_PAL_TABLE_X(  POLYGON_MODE, PolygonMode,                FillMode,
 // =====================================================================================================================
-VK_TO_PAL_ENTRY_X(  POLYGON_MODE_POINT,                       FillMode::Points                                           )
-VK_TO_PAL_ENTRY_X(  POLYGON_MODE_LINE,                        FillMode::Wireframe                                        )
-VK_TO_PAL_ENTRY_X(  POLYGON_MODE_FILL,                        FillMode::Solid                                            )
+VK_TO_PAL_ENTRY_X(  POLYGON_MODE_POINT,                       FillMode::Points                                         )
+VK_TO_PAL_ENTRY_X(  POLYGON_MODE_LINE,                        FillMode::Wireframe                                      )
+VK_TO_PAL_ENTRY_X(  POLYGON_MODE_FILL,                        FillMode::Solid                                          )
 // =====================================================================================================================
 )
 
@@ -368,8 +368,8 @@ inline Pal::CullMode VkToPalCullMode(
 // =====================================================================================================================
 VK_TO_PAL_TABLE_I(  FRONT_FACE, FrontFace,                         FaceOrientation,
 // =====================================================================================================================
-VK_TO_PAL_ENTRY_I(  FRONT_FACE_COUNTER_CLOCKWISE,                  FaceOrientation::Ccw                                       )
-VK_TO_PAL_ENTRY_I(  FRONT_FACE_CLOCKWISE,                          FaceOrientation::Cw                                        )
+VK_TO_PAL_ENTRY_I(  FRONT_FACE_COUNTER_CLOCKWISE,                  FaceOrientation::Ccw                                )
+VK_TO_PAL_ENTRY_I(  FRONT_FACE_CLOCKWISE,                          FaceOrientation::Cw                                 )
 // =====================================================================================================================
 )
 
@@ -411,25 +411,25 @@ inline Pal::LogicOp VkToPalLogicOp(VkLogicOp logicOp)
 // =====================================================================================================================
 VK_TO_PAL_TABLE_I(  BLEND_FACTOR, BlendFactor,                            Blend,
 // =====================================================================================================================
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ZERO,                             Blend::Zero                                                )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE,                              Blend::One                                                 )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_SRC_COLOR,                        Blend::SrcColor                                            )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_SRC_COLOR,              Blend::OneMinusSrcColor                                    )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_DST_COLOR,                        Blend::DstColor                                            )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_DST_COLOR,              Blend::OneMinusDstColor                                    )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_SRC_ALPHA,                        Blend::SrcAlpha                                            )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,              Blend::OneMinusSrcAlpha                                    )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_DST_ALPHA,                        Blend::DstAlpha                                            )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_DST_ALPHA,              Blend::OneMinusDstAlpha                                    )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_CONSTANT_COLOR,                   Blend::ConstantColor                                       )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR,         Blend::OneMinusConstantColor                               )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_CONSTANT_ALPHA,                   Blend::ConstantAlpha                                       )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA,         Blend::OneMinusConstantAlpha                               )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_SRC_ALPHA_SATURATE,               Blend::SrcAlphaSaturate                                    )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_SRC1_COLOR,                       Blend::Src1Color                                           )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,             Blend::OneMinusSrc1Color                                   )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_SRC1_ALPHA,                       Blend::Src1Alpha                                           )
-VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,             Blend::OneMinusSrc1Alpha                                   )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ZERO,                             Blend::Zero                                         )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE,                              Blend::One                                          )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_SRC_COLOR,                        Blend::SrcColor                                     )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_SRC_COLOR,              Blend::OneMinusSrcColor                             )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_DST_COLOR,                        Blend::DstColor                                     )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_DST_COLOR,              Blend::OneMinusDstColor                             )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_SRC_ALPHA,                        Blend::SrcAlpha                                     )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,              Blend::OneMinusSrcAlpha                             )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_DST_ALPHA,                        Blend::DstAlpha                                     )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_DST_ALPHA,              Blend::OneMinusDstAlpha                             )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_CONSTANT_COLOR,                   Blend::ConstantColor                                )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR,         Blend::OneMinusConstantColor                        )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_CONSTANT_ALPHA,                   Blend::ConstantAlpha                                )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA,         Blend::OneMinusConstantAlpha                        )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_SRC_ALPHA_SATURATE,               Blend::SrcAlphaSaturate                             )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_SRC1_COLOR,                       Blend::Src1Color                                    )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,             Blend::OneMinusSrc1Color                            )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_SRC1_ALPHA,                       Blend::Src1Alpha                                    )
+VK_TO_PAL_ENTRY_I(  BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,             Blend::OneMinusSrc1Alpha                            )
 // =====================================================================================================================
 )
 
@@ -1774,7 +1774,7 @@ static VkFormat convertCompressedFormat(VkFormat format, bool useBC3)
 namespace convert
 {
 #if VKI_RAY_TRACING
-    // =====================================================================================================================
+    // =================================================================================================================
     // Performs conversion of traceRayProfileRayFlags to RayTracingRayFlag
     static uint32_t  TraceRayProfileRayFlagsToRayTracingRayFlags(
         uint32_t                           traceRayProfileRayFlag) // [in] Input trace ray profile ray flag
@@ -2664,6 +2664,20 @@ inline Pal::WsiPlatform VkToPalWsiPlatform(VkIcdWsiPlatform Platform)
 }
 
 // =====================================================================================================================
+// Converts Vulkan Provoking Vertex Mode to PAL equivalent.
+inline constexpr Pal::ProvokingVertex VkToPalProvokingVertex(VkProvokingVertexModeEXT provokingVertexMode)
+{
+    static_assert(static_cast<Pal::ProvokingVertex>(VK_PROVOKING_VERTEX_MODE_FIRST_VERTEX_EXT) ==
+                  Pal::ProvokingVertex::First,
+                  "VK and PAL enums don't match");
+    static_assert(static_cast<Pal::ProvokingVertex>(VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT) ==
+                  Pal::ProvokingVertex::Last,
+                  "VK and PAL enums don't match");
+
+    return static_cast<Pal::ProvokingVertex>(provokingVertexMode);
+}
+
+// =====================================================================================================================
 VK_TO_PAL_TABLE_I_WITH_SUFFIX(  PRESENT_MODE, PresentModeKHR,                SwapChainMode,
 // =====================================================================================================================
 VK_TO_PAL_ENTRY_I(  PRESENT_MODE_IMMEDIATE_KHR,                  SwapChainMode::Immediate                              )
@@ -3156,14 +3170,14 @@ inline Pal::GpuBlock VkToPalGpuBlock(
 
 // =====================================================================================================================
 VK_TO_PAL_TABLE_I_AMD(GPA_DEVICE_CLOCK_MODE, GpaDeviceClockModeAMD, DeviceClockMode,
-    // =====================================================================================================================
+    // =================================================================================================================
     VK_TO_PAL_ENTRY_I(GPA_DEVICE_CLOCK_MODE_DEFAULT_AMD,    DeviceClockMode::Default)
     VK_TO_PAL_ENTRY_I(GPA_DEVICE_CLOCK_MODE_QUERY_AMD,      DeviceClockMode::Query)
     VK_TO_PAL_ENTRY_I(GPA_DEVICE_CLOCK_MODE_PROFILING_AMD,  DeviceClockMode::Profiling)
     VK_TO_PAL_ENTRY_I(GPA_DEVICE_CLOCK_MODE_MIN_MEMORY_AMD, DeviceClockMode::MinimumMemory)
     VK_TO_PAL_ENTRY_I(GPA_DEVICE_CLOCK_MODE_MIN_ENGINE_AMD, DeviceClockMode::MinimumEngine)
     VK_TO_PAL_ENTRY_I(GPA_DEVICE_CLOCK_MODE_PEAK_AMD,       DeviceClockMode::Peak)
-    // =====================================================================================================================
+    // =================================================================================================================
 )
 
 // =====================================================================================================================
@@ -3387,8 +3401,8 @@ inline void VkToPalScissorRect(
 // =====================================================================================================================
 template<class T>
 inline Pal::QueuePriority VkToPalGlobalPriority(
-    VkQueueGlobalPriorityEXT vkPriority,
-    const T& engineCapabilities)
+    VkQueueGlobalPriorityKHR vkPriority,
+    const T&                 engineCapabilities)
 {
     Pal::QueuePriority palPriority = Pal::QueuePriority::Normal;
     switch (static_cast<int32_t>(vkPriority))
@@ -3440,7 +3454,7 @@ inline Pal::QueuePriority VkToPalGlobalPriority(
 
 // =====================================================================================================================
 inline Pal::QueuePrioritySupport VkToPalGlobaPrioritySupport(
-    VkQueueGlobalPriorityEXT vkPriority)
+    VkQueueGlobalPriorityKHR vkPriority)
 {
     Pal::QueuePrioritySupport palPrioritySupport = Pal::QueuePrioritySupport::SupportQueuePriorityNormal;
     switch (static_cast<int32_t>(vkPriority))

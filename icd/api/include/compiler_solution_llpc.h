@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -36,6 +36,8 @@
 
 namespace vk
 {
+class PipelineCompiler;
+struct PipelineInternalBufferInfo;
 
 #if VKI_RAY_TRACING
 class LlpcHelperThreadProvider : public Llpc::IHelperThreadProvider
@@ -157,6 +159,13 @@ public:
     virtual void FreeRayTracingPipelineBinary(
         RayTracingPipelineBinary* pPipelineBinary) override;
 #endif
+
+    void BuildPipelineInternalBufferData(
+        const PipelineCompiler*           pCompiler,
+        const uint32_t                    uberFetchConstBufRegBase,
+        const uint32_t                    specConstBufVertexRegBase,
+        const uint32_t                    specConstBufFragmentRegBase,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo);
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(CompilerSolutionLlpc);

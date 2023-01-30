@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -184,7 +184,7 @@ endmacro()
 function(xgl_compiler_options TARGET)
     # Set the C++ standard
     set_target_properties(${TARGET} PROPERTIES
-        CXX_STANDARD 14
+        CXX_STANDARD 17
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF
         POSITION_INDEPENDENT_CODE ON

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -471,7 +471,12 @@ VkResult GraphicsPipelineLibrary::Create(
     BuildApiHash(pCreateInfo, &apiPsoHash, &elfHash);
 
     // 4. Get pipeline layout
-    PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
+    const PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
+
+    if (pPipelineLayout == nullptr)
+    {
+        pPipelineLayout = pDevice->GetNullPipelineLayout();
+    }
 
     // 5. Populate binary create info
     PipelineMetadata binaryMetadata = {};
@@ -491,8 +496,6 @@ VkResult GraphicsPipelineLibrary::Create(
     if (result == VK_SUCCESS)
     {
         // 6. Create partial pipeline binary for fast-link
-        void* pLlpcPipelineBuffer = nullptr;
-        binaryCreateInfo.pipelineInfo.pUserData = &pLlpcPipelineBuffer;
         result = CreatePartialPipelineBinary(
             pDevice,
             pCreateInfo,
@@ -619,7 +622,7 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
     const uint64_t                          apiHash,
     const ShaderModuleHandle*               pTempModules,
     const TempModuleState*                  pTempModuleStates,
-    PipelineLayout*                         pPipelineLayout)
+    const PipelineLayout*                   pPipelineLayout)
 #if VKI_RAY_TRACING
     : GraphicsPipelineCommon(false, pDevice),
 #else

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -742,6 +742,10 @@ void SqttCmdBufferState::WriteBarrierEndMarker(
         marker.numLayoutTransitions = m_currentBarrier.numLayoutTransitions;
 
         marker.invalGl1             = operations.caches.invalGl1;
+        marker.waitOnTs             = operations.pipelineStalls.waitOnTs;
+        marker.eopTsBottomOfPipe    = operations.pipelineStalls.eopTsBottomOfPipe;
+        marker.eosTsPsDone          = operations.pipelineStalls.eosTsPsDone;
+        marker.eosTsCsDone          = operations.pipelineStalls.eosTsCsDone;
 
         Pal::RgpMarkerSubQueueFlags subQueueFlags = {};
         subQueueFlags.includeMainSubQueue         = 1;
@@ -1290,6 +1294,65 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirectCountKHR(
     pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdDrawIndexedIndirectCountKHR);
 
     SQTT_CALL_NEXT_LAYER(vkCmdDrawIndexedIndirectCountKHR)(cmdBuffer, buffer, offset, countBuffer, countOffset,
+        maxDrawCount, stride);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawMeshTasksEXT(
+    VkCommandBuffer                             cmdBuffer,
+    uint32_t                                    groupCountX,
+    uint32_t                                    groupCountY,
+    uint32_t                                    groupCountZ)
+{
+    SQTT_SETUP();
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDrawMeshTasksEXT);
+    pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdDrawMeshTasksEXT);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdDrawMeshTasksEXT)(cmdBuffer, groupCountX, groupCountY, groupCountZ);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawMeshTasksIndirectEXT(
+    VkCommandBuffer                             cmdBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    uint32_t                                    drawCount,
+    uint32_t                                    stride)
+{
+    SQTT_SETUP();
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDrawMeshTasksIndirectEXT);
+    pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdDrawMeshTasksIndirectEXT);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdDrawMeshTasksIndirectEXT)(cmdBuffer, buffer, offset, drawCount, stride);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawMeshTasksIndirectCountEXT(
+    VkCommandBuffer                             cmdBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    VkBuffer                                    countBuffer,
+    VkDeviceSize                                countBufferOffset,
+    uint32_t                                    maxDrawCount,
+    uint32_t                                    stride)
+{
+    SQTT_SETUP();
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDrawMeshTasksIndirectCountEXT);
+    pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdDrawMeshTasksIndirectCountEXT);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdDrawMeshTasksIndirectCountEXT)(cmdBuffer, buffer, offset, countBuffer, countBufferOffset,
         maxDrawCount, stride);
 
     pSqtt->EndEventMarkers();
@@ -2639,6 +2702,9 @@ void SqttOverrideDispatchTable(
     SQTT_OVERRIDE_ENTRY(vkCmdDrawIndexedIndirectCountAMD);
     SQTT_OVERRIDE_ENTRY(vkCmdDrawIndirectCountKHR);
     SQTT_OVERRIDE_ENTRY(vkCmdDrawIndexedIndirectCountKHR);
+    SQTT_OVERRIDE_ENTRY(vkCmdDrawMeshTasksEXT);
+    SQTT_OVERRIDE_ENTRY(vkCmdDrawMeshTasksIndirectCountEXT);
+    SQTT_OVERRIDE_ENTRY(vkCmdDrawMeshTasksIndirectEXT);
     SQTT_OVERRIDE_ENTRY(vkCmdDispatch);
     SQTT_OVERRIDE_ENTRY(vkCmdDispatchIndirect);
     SQTT_OVERRIDE_ENTRY(vkCmdCopyBuffer);

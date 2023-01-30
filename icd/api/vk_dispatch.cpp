@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -35,6 +35,7 @@
 #include "include/vk_buffer.h"
 #include "include/vk_buffer_view.h"
 #include "include/vk_cmdbuffer.h"
+#include "include/vk_descriptor_buffer.h"
 #include "include/vk_descriptor_pool.h"
 #include "include/vk_descriptor_set.h"
 #include "include/vk_descriptor_set_layout.h"
@@ -713,6 +714,18 @@ void DispatchTable::Init()
                         vkSetPrivateData                                );
     INIT_DISPATCH_ALIAS(vkGetPrivateDataEXT,
                         vkGetPrivateData                                );
+
+    INIT_DISPATCH_ENTRY(vkGetDescriptorSetLayoutSizeEXT                 );
+    INIT_DISPATCH_ENTRY(vkGetDescriptorSetLayoutBindingOffsetEXT        );
+    INIT_DISPATCH_ENTRY(vkGetDescriptorEXT                              );
+    INIT_DISPATCH_ENTRY(vkGetBufferOpaqueCaptureDescriptorDataEXT       );
+    INIT_DISPATCH_ENTRY(vkGetImageOpaqueCaptureDescriptorDataEXT        );
+    INIT_DISPATCH_ENTRY(vkGetImageViewOpaqueCaptureDescriptorDataEXT    );
+    INIT_DISPATCH_ENTRY(vkGetSamplerOpaqueCaptureDescriptorDataEXT      );
+    INIT_DISPATCH_ENTRY(vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT);
+    INIT_DISPATCH_ENTRY(vkCmdBindDescriptorBuffersEXT                   );
+    INIT_DISPATCH_ENTRY(vkCmdSetDescriptorBufferOffsetsEXT              );
+    INIT_DISPATCH_ENTRY(vkCmdBindDescriptorBufferEmbeddedSamplersEXT    );
 
     INIT_DISPATCH_ENTRY(vkCmdSetColorWriteEnableEXT                     );
 

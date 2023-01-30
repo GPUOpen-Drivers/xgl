@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -66,6 +66,18 @@ macro(xgl_set_compile_definitions)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI31=1)
     endif()
 #endif
+
+    if(XGL_BUILD_REMBRANDT)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_REMBRANDT=1)
+    endif()
+
+    if(XGL_BUILD_RAPHAEL)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_RAPHAEL=1)
+    endif()
+
+    if(XGL_BUILD_MENDOCINO)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_MENDOCINO=1)
+    endif()
 
 #if VKI_RAY_TRACING
     if (VKI_RAY_TRACING)

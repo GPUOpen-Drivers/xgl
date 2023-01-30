@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1094,6 +1094,56 @@ GraphicsPipeline::GraphicsPipeline(
 
     CreateStaticState();
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 778
+    if (ContainsDynamicState(DynamicStatesInternal::RasterizerDiscardEnable))
+    {
+        m_info.graphicsShaderInfos.dynamicState.enable.rasterizerDiscardEnable = 1;
+    }
+
+    if (ContainsDynamicState(DynamicStatesInternal::ColorWriteEnable) ||
+        ContainsDynamicState(DynamicStatesInternal::ColorWriteMask))
+    {
+        m_info.graphicsShaderInfos.dynamicState.enable.colorWriteMask = 1;
+    }
+
+    if (ContainsDynamicState(DynamicStatesInternal::LogicOp) ||
+        ContainsDynamicState(DynamicStatesInternal::LogicOpEnable))
+    {
+        m_info.graphicsShaderInfos.dynamicState.enable.logicOp = 1;
+    }
+
+    if (ContainsDynamicState(DynamicStatesInternal::LineRasterizationMode))
+    {
+        m_info.graphicsShaderInfos.dynamicState.enable.perpLineEndCapsEnable = 1;
+    }
+
+    if (ContainsDynamicState(DynamicStatesInternal::TessellationDomainOrigin))
+    {
+        m_info.graphicsShaderInfos.dynamicState.enable.switchWinding = 1;
+    }
+
+    if (ContainsDynamicState(DynamicStatesInternal::AlphaToCoverageEnable))
+    {
+        m_info.graphicsShaderInfos.dynamicState.enable.alphaToCoverageEnable = 1;
+    }
+
+    if (ContainsDynamicState(DynamicStatesInternal::DepthClipNegativeOneToOne))
+    {
+        m_info.graphicsShaderInfos.dynamicState.enable.depthRange = 1;
+    }
+
+    if (ContainsDynamicState(DynamicStatesInternal::DepthClipEnable))
+    {
+        m_info.graphicsShaderInfos.dynamicState.enable.depthClipMode = 1;
+    }
+
+    if (ContainsDynamicState(DynamicStatesInternal::DepthClampEnable))
+    {
+        m_info.graphicsShaderInfos.dynamicState.enable.depthClipMode = 1;
+        m_info.graphicsShaderInfos.dynamicState.enable.depthClampMode = 1;
+    }
+#endif
+
     pPalPipelineHasher->Update(m_palPipelineHash);
     pPalPipelineHasher->Finalize(reinterpret_cast<uint8*>(&m_palPipelineHash));
 }
@@ -1149,7 +1199,8 @@ void GraphicsPipeline::CreateStaticState()
         pStaticTokens->depthBounds = pCache->CreateDepthBounds(m_info.depthBoundParams);
     }
 
-    if (ContainsStaticState(DynamicStatesInternal::Viewport))
+    if (ContainsStaticState(DynamicStatesInternal::Viewport) &&
+        ContainsStaticState(DynamicStatesInternal::DepthClipNegativeOneToOne))
     {
         pStaticTokens->viewport = pCache->CreateViewport(m_info.viewportParams);
     }
@@ -1261,11 +1312,14 @@ VkResult GraphicsPipeline::Destroy(
 // =====================================================================================================================
 // Binds this graphics pipeline's state to the given command buffer (with passed in wavelimits)
 void GraphicsPipeline::BindToCmdBuffer(
-    CmdBuffer*                             pCmdBuffer,
-    const Pal::DynamicGraphicsShaderInfos& graphicsShaderInfos
+    CmdBuffer*                             pCmdBuffer
     ) const
 {
     AllGpuRenderState* pRenderState = pCmdBuffer->RenderState();
+
+    const Pal::DynamicGraphicsShaderInfos& graphicsShaderInfos = m_info.graphicsShaderInfos;
+    Pal::DynamicGraphicsShaderInfos*       pGfxDynamicBindInfo =
+        &pRenderState->pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx;
 
     // Get this pipeline's static tokens
     const auto& newTokens = m_info.staticTokens;
@@ -1279,40 +1333,70 @@ void GraphicsPipeline::BindToCmdBuffer(
     // represented as token compares, where the tokens are two perfect hashes of previously compiled pipelines' static
     // parameter values.
     // If VIEWPORT is static, VIEWPORT_COUNT must be static as well
-    if (ContainsStaticState(DynamicStatesInternal::Viewport))
+    if (ContainsStaticState(DynamicStatesInternal::Viewport) &&
+        ContainsStaticState(DynamicStatesInternal::DepthClipNegativeOneToOne))
     {
         if (CmdBuffer::IsStaticStateDifferent(oldTokens.viewports, newTokens.viewport))
         {
             pCmdBuffer->SetAllViewports(m_info.viewportParams, newTokens.viewport);
         }
     }
-    else if (ContainsStaticState(DynamicStatesInternal::ViewportCount))
+    else
     {
-        utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
-        do
+        if (ContainsStaticState(DynamicStatesInternal::Viewport))
         {
-            uint32* pViewportCount = &(pCmdBuffer->PerGpuState(deviceGroup.Index())->viewport.count);
-
-            if (*pViewportCount != m_info.viewportParams.count)
+            auto pViewports = pCmdBuffer->PerGpuState(0)->viewport.viewports;
+            if (memcmp(pViewports,
+                       m_info.viewportParams.viewports,
+                       sizeof(Pal::Viewport) * m_info.viewportParams.count) != 0)
             {
-                *pViewportCount = m_info.viewportParams.count;
+                utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
+                do
+                {
+                    for (uint32_t i = 0; i < m_info.viewportParams.count; ++i)
+                    {
+                        pCmdBuffer->PerGpuState(deviceGroup.Index())->viewport.viewports[i] =
+                            m_info.viewportParams.viewports[i];
+                    }
+                } while (deviceGroup.IterateNext());
                 pRenderState->dirtyGraphics.viewport = 1;
             }
         }
-        while (deviceGroup.IterateNext());
-    }
 
-    // We can just check DefaultDeviceIndex as the value can't vary between GPUs.
-    if (pCmdBuffer->PerGpuState(DefaultDeviceIndex)->viewport.depthRange != m_info.viewportParams.depthRange)
-    {
-        utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
-        do
+        if (ContainsStaticState(DynamicStatesInternal::ViewportCount))
         {
-            pCmdBuffer->PerGpuState(deviceGroup.Index())->viewport.depthRange = m_info.viewportParams.depthRange;
-        }
-        while (deviceGroup.IterateNext());
+            utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
+            do
+            {
+                uint32* pViewportCount = &(pCmdBuffer->PerGpuState(deviceGroup.Index())->viewport.count);
 
-        pRenderState->dirtyGraphics.viewport = 1;
+                if (*pViewportCount != m_info.viewportParams.count)
+                {
+                    *pViewportCount = m_info.viewportParams.count;
+                    pRenderState->dirtyGraphics.viewport = 1;
+                }
+            } while (deviceGroup.IterateNext());
+        }
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 778
+        Pal::DepthRange depthRange = pGfxDynamicBindInfo->dynamicState.depthRange;
+        if (ContainsStaticState(DynamicStatesInternal::DepthClipNegativeOneToOne))
+        {
+            depthRange = m_info.viewportParams.depthRange;
+        }
+
+        // We can just check DefaultDeviceIndex as the value can't vary between GPUs.
+        if (pCmdBuffer->PerGpuState(DefaultDeviceIndex)->viewport.depthRange != depthRange)
+        {
+            utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
+            do
+            {
+                pCmdBuffer->PerGpuState(deviceGroup.Index())->viewport.depthRange = depthRange;
+            } while (deviceGroup.IterateNext());
+
+            pRenderState->dirtyGraphics.viewport = 1;
+        }
+#endif
     }
 
     if (ContainsStaticState(DynamicStatesInternal::Scissor))
@@ -1621,6 +1705,53 @@ void GraphicsPipeline::BindToCmdBuffer(
     const bool useOptimizedPipeline = UseOptimizedPipeline();
     const uint64_t oldHash = pRenderState->boundGraphicsPipelineHash;
     const uint64_t newHash = useOptimizedPipeline ? m_optimizedPipelineHash : PalPipelineHash();
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 778
+    const bool dynamicStateDirty    =
+        pGfxDynamicBindInfo->dynamicState.enable.u32All != graphicsShaderInfos.dynamicState.enable.u32All;
+
+    // Update pipleine dynamic state
+    pGfxDynamicBindInfo->dynamicState.enable.u32All = graphicsShaderInfos.dynamicState.enable.u32All;
+
+    if (ContainsStaticState(DynamicStatesInternal::ColorWriteMask) ^
+        ContainsStaticState(DynamicStatesInternal::ColorWriteEnable))
+    {
+        if (ContainsStaticState(DynamicStatesInternal::ColorWriteMask))
+        {
+            pRenderState->colorWriteMask = m_info.colorWriteMask;
+        }
+
+        if (ContainsStaticState(DynamicStatesInternal::ColorWriteEnable))
+        {
+            pRenderState->colorWriteEnable = m_info.colorWriteEnable;
+        }
+
+        pGfxDynamicBindInfo->dynamicState.colorWriteMask =
+            pRenderState->colorWriteMask & pRenderState->colorWriteEnable;
+    }
+
+    // Overwrite state with dynamic state in current render state
+    if (graphicsShaderInfos.dynamicState.enable.logicOp)
+    {
+        if (ContainsStaticState(DynamicStatesInternal::LogicOp))
+        {
+            pRenderState->logicOp = m_info.logicOp;
+            pGfxDynamicBindInfo->dynamicState.logicOp =
+                pRenderState->logicOpEnable ? VkToPalLogicOp(pRenderState->logicOp) : Pal::LogicOp::Copy;
+        }
+
+        if (ContainsStaticState(DynamicStatesInternal::LogicOpEnable))
+        {
+            pRenderState->logicOpEnable = m_info.logicOpEnable;
+            pGfxDynamicBindInfo->dynamicState.logicOp =
+                pRenderState->logicOpEnable ? VkToPalLogicOp(pRenderState->logicOp) : Pal::LogicOp::Copy;
+        }
+    }
+    else
+    {
+        pRenderState->logicOp       = m_info.logicOp;
+        pRenderState->logicOpEnable = m_info.logicOpEnable;
+    }
+#endif
 
     utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
     do
@@ -1628,7 +1759,14 @@ void GraphicsPipeline::BindToCmdBuffer(
         const uint32_t deviceIdx = deviceGroup.Index();
 
         Pal::ICmdBuffer* pPalCmdBuf = pCmdBuffer->PalCmdBuffer(deviceIdx);
-
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 778
+        if ((oldHash != newHash)
+            || dynamicStateDirty
+            )
+        {
+            pRenderState->dirtyGraphics.pipeline = 1;
+        }
+#else
         if (pRenderState->pGraphicsPipeline != nullptr)
         {
             bool palPipelineBound = false;
@@ -1637,10 +1775,10 @@ void GraphicsPipeline::BindToCmdBuffer(
             {
                 Pal::PipelineBindParams params = {};
 
-                params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
-                params.pPipeline         = useOptimizedPipeline ? m_pOptimizedPipeline[deviceIdx] : m_pPalPipeline[deviceIdx];
-                params.graphics          = graphicsShaderInfos;
-                params.apiPsoHash        = m_apiHash;
+                params.pipelineBindPoint     = Pal::PipelineBindPoint::Graphics;
+                params.pPipeline             = useOptimizedPipeline ? m_pOptimizedPipeline[deviceIdx] : m_pPalPipeline[deviceIdx];
+                params.graphics              = graphicsShaderInfos;
+                params.apiPsoHash            = m_apiHash;
 
                 pPalCmdBuf->CmdBindPipeline(params);
                 palPipelineBound         = true;
@@ -1673,13 +1811,14 @@ void GraphicsPipeline::BindToCmdBuffer(
         {
             Pal::PipelineBindParams params = {};
 
-            params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
-            params.pPipeline         = useOptimizedPipeline ? m_pOptimizedPipeline[deviceIdx] : m_pPalPipeline[deviceIdx];
-            params.graphics          = graphicsShaderInfos;
-            params.apiPsoHash        = m_apiHash;
+            params.pipelineBindPoint     = Pal::PipelineBindPoint::Graphics;
+            params.pPipeline             = useOptimizedPipeline ? m_pOptimizedPipeline[deviceIdx] : m_pPalPipeline[deviceIdx];
+            params.graphics              = graphicsShaderInfos;
+            params.apiPsoHash            = m_apiHash;
 
             pPalCmdBuf->CmdBindPipeline(params);
         }
+#endif
 
         // Bind state objects that are always static; these are redundancy checked by the pointer in the command buffer.
         if (m_flags.bindDepthStencilObject)
@@ -1790,6 +1929,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             }
         }
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 778
         if (ContainsStaticState(DynamicStatesInternal::ColorWriteEnable))
         {
             if (pRenderState->lastColorWriteEnableDynamic)
@@ -1801,6 +1941,7 @@ void GraphicsPipeline::BindToCmdBuffer(
                 pRenderState->dirtyGraphics.colorWriteEnable = 0;
             }
         }
+#endif
 
         // Only set the Fragment Shading Rate if the dynamic state is not set.
         if (ContainsStaticState(DynamicStatesInternal::FragmentShadingRateStateKhr) &&

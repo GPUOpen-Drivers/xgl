@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -221,9 +221,9 @@ VkResult SwapChain::Create(
     // Two on the slave (1 to render, 1 to copy). 3 on the master (1 to present, 1 to recieve copy, 1 render)
     // (This was also verified with looking at GPU traces)
     // TODO: Rework PAL to release image after the copy and in Vulkan allocate 3 images on GPU0 and 2 images on GPU1.
-    uint32_t           swapImageCount      = (pDevice->NumPalDevices() > 1) ?
-                                                    Util::Max<uint32_t>(5, pCreateInfo->minImageCount) :
-                                                    pCreateInfo->minImageCount;
+    uint32_t           swapImageCount       = (pDevice->NumPalDevices() > 1) ?
+                                                     Util::Max<uint32_t>(5, pCreateInfo->minImageCount) :
+                                                     pCreateInfo->minImageCount;
 
     // Need 5 images to support MAILBOX mode. (1. CPU  2. GPU render 3. idle 4. queued for flip 5. presenting)
     // Tests show that performance of 5 images is better than 4 images. (6% performance gain in xplane 4k low benchmark.)
@@ -249,13 +249,26 @@ VkResult SwapChain::Create(
     swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(pCreateInfo->presentMode);
     swapChainCreateInfo.colorSpace          = VkToPalScreenSpace(VkSurfaceFormatKHR{ pCreateInfo->imageFormat,
                                                                                      pCreateInfo->imageColorSpace });
-#if VK_IS_PAL_VERSION_AT_LEAST(702,0)
     swapChainCreateInfo.frameLatency        = swapImageCount; // Only matters for DXGI swapchain
-#endif
 
     swapChainCreateInfo.flags.canAcquireBeforeSignaling = settings.enableAcquireBeforeSignal;
 
     Pal::IDevice* pPalDevice = pDevice->PalDevice(properties.presentationDeviceIdx);
+
+    // Find the monitor is associated with the given window handle
+    Pal::IScreen* pScreen = pDevice->VkInstance()->FindScreen(pPalDevice,
+                                                              swapChainCreateInfo.hWindow,
+                                                              properties.imageCreateInfo.hDisplay);
+
+    Pal::ScreenProperties screenProperties = {};
+
+    if (pScreen != nullptr)
+    {
+        palResult = pScreen->GetProperties(&screenProperties);
+        VK_ASSERT(palResult == Pal::Result::Success);
+
+        properties.displayableInfo.pScreen = pScreen;
+    }
 
     if (properties.displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
     {
@@ -275,20 +288,6 @@ VkResult SwapChain::Create(
     // Figure out the mode the FullscreenMgr should be working in
     const FullscreenMgr::Mode mode =
                        FullscreenMgr::Implicit;
-    // Find the monitor is associated with the given window handle
-    Pal::IScreen* pScreen    = pDevice->VkInstance()->FindScreen(pPalDevice,
-                                                                 swapChainCreateInfo.hWindow,
-                                                                 properties.imageCreateInfo.hDisplay);
-
-    Pal::ScreenProperties screenProperties = {};
-
-    if (pScreen != nullptr)
-    {
-        palResult = pScreen->GetProperties(&screenProperties);
-        VK_ASSERT(palResult == Pal::Result::Success);
-
-        properties.displayableInfo.pScreen = pScreen;
-    }
 
     // Determine if SW compositing is also required for fullscreen exclusive mode by querying for HW compositing support
     Pal::GetPrimaryInfoInput  primaryInfoInput  = {};
@@ -389,6 +388,7 @@ VkResult SwapChain::Create(
     if (result == VK_SUCCESS)
     {
         properties.imageCreateInfo.pSwapChain = pPalSwapChain;
+
     }
 
     // Allocate memory for the fullscreen manager if it's enabled.  We need to create it first before the
@@ -881,9 +881,7 @@ bool SwapChain::IsSuboptimal(uint32_t deviceIdx)
     {
         VK_ASSERT(m_properties.pSurface != nullptr);
 
-#if VK_IS_PAL_VERSION_AT_LEAST(633, 1)
         if (m_pPalSwapChain->NeedWindowSizeChangedCheck())
-#endif
         {
             result = m_pDevice->VkPhysicalDevice(deviceIdx)->GetSurfaceCapabilities(
                 Surface::HandleFromObject(m_properties.pSurface),

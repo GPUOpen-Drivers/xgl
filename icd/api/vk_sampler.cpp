@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -92,6 +92,15 @@ uint64_t Sampler::BuildApiHash(
         hasher.Update(extStructs.pSamplerBorderColorComponentMappingCreateInfoEXT->sType);
         hasher.Update(extStructs.pSamplerBorderColorComponentMappingCreateInfoEXT->components);
         hasher.Update(extStructs.pSamplerBorderColorComponentMappingCreateInfoEXT->srgb);
+    }
+
+    if (extStructs.pOpaqueCaptureDescriptorDataCreateInfoEXT != nullptr)
+    {
+        hasher.Update(extStructs.pOpaqueCaptureDescriptorDataCreateInfoEXT->sType);
+        const uint32* pPaletteIndex = static_cast<
+            const uint32*>(extStructs.pOpaqueCaptureDescriptorDataCreateInfoEXT->opaqueCaptureDescriptorData);
+
+        hasher.Update(*pPaletteIndex);
     }
 
     uint64_t hash;
@@ -186,7 +195,21 @@ VkResult Sampler::Create(
 
     const bool extCustomBorderColor = pDevice->IsExtensionEnabled(DeviceExtensions::EXT_CUSTOM_BORDER_COLOR);
 
-    if (extStructs.pSamplerCustomBorderColorCreateInfoEXT != nullptr)
+    if (extCustomBorderColor && (extStructs.pOpaqueCaptureDescriptorDataCreateInfoEXT != nullptr))
+    {
+        if (extStructs.pSamplerCustomBorderColorCreateInfoEXT != nullptr)
+        {
+            const uint32* pPaletteIndex = static_cast<
+                const uint32*>(extStructs.pOpaqueCaptureDescriptorDataCreateInfoEXT->opaqueCaptureDescriptorData);
+
+             pDevice->ReserveBorderColorIndex(
+                 *pPaletteIndex,
+                 extStructs.pSamplerCustomBorderColorCreateInfoEXT->customBorderColor.float32);
+
+            samplerInfo.borderColorPaletteIndex = *pPaletteIndex;
+        }
+    }
+    else if (extStructs.pSamplerCustomBorderColorCreateInfoEXT != nullptr)
     {
         if (extCustomBorderColor)
         {
@@ -308,6 +331,12 @@ void Sampler::HandleExtensionStructs(
         {
             pExtStructs->pSamplerBorderColorComponentMappingCreateInfoEXT = static_cast<
                 const VkSamplerBorderColorComponentMappingCreateInfoEXT*>(pNext);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT:
+        {
+            pExtStructs->pOpaqueCaptureDescriptorDataCreateInfoEXT = static_cast<
+                const VkOpaqueCaptureDescriptorDataCreateInfoEXT*>(pNext);
             break;
         }
         default:

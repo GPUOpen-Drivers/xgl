@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -38,6 +38,12 @@ macro(xgl_options)
     option(XGL_BUILD_GFX103 "Build vulkan for GFX103" ON)
 
     option(XGL_BUILD_NAVI12 "Build vulkan for Navi12" ON)
+
+    option(XGL_BUILD_REMBRANDT "Build vulkan for REMBRANDT" ON)
+
+    option(XGL_BUILD_RAPHAEL "Build vulkan for RAPHAEL" ON)
+
+    option(XGL_BUILD_MENDOCINO "Build vulkan for MENDOCINO" ON)
 
 #if VKI_BUILD_GFX11
     option(XGL_BUILD_GFX11 "Build vulkan for GFX11" ON)

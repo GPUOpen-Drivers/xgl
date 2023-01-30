@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -222,10 +222,6 @@ public:
 #define VK_INIT_DISPATCHABLE(obj_class, storage, constructor_params) \
     do { VK_PLACEMENT_NEW (storage) Dispatchable##obj_class(); \
          VK_PLACEMENT_NEW ((obj_class*)*(Dispatchable##obj_class*)storage) obj_class constructor_params; } while (0)
-
-// Helper function to initialize a dispatchable object
-#define VK_INIT_API_OBJECT(obj_class, storage, constructor_params) \
-    VK_INIT_DISPATCHABLE(obj_class, storage, constructor_params)
 
 // =====================================================================================================================
 // Template base class for non-dispatchable Vulkan objects (e.g. VkImages, VkBuffers, etc.).  Adds type-safe helper

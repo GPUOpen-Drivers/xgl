@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -51,8 +51,6 @@ namespace vk
 constexpr uint32_t FetchShaderInternalBufferOffset = 0;
 constexpr uint32_t SpecConstBufferVertexOffset     = 2;
 constexpr uint32_t SpecConstBufferFragmentOffset   = 4;
-constexpr uint32_t SpecConstVertexInternalBufferBindingId = 5;
-constexpr uint32_t SpecConstFragmentInternalBufferBindingId = 9;
 
 // Constants for Angle style descriptor layout pattern
 namespace AngleDescPattern

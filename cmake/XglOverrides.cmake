@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -121,6 +121,12 @@ macro(xgl_overrides_pal)
 
     set(PAL_BUILD_NAVI24 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
+    set(PAL_BUILD_REMBRANDT ${XGL_BUILD_REMBRANDT} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
+    set(PAL_BUILD_RAPHAEL ${XGL_BUILD_RAPHAEL} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
+    set(PAL_BUILD_MENDOCINO ${XGL_BUILD_MENDOCINO} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
 #if VKI_BUILD_NAVI31
     set(PAL_BUILD_NAVI31 ${XGL_BUILD_NAVI31} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 #endif
@@ -150,6 +156,12 @@ macro(xgl_overrides_vkgc)
     set(LLPC_BUILD_TESTS ${XGL_BUILD_TESTS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
     set(LLPC_BUILD_NAVI12 ${XGL_BUILD_NAVI12} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
+    set(LLPC_BUILD_REMBRANDT ${XGL_BUILD_REMBRANDT} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
+    set(LLPC_BUILD_RAPHAEL ${XGL_BUILD_RAPHAEL} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
+    set(LLPC_BUILD_MENDOCINO ${XGL_BUILD_MENDOCINO} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
 #if VKI_BUILD_GFX11
     set(LLPC_BUILD_GFX11 ${XGL_BUILD_GFX11} CACHE BOOL "${PROJECT_NAME} override." FORCE)

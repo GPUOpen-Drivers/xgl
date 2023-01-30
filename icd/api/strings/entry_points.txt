@@ -476,6 +476,18 @@ vkCmdSetDepthBoundsTestEnableEXT                    @device       @dext(EXT_exte
 vkCmdSetStencilTestEnableEXT                        @device       @dext(EXT_extended_dynamic_state)
 vkCmdSetStencilOpEXT                                @device       @dext(EXT_extended_dynamic_state)
 
+vkGetDescriptorSetLayoutSizeEXT                     @device     @dext(EXT_descriptor_buffer)
+vkGetDescriptorSetLayoutBindingOffsetEXT            @device     @dext(EXT_descriptor_buffer)
+vkGetDescriptorEXT                                  @device     @dext(EXT_descriptor_buffer)
+vkCmdBindDescriptorBuffersEXT                       @device     @dext(EXT_descriptor_buffer)
+vkCmdSetDescriptorBufferOffsetsEXT                  @device     @dext(EXT_descriptor_buffer)
+vkCmdBindDescriptorBufferEmbeddedSamplersEXT        @device     @dext(EXT_descriptor_buffer)
+vkGetBufferOpaqueCaptureDescriptorDataEXT           @device     @dext(EXT_descriptor_buffer)
+vkGetImageOpaqueCaptureDescriptorDataEXT            @device     @dext(EXT_descriptor_buffer)
+vkGetImageViewOpaqueCaptureDescriptorDataEXT        @device     @dext(EXT_descriptor_buffer)
+vkGetSamplerOpaqueCaptureDescriptorDataEXT          @device     @dext(EXT_descriptor_buffer)
+vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT @device     @dext(EXT_descriptor_buffer)
+
 vkCmdSetColorWriteEnableEXT                         @device       @dext(EXT_color_write_enable)
 
 vkCmdSetRasterizerDiscardEnableEXT                  @device       @dext(EXT_extended_dynamic_state2)

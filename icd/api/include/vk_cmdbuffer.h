@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -156,15 +156,32 @@ union DirtyGraphicsState
         uint32 inputAssembly           :  1;
         uint32 stencilRef              :  1;
         uint32 vrs                     :  1;
-        uint32 colorWriteEnable        :  1;
-        uint32 rasterizerDiscardEnable :  1;
         uint32 samplePattern           :  1;
         uint32 colorBlend              :  1;
         uint32 msaa                    :  1;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 778
+        uint32 colorWriteEnable        :  1;
+        uint32 rasterizerDiscardEnable :  1;
         uint32 reserved                : 20;
+#else
+        uint32 pipeline                :  1;
+        uint32 reserved                : 21;
+#endif
+
     };
 
     uint32 u32All;
+};
+
+struct DescriptorBuffers
+{
+    VkDeviceSize     offset;
+    uint32           baseAddrNdx;
+};
+
+struct DescBufBinding
+{
+    VkDeviceAddress     baseAddr[MaxDescriptorSets];
 };
 
 struct DynamicDepthStencil
@@ -246,11 +263,13 @@ struct AllGpuRenderState
     // defined by the last bound GraphicsPipeline, which was not nullptr.
     bool viewIndexFromDeviceIndex;
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 778
     // Tracks if color write enable modified the value of CB_TARGET_MASK with the currently bound pipeline.  This value
     // is used at pipeline bind time to determine if CB_TARGET_MASK needs to be updated as part of the bind operation.
     bool lastColorWriteEnableDynamic;
 
     bool rasterizerDiscardEnable;
+#endif
 
     DynamicRenderingInstance         dynamicRenderingInstance;
 
@@ -300,11 +319,21 @@ struct AllGpuRenderState
     Pal::InputAssemblyStateParams    inputAssemblyState;
     Pal::DepthStencilStateCreateInfo depthStencilCreateInfo;
     Pal::VrsRateParams               vrsRate;
-    Pal::ColorWriteMaskParams        colorWriteMaskParams;
     Pal::ColorBlendStateCreateInfo   colorBlendCreateInfo;
     Pal::MsaaStateCreateInfo         msaaCreateInfo;
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 778
+    uint32_t                         colorWriteEnable; // Per target mask from vkCmdSetColorWriteEnableEXT or pipeline
+    uint32_t                         colorWriteMask;
+#else
+    Pal::ColorWriteMaskParams        colorWriteMaskParams; // Final merged color target write mask according to
+                                                           // colorWriteEnable and colorWriteMask
+#endif
     SamplePattern                    samplePattern;
     VkBool32                         sampleLocationsEnable;
+    DescBufBinding*                  pDescBufBinding;
+    VkLogicOp                        logicOp;
+    VkBool32                         logicOpEnable;
     float                            minSampleShading;
 };
 
@@ -706,8 +735,38 @@ public:
     void SetProvokingVertexMode(
         VkProvokingVertexModeEXT            provokingVertexMode);
 
+    void SetColorWriteMask(
+        uint32_t                            firstAttachment,
+        uint32_t                            attachmentCount,
+        const  VkColorComponentFlags*       pColorWriteMasks);
+
     void SetSampleLocationsEnable(
         VkBool32                            sampleLocationsEnable);
+
+    void SetLogicOp(
+        VkLogicOp                           logicOp);
+
+    void SetLogicOpEnable(
+        VkBool32                            logicOpEnable);
+
+    void SetLineRasterizationMode(
+        VkLineRasterizationModeEXT          lineRasterizationMode);
+
+    void SetTessellationDomainOrigin(
+        VkTessellationDomainOrigin          domainOrigin);
+
+    void SetDepthClampEnable(
+        VkBool32                            depthClampEnable);
+
+    void SetAlphaToCoverageEnable(
+        VkBool32                            alphaToCoverageEnable);
+
+    void SetDepthClipEnable(
+        VkBool32                            depthClipEnable);
+
+    void SetDepthClipNegativeOneToOne(
+        VkBool32                            negativeOneToOne);
+
     void SetEvent(
         VkEvent                                     event,
         PipelineStageFlags                          stageMask);
@@ -1285,6 +1344,23 @@ public:
 
 #endif
 
+    void BindDescriptorBuffers(
+        uint32_t                                    bufferCount,
+        const VkDescriptorBufferBindingInfoEXT*     pBindingInfos);
+
+    void SetDescriptorBufferOffsets(
+        VkPipelineBindPoint                         pipelineBindPoint,
+        VkPipelineLayout                            layout,
+        uint32_t                                    firstSet,
+        uint32_t                                    setCount,
+        const uint32_t*                             pBufferIndices,
+        const VkDeviceSize*                         pOffsets);
+
+    void BindDescriptorBufferEmbeddedSamplers(
+        VkPipelineBindPoint                         pipelineBindPoint,
+        VkPipelineLayout                            layout,
+        uint32_t                                    set);
+
     CmdPool* GetCmdPool() const { return m_pCmdPool; }
 
     PerGpuRenderState* PerGpuState(uint32 deviceIdx)
@@ -1320,7 +1396,7 @@ public:
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(CmdBuffer);
 
-    void ValidateStates();
+    void ValidateGraphicsStates();
 
     void ValidateSamplePattern(uint32_t sampleCount, SamplePattern* pSamplePattern);
 
@@ -1498,6 +1574,13 @@ private:
         const VkDescriptorSet*                      pDescriptorSets,
         uint32_t                                    dynamicOffsetCount,
         const uint32_t*                             pDynamicOffsets);
+
+    void BindDescriptorSetsBuffers(
+        VkPipelineBindPoint                         pipelineBindPoint,
+        VkPipelineLayout                            layout,
+        uint32_t                                    firstSet,
+        uint32_t                                    setCount,
+        const DescriptorBuffers*                    pDescriptorBuffers);
 
     void SetUserDataPipelineLayout(
         uint32_t                                    firstSet,
@@ -2455,6 +2538,26 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOp(
     VkStencilOp                                 passOp,
     VkStencilOp                                 depthFailOp,
     VkCompareOp                                 compareOp);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorBuffersEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    bufferCount,
+    const VkDescriptorBufferBindingInfoEXT*     pBindingInfos);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDescriptorBufferOffsetsEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipelineLayout                            layout,
+    uint32_t                                    firstSet,
+    uint32_t                                    setCount,
+    const uint32_t*                             pBufferIndices,
+    const VkDeviceSize*                         pOffsets);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorBufferEmbeddedSamplersEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipelineLayout                            layout,
+    uint32_t                                    set);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetColorWriteEnableEXT(
     VkCommandBuffer                             commandBuffer,

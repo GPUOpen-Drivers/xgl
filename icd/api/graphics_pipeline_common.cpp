@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021-2022 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2023 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -927,6 +927,12 @@ static void CopyFragmentOutputInterfaceState(
     {
         pInfo->immedInfo.blendCreateInfo.targets[i] = libInfo.immedInfo.blendCreateInfo.targets[i];
     }
+    pInfo->immedInfo.blendConstParams                       = libInfo.immedInfo.blendConstParams;
+    pInfo->immedInfo.logicOp                                = libInfo.immedInfo.logicOp;
+    pInfo->immedInfo.logicOpEnable                          = libInfo.immedInfo.logicOpEnable;
+
+    pInfo->immedInfo.colorWriteMask                         = libInfo.immedInfo.colorWriteMask;
+    pInfo->immedInfo.colorWriteEnable                       = libInfo.immedInfo.colorWriteEnable;
 
     pInfo->immedInfo.msaaCreateInfo.coverageSamples         = libInfo.immedInfo.msaaCreateInfo.coverageSamples;
     pInfo->immedInfo.msaaCreateInfo.exposedSamples          = libInfo.immedInfo.msaaCreateInfo.exposedSamples;
@@ -940,8 +946,8 @@ static void CopyFragmentOutputInterfaceState(
     pInfo->immedInfo.msaaCreateInfo.flags.enable1xMsaaSampleLocations =
         libInfo.immedInfo.msaaCreateInfo.flags.enable1xMsaaSampleLocations;
 
-    pInfo->immedInfo.blendConstParams = libInfo.immedInfo.blendConstParams;
     pInfo->immedInfo.samplePattern    = libInfo.immedInfo.samplePattern;
+    pInfo->immedInfo.minSampleShading = libInfo.immedInfo.minSampleShading;
 
     pInfo->sampleCoverage               = libInfo.sampleCoverage;
     pInfo->flags.customMultiSampleState = libInfo.flags.customMultiSampleState;
@@ -1085,17 +1091,21 @@ static void BuildRasterizationState(
                     const auto* pRsLine =
                         static_cast<const VkPipelineRasterizationLineStateCreateInfoEXT*>(pNext);
 
-                    pInfo->flags.bresenhamEnable =
-                        (pRsLine->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT);
+                    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::LineRasterizationMode) == false)
+                    {
+                        pInfo->flags.bresenhamEnable =
+                            (pRsLine->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT);
 
-                    // Bresenham Lines need axis aligned end caps
-                    if (pInfo->flags.bresenhamEnable)
-                    {
-                        pInfo->pipeline.rsState.perpLineEndCapsEnable = false;
-                    }
-                    else if (pRsLine->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT)
-                    {
-                        pInfo->pipeline.rsState.perpLineEndCapsEnable = true;
+                        // Bresenham Lines need axis aligned end caps
+                        if (pInfo->flags.bresenhamEnable)
+                        {
+                            pInfo->pipeline.rsState.perpLineEndCapsEnable = false;
+                        }
+                        else if (pRsLine->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT)
+                        {
+                            pInfo->pipeline.rsState.perpLineEndCapsEnable = true;
+                        }
+                        pInfo->flags.perpLineEndCapsEnable = pInfo->pipeline.rsState.perpLineEndCapsEnable;
                     }
 
                     pInfo->immedInfo.msaaCreateInfo.flags.enableLineStipple                 = pRsLine->stippledLineEnable;
@@ -1103,9 +1113,10 @@ static void BuildRasterizationState(
                     pInfo->immedInfo.lineStippleParams.lineStippleScale = (pRsLine->lineStippleFactor - 1);
                     pInfo->immedInfo.lineStippleParams.lineStippleValue = pRsLine->lineStipplePattern;
 
+                    bool isDynamicLineStippleEnabled =
+                        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::LineStippleEnable);
                     if ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::LineStipple) == false) &&
-                        (pRsLine->stippledLineEnable ||
-                        (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::LineStippleEnable) == false)))
+                        (pRsLine->stippledLineEnable || isDynamicLineStippleEnabled))
                     {
                         pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::LineStipple);
                     }
@@ -1115,9 +1126,11 @@ static void BuildRasterizationState(
                 {
                     const auto* pRsDepthClip =
                         static_cast<const VkPipelineRasterizationDepthClipStateCreateInfoEXT*>(pNext);
-
-                    pInfo->pipeline.viewportInfo.depthClipNearEnable = (pRsDepthClip->depthClipEnable == VK_TRUE);
-                    pInfo->pipeline.viewportInfo.depthClipFarEnable  = (pRsDepthClip->depthClipEnable == VK_TRUE);
+                    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthClipEnable) == false)
+                    {
+                        pInfo->pipeline.viewportInfo.depthClipNearEnable = (pRsDepthClip->depthClipEnable == VK_TRUE);
+                        pInfo->pipeline.viewportInfo.depthClipFarEnable = (pRsDepthClip->depthClipEnable == VK_TRUE);
+                    }
                 }
                 break;
             case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT:
@@ -1125,14 +1138,7 @@ static void BuildRasterizationState(
                     const auto* pRsProvokingVertex =
                         static_cast<const VkPipelineRasterizationProvokingVertexStateCreateInfoEXT*>(pNext);
                     pInfo->immedInfo.triangleRasterState.provokingVertex =
-                        static_cast<Pal::ProvokingVertex>(pRsProvokingVertex->provokingVertexMode);
-
-                    static_assert(static_cast<Pal::ProvokingVertex>(VK_PROVOKING_VERTEX_MODE_FIRST_VERTEX_EXT) ==
-                                  Pal::ProvokingVertex::First,
-                                  "VK and PAL enums don't match");
-                    static_assert(static_cast<Pal::ProvokingVertex>(VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT) ==
-                                  Pal::ProvokingVertex::Last,
-                                  "VK and PAL enums don't match");
+                        VkToPalProvokingVertex(pRsProvokingVertex->provokingVertexMode);
                 }
                 break;
             default:
@@ -1185,6 +1191,21 @@ static void BuildRasterizationState(
             break;
         }
     }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::LineRasterizationMode) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::LineRasterizationMode);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthClipEnable) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthClipEnable);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthClampEnable) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthClampEnable);
+    }
 }
 
 // =====================================================================================================================
@@ -1204,10 +1225,17 @@ static void BuildViewportState(
 
         // Default Vulkan depth range is [0, 1]
         // Check if VK_EXT_depth_clip_control overrides depth to [-1, 1]
-        pInfo->pipeline.viewportInfo.depthRange =
-            ((pPipelineViewportDepthClipControlCreateInfoEXT != nullptr) &&
-            (pPipelineViewportDepthClipControlCreateInfoEXT->negativeOneToOne == VK_TRUE)) ?
-            Pal::DepthRange::NegativeOneToOne : Pal::DepthRange::ZeroToOne;
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthClipNegativeOneToOne) == false)
+        {
+            pInfo->pipeline.viewportInfo.depthRange =
+                ((pPipelineViewportDepthClipControlCreateInfoEXT != nullptr) &&
+                    (pPipelineViewportDepthClipControlCreateInfoEXT->negativeOneToOne == VK_TRUE)) ?
+                Pal::DepthRange::NegativeOneToOne : Pal::DepthRange::ZeroToOne;
+        }
+        else
+        {
+            pInfo->pipeline.viewportInfo.depthRange = Pal::DepthRange::ZeroToOne;
+        }
 
         pInfo->immedInfo.viewportParams.depthRange = pInfo->pipeline.viewportInfo.depthRange;
 
@@ -1248,6 +1276,11 @@ static void BuildViewportState(
             }
             pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::Scissor);
         }
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthClipNegativeOneToOne) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthClipNegativeOneToOne);
     }
 }
 
@@ -1355,7 +1388,8 @@ static void BuildMultisampleState(
         pInfo->sampleCoverage              = subpassCoverageSampleCount;
 
         pInfo->pipeline.cbState.target[0].forceAlphaToOne = (pMs->alphaToOneEnable == VK_TRUE);
-        pInfo->pipeline.cbState.alphaToCoverageEnable     = (pMs->alphaToCoverageEnable == VK_TRUE);
+        pInfo->pipeline.cbState.alphaToCoverageEnable = (pMs->alphaToCoverageEnable == VK_TRUE) ||
+            (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::AlphaToCoverageEnable) == true);
 
         if (pInfo->flags.customSampleLocations)
         {
@@ -1400,6 +1434,11 @@ static void BuildMultisampleState(
             pInfo->staticStateMask |=
                 1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocations);
         }
+    }
+    else
+    {
+        pInfo->pipeline.cbState.alphaToCoverageEnable =
+            (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::AlphaToCoverageEnable) == true);
     }
 
     if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::SampleLocationsEnable) == false)
@@ -1515,15 +1554,37 @@ static void BuildColorBlendState(
     bool blendingEnabled = false;
     bool dualSourceBlend = false;
 
+    pInfo->pipeline.cbState.logicOp = Pal::LogicOp::Copy;
+    pInfo->immedInfo.logicOp = VK_LOGIC_OP_MAX_ENUM;
+    pInfo->immedInfo.logicOpEnable = false;
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::LogicOp) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::LogicOp);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::LogicOpEnable) == false)
+    {
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::LogicOp) == false)
+        {
+            pInfo->pipeline.cbState.logicOp =
+                ((pCb != nullptr) && pCb->logicOpEnable) ? VkToPalLogicOp(pCb->logicOp) : Pal::LogicOp::Copy;
+        }
+
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::LogicOpEnable);
+    }
+
     if (pCb != nullptr)
     {
-        pInfo->pipeline.cbState.logicOp = (pCb->logicOpEnable) ?
-                                           VkToPalLogicOp(pCb->logicOp) :
-                                           Pal::LogicOp::Copy;
+        pInfo->immedInfo.logicOp = pCb->logicOp;
+        pInfo->immedInfo.logicOpEnable = pCb->logicOpEnable;
+    }
 
-        const uint32_t numColorTargets = Min(pCb->attachmentCount, Pal::MaxColorTargets);
-
-        const VkPipelineColorWriteCreateInfoEXT* pColorWriteCreateInfo = nullptr;
+    uint32_t numColorTargets = 0;
+    const VkPipelineColorWriteCreateInfoEXT* pColorWriteCreateInfo = nullptr;
+    if (pCb != nullptr)
+    {
+        numColorTargets = Min(pCb->attachmentCount, Pal::MaxColorTargets);
 
         const void* pNext = static_cast<const VkStructHeader*>(pCb->pNext);
 
@@ -1550,11 +1611,20 @@ static void BuildColorBlendState(
 
             pNext = pHeader->pNext;
         }
+    }
 
+    if (pRendering != nullptr)
+    {
+        numColorTargets = Min(pRendering->colorAttachmentCount, Pal::MaxColorTargets);
+    }
+
+    pInfo->immedInfo.colorWriteEnable = 0;
+    pInfo->immedInfo.colorWriteMask = 0;
+
+    if (numColorTargets > 0)
+    {
         for (uint32_t i = 0; i < numColorTargets; ++i)
         {
-            const VkPipelineColorBlendAttachmentState& src = pCb->pAttachments[i];
-
             auto pCbDst     = &pInfo->pipeline.cbState.target[i];
 
             if (pRenderPass != nullptr)
@@ -1572,32 +1642,46 @@ static void BuildColorBlendState(
             // disable shader writes through that target.
             if (pCbDst->swizzledFormat.format != Pal::ChNumFormat::Undefined)
             {
-                if ((pColorWriteCreateInfo != nullptr) && (pColorWriteCreateInfo->pColorWriteEnables != nullptr) &&
-                    (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorWriteEnable) == false))
+                const VkPipelineColorBlendAttachmentState* pSrc = (pCb != nullptr) ? &pCb->pAttachments[i] : nullptr;
+                VkColorComponentFlags colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+                                                       VK_COLOR_COMPONENT_G_BIT |
+                                                       VK_COLOR_COMPONENT_B_BIT |
+                                                       VK_COLOR_COMPONENT_A_BIT;
+                if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorWriteMask) == false)
                 {
-                    if (pColorWriteCreateInfo->pColorWriteEnables[i])
+                    if (pSrc != nullptr)
                     {
-                        pCbDst->channelWriteMask = src.colorWriteMask;
+                        colorWriteMask = pSrc->colorWriteMask;
                     }
-                    else
-                    {
-                        pCbDst->channelWriteMask = 0;
-                    }
+                }
+
+                if ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorWriteEnable) == false) &&
+                    (pColorWriteCreateInfo != nullptr) &&
+                    (pColorWriteCreateInfo->pColorWriteEnables != nullptr) &&
+                    (pColorWriteCreateInfo->pColorWriteEnables[i] == false))
+                {
+                    pCbDst->channelWriteMask = 0;
                 }
                 else
                 {
-                    pCbDst->channelWriteMask = src.colorWriteMask;
+                    pCbDst->channelWriteMask           = colorWriteMask;
+                    pInfo->immedInfo.colorWriteMask   |= colorWriteMask << (4 * i);
+                    pInfo->immedInfo.colorWriteEnable |= (0xF << (4 * i));
                 }
 
                 if ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable) == false))
                 {
-                    blendingEnabled |= (src.blendEnable == VK_TRUE);
+                    if (pSrc != nullptr)
+                    {
+                        blendingEnabled |= (pSrc->blendEnable == VK_TRUE);
+                    }
                 }
             }
         }
 
-        if ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable) == false) ||
-            (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation) == false))
+        if ((pCb != nullptr) &&
+            ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable) == false) ||
+             (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation) == false)))
         {
             BuildPalColorBlendStateCreateInfo(pCb, dynamicStateFlags, &pInfo->immedInfo.blendCreateInfo);
             dualSourceBlend =
@@ -1771,6 +1855,11 @@ static void BuildPreRasterizationShaderState(
     {
         pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::LineStippleEnable);
     }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::TessellationDomainOrigin) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::TessellationDomainOrigin);
+    }
 }
 
 // =====================================================================================================================
@@ -1846,6 +1935,11 @@ static void BuildFragmentOutputInterfaceState(
         pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnable);
     }
 
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorWriteMask) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteMask);
+    }
+
     if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable) == false)
     {
         pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::ColorBlendEnable);
@@ -1864,6 +1958,11 @@ static void BuildFragmentOutputInterfaceState(
     if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::SampleMask) == false)
     {
         pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleMask);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::AlphaToCoverageEnable) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::AlphaToCoverageEnable);
     }
 }
 
