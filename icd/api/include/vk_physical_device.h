@@ -789,8 +789,7 @@ protected:
     PhysicalDevice(PhysicalDeviceManager* pPhysicalDeviceManager,
                    Pal::IDevice*          pPalDevice,
                    VulkanSettingsLoader*  pSettingsLoader,
-                   AppProfile             appProfile
-                   );
+                   AppProfile             appProfile);
 
     VkResult Initialize();
     void PopulateLimits();

@@ -715,10 +715,21 @@ VkResult PhysicalDevice::Initialize()
 
     Pal::GpuMemoryHeapProperties heapProperties[Pal::GpuHeapCount] = {};
 
-    // Collect memory properties
+    // Obtain the heap properties and apply any overrides
     if (result == Pal::Result::Success)
     {
         result = m_pPalDevice->GetGpuMemoryHeapProperties(heapProperties);
+
+        // Check the logical size to see if HBCC is enabled, and expose a larger heap size.
+        heapProperties[Pal::GpuHeapInvisible].physicalSize =
+            Util::Max(heapProperties[Pal::GpuHeapInvisible].physicalSize,
+                      heapProperties[Pal::GpuHeapInvisible].logicalSize);
+
+        if (settings.forceUMA)
+        {
+            heapProperties[Pal::GpuHeapInvisible].physicalSize = 0;
+            heapProperties[Pal::GpuHeapLocal].physicalSize     = 0;
+        }
 
         if (settings.overrideLocalHeapSizeInGBs > 0)
         {
@@ -747,6 +758,7 @@ VkResult PhysicalDevice::Initialize()
         }
     }
 
+    // Collect memory properties
     if (result == Pal::Result::Success)
     {
         for (uint32_t heapIdx = 0; heapIdx < Pal::GpuHeapCount; heapIdx++)
@@ -784,12 +796,6 @@ VkResult PhysicalDevice::Initialize()
             Pal::GpuHeapLocal,
             Pal::GpuHeapGartCacheable
         };
-
-        if (settings.forceUMA)
-        {
-            heapProperties[Pal::GpuHeapInvisible].physicalSize = 0;
-            heapProperties[Pal::GpuHeapLocal].physicalSize     = 0;
-        }
 
         const Pal::gpusize invisHeapSize = heapProperties[Pal::GpuHeapInvisible].physicalSize;
 
@@ -4040,6 +4046,10 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ATTACHMENT_FEEDBACK_LOOP_LAYOUT));
 
+#if defined(__unix__)
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PHYSICAL_DEVICE_DRM));
+#endif
+
     return availableExtensions;
 }
 
@@ -6734,6 +6744,8 @@ void PhysicalDevice::GetDeviceProperties2(
 
     void* pNext = pProperties->pNext;
 
+    const Pal::DeviceProperties& palProps = PalProperties();
+
     while (pNext != nullptr)
     {
         auto* pHeader = static_cast<VkStructHeaderNonConst*>(pNext);
@@ -6781,7 +6793,7 @@ void PhysicalDevice::GetDeviceProperties2(
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GPA_PROPERTIES2_AMD:
         {
             auto* pGpaProperties = static_cast<VkPhysicalDeviceGpaProperties2AMD*>(pNext);
-            pGpaProperties->revisionId = PalProperties().revisionId;
+            pGpaProperties->revisionId = palProps.revisionId;
             break;
         }
 
@@ -6842,9 +6854,6 @@ void PhysicalDevice::GetDeviceProperties2(
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT:
         {
             auto* pProps = static_cast<VkPhysicalDeviceExternalMemoryHostPropertiesEXT*>(pNext);
-
-            const Pal::DeviceProperties& palProps = PalProperties();
-
             pProps->minImportedHostPointerAlignment = palProps.gpuMemoryProperties.realMemAllocGranularity;
 
             break;
@@ -6853,8 +6862,6 @@ void PhysicalDevice::GetDeviceProperties2(
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD:
         {
             auto* pProps = static_cast<VkPhysicalDeviceShaderCorePropertiesAMD*>(pNext);
-
-            const Pal::DeviceProperties& palProps = PalProperties();
 
             pProps->shaderEngineCount          = palProps.gfxipProperties.shaderCore.numShaderEngines;
             pProps->shaderArraysPerEngineCount = palProps.gfxipProperties.shaderCore.numShaderArrays;
@@ -6881,9 +6888,6 @@ void PhysicalDevice::GetDeviceProperties2(
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD:
         {
             auto* pProps = static_cast<VkPhysicalDeviceShaderCoreProperties2AMD*>(pNext);
-
-            const Pal::DeviceProperties& palProps = PalProperties();
-
             pProps->shaderCoreFeatures = 0;
 
             pProps->activeComputeUnitCount = 0;
@@ -6950,7 +6954,6 @@ void PhysicalDevice::GetDeviceProperties2(
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT:
         {
             auto* pProps = static_cast<VkPhysicalDevicePCIBusInfoPropertiesEXT*>(pNext);
-            const Pal::DeviceProperties& palProps = PalProperties();
 
             pProps->pciDomain   = palProps.pciProperties.domainNumber;
             pProps->pciBus      = palProps.pciProperties.busNumber;
@@ -7224,7 +7227,7 @@ void PhysicalDevice::GetDeviceProperties2(
         {
             auto* pProps = static_cast<VkPhysicalDeviceFragmentShadingRatePropertiesKHR*>(pNext);
 
-            VkExtent2D vrsTileSize = PalToVkExtent2d(PalProperties().imageProperties.vrsTileSize);
+            VkExtent2D vrsTileSize = PalToVkExtent2d(palProps.imageProperties.vrsTileSize);
 
             // We just have one tile size for attachments
             pProps->minFragmentShadingRateAttachmentTexelSize = vrsTileSize;
@@ -7232,10 +7235,10 @@ void PhysicalDevice::GetDeviceProperties2(
 
             uint32_t maxVrsShadingRate = 0;
 
-            // BSR op normally returns success unless PalProperties().gfxipProperties.supportedVrsRates equals 0,
+            // BSR op normally returns success unless palProps.gfxipProperties.supportedVrsRates equals 0.
             // Unfortunately, if HW doesn't support VRS, we do get supportedVrsRates to be 0 which fails.
             bool foundSupportedVrsRates = Util::BitMaskScanReverse(&maxVrsShadingRate,
-                PalProperties().gfxipProperties.supportedVrsRates);
+                palProps.gfxipProperties.supportedVrsRates);
 
             // Per Spec says maxVrsShadingRate's width and height must both be power-of-two values.
             // This limit is purely informational, and is not validated. Thus, for VRS unsupported conditions,
@@ -7251,11 +7254,11 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->maxFragmentSizeAspectRatio                           = Util::Max(pProps->maxFragmentSize.width,
                                                                                      pProps->maxFragmentSize.height);
             pProps->fragmentShadingRateWithShaderDepthStencilWrites      =
-                PalProperties().gfxipProperties.flags.supportVrsWithDsExports;
+                palProps.gfxipProperties.flags.supportVrsWithDsExports;
             pProps->fragmentShadingRateWithSampleMask                    = VK_TRUE;
 
             pProps->fragmentShadingRateWithShaderSampleMask =
-                PalProperties().gfxipProperties.flags.supportVrsWithDsExports;
+                palProps.gfxipProperties.flags.supportVrsWithDsExports;
 
             pProps->fragmentShadingRateWithConservativeRasterization     = VK_TRUE;
             pProps->fragmentShadingRateWithFragmentShaderInterlock       = VK_FALSE;
@@ -7366,8 +7369,6 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->samplerCaptureReplayDescriptorDataSize               = sizeof(uint32_t);
             pProps->accelerationStructureCaptureReplayDescriptorDataSize = sizeof(uint32_t);
 
-            const Pal::DeviceProperties& palProps = PalProperties();
-
             VK_ASSERT(palProps.gfxipProperties.srdSizes.sampler    <= 32);
             VK_ASSERT(palProps.gfxipProperties.srdSizes.imageView  <= 64);
             VK_ASSERT(palProps.gfxipProperties.srdSizes.bufferView <= 64);
@@ -7446,7 +7447,6 @@ void PhysicalDevice::GetDeviceProperties2(
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT:
         {
             auto* pProps = static_cast<VkPhysicalDeviceMeshShaderPropertiesEXT*>(pNext);
-            const Pal::DeviceProperties& palProps = PalProperties();
 
             pProps->maxTaskWorkGroupTotalCount            = m_limits.maxComputeWorkGroupCount[0] *
                                                             m_limits.maxComputeWorkGroupInvocations;
@@ -7482,7 +7482,7 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->maxMeshOutputPrimitives               = 256;
 
  #if VKI_BUILD_GFX11
-            if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
+            if (palProps.gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
             {
                 pProps->maxMeshOutputLayers               = m_limits.maxFramebufferLayers;
             }
@@ -7517,6 +7517,21 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->dynamicPrimitiveTopologyUnrestricted = GetRuntimeSettings().dynamicPrimitiveTopologyUnrestricted;
             break;
         }
+
+#if defined(__unix__)
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceDrmPropertiesEXT*>(pNext);
+
+            pProps->hasPrimary   = palProps.osProperties.flags.hasPrimaryDrmNode;
+            pProps->primaryMajor = palProps.osProperties.primaryDrmNodeMajor;
+            pProps->primaryMinor = palProps.osProperties.primaryDrmNodeMinor;
+            pProps->hasRender    = palProps.osProperties.flags.hasRenderDrmNode;
+            pProps->renderMajor  = palProps.osProperties.renderDrmNodeMajor;
+            pProps->renderMinor  = palProps.osProperties.renderDrmNodeMinor;
+            break;
+        }
+#endif
         default:
             break;
         }

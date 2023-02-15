@@ -8708,9 +8708,12 @@ void CmdBuffer::RPLoadOpClearColor(
 
         const Framebuffer::Attachment& attachment = m_allGpuState.pFramebuffer->GetAttachment(clear.attachment);
 
+        const VkClearColorValue zeroClear = { 0.0f, 0.0f, 0.0f, 1.0f };
+
         // Convert the clear color to the format of the attachment view
         Pal::ClearColor clearColor = VkToPalClearColor(
-            &m_renderPassInstance.pAttachments[clear.attachment].clearValue.color,
+            (clear.isOptional == false) ?
+                &m_renderPassInstance.pAttachments[clear.attachment].clearValue.color : &zeroClear,
             attachment.viewFormat);
 
         Pal::BoundColorTarget target = {};
@@ -8761,7 +8764,11 @@ void CmdBuffer::RPLoadOpClearColor(
 
             if (m_flags.subpassLoadOpClearsBoundAttachments == false)
             {
-                 PalCmdBuffer(deviceIdx)->CmdClearColorImage(
+                // Multi-RT clears are synchronized later in RPBeginSubpass()
+                const uint32 flags = ((count == 1) ? Pal::ColorClearAutoSync : 0) |
+                                     (clear.isOptional ? Pal::ColorClearSkipIfSlow : 0);
+
+                PalCmdBuffer(deviceIdx)->CmdClearColorImage(
                     *attachment.pImage->PalImage(deviceIdx),
                     clearLayout,
                     clearColor,
@@ -8770,10 +8777,9 @@ void CmdBuffer::RPLoadOpClearColor(
                     clearSubresRanges.Data(),
                     1,
                     &clearBox,
-                    // Multi-RT clears are synchronized later in RPBeginSubpass()
-                    count == 1 ? Pal::ColorClearAutoSync : static_cast<Pal::ClearColorImageFlags>(0));
+                    flags);
             }
-            else
+            else if (clear.isOptional == false) // Don't attempt optional bound clears yet
             {
                 const RenderPass* pRenderPass = m_allGpuState.pRenderPass;
                 const uint32_t    subpass     = m_renderPassInstance.subpass;

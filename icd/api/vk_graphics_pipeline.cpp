@@ -146,7 +146,8 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                 {
                     result = pDefaultCompiler->WriteBinaryMetadata(
                         pDevice,
-                        pBinaryCreateInfo,
+                        pBinaryCreateInfo->compilerType,
+                        &pBinaryCreateInfo->freeCompilerBinary,
                         &ppPipelineBinaries[deviceIdx],
                         &pPipelineBinarySizes[deviceIdx],
                         pBinaryCreateInfo->pBinaryMetadata);
@@ -616,6 +617,9 @@ VkResult GraphicsPipeline::Create(
             (binaryMetadata.enableEarlyCompile ||
              binaryMetadata.enableUberFetchShader);
 
+#if VKI_RAY_TRACING
+        objectCreateInfo.flags.hasRayTracing = binaryMetadata.rayQueryUsed;
+#endif
         objectCreateInfo.flags.isPointSizeUsed = binaryMetadata.pointSizeUsed;
         objectCreateInfo.flags.viewIndexFromDeviceIndex = Util::TestAnyFlagSet(pCreateInfo->flags,
             VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT);
@@ -655,7 +659,10 @@ VkResult GraphicsPipeline::Create(
         if (pPipelineBinaries[deviceIdx] != nullptr)
         {
             pDevice->GetCompiler(deviceIdx)->FreeGraphicsPipelineBinary(
-                &binaryCreateInfo, pPipelineBinaries[deviceIdx], pipelineBinarySizes[deviceIdx]);
+                binaryCreateInfo.compilerType,
+                binaryCreateInfo.freeCompilerBinary,
+                pPipelineBinaries[deviceIdx],
+                pipelineBinarySizes[deviceIdx]);
         }
     }
 
@@ -1022,7 +1029,10 @@ VkResult GraphicsPipeline::DeferCreateOptimizedPipeline(
         if (pPipelineBinaries[deviceIdx] != nullptr)
         {
             pDevice->GetCompiler(deviceIdx)->FreeGraphicsPipelineBinary(
-                pBinaryCreateInfo, pPipelineBinaries[deviceIdx], pipelineBinarySizes[deviceIdx]);
+                pBinaryCreateInfo->compilerType,
+                pBinaryCreateInfo->freeCompilerBinary,
+                pPipelineBinaries[deviceIdx],
+                pipelineBinarySizes[deviceIdx]);
         }
     }
     return result;

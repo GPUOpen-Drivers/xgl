@@ -83,6 +83,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(
 
         VirtualStackFrame virtStackFrame(pCmdBuffer->GetStackAllocator());
 
+        if ((dstStageMask == VK_PIPELINE_STAGE_HOST_BIT) && ((filterOptions & FlushOnHostMask) != 0))
+        {
+            dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        }
+
         if (memoryCount > 0)
         {
             pMemory = virtStackFrame.AllocArray<VkMemoryBarrier>(memoryCount);
@@ -210,7 +215,8 @@ void BarrierFilterLayer::OverrideDispatchTable(
 
     if (settings.barrierFilterOptions & (SkipStrayExecutionDependencies |
                                          SkipImageLayoutUndefined       |
-                                         SkipDuplicateResourceBarriers))
+                                         SkipDuplicateResourceBarriers  |
+                                         FlushOnHostMask))
     {
         BARRIER_FILTER_LAYER_OVERRIDE_ENTRY(vkCmdPipelineBarrier);
     }

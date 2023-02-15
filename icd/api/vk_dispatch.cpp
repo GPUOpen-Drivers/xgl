@@ -800,6 +800,9 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdSetLineStippleEnableEXT                    );
     INIT_DISPATCH_ENTRY(vkCmdSetDepthClipNegativeOneToOneEXT            );
     INIT_DISPATCH_ENTRY(vkCmdSetVertexInputEXT);
+
+    INIT_DISPATCH_ENTRY(vkGetShaderModuleIdentifierEXT                  );
+    INIT_DISPATCH_ENTRY(vkGetShaderModuleCreateInfoIdentifierEXT        );
 }
 
 // =====================================================================================================================

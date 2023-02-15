@@ -219,6 +219,7 @@ public:
         const VkComputePipelineCreateInfo*              pIn,
         const ComputePipelineShaderStageInfo*           pShaderInfo,
         const PipelineOptimizerKey*                     pPipelineProfileKey,
+        PipelineMetadata*                               pBinaryMetadata,
         ComputePipelineBinaryCreateInfo*                pInfo);
 
     void FreeComputePipelineBinary(
@@ -227,7 +228,8 @@ public:
         size_t                           binarySize);
 
     void FreeGraphicsPipelineBinary(
-        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        const PipelineCompilerType        compilerType,
+        const FreeCompilerBinary          freeCompilerBinary,
         const void*                       pPipelineBinary,
         size_t                            binarySize);
 
@@ -394,7 +396,8 @@ public:
 
     static VkResult WriteBinaryMetadata(
         const Device*                     pDevice,
-        GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
+        PipelineCompilerType              compilerType,
+        FreeCompilerBinary*               pFreeCompilerBinary,
         const void**                      ppElfBinary,
         size_t*                           pBinarySize,
         PipelineMetadata*                 pMetadata);

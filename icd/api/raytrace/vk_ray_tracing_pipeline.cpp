@@ -309,8 +309,8 @@ RayTracingPipeline::RayTracingPipeline(
     m_ppShaderLibraries(nullptr),
     m_createInfo(pDevice),
     m_hasTraceRay(false),
-    m_captureReplayVaMappingBufferInfo{},
-    m_elfHash{}
+    m_elfHash{},
+    m_captureReplayVaMappingBufferInfo{}
 {
     memset(m_pShaderGroupHandles, 0, sizeof(Vkgc::RayTracingShaderIdentifier*) * MaxPalDevices);
     memset(m_pShaderGroupStackSizes, 0, sizeof(ShaderGroupStackSizes*) * MaxPalDevices);

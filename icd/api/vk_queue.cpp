@@ -331,10 +331,9 @@ void Queue::ConstructQueueCreateInfo(
     const bool                     useComputeAsTransferQueue,
     const bool                     isTmzQueue)
 {
-    const auto& palProperties = physicalDevice.PalProperties();
-    const Pal::QueuePriority palQueuePriority =
-        VkToPalGlobalPriority(queuePriority,
-                              palProperties.engineProperties[queueFamilyIndex].capabilities[queueIndex]);
+    const auto&        palProperties    = physicalDevice.PalProperties();
+    Pal::QueuePriority palQueuePriority = VkToPalGlobalPriority(queuePriority,
+                                          palProperties.engineProperties[queueFamilyIndex].capabilities[queueIndex]);
 
     // Some configs can use this feature with any priority, but it's not useful for
     // lower priorities.
@@ -395,7 +394,17 @@ void Queue::ConstructQueueCreateInfo(
         }
         else
         {
-            pQueueCreateInfo->engineIndex = physicalDevice.GetCompQueueEngineIndex(queueIndex);
+            if (useComputeAsTransferQueue)
+            {
+                palQueuePriority =
+                    VkToPalGlobalPriority(queuePriority,
+                        palProperties.engineProperties[Pal::EngineType::EngineTypeCompute].capabilities[0]);
+                pQueueCreateInfo->engineIndex = physicalDevice.GetCompQueueEngineIndex(0);
+            }
+            else
+            {
+                pQueueCreateInfo->engineIndex = physicalDevice.GetCompQueueEngineIndex(queueIndex);
+            }
         }
     }
     else

@@ -161,6 +161,7 @@ VkResult ComputePipeline::Create(
     ShaderOptimizerKey              shaderOptimizerKey                 = {};
     ShaderModuleHandle              tempModule                         = {};
     VkResult                        result                             = VK_SUCCESS;
+    PipelineMetadata                binaryMetadata                     = {};
 
     ComputePipelineShaderStageInfo shaderInfo = {};
     result = BuildShaderStageInfo(pDevice,
@@ -172,9 +173,9 @@ VkResult ComputePipeline::Create(
             return 0u;
         },
         &shaderInfo.stage,
-            &tempModule,
-            pPipelineCache,
-            &binaryCreateInfo.stageFeedback);
+        &tempModule,
+        pPipelineCache,
+        &binaryCreateInfo.stageFeedback);
 
     Util::MetroHash::Hash elfHash    = {};
     uint64_t              apiPsoHash = {};
@@ -239,7 +240,12 @@ VkResult ComputePipeline::Create(
                 if (binaryCreateInfo.pTempBuffer == nullptr)
                 {
                     result = pDefaultCompiler->ConvertComputePipelineInfo(
-                        pDevice, pCreateInfo, &shaderInfo, &pipelineOptimizerKey, &binaryCreateInfo);
+                        pDevice,
+                        pCreateInfo,
+                        &shaderInfo,
+                        &pipelineOptimizerKey,
+                        &binaryMetadata,
+                        &binaryCreateInfo);
                 }
 
                 if (result == VK_SUCCESS)
@@ -253,6 +259,25 @@ VkResult ComputePipeline::Create(
                         &pPipelineBinaries[deviceIdx],
                         &cacheId[deviceIdx]);
                 }
+
+                if (result == VK_SUCCESS)
+                {
+                    result = pDefaultCompiler->WriteBinaryMetadata(
+                        pDevice,
+                        binaryCreateInfo.compilerType,
+                        &binaryCreateInfo.freeCompilerBinary,
+                        &pPipelineBinaries[deviceIdx],
+                        &pipelineBinarySizes[deviceIdx],
+                        binaryCreateInfo.pBinaryMetadata);
+                }
+            }
+            else if (deviceIdx == DefaultDeviceIndex)
+            {
+                pDefaultCompiler->ReadBinaryMetadata(
+                    pDevice,
+                    pPipelineBinaries[DefaultDeviceIndex],
+                    pipelineBinarySizes[DefaultDeviceIndex],
+                    &binaryMetadata);
             }
         }
 
@@ -387,7 +412,12 @@ VkResult ComputePipeline::Create(
     if (result == VK_SUCCESS)
     {
 #if VKI_RAY_TRACING
-        bool     hasRayTracing              = pModuleData->usage.enableRayQuery;
+        // If pModuleData is null this means the pipeline is being created with a null shader and
+        // using the shader module identifier.
+        bool hasRayTracing = (pModuleData != nullptr) ?
+            pModuleData->usage.enableRayQuery :
+            binaryMetadata.rayQueryUsed;
+
         uint32_t dispatchRaysUserDataOffset = localPipelineInfo.pLayout->GetDispatchRaysUserData();
 #endif
 

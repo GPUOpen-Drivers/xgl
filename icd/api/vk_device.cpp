@@ -1711,6 +1711,7 @@ VkResult Device::CreateInternalComputePipeline(
     size_t               pipelineBinarySize   = 0;
     ShaderOptimizerKey   shaderOptimzierKey   = {};
     PipelineOptimizerKey pipelineOptimizerKey = {};
+    PipelineMetadata     binaryMetadata       = {};
 
     void*                pPipelineMem        = nullptr;
 
@@ -1722,6 +1723,7 @@ VkResult Device::CreateInternalComputePipeline(
     pipelineOptimizerKey.shaderCount      = 1;
     pipelineOptimizerKey.pShaders         = &shaderOptimzierKey;
     pipelineBuildInfo.pPipelineProfileKey = &pipelineOptimizerKey;
+    pipelineBuildInfo.pBinaryMetadata     = &binaryMetadata;
 
     // Build shader module
     result = pCompiler->BuildShaderModule(
@@ -1758,7 +1760,9 @@ VkResult Device::CreateInternalComputePipeline(
         }
 
         Pal::ShaderHash codeHash = ShaderModule::GetCodeHash(
-            ShaderModule::BuildCodeHash(pCode, codeByteSize),
+            ShaderModule::BuildCodeHash(
+                pCode,
+                codeByteSize),
             pShaderInfo->pEntryTarget);
 
         GetShaderOptimizer()->CreateShaderOptimizerKey(

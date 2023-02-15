@@ -108,20 +108,22 @@ enum class AppProfile : uint32_t
     SaschaWillemsExamples, // Vulkan Examples by Sascha Willems
     Hyperscape,            // Hyperscape by Ubisoft
     SeriousSam4,           // Serious Sam 4 by Croteam
-    SniperElite5,           // Sniper Elite 5 by Rebellion
+    SniperElite5,          // Sniper Elite 5 by Rebellion
 #if VKI_RAY_TRACING
-    ControlDX12,                 // VKD3D Control Ultimate Edition
+    ControlDX12,           // VKD3D Control Ultimate Edition
 #endif
-    Maxon,                       // Maxon
-    AngleEngine,                 // Angle Engine
-    CSGO,                        // Counter-Strike: Global Offensive
-    DxvkGodOfWar,                // DXVK God of War
-    X4Foundations,               // X4: Foundations by Egosoft
-    MetalGearSolid5,             // Metal Gear Solid5 : The Phantom Pain
-    YamagiQuakeII,               // Yamagi Quake II
-    Battlefield1,                // Battlefield 1
-    GpuCapsViewer32Bit,          // GPU Caps Viewer demos by GeeXLab
-    DDraceNetwork,               // DDrace Network
+    Maxon,                 // Maxon
+    AngleEngine,           // Angle Engine
+    CSGO,                  // Counter-Strike: Global Offensive
+    DxvkGodOfWar,          // DXVK God of War
+    X4Foundations,         // X4: Foundations by Egosoft
+    MetalGearSolid5,       // Metal Gear Solid5 : The Phantom Pain
+    YamagiQuakeII,         // Yamagi Quake II
+    Battlefield1,          // Battlefield 1
+    GpuCapsViewer32Bit,    // GPU Caps Viewer demos by GeeXLab
+    DDraceNetwork,         // DDrace Network
+    SaintsRowV,            // Saints Row V by Volition
+    VolitionEngine,        // Volition Engine
 };
 
 struct ProfileSettings

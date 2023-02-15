@@ -28,7 +28,7 @@ include_guard()
 # This will become the value of PAL_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the PAL interface
 # that the ICD supports.  PAL uses this value to enable backwards-compatibility for older interface versions.
 # It must be updated on each PAL promotion after handling all of the interface changes described in palLib.h.
-set(ICD_PAL_CLIENT_MAJOR_VERSION "780")
+set(ICD_PAL_CLIENT_MAJOR_VERSION "781")
 set(ICD_PAL_CLIENT_MINOR_VERSION "0")
 
 # This will become the value of GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION if ICD_GPUOPEN_DEVMODE_BUILD=1.
@@ -43,4 +43,4 @@ set(ICD_GPURT_CLIENT_MAJOR_VERSION "29")
 
 # This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION if ICD_BUILD_LLPC=1.
 # It describes the version of the interface version of LLPC that the ICD supports.
-set(ICD_LLPC_CLIENT_MAJOR_VERSION "57")
+set(ICD_LLPC_CLIENT_MAJOR_VERSION "58")

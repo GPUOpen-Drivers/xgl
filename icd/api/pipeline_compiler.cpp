@@ -1118,11 +1118,10 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
                 {
                     const auto* pModuleData =
                         reinterpret_cast<const Vkgc::ShaderModuleData*>(shaderInfos[stage]->pModuleData);
-                    if (pModuleData->usage.usePointSize)
-                    {
-                        pCreateInfo->pBinaryMetadata->pointSizeUsed = true;
-                        break;
-                    }
+#if VKI_RAY_TRACING
+                    pCreateInfo->pBinaryMetadata->rayQueryUsed  |= pModuleData->usage.enableRayQuery;
+#endif
+                    pCreateInfo->pBinaryMetadata->pointSizeUsed |= pModuleData->usage.usePointSize;
                 }
             }
 
@@ -1285,6 +1284,13 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         }
         else
         {
+#if VKI_RAY_TRACING
+            const auto* pModuleData =
+                reinterpret_cast<const Vkgc::ShaderModuleData*>(pCreateInfo->pipelineInfo.cs.pModuleData);
+
+            pCreateInfo->pBinaryMetadata->rayQueryUsed = pModuleData->usage.enableRayQuery;
+#endif
+
             if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
             {
                 result = m_compilerSolutionLlpc.CreateComputePipelineBinary(
@@ -1854,11 +1860,14 @@ void PipelineCompiler::BuildNggState(
         pCreateInfo->pipelineInfo.nggState.enableGsUse = Util::TestAnyFlagSet(
             settings.enableNgg,
             GraphicsPipelineTypeGs | GraphicsPipelineTypeTessGs);
-        pCreateInfo->pipelineInfo.nggState.forceCullingMode         = settings.nggForceCullingMode;
-        pCreateInfo->pipelineInfo.nggState.compactMode              =
-            static_cast<Vkgc::NggCompactMode>(settings.nggCompactionMode);
+        pCreateInfo->pipelineInfo.nggState.forceCullingMode          = settings.nggForceCullingMode;
 
-        pCreateInfo->pipelineInfo.nggState.enableVertexReuse         = false;
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 60
+        pCreateInfo->pipelineInfo.nggState.compactMode               =
+            settings.nggCompactVertex ? Vkgc::NggCompactVertices : Vkgc::NggCompactDisable;
+#else
+        pCreateInfo->pipelineInfo.nggState.compactVertex             = settings.nggCompactVertex;
+#endif
         pCreateInfo->pipelineInfo.nggState.enableBackfaceCulling     = (isConservativeOverestimation ?
                                                                         false : settings.nggEnableBackfaceCulling);
         pCreateInfo->pipelineInfo.nggState.enableFrustumCulling      = settings.nggEnableFrustumCulling;
@@ -2745,6 +2754,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     const VkComputePipelineCreateInfo*              pIn,
     const ComputePipelineShaderStageInfo*           pShaderInfo,
     const PipelineOptimizerKey*                     pPipelineProfileKey,
+    PipelineMetadata*                               pBinaryMetadata,
     ComputePipelineBinaryCreateInfo*                pCreateInfo)
 {
     VkResult result    = VK_SUCCESS;
@@ -2760,6 +2770,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
         pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
     }
 
+    pCreateInfo->pBinaryMetadata     = pBinaryMetadata;
     pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
     pCreateInfo->flags               = pIn->flags;
 
@@ -2817,8 +2828,12 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     }
 
     pCreateInfo->compilerType                   = CheckCompilerType(&pCreateInfo->pipelineInfo);
-    pCreateInfo->pipelineInfo.cs.pModuleData    = ShaderModule::GetShaderData(pCreateInfo->compilerType,
-                                                                              pShaderInfo->stage.pModuleHandle);
+
+    if (pShaderInfo->stage.pModuleHandle != nullptr)
+    {
+        pCreateInfo->pipelineInfo.cs.pModuleData =
+            ShaderModule::GetShaderData(pCreateInfo->compilerType, pShaderInfo->stage.pModuleHandle);
+    }
 
 #if VKI_RAY_TRACING
     auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
@@ -2827,7 +2842,8 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>
         (pCreateInfo->pipelineInfo.cs.pModuleData);
 
-    if (pModuleData->usage.enableRayQuery)
+    if ((pModuleData != nullptr) &&
+         pModuleData->usage.enableRayQuery)
     {
         SetRayTracingState(pDevice, &(pCreateInfo->pipelineInfo.rtState), 0);
 
@@ -2954,19 +2970,20 @@ void PipelineCompiler::FreeComputePipelineBinary(
 // =====================================================================================================================
 // Free graphics pipeline binary
 void PipelineCompiler::FreeGraphicsPipelineBinary(
-    GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    const PipelineCompilerType        compilerType,
+    const FreeCompilerBinary          freeCompilerBinary,
     const void*                       pPipelineBinary,
     size_t                            binarySize)
 {
-    if (pCreateInfo->freeCompilerBinary == FreeWithCompiler)
+    if (freeCompilerBinary == FreeWithCompiler)
     {
-        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
+        if (compilerType == PipelineCompilerTypeLlpc)
         {
             m_compilerSolutionLlpc.FreeGraphicsPipelineBinary(pPipelineBinary, binarySize);
         }
 
     }
-    else if (pCreateInfo->freeCompilerBinary == FreeWithInstanceAllocator)
+    else if (freeCompilerBinary == FreeWithInstanceAllocator)
     {
         m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
     }
@@ -4246,7 +4263,8 @@ bool PipelineCompiler::IsDefaultPipelineMetadata(
 // Parses a given ELF binary and injects the provided metadata chunk
 VkResult PipelineCompiler::WriteBinaryMetadata(
     const Device*                     pDevice,
-    GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
+    PipelineCompilerType              compilerType,
+    FreeCompilerBinary*               pFreeCompilerBinary,
     const void**                      ppElfBinary,
     size_t*                           pBinarySize,
     PipelineMetadata*                 pMetadata)
@@ -4294,7 +4312,7 @@ VkResult PipelineCompiler::WriteBinaryMetadata(
         if (palResult == Pal::Result::Success)
         {
             pPhysicalDevice->GetCompiler()->FreeGraphicsPipelineBinary(
-                pBinaryCreateInfo, *ppElfBinary, *pBinarySize);
+                compilerType, *pFreeCompilerBinary, *ppElfBinary, *pBinarySize);
 
             *ppElfBinary = nullptr;
             *pBinarySize = abiProcessor.GetRequiredBufferSizeBytes();
@@ -4309,8 +4327,8 @@ VkResult PipelineCompiler::WriteBinaryMetadata(
             else
             {
                 abiProcessor.SaveToBuffer(pNewPipelineBinary);
-                *ppElfBinary                          = pNewPipelineBinary;
-                pBinaryCreateInfo->freeCompilerBinary = FreeWithInstanceAllocator;
+                *ppElfBinary         = pNewPipelineBinary;
+                *pFreeCompilerBinary = FreeWithInstanceAllocator;
             }
         }
 

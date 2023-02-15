@@ -596,6 +596,18 @@ constexpr AppProfilePatternEntry AppNameDDraceNetwork =
     "ddnet"
 };
 
+constexpr AppProfilePatternEntry AppNameSaintsRowV =
+{
+    PatternAppNameLower,
+    "saintsrow5"
+};
+
+constexpr AppProfilePatternEntry AppEngineVolition =
+{
+    PatternEngineNameLower,
+    "volition ctg engine"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -977,6 +989,15 @@ AppProfilePattern AppPatternTable[] =
         {
             AppNameRage2,
             AppEngineApex,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::SaintsRowV,
+        {
+            AppNameSaintsRowV,
+            AppEngineVolition,
             PatternEnd
         }
     },

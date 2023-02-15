@@ -1426,29 +1426,15 @@
       "Scope": "Driver"
     },
     {
-      "ValidValues": {
-        "IsEnum": true,
-        "Values": [
-          {
-            "Name": "NggCompactDisable",
-            "Value": 0
-          },
-          {
-            "Name": "NggCompactVertices",
-            "Value": 1
-          }
-        ],
-        "Name": "NggCompactMode"
-      },
-      "Description": "Compaction mode after culling operations. 0 - Compaction is disabled 1 - Compaction is based on vertices ",
+      "Description": "Enable NGG vertex compaction after culling",
       "Tags": [
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": "NggCompactVertices"
+        "Default": true
       },
-      "Type": "enum",
-      "Name": "NggCompactionMode",
+      "Type": "bool",
+      "Name": "NggCompactVertex",
       "Scope": "Driver"
     },
     {
@@ -4893,6 +4879,11 @@
             "Name": "SkipDuplicateResourceBarriers",
             "Value": 4,
             "Description": "Ignores resource barriers that have the same source and destination parameters in case a full cross-bar sync isn't required."
+          },
+          {
+            "Name": "FlushOnHostMask",
+            "Value": 64,
+            "Description": "The driver cannot know the intention behind a host stage mask in a pipeline barrier, flush GPU work to avoid any dependency issues."
           }
         ],
         "Name": "BarrierFilterOptions"
@@ -6908,6 +6899,30 @@
       },
       "Type": "bool",
       "Scope": "Driver"
+    },
+    {
+      "Description": "Potentially issue load op fast clears for load op don't care color attachments for subpasses with at least this many color attachments.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 4294967295
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "Name": "MinColorAttachmentsForOptionalClears"
+    },
+    {
+      "Description": "Potentially issue load op fast clears for load op don't care color attachments for subpasses with at least this may subpasses.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 4294967295
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "Name": "MinSubpassesForOptionalClears"
     },
     {
       "Description": "Enable GPU decompress pass for astc/etc image, it is on the vkCopyBufferToImage, and not safe depending on application.",

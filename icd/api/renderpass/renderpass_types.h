@@ -85,6 +85,7 @@ struct RPLoadOpClearInfo
 {
     uint32_t           attachment; // Attachment to be cleared
     VkImageAspectFlags aspect;     // Which image aspects are to be cleared
+    bool               isOptional; // If possible, fast clear in case data is not well compressed
 };
 
 // Information about a resolve operation due to a resolve attachment
