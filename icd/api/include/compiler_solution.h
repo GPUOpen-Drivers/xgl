@@ -110,7 +110,9 @@ struct PipelineInternalBufferInfo
 // Represents pipeline metadata included in the pipeline ELF.
 struct PipelineMetadata
 {
-
+#if VKI_RAY_TRACING
+    bool                       rayQueryUsed;
+#endif
     bool                       pointSizeUsed;
     VbBindingInfo              vbInfo;
     bool                       enableEarlyCompile;
@@ -154,6 +156,7 @@ struct ComputePipelineBinaryCreateInfo
     FreeCompilerBinary                     freeCompilerBinary;
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback;
+    PipelineMetadata*                      pBinaryMetadata;
 };
 
 #if VKI_RAY_TRACING

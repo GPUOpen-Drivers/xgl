@@ -86,7 +86,10 @@ Pal::ShaderHash ShaderModule::BuildCodeHash(
     Pal::ShaderHash result = {};
 
     Util::MetroHash::Hash codeHash = {};
-    Util::MetroHash128::Hash(static_cast<const uint8_t*>(pCode), codeSize, codeHash.bytes);
+
+    Util::MetroHash128 hash = {};
+    hash.Update(static_cast<const uint8_t*>(pCode), codeSize);
+    hash.Finalize(codeHash.bytes);
 
     MetroHashTo128Bit(codeHash, &result.lower, &result.upper);
 
@@ -139,7 +142,7 @@ void* ShaderModule::GetShaderData(
 // Gets first valid shader data.
 void* ShaderModule::GetFirstValidShaderData(const ShaderModuleHandle* pHandle)
 {
-    if (pHandle->pLlpcShaderModule)
+    if ((pHandle != nullptr) && pHandle->pLlpcShaderModule)
     {
         return pHandle->pLlpcShaderModule;
     }
@@ -149,8 +152,8 @@ void* ShaderModule::GetFirstValidShaderData(const ShaderModuleHandle* pHandle)
 
 // =====================================================================================================================
 ShaderModule::ShaderModule(
-    size_t      codeSize,
-    const void* pCode)
+    size_t                       codeSize,
+    const void*                  pCode)
 {
     m_codeSize = codeSize;
     m_pCode    = pCode;
@@ -247,7 +250,13 @@ VKAPI_ATTR void VKAPI_CALL vkGetShaderModuleIdentifierEXT(
     VkShaderModule                              shaderModule,
     VkShaderModuleIdentifierEXT*                pIdentifier)
 {
-    // TODO: implement vkGetShaderModuleIdentifierEXT
+    const ShaderModule* pShaderModule = ShaderModule::ObjectFromHandle(shaderModule);
+    Pal::ShaderHash shaderHash        = pShaderModule->GetCodeHash();
+
+    // Get the 128 bit ShaderModule Hash
+    memcpy(&pIdentifier->identifier[0], &shaderHash.lower, sizeof(shaderHash.lower));
+    memcpy(&pIdentifier->identifier[8], &shaderHash.upper, sizeof(shaderHash.upper));
+    pIdentifier->identifierSize = sizeof(shaderHash);
 }
 
 // =====================================================================================================================
@@ -256,7 +265,23 @@ VKAPI_ATTR void VKAPI_CALL vkGetShaderModuleCreateInfoIdentifierEXT(
     const VkShaderModuleCreateInfo*             pCreateInfo,
     VkShaderModuleIdentifierEXT*                pIdentifier)
 {
-    // TODO: implement vkGetShaderModuleCreateInfoIdentifierEXT
+    MetroHash::Hash moduleHash = {};
+
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    MetroHash64::Hash(
+        reinterpret_cast<const uint8_t*>(pCreateInfo->pCode),
+        pCreateInfo->codeSize,
+        moduleHash.bytes);
+
+    Pal::ShaderHash shaderModuleHash = ShaderModule::BuildCodeHash(
+        pCreateInfo->pCode,
+        pCreateInfo->codeSize);
+
+    // Get the 128 bit ShaderModule Hash (Profile Hash)
+    memcpy(&pIdentifier->identifier[0], &shaderModuleHash.lower, sizeof(shaderModuleHash.lower));
+    memcpy(&pIdentifier->identifier[8], &shaderModuleHash.upper, sizeof(shaderModuleHash.upper));
+    pIdentifier->identifierSize = sizeof(shaderModuleHash);
 }
 
 } // namespace entry

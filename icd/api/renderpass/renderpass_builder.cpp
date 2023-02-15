@@ -430,6 +430,10 @@ Pal::Result RenderPassBuilder::BuildLoadOps(
     VK_ASSERT(subpass == pAttachment->firstUseSubpass);
     VK_ASSERT(pAttachment->loaded == false);
 
+    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+
+    bool isOptional = false;
+
     // Set a flag indicating this attachment has been already loaded once.
     pAttachment->loaded = true;
 
@@ -443,6 +447,15 @@ Pal::Result RenderPassBuilder::BuildLoadOps(
         if (pAttachment->pDesc->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
         {
             clearAspect |= VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+        else if ((m_subpassCount >= settings.minSubpassesForOptionalClears) &&
+                 (pSubpass->bindTargets.colorTargetCount >= settings.minColorAttachmentsForOptionalClears) &&
+                 (pAttachment->pDesc->loadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE))
+        {
+            // LOAD_OP_DONT_CARE color attachment are safe to clear, but make sure to use the optional flag to not
+            // issue a slow clear.
+            clearAspect |= VK_IMAGE_ASPECT_COLOR_BIT;
+            isOptional = true;
         }
     }
     else
@@ -471,6 +484,7 @@ Pal::Result RenderPassBuilder::BuildLoadOps(
 
         clearInfo.attachment = attachment;
         clearInfo.aspect     = clearAspect;
+        clearInfo.isOptional = isOptional;
 
         // Load-op clear only if requested and the first reference isn't a resolve attachment (which will overwrite
         // the results of the clear and make it redundant).

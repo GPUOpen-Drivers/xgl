@@ -2147,6 +2147,15 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
         }
     }
 
+    if (libInfo.pPreRasterizationShaderLib != nullptr)
+    {
+        if (Util::TestAnyFlagSet(libInfo.pPreRasterizationShaderLib->GetPipelineObjectCreateInfo().activeStages,
+                                 VK_SHADER_STAGE_MESH_BIT_EXT))
+        {
+            hasMesh = true;
+        }
+    }
+
     uint32_t libFlags = libInfo.libFlags;
 
     pInfo->activeStages = GetActiveShaderStages(pIn, &libInfo);

@@ -326,11 +326,6 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                     options.pNggState->enableNgg = false;
                 }
 
-                if (shaderCreate.apply.nggVertexReuse)
-                {
-                    options.pNggState->enableVertexReuse = true;
-                }
-
                 if (shaderCreate.apply.nggEnableFrustumCulling)
                 {
                     options.pNggState->enableFrustumCulling = true;

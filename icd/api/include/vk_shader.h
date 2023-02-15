@@ -71,13 +71,18 @@ public:
     Pal::ShaderHash GetCodeHash(const char* pEntryPoint) const
         { return GetCodeHash(m_codeHash, pEntryPoint); }
 
+    const Pal::ShaderHash& GetCodeHash() const
+        { return m_codeHash; }
+
     void* GetShaderData(PipelineCompilerType compilerType) const
         { return GetShaderData(compilerType, &m_handle); }
 
     void* GetFirstValidShaderData() const
         { return GetFirstValidShaderData(&m_handle); }
 
-    static Pal::ShaderHash BuildCodeHash(const void* pCode, const size_t codeSize);
+    static Pal::ShaderHash BuildCodeHash(
+        const void*                  pCode,
+        const size_t                 codeSize);
 
     static Pal::ShaderHash GetCodeHash(Pal::ShaderHash codeHash, const char* pEntryPoint);
 

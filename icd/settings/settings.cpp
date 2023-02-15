@@ -261,7 +261,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.nggEnableSmallPrimFilter = true;
 
             // Enable NGG compactionless mode for Navi2x
-            m_settings.nggCompactionMode = NggCompactDisable;
+            m_settings.nggCompactVertex = false;
 
         }
 
@@ -269,7 +269,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
             // Enable NGG compactionless mode for Navi3x
-            m_settings.nggCompactionMode = NggCompactDisable;
+            m_settings.nggCompactVertex = false;
 
             // Hardcode wave sizes per shader stage until the ML model is trained and perf lab testing is done
             m_settings.csWaveSize = 64;
@@ -1217,6 +1217,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (appProfile == AppProfile::DDraceNetwork)
         {
             m_settings.ignorePreferredPresentMode = true;
+        }
+
+        if (appProfile == AppProfile::SaintsRowV)
+        {
+            m_settings.barrierFilterOptions = BarrierFilterOptions::FlushOnHostMask;
         }
 
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
