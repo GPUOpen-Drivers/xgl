@@ -986,8 +986,13 @@ void CmdBuffer::PalCmdBufferDestroy()
 }
 
 // =====================================================================================================================
-void CmdBuffer::PalCmdBindIndexData(Buffer* pBuffer, Pal::gpusize offset, Pal::IndexType indexType)
+void CmdBuffer::PalCmdBindIndexData(
+    Buffer* pBuffer,
+    Pal::gpusize offset,
+    Pal::IndexType indexType)
 {
+    const uint32_t indexCount = utils::BufferSizeToIndexCount(indexType, pBuffer->GetSize() - offset);
+
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
     {
@@ -996,7 +1001,7 @@ void CmdBuffer::PalCmdBindIndexData(Buffer* pBuffer, Pal::gpusize offset, Pal::I
         const Pal::gpusize gpuVirtAddr = pBuffer->GpuVirtAddr(deviceIdx) + offset;
 
         PalCmdBuffer(deviceIdx)->CmdBindIndexData(gpuVirtAddr,
-            utils::BufferSizeToIndexCount(indexType, pBuffer->GetSize()),
+            indexCount,
             indexType);
     }
     while (deviceGroup.IterateNext());
@@ -3839,7 +3844,7 @@ void CmdBuffer::ClearColorImage(
             PalCmdClearColorImage(
                 *pImage,
                 layout,
-                VkToPalClearColor(pColor, palFormat),
+                VkToPalClearColor(*pColor, palFormat),
                 palFormat,
                 palRangeCount,
                 pPalRanges,
@@ -4063,7 +4068,7 @@ void CmdBuffer::ClearDynamicRenderingImages(
                          PalCmdClearColorImage(
                              *pImage,
                              attachment.imageLayout,
-                             VkToPalClearColor(&clearInfo.clearValue.color, palFormat),
+                             VkToPalClearColor(clearInfo.clearValue.color, palFormat),
                              palFormat,
                              clearSubresRanges.NumElements(),
                              clearSubresRanges.Data(),
@@ -4207,7 +4212,7 @@ void CmdBuffer::ClearDynamicRenderingBoundAttachments(
                             VkToPalFormat(attachment.attachmentFormat, m_pDevice->GetRuntimeSettings());
                         target.samples        = attachment.rasterizationSamples;
                         target.fragments      = attachment.rasterizationSamples;
-                        target.clearValue     = VkToPalClearColor(&clearInfo.clearValue.color, target.swizzledFormat);
+                        target.clearValue     = VkToPalClearColor(clearInfo.clearValue.color, target.swizzledFormat);
 
                         colorTargets.PushBack(target);
                     }
@@ -4333,7 +4338,7 @@ void CmdBuffer::ClearBoundAttachments(
                                                           m_pDevice->GetRuntimeSettings());
                     target.samples        = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
                     target.fragments      = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
-                    target.clearValue     = VkToPalClearColor(&clearInfo.clearValue.color, target.swizzledFormat);
+                    target.clearValue     = VkToPalClearColor(clearInfo.clearValue.color, target.swizzledFormat);
 
                     colorTargets.PushBack(target);
                 }
@@ -4640,7 +4645,7 @@ void CmdBuffer::ClearImageAttachments(
                         PalCmdClearColorImage(
                             *attachment.pImage,
                             targetLayout,
-                            VkToPalClearColor(&clearInfo.clearValue.color, attachment.viewFormat),
+                            VkToPalClearColor(clearInfo.clearValue.color, attachment.viewFormat),
                             attachment.viewFormat,
                             clearSubresRanges.NumElements(),
                             clearSubresRanges.Data(),
@@ -4913,7 +4918,7 @@ void CmdBuffer::LoadOpClearColor(
                 pImageView->GetViewFormat(),
                 m_pDevice->GetRuntimeSettings());
             Pal::ClearColor clearColor = VkToPalClearColor(
-                &(attachmentInfo.clearValue.color),
+                attachmentInfo.clearValue.color,
                 clearFormat);
 
              // Get subres range from the image view
@@ -8708,12 +8713,12 @@ void CmdBuffer::RPLoadOpClearColor(
 
         const Framebuffer::Attachment& attachment = m_allGpuState.pFramebuffer->GetAttachment(clear.attachment);
 
-        const VkClearColorValue zeroClear = { 0.0f, 0.0f, 0.0f, 1.0f };
+        const VkClearColorValue zeroClear = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
 
         // Convert the clear color to the format of the attachment view
         Pal::ClearColor clearColor = VkToPalClearColor(
             (clear.isOptional == false) ?
-                &m_renderPassInstance.pAttachments[clear.attachment].clearValue.color : &zeroClear,
+                m_renderPassInstance.pAttachments[clear.attachment].clearValue.color : zeroClear,
             attachment.viewFormat);
 
         Pal::BoundColorTarget target = {};

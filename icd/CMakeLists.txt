@@ -90,6 +90,7 @@ target_sources(xgl PRIVATE
     api/color_space_helper.cpp
     api/compiler_solution.cpp
     api/entry.cpp
+    api/gpumemory_event_handler.cpp
     api/internal_mem_mgr.cpp
     api/pipeline_compiler.cpp
     api/pipeline_binary_cache.cpp

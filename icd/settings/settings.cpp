@@ -604,6 +604,20 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.anisoThreshold = 1.0f;
         }
 
+        if (appProfile == AppProfile::QuakeEnhanced)
+        {
+            // Originally applied to QuakeRemastered - this setting applies to QuakeEnhanced now since it's an update
+            // to the same game.
+            m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
+
+#if VKI_BUILD_GFX11
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+                m_settings.useAcquireReleaseInterface = false;
+            }
+#endif
+        }
+
         if (appProfile == AppProfile::SedpEngine)
         {
             m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
@@ -1224,6 +1238,17 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.barrierFilterOptions = BarrierFilterOptions::FlushOnHostMask;
         }
 
+        if ((appProfile == AppProfile::HalfLifeAlyx) ||
+            (appProfile == AppProfile::Satisfactory))
+        {
+#if VKI_BUILD_GFX11
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+                m_settings.useAcquireReleaseInterface = false;
+            }
+#endif
+        }
+
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
     }
 
@@ -1278,6 +1303,7 @@ VkResult VulkanSettingsLoader::ProcessSettings(
                                                        Pal::SettingScope::Driver,
                                                        Util::ValueType::Uint,
                                                        &m_settings.forceAppProfileValue);
+
     // Check for forced application profile
     if (m_settings.forceAppProfileEnable)
     {

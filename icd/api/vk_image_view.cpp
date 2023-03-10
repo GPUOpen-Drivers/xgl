@@ -114,6 +114,7 @@ void ImageView::BuildImageSrds(
     const Image*                 pImage,
     const Pal::SwizzledFormat    viewFormat,
     const Pal::SubresRange&      subresRange,
+    const Pal::Range&            zRange,
     VkImageUsageFlags            imageViewUsage,
     float                        minLod,
     const VkImageViewCreateInfo* pCreateInfo,
@@ -122,24 +123,29 @@ void ImageView::BuildImageSrds(
     Pal::ImageViewInfo info = {};
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
-    Pal::ImageTiling imageTiling = pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().tiling;
+    const Pal::ImageCreateInfo& imageInfo = pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
 
     info.viewType         = VkToPalImageViewType(pCreateInfo->viewType);
     info.swizzledFormat   = RemapFormatComponents(viewFormat,
                                                   subresRange,
                                                   pCreateInfo->components,
                                                   pDevice->PalDevice(DefaultDeviceIndex),
-                                                  imageTiling);
+                                                  imageInfo.tiling);
     info.samplePatternIdx = Device::GetDefaultSamplePatternIndex(pImage->GetImageSamples());
     info.texOptLevel      = VkToPalTexFilterQuality(settings.vulkanTexFilterQuality);
 
-    // NOTE: Unlike for color views, we don't have to mess with the subresource range for 3D views.
-    // When zRangeValid is 0, PAL still enables all depth slices on that subresource visible to the view
-    // despite the arrayLayers count.
-
-    info.subresRange  = subresRange;
     info.flags.u32All = 0;
-    info.minLod       = minLod;
+
+    // When zRangeValid is 0, PAL still enables all depth slices on that subresource visible to the view
+    // despite the arrayLayers count. However, zRangeValid must be set for a 2D image view of a 3D image.
+    if ((imageInfo.imageType == Pal::ImageType::Tex3d) && (info.viewType == Pal::ImageViewType::Tex2d))
+    {
+        info.flags.zRangeValid = 1;
+        info.zRange = zRange;
+    }
+
+    info.subresRange = subresRange;
+    info.minLod      = minLod;
 
     // Restrict possible usages to only those supported by the image, e.g. no FMask based reads without MSAA.
     const ImageBarrierPolicy& barrierPolicy = pImage->GetBarrierPolicy();
@@ -184,6 +190,33 @@ void ImageView::BuildImageSrds(
 
         if (imageViewUsage & VK_IMAGE_USAGE_STORAGE_BIT)
         {
+            const void* pNext = pCreateInfo->pNext;
+
+            while (pNext != nullptr)
+            {
+                const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+                if (pHeader->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_SLICED_CREATE_INFO_EXT)
+                {
+                    const auto* pSlicedInfo = reinterpret_cast<const VkImageViewSlicedCreateInfoEXT*>(pHeader);
+
+                    // Only update zRange here because this extension is specific to shader storage 3D image views.
+                    // The zRange.extent was previously initialized, so that can be used for the subresource depth.
+                    // The minimum is taken below for VK_REMAINING_3D_SLICES_EXT handling.
+                    VK_ASSERT((imageInfo.imageType == Pal::ImageType::Tex3d) &&
+                              (info.viewType       == Pal::ImageViewType::Tex3d));
+                    VK_ASSERT(zRange.extent > 0);
+
+                    info.zRange.offset = pSlicedInfo->sliceOffset;
+                    info.zRange.extent = Util::Min(pSlicedInfo->sliceCount, (zRange.extent - pSlicedInfo->sliceOffset));
+
+                    info.flags.zRangeValid = 1;
+                    break;
+                }
+
+                pNext = pHeader->pNext;
+            }
+
             if (!Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocImageViewSrds))
             {
                 // If Mall No alloc flags were set for shader non-storage resources, clear the flags first so that they
@@ -421,7 +454,6 @@ VkResult ImageView::Create(
         }
         else
         {
-            VK_ASSERT(pImage->Is2dArrayCompatible());
             VK_ASSERT(subresRange.layerCount <= subresDepth);
             VK_ASSERT((pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_2D) ||
                       (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY));
@@ -476,8 +508,7 @@ VkResult ImageView::Create(
     {
         imageViewUsage = (pImage->GetImageStencilUsage() & pImage->GetImageUsage());
     }
-    else
-    if (pCreateInfo->subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT)
+    else if (pCreateInfo->subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT)
     {
         imageViewUsage = pImage->GetImageStencilUsage();
     }
@@ -606,6 +637,7 @@ VkResult ImageView::Create(
                            pImage,
                            aspectFormat,
                            palRanges[plane],
+                           zRange,
                            imageViewUsage,
                            minLod,
                            pCreateInfo,

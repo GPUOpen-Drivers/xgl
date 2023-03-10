@@ -332,8 +332,6 @@ void Queue::ConstructQueueCreateInfo(
     const bool                     isTmzQueue)
 {
     const auto&        palProperties    = physicalDevice.PalProperties();
-    Pal::QueuePriority palQueuePriority = VkToPalGlobalPriority(queuePriority,
-                                          palProperties.engineProperties[queueFamilyIndex].capabilities[queueIndex]);
 
     // Some configs can use this feature with any priority, but it's not useful for
     // lower priorities.
@@ -351,9 +349,12 @@ void Queue::ConstructQueueCreateInfo(
     Pal::QueueType palQueueType =
         physicalDevice.GetQueueFamilyPalQueueType(queueFamilyIndex);
 
+    bool changeDMAToCompute = false;
+
     if ((palQueueType == Pal::QueueType::QueueTypeDma) && useComputeAsTransferQueue)
     {
-        palQueueType = Pal::QueueType::QueueTypeCompute;
+        palQueueType        = Pal::QueueType::QueueTypeCompute;
+        changeDMAToCompute  = true;
     }
     else if ((palQueueType == Pal::QueueType::QueueTypeCompute) &&
         (physicalDevice.GetRuntimeSettings().useUniversalAsComputeQueue))
@@ -379,31 +380,32 @@ void Queue::ConstructQueueCreateInfo(
         constexpr uint32_t VrHighPriority = Pal::SupportQueuePriorityMedium |
             Pal::SupportQueuePriorityHigh |
             Pal::SupportQueuePriorityRealtime;
-        const uint32_t queuePriorityMask = (1 << static_cast<uint8>(palQueuePriority));
 
-        if (TestAnyFlagSet(tunnelPriorities, queuePriorityMask) &&
-            (tunnelComputeSubEngineIndex != UINT32_MAX))
+        const uint32_t engineIndex = physicalDevice.GetCompQueueEngineIndex(queueIndex);
+
+        const uint32_t queuePriorityMask = (1 << static_cast<uint8>(VkToPalGlobalPriority(queuePriority,
+            palProperties.engineProperties[pQueueCreateInfo->engineType].capabilities[engineIndex])));
+
+        if ((tunnelComputeSubEngineIndex != UINT32_MAX) &&
+            TestAnyFlagSet(tunnelPriorities, queuePriorityMask))
         {
             pQueueCreateInfo->engineIndex = tunnelComputeSubEngineIndex;
             pQueueCreateInfo->dispatchTunneling = 1;
         }
-        else if (TestAnyFlagSet(VrHighPriority, queuePriorityMask) &&
-            (vrHighPriorityIndex != UINT32_MAX))
+        else if ((vrHighPriorityIndex != UINT32_MAX) &&
+                 TestAnyFlagSet(VrHighPriority, queuePriorityMask))
         {
             pQueueCreateInfo->engineIndex = vrHighPriorityIndex;
         }
         else
         {
-            if (useComputeAsTransferQueue)
+            if (changeDMAToCompute)
             {
-                palQueuePriority =
-                    VkToPalGlobalPriority(queuePriority,
-                        palProperties.engineProperties[Pal::EngineType::EngineTypeCompute].capabilities[0]);
                 pQueueCreateInfo->engineIndex = physicalDevice.GetCompQueueEngineIndex(0);
             }
             else
             {
-                pQueueCreateInfo->engineIndex = physicalDevice.GetCompQueueEngineIndex(queueIndex);
+                pQueueCreateInfo->engineIndex = engineIndex;
             }
         }
     }
@@ -427,9 +429,11 @@ void Queue::ConstructQueueCreateInfo(
             pQueueCreateInfo->engineIndex = queueIndex;
         }
     }
+
     pQueueCreateInfo->forceWaitIdleOnRingResize = 1;
     pQueueCreateInfo->queueType                 = palQueueType;
-    pQueueCreateInfo->priority                  = palQueuePriority;
+    pQueueCreateInfo->priority                  = VkToPalGlobalPriority(queuePriority,
+        palProperties.engineProperties[pQueueCreateInfo->engineType].capabilities[pQueueCreateInfo->engineIndex]);
 #if defined(__unix__)
     pQueueCreateInfo->enableGpuMemoryPriorities = 1;
 #endif
@@ -1045,14 +1049,19 @@ VkResult Queue::NotifyFlipMetadataBeforePresent(
     const Pal::PresentSwapChainInfo* pPresentInfo,
     CmdBufState*                     pCmdBufState,
     const Pal::IGpuMemory*           pGpuMemory,
-    bool                             forceSubmit)
+    bool                             forceSubmit,
+    bool                             skipFsfmFlags)
 {
     FullscreenFrameMetadataFlags flags       = {};
     const Pal::DeviceProperties& deviceProps = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
 
-    if (deviceProps.osProperties.flags.requireFrameEnd == 1)
+    if (skipFsfmFlags == false)
     {
-        flags.frameEndFlag = 1;
+
+        if (deviceProps.osProperties.flags.requireFrameEnd == 1)
+        {
+            flags.frameEndFlag = 1;
+        }
     }
 
     return NotifyFlipMetadata(deviceIdx, pPresentQueue, pCmdBufState, pGpuMemory, flags, forceSubmit);
@@ -1964,13 +1973,15 @@ VkResult Queue::Present(
         bool syncFlip = false;
         bool postFrameTimerSubmission = false;
         bool needFramePacing = NeedPacePresent(&presentInfo, pSwapChain, &syncFlip, &postFrameTimerSubmission);
+        bool skipFsfmFlags   = false;
 
         result = NotifyFlipMetadataBeforePresent(presentationDeviceIdx,
                                                  pPresentQueue,
                                                  &presentInfo,
                                                  (hasPostProcessing ? pCmdBufState : nullptr),
                                                  pGpuMemory,
-                                                 needSemaphoreFlush);
+                                                 needSemaphoreFlush,
+                                                 skipFsfmFlags);
 
         if (result != VK_SUCCESS)
         {
@@ -2605,6 +2616,14 @@ void Queue::InsertDebugUtilsLabel(
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, DevModeMgr::FrameDelimiterType::QueueLabel);
+
+            if (settings.devModeBlockingEndFrameDebugUtils)
+            {
+                // RGP tracing does not allow for overlapping frames. This WaitIdle() may be
+                // disabled in situations where applications synchronize the frames themselves
+                VkResult tempResult = WaitIdle();
+                VK_ASSERT(tempResult == VK_SUCCESS);
+            }
         }
 #endif
 

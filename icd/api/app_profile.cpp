@@ -128,6 +128,12 @@ constexpr AppProfilePatternEntry AppNameDota2 =
     "dota"
 };
 
+constexpr AppProfilePatternEntry AppNameHalfLifeAlyx =
+{
+    PatternAppNameLower,
+    "hlvr"
+};
+
 constexpr AppProfilePatternEntry AppEngineSource2 =
 {
     PatternEngineNameLower,
@@ -608,6 +614,24 @@ constexpr AppProfilePatternEntry AppEngineVolition =
     "volition ctg engine"
 };
 
+constexpr AppProfilePatternEntry AppNameSeriousSamVr =
+{
+    PatternAppNameLower,
+    "serious sam vr: the last hope - 64bit- vr"
+};
+
+constexpr AppProfilePatternEntry AppNameSatisfactory =
+{
+    PatternAppNameLower,
+    "factorygame"
+};
+
+constexpr AppProfilePatternEntry AppNameQuakeEnhanced =
+{
+    PatternAppNameLower,
+    "quake"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -688,6 +712,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::Dota2,
         {
             AppNameDota2,
+            AppEngineSource2,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::HalfLifeAlyx,
+        {
+            AppNameHalfLifeAlyx,
             AppEngineSource2,
             PatternEnd
         }
@@ -777,6 +810,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::SeriousSam4,
         {
             AppNameSeriousSam4Win,
+            AppEngineSedp,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::SeriousSamVrTheLastHope,
+        {
+            AppNameSeriousSamVr,
             AppEngineSedp,
             PatternEnd
         }
@@ -1203,6 +1245,22 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::DDraceNetwork,
         {
             AppNameDDraceNetwork,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Satisfactory,
+        {
+            AppNameSatisfactory,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::QuakeEnhanced,
+        {
+            AppNameQuakeEnhanced,
             PatternEnd
         }
     }

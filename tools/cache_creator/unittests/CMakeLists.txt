@@ -46,8 +46,12 @@ target_sources(CacheCreatorUnitTests PRIVATE
   cache_info_tests.cpp
 )
 
+llvm_map_components_to_libnames(llvm_libs
+    BinaryFormat
+)
 target_link_libraries(CacheCreatorUnitTests PRIVATE
   ${LLVM_GTEST_LIBS}
+  ${llvm_libs}
   cache_creator_lib
 )
 target_include_directories(CacheCreatorUnitTests PRIVATE

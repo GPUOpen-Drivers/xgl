@@ -101,6 +101,7 @@ protected:
         const Image*                 pImage,
         const Pal::SwizzledFormat    viewFormat,
         const Pal::SubresRange&      subresRange,
+        const Pal::Range&            zRange,
         VkImageUsageFlags            imageViewUsage,
         float                        minLod,
         const VkImageViewCreateInfo* pCreateInfo,

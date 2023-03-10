@@ -104,6 +104,7 @@
 #include "palQueueSemaphore.h"
 #include "palAutoBuffer.h"
 #include "palBorderColorPalette.h"
+#include "palVectorImpl.h"
 
 #include <cmath>
 
@@ -787,6 +788,8 @@ VkResult Device::Create(
         }
     }
 
+    GpuMemoryEventHandler::DeviceMemoryReportCallbacks deviceMemoryReportCallbacks {nullptr};
+
     for (pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext); pHeader != nullptr; pHeader = pHeader->pNext)
     {
         switch (static_cast<uint32>(pHeader->sType))
@@ -796,6 +799,20 @@ VkResult Device::Create(
                 const auto* pPrivateDataInfo = reinterpret_cast<const VkDevicePrivateDataCreateInfoEXT*>(pHeader);
 
                 privateDataSlotRequestCount += pPrivateDataInfo->privateDataSlotRequestCount;
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_DEVICE_DEVICE_MEMORY_REPORT_CREATE_INFO_EXT:
+            {
+                pInstance->EnableGpuMemoryEventHandler();
+
+                const auto* pDeviceMemoryReportInfo =
+                    reinterpret_cast<const VkDeviceDeviceMemoryReportCreateInfoEXT*>(pHeader);
+
+                GpuMemoryEventHandler::DeviceMemoryReportCallback callback =
+                    {pDeviceMemoryReportInfo->pfnUserCallback, pDeviceMemoryReportInfo->pUserData, nullptr};
+
+                deviceMemoryReportCallbacks.PushBack(callback);
                 break;
             }
 
@@ -885,6 +902,16 @@ VkResult Device::Create(
 
         DispatchableDevice* pDispatchableDevice = static_cast<DispatchableDevice*>(pMemory);
         DispatchableQueue*  pDispatchableQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
+
+        auto gpuMemoryEventHandler = pInstance->GetGpuMemoryEventHandler();
+        Device* pDevice            = ApiDevice::ObjectFromHandle(reinterpret_cast<VkDevice>(pDispatchableDevice));
+
+        for (auto iter = deviceMemoryReportCallbacks.Begin(); iter.IsValid(); iter.Next())
+        {
+            iter.Get().pDevice = pDevice;
+
+            gpuMemoryEventHandler->RegisterDeviceMemoryReportCallback(iter.Get());
+        }
 
         size_t       palQueueMemoryOffset = 0;
         uint32       tmzQueueIndex        = 0;
@@ -1645,6 +1672,8 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
     DestroyBorderColorPalette();
 
     m_renderStateCache.Destroy();
+
+    VkInstance()->GetGpuMemoryEventHandler()->UnregisterDeviceMemoryReportCallbacks(this);
 
     Util::Destructor(this);
 
@@ -3579,23 +3608,7 @@ VkResult Device::CopyAccelerationStructure(
     VkDeferredOperationKHR                    deferredOperation,
     const VkCopyAccelerationStructureInfoKHR* pInfo)
 {
-    VkResult result;
-
-    if (GetRuntimeSettings().rtEnableAccelStructHostFeatures)
-    {
-        DeferredHostOperation* pDeferredOperation = DeferredHostOperation::ObjectFromHandle(deferredOperation);
-
-        result = AccelerationStructure::CopyAccelerationStructure(
-            this,
-            pDeferredOperation,
-            pInfo);
-    }
-    else
-    {
-        result = VK_ERROR_FEATURE_NOT_PRESENT;
-    }
-
-    return result;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 
 // =====================================================================================================================
@@ -3603,23 +3616,7 @@ VkResult Device::CopyAccelerationStructureToMemory(
     VkDeferredOperationKHR                            deferredOperation,
     const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo)
 {
-    VkResult result;
-
-    if (GetRuntimeSettings().rtEnableAccelStructHostFeatures)
-    {
-        DeferredHostOperation* pDeferredOperation = DeferredHostOperation::ObjectFromHandle(deferredOperation);
-
-        result = AccelerationStructure::CopyAccelerationStructureToMemory(
-            this,
-            pDeferredOperation,
-            pInfo);
-    }
-    else
-    {
-        result = VK_ERROR_FEATURE_NOT_PRESENT;
-    }
-
-    return result;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 
 // =====================================================================================================================
@@ -3627,23 +3624,7 @@ VkResult Device::CopyMemoryToAccelerationStructure(
     VkDeferredOperationKHR                            deferredOperation,
     const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo)
 {
-    VkResult result;
-
-    if (GetRuntimeSettings().rtEnableAccelStructHostFeatures)
-    {
-        DeferredHostOperation* pDeferredOperation = DeferredHostOperation::ObjectFromHandle(deferredOperation);
-
-        result = AccelerationStructure::CopyMemoryToAccelerationStructure(
-            this,
-            pDeferredOperation,
-            pInfo);
-    }
-    else
-    {
-        result = VK_ERROR_FEATURE_NOT_PRESENT;
-    }
-
-    return result;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 
 // =====================================================================================================================
@@ -3677,63 +3658,7 @@ VkResult Device::WriteAccelerationStructuresProperties(
     void*                                       pData,
     size_t                                      stride)
 {
-    VkResult result = VK_SUCCESS;
-
-    if (GetRuntimeSettings().rtEnableAccelStructHostFeatures)
-    {
-        uint32_t deviceIndex = 0;
-
-        GpuRt::AccelStructPostBuildInfo postBuildInfo = {};
-
-        postBuildInfo.srcAccelStructCount = 1;
-
-        switch (static_cast<uint32_t>(queryType))
-        {
-        case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR:
-            postBuildInfo.desc.infoType = GpuRt::AccelStructPostBuildInfoType::CompactedSize;
-            break;
-        case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR:
-            postBuildInfo.desc.infoType = GpuRt::AccelStructPostBuildInfoType::Serialization;
-            break;
-        case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR:
-            postBuildInfo.desc.infoType = GpuRt::AccelStructPostBuildInfoType::CurrentSize;
-            break;
-        case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR:
-            postBuildInfo.desc.infoType = GpuRt::AccelStructPostBuildInfoType::BottomLevelASPointerCount;
-            break;
-        default:
-            VK_NEVER_CALLED();
-            break;
-        }
-
-        void* pCpuAddr = nullptr;
-
-        for (uint32_t i = 0; i < accelerationStructureCount; i++)
-        {
-            AccelerationStructure* pAccelStructure =
-                AccelerationStructure::ObjectFromHandle(pAccelerationStructures[i]);
-
-            if (pAccelStructure->Map(deviceIndex, &pCpuAddr) == Pal::Result::Success)
-            {
-                postBuildInfo.desc.postBuildBufferAddr.pCpu = reinterpret_cast<char*>(pData) + (i * stride);
-                postBuildInfo.pSrcAccelStructCpuAddrs       = pCpuAddr;
-
-                RayTrace()->GpuRt(deviceIndex)->EmitAccelStructPostBuildInfo(nullptr, postBuildInfo);
-
-                pAccelStructure->Unmap(deviceIndex);
-            }
-            else
-            {
-                result = VK_ERROR_MEMORY_MAP_FAILED;
-            }
-        }
-    }
-    else
-    {
-        result = VK_ERROR_FEATURE_NOT_PRESENT;
-    }
-
-    return result;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 
 // =====================================================================================================================
@@ -3752,25 +3677,7 @@ VkResult Device::BuildAccelerationStructure(
     const VkAccelerationStructureBuildGeometryInfoKHR*       pInfos,
     const VkAccelerationStructureBuildRangeInfoKHR* const*   ppBuildRangeInfos)
 {
-    VkResult result;
-
-    if (GetRuntimeSettings().rtEnableAccelStructHostFeatures)
-    {
-        DeferredHostOperation* pDeferredOperation = DeferredHostOperation::ObjectFromHandle(deferredOperation);
-
-        result = AccelerationStructure::BuildAccelerationStructure(
-            this,
-            pDeferredOperation,
-            infoCount,
-            pInfos,
-            ppBuildRangeInfos);
-    }
-    else
-    {
-        result = VK_ERROR_FEATURE_NOT_PRESENT;
-    }
-
-    return result;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 
 // =====================================================================================================================
@@ -3799,18 +3706,14 @@ void Device::GetAccelerationStructureBuildSizesKHR(
     switch (buildType)
     {
     case VK_ACCELERATION_STRUCTURE_BUILD_TYPE_HOST_KHR:
-        pSizeInfo->buildScratchSize  = prebuild.cpuScratchSizeInBytes;
-        pSizeInfo->updateScratchSize = prebuild.cpuUpdateScratchSizeInBytes;
+        pSizeInfo->buildScratchSize  = 0;
+        pSizeInfo->updateScratchSize = 0;
+        VK_NEVER_CALLED();
         break;
     case VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR:
+    case VK_ACCELERATION_STRUCTURE_BUILD_TYPE_HOST_OR_DEVICE_KHR:
         pSizeInfo->buildScratchSize  = prebuild.scratchDataSizeInBytes;
         pSizeInfo->updateScratchSize = prebuild.updateScratchDataSizeInBytes;
-        break;
-    case VK_ACCELERATION_STRUCTURE_BUILD_TYPE_HOST_OR_DEVICE_KHR:
-        pSizeInfo->buildScratchSize  = Util::Max(prebuild.cpuScratchSizeInBytes,
-                                                 prebuild.scratchDataSizeInBytes);
-        pSizeInfo->updateScratchSize = Util::Max(prebuild.cpuUpdateScratchSizeInBytes,
-                                                 prebuild.updateScratchDataSizeInBytes);
         break;
     default:
         VK_NEVER_CALLED();

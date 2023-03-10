@@ -402,6 +402,16 @@ VkResult Memory::Create(
 
         if (pPalGpuMem != nullptr)
         {
+            // TODO: MGPU not handled
+            pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanAllocateEvent(
+                pPalGpuMem,
+                reinterpret_cast<uint64_t>(pMemory),
+                pPalGpuMem->Desc().size,
+                VK_OBJECT_TYPE_DEVICE_MEMORY,
+                pPalGpuMem->Desc().uniqueId,
+                pAllocInfo->memoryTypeIndex,
+                isExternal);
+
             Pal::GpuMemoryResourceBindEventData bindData = {};
             bindData.pObj               = pMemory;
             bindData.pGpuMemory         = pPalGpuMem;
@@ -423,10 +433,18 @@ VkResult Memory::Create(
             pBoundImage->BindMemory(pDevice, *pMemoryHandle, 0, 0, nullptr, 0, nullptr);
         }
     }
-    else if (vkResult != VK_ERROR_TOO_MANY_OBJECTS)
+    else
     {
-        // Something failed after the allocation count was incremented
-        pDevice->DecreaseAllocationCount();
+        if (vkResult != VK_ERROR_TOO_MANY_OBJECTS)
+        {
+            // Something failed after the allocation count was incremented
+            pDevice->DecreaseAllocationCount();
+        }
+
+        pDevice->VkInstance()->GetGpuMemoryEventHandler()->DeviceMemoryReportAllocationFailedEvent(
+            pAllocInfo->allocationSize,
+            VK_OBJECT_TYPE_DEVICE_MEMORY,
+            pAllocInfo->memoryTypeIndex);
     }
 
     return vkResult;
@@ -968,6 +986,12 @@ void Memory::Free(
         {
             Pal::IDevice* pPalDevice = pDevice->PalDevice(i);
             pDevice->RemoveMemReference(pPalDevice, pGpuMemory);
+
+            pDevice->VkInstance()->GetGpuMemoryEventHandler()->DeviceMemoryReportFreeEvent(
+                reinterpret_cast<uint64_t>(this),
+                VK_OBJECT_TYPE_DEVICE_MEMORY,
+                pGpuMemory->Desc().uniqueId,
+                pGpuMemory->Desc().flags.isExternal);
 
             // Destroy PAL memory object
             pGpuMemory->Destroy();

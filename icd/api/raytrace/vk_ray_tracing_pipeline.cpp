@@ -453,7 +453,8 @@ VkResult RayTracingPipeline::CreateImpl(
         };
 
         // If rtEnableCompilePipelineLibrary is false, the library shaders have been included in pCreateInfo.
-        const bool hasLibraries = settings.rtEnableCompilePipelineLibrary && (pCreateInfo->pLibraryInfo != nullptr);
+        const bool hasLibraries = settings.rtEnableCompilePipelineLibrary &&
+            ((pCreateInfo->pLibraryInfo != nullptr) && (pCreateInfo->pLibraryInfo->libraryCount > 0));
 
         PipelineCompiler* pDefaultCompiler = m_pDevice->GetCompiler(DefaultDeviceIndex);
 
@@ -770,8 +771,6 @@ VkResult RayTracingPipeline::CreateImpl(
                 // Add the pipeline to any cache layer where it's missing.
                 if (result == VK_SUCCESS)
                 {
-                    m_hasTraceRay = binaryCreateInfo.hasTraceRay;
-
                     Vkgc::BinaryData cachedBinData = {};
 
                     // Join the binaries into a single blob.
@@ -804,6 +803,8 @@ VkResult RayTracingPipeline::CreateImpl(
                     sizeof(Vkgc::RayTracingShaderIdentifier) * groupHandle.shaderHandleCount);
             }
         }
+
+        m_hasTraceRay = pipelineBinary[DefaultDeviceIndex].hasTraceRay;
 
         uint32_t funcCount = 0;
         if (result == VK_SUCCESS)
@@ -859,7 +860,7 @@ VkResult RayTracingPipeline::CreateImpl(
             shaderLibraryPalMemSize      = shaderLibrarySize * funcCount * m_pDevice->NumPalDevices();
             shaderLibraryMemSize         = sizeof(Pal::IShaderLibrary*) * funcCount * m_pDevice->NumPalDevices();
             shaderGroupInfosMemSize      = sizeof(ShaderGroupInfo) * totalGroupCount;
-            shaderGroupStackSizesMemSize = (funcCount == 0 ? 0 : 1) *
+            shaderGroupStackSizesMemSize = (((funcCount > 0) || hasLibraries) ? 1 : 0) *
                                            sizeof(ShaderGroupStackSizes) * totalGroupCount * m_pDevice->NumPalDevices();
 
             const size_t totalSize =
@@ -967,7 +968,7 @@ VkResult RayTracingPipeline::CreateImpl(
                 }
 
                 // Create shader library and remap shader ID to indirect function GPU Va
-                if ((palResult == Util::Result::Success) && (funcCount > 0))
+                if (palResult == Util::Result::Success)
                 {
                     for (uint32_t i = 0; i < funcCount; ++i)
                     {
@@ -997,7 +998,7 @@ VkResult RayTracingPipeline::CreateImpl(
                     uint32_t intersectionStackMax = 0;
                     uint32_t callableStackMax     = 0;
 
-                    if (palResult == Util::Result::Success)
+                    if ((palResult == Util::Result::Success) && ((funcCount > 0) || hasLibraries))
                     {
                         pShaderGroupStackSizes[deviceIdx]
                             = static_cast<ShaderGroupStackSizes*>(
@@ -1025,7 +1026,8 @@ VkResult RayTracingPipeline::CreateImpl(
                                         if (pTraceRayUsage[funcIdx])
                                         {
                                             const uint32_t traceRayFuncIdx = pShaderNameMap[traceRayShaderIndex];
-                                            if (pShaderStackSize[traceRayFuncIdx] == ~0ULL)
+                                            if ((pShaderStackSize[traceRayFuncIdx] == ~0ULL) &&
+                                                (ppDeviceShaderLibraries[traceRayFuncIdx] != nullptr))
                                             {
                                                 Pal::ShaderLibStats traceRayShaderStats = {};
                                                 ppDeviceShaderLibraries[traceRayFuncIdx]->GetShaderFunctionStats(
@@ -1104,29 +1106,29 @@ VkResult RayTracingPipeline::CreateImpl(
                         }
                     }
 
-                    for (uint32_t i = 0; i < pipelineCreateInfo.groupCount; ++i)
+                    if (funcCount > 0)
                     {
-                        const auto pGroup = &pShaderGroups[deviceIdx][i];
-                        bool       found  = false;
-                        found |= MapShaderIdToGpuVa(funcCount,
-                                                    pIndirectFuncInfo,
-                                                    pShaderNameMap,
-                                                    shaderCount,
-                                                    pShaderProp,
-                                                    &pGroup->shaderId);
-                        found |= MapShaderIdToGpuVa(funcCount,
-                                                    pIndirectFuncInfo,
-                                                    pShaderNameMap,
-                                                    shaderCount,
-                                                    pShaderProp,
-                                                    &pGroup->intersectionId);
-                        found |= MapShaderIdToGpuVa(funcCount,
-                                                    pIndirectFuncInfo,
-                                                    pShaderNameMap,
-                                                    shaderCount,
-                                                    pShaderProp,
-                                                    &pGroup->anyHitId);
-                        VK_ASSERT(found && "Failed to map shader to gpu address");
+                        for (uint32_t i = 0; i < pipelineCreateInfo.groupCount; ++i)
+                        {
+                            const auto pGroup = &pShaderGroups[deviceIdx][i];
+                            bool       found = false;
+                            found |= MapShaderIdToGpuVa(pIndirectFuncInfo,
+                                                        pShaderNameMap,
+                                                        shaderCount,
+                                                        pShaderProp,
+                                                        &pGroup->shaderId);
+                            found |= MapShaderIdToGpuVa(pIndirectFuncInfo,
+                                                        pShaderNameMap,
+                                                        shaderCount,
+                                                        pShaderProp,
+                                                        &pGroup->intersectionId);
+                            found |= MapShaderIdToGpuVa(pIndirectFuncInfo,
+                                                        pShaderNameMap,
+                                                        shaderCount,
+                                                        pShaderProp,
+                                                        &pGroup->anyHitId);
+                            VK_ASSERT(found && "Failed to map shader to gpu address");
+                        }
                     }
 
                     // now appending the pipeline library data
@@ -1146,13 +1148,16 @@ VkResult RayTracingPipeline::CreateImpl(
                         {
                             const auto pLibraries             = pCreateInfo->pLibraryInfo->pLibraries[libIdx];
                             const auto pPipelineLib           = RayTracingPipeline::ObjectFromHandle(pLibraries);
-                            const auto pImportedShaderLibrary = pPipelineLib->PalShaderLibrary(deviceIdx);
-                            const auto pImportedFuncInfoList  = pImportedShaderLibrary->GetShaderLibFunctionList();
-                            const uint32 numFunctions         = pImportedShaderLibrary->GetShaderLibFunctionCount();
 
-                            // We only use one shader library per collection function
-                            VK_ASSERT((pImportedFuncInfoList != nullptr) && (numFunctions == 1));
-                            palResult = pPalPipeline[deviceIdx]->LinkWithLibraries(&pImportedShaderLibrary, 1);
+                            // Link all shader libraries from imported pipeline library
+                            const auto ppImortedShaderLibraries = pPipelineLib->GetShaderLibraries();
+                            const uint32 importedLibraryCount =
+                                pPipelineLib->GetShaderLibraryCount() / m_pDevice->NumPalDevices();
+                            const auto ppImportedDeviceShaderLibraries =
+                                ppImortedShaderLibraries + deviceIdx * importedLibraryCount;
+
+                            palResult = pPalPipeline[deviceIdx]->LinkWithLibraries(ppImportedDeviceShaderLibraries,
+                                                                                   importedLibraryCount);
 
                             if (palResult == Util::Result::Success)
                             {
@@ -1264,8 +1269,9 @@ VkResult RayTracingPipeline::CreateImpl(
                          Util::Max(closestHitStackMax, missStackMax)) +
                         (2 * callableStackMax);
 
-                    // TraceRay is the last function in function list
-                    if (Util::TestAnyFlagSet(pCreateInfo->flags, VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) == 0)
+                    // TraceRay is the last function in function list, record it regardless we are building library or
+                    // not, so that a pipeline will get its own TraceRayGpuVa correctly.
+                    if (funcCount > 0)
                     {
                         const auto traceRayFuncIndex = funcCount - 1;
                         traceRayGpuVas[deviceIdx]    = pIndirectFuncInfo[traceRayFuncIndex].gpuVirtAddr;
@@ -1756,7 +1762,6 @@ void RayTracingPipeline::BindNullPipeline(
 
 // =====================================================================================================================
 bool RayTracingPipeline::MapShaderIdToGpuVa(
-    uint32_t                          indirectFuncCount,
     Pal::ShaderLibraryFunctionInfo*   pIndirectFuncList,
     uint32_t*                         pShaderNameMap,
     uint32_t                          shaderPropCount,

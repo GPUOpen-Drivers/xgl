@@ -41,7 +41,6 @@ namespace vk
 class DeferredHostOperation;
 #if VKI_RAY_TRACING
 class PipelineCache;
-class RayTracingPipeline;
 #endif
 
 enum class DeferredCallbackType : uint32_t
@@ -50,10 +49,6 @@ enum class DeferredCallbackType : uint32_t
     GetMaxConcurrency,
     GetResult
 };
-
-// Callback for "simple" operations: should fully execute the deferred operation and return its result
-typedef VkResult (*DeferredHostSimpleFunc)(Device* pDevice,
-                                           const void* pArgs);
 
 typedef int32_t (*DeferredHostCallback)(Device*                pDevice,
                                         DeferredHostOperation* pOperation,
@@ -76,18 +71,6 @@ class DeferredHostOperation : public NonDispatchable<VkDeferredOperationKHR, Def
 {
 public:
 #if VKI_RAY_TRACING
-    // State for deferred vkBuildAccelerationStructuresKHR
-    struct AccelBuildState
-    {
-        uint32_t                                                nextPending;
-        uint32_t                                                completed;
-        uint32_t                                                failedMaps;
-
-        uint32_t                                                infoCount;
-        const VkAccelerationStructureBuildGeometryInfoKHR*      pInfos;
-        const VkAccelerationStructureBuildRangeInfoKHR* const*  ppBuildRangeInfos;
-    };
-
     // State for deferred VkRayTracingPipelineCreateInfoKHR
     struct RayTracingPipelineCreateState
     {
@@ -103,15 +86,6 @@ public:
         VkPipeline*                              pPipelines;
     };
 #endif
-
-    // State for "simple" operations set by SetSimpleOperation()
-    struct SimpleState
-    {
-        uint32_t               joined;
-        DeferredHostSimpleFunc pfnOperation;
-        const void*            pArg;
-        VkResult               result;
-    };
 
     static VkResult Create(
         Device*                      pDevice,
@@ -130,21 +104,8 @@ public:
 
     void SetOperation(DeferredHostCallback pfnCallback);
 
-    // Simple operation that executes fully within the first join call
-    void SetSimpleOperation(DeferredHostSimpleFunc pfnSimple,
-                            const void* pArg);
-
-    template<typename ArgType> void SetSimpleOperation(VkResult (*pfnSimple)(Device* pDevice, const ArgType*),
-                                                       const ArgType* pArgs)
-    {
-        SetSimpleOperation(reinterpret_cast<DeferredHostSimpleFunc>(pfnSimple), pArgs);
-    }
-
-    SimpleState* Simple() { return &m_state.simple; }
-
 #if VKI_RAY_TRACING
-    AccelBuildState* AccelBuild() { return &m_state.accelBuild; }
-    RayTracingPipelineCreateState* RayTracingPipelineCreate() { return &m_state.rtPipelineCreate; }
+    RayTracingPipelineCreateState* RayTracingPipelineCreate() { return &m_rtPipelineCreate; }
 #endif
 
     static void ExecuteWorkload(DeferredWorkload* pWorkload);
@@ -161,22 +122,14 @@ private:
     // Used for deferred host objects that haven't yet been assigned to a command
     static int32_t UnusedCallback(Device* pDevice, DeferredHostOperation* pHost, DeferredCallbackType type);
 
-    // Implementation for simple operations
-    static int32_t SimpleCallback(Device* pDevice, DeferredHostOperation* pHost, DeferredCallbackType type);
-
     // Destroys any initialized workloads
     void DestroyWorkloads();
 
     DeferredHostCallback m_pfnCallback; ///< Callback for executing deferred Join/GetMaxConcurrency/GetResult.
 
-    union
-    {
-        SimpleState                   simple;           ///< Command state for simple operations
 #if VKI_RAY_TRACING
-        AccelBuildState               accelBuild;       ///< Command state for deferred vkBuildAccelerationStructuresKHR
-        RayTracingPipelineCreateState rtPipelineCreate; ///< Command state for deferred VkRayTracingPipelineCreateInfoKHR
+    RayTracingPipelineCreateState m_rtPipelineCreate; ///< Command state for deferred VkRayTracingPipelineCreateInfoKHR
 #endif
-    } m_state;
 
     Instance*         m_pInstance;
     uint32_t          m_workloadCount;

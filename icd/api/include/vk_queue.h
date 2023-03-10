@@ -338,7 +338,8 @@ protected:
         const Pal::PresentSwapChainInfo* pPresentInfo,
         CmdBufState*                     pCmdBufState,
         const Pal::IGpuMemory*           pGpuMemory,
-        bool                             forceSubmit);
+        bool                             forceSubmit,
+        bool                             skipFsfmFlags);
 
     VkResult NotifyFlipMetadataAfterPresent(
         uint32_t                         deviceIdx,

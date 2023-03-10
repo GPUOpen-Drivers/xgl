@@ -65,7 +65,9 @@ DeferredHostOperation::DeferredHostOperation(
     Instance* pInstance)
     :
     m_pfnCallback(&UnusedCallback),
-    m_state{},
+#if VKI_RAY_TRACING
+    m_rtPipelineCreate{},
+#endif
     m_pInstance(pInstance),
     m_workloadCount(0),
     m_pWorkloads(nullptr)
@@ -103,53 +105,6 @@ VkResult DeferredHostOperation::Destroy(
     pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
-}
-
-// =====================================================================================================================
-int32_t DeferredHostOperation::SimpleCallback(
-    Device*                pDevice,
-    DeferredHostOperation* pHost,
-    DeferredCallbackType   type)
-{
-    uint32_t result;
-    SimpleState* pState = pHost->Simple();
-
-    switch (type)
-    {
-    case DeferredCallbackType::Join:
-    {
-        VK_ASSERT(pState->joined == VK_FALSE || pState->joined == VK_TRUE);
-
-        if (Util::AtomicCompareAndSwap(&pState->joined, VK_FALSE, VK_TRUE) == VK_FALSE)
-        {
-            pState->result = pState->pfnOperation(pDevice, pState->pArg);
-
-            result = VK_SUCCESS;
-        }
-        else
-        {
-            result = VK_THREAD_DONE_KHR;
-        }
-
-        break;
-    }
-    case DeferredCallbackType::GetMaxConcurrency:
-    {
-        result = 1;
-        break;
-    }
-    case DeferredCallbackType::GetResult:
-    {
-        result = pState->result;
-        break;
-    }
-    default:
-        VK_NEVER_CALLED();
-        result = 0;
-        break;
-    }
-
-    return result;
 }
 
 // =====================================================================================================================
@@ -191,19 +146,6 @@ void DeferredHostOperation::SetOperation(
     DeferredHostCallback pfnCallback)
 {
     m_pfnCallback = pfnCallback;
-}
-
-// =====================================================================================================================
-void DeferredHostOperation::SetSimpleOperation(
-    DeferredHostSimpleFunc pfnSimple,
-    const void*            pArg)
-{
-    m_state.simple.joined       = VK_FALSE;
-    m_state.simple.pfnOperation = pfnSimple;
-    m_state.simple.pArg         = pArg;
-    m_state.simple.result       = VK_NOT_READY;
-
-    SetOperation(&SimpleCallback);
 }
 
 // =====================================================================================================================

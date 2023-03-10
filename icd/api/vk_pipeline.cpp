@@ -34,6 +34,9 @@
 #include "include/vk_shader.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_pipeline_cache.h"
+#if VKI_RAY_TRACING
+#include "raytrace/ray_tracing_device.h"
+#endif
 
 #include "palAutoBuffer.h"
 #include "palInlineFuncs.h"
@@ -881,6 +884,15 @@ void Pipeline::ElfHashToCacheId(
     hasher.Update(pDevice->GetEnabledFeatures().robustImageAccessExtended);
     hasher.Update(pDevice->GetEnabledFeatures().nullDescriptorExtended);
 
+#if VKI_RAY_TRACING
+    // The AccelStructTracker enable status gets stored inside the ELF within
+    // the static GpuRT flags. Needed for both TraceRay() and RayQuery().
+    if (pDevice->RayTrace() != nullptr)
+    {
+        hasher.Update(pDevice->RayTrace()->AccelStructTrackerEnabled(deviceIdx));
+    }
+#endif
+
     hasher.Finalize(pCacheId->bytes);
 }
 
@@ -1326,8 +1338,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
     Pal::Result      palResult = pPalPipeline->GetShaderStats(apiShaderType, &palStats, true);
 
     // Return (Number of Intermediate Shaders) + Number of HW ISA shaders
-    uint32_t numberOfInternalRepresentations =
-        Util::CountSetBits(palStats.shaderStageMask & pPipeline->GetAvailableAmdIlSymbol()) + 1;
+    uint32_t numberOfInternalRepresentations = (palStats.palShaderHash.lower > 0) ?
+        (Util::CountSetBits(palStats.shaderStageMask & pPipeline->GetAvailableAmdIlSymbol()) + 1) : 0;
 
     if (pInternalRepresentations == nullptr)
     {
@@ -1341,7 +1353,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
 
     uint32_t i = 0;
     while((Util::BitMaskScanForward(&i, apiShaderMask)) &&
-          (outputCount < *pInternalRepresentationCount))
+          (outputCount < Util::Min(numberOfInternalRepresentations, *pInternalRepresentationCount)))
     {
          // Build the name and description of the output property for IL
          const char*              pApiString    = ApiStageNames[i];
@@ -1372,7 +1384,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
     }
 
     // Output the ISA shaders
-    if (outputCount < *pInternalRepresentationCount)
+    if (outputCount < Util::Min(numberOfInternalRepresentations, *pInternalRepresentationCount))
     {
         // Build the name and description of the output property for ISA Shader
         const char* pApiString = HwStageNames[static_cast<uint32_t>(hwStage)];
