@@ -92,10 +92,11 @@ class RGPServer;
 namespace vk
 {
 class Instance;
-class PhysicalDevice;
-class Pipeline;
 class Queue;
-class SqttCmdBufferState;
+class Pipeline;
+#if VKI_RAY_TRACING
+class RayTracingPipeline;
+#endif
 class CmdBuffer;
 class PipelineBinaryCache;
 };

@@ -213,11 +213,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
     uint32_t physicalDeviceCount = 0;
     VkPhysicalDevice* pLayerPhysicalDevices = nullptr;
 
-    if ((pPhysicalDeviceCount == 0) && (pPhysicalDevices != nullptr))
-    {
-        result = nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, pPhysicalDeviceCount, pPhysicalDevices);
-    }
-    else
     {
         result = nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, NULL);
 

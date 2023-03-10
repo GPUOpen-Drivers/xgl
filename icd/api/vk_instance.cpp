@@ -55,7 +55,6 @@
 #include "palPlatform.h"
 #include "palOglPresent.h"
 #include "palListImpl.h"
-#include "palHashMapImpl.h"
 #include "palInlineFuncs.h"
 
 #include <new>
@@ -94,7 +93,8 @@ Instance::Instance(
     m_pDevModeMgr(nullptr),
     m_debugReportCallbacks(&m_palAllocator),
     m_debugUtilsMessengers(&m_palAllocator),
-    m_logTagIdMask(0)
+    m_logTagIdMask(0),
+    m_pGpuMemoryEventHandler(nullptr)
 {
     m_flags.u32All = 0;
 
@@ -306,7 +306,7 @@ bool Instance::DetermineNullGpuSupport(
 VkResult Instance::Init(
     const VkApplicationInfo* pAppInfo)
 {
-    VkResult status;
+    VkResult status = VK_SUCCESS;
 
     if (pAppInfo != nullptr)
     {
@@ -326,71 +326,79 @@ VkResult Instance::Init(
 
     if (pPalMemory == nullptr)
     {
-        return VK_ERROR_OUT_OF_HOST_MEMORY;
+        status = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    // Thunk PAL's memory allocator callbacks to our own
-    const Util::AllocCallbacks allocCb =
+    if (status == VK_SUCCESS)
     {
-        &m_allocCallbacks,
-        allocator::PalAllocFuncDelegator,
-        allocator::PalFreeFuncDelegator
-    };
+        status = GpuMemoryEventHandler::Create(this, &m_pGpuMemoryEventHandler);
+    }
 
-    Pal::PlatformCreateInfo createInfo = { 0 };
-    createInfo.pAllocCb = &allocCb;
-
-    const Util::LogCallbackInfo callbackInfo =
+    if (status == VK_SUCCESS)
     {
-        this,
-        &LogCallback
-    };
+        // Thunk PAL's memory allocator callbacks to our own
+        const Util::AllocCallbacks allocCb =
+        {
+            &m_allocCallbacks,
+            allocator::PalAllocFuncDelegator,
+            allocator::PalFreeFuncDelegator
+        };
 
-    createInfo.pLogInfo = &callbackInfo;
+        Pal::PlatformCreateInfo createInfo = { 0 };
+        createInfo.pAllocCb = &allocCb;
+
+        const Util::LogCallbackInfo callbackInfo =
+        {
+            this,
+            &LogCallback
+        };
+
+        createInfo.pLogInfo = &callbackInfo;
 
 #if   defined(__unix__)
-    createInfo.pSettingsPath = "/etc/amd";
+        createInfo.pSettingsPath = "/etc/amd";
 #else
-    createInfo.pSettingsPath = "Vulkan";
+        createInfo.pSettingsPath = "Vulkan";
 #endif
 
-    // We use shadow descriptors to support FMASK based MSAA reads so we need to request support from PAL.
-    createInfo.flags.requestShadowDescriptorVaRange = 1;
+        // We use shadow descriptors to support FMASK based MSAA reads so we need to request support from PAL.
+        createInfo.flags.requestShadowDescriptorVaRange = 1;
 
-    // Switch to "null" GPU mode if requested
-    if (DetermineNullGpuSupport(&createInfo.nullGpuId))
-    {
-        createInfo.flags.createNullDevice = 1;
-        m_flags.nullGpuMode               = 1;
-        m_nullGpuId                       = createInfo.nullGpuId;
-    }
+        // Switch to "null" GPU mode if requested
+        if (DetermineNullGpuSupport(&createInfo.nullGpuId))
+        {
+            createInfo.flags.createNullDevice = 1;
+            m_flags.nullGpuMode               = 1;
+            m_nullGpuId                       = createInfo.nullGpuId;
+        }
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    createInfo.flags.supportRgpTraces = 1;
+        createInfo.flags.supportRgpTraces = 1;
 #endif
 
-    //Check the KHR_DISPALY extension, and then determine whether to open the primaryNode.
-    if (IsExtensionEnabled(InstanceExtensions::KHR_DISPLAY) == false)
-    {
-        createInfo.flags.dontOpenPrimaryNode = 1;
-    }
+        //Check the KHR_DISPALY extension, and then determine whether to open the primaryNode.
+        if (IsExtensionEnabled(InstanceExtensions::KHR_DISPLAY) == false)
+        {
+            createInfo.flags.dontOpenPrimaryNode = 1;
+        }
 
-    createInfo.clientApiId = Pal::ClientApi::Vulkan;
+        createInfo.clientApiId = Pal::ClientApi::Vulkan;
 
-    Pal::Result palResult = Pal::CreatePlatform(createInfo, pPalMemory, &m_pPalPlatform);
+        Pal::Result palResult = Pal::CreatePlatform(createInfo, pPalMemory, &m_pPalPlatform);
 
-    if (palResult != Pal::Result::ErrorUnknown)
-    {
-        status = PalToVkResult(palResult);
-    }
-    else
-    {
-        // We _might_ hit this case when addrLib fails to initialize when an upper limit to the number
-        // of allocations is set by the application. So we report VK_ERROR_OUT_OF_HOST_MEMORY here.
-        // While receiving ErrorUnknown doesn't necessarily guarantee that the error came from AddrLib
-        // due to an OOM condition, the time needed to have a propper fix for all the possible cases is
-        // not worth spending.
-        status = VK_ERROR_OUT_OF_HOST_MEMORY;
+        if (palResult != Pal::Result::ErrorUnknown)
+        {
+            status = PalToVkResult(palResult);
+        }
+        else
+        {
+            // We _might_ hit this case when addrLib fails to initialize when an upper limit to the number
+            // of allocations is set by the application. So we report VK_ERROR_OUT_OF_HOST_MEMORY here.
+            // While receiving ErrorUnknown doesn't necessarily guarantee that the error came from AddrLib
+            // due to an OOM condition, the time needed to have a propper fix for all the possible cases is
+            // not worth spending.
+            status = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
     }
 
     if (status == VK_SUCCESS)
@@ -543,6 +551,10 @@ VkResult Instance::Init(
             FreeMem(pPalMemory);
         }
 
+        if (m_pGpuMemoryEventHandler != nullptr)
+        {
+            m_pGpuMemoryEventHandler->Destroy();
+        }
     }
 
     if (status == VK_SUCCESS)
@@ -710,6 +722,11 @@ VkResult Instance::Destroy(void)
         m_pPalPlatform->Destroy();
 
         FreeMem(m_pPalPlatform);
+    }
+
+    if (m_pGpuMemoryEventHandler != nullptr)
+    {
+        m_pGpuMemoryEventHandler->Destroy();
     }
 
     // This was created with placement new. Need to explicitly call destructor.
@@ -1139,6 +1156,10 @@ void PAL_STDCALL Instance::PalDeveloperCallback(
         SqttMgr::PalDeveloperCallback(pInstance, deviceIndex, type, pCbData);
     }
 
+    if (pInstance->IsGpuMemoryEventSupportEnabled() == true)
+    {
+        pInstance->m_pGpuMemoryEventHandler->PalDeveloperCallback(type, pCbData);
+    }
 }
 
 // =====================================================================================================================
@@ -1409,6 +1430,13 @@ void Instance::CallExternalMessengers(
     }
 
     m_logCallbackInternalExternalMutex.Unlock();
+}
+
+// =====================================================================================================================
+// GpuMemoryEventHandler is enabled by VK_EXT_device_memory_report and/or VK_EXT_device_address_binding_report
+void Instance::EnableGpuMemoryEventHandler()
+{
+    m_flags.gpuMemoryEventSupport = true;
 }
 
 namespace entry

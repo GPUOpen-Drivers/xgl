@@ -1550,13 +1550,11 @@ void VkToPalImageScaledCopyRegion(
     region.dstOffset = VkToPalOffset3d(imageBlit.dstOffsets[0]);
     region.dstExtent = VkToPalSignedExtent3d(imageBlit.dstOffsets);
 
+    // Source and destination aspect masks and layer counts must match
+    VK_ASSERT(imageBlit.srcSubresource.aspectMask == imageBlit.dstSubresource.aspectMask);
     VK_ASSERT(imageBlit.srcSubresource.layerCount == imageBlit.dstSubresource.layerCount);
-    VK_ASSERT(region.srcExtent.depth == region.dstExtent.depth);
 
     region.numSlices = imageBlit.srcSubresource.layerCount;
-
-    // Source and destination aspect masks must match
-    VK_ASSERT(imageBlit.srcSubresource.aspectMask == imageBlit.dstSubresource.aspectMask);
 
     // As we don't allow copying between different types of aspects we don't need to worry about dealing with both
     // aspect masks separately.
@@ -2727,10 +2725,11 @@ inline uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
 {
     Pal::ImageCreateFlags flags = {};
 
-    flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)   ? 1 : 0;
-    flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)  ? 1 : 0;
-    flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)             ? 1 : 0;
-    flags.tmzProtected       = (imageCreateFlags & VK_IMAGE_CREATE_PROTECTED_BIT)         ? 1 : 0;
+    flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)        ? 1 : 0;
+    flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)       ? 1 : 0;
+    flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)                  ? 1 : 0;
+    flags.tmzProtected       = (imageCreateFlags & VK_IMAGE_CREATE_PROTECTED_BIT)              ? 1 : 0;
+    flags.view3dAs2dArray    = (imageCreateFlags & VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT) ? 1 : 0;
 
     // Always provide pQuadSamplePattern to PalCmdResolveImage for depth formats to allow optimizations
     flags.sampleLocsAlwaysKnown = Formats::HasDepth(format) ? 1 : 0;
@@ -2764,6 +2763,11 @@ inline VkImageCreateFlags PalToVkImageCreateFlags(Pal::ImageCreateFlags imageCre
     if (imageCreateFlags.tmzProtected  == 1)
     {
         vkImageCreateFlags |= VK_IMAGE_CREATE_PROTECTED_BIT;
+    }
+
+    if (imageCreateFlags.view3dAs2dArray == 1)
+    {
+        vkImageCreateFlags |= VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT;
     }
 
     return vkImageCreateFlags;
@@ -2931,10 +2935,10 @@ inline float VkToPalClearDepth(float depth)
 // =====================================================================================================================
 // Converts Vulkan clear color value to PAL equivalent
 inline Pal::ClearColor VkToPalClearColor(
-    const VkClearColorValue*   pClearColor,
+    const VkClearColorValue&   clearColor,
     const Pal::SwizzledFormat& swizzledFormat)
 {
-    Pal::ClearColor clearColor = { };
+    Pal::ClearColor palClearColor = { };
 
     const auto& formatInfo = Pal::Formats::FormatInfoTable[static_cast<size_t>(swizzledFormat.format)];
 
@@ -2948,26 +2952,26 @@ inline Pal::ClearColor VkToPalClearColor(
     case Pal::Formats::NumericSupportFlags::Srgb:
         // Perform the conversion to UINT ourselves because PAL always implicitly performs float conversions to UINT
         // based on the image format. For mutable images, this may not match the view format used here.
-        clearColor.type = Pal::ClearColorType::Uint;
-        Pal::Formats::ConvertColor(swizzledFormat, &pClearColor->float32[0], &clearColor.u32Color[0]);
+        palClearColor.type = Pal::ClearColorType::Uint;
+        Pal::Formats::ConvertColor(swizzledFormat, &clearColor.float32[0], &palClearColor.u32Color[0]);
         break;
     case Pal::Formats::NumericSupportFlags::Sint:
-        clearColor.type        = Pal::ClearColorType::Sint;
-        clearColor.u32Color[0] = pClearColor->uint32[0];
-        clearColor.u32Color[1] = pClearColor->uint32[1];
-        clearColor.u32Color[2] = pClearColor->uint32[2];
-        clearColor.u32Color[3] = pClearColor->uint32[3];
+        palClearColor.type        = Pal::ClearColorType::Sint;
+        palClearColor.u32Color[0] = clearColor.uint32[0];
+        palClearColor.u32Color[1] = clearColor.uint32[1];
+        palClearColor.u32Color[2] = clearColor.uint32[2];
+        palClearColor.u32Color[3] = clearColor.uint32[3];
         break;
     default:
-        clearColor.type        = Pal::ClearColorType::Uint;
-        clearColor.u32Color[0] = pClearColor->uint32[0];
-        clearColor.u32Color[1] = pClearColor->uint32[1];
-        clearColor.u32Color[2] = pClearColor->uint32[2];
-        clearColor.u32Color[3] = pClearColor->uint32[3];
+        palClearColor.type        = Pal::ClearColorType::Uint;
+        palClearColor.u32Color[0] = clearColor.uint32[0];
+        palClearColor.u32Color[1] = clearColor.uint32[1];
+        palClearColor.u32Color[2] = clearColor.uint32[2];
+        palClearColor.u32Color[3] = clearColor.uint32[3];
         break;
     }
 
-    return clearColor;
+    return palClearColor;
 }
 
 // =====================================================================================================================
@@ -3404,48 +3408,110 @@ inline Pal::QueuePriority VkToPalGlobalPriority(
     VkQueueGlobalPriorityKHR vkPriority,
     const T&                 engineCapabilities)
 {
+    const bool idleSupported     = ((engineCapabilities.queuePrioritySupport &
+                                    Pal::QueuePrioritySupport::SupportQueuePriorityIdle) != 0);
+    const bool normalSupported   = ((engineCapabilities.queuePrioritySupport &
+                                    Pal::QueuePrioritySupport::SupportQueuePriorityNormal) != 0);
+    const bool mediumSupported   = ((engineCapabilities.queuePrioritySupport &
+                                    Pal::QueuePrioritySupport::SupportQueuePriorityMedium) != 0);
+    const bool highSupported     = ((engineCapabilities.queuePrioritySupport &
+                                    Pal::QueuePrioritySupport::SupportQueuePriorityHigh) != 0);
+    const bool realtimeSupported = ((engineCapabilities.queuePrioritySupport &
+                                    Pal::QueuePrioritySupport::SupportQueuePriorityRealtime) != 0);
+
+    VK_ASSERT(idleSupported || normalSupported || mediumSupported || highSupported || realtimeSupported);
+
     Pal::QueuePriority palPriority = Pal::QueuePriority::Normal;
     switch (static_cast<int32_t>(vkPriority))
     {
     case VK_QUEUE_GLOBAL_PRIORITY_LOW_EXT:
-        if ((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityIdle) != 0)
+        if (idleSupported)
         {
             palPriority = Pal::QueuePriority::Idle;
         }
-        else
+        else if (normalSupported)
         {
             palPriority = Pal::QueuePriority::Normal;
         }
-        break;
-    case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT:
-        palPriority = Pal::QueuePriority::Normal;
-        break;
-    case VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT:
-        if ((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityHigh) != 0)
+        else if (mediumSupported)
+        {
+            palPriority = Pal::QueuePriority::Medium;
+        }
+        else if (highSupported)
         {
             palPriority = Pal::QueuePriority::High;
         }
-        else
-        {
-            palPriority = Pal::QueuePriority::Normal;
-        }
-        break;
-    case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT:
-        if ((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityRealtime) != 0)
+        else if (realtimeSupported)
         {
             palPriority = Pal::QueuePriority::Realtime;
         }
-        else if ((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityHigh) != 0)
+        break;
+    case VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT:
+        if (highSupported)
         {
             palPriority = Pal::QueuePriority::High;
         }
-        else
+        else if (mediumSupported)
+        {
+            palPriority = Pal::QueuePriority::Medium;
+        }
+        else if (normalSupported)
         {
             palPriority = Pal::QueuePriority::Normal;
         }
+        else if (idleSupported)
+        {
+            palPriority = Pal::QueuePriority::Idle;
+        }
+        else if (realtimeSupported)
+        {
+            palPriority = Pal::QueuePriority::Realtime;
+        }
         break;
+    case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT:
+        if (realtimeSupported)
+        {
+            palPriority = Pal::QueuePriority::Realtime;
+        }
+        else if (highSupported)
+        {
+            palPriority = Pal::QueuePriority::High;
+        }
+        else if (mediumSupported)
+        {
+            palPriority = Pal::QueuePriority::Medium;
+        }
+        else if (normalSupported)
+        {
+            palPriority = Pal::QueuePriority::Normal;
+        }
+        else if (idleSupported)
+        {
+            palPriority = Pal::QueuePriority::Idle;
+        }
+        break;
+    case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT:
     default:
-        palPriority = Pal::QueuePriority::Normal;
+        if (normalSupported)
+        {
+            palPriority = Pal::QueuePriority::Normal;
+        }
+        else if (mediumSupported)
+        {
+            palPriority = Pal::QueuePriority::Medium;
+        }
+        else if (highSupported)
+        {
+            palPriority = Pal::QueuePriority::High;
+        }
+        else if (idleSupported)
+        {
+            palPriority = Pal::QueuePriority::Idle;
+        }
+        else if (realtimeSupported)
+        {
+            palPriority = Pal::QueuePriority::Realtime;
+        }
         break;
     }
 

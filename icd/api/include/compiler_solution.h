@@ -175,7 +175,6 @@ struct RayTracingPipelineBinaryCreateInfo
     uint32_t                               maxPayloadSize;
     uint32_t                               maxAttributeSize;
     bool                                   allowShaderInlining;
-    bool                                   hasTraceRay;
     DeferredWorkload*                      pDeferredWorkload;
 };
 
@@ -183,6 +182,7 @@ struct RayTracingPipelineBinaryCreateInfo
 struct RayTracingPipelineBinary
 {
     uint32_t                            maxFunctionCallDepth;
+    bool                                hasTraceRay;
     uint32_t                            pipelineBinCount;
     Vkgc::BinaryData*                   pPipelineBins;
     Vkgc::RayTracingShaderGroupHandle   shaderGroupHandle;

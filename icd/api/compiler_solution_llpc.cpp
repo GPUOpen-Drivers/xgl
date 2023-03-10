@@ -694,14 +694,14 @@ VkResult CompilerSolutionLlpc::CreateRayTracingPipelineBinary(
                                                        &pipelineOut,
                                                        pPipelineDumpHandle,
                                                        pLlpcHelperThreadProvider);
-    // Update "hasTracyRay" flag
-    pCreateInfo->hasTraceRay = pipelineOut.hasTraceRay;
     if (llpcResult != Vkgc::Result::Success)
     {
         result = VK_ERROR_INITIALIZATION_FAILED;
     }
     else
     {
+        pPipelineBinary->hasTraceRay = pipelineOut.hasTraceRay;
+
         const uint32_t shaderGroupHandleSize =
             sizeof(Vkgc::RayTracingShaderIdentifier) * pipelineOut.shaderGroupHandle.shaderHandleCount;
 

@@ -2137,7 +2137,7 @@
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": "PipelineCacheCompressDisabled"
+        "Default": "PipelineCacheCompressOnDisk"
       },
       "ValidValues": {
         "IsEnum": true,
@@ -3867,22 +3867,6 @@
       "Type": "bool",
       "Scope": "Driver",
       "VariableName": "rtEnableAccelStructIndirectBuild"
-    },
-    {
-      "Name": "EnableRayTracingAccelStructHostFeatures",
-      "Description": "Enable ray tracing host-side physical device acceleration structure feature and commands",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableAccelStructHostFeatures"
     },
     {
       "Name": "EnableRayQueryCsSwizzle",
@@ -6996,6 +6980,18 @@
       "Type": "string",
       "Name": "DevModeEndFrameDebugUtilsLabel",
       "Size": 512
+    },
+    {
+      "Description": "Injects a queue WaitIdle() at the end of a debug utils end-frame delimiter to avoid overlapping frames.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "DevModeBlockingEndFrameDebugUtils"
     },
     {
       "Description": "Determines the pipeline binary max size limit (in KB) used by the PipelineUriService when injecting pipeline binaries back into the driver. The limit is 256KB by default.",

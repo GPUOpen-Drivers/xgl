@@ -621,11 +621,7 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
 
         const uint32_t numConstants = compileConstants.numConstants;
 
-        // Only BuildParallel is using compile time constants for now.
-        VK_ASSERT((numConstants == 0) ||
-                  (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildParallel));
         // Set up specialization constant info
-
         VK_ASSERT(numConstants <= 64);
         Util::AutoBuffer<VkSpecializationMapEntry, 64, vk::PalAllocator> mapEntries(
             numConstants,

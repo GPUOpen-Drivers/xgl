@@ -65,13 +65,11 @@ union InternalMemCreateFlags
         uint32_t readOnly         : 1;  // This is a GPU read-only allocation.
         uint32_t persistentMapped : 1;  // Persistently map this GPU allocation.  This flag should be set for
                                         // frequently mapped allocations.
-        uint32_t noSuballocation  : 1;  // Set this flag if you want to disallow sub-allocation for whatever
-                                        // reason.
         uint32_t needShadow       : 1;  // If a shadow table is needed.
         uint32_t needGl2Uncached  : 1;  // If a gl2Uncached is needed.
         uint32_t debug            : 1;  // Memory used for internal debugging (e.g. data dumping) only;
                                         // not to be mixed with regular sub-allocations
-        uint32_t reserved         : 26; // Reserved
+        uint32_t reserved         : 27; // Reserved
     };
     uint32_t u32All;
 };

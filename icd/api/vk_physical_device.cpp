@@ -824,7 +824,8 @@ VkResult PhysicalDevice::Initialize()
                     // These two should match because the PAL GPU heaps share the same physical memory.
                     VK_ASSERT(memoryHeap.size == heapProperties[Pal::GpuHeapGartCacheable].physicalSize);
 
-                    heapIndices[Pal::GpuHeapGartCacheable] = heapIndex;
+                    heapIndices[Pal::GpuHeapGartCacheable]              = heapIndex;
+                    m_memoryPalHeapToVkHeap[Pal::GpuHeapGartCacheable]  = heapIndex;
                 }
                 else if ((palGpuHeap == Pal::GpuHeapLocal) &&
                          (heapIndices[Pal::GpuHeapInvisible] == Pal::GpuHeapCount))
@@ -2536,7 +2537,7 @@ void PhysicalDevice::PopulateLimits()
     // OGL: pDpCaps->maxDomainVaryingComponents = SI_MAX_TESS_CONTROL_INPUT_COMPONENTS [sic]
 
     // Maximum invocation count (per input primitive) supported for an instanced geometry shader.
-    m_limits.maxGeometryShaderInvocations = 127;
+    m_limits.maxGeometryShaderInvocations = palProps.gfxipProperties.maxGsInvocations;
 
     // OGL: pGpCaps->maxGeometryInvocations = SI_MAX_GP_INVOCATIONS
 
@@ -3905,6 +3906,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_FORMAT_FEATURE_FLAGS2));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_CLIP_CONTROL));
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PRIMITIVE_TOPOLOGY_LIST_RESTART));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DYNAMIC_RENDERING));
 
@@ -4516,11 +4518,7 @@ void PhysicalDevice::GetPhysicalDeviceSubgroupProperties(
 #if VKI_RAY_TRACING
     if (IsExtensionSupported(DeviceExtensions::KHR_RAY_TRACING_PIPELINE))
     {
-        *pSupportedStages |= VK_SHADER_STAGE_RAYGEN_BIT_KHR |
-                             VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
-                             VK_SHADER_STAGE_MISS_BIT_KHR |
-                             VK_SHADER_STAGE_INTERSECTION_BIT_KHR |
-                             VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+        *pSupportedStages |= RayTraceShaderStages;
     }
 #endif
 
@@ -5277,6 +5275,18 @@ size_t PhysicalDevice::GetFeatures2(
                 structSize = sizeof(*pExtInfo);
                 break;
             }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_MEMORY_REPORT_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDeviceMemoryReportFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->deviceMemoryReport = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceSamplerYcbcrConversionFeatures*>(pHeader);
@@ -5409,17 +5419,14 @@ size_t PhysicalDevice::GetFeatures2(
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES_KHR:
             {
-                if (IsExtensionSupported(DeviceExtensions::KHR_SHADER_INTEGER_DOT_PRODUCT))
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderIntegerDotProductFeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
                 {
-                    auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderIntegerDotProductFeaturesKHR*>(pHeader);
-
-                    if (updateFeatures)
-                    {
-                        pExtInfo->shaderIntegerDotProduct = VK_TRUE;
-                    }
-
-                    structSize = sizeof(*pExtInfo);
+                    pExtInfo->shaderIntegerDotProduct = VK_TRUE;
                 }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
@@ -5912,51 +5919,44 @@ size_t PhysicalDevice::GetFeatures2(
 #if VKI_RAY_TRACING
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR:
             {
-                if (IsExtensionSupported(DeviceExtensions::KHR_RAY_TRACING_PIPELINE))
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceRayTracingPipelineFeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
                 {
-                    auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceRayTracingPipelineFeaturesKHR*>(pHeader);
+                    pExtInfo->rayTracingPipeline                    = VK_TRUE;
+                    pExtInfo->rayTracingPipelineTraceRaysIndirect   = VK_TRUE;
+                    pExtInfo->rayTraversalPrimitiveCulling          = VK_TRUE;
 
-                    if (updateFeatures)
-                    {
-                        pExtInfo->rayTracingPipeline                    = VK_TRUE;
-                        pExtInfo->rayTracingPipelineTraceRaysIndirect   = VK_TRUE;
-                        pExtInfo->rayTraversalPrimitiveCulling          = VK_TRUE;
+                    pExtInfo->rayTracingPipelineShaderGroupHandleCaptureReplay      = VK_TRUE;
 
-                        pExtInfo->rayTracingPipelineShaderGroupHandleCaptureReplay      = VK_TRUE;
-
-                        // We cannot support capture replay for indirect RT pipelines in mixed mode (reused handles
-                        // mixed with non-reused handles). That is because we have no way to gaurantee the shaders' VAs
-                        // are the same between capture and replay, we need full reused handles to do a 1-on-1 mapping
-                        // in order to replay correctly.
-                        pExtInfo->rayTracingPipelineShaderGroupHandleCaptureReplayMixed = VK_FALSE;
-                    }
-
-                    structSize = sizeof(*pExtInfo);
+                    // We cannot support capture replay for indirect RT pipelines in mixed mode (reused handles
+                    // mixed with non-reused handles). That is because we have no way to gaurantee the shaders' VAs
+                    // are the same between capture and replay, we need full reused handles to do a 1-on-1 mapping
+                    // in order to replay correctly.
+                    pExtInfo->rayTracingPipelineShaderGroupHandleCaptureReplayMixed = VK_FALSE;
                 }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR:
             {
-                if (IsExtensionSupported(DeviceExtensions::KHR_ACCELERATION_STRUCTURE))
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceAccelerationStructureFeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
                 {
-                    auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceAccelerationStructureFeaturesKHR*>(pHeader);
-
-                    if (updateFeatures)
-                    {
-                        pExtInfo->accelerationStructure                                 = VK_TRUE;
-                        pExtInfo->accelerationStructureCaptureReplay                    = VK_TRUE;
-                        pExtInfo->accelerationStructureIndirectBuild                    = GetRuntimeSettings().rtEnableAccelStructIndirectBuild;
-                        pExtInfo->accelerationStructureHostCommands                     = GetRuntimeSettings().rtEnableAccelStructHostFeatures;
-                        pExtInfo->descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
-                    }
-
-                    structSize = sizeof(*pExtInfo);
+                    pExtInfo->accelerationStructure                                 = VK_TRUE;
+                    pExtInfo->accelerationStructureCaptureReplay                    = VK_TRUE;
+                    pExtInfo->accelerationStructureIndirectBuild                    = GetRuntimeSettings().rtEnableAccelStructIndirectBuild;
+                    pExtInfo->accelerationStructureHostCommands                     = VK_FALSE;
+                    pExtInfo->descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
                 }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
-#if VKI_RAY_TRACING
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR:
             {
                 auto * pExtInfo = reinterpret_cast<VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR*>(pHeader);
@@ -5965,6 +5965,32 @@ size_t PhysicalDevice::GetFeatures2(
                 {
                     pExtInfo->rayTracingMaintenance1               = VK_TRUE;
                     pExtInfo->rayTracingPipelineTraceRaysIndirect2 = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceRayQueryFeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->rayQuery = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->pipelineLibraryGroupHandles = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -5984,23 +6010,6 @@ size_t PhysicalDevice::GetFeatures2(
                 structSize = sizeof(*pExtInfo);
                 break;
             }
-
-            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR:
-            {
-                if (IsExtensionSupported(DeviceExtensions::KHR_RAY_QUERY))
-                {
-                    auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceRayQueryFeaturesKHR*>(pHeader);
-
-                    if (updateFeatures)
-                    {
-                        pExtInfo->rayQuery = VK_TRUE;
-                    }
-
-                    structSize = sizeof(*pExtInfo);
-                }
-                break;
-            }
-#endif
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT:
             {
@@ -6135,6 +6144,20 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_2D_VIEW_OF_3D_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceImage2DViewOf3DFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->image2DViewOf3D   = VK_TRUE;
+                    pExtInfo->sampler2DViewOf3D = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceCustomBorderColorFeaturesEXT*>(pHeader);
@@ -6236,17 +6259,14 @@ size_t PhysicalDevice::GetFeatures2(
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT:
             {
-                if (IsExtensionSupported(DeviceExtensions::EXT_GRAPHICS_PIPELINE_LIBRARY))
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
                 {
-                    auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT*>(pHeader);
-
-                    if (updateFeatures)
-                    {
-                        pExtInfo->graphicsPipelineLibrary = VK_TRUE;
-                    }
-
-                    structSize = sizeof(*pExtInfo);
+                    pExtInfo->graphicsPipelineLibrary = VK_TRUE;
                 }
+
+                structSize = sizeof(*pExtInfo);
                 break;
             }
 
@@ -6538,6 +6558,20 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_SLICED_VIEW_OF_3D_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceImageSlicedViewOf3DFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->imageSlicedViewOf3D = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT*>(pHeader);
@@ -6597,6 +6631,18 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     pExtInfo->attachmentFeedbackLoopLayout = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderModuleIdentifier = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);

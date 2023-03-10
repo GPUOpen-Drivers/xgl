@@ -203,6 +203,9 @@ public:
     const Pal::IShaderLibrary* PalShaderLibrary(uint32_t idx) const
         { return m_ppShaderLibraries[idx]; }
 
+    const Pal::IShaderLibrary*const* GetShaderLibraries() const
+        { return m_ppShaderLibraries; }
+
     bool CheckHasTraceRay() const
         { return m_hasTraceRay; }
 
@@ -313,7 +316,6 @@ protected:
 
     // Return true if the shader id was found and mapped to a gpu address.
     static bool MapShaderIdToGpuVa(
-        uint32_t                          indirectFuncCount,
         Pal::ShaderLibraryFunctionInfo*   pIndirectFuncList,
         uint32_t*                         pShaderNameMap,
         uint32_t                          shaderPropsCount,

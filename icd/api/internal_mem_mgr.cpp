@@ -563,8 +563,7 @@ VkResult InternalMemMgr::AllocGpuMem(
 
     // If the requested allocation is small enough (at most half the size of a single pool) then try to find an
     // appropriate pool and suballocate from it.
-    if ((createInfo.flags.noSuballocation == false) &&
-        (createInfo.pal.size <= (PoolAllocationSize / 2)))
+    if (createInfo.pal.size <= (PoolAllocationSize / 2))
     {
         MemoryPoolList* pPoolList;
 

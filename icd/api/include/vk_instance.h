@@ -42,6 +42,7 @@
 #include "include/vk_extensions.h"
 #include "include/vk_debug_report.h"
 #include "include/vk_debug_utils.h"
+#include "include/gpumemory_event_handler.h"
 
 #include "palDeveloperHooks.h"
 #include "palLib.h"
@@ -62,6 +63,7 @@ namespace vk
 class DevModeMgr;
 class DispatchableInstance;
 class DisplayManager;
+class GpuMemoryEventHandler;
 class PhysicalDeviceManager;
 class VirtualStackMgr;
 class VulkanSettingsLoader;
@@ -212,11 +214,19 @@ public:
     bool IsNullGpuModeEnabled() const
         { return m_flags.nullGpuMode; }
 
+    bool IsGpuMemoryEventSupportEnabled() const
+        { return m_flags.gpuMemoryEventSupport; }
+
     Pal::NullGpuId GetNullGpuId() const
         { return m_nullGpuId; }
 
     DevModeMgr* GetDevModeMgr()
         { return m_pDevModeMgr; }
+
+    GpuMemoryEventHandler* GetGpuMemoryEventHandler() const
+        { return m_pGpuMemoryEventHandler; }
+
+    void EnableGpuMemoryEventHandler();
 
     const char* GetApplicationName() const
         { return m_applicationName; }
@@ -312,10 +322,11 @@ private:
     {
         struct
         {
-            uint32_t sqttSupport        : 1;  // True if SQTT thread trace annotation markers are enabled
-            uint32_t nullGpuMode        : 1;  // True if the instance is running in null gpu mode (fake gpus for shader
-                                              // compilation
-            uint32_t reserved           : 30;
+            uint32_t sqttSupport           : 1;  // True if SQTT thread trace annotation markers are enabled
+            uint32_t nullGpuMode           : 1;  // True if the instance is running in null gpu mode (fake gpus for
+                                                 // shader compilation
+            uint32_t gpuMemoryEventSupport : 1;  // True if GpuMemoryEventHandler is enabled
+            uint32_t reserved              : 29;
         };
         uint32_t u32All;
     } m_flags;
@@ -360,6 +371,9 @@ private:
     static const char* m_extensionsEnv;
 
     uint64_t  m_logTagIdMask;
+
+    GpuMemoryEventHandler* m_pGpuMemoryEventHandler; // Handler of Pal GPU memory events for VK_EXT_device_memory_report
+                                                     // and VK_EXT_device_address_binding_report extensions
 };
 
 // =====================================================================================================================

@@ -1396,6 +1396,8 @@ public:
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(CmdBuffer);
 
+    uint32 GetHevcDbpIndex(const uint8_t* pRefPicList, uint32 dpbSlot);
+
     void ValidateGraphicsStates();
 
     void ValidateSamplePattern(uint32_t sampleCount, SamplePattern* pSamplePattern);

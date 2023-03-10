@@ -88,28 +88,6 @@ public:
     static GpuRt::AccelStructCopyMode ConvertCopyAccelerationStructureModeKHR(
         VkCopyAccelerationStructureModeKHR copyAccelerationStructureInfo);
 
-    static VkResult BuildAccelerationStructure(
-        Device*                                                  pDevice,
-        DeferredHostOperation*                                   pDeferredOperation,
-        uint32_t                                                 infoCount,
-        const VkAccelerationStructureBuildGeometryInfoKHR*       pInfos,
-        const VkAccelerationStructureBuildRangeInfoKHR* const*   ppBuildRangeInfos);
-
-    static VkResult CopyAccelerationStructure(
-        Device*                                           pDevice,
-        DeferredHostOperation*                            pDeferredOperation,
-        const VkCopyAccelerationStructureInfoKHR*         pInfo);
-
-    static VkResult CopyMemoryToAccelerationStructure(
-        Device*                                           pDevice,
-        DeferredHostOperation*                            pDeferredOperation,
-        const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo);
-
-    static VkResult CopyAccelerationStructureToMemory(
-        Device*                                           pDevice,
-        DeferredHostOperation*                            pDeferredOperation,
-        const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo);
-
     // GPURT Callback Functions
     static GpuRt::Geometry ClientConvertAccelStructBuildGeometry(
         const GpuRt::AccelStructBuildInputs& inputs,
