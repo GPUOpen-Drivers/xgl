@@ -220,7 +220,9 @@ public:
     VkResult AllocGpuMem(
         const InternalMemCreateInfo& internalInfo,
         InternalMemory*              pInternalMemory,
-        uint32_t                     allocMask);
+        uint32_t                     allocMask,
+        const VkObjectType           requestingObjectType,
+        const uint64_t               requestingObjectHandle);
 
     VkResult AllocAndBindGpuMem(
         uint32_t                   numDevices,
@@ -229,7 +231,9 @@ public:
         InternalMemory*            pInternalMemory,
         uint32_t                   allocMask,
         bool                       removeInvisibleHeap,
-        bool                       persistentMapped);
+        bool                       persistentMapped,
+        const VkObjectType         requestingObjectType,
+        const uint64_t             requestingObjectHandle);
 
     void FreeGpuMem(
         const InternalMemory*           pInternalMemory);

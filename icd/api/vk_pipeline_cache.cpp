@@ -44,12 +44,14 @@ PipelineCache::PipelineCache(
     )
     :
     m_pDevice(pDevice),
+    m_shaderCaches{},
     m_pBinaryCache(pBinaryCache)
 {
-    memcpy(m_shaderCaches, pShaderCaches, sizeof(m_shaderCaches[0]) * pDevice->NumPalDevices());
-    memset(m_shaderCaches + pDevice->NumPalDevices(),
-           0,
-           sizeof(m_shaderCaches[0]) * (MaxPalDevices - pDevice->NumPalDevices()));
+    for (uint32_t i = 0; i < pDevice->NumPalDevices(); ++i)
+    {
+        const auto& cache = pShaderCaches[i];
+        m_shaderCaches[i].Init(cache.GetCacheType(), cache.GetCachePtr());
+    }
 }
 
 // =====================================================================================================================

@@ -549,7 +549,47 @@ DeviceBarrierPolicy::DeviceBarrierPolicy(
 {
     InitDeviceLayoutEnginePolicy(pPhysicalDevice, pCreateInfo, enabledExtensions);
     InitDeviceCachePolicy(pPhysicalDevice, enabledExtensions);
-    InitQueueFamilyPolicies(pPhysicalDevice, pCreateInfo, enabledExtensions);
+
+    memset(&m_queueFamilyPolicy[0], 0, sizeof(m_queueFamilyPolicy));
+
+    bool transferQueueRequested = false;
+    bool computeQueueRequested = false;
+
+    for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++)
+    {
+        uint32_t queueFamilyIndex = pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex;
+        QueueFamilyBarrierPolicy* pPolicy = &m_queueFamilyPolicy[queueFamilyIndex];
+        Pal::QueueType queueType = pPhysicalDevice->GetQueueFamilyPalQueueType(queueFamilyIndex);
+
+        InitQueueFamilyPolicy(
+            pPolicy,
+            pPhysicalDevice->GetQueueFamilyPalImageLayoutFlag(queueFamilyIndex),
+            queueType);
+
+        transferQueueRequested = transferQueueRequested || (queueType == Pal::QueueTypeDma);
+        computeQueueRequested = computeQueueRequested || (queueType == Pal::QueueTypeCompute);
+    }
+
+    // If application has requested transfer queue but not compute queue,
+    // we must also initialize queue family policy for compute queue because
+    // we might need to switch to compute queue (i.e. backup command buffer)
+    // to handle unsupported operations (e.g. MSAA image copies) on transfer queue.
+    if (transferQueueRequested && (computeQueueRequested == false))
+    {
+        uint32_t computeQueueFamilyIndex = pPhysicalDevice->GetQueueFamilyIndexByPalQueueType(Pal::QueueTypeCompute);
+        QueueFamilyBarrierPolicy* pComputeEnginePolicy = &m_queueFamilyPolicy[computeQueueFamilyIndex];
+
+        InitQueueFamilyPolicy(
+            pComputeEnginePolicy,
+            pPhysicalDevice->GetQueueFamilyPalImageLayoutFlag(computeQueueFamilyIndex),
+            Pal::QueueTypeCompute);
+    }
+
+    // Set defaults for external/foreign queue families.
+    m_externalQueueFamilyPolicy.palLayoutEngineMask         = Pal::LayoutAllEngines;
+    m_externalQueueFamilyPolicy.supportedCacheMask          = Pal::CoherAllUsages;
+    m_externalQueueFamilyPolicy.supportedLayoutUsageMask    = Pal::LayoutAllUsages;
+    m_externalQueueFamilyPolicy.ownershipTransferPriority   = OwnershipTransferPriority::None;
 }
 
 // =====================================================================================================================
@@ -574,6 +614,14 @@ void DeviceBarrierPolicy::InitDeviceLayoutEnginePolicy(
         uint32_t queueFamilyIndex = pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex;
 
         m_supportedLayoutEngineMask |= pPhysicalDevice->GetQueueFamilyPalImageLayoutFlag(queueFamilyIndex);
+
+        // If application has requested transfer queue, we might need to switch to compute queue to handle
+        // unsupported transfer operations on transfer queue at any time (e.g. during MSAA image copies),
+        // so, we must also set the layout engine mask of compute queue.
+        if (pPhysicalDevice->GetQueueFamilyPalQueueType(queueFamilyIndex) == Pal::QueueTypeDma)
+        {
+            m_supportedLayoutEngineMask |= Pal::LayoutComputeEngine;
+        }
     }
 
     m_supportedLayoutEngineMask &= maxLayoutEngineMask;
@@ -636,32 +684,25 @@ void DeviceBarrierPolicy::InitDeviceCachePolicy(
 
 // =====================================================================================================================
 // Initialize the layout engine policy of the device according to the input parameters.
-void DeviceBarrierPolicy::InitQueueFamilyPolicies(
-    PhysicalDevice*                     pPhysicalDevice,
-    const VkDeviceCreateInfo*           pCreateInfo,
-    const DeviceExtensions::Enabled&    enabledExtensions)
+void DeviceBarrierPolicy::InitQueueFamilyPolicy(
+    QueueFamilyBarrierPolicy*   pPolicy,
+    uint32_t                    palLayoutEngineMask,
+    Pal::QueueType              queueType)
 {
-    memset(&m_queueFamilyPolicy[0], 0, sizeof(m_queueFamilyPolicy));
+    pPolicy->palLayoutEngineMask            = palLayoutEngineMask;
 
-    for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; ++i)
+    pPolicy->supportedCacheMask             = Pal::CoherCpu
+                                            | Pal::CoherTimestamp
+                                            | Pal::CoherMemory;
+    pPolicy->supportedLayoutUsageMask       = Pal::LayoutUninitializedTarget
+                                            | Pal::LayoutPresentWindowed
+                                            | Pal::LayoutPresentFullscreen
+                                            | Pal::LayoutUncompressed;
+
+    switch (queueType)
     {
-        uint32_t queueFamilyIndex = pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex;
-        QueueFamilyBarrierPolicy& policy = m_queueFamilyPolicy[queueFamilyIndex];
-
-        policy.palLayoutEngineMask      = pPhysicalDevice->GetQueueFamilyPalImageLayoutFlag(queueFamilyIndex);
-
-        policy.supportedCacheMask       = Pal::CoherCpu
-                                        | Pal::CoherTimestamp
-                                        | Pal::CoherMemory;
-        policy.supportedLayoutUsageMask = Pal::LayoutUninitializedTarget
-                                        | Pal::LayoutPresentWindowed
-                                        | Pal::LayoutPresentFullscreen
-                                        | Pal::LayoutUncompressed;
-
-        switch (pPhysicalDevice->GetQueueFamilyPalQueueType(queueFamilyIndex))
-        {
-        case Pal::QueueTypeUniversal:
-            policy.supportedCacheMask       |= Pal::CoherShader
+    case Pal::QueueTypeUniversal:
+        pPolicy->supportedCacheMask         |= Pal::CoherShader
                                              | Pal::CoherCopy
                                              | Pal::CoherColorTarget
                                              | Pal::CoherDepthStencilTarget
@@ -670,7 +711,7 @@ void DeviceBarrierPolicy::InitQueueFamilyPolicies(
                                              | Pal::CoherIndirectArgs
                                              | Pal::CoherIndexData
                                              | Pal::CoherPresent;
-            policy.supportedLayoutUsageMask |= Pal::LayoutColorTarget
+        pPolicy->supportedLayoutUsageMask   |= Pal::LayoutColorTarget
                                              | Pal::LayoutDepthStencilTarget
                                              | Pal::LayoutShaderRead
                                              | Pal::LayoutShaderFmaskBasedRead
@@ -681,44 +722,37 @@ void DeviceBarrierPolicy::InitQueueFamilyPolicies(
                                              | Pal::LayoutResolveDst
                                              | Pal::LayoutSampleRate;
 
-            // Always prefer executing ownership transfer barriers on the universal queue.
-            policy.ownershipTransferPriority = OwnershipTransferPriority::High;
-            break;
+        // Always prefer executing ownership transfer barriers on the universal queue.
+        pPolicy->ownershipTransferPriority  = OwnershipTransferPriority::High;
+        break;
 
-        case Pal::QueueTypeCompute:
-            policy.supportedCacheMask       |= Pal::CoherShader
+    case Pal::QueueTypeCompute:
+        pPolicy->supportedCacheMask         |= Pal::CoherShader
                                              | Pal::CoherCopy
                                              | Pal::CoherResolve
                                              | Pal::CoherClear
                                              | Pal::CoherIndirectArgs;
-            policy.supportedLayoutUsageMask |= Pal::LayoutShaderRead
+        pPolicy->supportedLayoutUsageMask   |= Pal::LayoutShaderRead
                                              | Pal::LayoutShaderFmaskBasedRead
                                              | Pal::LayoutShaderWrite
                                              | Pal::LayoutCopySrc
                                              | Pal::LayoutCopyDst;
 
-            // Prefer executing ownership transfer barriers on the compute queue against all but the universal queue.
-            policy.ownershipTransferPriority = OwnershipTransferPriority::Medium;
-            break;
+        // Prefer executing ownership transfer barriers on the compute queue against all but the universal queue.
+        pPolicy->ownershipTransferPriority  = OwnershipTransferPriority::Medium;
+        break;
 
-        case Pal::QueueTypeDma:
-            policy.supportedCacheMask       |= Pal::CoherCopy
+    case Pal::QueueTypeDma:
+        pPolicy->supportedCacheMask         |= Pal::CoherCopy
                                              | Pal::CoherClear;
-            policy.supportedLayoutUsageMask |= Pal::LayoutCopySrc
+        pPolicy->supportedLayoutUsageMask   |= Pal::LayoutCopySrc
                                              | Pal::LayoutCopyDst;
-            policy.ownershipTransferPriority = OwnershipTransferPriority::Low;
-            break;
+        pPolicy->ownershipTransferPriority  = OwnershipTransferPriority::Low;
+        break;
 
-        default:
-            VK_ASSERT(!"Unexpected queue type");
-        }
+    default:
+        VK_ASSERT(!"Unexpected queue type");
     }
-
-    // Set defaults for external/foreign queue families.
-    m_externalQueueFamilyPolicy.palLayoutEngineMask         = Pal::LayoutAllEngines;
-    m_externalQueueFamilyPolicy.supportedCacheMask          = Pal::CoherAllUsages;
-    m_externalQueueFamilyPolicy.supportedLayoutUsageMask    = Pal::LayoutAllUsages;
-    m_externalQueueFamilyPolicy.ownershipTransferPriority   = OwnershipTransferPriority::None;
 }
 
 // =====================================================================================================================

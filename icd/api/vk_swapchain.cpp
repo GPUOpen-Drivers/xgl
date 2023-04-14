@@ -142,6 +142,11 @@ VkResult SwapChain::Create(
     properties.pFullscreenSurface       = pSurface;
     properties.fullscreenSurfaceFormat  = { pCreateInfo->imageFormat, pCreateInfo->imageColorSpace };
 
+    // Store creation info for image barrier policy
+    properties.usage                    = pCreateInfo->imageUsage;
+    properties.sharingMode              = pCreateInfo->imageSharingMode;
+    properties.format                   = pCreateInfo->imageFormat;
+
     // The swapchain image can be used as a blit source for driver post processing on present.
     properties.imageCreateInfo.usage.shaderRead = 1;
 
@@ -425,11 +430,6 @@ VkResult SwapChain::Create(
             &properties.imagePresentSupport,
             &properties.imageCreateInfo);
     }
-
-    // Store creation info for image barrier policy
-    properties.usage       = pCreateInfo->imageUsage;
-    properties.sharingMode = pCreateInfo->imageSharingMode;
-    properties.format      = pCreateInfo->imageFormat;
 
     properties.images      = static_cast<VkImage*>(Util::VoidPtrInc(pMemory, offset));
     offset += imageArraySize;
@@ -912,9 +912,7 @@ void SwapChain::MarkAsDeprecated(
 {
     m_deprecated = true;
 
-    // DXGI and the Vulkan spec enforce that only one swapchain may be tied to a HWND. We never cared about it before
-    // but we should now. Call into PAL to free the swapchain in DXGI mode.
-    if (IsDxgiEnabled() && (m_pPalSwapChain != nullptr))
+    if (m_pPalSwapChain != nullptr)
     {
         m_pPalSwapChain->WaitIdle();
 

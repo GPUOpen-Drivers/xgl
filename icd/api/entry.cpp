@@ -1682,6 +1682,16 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetSampleLocationsEnableEXT(
 }
 
 // =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetColorBlendAdvancedEXT(
+    VkCommandBuffer                      commandBuffer,
+    uint32_t                             firstAttachment,
+    uint32_t                             attachmentCount,
+    const VkColorBlendAdvancedEXT*       pColorBlendAdvanced)
+{
+    VK_NEVER_CALLED();
+}
+
+// =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdSetProvokingVertexModeEXT(
     VkCommandBuffer                     commandBuffer,
     VkProvokingVertexModeEXT            provokingVertexMode)

@@ -194,10 +194,10 @@ protected:
         PhysicalDevice*                     pPhysicalDevice,
         const DeviceExtensions::Enabled&    enabledExtensions);
 
-    void InitQueueFamilyPolicies(
-        PhysicalDevice*                     pPhysicalDevice,
-        const VkDeviceCreateInfo*           pCreateInfo,
-        const DeviceExtensions::Enabled&    enabledExtensions);
+    void InitQueueFamilyPolicy(
+        QueueFamilyBarrierPolicy*   pPolicy,
+        uint32_t                    palLayoutEngineMask,
+        Pal::QueueType              queueType);
 
     uint32_t    m_supportedLayoutEngineMask;        // Mask including all supported image layout engine flags.
     uint32_t    m_allowedConcurrentCacheMask;       // Mask including all caches that can be affected by operations

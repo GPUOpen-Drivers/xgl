@@ -104,16 +104,15 @@ VkResult DescriptorPool::Init(
     const VkDescriptorPoolCreateInfo*      pCreateInfo,
     const VkAllocationCallbacks*           pAllocator)
 {
-    VkDescriptorPoolCreateFlags poolUsage   = pCreateInfo->flags;
-    uint32_t                    maxSets     = pCreateInfo->maxSets;
+    VkResult result = m_setHeap.Init<numPalDevices>(pDevice, pAllocator, pCreateInfo);
 
-    VkResult result = VK_SUCCESS;
+    m_hostOnly = (pCreateInfo->flags & VK_DESCRIPTOR_POOL_CREATE_HOST_ONLY_BIT_EXT) != 0;
 
-    result = m_setHeap.Init<numPalDevices>(pDevice, pAllocator, pCreateInfo);
+    m_pHostOnlyMemory = nullptr;
 
     if (result == VK_SUCCESS)
     {
-        result = m_gpuMemHeap.Init(pDevice, pAllocator, poolUsage, maxSets, pCreateInfo->poolSizeCount, pCreateInfo->pPoolSizes);
+        result = m_gpuMemHeap.Init(pDevice, pCreateInfo, pAllocator);
 
         if (result != VK_SUCCESS)
         {
@@ -127,35 +126,85 @@ VkResult DescriptorPool::Init(
 
         if (memReqs.size > 0)
         {
-            InternalMemCreateInfo allocInfo = {};
-
-            allocInfo.pal.size      = memReqs.size;
-            allocInfo.pal.alignment = memReqs.alignment;
-            allocInfo.pal.priority  = m_pDevice->GetRuntimeSettings().enableHighPriorityDescriptorMemory ?
-                                        Pal::GpuMemPriority::High :
-                                        Pal::GpuMemPriority::Normal;
-
-            pDevice->MemMgr()->GetCommonPool(InternalPoolDescriptorTable, &allocInfo);
-
-            allocInfo.flags.needShadow = m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead;
-
-            result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &m_staticInternalMem, pDevice->GetPalDeviceMask());
-
-            if (result != VK_SUCCESS)
+            if (m_hostOnly)
             {
-                return result;
-            }
-
-            m_gpuMemHeap.BindMemory(&m_staticInternalMem);
-
-            for (uint32_t deviceIdx = 0; deviceIdx < MaxPalDevices; deviceIdx++)
-            {
-                m_addresses[deviceIdx].staticGpuAddr = m_staticInternalMem.GpuVirtAddr(deviceIdx);
-                m_addresses[deviceIdx].staticCpuAddr = static_cast<uint32_t*>(m_gpuMemHeap.CpuAddr(deviceIdx));
-
                 if (m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
                 {
-                    m_addresses[deviceIdx].fmaskCpuAddr = static_cast<uint32_t*>(m_gpuMemHeap.CpuShadowAddr(deviceIdx));
+                    // Double memory required for fmask shadow memory
+                    m_pHostOnlyMemory = pAllocator->pfnAllocation(
+                        pAllocator->pUserData,
+                        memReqs.size * numPalDevices * 2,
+                        VK_DEFAULT_MEM_ALIGN,
+                        VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+                }
+                else
+                {
+                    m_pHostOnlyMemory = pAllocator->pfnAllocation(
+                        pAllocator->pUserData,
+                        memReqs.size * numPalDevices,
+                        VK_DEFAULT_MEM_ALIGN,
+                        VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+                }
+
+                if (m_pHostOnlyMemory == nullptr)
+                {
+                    return VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
+
+                for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
+                {
+                    m_addresses[deviceIdx].staticGpuAddr = 0;
+                    m_addresses[deviceIdx].staticCpuAddr =
+                        static_cast<uint32_t*>(Util::VoidPtrInc(m_pHostOnlyMemory, memReqs.size * deviceIdx));
+
+                    if (m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
+                    {
+                        m_addresses[deviceIdx].fmaskCpuAddr = static_cast<uint32_t*>(m_pHostOnlyMemory);
+                            static_cast<uint32_t*>(Util::VoidPtrInc(m_pHostOnlyMemory,
+                                memReqs.size * numPalDevices + memReqs.size * deviceIdx));
+                    }
+                }
+
+                m_gpuMemHeap.SetupCPUOnlyMemory(m_pHostOnlyMemory);
+            }
+            else
+            {
+                InternalMemCreateInfo allocInfo = {};
+
+                allocInfo.pal.size      = memReqs.size;
+                allocInfo.pal.alignment = memReqs.alignment;
+                allocInfo.pal.priority  = m_pDevice->GetRuntimeSettings().enableHighPriorityDescriptorMemory ?
+                                            Pal::GpuMemPriority::High :
+                                            Pal::GpuMemPriority::Normal;
+
+                pDevice->MemMgr()->GetCommonPool(InternalPoolDescriptorTable, &allocInfo);
+
+                allocInfo.flags.needShadow = m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead;
+
+                result = pDevice->MemMgr()->AllocGpuMem(
+                    allocInfo,
+                    &m_staticInternalMem,
+                    pDevice->GetPalDeviceMask(),
+                    VK_OBJECT_TYPE_DESCRIPTOR_POOL,
+                    DescriptorPool::IntValueFromHandle(DescriptorPool::HandleFromObject(this)));
+
+                if (result != VK_SUCCESS)
+                {
+                    return result;
+                }
+
+                m_gpuMemHeap.BindMemory(&m_staticInternalMem);
+
+                for (uint32_t deviceIdx = 0; deviceIdx < MaxPalDevices; deviceIdx++)
+                {
+                    m_addresses[deviceIdx].staticGpuAddr = m_staticInternalMem.GpuVirtAddr(deviceIdx);
+                    m_addresses[deviceIdx].staticCpuAddr = static_cast<uint32_t*>(m_gpuMemHeap.CpuAddr(deviceIdx));
+
+                    if (m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
+                    {
+                        m_addresses[deviceIdx].fmaskCpuAddr =
+                            static_cast<uint32_t*>(m_gpuMemHeap.CpuShadowAddr(deviceIdx));
+                    }
                 }
             }
         }
@@ -212,16 +261,19 @@ VkResult DescriptorPool::Init(
 
             pAllocator->pfnFree(pAllocator->pUserData, pMem);
 
-            Pal::GpuMemoryResourceBindEventData bindData = {};
-            bindData.pObj               = this;
-            bindData.pGpuMemory         = m_staticInternalMem.PalMemory(DefaultDeviceIndex);
-            bindData.requiredGpuMemSize = m_staticInternalMem.Size();
-            bindData.offset             = m_staticInternalMem.Offset();
+            if (m_hostOnly == false)
+            {
+                Pal::GpuMemoryResourceBindEventData bindData = {};
+                bindData.pObj               = this;
+                bindData.pGpuMemory         = m_staticInternalMem.PalMemory(DefaultDeviceIndex);
+                bindData.requiredGpuMemSize = m_staticInternalMem.Size();
+                bindData.offset             = m_staticInternalMem.Offset();
 
-            pDevice->VkInstance()->PalPlatform()->LogEvent(
-                Pal::PalEvent::GpuMemoryResourceBind,
-                &bindData,
-                sizeof(Pal::GpuMemoryResourceBindEventData));
+                pDevice->VkInstance()->PalPlatform()->LogEvent(
+                    Pal::PalEvent::GpuMemoryResourceBind,
+                    &bindData,
+                    sizeof(Pal::GpuMemoryResourceBindEventData));
+            }
         }
     }
 
@@ -246,22 +298,35 @@ VkResult DescriptorPool::Destroy(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
-    Pal::ResourceDestroyEventData data = {};
-    data.pObj = m_staticInternalMem.PalMemory(DefaultDeviceIndex);
+    if (m_hostOnly == false)
+    {
+        Pal::ResourceDestroyEventData data = {};
+        data.pObj = m_staticInternalMem.PalMemory(DefaultDeviceIndex);
 
-    pDevice->VkInstance()->PalPlatform()->LogEvent(
-        Pal::PalEvent::GpuMemoryResourceDestroy,
-        &data,
-        sizeof(Pal::ResourceDestroyEventData));
+        pDevice->VkInstance()->PalPlatform()->LogEvent(
+            Pal::PalEvent::GpuMemoryResourceDestroy,
+            &data,
+            sizeof(Pal::ResourceDestroyEventData));
+    }
 
     // Destroy children heaps
     m_setHeap.Destroy(pDevice, pAllocator);
     m_gpuMemHeap.Destroy(pDevice, pAllocator);
 
-    // Free internal GPU memory allocation used by the object
-    if (m_staticInternalMem.PalMemory(DefaultDeviceIndex) != nullptr)
+    if (m_hostOnly == false)
     {
-        pDevice->MemMgr()->FreeGpuMem(&m_staticInternalMem);
+        // Free internal GPU memory allocation used by the object
+        if (m_staticInternalMem.PalMemory(DefaultDeviceIndex) != nullptr)
+        {
+            pDevice->MemMgr()->FreeGpuMem(&m_staticInternalMem);
+        }
+    }
+    else
+    {
+        if (m_pHostOnlyMemory != nullptr)
+        {
+            pAllocator->pfnFree(pAllocator->pUserData, m_pHostOnlyMemory);
+        }
     }
 
     // Call destructor
@@ -346,6 +411,7 @@ VkResult DescriptorPool::AllocDescriptorSets(
                         setGpuMemOffset,
                         m_addresses,
                         pSetAllocHandle);
+
                     if (m_pDevice->MustWriteImmutableSamplers())
                     {
                         pSet->WriteImmutableSamplers(m_pDevice->GetProperties().descriptorSizes.imageView);
@@ -436,22 +502,50 @@ m_numPalDevices(0)
 // =====================================================================================================================
 // Initializes a DescriptorGpuMemHeap.  Allocates any internal GPU memory for it if needed.
 VkResult DescriptorGpuMemHeap::Init(
-    Device*                      pDevice,
-    const VkAllocationCallbacks* pAllocator,
-    VkDescriptorPoolCreateFlags  poolUsage,
-    uint32_t                     maxSets,
-    const uint32_t               count,
-    const VkDescriptorPoolSize*  pTypeCount)
+    Device*                                           pDevice,
+    const VkDescriptorPoolCreateInfo*                 pCreateInfo,
+    const VkAllocationCallbacks*                      pAllocator)
 {
+    VkDescriptorPoolCreateFlags poolUsage   = pCreateInfo->flags;
+    uint32_t                    maxSets     = pCreateInfo->maxSets;
+    const VkDescriptorPoolSize* pTypeCount  = pCreateInfo->pPoolSizes;
+
     m_numPalDevices = pDevice->NumPalDevices();
     m_usage      = poolUsage;
     m_gpuMemSize = 0;
 
     bool oneShot = (m_usage & VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT) == 0;
 
+    const VkMutableDescriptorTypeCreateInfoEXT* pMutableDescriptorTypeCreateInfoEXT = nullptr;
+
+    {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
+
+        while (pHeader != nullptr)
+        {
+            switch (static_cast<uint32_t>(pHeader->sType))
+            {
+                case VK_STRUCTURE_TYPE_MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT:
+                {
+                    pMutableDescriptorTypeCreateInfoEXT =
+                        reinterpret_cast<const VkMutableDescriptorTypeCreateInfoEXT*>(pHeader);
+
+                    break;
+                }
+
+                default:
+                    break;
+            }
+
+            pHeader = static_cast<const VkStructHeader*>(pHeader->pNext);
+        }
+    }
+
+    VkResult result = VK_SUCCESS;
+
     if (pDevice->GetRuntimeSettings().pipelineLayoutMode == PipelineLayoutAngle)
     {
-        for (uint32_t i = 0; i < count; ++i)
+        for (uint32_t i = 0; i < pCreateInfo->poolSizeCount; ++i)
         {
             m_gpuMemSize += AngleDescPattern::DescriptorSetBindingStride * sizeof(uint32_t) *
                 pTypeCount[i].descriptorCount;
@@ -459,10 +553,37 @@ VkResult DescriptorGpuMemHeap::Init(
     }
     else
     {
-        for (uint32_t i = 0; i < count; ++i)
+        for (uint32_t i = 0; i < pCreateInfo->poolSizeCount; ++i)
         {
-            m_gpuMemSize += DescriptorSetLayout::GetSingleDescStaticSize(pDevice, pTypeCount[i].type) *
-                pTypeCount[i].descriptorCount;
+            if (pTypeCount[i].type == VK_DESCRIPTOR_TYPE_MUTABLE_EXT)
+            {
+                uint32_t maxSize = 0;
+                if (pMutableDescriptorTypeCreateInfoEXT != nullptr)
+                {
+                    const VkMutableDescriptorTypeListEXT& list =
+                        pMutableDescriptorTypeCreateInfoEXT->pMutableDescriptorTypeLists[i];
+                    for (uint32_t j = 0; j < list.descriptorTypeCount; ++j)
+                    {
+                        maxSize = Util::Max(maxSize,
+                            DescriptorSetLayout::GetSingleDescStaticSize(pDevice, list.pDescriptorTypes[j]));
+                    }
+                }
+
+                // If no mutable type list passed, assume largest
+                if (maxSize == 0)
+                {
+                    maxSize = DescriptorSetLayout::GetSingleDescStaticSize(
+                        pDevice, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+                }
+
+                VK_ASSERT(maxSize > 0);
+                m_gpuMemSize += maxSize * sizeof(uint32_t) * pTypeCount[i].descriptorCount;
+            }
+            else
+            {
+                m_gpuMemSize += DescriptorSetLayout::GetSingleDescStaticSize(pDevice, pTypeCount[i].type) *
+                    pTypeCount[i].descriptorCount;
+            }
         }
     }
 
@@ -648,6 +769,7 @@ bool DescriptorGpuMemHeap::AllocSetGpuMem(
 
         return true;
     }
+
     bool oneShot = (m_usage & VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT) == 0;
 
     // For one-shot allocations, allocate forwards from the one-shot range until you hit the dynamic range
@@ -803,6 +925,20 @@ VkResult DescriptorGpuMemHeap::BindMemory(
             m_pCpuAddr[deviceIdx]       = nullptr;
         }
     }
+    Reset();
+
+    return result;
+}
+
+// =====================================================================================================================
+VkResult DescriptorGpuMemHeap::SetupCPUOnlyMemory(
+        void*        pCpuMem)
+{
+    VkResult result = VK_SUCCESS;
+
+    m_gpuMemOffsetRangeStart = 0;
+    m_gpuMemOffsetRangeEnd   = m_gpuMemOffsetRangeStart + m_gpuMemSize;
+
     Reset();
 
     return result;

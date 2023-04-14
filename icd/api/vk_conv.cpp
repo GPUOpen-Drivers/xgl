@@ -1019,10 +1019,6 @@ VkResult PalToVkError(
     case Pal::Result::ErrorImageFmaskUnavailable:
         // Fmask based reads will be handled by the API layer thus this error should
         // never get to the client, fall through to the default path.
-    case Pal::Result::ErrorPrivateScreenRemoved:
-    case Pal::Result::ErrorPrivateScreenUsed:
-    case Pal::Result::ErrorTooManyPrivateDisplayImages:
-    case Pal::Result::ErrorPrivateScreenNotEnabled:
         // There's no private screen support yet. Fall through to the default path.
     default:
         VK_NOT_IMPLEMENTED;

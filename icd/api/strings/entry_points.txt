@@ -243,6 +243,9 @@ vkGetBufferDeviceAddressKHR                         @device       @dext(KHR_buff
 vkGetBufferOpaqueCaptureAddressKHR                  @device       @dext(KHR_buffer_device_address)
 vkGetDeviceMemoryOpaqueCaptureAddressKHR            @device       @dext(KHR_buffer_device_address)
 
+vkMapMemory2KHR                                     @device       @dext(KHR_map_memory2)
+vkUnmapMemory2KHR                                   @device       @dext(KHR_map_memory2)
+
 #if VKI_RAY_TRACING
 vkCreateDeferredOperationKHR                        @device       @dext(KHR_deferred_host_operations)
 vkDestroyDeferredOperationKHR                       @device       @dext(KHR_deferred_host_operations)
@@ -538,6 +541,7 @@ vkCmdSetConservativeRasterizationModeEXT            @device       @dext(EXT_exte
 vkCmdSetExtraPrimitiveOverestimationSizeEXT         @device       @dext(EXT_extended_dynamic_state3)
 vkCmdSetDepthClipEnableEXT                          @device       @dext(EXT_extended_dynamic_state3)
 vkCmdSetSampleLocationsEnableEXT                    @device       @dext(EXT_extended_dynamic_state3)
+vkCmdSetColorBlendAdvancedEXT                       @device       @dext(EXT_extended_dynamic_state3)
 vkCmdSetProvokingVertexModeEXT                      @device       @dext(EXT_extended_dynamic_state3)
 vkCmdSetLineRasterizationModeEXT                    @device       @dext(EXT_extended_dynamic_state3)
 vkCmdSetLineStippleEnableEXT                        @device       @dext(EXT_extended_dynamic_state3)

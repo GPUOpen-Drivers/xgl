@@ -309,8 +309,8 @@ Device::Device(
         m_perGpu[deviceIdx].pPalBorderColorPalette  = nullptr;
     }
 
-    m_allocatedCount = 0;
-    m_maxAllocations = pPhysicalDevices[DefaultDeviceIndex]->GetLimits().maxMemoryAllocationCount;
+#if VKI_RAY_TRACING
+#endif
 
     m_shaderOptimizer.Init();
     m_resourceOptimizer.Init();
@@ -804,7 +804,18 @@ VkResult Device::Create(
 
             case VK_STRUCTURE_TYPE_DEVICE_DEVICE_MEMORY_REPORT_CREATE_INFO_EXT:
             {
-                pInstance->EnableGpuMemoryEventHandler();
+                deviceFeatures.deviceMemoryReport = true;
+
+                pInstance->GetGpuMemoryEventHandler()->EnableGpuMemoryEvents();
+
+                uint32 enabledCallbacks = pInstance->PalPlatform()->GetEnabledCallbackTypes();
+
+                enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::AllocGpuMemory);
+                enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::FreeGpuMemory);
+                enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::SubAllocGpuMemory);
+                enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::SubFreeGpuMemory);
+
+                pInstance->PalPlatform()->SetEnabledCallbackTypes(enabledCallbacks);
 
                 const auto* pDeviceMemoryReportInfo =
                     reinterpret_cast<const VkDeviceDeviceMemoryReportCreateInfoEXT*>(pHeader);
@@ -836,6 +847,7 @@ VkResult Device::Create(
     // If the app requested any sparse residency features, but we can't reliably support PRT on transfer queues,
     // we have to fall-back on a compute queue instead and avoid using DMA.
     if ((pEnabledFeatures != nullptr) &&
+        pPhysicalDevices[DefaultDeviceIndex]->IsComputeEngineSupported() &&
         (pPhysicalDevices[DefaultDeviceIndex]->IsPrtSupportedOnDmaEngine() == false))
     {
         useComputeAsTransferQueue = (pEnabledFeatures->sparseResidencyBuffer  ||
@@ -1673,9 +1685,15 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 
     m_renderStateCache.Destroy();
 
-    VkInstance()->GetGpuMemoryEventHandler()->UnregisterDeviceMemoryReportCallbacks(this);
+    const bool deviceMemoryReportEnabled = m_enabledFeatures.deviceMemoryReport;
 
     Util::Destructor(this);
+
+    if (deviceMemoryReportEnabled == true)
+    {
+        VkInstance()->GetGpuMemoryEventHandler()->UnregisterDeviceMemoryReportCallbacks(this);
+        VkInstance()->GetGpuMemoryEventHandler()->DisableGpuMemoryEvents();
+    }
 
     FreeApiObject(VkInstance()->GetAllocCallbacks(), ApiDevice::FromObject(this));
 
@@ -1908,6 +1926,29 @@ VkResult Device::CreateInternalComputePipeline(
             pInternalPipeline->userDataNodeOffsets[i] = pUserDataNodes[i].node.offsetInDwords;
         }
         memcpy(pInternalPipeline->pPipeline, pPipeline, sizeof(pPipeline));
+
+        if (GetEnabledFeatures().deviceMemoryReport == true)
+        {
+            size_t numEntries = 0;
+            Util::Vector<Pal::GpuMemSubAllocInfo, 1, PalAllocator> palSubAllocInfos(VkInstance()->Allocator());
+
+            (*pPipeline)->QueryAllocationInfo(&numEntries, nullptr);
+
+            palSubAllocInfos.Resize(numEntries);
+
+            (*pPipeline)->QueryAllocationInfo(&numEntries, &palSubAllocInfos[0]);
+
+            for (size_t i = 0; i < numEntries; ++i)
+            {
+                // Report the Pal suballocation for this pipeline to device_memory_report
+                // Internal pipelines are attributed to the device
+                VkInstance()->GetGpuMemoryEventHandler()->ReportDeferredPalSubAlloc(
+                    palSubAllocInfos[i].address,
+                    palSubAllocInfos[i].offset,
+                    DispatchableDevice::IntValueFromHandle(DispatchableDevice::FromObject(this)),
+                    VK_OBJECT_TYPE_DEVICE);
+            }
+        }
     }
     else
     {
@@ -1964,6 +2005,7 @@ VkResult Device::CreateInternalPipelines()
     userDataNodes[0].node.sizeInDwords = uavViewSize;
     userDataNodes[0].node.srdRange.set = 0;
     userDataNodes[0].node.srdRange.binding = 0;
+    userDataNodes[0].node.srdRange.strideInDwords = 0;
     userDataNodes[0].visibility = Vkgc::ShaderStageComputeBit;
 
     // Copy destination storage view
@@ -1972,6 +2014,7 @@ VkResult Device::CreateInternalPipelines()
     userDataNodes[1].node.sizeInDwords = uavViewSize;
     userDataNodes[1].node.srdRange.set = 0;
     userDataNodes[1].node.srdRange.binding = 1;
+    userDataNodes[1].node.srdRange.strideInDwords = 0;
     userDataNodes[1].visibility = Vkgc::ShaderStageComputeBit;
 
     // Inline constant data
@@ -1979,6 +2022,7 @@ VkResult Device::CreateInternalPipelines()
     userDataNodes[2].node.offsetInDwords = 2 * uavViewSize;
     userDataNodes[2].node.sizeInDwords = 4;
     userDataNodes[2].node.srdRange.set = Vkgc::InternalDescriptorSetId;
+    userDataNodes[2].node.srdRange.strideInDwords = 0;
     userDataNodes[2].visibility = Vkgc::ShaderStageComputeBit;
 
     result = CreateInternalComputePipeline(
@@ -3410,14 +3454,16 @@ VkResult Device::AllocBorderColorPalette()
             pPalBorderColorPalette[deviceIdx] = m_perGpu[deviceIdx].pPalBorderColorPalette;
         }
 
-      result = MemMgr()->AllocAndBindGpuMem(
-          NumPalDevices(),
-          reinterpret_cast<Pal::IGpuMemoryBindable**>(pPalBorderColorPalette),
-          false,
-          &m_memoryPalBorderColorPalette,
-          GetPalDeviceMask(),
-          true,
-          false);
+        result = MemMgr()->AllocAndBindGpuMem(
+            NumPalDevices(),
+            reinterpret_cast<Pal::IGpuMemoryBindable**>(pPalBorderColorPalette),
+            false,
+            &m_memoryPalBorderColorPalette,
+            GetPalDeviceMask(),
+            true,
+            false,
+            VK_OBJECT_TYPE_DEVICE,
+            DispatchableDevice::IntValueFromHandle(DispatchableDevice::FromObject(this)));
     }
 
     if (result == VK_SUCCESS)
@@ -3557,8 +3603,10 @@ void Device::UpdateFeatureSettings()
 {
     ProfileSettings profileSettings = {};
 
-    ReloadAppProfileSettings(m_pInstance, &profileSettings);
+    ReloadAppProfileSettings(VkPhysicalDevice(DefaultDeviceIndex), m_pInstance, &profileSettings);
 
+#if VKI_RAY_TRACING
+#endif
 }
 
 #if VKI_RAY_TRACING
@@ -4511,36 +4559,91 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupport(
     const VkDescriptorSetLayoutCreateInfo*      pCreateInfo,
     VkDescriptorSetLayoutSupport*               pSupport)
 {
-    VkStructHeaderNonConst* pHeader = reinterpret_cast<VkStructHeaderNonConst*>(pSupport);
-
-    // No descriptor set layout validation is required beyond what is expressed with existing limits.
-    VK_ASSERT(pSupport->sType == VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT);
-
-    while (pHeader)
+    // Validate mutable descriptor support and variable descriptor count limits
+    const VkMutableDescriptorTypeCreateInfoEXT* pMutableDescriptorTypeCreateInfoEXT = nullptr;
     {
-        switch (static_cast<uint32_t>(pHeader->sType))
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
+
+        while (pHeader != nullptr)
         {
-            case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT:
+            switch (static_cast<uint32_t>(pHeader->sType))
             {
-                pSupport->supported = VK_TRUE;
-                break;
+                case VK_STRUCTURE_TYPE_MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT:
+                {
+                    pMutableDescriptorTypeCreateInfoEXT =
+                        reinterpret_cast<const VkMutableDescriptorTypeCreateInfoEXT*>(pHeader);
+
+                    break;
+                }
+
+                default:
+                    break;
             }
 
-            case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT_EXT:
-            {
-                VkDescriptorSetVariableDescriptorCountLayoutSupportEXT * pDescCountLayoutSupport =
-                    reinterpret_cast<VkDescriptorSetVariableDescriptorCountLayoutSupportEXT *>(pHeader);
-
-                pDescCountLayoutSupport->maxVariableDescriptorCount = UINT_MAX;
-
-                break;
-            }
-
-            default:
-                break;
+            pHeader = reinterpret_cast<const VkStructHeader*>(pHeader->pNext);
         }
+    }
 
-        pHeader = reinterpret_cast<VkStructHeaderNonConst*>(pHeader->pNext);
+    {
+        VkStructHeaderNonConst* pHeader = static_cast<VkStructHeaderNonConst*>(pSupport->pNext);
+
+        while (pHeader != nullptr)
+        {
+            switch (static_cast<uint32_t>(pHeader->sType))
+            {
+                case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT_EXT:
+                {
+                    VkDescriptorSetVariableDescriptorCountLayoutSupportEXT * pDescCountLayoutSupport =
+                        reinterpret_cast<VkDescriptorSetVariableDescriptorCountLayoutSupportEXT*>(pHeader);
+
+                    pDescCountLayoutSupport->maxVariableDescriptorCount = UINT_MAX;
+
+                    break;
+                }
+
+                default:
+                    break;
+            }
+
+            pHeader = reinterpret_cast<VkStructHeaderNonConst*>(pHeader->pNext);
+        }
+    }
+
+    pSupport->supported = VK_TRUE;
+
+    for (uint32_t i = 0; i < pCreateInfo->bindingCount; ++i)
+    {
+        if (pCreateInfo->pBindings[i].descriptorType == VK_DESCRIPTOR_TYPE_MUTABLE_EXT)
+        {
+            if (pMutableDescriptorTypeCreateInfoEXT != nullptr)
+            {
+                const VkMutableDescriptorTypeListEXT& list =
+                    pMutableDescriptorTypeCreateInfoEXT->pMutableDescriptorTypeLists[i];
+
+                for (uint32_t j = 0; j < list.descriptorTypeCount; ++j)
+                {
+                    switch(list.pDescriptorTypes[j])
+                    {
+                        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+                        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+                        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+                        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+                        case VK_DESCRIPTOR_TYPE_SAMPLER:
+                        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+                        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+                            break;
+                        default:
+                            pSupport->supported = VK_FALSE;
+                            break;
+                    }
+                }
+            }
+
+            if (pSupport->supported == VK_FALSE)
+            {
+                break;
+            }
+        }
     }
 }
 

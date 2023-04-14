@@ -147,16 +147,8 @@ public:
         const VkShaderStageFlags*    pShaderMasks,
         const uint32_t               count);
 
-    static void Merge(
-        const Device*                pDevice,
-        const VkDescriptorSetLayout* pLayouts,
-        const VkShaderStageFlags*    pShaderMasks,
-        const uint32_t               count,
-        DescriptorSetLayout*         pOutLayout);
-
     void Copy(
         const Device*        pDevice,
-        const uint32_t       shaderMask,
         DescriptorSetLayout* pOutLayout) const;
 
     VkResult Destroy(
@@ -229,8 +221,7 @@ protected:
 
     bool CoverAllActiveShaderStages(const uint32_t shaderMask) const
     {
-        bool result = ((~shaderMask & m_info.activeStageMask) == 0);
-        return result;
+        return ((~shaderMask & m_info.activeStageMask) == 0);
     }
 
     static VkResult ConvertCreateInfo(

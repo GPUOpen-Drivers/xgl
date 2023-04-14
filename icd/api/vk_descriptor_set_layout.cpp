@@ -101,6 +101,22 @@ uint64_t DescriptorSetLayout::BuildApiHash(
                 }
                 break;
             }
+            case VK_STRUCTURE_TYPE_MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT:
+            {
+                const auto* pExtInfo = reinterpret_cast<const VkMutableDescriptorTypeCreateInfoEXT*>(pNext);
+                hasher.Update(pExtInfo->sType);
+                hasher.Update(pExtInfo->mutableDescriptorTypeListCount);
+
+                for (uint32 i = 0; i < pExtInfo->mutableDescriptorTypeListCount; i++)
+                {
+                    hasher.Update(pExtInfo->pMutableDescriptorTypeLists[i].descriptorTypeCount);
+                    for (uint32 j = 0; j < pExtInfo->pMutableDescriptorTypeLists[i].descriptorTypeCount; j++)
+                    {
+                        hasher.Update(pExtInfo->pMutableDescriptorTypeLists[i].pDescriptorTypes[j]);
+                    }
+                }
+                break;
+            }
             default:
                 break;
             }
@@ -126,6 +142,7 @@ DescriptorSetLayout::DescriptorSetLayout(
 {
 
 }
+
 // =====================================================================================================================
 // Returns the byte size for a particular type of descriptor.
 uint32_t DescriptorSetLayout::GetSingleDescStaticSize(
@@ -189,6 +206,7 @@ uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(
     const DescriptorBindingFlags        bindingFlags,
     const bool                          useFullYcbrImageSampler)
 {
+    VK_ASSERT(descriptorInfo->descriptorType != VK_DESCRIPTOR_TYPE_MUTABLE_EXT);
     uint32_t size = GetSingleDescStaticSize(pDevice, descriptorInfo->descriptorType);
 
     if ((descriptorInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) &&
@@ -318,7 +336,6 @@ void DescriptorSetLayout::ConvertBindingInfo(
     SectionInfo*                        pSectionInfo,
     BindingSectionInfo*                 pBindingSectionInfo)
 {
-
     // Dword offset to this binding
     pBindingSectionInfo->dwOffset = Util::RoundUpToMultiple(pSectionInfo->dwSize, descAlignmentInDw);
 
@@ -488,13 +505,38 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
 
     VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO);
 
-    const auto* pBindingFlags = static_cast<const VkDescriptorSetLayoutBindingFlagsCreateInfo*>(pIn->pNext);
+    const VkDescriptorSetLayoutBindingFlagsCreateInfo* pDescriptorSetLayoutBindingFlagsCreateInfo = nullptr;
+    const VkMutableDescriptorTypeCreateInfoEXT* pMutableDescriptorTypeCreateInfoEXT = nullptr;
+    {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pIn->pNext);
 
-    EXTRACT_VK_STRUCTURES_0(
-        BindingFlag,
-        DescriptorSetLayoutBindingFlagsCreateInfo,
-        pBindingFlags,
-        DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO)
+        while (pHeader != nullptr)
+        {
+            switch (static_cast<uint32_t>(pHeader->sType))
+            {
+                case VK_STRUCTURE_TYPE_MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT:
+                {
+                    pMutableDescriptorTypeCreateInfoEXT =
+                        reinterpret_cast<const VkMutableDescriptorTypeCreateInfoEXT*>(pHeader);
+
+                    break;
+                }
+
+                case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO:
+                {
+                    pDescriptorSetLayoutBindingFlagsCreateInfo =
+                        reinterpret_cast<const VkDescriptorSetLayoutBindingFlagsCreateInfo*>(pHeader);
+
+                    break;
+                }
+
+                default:
+                    break;
+            }
+
+            pHeader = static_cast<const VkStructHeader*>(pHeader->pNext);
+        }
+    }
 
     if (pDescriptorSetLayoutBindingFlagsCreateInfo != nullptr)
     {
@@ -508,11 +550,9 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
         }
     }
 
+    for (uint32 inIndex = 0; inIndex < pIn->bindingCount; ++inIndex)
     {
-        for (uint32 inIndex = 0; inIndex < pIn->bindingCount; ++inIndex)
-        {
-            pOut->activeStageMask |= pIn->pBindings[inIndex].stageFlags;
-        }
+        pOut->activeStageMask |= pIn->pBindings[inIndex].stageFlags;
     }
 
     const bool useFullYcbrImageSampler = ((pIn->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0);
@@ -527,6 +567,30 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
     {
         const VkDescriptorSetLayoutBinding & currentBinding = pIn->pBindings[inIndex];
         pOutBindings[currentBinding.binding].info = currentBinding;
+
+        // Calculate the maximum size required for mutable descriptors
+        if (currentBinding.descriptorType == VK_DESCRIPTOR_TYPE_MUTABLE_EXT)
+        {
+            VkMutableDescriptorTypeListEXT list =
+                pMutableDescriptorTypeCreateInfoEXT->pMutableDescriptorTypeLists[inIndex];
+            uint32_t maxSize = 0;
+            for (uint32_t j = 0; j < list.descriptorTypeCount; ++j)
+            {
+                VK_ASSERT(list.pDescriptorTypes[j] != VK_DESCRIPTOR_TYPE_MUTABLE_EXT);
+                uint32_t size = GetSingleDescStaticSize(pDevice, list.pDescriptorTypes[j]);
+                maxSize = Util::Max(maxSize, size);
+            }
+
+            VK_ASSERT(maxSize > 0);
+            pOutBindings[currentBinding.binding].sta.dwArrayStride = maxSize / sizeof(uint32_t);
+
+            // See below loop where we write non mutable variable descriptor sizes
+            if ((currentBinding.binding == (pOut->count - 1)) &&
+                pOutBindings[currentBinding.binding].bindingFlags.variableDescriptorCount)
+            {
+                pOut->varDescStride = maxSize;
+            }
+        }
 
         if (currentBinding.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
         {
@@ -543,13 +607,14 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
             }
         }
     }
-
     // Now iterate over our output array to convert the binding info.  Any gaps in
     // the input binding numbers will be dummy entries in this array, but it
     // should be safe to call ConvertBindingInfo on those as well.
     for (uint32 bindingNumber = 0; bindingNumber < pOut->count; ++bindingNumber)
     {
         BindingInfo* pBinding = &pOutBindings[bindingNumber];
+
+        VkDescriptorType type = pBinding->info.descriptorType;
 
         // Determine the alignment requirement of descriptors in dwords.
         uint32 descAlignmentInDw    = pDevice->GetProperties().descriptorSizes.alignmentInDwords;
@@ -562,13 +627,30 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
         // If the last binding has the VARIABLE_DESCRIPTOR_COUNT_BIT set, write the varDescDwStride
         if ((bindingNumber == (pOut->count - 1)) && pBinding->bindingFlags.variableDescriptorCount)
         {
-            pOut->varDescStride = GetSingleDescStaticSize(pDevice, pBinding->info.descriptorType);
+            // Mutable descriptor sizes calculated in loop above
+            if (type != VK_DESCRIPTOR_TYPE_MUTABLE_EXT)
+            {
+                pOut->varDescStride =
+                    GetSingleDescStaticSize(pDevice, pBinding->info.descriptorType);
+            }
         }
 
         // Construct the information specific to the static section of the descriptor set layout.
+        uint32_t staticSectionDwSize = 0;
+
+        if (pBinding->info.descriptorType == VK_DESCRIPTOR_TYPE_MUTABLE_EXT)
+        {
+            staticSectionDwSize = pBinding->sta.dwArrayStride;
+        }
+        else
+        {
+            staticSectionDwSize = GetDescStaticSectionDwSize(pDevice, &pBinding->info, pBinding->bindingFlags,
+                useFullYcbrImageSampler);
+        }
+
         ConvertBindingInfo(
             &pBinding->info,
-            GetDescStaticSectionDwSize(pDevice, &pBinding->info, pBinding->bindingFlags, useFullYcbrImageSampler),
+            staticSectionDwSize,
             staDescAlignmentInDw,
             &pOut->sta,
             &pBinding->sta);
@@ -717,164 +799,32 @@ size_t DescriptorSetLayout::GetObjectSize(
 }
 
 // =====================================================================================================================
-// Merge several descriptor set layouts into one layout.
-// The output memory pointed by pOutLayout is required to be initialized to 0 by callee.
-void DescriptorSetLayout::Merge(
-    const Device*                pDevice,
-    const VkDescriptorSetLayout* pLayouts,
-    const VkShaderStageFlags*    pShaderMasks,
-    const uint32_t               count,
-    DescriptorSetLayout*         pOutLayout)
-{
-    constexpr size_t apiSize = sizeof(DescriptorSetLayout);
-
-    CreateInfo   mergedInfo   = {};
-    BindingInfo* pBindingInfo = static_cast<BindingInfo*>(Util::VoidPtrInc(pOutLayout, apiSize));
-
-    // The i th element in this array is the source descriptor set layout from which binding i in the
-    // merged layout should copy.
-    Util::Vector<const DescriptorSetLayout*, 8, Util::GenericAllocator> pRefDescSetLayouts{ nullptr };
-    pRefDescSetLayouts.Resize(8, nullptr);
-
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        const DescriptorSetLayout* pRef       = DescriptorSetLayout::ObjectFromHandle(pLayouts[i]);
-        const CreateInfo&          refInfo    = pRef->Info();
-        const VkShaderStageFlags   shaderMask = pShaderMasks[i];
-
-        if (i == 0)
-        {
-            mergedInfo.flags = DescriptorSetLayout::ObjectFromHandle(pLayouts[i])->Info().flags;
-        }
-        else
-        {
-            VK_ASSERT(mergedInfo.flags == DescriptorSetLayout::ObjectFromHandle(pLayouts[i])->Info().flags);
-        }
-
-        for (uint32_t j = 0; j < refInfo.count; ++j)
-        {
-            const BindingInfo&       refBinding   = pRef->Binding(j);
-            const VkShaderStageFlags activeStages = refBinding.info.stageFlags & shaderMask;
-
-            if ((activeStages != 0) && (refBinding.info.descriptorCount > 0))
-            {
-                uint32_t bindingIdx = refBinding.info.binding;
-                BindingInfo& mergedBinding = pBindingInfo[bindingIdx];
-
-                if (mergedBinding.info.stageFlags == 0)
-                {
-                    VK_ASSERT(mergedBinding.info.descriptorCount == 0);
-
-                    mergedBinding = refBinding;
-
-                    mergedInfo.count = Util::Max(mergedInfo.count, bindingIdx + 1);
-
-                    if (pRefDescSetLayouts.NumElements() <= bindingIdx)
-                    {
-                        pRefDescSetLayouts.Resize(bindingIdx * 2, nullptr);
-                    }
-                    pRefDescSetLayouts[bindingIdx] = pRef;
-                }
-                else
-                {
-                    VK_ASSERT(mergedBinding.info.descriptorCount == refBinding.info.descriptorCount);
-                    VK_ASSERT(mergedBinding.info.descriptorType == refBinding.info.descriptorType);
-                    VK_ASSERT(mergedBinding.bindingFlags.u32all == refBinding.bindingFlags.u32all);
-
-                    mergedBinding.info.stageFlags |= activeStages;
-                }
-            }
-        }
-    }
-
-    mergedInfo.imm.pImmutableSamplerData = reinterpret_cast<uint32_t*>(
-        Util::VoidPtrInc(pOutLayout, apiSize + mergedInfo.count * sizeof(BindingInfo)));
-
-    for (uint32_t bindingIdx = 0; bindingIdx < mergedInfo.count; ++bindingIdx)
-    {
-        const uint32 descAlignmentInDw = pDevice->GetProperties().descriptorSizes.alignmentInDwords;
-
-        BindingInfo& binding = pBindingInfo[bindingIdx];
-
-        mergedInfo.activeStageMask |= binding.info.stageFlags;
-
-        if ((bindingIdx == mergedInfo.count - 1) && binding.bindingFlags.variableDescriptorCount)
-        {
-            mergedInfo.varDescStride = GetSingleDescStaticSize(pDevice, binding.info.descriptorType);
-        }
-
-        const uint32_t staticDescSize =
-            (pRefDescSetLayouts[bindingIdx] == nullptr) ?
-                GetSingleDescStaticSize(pDevice, binding.info.descriptorType) :
-                GetDescStaticSectionDwSize(pRefDescSetLayouts[bindingIdx], bindingIdx);
-
-        ConvertBindingInfo(
-            &binding.info,
-            staticDescSize,
-            descAlignmentInDw,
-            &mergedInfo.sta,
-            &binding.sta);
-
-        ConvertBindingInfo(
-            &binding.info,
-            GetDescDynamicSectionDwSize(pDevice, binding.info.descriptorType),
-            descAlignmentInDw,
-            &mergedInfo.dyn,
-            &binding.dyn);
-
-        ConvertImmutableInfo(
-            &binding.info,
-            GetDescImmutableSectionDwSize(pDevice, binding.info.descriptorType),
-            &mergedInfo.imm,
-            &binding.imm,
-            binding.bindingFlags,
-            pRefDescSetLayouts[bindingIdx]);
-
-        if ((binding.info.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
-            (binding.info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC))
-        {
-            mergedInfo.numDynamicDescriptors += binding.info.descriptorCount;
-        }
-    }
-
-    VK_PLACEMENT_NEW(pOutLayout) DescriptorSetLayout(pDevice, mergedInfo, 0);
-}
-
-// =====================================================================================================================
 // Copy descriptor set layout object
 void DescriptorSetLayout::Copy(
     const Device*        pDevice,
-    const uint32_t       shaderMask,
     DescriptorSetLayout* pOutLayout) const
 {
-    if (CoverAllActiveShaderStages(shaderMask))
-    {
-        constexpr size_t apiSize = sizeof(DescriptorSetLayout);
+    constexpr uint32_t shaderMask = VK_SHADER_STAGE_ALL;
+    constexpr size_t apiSize = sizeof(DescriptorSetLayout);
 
-        CreateInfo info = Info();
+    CreateInfo info = Info();
 
-        // Copy the bindings array
-        void* pBindings = Util::VoidPtrInc(pOutLayout, apiSize);
+    // Copy the bindings array
+    void* pBindings = Util::VoidPtrInc(pOutLayout, apiSize);
 
-        memcpy(pBindings, Util::VoidPtrInc(this, apiSize), GetBindingInfoArrayByteSize(shaderMask));
+    memcpy(pBindings, Util::VoidPtrInc(this, apiSize), GetBindingInfoArrayByteSize(shaderMask));
 
-        // Copy the immutable sampler data
-        void* pImmutableSamplerData = Util::VoidPtrInc(pOutLayout, apiSize + GetBindingInfoArrayByteSize(shaderMask));
+    // Copy the immutable sampler data
+    void* pImmutableSamplerData = Util::VoidPtrInc(pOutLayout, apiSize + GetBindingInfoArrayByteSize(shaderMask));
 
-        memcpy(pImmutableSamplerData,
-               Util::VoidPtrInc(this, apiSize + GetBindingInfoArrayByteSize(shaderMask)),
-               GetImmSamplerArrayByteSize(shaderMask) + GetImmYCbCrMetaDataArrayByteSize(shaderMask));
+    memcpy(pImmutableSamplerData,
+            Util::VoidPtrInc(this, apiSize + GetBindingInfoArrayByteSize(shaderMask)),
+            GetImmSamplerArrayByteSize(shaderMask) + GetImmYCbCrMetaDataArrayByteSize(shaderMask));
 
-        // Set the base pointer of the immutable sampler data to the appropriate location within the allocated memory
-        info.imm.pImmutableSamplerData = reinterpret_cast<uint32_t*>(pImmutableSamplerData);
+    // Set the base pointer of the immutable sampler data to the appropriate location within the allocated memory
+    info.imm.pImmutableSamplerData = reinterpret_cast<uint32_t*>(pImmutableSamplerData);
 
-        VK_PLACEMENT_NEW(pOutLayout) DescriptorSetLayout(pDevice, info, GetApiHash());
-    }
-    else
-    {
-        VkDescriptorSetLayout handle = DescriptorSetLayout::HandleFromObject(this);
-        Merge(pDevice, &handle, &shaderMask, 1, pOutLayout);
-    }
+    VK_PLACEMENT_NEW(pOutLayout) DescriptorSetLayout(pDevice, info, GetApiHash());
 }
 
 // =====================================================================================================================

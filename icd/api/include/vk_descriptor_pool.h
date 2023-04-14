@@ -56,12 +56,9 @@ public:
     DescriptorGpuMemHeap();
 
     VkResult Init(
-        Device*                          pDevice,
-        const VkAllocationCallbacks*     pAllocator,
-        VkDescriptorPoolCreateFlags      poolUsage,
-        uint32_t                         maxSets,
-        const uint32_t                   count,
-        const VkDescriptorPoolSize*      pTypeCount);
+        Device*                                     pDevice,
+        const VkDescriptorPoolCreateInfo*           pCreateInfo,
+        const VkAllocationCallbacks*                pAllocator);
 
     void Destroy(
         Device* pDevice,
@@ -78,6 +75,9 @@ public:
 
     VkResult BindMemory(
         InternalMemory*         pInternalMem);
+
+    VkResult SetupCPUOnlyMemory(
+        void*        pCpuMem);
 
     void FreeSetGpuMem(
         void*        pSetAllocHandle);
@@ -274,6 +274,8 @@ private:
     InternalMemory       m_staticInternalMem; // Static Internal GPU memory
 
     bool                 m_DynamicDataSupport; // Pool supports dynamic data
+    bool                 m_hostOnly;          // VK_DESCRIPTOR_POOL_CREATE_HOST_ONLY_BIT_EXT flag set
+    void*                m_pHostOnlyMemory;   // Memory allocated for host only descriptor pools
 
     DescriptorAddr       m_addresses[MaxPalDevices];
 

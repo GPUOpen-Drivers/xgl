@@ -447,6 +447,14 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
         pPipelineInfo->numUserDataNodes           += 1;
     }
 
+    if (pDevice->GetRuntimeSettings().enableDebugPrintf)
+    {
+        pPipelineInfo->numUserDataNodes    += 1;
+        pUserDataLayout->debugPrintfRegBase = pInfo->userDataRegCount;
+        pInfo->userDataRegCount            += 1;
+        pPipelineInfo->numRsrcMapNodes     += 1;
+    }
+
     // Allocate user data for the thread group reversal state
     ReserveAlternatingThreadGroupUserData(
         pDevice,
@@ -533,8 +541,9 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
     //       1. PipelineLayoutAngle mode
 
     VK_ASSERT(pIn->setLayoutCount <= MaxDescriptorSets);
-    VK_ASSERT(pDevice->GetRuntimeSettings().pipelineLayoutMode != PipelineLayoutAngle);
-    VK_ASSERT(pDevice->GetRuntimeSettings().enableEarlyCompile == false);
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+    VK_ASSERT(settings.pipelineLayoutMode != PipelineLayoutAngle);
+    VK_ASSERT(settings.enableEarlyCompile == false);
 
     VkResult      result            = VK_SUCCESS;
     auto*         pUserDataLayout   = &pInfo->userDataLayout.indirect;
@@ -572,6 +581,14 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
         pUserDataLayout->transformFeedbackRegBase = pInfo->userDataRegCount;
         pPipelineInfo->numUserDataNodes          += 1;
         pInfo->userDataRegCount                  += 1;
+    }
+
+    if (settings.enableDebugPrintf)
+    {
+        pPipelineInfo->numUserDataNodes    += 1;
+        pUserDataLayout->debugPrintfRegBase = pInfo->userDataRegCount;
+        pInfo->userDataRegCount            += 1;
+        pPipelineInfo->numRsrcMapNodes     += 1;
     }
 
     // Allocate user data for the thread group reversal state
@@ -752,7 +769,6 @@ VkResult PipelineLayout::Create(
         Util::Pow2Align((pCreateInfo->setLayoutCount * sizeof(DescriptorSetLayout*)), ExtraDataAlignment());
 
     size_t objSize = apiSize + setUserDataLayoutSize + descriptorSetLayoutSize + setLayoutsArraySize;
-
     void* pSysMem = pDevice->AllocApiObject(pAllocator, objSize);
 
     if (pSysMem == nullptr)
@@ -790,7 +806,7 @@ VkResult PipelineLayout::Create(
                 ppSetLayouts[i] = reinterpret_cast<DescriptorSetLayout*>(Util::VoidPtrInc(pSysMem, currentSetLayoutOffset));
 
                 // Copy the original descriptor set layout object
-                pLayout->Copy(pDevice, VK_SHADER_STAGE_ALL, ppSetLayouts[i]);
+                pLayout->Copy(pDevice, ppSetLayouts[i]);
 
                 currentSetLayoutOffset += pLayout->GetObjectSize(VK_SHADER_STAGE_ALL);
             }
@@ -861,6 +877,9 @@ Vkgc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
     case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
         nodeType = Vkgc::ResourceMappingNodeType::InlineBuffer;
         break;
+    case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorMutable;
+        break;
     default:
         VK_NEVER_CALLED();
         break;
@@ -880,10 +899,17 @@ void PipelineLayout::BuildLlpcStaticMapping(
     uint32_t*                               pDescriptorRangeCount
     ) const
 {
-
     pNode->type                  = MapLlpcResourceNodeType(binding.info.descriptorType);
     pNode->offsetInDwords        = binding.sta.dwOffset;
     pNode->sizeInDwords          = binding.sta.dwSize;
+    if (pNode->type == Vkgc::ResourceMappingNodeType::DescriptorMutable)
+    {
+        pNode->srdRange.strideInDwords = binding.sta.dwArrayStride;
+    }
+    else
+    {
+        pNode->srdRange.strideInDwords = 0;
+    }
     pNode->srdRange.binding      = binding.info.binding;
     pNode->srdRange.set          = setIndex;
 
@@ -908,7 +934,6 @@ void PipelineLayout::BuildLlpcStaticMapping(
         pDescriptorRangeValue->pValue       = pImmutableSamplerData;
         pDescriptorRangeValue->arraySize    = arraySize;
         pDescriptorRangeValue->visibility   = visibility;
-
         ++(*pDescriptorRangeCount);
     }
 }
@@ -938,10 +963,11 @@ void PipelineLayout::BuildLlpcDynamicMapping(
             Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
     }
 
-    pNode->offsetInDwords   = userDataRegBase + binding.dyn.dwOffset;
-    pNode->sizeInDwords     = binding.dyn.dwSize;
-    pNode->srdRange.binding = binding.info.binding;
-    pNode->srdRange.set     = setIndex;
+    pNode->offsetInDwords          = userDataRegBase + binding.dyn.dwOffset;
+    pNode->sizeInDwords            = binding.dyn.dwSize;
+    pNode->srdRange.strideInDwords = 0;
+    pNode->srdRange.binding        = binding.info.binding;
+    pNode->srdRange.set            = setIndex;
 }
 
 // =====================================================================================================================
@@ -1012,12 +1038,13 @@ void PipelineLayout::BuildLlpcInternalConstantBufferMapping(
 {
     if (stageMask != 0)
     {
-        pNode->node.type             = Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact;
-        pNode->node.offsetInDwords   = offsetInDwords;
-        pNode->node.sizeInDwords     = InternalConstBufferRegCount;
-        pNode->node.srdRange.set     = Vkgc::InternalDescriptorSetId;
-        pNode->node.srdRange.binding = binding;
-        pNode->visibility            = stageMask;
+        pNode->node.type                      = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
+        pNode->node.offsetInDwords            = offsetInDwords;
+        pNode->node.sizeInDwords              = InternalConstBufferRegCount;
+        pNode->node.srdRange.strideInDwords   = 0;
+        pNode->node.srdRange.set              = Vkgc::InternalDescriptorSetId;
+        pNode->node.srdRange.binding          = binding;
+        pNode->visibility                     = stageMask;
 
         ++(*pNodeCount);
     }
@@ -1068,9 +1095,9 @@ void PipelineLayout::BuildLlpcRayTracingDispatchArgumentsMapping(
     const Vkgc::ResourceMappingNode TraceRayLayout[] =
     {
         // TODO: Replace binding and set with enum once it is defined in vkgcDefs.h
-        { Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact, 2, 0, {{93, 17}} },
-        { Vkgc::ResourceMappingNodeType::DescriptorConstBuffer, 4, 2, {{93, 0}} },
-        { Vkgc::ResourceMappingNodeType::DescriptorBuffer, 4, 6, {{93, 1}} },
+        { Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact, 2, 0, {{93, 17, 0}} },
+        { Vkgc::ResourceMappingNodeType::DescriptorConstBuffer, 4, 2, {{93, 0, 0}} },
+        { Vkgc::ResourceMappingNodeType::DescriptorBuffer, 4, 6, {{93, 1, 0}} },
     };
     const uint32_t TraceRayLayoutNodeCount = static_cast<uint32_t>(Util::ArrayLen(TraceRayLayout));
 
@@ -1089,6 +1116,36 @@ void PipelineLayout::BuildLlpcRayTracingDispatchArgumentsMapping(
     ++(*pRootNodeCount);
 }
 #endif
+
+// =====================================================================================================================
+// Builds the VKGC resource mapping nodes for debugPrintf argument
+void PipelineLayout::BuildLlpcDebugPrintfMapping(
+    const uint32_t                 stageMask,
+    const uint32_t                 offsetInDwords,
+    const uint32_t                 sizeInDwords,
+    Vkgc::ResourceMappingRootNode* pRootNode,
+    uint32_t*                      pRootNodeCount,
+    Vkgc::ResourceMappingNode*     pStaNode,
+    uint32_t*                      pStaNodeCount
+    ) const
+{
+    const Vkgc::ResourceMappingNode DebugPrintfLayout[] =
+    {
+        { Vkgc::ResourceMappingNodeType::DescriptorBuffer, 4, 0, {{Vkgc::InternalDescriptorSetId, 6}}},
+    };
+
+    Util::FastMemCpy(pStaNode, DebugPrintfLayout, sizeof(DebugPrintfLayout));
+    *pStaNodeCount += static_cast<uint32_t>(Util::ArrayLen(DebugPrintfLayout));
+
+    pRootNode->node.type               = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
+    pRootNode->node.offsetInDwords     = offsetInDwords;
+    pRootNode->node.sizeInDwords       = sizeInDwords;
+    pRootNode->node.tablePtr.pNext     = pStaNode;
+    pRootNode->node.tablePtr.nodeCount = 1;
+    pRootNode->visibility              = stageMask;
+
+    ++(*pRootNodeCount);
+}
 
 // =====================================================================================================================
 // Populates the resource mapping nodes in compact scheme
@@ -1227,17 +1284,17 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
     }
 
     // TODO: Build the internal push constant resource mapping
-        if (userDataLayout.pushConstRegCount > 0)
-        {
-            auto pPushConstNode = &pUserDataNodes[userDataNodeCount];
-            pPushConstNode->node.type = Vkgc::ResourceMappingNodeType::PushConst;
-            pPushConstNode->node.offsetInDwords = userDataLayout.pushConstRegBase;
-            pPushConstNode->node.sizeInDwords = userDataLayout.pushConstRegCount;
-            pPushConstNode->node.srdRange.set = Vkgc::InternalDescriptorSetId;
-            pPushConstNode->visibility = stageMask;
+    if (userDataLayout.pushConstRegCount > 0)
+    {
+        auto pPushConstNode = &pUserDataNodes[userDataNodeCount];
+        pPushConstNode->node.type = Vkgc::ResourceMappingNodeType::PushConst;
+        pPushConstNode->node.offsetInDwords = userDataLayout.pushConstRegBase;
+        pPushConstNode->node.sizeInDwords = userDataLayout.pushConstRegCount;
+        pPushConstNode->node.srdRange.set = Vkgc::InternalDescriptorSetId;
+        pPushConstNode->visibility = stageMask;
 
-            userDataNodeCount += 1;
-        }
+        userDataNodeCount += 1;
+    }
 
     if (userDataLayout.transformFeedbackRegCount > 0)
     {
@@ -1247,6 +1304,18 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
             userDataLayout.transformFeedbackRegCount,
             &pUserDataNodes[userDataNodeCount],
             &userDataNodeCount);
+    }
+
+    if (m_pDevice->GetRuntimeSettings().enableDebugPrintf)
+    {
+        BuildLlpcDebugPrintfMapping(
+            stageMask,
+            userDataLayout.debugPrintfRegBase,
+            1u,
+            &pUserDataNodes[userDataNodeCount],
+            &userDataNodeCount,
+            &pResourceNodes[mappingNodeCount],
+            &mappingNodeCount);
     }
 
     if (pVbInfo != nullptr)
@@ -1447,10 +1516,11 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
         // Build mapping for push constant resource
         Vkgc::ResourceMappingNode* pPushConstNode = &pResourceNodes[mappingNodeCount];
 
-        pPushConstNode->type           = Vkgc::ResourceMappingNodeType::PushConst;
-        pPushConstNode->offsetInDwords = 0;
-        pPushConstNode->sizeInDwords   = userDataLayout.pushConstSizeInDword;
-        pPushConstNode->srdRange.set   = Vkgc::InternalDescriptorSetId;
+        pPushConstNode->type                    = Vkgc::ResourceMappingNodeType::PushConst;
+        pPushConstNode->offsetInDwords          = 0;
+        pPushConstNode->sizeInDwords            = userDataLayout.pushConstSizeInDword;
+        pPushConstNode->srdRange.set            = Vkgc::InternalDescriptorSetId;
+        pPushConstNode->srdRange.strideInDwords = 0;
 
         ++mappingNodeCount;
 
@@ -1515,6 +1585,18 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
         }
     }
 #endif
+
+    if (m_pDevice->GetRuntimeSettings().enableDebugPrintf)
+    {
+        BuildLlpcDebugPrintfMapping(
+            stageMask,
+            m_info.userDataRegCount,
+            1u,
+            &pUserDataNodes[userDataNodeCount],
+            &userDataNodeCount,
+            &pResourceNodes[mappingNodeCount],
+            &mappingNodeCount);
+    }
 
     // Build mapping for each set of descriptors
     VK_ASSERT(setBindingPtrRegBase == userDataLayout.setBindingPtrRegBase);

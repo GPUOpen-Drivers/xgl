@@ -103,7 +103,7 @@ static void ConvertToPalMsaaQuadSamplePattern(
 
     VK_ASSERT(gridWidth * gridHeight != 0);
 
-    uint32_t sampleLocationsPerPixel = (uint32_t)pSampleLocationsInfo->sampleLocationsPerPixel;
+    uint32_t sampleLocationsPerPixel = static_cast<uint32_t>(pSampleLocationsInfo->sampleLocationsPerPixel);
 
     // Sample locations are passed in the [0, 1] range. We need to convert them to [-8, 7]
     // discrete range for setting the registers.

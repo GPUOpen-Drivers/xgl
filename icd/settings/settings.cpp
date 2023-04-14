@@ -145,6 +145,8 @@ void VulkanSettingsLoader::OverrideSettingsBySystemInfo()
         MakeAbsolutePath(m_settings.pipelineProfileRuntimeFile, sizeof(m_settings.pipelineProfileRuntimeFile),
                          pRootPath, m_settings.pipelineProfileRuntimeFile);
 #endif
+        MakeAbsolutePath(m_settings.debugPrintfDumpFolder, sizeof(m_settings.debugPrintfDumpFolder),
+                         pRootPath, m_settings.debugPrintfDumpFolder);
     }
 }
 
@@ -204,9 +206,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                          ForceDccFor64BppShaderStorage);
             m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         }
-
-        // Enable DXGI present for HG configurations as CASO (Cross Adapter Scan Out) can provide a
-        // good performance boost.
 
 #if VKI_RAY_TRACING
         const char* pMaxInlinedShadersEnvVar = getenv("AMD_VK_MAX_INLINED_SHADERS");
@@ -613,7 +612,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 #if VKI_BUILD_GFX11
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
             {
-                m_settings.useAcquireReleaseInterface = false;
+                pPalSettings->pwsMode = Pal::PwsMode::NoLateAcquirePoint;
             }
 #endif
         }
@@ -625,6 +624,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::StrangeBrigade)
         {
+
             if (pInfo->gpuType == Pal::GpuType::Discrete)
             {
                 m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc;
@@ -670,6 +670,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::ZombieArmy4)
         {
+
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
             {
                 m_settings.dccBitsPerPixelThreshold = 512;
@@ -989,6 +990,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             m_settings.implicitExternalSynchronization = false;
 
+            m_settings.alwaysReportHdrFormats = true;
+
 #if VKI_RAY_TRACING
             m_settings.indirectCallConvention = IndirectConvention0;
 #endif
@@ -1168,6 +1171,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::SniperElite5)
         {
+            m_settings.alwaysReportHdrFormats = true;
+
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
                 m_settings.csWaveSize = 64;
@@ -1244,7 +1249,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 #if VKI_BUILD_GFX11
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
             {
-                m_settings.useAcquireReleaseInterface = false;
+                pPalSettings->pwsMode = Pal::PwsMode::NoLateAcquirePoint;
             }
 #endif
         }
@@ -1471,6 +1476,9 @@ void VulkanSettingsLoader::UpdatePalSettings()
     // Set it to true for applications that have perf drops
     pPalSettings->depthClampBasedOnZExport = m_settings.forceDepthClampBasedOnZExport;
     pPalSettings->cpDmaCmdCopyMemoryMaxBytes = m_settings.cpDmaCmdCopyMemoryMaxBytes;
+
+    // The color cache fetch size is limited to 256Bytes MAX regardless of other register settings.
+    pPalSettings->limitCbFetch256B = m_settings.limitCbFetch256B;
 
 }
 

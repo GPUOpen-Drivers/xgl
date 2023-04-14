@@ -759,7 +759,6 @@ void DispatchTable::Init()
                         vkCmdCopyImageToBuffer2                         );
     INIT_DISPATCH_ALIAS(vkCmdResolveImage2KHR,
                         vkCmdResolveImage2                              );
-
     INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSetKHR                       );
     INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSetWithTemplateKHR           );
     INIT_DISPATCH_ENTRY(vkGetDeviceBufferMemoryRequirements             );
@@ -775,6 +774,9 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdDrawMeshTasksEXT                           );
     INIT_DISPATCH_ENTRY(vkCmdDrawMeshTasksIndirectEXT                   );
     INIT_DISPATCH_ENTRY(vkCmdDrawMeshTasksIndirectCountEXT              );
+
+    INIT_DISPATCH_ENTRY(vkMapMemory2KHR                                 );
+    INIT_DISPATCH_ENTRY(vkUnmapMemory2KHR                               );
 
     INIT_DISPATCH_ENTRY(vkGetShaderModuleIdentifierEXT                  );
     INIT_DISPATCH_ENTRY(vkGetShaderModuleCreateInfoIdentifierEXT        );
@@ -795,6 +797,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdSetExtraPrimitiveOverestimationSizeEXT     );
     INIT_DISPATCH_ENTRY(vkCmdSetDepthClipEnableEXT                      );
     INIT_DISPATCH_ENTRY(vkCmdSetSampleLocationsEnableEXT                );
+    INIT_DISPATCH_ENTRY(vkCmdSetColorBlendAdvancedEXT                   );
     INIT_DISPATCH_ENTRY(vkCmdSetProvokingVertexModeEXT                  );
     INIT_DISPATCH_ENTRY(vkCmdSetLineRasterizationModeEXT                );
     INIT_DISPATCH_ENTRY(vkCmdSetLineStippleEnableEXT                    );

@@ -513,6 +513,8 @@ VkResult ImageView::Create(
         imageViewUsage = pImage->GetImageStencilUsage();
     }
 
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+
     VkFormat createInfoFormat = pCreateInfo->format;
 
     VK_ASSERT(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);

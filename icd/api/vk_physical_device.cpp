@@ -984,6 +984,26 @@ VkResult PhysicalDevice::Initialize()
             }
         }
 
+        uint32_t currentTypeCount = m_memoryProperties.memoryTypeCount;
+
+        for (uint32_t i = 0; i < currentTypeCount; i++)
+        {
+            uint32_t memoryTypeIndex = m_memoryProperties.memoryTypeCount++;
+
+            VkMemoryType* pMemoryType = &m_memoryProperties.memoryTypes[i];
+            VkMemoryType* pNewMemoryType = &m_memoryProperties.memoryTypes[memoryTypeIndex];
+
+            *pNewMemoryType = *pMemoryType;
+
+            m_memoryVkIndexToPalHeap[memoryTypeIndex] = m_memoryVkIndexToPalHeap[i];
+
+            m_memoryPalHeapToVkIndexBits[m_memoryVkIndexToPalHeap[i]] |= (1UL << memoryTypeIndex);
+
+            m_memoryTypeMask |= 1 << memoryTypeIndex;
+
+            m_memoryTypeMaskForDescriptorBuffers |= 1 << memoryTypeIndex;
+        }
+
         VK_ASSERT(m_memoryProperties.memoryTypeCount <= VK_MAX_MEMORY_TYPES);
         VK_ASSERT(m_memoryProperties.memoryHeapCount <= Pal::GpuHeapCount);
     }
@@ -2254,7 +2274,7 @@ void PhysicalDevice::GetDeviceProperties(
     }
 
     memcpy(pProperties->deviceName, palProps.gpuName,
-        std::min(Pal::MaxDeviceName, Pal::uint32(VK_MAX_PHYSICAL_DEVICE_NAME_SIZE)));
+        Util::Min(Pal::MaxDeviceName, Pal::uint32(VK_MAX_PHYSICAL_DEVICE_NAME_SIZE)));
     pProperties->deviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE - 1] = 0;
 
     pProperties->limits = GetLimits();
@@ -2584,7 +2604,9 @@ void PhysicalDevice::PopulateLimits()
 
     // Maximum total storage size, in bytes, of all variables declared with the WorkgroupLocal SPIRV Storage
     // Class (the shared storage qualifier in GLSL) in the compute shader stage.
-    m_limits.maxComputeSharedMemorySize = palProps.gfxipProperties.shaderCore.ldsSizePerThreadGroup;
+    // The size is capped at 32 KiB to reserve memory for driver internal use, or to optimize occupancy.
+    m_limits.maxComputeSharedMemorySize = Util::Min(32768u,
+                                                    palProps.gfxipProperties.shaderCore.ldsSizePerThreadGroup);
 
     // Maximum number of work groups that may be dispatched by a single dispatch command.  These three values represent
     // the maximum number of work groups for the X, Y, and Z dimensions, respectively.  The x, y, and z parameters to
@@ -3922,12 +3944,16 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_ACCELERATION_STRUCTURE));
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DEFERRED_HOST_OPERATIONS));
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RAY_TRACING_MAINTENANCE1));
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PIPELINE_LIBRARY_GROUP_HANDLES));
 
         }
     }
 #endif
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PIPELINE_LIBRARY));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_CLAMP_ZERO_ONE));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DESCRIPTOR_BUFFER));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAP_MEMORY2));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_INTEGER_DOT_PRODUCT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COPY_COMMANDS2));
@@ -3973,8 +3999,24 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     }
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INDEX_TYPE_UINT8));
 
+    if ((pPhysicalDevice == nullptr) ||
+            pPhysicalDevice->PalProperties().gfxipProperties.flags.supportMeshShader)
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MESH_SHADER));
+    }
+
      availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_FRAGMENT_SHADER_BARYCENTRIC));
      availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_NON_SEAMLESS_CUBE_MAP));
+     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_MODULE_IDENTIFIER));
+
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE3));
+
+        if ((pPhysicalDevice == nullptr) ||
+            ((pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9) &&
+             (pPhysicalDevice->GetAppProfile() != AppProfile::Zink)))
+        {
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_INPUT_DYNAMIC_STATE));
+        }
 
     bool disableAMDVendorExtensions = false;
     if (pPhysicalDevice != nullptr)
@@ -4044,6 +4086,19 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_DEVICE_COHERENT_MEMORY));
         }
 
+        if ((pPhysicalDevice == nullptr) ||
+            (pPhysicalDevice->PalProperties().gfxipProperties.flags.support3dUavZRange))
+        {
+
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_SLICED_VIEW_OF_3D));
+        }
+
+    }
+
+    if ((pPhysicalDevice == nullptr) ||
+         pPhysicalDevice->PalProperties().gpuMemoryProperties.flags.supportPageFaultInfo)
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEVICE_FAULT));
     }
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ATTACHMENT_FEEDBACK_LOOP_LAYOUT));
@@ -6326,10 +6381,14 @@ size_t PhysicalDevice::GetFeatures2(
                     // HW has no distinction between normal and sparse images for atomics.
                     pExtInfo->sparseImageFloat32Atomics = pExtInfo->shaderImageFloat32Atomics;
 
-                    pExtInfo->shaderBufferFloat32AtomicAdd = VK_FALSE;
-                    pExtInfo->shaderImageFloat32AtomicAdd  = VK_FALSE;
-                    pExtInfo->sparseImageFloat32AtomicAdd  = VK_FALSE;
-                    pExtInfo->shaderSharedFloat32AtomicAdd = VK_FALSE;
+                    pExtInfo->shaderBufferFloat32AtomicAdd =
+                        PalProperties().gfxipProperties.flags.supportFloat32BufferAtomicAdd;
+                    pExtInfo->shaderSharedFloat32AtomicAdd =
+                        pExtInfo->shaderBufferFloat32AtomicAdd;
+                    pExtInfo->shaderImageFloat32AtomicAdd =
+                        PalProperties().gfxipProperties.flags.supportFloat32ImageAtomicAdd;
+                    pExtInfo->sparseImageFloat32AtomicAdd =
+                        pExtInfo->shaderImageFloat32AtomicAdd;
 
                     if (PalProperties().gfxipProperties.flags.support64BitInstructions &&
                         PalProperties().gfxipProperties.flags.supportFloat64Atomics)
@@ -6366,8 +6425,9 @@ size_t PhysicalDevice::GetFeatures2(
 
                     pExtInfo->shaderBufferFloat32AtomicMinMax =
                         PalProperties().gfxipProperties.flags.supportFloat32BufferAtomics;
-                    pExtInfo->shaderImageFloat32AtomicMinMax  =
-                        PalProperties().gfxipProperties.flags.supportFloat32ImageAtomics;
+                    pExtInfo->shaderImageFloat32AtomicMinMax =
+                        PalProperties().gfxipProperties.flags.supportFloat32ImageAtomics &&
+                        PalProperties().gfxipProperties.flags.supportFloat32ImageAtomicMinMax;
 
                     // HW has no distinction between shared and normal buffers for atomics.
                     pExtInfo->shaderSharedFloat32AtomicMinMax = pExtInfo->shaderBufferFloat32AtomicMinMax;
@@ -6377,8 +6437,10 @@ size_t PhysicalDevice::GetFeatures2(
                     if (PalProperties().gfxipProperties.flags.support64BitInstructions &&
                         PalProperties().gfxipProperties.flags.supportFloat64Atomics)
                     {
-                        pExtInfo->shaderBufferFloat64AtomicMinMax = VK_TRUE;
-                        pExtInfo->shaderSharedFloat64AtomicMinMax = VK_TRUE;
+                        pExtInfo->shaderBufferFloat64AtomicMinMax =
+                            PalProperties().gfxipProperties.flags.supportFloat64BufferAtomicMinMax;
+                        pExtInfo->shaderSharedFloat64AtomicMinMax =
+                            PalProperties().gfxipProperties.flags.supportFloat64SharedAtomicMinMax;
                     }
                     else
                     {
@@ -7538,16 +7600,23 @@ void PhysicalDevice::GetDeviceProperties2(
                 pProps->maxMeshOutputLayers               = 8;
             }
 
+            // This limit is expressed in the number of dwords
+            const auto outputGranularity = static_cast<uint32_t>(
+                palProps.gfxipProperties.shaderCore.ldsGranularity / sizeof(uint32_t));
+
+            pProps->meshOutputPerVertexGranularity        = outputGranularity;
+            pProps->meshOutputPerPrimitiveGranularity     = outputGranularity;
+
+            // May need to reserve 4 dwords for mesh_prim_count and mesh_vert_count
+            const auto reservedSharedMemSize = static_cast<uint32_t>(
+                ((m_limits.maxComputeSharedMemorySize == palProps.gfxipProperties.shaderCore.ldsSizePerThreadGroup) ?
+                 4 : 0) * sizeof(uint32_t));
+
+            pProps->maxTaskSharedMemorySize           = m_limits.maxComputeSharedMemorySize - reservedSharedMemSize;
+            pProps->maxMeshSharedMemorySize           = m_limits.maxComputeSharedMemorySize - reservedSharedMemSize;
+            pProps->maxMeshPayloadAndSharedMemorySize = m_limits.maxComputeSharedMemorySize - reservedSharedMemSize;
+
             pProps->maxMeshMultiviewViewCount             = Pal::MaxViewInstanceCount;
-            pProps->meshOutputPerVertexGranularity        = palProps.gfxipProperties.shaderCore.ldsGranularity;
-            pProps->meshOutputPerPrimitiveGranularity     = palProps.gfxipProperties.shaderCore.ldsGranularity;
-
-            // Need to reserve 4 dwords for mesh_prim_count and mesh_vert_count
-            pProps->maxTaskSharedMemorySize           = m_limits.maxComputeSharedMemorySize - (4 * sizeof(uint32_t));
-            pProps->maxMeshSharedMemorySize           = m_limits.maxComputeSharedMemorySize - (4 * sizeof(uint32_t));
-            pProps->maxMeshPayloadAndSharedMemorySize = m_limits.maxComputeSharedMemorySize - (4 * sizeof(uint32_t));
-
-            // Use default value for now
             pProps->maxPreferredTaskWorkGroupInvocations  = pProps->maxTaskWorkGroupInvocations;
             pProps->maxPreferredMeshWorkGroupInvocations  = pProps->maxMeshWorkGroupInvocations;
             pProps->prefersLocalInvocationVertexOutput    = VK_TRUE;

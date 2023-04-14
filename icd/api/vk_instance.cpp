@@ -565,6 +565,9 @@ VkResult Instance::Init(
             GetApplicationName());
 
         InitDispatchTable();
+
+#if DEBUG
+#endif
     }
 
     return status;
@@ -665,7 +668,8 @@ void Instance::UpdateSettingsWithAppProfile(
     // Set the default values
     profileSettings.texFilterQuality = pSettings->vulkanTexFilterQuality;
 
-    ReloadAppProfileSettings(this,
+    ReloadAppProfileSettings(nullptr,
+                            this,
                             &profileSettings,
                             pSettings->appGpuID);
 
@@ -1156,7 +1160,7 @@ void PAL_STDCALL Instance::PalDeveloperCallback(
         SqttMgr::PalDeveloperCallback(pInstance, deviceIndex, type, pCbData);
     }
 
-    if (pInstance->IsGpuMemoryEventSupportEnabled() == true)
+    if (pInstance->m_pGpuMemoryEventHandler->IsGpuMemoryEventHandlerEnabled())
     {
         pInstance->m_pGpuMemoryEventHandler->PalDeveloperCallback(type, pCbData);
     }
@@ -1430,13 +1434,6 @@ void Instance::CallExternalMessengers(
     }
 
     m_logCallbackInternalExternalMutex.Unlock();
-}
-
-// =====================================================================================================================
-// GpuMemoryEventHandler is enabled by VK_EXT_device_memory_report and/or VK_EXT_device_address_binding_report
-void Instance::EnableGpuMemoryEventHandler()
-{
-    m_flags.gpuMemoryEventSupport = true;
 }
 
 namespace entry

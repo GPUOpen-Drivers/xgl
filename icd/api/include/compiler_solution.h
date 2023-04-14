@@ -78,6 +78,16 @@ struct PipelineCreationFeedback
 };
 
 // =====================================================================================================================
+// Pipeline compile and cache statistic info.
+struct PipelineCompileCacheMatrix
+{
+    uint32_t    cacheAttempts;      // Number of attempted cache loads
+    uint32_t    cacheHits;          // Number of cache hits
+    uint32_t    totalBinaries;      // Total number of binaries compiled or fetched
+    int64_t     totalTimeSpent;     // Accumulation of time spent either loading or compiling pipeline
+};
+
+// =====================================================================================================================
 // Information required by the VB table manager that is defined by the graphics pipeline
 struct VbBindingInfo
 {
@@ -245,6 +255,7 @@ public:
         const Device*                     pDevice,
         const ShaderStage                 stage,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        void*                             pPipelineDumpHandle,
         ShaderModuleHandle*               pShaderModule) = 0;
 
     virtual VkResult CreateComputePipelineBinary(

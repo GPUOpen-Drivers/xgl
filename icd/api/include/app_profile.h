@@ -128,19 +128,24 @@ enum class AppProfile : uint32_t
     HalfLifeAlyx,            // Half Life Alyx VR by Valve
     Satisfactory,            // Satisfactory by Coffee Stain Studios
     QuakeEnhanced,           // Quake Enhanced by id Software
+    Zink,                    // Zink
 };
 
 struct ProfileSettings
 {
     uint32_t    texFilterQuality;      // TextureFilterOptimizationSettings
 
+#if VKI_RAY_TRACING
+#endif
+
 };
 
 extern AppProfile ScanApplicationProfile(const VkInstanceCreateInfo& instanceInfo);
 
-void ReloadAppProfileSettings(Instance*         pInstance,
-                              ProfileSettings*  pProfileSettings,
-                              uint32_t          appGpuID = 0u);
+void ReloadAppProfileSettings(const PhysicalDevice* pPhysicalDevice,
+                              Instance*             pInstance,
+                              ProfileSettings*      pProfileSettings,
+                              uint32_t              appGpuID = 0u);
 
 };
 

@@ -35,6 +35,7 @@
 
 #include "palPipeline.h"
 #include "palMetroHash.h"
+#include "palVectorImpl.h"
 
 namespace vk
 {
@@ -58,7 +59,10 @@ void ComputePipeline::BuildApiHash(
 
     GenerateHashFromShaderStageCreateInfo(stageInfo.stage, &elfHasher);
 
-    elfHasher.Update(PipelineLayout::ObjectFromHandle(pCreateInfo->layout)->GetApiHash());
+    if (pCreateInfo->layout != VK_NULL_HANDLE)
+    {
+        elfHasher.Update(PipelineLayout::ObjectFromHandle(pCreateInfo->layout)->GetApiHash());
+    }
     elfHasher.Finalize(reinterpret_cast<uint8_t*>(pElfHash));
 
     // Set up the API hash, which gets passed down to RGP traces as 64 bits
@@ -435,6 +439,15 @@ VkResult ComputePipeline::Create(
             apiPsoHash);
 
         *pPipeline = ComputePipeline::HandleFromVoidPointer(pSystemMem);
+        if (settings.enableDebugPrintf)
+        {
+            ComputePipeline* pComputePipeline = static_cast<ComputePipeline*>(pSystemMem);
+            pComputePipeline->ClearFormatString();
+            DebugPrintf::DecodeFormatStringsFromElf(pDevice,
+                                                    pipelineBinarySizes[DefaultDeviceIndex],
+                                                    static_cast<const char*>(pPipelineBinaries[DefaultDeviceIndex]),
+                                                    pComputePipeline->GetFormatStrings());
+        }
     }
     else
     {
@@ -490,6 +503,29 @@ VkResult ComputePipeline::Create(
             &binaryCreateInfo.pipelineFeedback,
             &binaryCreateInfo.stageFeedback);
 
+        if (pDevice->GetEnabledFeatures().deviceMemoryReport == true)
+        {
+            size_t numEntries = 0;
+            Util::Vector<Pal::GpuMemSubAllocInfo, 1, PalAllocator> palSubAllocInfos(pDevice->VkInstance()->Allocator());
+            const auto* pPipelineObject = ComputePipeline::ObjectFromHandle(*pPipeline);
+
+            pPipelineObject->PalPipeline(DefaultDeviceIndex)->QueryAllocationInfo(&numEntries, nullptr);
+
+            palSubAllocInfos.Resize(numEntries);
+
+            pPipelineObject->PalPipeline(DefaultDeviceIndex)->QueryAllocationInfo(&numEntries, &palSubAllocInfos[0]);
+
+            for (size_t i = 0; i < numEntries; ++i)
+            {
+                // Report the Pal suballocation for this pipeline to device_memory_report
+                pDevice->VkInstance()->GetGpuMemoryEventHandler()->ReportDeferredPalSubAlloc(
+                    palSubAllocInfos[i].address,
+                    palSubAllocInfos[i].offset,
+                    ComputePipeline::IntValueFromHandle(*pPipeline),
+                    VK_OBJECT_TYPE_PIPELINE);
+            }
+       }
+
         // The hash is same as pipline dump file name, we can easily analyze further.
         AmdvlkLog(settings.logTagIdMask, PipelineCompileTime, "0x%016llX-%llu", apiPsoHash, duration);
     }
@@ -515,6 +551,14 @@ void ComputePipeline::BindToCmdBuffer(
         params.pPipeline = m_pPalPipeline[deviceIdx];
 
         pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdBindPipeline(params);
+        uint32_t debugPrintfRegBase = (m_userDataLayout.scheme == PipelineLayoutScheme::Compact) ?
+            m_userDataLayout.compact.debugPrintfRegBase : m_userDataLayout.indirect.debugPrintfRegBase;
+        pCmdBuffer->GetDebugPrintf()->BindPipeline(m_pDevice,
+                                                   this,
+                                                   deviceIdx,
+                                                   pCmdBuffer->PalCmdBuffer(deviceIdx),
+                                                   static_cast<uint32_t>(Pal::PipelineBindPoint::Compute),
+                                                   debugPrintfRegBase);
     }
 }
 

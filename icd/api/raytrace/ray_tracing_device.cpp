@@ -160,10 +160,6 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     }
 
     pDeviceSettings->fp16BoxModeMixedSaThresh = Util::Clamp(fp16BoxMixedThreshold, 1.0f, 8.0f);
-
-    pDeviceSettings->bvhBuilderNodeSortType            = ConvertBvhBuilderNodeSortType(settings.bvhBuilderNodeSortType);
-    pDeviceSettings->bvhBuilderNodeSortHeuristic       = ConvertNodeSortHeuristic(settings.bvhBuilderNodeSortHeuristic);
-
     pDeviceSettings->enableMortonCode30                = settings.rtEnableMortonCode30;
     pDeviceSettings->enableVariableBitsMortonCodes     = settings.enableVariableBitsMortonCodes;
     pDeviceSettings->enablePrefixScanDLB               = settings.rtEnablePrefixScanDLB;
@@ -195,8 +191,6 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->lbvhBuildThreshold                = settings.lbvhBuildThreshold;
     pDeviceSettings->enableBVHBuildDebugCounters       = settings.enableBVHBuildDebugCounters;
     pDeviceSettings->enableInsertBarriersInBuildAS     = settings.enableInsertBarriersInBuildAS;
-    pDeviceSettings->sahQbvh                           = settings.sahQbvh;
-
     pDeviceSettings->numMortonSizeBits                 = settings.numMortonSizeBits;
     pDeviceSettings->allowFp16BoxNodesInUpdatableBvh   = settings.rtAllowFp16BoxNodesInUpdatableBVH;
 
@@ -339,8 +333,13 @@ VkResult RayTracingDevice::InitAccelStructTracker()
             allocInfo.pal.heaps[0]  = Pal::GpuHeap::GpuHeapLocal;
             allocInfo.pal.heaps[1]  = Pal::GpuHeap::GpuHeapGartUswc;
 
-            result = (m_pDevice->MemMgr()->AllocGpuMem(allocInfo, pTracker->pMem, deviceMask) == VK_SUCCESS) ?
-                Pal::Result::Success : Pal::Result::ErrorUnknown;
+            result = (m_pDevice->MemMgr()->AllocGpuMem(
+                allocInfo,
+                pTracker->pMem,
+                deviceMask,
+                VK_OBJECT_TYPE_DEVICE,
+                DispatchableDevice::IntValueFromHandle(DispatchableDevice::FromObject(m_pDevice))) == VK_SUCCESS) ?
+                    Pal::Result::Success : Pal::Result::ErrorUnknown;
 
             if (result != Pal::Result::Success)
             {
@@ -382,6 +381,7 @@ VkResult RayTracingDevice::InitAccelStructTracker()
             if (m_accelStructTrackerResources[deviceIdx].pMem != nullptr)
             {
                 m_pDevice->MemMgr()->FreeGpuMem(m_accelStructTrackerResources[deviceIdx].pMem);
+
                 m_accelStructTrackerResources[deviceIdx].pMem = nullptr;
             }
         }
@@ -874,8 +874,13 @@ Pal::Result RayTracingDevice::ClientAllocateGpuMemory(
             allocInfo.pal.heaps[2]  = Pal::GpuHeap::GpuHeapGartUswc;
         }
 
-        result = (pDevice->MemMgr()->AllocGpuMem(allocInfo, pInternalMemory, deviceMask) == VK_SUCCESS) ?
-            Pal::Result::Success : Pal::Result::ErrorUnknown;
+        result = (pDevice->MemMgr()->AllocGpuMem(
+            allocInfo,
+            pInternalMemory,
+            deviceMask,
+            VK_OBJECT_TYPE_DEVICE,
+            DispatchableDevice::IntValueFromHandle(DispatchableDevice::FromObject(pDevice))) == VK_SUCCESS) ?
+                Pal::Result::Success : Pal::Result::ErrorUnknown;
     }
 
     if ((result == Pal::Result::Success) && (ppMappedData != nullptr))

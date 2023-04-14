@@ -54,7 +54,6 @@
 #include "sqtt/sqtt_layer.h"
 
 #include "palQueue.h"
-
 namespace vk
 {
 
@@ -166,7 +165,6 @@ VkResult Queue::Create(
 {
     size_t       palQueueMemorySize = 0;
     VkResult     result             = VK_SUCCESS;
-    Pal::Result  palResult          = Pal::Result::Success;
     const size_t apiQueueSize       = sizeof(ApiQueue);
     void*        pSysMem            = nullptr;
 
@@ -190,7 +188,8 @@ VkResult Queue::Create(
 
     if (result == VK_SUCCESS)
     {
-        void* pPalQueueMemory = Util::VoidPtrInc(pSysMem, apiQueueSize);
+        Pal::Result  palResult        = Pal::Result::Success;
+        void*        pPalQueueMemory  = Util::VoidPtrInc(pSysMem, apiQueueSize);
 
         size_t                 palQueueMemoryOffset = 0;
         uint32                 tmzQueueIndex        = 0;
@@ -304,9 +303,9 @@ VkResult Queue::Create(
                 pDevice->VkInstance()->StackMgr()->ReleaseAllocator(pQueueStackAllocator);
             }
         }
-    }
 
-    result = PalToVkResult(palResult);
+        result = PalToVkResult(palResult);
+    }
 
     if ((result != VK_SUCCESS) && (pSysMem!= nullptr))
     {
@@ -556,7 +555,9 @@ VkResult Queue::GetPalQueueMemorySize(
             }
         }
 
-        if ((queueCreateInfo.queueType == Pal::QueueType::QueueTypeDma) && (settings.useBackupCmdbuffer))
+        if ((queueCreateInfo.queueType == Pal::QueueType::QueueTypeDma)               &&
+            pDevice->VkPhysicalDevice(DefaultDeviceIndex)->IsComputeEngineSupported() &&
+            settings.useBackupCmdbuffer)
         {
             // create a backup compute queue for dma queue
             Pal::QueueCreateInfo backupQueueCreateInfo = {};
@@ -716,10 +717,14 @@ Pal::Result Queue::CreatePalQueues(
         }
 
         // Create a backup queue when this is a dma queue type.
-        if ((queueCreateInfo.queueType == Pal::QueueType::QueueTypeDma) && (settings.useBackupCmdbuffer))
+        if ((queueCreateInfo.queueType == Pal::QueueType::QueueTypeDma)               &&
+            pDevice->VkPhysicalDevice(DefaultDeviceIndex)->IsComputeEngineSupported() &&
+            settings.useBackupCmdbuffer)
         {
             Pal::QueueCreateInfo backupQueueCreateInfo = {};
 
+            // If we are inside here, compute engine is guaranteed to be supported by the device and thus hardcoding
+            // useComputeAsTransferQueue = true is fine.
             palResult = CreatePalQueue(physicalDevice,
                                        pPalDevice,
                                        queueFamilyIndex,
@@ -784,6 +789,8 @@ Pal::Result Queue::CreatePalQueues(
             {
                 Pal::QueueCreateInfo backupTmzQueueCreateInfo = {};
 
+                // If we are inside here, Compute engine is guaranteed to be supported by the device and thus hardcoding
+                // useComputeAsTransferQueue = true is fine.
                 palResult = CreatePalQueue(physicalDevice,
                                            pPalDevice,
                                            queueFamilyIndex,
@@ -1331,6 +1338,7 @@ VkResult Queue::Submit(
                         }
 #endif
 
+                        (*pCommandBuffers[i])->GetDebugPrintf()->PreQueueSubmit(m_pDevice, deviceIdx);
                         pPalCmdBuffers[perSubQueueInfo.cmdBufferCount++] = cmdBuf.PalCmdBuffer(deviceIdx);
 
                         if (cmdBuf.IsBackupBufferUsed())
@@ -1577,6 +1585,8 @@ VkResult Queue::Submit(
                         (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pSignalSemaphoreDeviceIndices : nullptr));
                 }
             }
+
+            DebugPrintf::PostQueueSubmit(m_pDevice, pCmdBuffers, cmdBufferCount);
 
 #if VKI_RAY_TRACING
 #endif
@@ -1858,6 +1868,9 @@ VkResult Queue::Present(
     {
         uint32_t rsFeaturesQueriedMask = 0;
 
+#if VKI_RAY_TRACING
+#endif
+
         Pal::Result palResult = m_pDevice->PalDevice(DefaultDeviceIndex)->DidRsFeatureSettingsChange(
             rsFeaturesQueriedMask,
             &rsFeaturesChangedMask);
@@ -2071,7 +2084,8 @@ VkResult Queue::AddVirtualRemapRange(
     Pal::IGpuMemory*   pRealGpuMem,
     VkDeviceSize       realOffset,
     VkDeviceSize       size,
-    VirtualRemapState* pRemapState)
+    VirtualRemapState* pRemapState,
+    bool               noWait)
 {
     VkResult result = VK_SUCCESS;
 
@@ -2097,7 +2111,7 @@ VkResult Queue::AddVirtualRemapRange(
     // If we've hit our limit of batched remaps, send them to PAL and reset
     if (pRemapState->rangeCount >= pRemapState->maxRangeCount)
     {
-        result = CommitVirtualRemapRanges(resourceDeviceIndex, nullptr, pRemapState);
+        result = CommitVirtualRemapRanges(resourceDeviceIndex, pRemapState, noWait);
     }
 
     return result;
@@ -2108,8 +2122,8 @@ VkResult Queue::AddVirtualRemapRange(
 // signaling if requested.
 VkResult Queue::CommitVirtualRemapRanges(
     uint32_t           deviceIndex,
-    Pal::IFence*       pFence,
-    VirtualRemapState* pRemapState)
+    VirtualRemapState* pRemapState,
+    bool               noWait)
 {
     Pal::Result result = Pal::Result::Success;
 
@@ -2118,19 +2132,10 @@ VkResult Queue::CommitVirtualRemapRanges(
         result = PalQueue(deviceIndex)->RemapVirtualMemoryPages(
             pRemapState->rangeCount,
             pRemapState->pRanges,
-            true,
-            pFence);
+            noWait,
+            nullptr);
 
         pRemapState->rangeCount = 0;
-    }
-    else if (pFence != nullptr)
-    {
-        Pal::SubmitInfo submitInfo = {};
-
-        submitInfo.ppFences   = &pFence;
-        submitInfo.fenceCount = 1;
-
-        result = PalQueue(deviceIndex)->Submit(submitInfo);
     }
 
     return (result == Pal::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
@@ -2143,7 +2148,8 @@ VkResult Queue::BindSparseEntry(
     uint32_t                resourceDeviceIndex,
     uint32_t                memoryDeviceIndex,
     VkDeviceSize            prtTileSize,
-    VirtualRemapState*      pRemapState)
+    VirtualRemapState*      pRemapState,
+    bool                    noWait)
 {
     VkResult result = VK_SUCCESS;
 
@@ -2177,7 +2183,8 @@ VkResult Queue::BindSparseEntry(
                 pRealGpuMem,
                 bind.memoryOffset,
                 bind.size,
-                pRemapState);
+                pRemapState,
+                noWait);
 
             if (result != VK_SUCCESS)
             {
@@ -2214,7 +2221,8 @@ VkResult Queue::BindSparseEntry(
                 pRealGpuMem,
                 bind.memoryOffset,
                 bind.size,
-                pRemapState);
+                pRemapState,
+                noWait);
 
             if (result != VK_SUCCESS)
             {
@@ -2327,7 +2335,8 @@ VkResult Queue::BindSparseEntry(
                         pRealGpuMem,
                         realOffset,
                         sizePerRow,
-                        pRemapState);
+                        pRemapState,
+                        noWait);
 
                     if (result != VK_SUCCESS)
                     {
@@ -2429,6 +2438,7 @@ VkResult Queue::BindSparse(
         uint32_t    resourceDeviceIndex     = DefaultDeviceIndex;
         uint32_t    memoryDeviceIndex       = DefaultDeviceIndex;
         uint32_t    nextResourceDeviceIndex = DefaultDeviceIndex;
+        bool        noWait                  = (bindInfo.waitSemaphoreCount == 0);
         const VkTimelineSemaphoreSubmitInfo* pTimelineSemaphoreInfo = nullptr;
         const VkTimelineSemaphoreSubmitInfo* pNextTimelineSemaphoreInfo = nullptr;
 
@@ -2466,7 +2476,8 @@ VkResult Queue::BindSparse(
                 resourceDeviceIndex,
                 memoryDeviceIndex,
                 prtTileSize,
-                &remapState);
+                &remapState,
+                noWait);
         }
 
         // Commit any batched remap operations immediately if:
@@ -2478,7 +2489,7 @@ VkResult Queue::BindSparse(
             // Commit any remaining remaps
             if (result == VK_SUCCESS)
             {
-                result = CommitVirtualRemapRanges(resourceDeviceIndex, nullptr, &remapState);
+                result = CommitVirtualRemapRanges(resourceDeviceIndex, &remapState, noWait);
             }
 
             // Signal any semaphores depending on the preceding remap operations
@@ -2562,13 +2573,14 @@ bool Queue::BuildPostProcessCommands(
 
         if (pPresentInfo != nullptr)
         {
-            frameInfo.pSrcImage   = pPresentInfo->pSrcImage;
-            frameInfo.presentMode = pPresentInfo->presentMode;
+            frameInfo.pSrcImage                = pPresentInfo->pSrcImage;
+            frameInfo.debugOverlay.presentMode = pPresentInfo->presentMode;
+            frameInfo.debugOverlay.wsiPlatform = pSwapChain->GetProperties().displayableInfo.palPlatform;
         }
         else
         {
-            frameInfo.pSrcImage   = pImage;
-            frameInfo.presentMode = Pal::PresentMode::Unknown;
+            frameInfo.pSrcImage                = pImage;
+            frameInfo.debugOverlay.presentMode = Pal::PresentMode::Unknown;
         }
 
         frameInfo.fullScreenFrameMetadataControlFlags.u32All = m_palFrameMetadataControl.flags.u32All;

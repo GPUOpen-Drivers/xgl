@@ -574,11 +574,6 @@ void ShaderOptimizer::ApplyProfileToDynamicGraphicsShaderInfo(
     {
         pGraphicsShaderInfo->maxWavesPerCu = static_cast<float>(action.dynamicShaderInfo.maxWavesPerCu);
     }
-
-    if (action.dynamicShaderInfo.apply.cuEnableMask)
-    {
-        pGraphicsShaderInfo->cuEnableMask = action.dynamicShaderInfo.cuEnableMask;
-    }
 }
 
 // =====================================================================================================================
@@ -1004,6 +999,17 @@ void ShaderOptimizer::BuildTuningProfile()
                 pAction->shaderCreate.apply.disableFastMathFlags = true;
                 pAction->shaderCreate.tuningOptions.disableFastMathFlags = m_settings.overrideDisableFastMathFlags;
             }
+            if (m_settings.overrideNsaThreshold != 0)
+            {
+                pAction->shaderCreate.apply.nsaThreshold = true;
+                pAction->shaderCreate.tuningOptions.nsaThreshold = m_settings.overrideNsaThreshold;
+            }
+            if (m_settings.overrideAggressiveInvariantLoads != 0)
+            {
+                pAction->shaderCreate.apply.aggressiveInvariantLoads = true;
+                pAction->shaderCreate.tuningOptions.aggressiveInvariantLoads =
+                    static_cast<Vkgc::InvariantLoads>(m_settings.overrideAggressiveInvariantLoads);
+            }
 
             switch (m_settings.overrideWaveSize)
             {
@@ -1177,6 +1183,8 @@ void ShaderOptimizer::BuildAppProfileLlpc()
         pEntry->pattern.match.always = true;
         pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.apply.disableFastMathFlags = true;
         pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.tuningOptions.disableFastMathFlags = 8u | 32u;
+        pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.disableFastMathFlags = true;
+        pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.tuningOptions.disableFastMathFlags = 8u;
     }
 
     if (appProfile == AppProfile::CSGO)

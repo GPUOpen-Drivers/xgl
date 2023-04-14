@@ -54,6 +54,7 @@
 #if VKI_RAY_TRACING
 #endif
 
+#include "debug_printf.h"
 #include "palCmdBuffer.h"
 #include "palDequeImpl.h"
 #include "palGpuMemory.h"
@@ -159,15 +160,8 @@ union DirtyGraphicsState
         uint32 samplePattern           :  1;
         uint32 colorBlend              :  1;
         uint32 msaa                    :  1;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 778
-        uint32 colorWriteEnable        :  1;
-        uint32 rasterizerDiscardEnable :  1;
-        uint32 reserved                : 20;
-#else
         uint32 pipeline                :  1;
         uint32 reserved                : 21;
-#endif
-
     };
 
     uint32 u32All;
@@ -263,14 +257,6 @@ struct AllGpuRenderState
     // defined by the last bound GraphicsPipeline, which was not nullptr.
     bool viewIndexFromDeviceIndex;
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 778
-    // Tracks if color write enable modified the value of CB_TARGET_MASK with the currently bound pipeline.  This value
-    // is used at pipeline bind time to determine if CB_TARGET_MASK needs to be updated as part of the bind operation.
-    bool lastColorWriteEnableDynamic;
-
-    bool rasterizerDiscardEnable;
-#endif
-
     DynamicRenderingInstance         dynamicRenderingInstance;
 
 // =====================================================================================================================
@@ -322,13 +308,9 @@ struct AllGpuRenderState
     Pal::ColorBlendStateCreateInfo   colorBlendCreateInfo;
     Pal::MsaaStateCreateInfo         msaaCreateInfo;
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 778
     uint32_t                         colorWriteEnable; // Per target mask from vkCmdSetColorWriteEnableEXT or pipeline
     uint32_t                         colorWriteMask;
-#else
-    Pal::ColorWriteMaskParams        colorWriteMaskParams; // Final merged color target write mask according to
-                                                           // colorWriteEnable and colorWriteMask
-#endif
+
     SamplePattern                    samplePattern;
     VkBool32                         sampleLocationsEnable;
     DescBufBinding*                  pDescBufBinding;
@@ -1126,9 +1108,9 @@ public:
 
     void PalCmdCopyImage(
         const Image* const    pSrcImage,
-        Pal::ImageLayout      srcImageLayout,
+        VkImageLayout         srcImageLayout,
         const Image* const    pDstImage,
-        Pal::ImageLayout      destImageLayout,
+        VkImageLayout         destImageLayout,
         uint32_t              regionCount,
         Pal::ImageCopyRegion* pRegions);
 
@@ -1393,6 +1375,10 @@ public:
     bool HasRayTracing() const { return m_flags.hasRayTracing; }
 #endif
 
+    DebugPrintf* GetDebugPrintf()
+    {
+        return &m_debugPrintf;
+    }
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(CmdBuffer);
 
@@ -1814,9 +1800,8 @@ private:
     Util::Vector<DynamicMsaa, 16, PalAllocator>         m_palMsaaState;
 
     uint32                        m_vbWatermark;  // tracks how many vb entries need to be reset
-
+    DebugPrintf                   m_debugPrintf;
     bool                          m_reverseThreadGroupState;
-
 #if VKI_RAY_TRACING
     Util::Vector<InternalMemory*, 16, PalAllocator> m_rayTracingIndirectList; // Ray-tracing indirect memory
 #endif
@@ -2695,6 +2680,12 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthClipEnableEXT(
 VKAPI_ATTR void VKAPI_CALL vkCmdSetSampleLocationsEnableEXT(
     VkCommandBuffer                     commandBuffer,
     VkBool32                            sampleLocationsEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetColorBlendAdvancedEXT(
+    VkCommandBuffer                     commandBuffer,
+    uint32_t                            firstAttachment,
+    uint32_t                            attachmentCount,
+    const VkColorBlendAdvancedEXT*      pColorBlendAdvanced);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetProvokingVertexModeEXT(
     VkCommandBuffer                     commandBuffer,

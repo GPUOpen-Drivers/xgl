@@ -96,11 +96,6 @@
 #define VK_ENUM_IN_RANGE(value, type)   (((value) >= type##_BEGIN_RANGE) && ((value) <= type##_END_RANGE))
 #define VK_ENUM_IN_RANGE_AMD(value, type)   (((value) >= type##_BEGIN_RANGE_AMD) && ((value) <= type##_END_RANGE_AMD))
 
-// Helper macro to make code conditional on being a minimum PAL major/minor version
-#define VK_IS_PAL_VERSION_AT_LEAST(major, minor) \
-    ((PAL_CLIENT_INTERFACE_MAJOR_VERSION == major && PAL_CLIENT_INTERFACE_MINOR_VERSION >= minor) || \
-     (PAL_CLIENT_INTERFACE_MAJOR_VERSION > major))
-
 #define NANOSECONDS_IN_A_SECOND      1000000000ull
 
 namespace vk
@@ -119,8 +114,8 @@ struct VkStructHeader
 
 struct VkStructHeaderNonConst
 {
-    VkStructureType         sType;
-    VkStructHeader*         pNext;
+    VkStructureType          sType;
+    VkStructHeaderNonConst*  pNext;
 };
 
 #if VKI_RAY_TRACING
@@ -147,6 +142,9 @@ inline uint64_t TicksToNano(uint64_t ticks)
 // =====================================================================================================================
 // Get driver build time hash
 uint32_t GetBuildTimeHash();
+
+#if DEBUG
+#endif
 
 // =====================================================================================================================
 // This function can be used to get the right externsion structure of specific type in case there are more than one

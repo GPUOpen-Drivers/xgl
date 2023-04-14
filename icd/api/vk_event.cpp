@@ -204,7 +204,12 @@ VkResult Event::Initialize(
 
     pDevice->MemMgr()->GetCommonPool(pool, &allocInfo);
 
-    result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &m_internalGpuMem, 1);
+    result = pDevice->MemMgr()->AllocGpuMem(
+        allocInfo,
+        &m_internalGpuMem,
+        1,
+        VK_OBJECT_TYPE_EVENT,
+        Event::IntValueFromHandle(Event::HandleFromObject(this)));
 
     if (result == VK_SUCCESS)
     {

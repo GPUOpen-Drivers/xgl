@@ -89,6 +89,7 @@ target_sources(xgl PRIVATE
     api/cmd_buffer_ring.cpp
     api/color_space_helper.cpp
     api/compiler_solution.cpp
+    api/debug_printf.cpp
     api/entry.cpp
     api/gpumemory_event_handler.cpp
     api/internal_mem_mgr.cpp
@@ -315,6 +316,7 @@ if (UNIX)
 
     if(CMAKE_BUILD_TYPE_RELEASE AND XGL_ENABLE_LTO)
         if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+            target_link_options(xgl PRIVATE -Wno-stringop-overflow)
             execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
             if (GCC_VERSION VERSION_GREATER 5.3 OR GCC_VERSION VERSION_EQUAL 5.3)
                 target_link_libraries(xgl PRIVATE -flto=4  -fuse-linker-plugin -Wno-odr)
@@ -381,4 +383,3 @@ if(UNIX)
     set(AMDVLK_INSTALL_PATH ${CMAKE_INSTALL_FULL_LIBDIR})
     configure_file(Loader/LunarG/Lnx/amd-icd.json amd_icd${ISABITS}.json @ONLY)
 endif()
-

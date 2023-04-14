@@ -404,22 +404,21 @@ CMP_STATIC CGU_UINT32 cmp_clampui32(CMP_IN CGU_UINT32 v, CMP_IN CGU_UINT32 a, CM
 }
 
 
-// Test Ref:https://en.wikipedia.org/wiki/Half-precision_floating-point_format
-// Half (in Hex)        Float               Comment
-// ---------------------------------------------------------------------------
-// 0001    (approx) = 0.000000059604645     smallest positive subnormal number
-// 03ff    (approx) = 0.000060975552        largest subnormal number
-// 0400    (approx) = 0.00006103515625      smallest positive normal number
-// 7bff    (approx) = 65504                 largest normal number
-// 3bff    (approx) = 0.99951172            largest number less than one
-// 3c00    (approx) = 1.00097656            smallest number larger than one
-// 3555             = 0.33325195            the rounding of 1/3 to nearest
-// c000             = ?2
-// 8000             = -0
-// 0000             = 0
-// 7c00             = infinity
-// fc00             = infinity
-// Half Float Math
+//# Half (in Hex)        Float               Comment
+//# ---------------------------------------------------------------------------
+//# 0001    (approx) = 0.000000059604645     smallest positive subnormal number
+//# 03ff    (approx) = 0.000060975552        largest subnormal number
+//# 0400    (approx) = 0.00006103515625      smallest positive normal number
+//# 7bff    (approx) = 65504                 largest normal number
+//# 3bff    (approx) = 0.99951172            largest number less than one
+//# 3c00    (approx) = 1.00097656            smallest number larger than one
+//# 3555             = 0.33325195            the rounding of 1/3 to nearest
+//# c000             = ?2
+//# 8000             = -0
+//# 0000             = 0
+//# 7c00             = infinity
+//# fc00             = infinity
+//# Half Float Math
 
 CMP_STATIC CGU_FLOAT HalfToFloat(CGU_UINT32 h)
 {

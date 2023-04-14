@@ -42,6 +42,7 @@
 #include "palPipeline.h"
 #include "palInlineFuncs.h"
 #include "palMetroHash.h"
+#include "palVectorImpl.h"
 
 #include <float.h>
 #include <math.h>
@@ -483,6 +484,15 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
             &palPipelineHasher);
 
         *pPipeline = GraphicsPipeline::HandleFromVoidPointer(pSystemMem);
+        if (pDevice->GetRuntimeSettings().enableDebugPrintf)
+        {
+            GraphicsPipeline* pGraphicsPipeline = static_cast<GraphicsPipeline*>(pSystemMem);
+            pGraphicsPipeline->ClearFormatString();
+            DebugPrintf::DecodeFormatStringsFromElf(pDevice,
+                                                    pPipelineBinarySizes[DefaultDeviceIndex],
+                                                    static_cast<const char*>(pPipelineBinaries[DefaultDeviceIndex]),
+                                                    pGraphicsPipeline->GetFormatStrings());
+        }
     }
 
     if (result != VK_SUCCESS)
@@ -581,6 +591,7 @@ VkResult GraphicsPipeline::Create(
     const void*                pPipelineBinaries[MaxPalDevices]   = {};
     Util::MetroHash::Hash      cacheId[MaxPalDevices]             = {};
     PipelineMetadata           binaryMetadata                     = {};
+
     if (result == VK_SUCCESS)
     {
         result = CreatePipelineBinaries(
@@ -698,6 +709,29 @@ VkResult GraphicsPipeline::Create(
             pCreateInfo->pStages,
             &binaryCreateInfo.pipelineFeedback,
             binaryCreateInfo.stageFeedback);
+
+        if (pDevice->GetEnabledFeatures().deviceMemoryReport == true)
+        {
+            size_t numEntries = 0;
+            Util::Vector<Pal::GpuMemSubAllocInfo, 1, PalAllocator> palSubAllocInfos(pDevice->VkInstance()->Allocator());
+            const auto* pPipelineObject = GraphicsPipeline::ObjectFromHandle(*pPipeline);
+
+            pPipelineObject->PalPipeline(DefaultDeviceIndex)->QueryAllocationInfo(&numEntries, nullptr);
+
+            palSubAllocInfos.Resize(numEntries);
+
+            pPipelineObject->PalPipeline(DefaultDeviceIndex)->QueryAllocationInfo(&numEntries, &palSubAllocInfos[0]);
+
+            for (size_t i = 0; i < numEntries; ++i)
+            {
+                // Report the Pal suballocation for this pipeline to device_memory_report
+                pDevice->VkInstance()->GetGpuMemoryEventHandler()->ReportDeferredPalSubAlloc(
+                    palSubAllocInfos[i].address,
+                    palSubAllocInfos[i].offset,
+                    GraphicsPipeline::IntValueFromHandle(*pPipeline),
+                    VK_OBJECT_TYPE_PIPELINE);
+            }
+        }
 
         // The hash is same as pipline dump file name, we can easily analyze further.
         AmdvlkLog(pDevice->GetRuntimeSettings().logTagIdMask,
@@ -1104,7 +1138,6 @@ GraphicsPipeline::GraphicsPipeline(
 
     CreateStaticState();
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 778
     if (ContainsDynamicState(DynamicStatesInternal::RasterizerDiscardEnable))
     {
         m_info.graphicsShaderInfos.dynamicState.enable.rasterizerDiscardEnable = 1;
@@ -1152,7 +1185,11 @@ GraphicsPipeline::GraphicsPipeline(
         m_info.graphicsShaderInfos.dynamicState.enable.depthClipMode = 1;
         m_info.graphicsShaderInfos.dynamicState.enable.depthClampMode = 1;
     }
-#endif
+
+    if (ContainsDynamicState(DynamicStatesInternal::ColorBlendEquation))
+    {
+        m_info.graphicsShaderInfos.dynamicState.enable.dualSourceBlendEnable = 1;
+    }
 
     pPalPipelineHasher->Update(m_palPipelineHash);
     pPalPipelineHasher->Finalize(reinterpret_cast<uint8*>(&m_palPipelineHash));
@@ -1388,7 +1425,6 @@ void GraphicsPipeline::BindToCmdBuffer(
             } while (deviceGroup.IterateNext());
         }
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 778
         Pal::DepthRange depthRange = pGfxDynamicBindInfo->dynamicState.depthRange;
         if (ContainsStaticState(DynamicStatesInternal::DepthClipNegativeOneToOne))
         {
@@ -1406,7 +1442,6 @@ void GraphicsPipeline::BindToCmdBuffer(
 
             pRenderState->dirtyGraphics.viewport = 1;
         }
-#endif
     }
 
     if (ContainsStaticState(DynamicStatesInternal::Scissor))
@@ -1715,8 +1750,7 @@ void GraphicsPipeline::BindToCmdBuffer(
     const bool useOptimizedPipeline = UseOptimizedPipeline();
     const uint64_t oldHash = pRenderState->boundGraphicsPipelineHash;
     const uint64_t newHash = useOptimizedPipeline ? m_optimizedPipelineHash : PalPipelineHash();
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 778
-    const bool dynamicStateDirty    =
+    const bool dynamicStateDirty =
         pGfxDynamicBindInfo->dynamicState.enable.u32All != graphicsShaderInfos.dynamicState.enable.u32All;
 
     // Update pipleine dynamic state
@@ -1761,7 +1795,6 @@ void GraphicsPipeline::BindToCmdBuffer(
         pRenderState->logicOp       = m_info.logicOp;
         pRenderState->logicOpEnable = m_info.logicOpEnable;
     }
-#endif
 
     utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
     do
@@ -1769,66 +1802,21 @@ void GraphicsPipeline::BindToCmdBuffer(
         const uint32_t deviceIdx = deviceGroup.Index();
 
         Pal::ICmdBuffer* pPalCmdBuf = pCmdBuffer->PalCmdBuffer(deviceIdx);
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 778
+
+        uint32_t debugPrintfRegBase = (m_userDataLayout.scheme == PipelineLayoutScheme::Compact) ?
+            m_userDataLayout.compact.debugPrintfRegBase : m_userDataLayout.indirect.debugPrintfRegBase;
+        pCmdBuffer->GetDebugPrintf()->BindPipeline(m_pDevice,
+                                                   this,
+                                                   deviceIdx,
+                                                   pPalCmdBuf,
+                                                   static_cast<uint32_t>(Pal::PipelineBindPoint::Graphics),
+                                                   debugPrintfRegBase);
         if ((oldHash != newHash)
             || dynamicStateDirty
             )
         {
             pRenderState->dirtyGraphics.pipeline = 1;
         }
-#else
-        if (pRenderState->pGraphicsPipeline != nullptr)
-        {
-            bool palPipelineBound = false;
-            if ((oldHash != newHash)
-                )
-            {
-                Pal::PipelineBindParams params = {};
-
-                params.pipelineBindPoint     = Pal::PipelineBindPoint::Graphics;
-                params.pPipeline             = useOptimizedPipeline ? m_pOptimizedPipeline[deviceIdx] : m_pPalPipeline[deviceIdx];
-                params.graphics              = graphicsShaderInfos;
-                params.apiPsoHash            = m_apiHash;
-
-                pPalCmdBuf->CmdBindPipeline(params);
-                palPipelineBound         = true;
-            }
-
-            if ((palPipelineBound == false) &&
-                ContainsStaticState(DynamicStatesInternal::ColorWriteEnable) &&
-                pRenderState->lastColorWriteEnableDynamic)
-            {
-                // Color write enable requires an explicit write to CB_TARGET_MASK in cases where the Pal pipeline bind
-                // is skipped due to matching Pal pipeline hash values and CB_TARGET_MASK has been altered by the
-                // previous pipeline via color write enable.  Passing in a count of 0 resets the mask.
-                pRenderState->colorWriteMaskParams.count = 0;
-                pRenderState->dirtyGraphics.colorWriteEnable     = 1;
-            }
-
-            if (ContainsStaticState(DynamicStatesInternal::RasterizerDiscardEnable))
-            {
-                // Need to update static rasterizerDiscardEnable setting if the Pal pipeline bind is skipped
-                pRenderState->rasterizerDiscardEnable       = m_info.rasterizerDiscardEnable;
-                pRenderState->dirtyGraphics.rasterizerDiscardEnable = (palPipelineBound == false) ? 1 : 0;
-            }
-            else
-            {
-                // Binding a pipeline overwrites the dynamic rasterizerDiscardEnable setting so need to force validation
-                pRenderState->dirtyGraphics.rasterizerDiscardEnable = 1;
-            }
-        }
-        else
-        {
-            Pal::PipelineBindParams params = {};
-
-            params.pipelineBindPoint     = Pal::PipelineBindPoint::Graphics;
-            params.pPipeline             = useOptimizedPipeline ? m_pOptimizedPipeline[deviceIdx] : m_pPalPipeline[deviceIdx];
-            params.graphics              = graphicsShaderInfos;
-            params.apiPsoHash            = m_apiHash;
-
-            pPalCmdBuf->CmdBindPipeline(params);
-        }
-#endif
 
         // Bind state objects that are always static; these are redundancy checked by the pointer in the command buffer.
         if (m_flags.bindDepthStencilObject)
@@ -1938,20 +1926,6 @@ void GraphicsPipeline::BindToCmdBuffer(
                 }
             }
         }
-
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 778
-        if (ContainsStaticState(DynamicStatesInternal::ColorWriteEnable))
-        {
-            if (pRenderState->lastColorWriteEnableDynamic)
-            {
-                pRenderState->lastColorWriteEnableDynamic = false;
-            }
-            else
-            {
-                pRenderState->dirtyGraphics.colorWriteEnable = 0;
-            }
-        }
-#endif
 
         // Only set the Fragment Shading Rate if the dynamic state is not set.
         if (ContainsStaticState(DynamicStatesInternal::FragmentShadingRateStateKhr) &&

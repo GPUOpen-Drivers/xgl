@@ -296,8 +296,6 @@ public:
 
     Vkgc::GfxIpVersion& GetGfxIp() { return m_gfxIp; }
 
-    void GetElfCacheMetricString(char* pOutStr, size_t outStrSize);
-
     void DestroyPipelineBinaryCache();
 
     void BuildPipelineInternalBufferData(
@@ -402,6 +400,22 @@ public:
         size_t*                           pBinarySize,
         PipelineMetadata*                 pMetadata);
 
+    static void DumpCacheMatrix(
+        PhysicalDevice*             pPhysicalDevice,
+        const char*                 pPrefixStr,
+        uint32_t                    countHint,
+        PipelineCompileCacheMatrix* pCacheMatrix);
+
+    static void GetElfCacheMetricString(
+        PipelineCompileCacheMatrix* pCacheMatrix,
+        const char*                 pPrefixStr,
+        char*                       pOutStr,
+        size_t                      outStrSize);
+
+    void GetElfCacheMetricString(char* pOutStr, size_t outStrSize)
+    {
+        GetElfCacheMetricString(&m_pipelineCacheMatrix, "", pOutStr, outStrSize);
+    }
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
 
@@ -488,12 +502,8 @@ private:
 
     PipelineBinaryCache* m_pBinaryCache;       // Pipeline binary cache object
 
-    // Metrics
-    uint32_t             m_cacheAttempts;      // Number of attempted cache loads
-    uint32_t             m_cacheHits;          // Number of cache hits
-    uint32_t             m_totalBinaries;      // Total number of binaries compiled or fetched
-    int64_t              m_totalTimeSpent;     // Accumulation of time spent either loading or compiling pipeline
-                                               // binaries
+    // Compile statistic metrics
+    PipelineCompileCacheMatrix     m_pipelineCacheMatrix;
 
     Util::Mutex                    m_cacheLock;
 

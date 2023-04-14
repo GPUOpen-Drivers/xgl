@@ -1734,20 +1734,37 @@ static void BuildVertexInputInterfaceState(
     const VbBindingInfo*                pVbInfo,
     const uint64_t                      dynamicStateFlags,
     const bool                          isLibrary,
+    const bool                          hasMesh,
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
     const VkPipelineInputAssemblyStateCreateInfo* pIa = pIn->pInputAssemblyState;
 
-    if((pIa != nullptr) || (isLibrary == true))
+    pInfo->immedInfo.inputAssemblyState.primitiveRestartIndex = 0xFFFFFFFF;
+    if ((pIa != nullptr) &&
+        (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::PrimitiveTopology) == false))
     {
         pInfo->immedInfo.inputAssemblyState.primitiveRestartEnable = (pIa->primitiveRestartEnable != VK_FALSE);
-        pInfo->immedInfo.inputAssemblyState.primitiveRestartIndex  = 0xFFFFFFFF;
-        pInfo->immedInfo.inputAssemblyState.topology               = VkToPalPrimitiveTopology(pIa->topology);
+    }
+    else
+    {
+        pInfo->immedInfo.inputAssemblyState.primitiveRestartEnable = false;
+    }
 
-        pInfo->pipeline.iaState.vertexBufferCount = pVbInfo->bindingTableSize;
-
+    pInfo->immedInfo.inputAssemblyState.topology = Pal::PrimitiveTopology::TriangleList;
+    pInfo->pipeline.iaState.topologyInfo.primitiveType = Pal::PrimitiveType::Triangle;
+    if (pIa != nullptr)
+    {
+        pInfo->immedInfo.inputAssemblyState.topology       = VkToPalPrimitiveTopology(pIa->topology);
         pInfo->pipeline.iaState.topologyInfo.primitiveType = VkToPalPrimitiveType(pIa->topology);
+    }
 
+    if ((pIa != nullptr) || isLibrary || IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInput))
+    {
+        pInfo->pipeline.iaState.vertexBufferCount = pVbInfo->bindingTableSize;
+    }
+
+    if (hasMesh == false)
+    {
         if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::PrimitiveTopology) == false)
         {
             pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::PrimitiveTopology);
@@ -2168,7 +2185,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)
     {
         BuildVertexInputInterfaceState(
-            pDevice, pIn, &pBinMeta->vbInfo, dynamicStateFlags, libInfo.flags.isLibrary, pInfo);
+            pDevice, pIn, &pBinMeta->vbInfo, dynamicStateFlags, libInfo.flags.isLibrary, hasMesh, pInfo);
     }
     else if (libInfo.pVertexInputInterfaceLib != nullptr)
     {

@@ -30,6 +30,7 @@
 
 #include "include/khronos/vulkan.h"
 #include "include/vk_alloccb.h"
+#include "include/vk_utils.h"
 
 #include "palHashMap.h"
 #include "palMutex.h"
@@ -60,6 +61,12 @@ public:
         Pal::Developer::CallbackType type,
         void*                        pCbData);
 
+    void EnableGpuMemoryEvents();
+
+    void DisableGpuMemoryEvents();
+
+    VK_FORCEINLINE bool IsGpuMemoryEventHandlerEnabled() { return m_memoryEventEnables > 0; }
+
     typedef struct
     {
         PFN_vkDeviceMemoryReportCallbackEXT callback;
@@ -78,22 +85,56 @@ public:
     void VulkanAllocateEvent(
         const Pal::IGpuMemory*           pGpuMemory,
         uint64_t                         objectHandle,
-        Util::gpusize                    allocatedSize,
         VkObjectType                     objectType,
-        uint64_t                         memoryObjectId,
-        uint64_t                         heapIndex,
-        bool                             isImport);
+        uint64_t                         heapIndex);
+
+    void VulkanAllocationFailedEvent(
+        Pal::gpusize                     allocatedSize,
+        VkObjectType                     objectType,
+        uint64_t                         heapIndex);
+
+    void VulkanFreeEvent(
+        const Pal::IGpuMemory*           pGpuMemory);
+
+    void VulkanSubAllocateEvent(
+        const Pal::IGpuMemory*           pGpuMemory,
+        Pal::gpusize                     offset,
+        Pal::gpusize                     subAllocationSize,
+        uint64_t                         objectHandle,
+        VkObjectType                     objectType,
+        uint64_t                         heapIndex);
+
+    void VulkanSubFreeEvent(
+        const Pal::IGpuMemory*           pGpuMemory,
+        Pal::gpusize                     offset);
+
+    void ReportDeferredPalSubAlloc(
+        Pal::gpusize                     gpuVirtAddr,
+        Pal::gpusize                     offset,
+        const uint64_t                   objectHandle,
+        const VkObjectType               objectType);
+
+protected:
+
+private:
+    GpuMemoryEventHandler(Instance* pInstance);
+
+    PAL_DISALLOW_COPY_AND_ASSIGN(GpuMemoryEventHandler);
+
+    void HandlePalDeveloperCallback(
+        Pal::Developer::CallbackType type,
+        void*                        pCbData);
 
     void DeviceMemoryReportAllocateEvent(
         uint64_t                         objectHandle,
-        Util::gpusize                    allocatedSize,
+        Pal::gpusize                     allocatedSize,
         VkObjectType                     objectType,
         uint64_t                         memoryObjectId,
         uint64_t                         heapIndex,
         bool                             isImport);
 
     void DeviceMemoryReportAllocationFailedEvent(
-        Util::gpusize                    allocatedSize,
+        Pal::gpusize                     allocatedSize,
         VkObjectType                     objectType,
         uint64_t                         heapIndex);
 
@@ -102,13 +143,6 @@ public:
         VkObjectType                     objectType,
         uint64_t                         memoryObjectId,
         bool                             isUnimport);
-
-protected:
-
-private:
-    GpuMemoryEventHandler(Instance* pInstance);
-
-    PAL_DISALLOW_COPY_AND_ASSIGN(GpuMemoryEventHandler);
 
     void SendDeviceMemoryReportEvent(
         const VkDeviceMemoryReportCallbackDataEXT& callbackData);
@@ -119,20 +153,54 @@ private:
     Instance* m_pInstance;
 
     DeviceMemoryReportCallbacks m_callbacks;
+    Util::RWLock                m_callbacksLock;
 
     typedef struct
     {
         Pal::Developer::GpuMemoryData allocationData;
-        uint64_t                      memoryObjectId;
-        bool                          correlatedWithVulkan;
+        uint64_t                      objectHandle;
+        VkObjectType                  objectType;
         bool                          reportedToDeviceMemoryReport;
     } AllocationData;
 
-    typedef Util::HashMap<const Pal::IGpuMemory*, AllocationData, PalAllocator> GpuMemoryAllocationHashMap;
+    typedef Util::HashMap<const Pal::IGpuMemory*,
+                          AllocationData,
+                          PalAllocator> GpuMemoryAllocationHashMap;
 
     GpuMemoryAllocationHashMap m_allocationHashMap;
+    Util::RWLock               m_allocationHashMapLock;
 
-    volatile uint64_t m_memoryObjectId; // Seed for memoryObjectId generation
+    typedef struct
+    {
+        Pal::gpusize                  gpuVirtAddr;
+        Pal::gpusize                  offset;
+    } SubAllocationKey;
+
+    typedef struct
+    {
+        Pal::Developer::GpuMemoryData allocationData;
+        uint64_t                      objectHandle;
+        VkObjectType                  objectType;
+        bool                          reportedToDeviceMemoryReport;
+        uint64_t                      memoryObjectId;
+        Pal::gpusize                  subAllocationSize;
+        Pal::gpusize                  offset;
+        uint64_t                      heapIndex;
+    } SubAllocationData;
+
+    typedef Util::HashMap<SubAllocationKey,
+                          SubAllocationData,
+                          PalAllocator,
+                          Util::JenkinsHashFunc> GpuMemorySubAllocationHashMap;
+
+    GpuMemorySubAllocationHashMap m_vulkanSubAllocationHashMap;
+    Util::RWLock                  m_vulkanSubAllocationHashMapLock;
+
+    GpuMemorySubAllocationHashMap m_palSubAllocationHashMap;
+    Util::RWLock                  m_palSubAllocationHashMapLock;
+
+    volatile uint64_t m_memoryObjectId;             // Seed for memoryObjectId generation
+    volatile uint32_t m_memoryEventEnables;         // The number of device extensions requesting memory events
 };
 
 } // namespace vk

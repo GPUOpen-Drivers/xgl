@@ -217,7 +217,9 @@ VkResult PalQueryPool::Initialize()
         &m_internalMem,
         m_pDevice->GetPalDeviceMask(),
         removeInvisibleHeap,
-        persistentMapped);
+        persistentMapped,
+        VK_OBJECT_TYPE_QUERY_POOL,
+        PalQueryPool::IntValueFromHandle(PalQueryPool::HandleFromObject(this)));
 
     return result;
 }
@@ -239,7 +241,6 @@ VkResult PalQueryPool::Destroy(
 
     // Free internal GPU memory allocation used by the object
     pDevice->MemMgr()->FreeGpuMem(&m_internalMem);
-
     // Call destructor
     Util::Destructor(this);
 
@@ -441,7 +442,7 @@ VkResult TimestampQueryPool::Create(
 
 // =====================================================================================================================
 VkResult QueryPoolWithStorageView::Initialize(
-    void* pMemory,
+    void*          pMemory,
     size_t         apiSize,
     size_t         viewSize,
     uint32_t       entryCount,
@@ -477,7 +478,12 @@ VkResult QueryPoolWithStorageView::Initialize(
         allocMask = 1 << DefaultMemoryInstanceIdx;
     }
 
-    result = m_pDevice->MemMgr()->AllocGpuMem(createInfo, &m_internalMem, allocMask);
+    result = m_pDevice->MemMgr()->AllocGpuMem(
+        createInfo,
+        &m_internalMem,
+        allocMask,
+        VK_OBJECT_TYPE_QUERY_POOL,
+        QueryPoolWithStorageView::IntValueFromHandle(QueryPoolWithStorageView::HandleFromObject(this)));
 
     if (result == VK_SUCCESS)
     {

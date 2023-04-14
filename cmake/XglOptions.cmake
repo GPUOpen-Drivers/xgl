@@ -80,7 +80,7 @@ macro(xgl_options)
 
     option(ICD_MEMTRACK "Turn on memory tracking?" ${CMAKE_BUILD_TYPE_DEBUG})
 
-    if (NOT WIN32)
+    if(UNIX AND (NOT ANDROID))
         option(BUILD_WAYLAND_SUPPORT "Build XGL with Wayland support" ON)
 
         option(BUILD_DRI3_SUPPORT "Build XGL with Dri3 support" ON)

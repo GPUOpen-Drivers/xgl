@@ -529,6 +529,10 @@ void Buffer::GetBufferMemoryRequirements(
     {
         pMemoryRequirements->memoryTypeBits &= pDevice->GetMemoryTypeMaskForDescriptorBuffers();
     }
+    else
+    {
+        pMemoryRequirements->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskForDescriptorBuffers();
+    }
 }
 
 void Buffer::CalculateBufferFlags(

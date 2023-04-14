@@ -553,7 +553,9 @@ void InternalMemMgr::CheckProvidedSubAllocPoolInfo(
 VkResult InternalMemMgr::AllocGpuMem(
     const InternalMemCreateInfo& createInfo,
     InternalMemory*              pInternalMemory,
-    uint32_t                     allocMask)
+    uint32_t                     allocMask,
+    const VkObjectType           requestingObjectType,
+    const uint64_t               requestingObjectHandle)
 {
     VK_ASSERT(pInternalMemory != nullptr);
 
@@ -624,6 +626,27 @@ VkResult InternalMemMgr::AllocGpuMem(
                     allocMask,
                     &pInternalMemory->m_offset);
             }
+
+            if ((result == VK_SUCCESS) &&
+                (m_pDevice->GetEnabledFeatures().deviceMemoryReport == true))
+            {
+                // Sub-allocation succeeded, either from an existing pool, or a new pool.  Report the allocation to
+                // device_memory_report.
+                Pal::IGpuMemory* pPalGpuMem = pInternalMemory->PalMemory(DefaultDeviceIndex);
+                auto*const pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+
+                uint32_t heapIndex = 0;
+                bool validHeap = pPhysicalDevice->GetVkHeapIndexFromPalHeap(pPalGpuMem->Desc().heaps[0], &heapIndex);
+                VK_ASSERT(validHeap);
+
+                m_pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanSubAllocateEvent(
+                    pPalGpuMem,
+                    pInternalMemory->m_offset,
+                    pInternalMemory->m_size,
+                    requestingObjectHandle,
+                    requestingObjectType,
+                    heapIndex);
+            }
         }
     }
     else
@@ -687,7 +710,9 @@ VkResult InternalMemMgr::AllocAndBindGpuMem(
     InternalMemory*           pInternalMemory,
     uint32_t                  allocMask,
     bool                      removeInvisibleHeap,
-    bool                      persistentMapped)
+    bool                      persistentMapped,
+    const VkObjectType        requestingObjectType,
+    const uint64_t            requestingObjectHandle)
 {
     VK_ASSERT(pInternalMemory != nullptr);
 
@@ -737,7 +762,7 @@ VkResult InternalMemMgr::AllocAndBindGpuMem(
     }
 
     // Issue the memory allocation
-    VkResult result = AllocGpuMem(createInfo, pInternalMemory, allocMask);
+    VkResult result = AllocGpuMem(createInfo, pInternalMemory, allocMask, requestingObjectType, requestingObjectHandle);
 
     if (result == VK_SUCCESS)
     {
@@ -778,6 +803,15 @@ void InternalMemMgr::FreeGpuMem(
             pInternalMemory->m_offset,
             pInternalMemory->m_size,
             pInternalMemory->m_alignment);
+
+        if (m_pDevice->GetEnabledFeatures().deviceMemoryReport == true)
+        {
+            Pal::IGpuMemory* pPalGpuMem = pInternalMemory->PalMemory(DefaultDeviceIndex);
+
+            m_pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanSubFreeEvent(
+                pPalGpuMem,
+                pInternalMemory->m_offset);
+        }
     }
     else
     {

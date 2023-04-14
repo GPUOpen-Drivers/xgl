@@ -79,9 +79,19 @@ public:
 
     // Instances are a special type of objects, they are dispatchable but don't have the loader header as other
     // dispatchable object types.
-    static Instance* ObjectFromHandle(VkInstance instance)
+    inline static Instance* ObjectFromHandle(VkInstance handle)
     {
-        return reinterpret_cast<Instance*>(instance);
+        return reinterpret_cast<Instance*>(handle);
+    }
+
+    inline static VkInstance FromObject(Instance* pInstance)
+    {
+        return reinterpret_cast<VkInstance>(pInstance);
+    }
+
+    inline static uint64_t IntValueFromHandle(VkInstance handle)
+    {
+        return reinterpret_cast<uint64_t>(handle);
     }
 
     struct Properties
@@ -214,9 +224,6 @@ public:
     bool IsNullGpuModeEnabled() const
         { return m_flags.nullGpuMode; }
 
-    bool IsGpuMemoryEventSupportEnabled() const
-        { return m_flags.gpuMemoryEventSupport; }
-
     Pal::NullGpuId GetNullGpuId() const
         { return m_nullGpuId; }
 
@@ -225,8 +232,6 @@ public:
 
     GpuMemoryEventHandler* GetGpuMemoryEventHandler() const
         { return m_pGpuMemoryEventHandler; }
-
-    void EnableGpuMemoryEventHandler();
 
     const char* GetApplicationName() const
         { return m_applicationName; }
@@ -325,8 +330,7 @@ private:
             uint32_t sqttSupport           : 1;  // True if SQTT thread trace annotation markers are enabled
             uint32_t nullGpuMode           : 1;  // True if the instance is running in null gpu mode (fake gpus for
                                                  // shader compilation
-            uint32_t gpuMemoryEventSupport : 1;  // True if GpuMemoryEventHandler is enabled
-            uint32_t reserved              : 29;
+            uint32_t reserved              : 30;
         };
         uint32_t u32All;
     } m_flags;

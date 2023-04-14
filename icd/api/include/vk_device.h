@@ -123,6 +123,7 @@ struct ImportSemaphoreInfo
 class Device
 {
 public:
+
     // Represent features in VK_EXT_robustness2
     struct ExtendedRobustness
     {
@@ -154,7 +155,8 @@ public:
             uint32                strictImageSizeRequirements          : 1;
             uint32                dynamicPrimitiveTopologyUnrestricted : 1;
             uint32                graphicsPipelineLibrary              : 1;
-            uint32                reserved                             : 19;
+            uint32                deviceMemoryReport                   : 1;
+            uint32                reserved                             : 18;
         };
 
         uint32 u32All;
@@ -532,32 +534,6 @@ public:
     const RuntimeSettings& GetRuntimeSettings() const
         { return m_settings; }
 
-    // return too many objects if the allocation count will exceed max limit.
-    // There is a potential improvement by using atomic inc/dec.
-    // That require us to limit the max allocation to some value less than UINT_MAX
-    // to avoid the overflow.
-    VkResult IncreaseAllocationCount()
-    {
-        VkResult vkResult = VK_SUCCESS;
-        Util::MutexAuto lock(&m_memoryMutex);
-
-        if (m_allocatedCount < m_maxAllocations)
-        {
-            m_allocatedCount ++;
-        }
-        else
-        {
-            vkResult = VK_ERROR_TOO_MANY_OBJECTS;
-        }
-        return vkResult;
-    }
-
-    void DecreaseAllocationCount()
-    {
-        Util::MutexAuto lock(&m_memoryMutex);
-        m_allocatedCount --;
-    }
-
     VkResult TryIncreaseAllocatedMemorySize(
         Pal::gpusize allocationSize,
         uint32_t     deviceMask,
@@ -754,6 +730,7 @@ public:
         const VkAccelerationStructureBuildGeometryInfoKHR*   pBuildInfo,
         const uint32_t*                                      pMaxPrimitiveCounts,
         VkAccelerationStructureBuildSizesInfoKHR*            pSizeInfo);
+
 #endif
 
     VK_FORCEINLINE VkExtent2D GetMaxVrsShadingRate() const
@@ -900,12 +877,6 @@ protected:
     // The states of m_enabledFeatures are provided by application
     const DeviceFeatures                m_enabledFeatures;
 
-    // The count of allocations that has been created from the logical device.
-    uint32_t                            m_allocatedCount;
-
-    // The maximum allocations that can be created from the logical device
-    uint32_t                            m_maxAllocations;
-
     // Determines if the allocated memory size will be tracked (error will be thrown when
     // allocation exceeds threshold size)
     bool                                m_allocationSizeTracking;
@@ -924,6 +895,9 @@ protected:
 
     // If use global GpuVa's should be used in MGPU configurations
     bool                                m_useGlobalGpuVa;
+
+#if VKI_RAY_TRACING
+#endif
 
     struct PerGpuInfo
     {

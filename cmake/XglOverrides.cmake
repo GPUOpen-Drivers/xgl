@@ -95,8 +95,6 @@ macro(xgl_overrides_pal)
 
     set(PAL_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_PAL_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 
-    set(PAL_CLIENT_INTERFACE_MINOR_VERSION ${ICD_PAL_CLIENT_MINOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
-
     set(PAL_CLIENT "VULKAN" CACHE STRING "${PROJECT_NAME} override." FORCE)
 
     set(PAL_ENABLE_PRINTS_ASSERTS ${XGL_ENABLE_PRINTS_ASSERTS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
@@ -216,11 +214,14 @@ macro(xgl_overrides)
 
     set(METROHASH_ENABLE_WERROR ${ICD_ANALYSIS_WARNINGS_AS_ERRORS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
+### XCB required ######################################################################################################
+    set(XCB_REQUIRED OFF)
+    if(UNIX AND (NOT ANDROID))
+        set(XCB_REQUIRED ON)
+    endif()
+
     xgl_overrides_pal()
 
     xgl_overrides_vkgc()
-
-### XCB required ######################################################################################################
-    set(XCB_REQUIRED ON)
 
 endmacro()

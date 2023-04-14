@@ -177,12 +177,12 @@ VkResult DeferredHostOperation::GenerateWorkloads(uint32_t count)
     DestroyWorkloads();
 
     size_t memSize = sizeof(DeferredWorkload) * count;
-    m_pWorkloads   = static_cast<DeferredWorkload*>(m_pInstance->AllocMem(memSize,
-                                                                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+    void* pMem = m_pInstance->AllocMem(memSize,VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
-    if (m_pWorkloads != nullptr)
+    if (pMem != nullptr)
     {
-        memset(m_pWorkloads, 0, memSize);
+        memset(pMem, 0, memSize);
+        m_pWorkloads = static_cast<DeferredWorkload*>(pMem);
         m_workloadCount = count;
 
         Util::EventCreateFlags flags = {};

@@ -167,11 +167,10 @@ private:
     // Image needs to be a friend class to be able to create wrapper API memory objects
     friend class Image;
 
-    // Marks that the logical device's allocation count is incremented and needs to be decremented during the
+    // Marks that the logical device's allocated memory and needs to decrease the allocated memory size during the
     // destruction of this memory object.
-    void SetAllocationCounted(uint32_t sizeAccountedForDeviceMask)
+    void MarkAllocatedMemory(uint32_t sizeAccountedForDeviceMask)
     {
-        m_flags.allocationCounted = 1;
         m_sizeAccountedForDeviceMask = sizeAccountedForDeviceMask;
     }
 
@@ -231,9 +230,8 @@ private:
         {
             uint32_t sharedViaNtHandle :  1;
             uint32_t multiInstance     :  1;
-            uint32_t allocationCounted :  1;
             uint32_t reserved1         :  1;
-            uint32_t reserved          : 28;
+            uint32_t reserved          : 29;
         };
 
         uint32_t u32All;
@@ -258,6 +256,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkMapMemory(
 VKAPI_ATTR void VKAPI_CALL vkUnmapMemory(
     VkDevice                                    device,
     VkDeviceMemory                              memory);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkMapMemory2KHR(
+    VkDevice                                    device,
+    const VkMemoryMapInfoKHR*                   pMemoryMapInfo,
+    void**                                      ppData);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkUnmapMemory2KHR(
+    VkDevice                                    device,
+    const VkMemoryUnmapInfoKHR*                 pMemoryUnmapInfo);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkFlushMappedMemoryRanges(
     VkDevice                                    device,

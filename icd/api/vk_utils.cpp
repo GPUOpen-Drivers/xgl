@@ -44,6 +44,9 @@ uint32_t GetBuildTimeHash()
     return Util::HashLiteralString(__DATE__ __TIME__);
 }
 
+#if DEBUG
+#endif
+
 } // namespace utils
 
 } // namespace vk

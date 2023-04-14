@@ -1284,43 +1284,6 @@ SHADER_ACTION = {
         "jsonReaderTemplate": SHADER_CREATE_APPLY_DYNAMIC_SHADER_INFO_RUNTIME_TEMPLATE
     },
 
-    "cuEnableMask": {
-        "type": [int],
-        "jsonReadable": True,
-        "entityInfo": [
-            {
-                "parent": "dynamicShaderInfo.anonStruct",
-                "entity": "bitField",
-                "varName": "cuEnableMask",
-                "dataType": "uint32_t",
-                "defaultValue": 1,
-                "jsonWritable": True,
-                "buildTypes": {},
-            },
-            {
-                "parent": "dynamicShaderInfo",
-                "entity": "var",
-                "varName": "cuEnableMask",
-                "dataType": "uint32_t",
-                "defaultValue": "",
-                "buildTypes": {},
-            },
-        ],
-        "buildTypes": {},
-        "codeTemplate": """\
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.apply.%FieldName% \
-= true;
-            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.%FieldName% \
-= %IntValue%u;\n""",
-        "jsonWriterTemplate": SHADER_CREATE_DYNAMIC_SHADER_INFO_TEMPLATE,
-        "jsonReaderTemplate": \
-            "    if (shaderStage != ShaderStage::ShaderStageCompute)\n    {\n" +
-            "        pActions->dynamicShaderInfo.apply.%Action% = true;\n" +
-            "        pActions->dynamicShaderInfo.%Action%       = %Value%;" +
-            "\n    }\n    else\n    {\n" +
-            "        success = false;\n    }"
-    },
-
     "maxThreadGroupsPerCu": {
         "type": [int],
         "jsonReadable": True,

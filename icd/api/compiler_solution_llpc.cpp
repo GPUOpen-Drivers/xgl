@@ -240,6 +240,19 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
         }
     }
 
+    for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
+    {
+        if (ppShadersInfo[stage]->pModuleData != nullptr)
+        {
+            const auto* pModuleData =
+                reinterpret_cast<const Vkgc::ShaderModuleData*>(ppShadersInfo[stage]->pModuleData);
+#if VKI_RAY_TRACING
+            pCreateInfo->pBinaryMetadata->rayQueryUsed  |= pModuleData->usage.enableRayQuery;
+#endif
+            pCreateInfo->pBinaryMetadata->pointSizeUsed |= pModuleData->usage.usePointSize;
+        }
+    }
+
     Vkgc::Result llpcResult = Vkgc::Result::Success;
 
     bool isEarlyCompiler = false;
@@ -366,6 +379,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
     const Device*                     pDevice,
     const ShaderStage                 stage,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    void*                             pPipelineDumpHandle,
     ShaderModuleHandle*               pShaderModule)
 {
     VkResult result = VK_SUCCESS;
@@ -385,7 +399,11 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
         unlinkedStage = UnlinkedShaderStage::UnlinkedStageFragment;
     }
 
-    auto llpcResult = m_pLlpc->buildGraphicsShaderStage(&pCreateInfo->pipelineInfo, &pipelineOut, unlinkedStage);
+    auto llpcResult = m_pLlpc->buildGraphicsShaderStage(
+            &pCreateInfo->pipelineInfo,
+            &pipelineOut,
+            unlinkedStage,
+            pPipelineDumpHandle);
     if (llpcResult == Vkgc::Result::Success)
     {
         pShaderModule->elfPackage = pipelineOut.pipelineBin;
@@ -508,14 +526,15 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     }
 
 #if VKI_RAY_TRACING
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 55
-    // Propagate internal shader compilation options from module to pipeline
     const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>(pPipelineBuildInfo->cs.pModuleData);
     if (pModuleData != nullptr)
     {
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 55
+        // Propagate internal shader compilation options from module to pipeline
         pPipelineBuildInfo->options.internalRtShaders = pModuleData->usage.isInternalRtShader;
-    }
 #endif
+        pCreateInfo->pBinaryMetadata->rayQueryUsed    = pModuleData->usage.enableRayQuery;
+    }
 #endif
 
     // By default the client hash provided to PAL is more accurate than the one used by pipeline

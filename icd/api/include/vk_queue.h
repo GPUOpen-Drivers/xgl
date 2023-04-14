@@ -289,7 +289,8 @@ protected:
         uint32_t                resourceDeviceIndex,
         uint32_t                memoryDeviceIndex,
         VkDeviceSize            prtTileSize,
-        VirtualRemapState*      pRemapState);
+        VirtualRemapState*      pRemapState,
+        bool                    noWait);
 
     VkResult AddVirtualRemapRange(
         uint32_t           resourceDeviceIndex,
@@ -298,12 +299,13 @@ protected:
         Pal::IGpuMemory*   pRealGpuMem,
         VkDeviceSize       realOffset,
         VkDeviceSize       size,
-        VirtualRemapState* pRemapState);
+        VirtualRemapState* pRemapState,
+        bool               noWait);
 
     VkResult CommitVirtualRemapRanges(
         uint32_t           deviceIndex,
-        Pal::IFence*       pFence,
-        VirtualRemapState* pRemapState);
+        VirtualRemapState* pRemapState,
+        bool               noWait);
 
     VkResult UpdateFlipStatus(
         const Pal::PresentSwapChainInfo* pPresentInfo,

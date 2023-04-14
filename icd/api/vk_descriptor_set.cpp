@@ -543,6 +543,8 @@ void DescriptorUpdate::WriteDescriptorSets(
         // Determine whether the binding has immutable sampler descriptors.
         bool hasImmutableSampler = (destBinding.imm.dwSize != 0);
 
+        VK_ASSERT(params.descriptorType != VK_DESCRIPTOR_TYPE_MUTABLE_EXT);
+
         switch (static_cast<uint32_t>(params.descriptorType))
         {
         case VK_DESCRIPTOR_TYPE_SAMPLER:
@@ -780,13 +782,35 @@ void DescriptorUpdate::CopyDescriptorSets(
         bool hasImmutableSampler  = (destBinding.imm.dwSize != 0);
 
         // Source and destination descriptor types are expected to match.
-        VK_ASSERT(srcBinding.info.descriptorType == destBinding.info.descriptorType);
+        VK_ASSERT((srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_MUTABLE_EXT) ||
+            (destBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_MUTABLE_EXT) ||
+            (srcBinding.info.descriptorType == destBinding.info.descriptorType));
 
         // Cannot copy between sampler descriptors that are immutable and thus don't have any mutable portion
         VK_ASSERT((hasImmutableSampler == false) || (srcBinding.info.descriptorType != VK_DESCRIPTOR_TYPE_SAMPLER));
 
-        if ((srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
-            (srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC))
+        if ((srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_MUTABLE_EXT) ||
+            (destBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_MUTABLE_EXT))
+        {
+            VK_ASSERT(destBinding.sta.dwArrayStride > 0);
+            VK_ASSERT(srcBinding.sta.dwArrayStride > 0);
+            uint32_t* pSrcAddr  = pSrcSet->StaticCpuAddress(deviceIdx) + srcBinding.sta.dwOffset
+                                + params.srcArrayElement * srcBinding.sta.dwArrayStride * sizeof(uint32_t);
+
+            uint32_t* pDestAddr = pDestSet->StaticCpuAddress(deviceIdx) + destBinding.sta.dwOffset
+                                + params.dstArrayElement * destBinding.sta.dwArrayStride * sizeof(uint32_t);
+
+            for (uint32_t j = 0; j < count; ++j)
+            {
+                uint32_t dstSizeInDw = destBinding.sta.dwArrayStride;
+                uint32_t srcSizeInDw = srcBinding.sta.dwArrayStride;
+                memcpy(pDestAddr + j * dstSizeInDw, pSrcAddr + j * srcSizeInDw,
+                    Util::Min(destBinding.sta.dwArrayStride * sizeof(uint32_t),
+                        srcBinding.sta.dwArrayStride * sizeof(uint32_t)));
+            }
+        }
+        else if ((srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
+                 (srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC))
         {
             // Dynamic buffer descriptors reside in client memory to be read when the descriptor set is bound.
             uint32_t* pSrcAddr  = pSrcSet->DynamicDescriptorData(deviceIdx) + srcBinding.dyn.dwOffset

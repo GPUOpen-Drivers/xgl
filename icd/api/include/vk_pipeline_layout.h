@@ -86,6 +86,8 @@ struct UserDataLayout
             // Base user data register indices to use for buffers storing specialization constants
             uint32_t specConstBufVertexRegBase;
             uint32_t specConstBufFragmentRegBase;
+            // Base use data register for debug printf
+            uint32_t debugPrintfRegBase;
 
 #if VKI_RAY_TRACING
             // Base user data register index to use for ray tracing capture replay VA mapping internal buffer
@@ -115,6 +117,8 @@ struct UserDataLayout
 
             // The size of buffer required to store push constants
             uint32_t pushConstSizeInDword;
+            // Base use data register for debug printf
+            uint32_t debugPrintfRegBase;
 
 #if VKI_RAY_TRACING
             // Base user data register index to use for buffer storing ray tracing dispatch arguments
@@ -216,7 +220,6 @@ public:
         uint32_t                   setCount;
         // Total number of user data registers used in this pipeline layout
         uint32_t                   userDataRegCount;
-
     };
 
     // This information is specific for pipeline construction:
@@ -409,6 +412,15 @@ protected:
         Vkgc::ResourceMappingNode*     pStaNode,
         uint32_t*                      pStaNodeCount) const;
 #endif
+
+    void BuildLlpcDebugPrintfMapping(
+        const uint32_t                 stageMask,
+        const uint32_t                 offsetInDwords,
+        const uint32_t                 sizeInDwords,
+        Vkgc::ResourceMappingRootNode* pRootNode,
+        uint32_t*                      pRootNodeCount,
+        Vkgc::ResourceMappingNode*     pStaNode,
+        uint32_t*                      pStaNodeCount) const;
 
     static void ReserveAlternatingThreadGroupUserData(
         const Device*                     pDevice,

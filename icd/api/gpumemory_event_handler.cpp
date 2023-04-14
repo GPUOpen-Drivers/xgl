@@ -45,9 +45,14 @@ GpuMemoryEventHandler::GpuMemoryEventHandler(Instance* pInstance)
     m_pInstance(pInstance),
     m_callbacks(pInstance->Allocator()),
     m_allocationHashMap(32, pInstance->Allocator()),
-    m_memoryObjectId(1)
+    m_vulkanSubAllocationHashMap(32, pInstance->Allocator()),
+    m_palSubAllocationHashMap(32, pInstance->Allocator()),
+    m_memoryObjectId(0),
+    m_memoryEventEnables(0)
 {
     m_allocationHashMap.Init();
+    m_vulkanSubAllocationHashMap.Init();
+    m_palSubAllocationHashMap.Init();
 }
 
 // =====================================================================================================================
@@ -78,6 +83,9 @@ VkResult GpuMemoryEventHandler::Create(
 // =====================================================================================================================
 void GpuMemoryEventHandler::Destroy()
 {
+    PAL_ALERT_MSG(m_vulkanSubAllocationHashMap.GetNumEntries() != 0, "Vulkan suballocations were not freed.");
+    PAL_ALERT_MSG(m_palSubAllocationHashMap.GetNumEntries() != 0, "Pal suballocations were not freed.");
+
     Util::Destructor(this);
 
     m_pInstance->FreeMem(this);
@@ -92,50 +100,56 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
     {
     case Pal::Developer::CallbackType::AllocGpuMemory:
     {
-        auto* pGpuMemoryData = reinterpret_cast<Pal::Developer::GpuMemoryData*>(pCbData);
-
-        bool exists = false;
+        Util::RWLockAuto<RWLock::ReadWrite> lock(&m_allocationHashMapLock);
+        auto*const      pGpuMemoryData  = reinterpret_cast<Pal::Developer::GpuMemoryData*>(pCbData);
+        bool            exists          = false;
         AllocationData* pAllocationData = nullptr;
 
         Pal::Result palResult = m_allocationHashMap.FindAllocate(pGpuMemoryData->pGpuMemory, &exists, &pAllocationData);
 
         if (palResult == Pal::Result::Success)
         {
-            // Add the new value if it did not exist already.
+            // Add the new allocation if it did not exist already.
             if (exists == false)
             {
-                // Store the allocation
+                // Store the allocation information
                 pAllocationData->allocationData = *pGpuMemoryData;
 
-                // If this is a Pal internal allocation, also report it to device_memory_report now
-                if (pGpuMemoryData->flags.isClient == 0)
+                // If this is a Pal internal allocation that is not suballocated report it to device_memory_report now
+                if ((pAllocationData->allocationData.flags.isClient       == 0) && // Pal internal, not Vulkan
+                    (pAllocationData->allocationData.flags.isCmdAllocator == 0) && // Command allocator is suballocated
+                    (pAllocationData->allocationData.flags.buddyAllocated == 0) && // Buddy allocator is suballocated
+                    (pAllocationData->allocationData.flags.isExternal     == 0))   // vkCreateMemory handles external
                 {
-                    pAllocationData->memoryObjectId               = GenerateMemoryObjectId();
-                    pAllocationData->reportedToDeviceMemoryReport = true;
-
-                    auto iter = m_callbacks.Begin();
-                    uint64_t vulkanHeapIndex = 0;
+                    m_callbacksLock.LockForRead();
+                    auto     iter            = m_callbacks.Begin();
+                    uint32_t heapIndex = 0;
 
                     if (iter.IsValid())
                     {
-                        uint32_t heapIndex = 0;
-                        auto* pPhysicalDevice = (iter.Get().pDevice)->VkPhysicalDevice(DefaultDeviceIndex);
-                        bool result = pPhysicalDevice->GetVkHeapIndexFromPalHeap(pGpuMemoryData->heap, &heapIndex);
-
-                        if (result == true)
-                        {
-                            vulkanHeapIndex = heapIndex;
-                        }
+                        auto*const pPhysicalDevice = (iter.Get().pDevice)->VkPhysicalDevice(DefaultDeviceIndex);
+                        bool validHeap = pPhysicalDevice->GetVkHeapIndexFromPalHeap(pGpuMemoryData->heap, &heapIndex);
+                        VK_ASSERT(validHeap);
                     }
+                    m_callbacksLock.UnlockForRead();
+
+                    // The instance is the default Vulkan object for allocations not specifically tracked otherwise.
+                    pAllocationData->objectHandle = Instance::IntValueFromHandle(Instance::FromObject(m_pInstance));
+                    pAllocationData->objectType   = VK_OBJECT_TYPE_INSTANCE;
+                    pAllocationData->reportedToDeviceMemoryReport = true;
 
                     DeviceMemoryReportAllocateEvent(
-                        reinterpret_cast<uint64_t>(m_pInstance),
-                        pGpuMemoryData->size,
-                        VK_OBJECT_TYPE_INSTANCE,
-                        pAllocationData->memoryObjectId,
-                        vulkanHeapIndex,
-                        pGpuMemoryData->flags.isExternal);
+                        pAllocationData->objectHandle,
+                        pAllocationData->allocationData.size,
+                        pAllocationData->objectType,
+                        pAllocationData->allocationData.pGpuMemory->Desc().uniqueId,
+                        heapIndex,
+                        pAllocationData->allocationData.flags.isExternal);
                 }
+            }
+            else
+            {
+                PAL_ASSERT_ALWAYS_MSG("Allocation already exists");
             }
         }
 
@@ -143,24 +157,124 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
     }
     case Pal::Developer::CallbackType::FreeGpuMemory:
     {
-        auto*           pGpuMemoryData  = reinterpret_cast<Pal::Developer::GpuMemoryData*>(pCbData);
+        Util::RWLockAuto<RWLock::ReadWrite> lock(&m_allocationHashMapLock);
+        auto*const      pGpuMemoryData  = reinterpret_cast<Pal::Developer::GpuMemoryData*>(pCbData);
         AllocationData* pAllocationData = m_allocationHashMap.FindKey(pGpuMemoryData->pGpuMemory);
 
         if (pAllocationData != nullptr)
         {
-            if (pAllocationData->reportedToDeviceMemoryReport == true)
+            // If this is a Pal internal free that is not suballocated report it to device_memory_report now
+            if ((pAllocationData->allocationData.flags.isClient       == 0) && // Pal internal, not Vulkan
+                (pAllocationData->allocationData.flags.isCmdAllocator == 0) && // Command allocator is suballocated
+                (pAllocationData->allocationData.flags.buddyAllocated == 0) && // Buddy allocator is suballocated
+                (pAllocationData->allocationData.flags.isExternal     == 0))   // vkCreateMemory handles external
             {
-                if (pGpuMemoryData->flags.isClient == 0)
+                if (pAllocationData->reportedToDeviceMemoryReport == true)
                 {
                     DeviceMemoryReportFreeEvent(
-                        reinterpret_cast<uint64_t>(m_pInstance),
-                        VK_OBJECT_TYPE_INSTANCE,
-                        pAllocationData->memoryObjectId,
-                        pGpuMemoryData->flags.isExternal);
+                        pAllocationData->objectHandle,
+                        pAllocationData->objectType,
+                        pAllocationData->allocationData.pGpuMemory->Desc().uniqueId,
+                        pAllocationData->allocationData.flags.isExternal);
+                }
+                else
+                {
+                    PAL_ALERT_ALWAYS_MSG("Allocation freed that was never reported to device_memory_report");
                 }
             }
 
             m_allocationHashMap.Erase(pGpuMemoryData->pGpuMemory);
+        }
+        else
+        {
+            PAL_ASSERT_ALWAYS_MSG("Free reported for untracked allocation");
+        }
+
+        break;
+    }
+    case Pal::Developer::CallbackType::SubAllocGpuMemory:
+    {
+        Util::RWLockAuto<RWLock::ReadWrite> lock(&m_palSubAllocationHashMapLock);
+        auto*const pGpuMemoryData = reinterpret_cast<Pal::Developer::GpuMemoryData*>(pCbData);
+
+        PAL_ASSERT_MSG((pGpuMemoryData->flags.isClient       == 0) && // Pal internal allocation
+                       (pGpuMemoryData->flags.isCmdAllocator == 0) && // Command allocator is suballocated Pal internal
+                       (pGpuMemoryData->flags.buddyAllocated == 1) && // Buddy allocator is suballocated Pal internal
+                       (pGpuMemoryData->flags.isExternal     == 0) && // External memory is handled by vkCreateMemory
+                       (pGpuMemoryData->size < pGpuMemoryData->pGpuMemory->Desc().size), // Suballoc should be smaller
+                       "The base GPU allocation of this Pal internal suballocation is not as expected.");
+
+        SubAllocationKey key = {pGpuMemoryData->pGpuMemory->Desc().gpuVirtAddr,
+                                pGpuMemoryData->offset};
+
+        bool               exists        = false;
+        SubAllocationData* pSubAllocData = nullptr;
+
+        Pal::Result palResult = m_palSubAllocationHashMap.FindAllocate(key, &exists, &pSubAllocData);
+
+        if (palResult == Pal::Result::Success)
+        {
+            // Add the new Pal suballocation if it did not exist already.
+            if (exists == false)
+            {
+                // Store the Pal suballocation information
+                pSubAllocData->allocationData = *pGpuMemoryData;
+                pSubAllocData->memoryObjectId = GenerateMemoryObjectId();
+
+                m_callbacksLock.LockForRead();
+                auto iter = m_callbacks.Begin();
+
+                if (iter.IsValid())
+                {
+                    uint32_t heapIndex = 0;
+                    auto*const pPhysicalDevice = (iter.Get().pDevice)->VkPhysicalDevice(DefaultDeviceIndex);
+                    bool validHeap = pPhysicalDevice->GetVkHeapIndexFromPalHeap(pGpuMemoryData->heap, &heapIndex);
+                    VK_ASSERT(validHeap);
+
+                    pSubAllocData->heapIndex = heapIndex;
+                }
+                m_callbacksLock.UnlockForRead();
+
+                // Defer reporting of Pal suballocations to device_memory_report to ReportDeferredPalSubAlloc()
+            }
+            else
+            {
+                PAL_ASSERT_ALWAYS_MSG("SubAlloc of a Pal suballocation that already exists");
+            }
+        }
+
+        break;
+    }
+    case Pal::Developer::CallbackType::SubFreeGpuMemory:
+    {
+        Util::RWLockAuto<RWLock::ReadWrite> lock(&m_palSubAllocationHashMapLock);
+        auto*const pGpuMemoryData = reinterpret_cast<Pal::Developer::GpuMemoryData*>(pCbData);
+
+        SubAllocationKey key = {pGpuMemoryData->pGpuMemory->Desc().gpuVirtAddr,
+                                pGpuMemoryData->offset};
+
+        SubAllocationData* pSubAllocData = m_palSubAllocationHashMap.FindKey(key);
+
+        if (pSubAllocData != nullptr)
+        {
+            if (pSubAllocData->reportedToDeviceMemoryReport == true)
+            {
+                DeviceMemoryReportFreeEvent(
+                    pSubAllocData->objectHandle,
+                    pSubAllocData->objectType,
+                    pSubAllocData->memoryObjectId,
+                    pSubAllocData->allocationData.flags.isExternal);
+            }
+            else
+            {
+                //PAL_ALERT_ALWAYS_MSG("SubFree of a Pal suballocation that was never reported to device_memory_report");
+            }
+
+            m_palSubAllocationHashMap.Erase(key);
+        }
+        else
+        {
+            PAL_ASSERT_ALWAYS_MSG("SubFree reported for untracked Pal suballocation");
         }
 
         break;
@@ -175,9 +289,25 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
 }
 
 // =====================================================================================================================
+// GpuMemoryEventHandler is requested by VK_EXT_device_memory_report and/or VK_EXT_device_address_binding_report.
+// Increment the reference count of requests for GPU memory events.
+void GpuMemoryEventHandler::EnableGpuMemoryEvents()
+{
+    Util::AtomicIncrement(&m_memoryEventEnables);
+}
+
+// =====================================================================================================================
+// Decrement the reference count of requests for GPU memory events.
+void GpuMemoryEventHandler::DisableGpuMemoryEvents()
+{
+    Util::AtomicDecrement(&m_memoryEventEnables);
+}
+
+// =====================================================================================================================
 void GpuMemoryEventHandler::RegisterDeviceMemoryReportCallback(
     const DeviceMemoryReportCallback& callback)
 {
+    Util::RWLockAuto<RWLock::ReadWrite> lock(&m_callbacksLock);
     m_callbacks.PushBack(callback);
 }
 
@@ -185,6 +315,8 @@ void GpuMemoryEventHandler::RegisterDeviceMemoryReportCallback(
 void GpuMemoryEventHandler::UnregisterDeviceMemoryReportCallbacks(
     const Device*                     pDevice)
 {
+    Util::RWLockAuto<RWLock::ReadWrite> lock(&m_callbacksLock);
+
     for (DeviceMemoryReportCallbacks::Iter iter = m_callbacks.Begin(); iter.IsValid(); iter.Next())
     {
         if (iter.Get().pDevice == pDevice)
@@ -198,34 +330,165 @@ void GpuMemoryEventHandler::UnregisterDeviceMemoryReportCallbacks(
 void GpuMemoryEventHandler::VulkanAllocateEvent(
     const Pal::IGpuMemory*           pGpuMemory,
     uint64_t                         objectHandle,
-    Util::gpusize                    allocatedSize,
     VkObjectType                     objectType,
-    uint64_t                         memoryObjectId,
-    uint64_t                         heapIndex,
-    bool                             isImport)
+    uint64_t                         heapIndex)
 {
+    Util::RWLockAuto<RWLock::ReadWrite> lock(&m_allocationHashMapLock);
     AllocationData* pAllocationData = m_allocationHashMap.FindKey(pGpuMemory);
 
     if (pAllocationData != nullptr)
     {
-        pAllocationData->correlatedWithVulkan = true;
-        pAllocationData->reportedToDeviceMemoryReport = true;
-        pAllocationData->memoryObjectId = memoryObjectId;
+        if (pAllocationData->reportedToDeviceMemoryReport == false)
+        {
+            pAllocationData->reportedToDeviceMemoryReport = true;
+            pAllocationData->objectType                   = objectType;
+            pAllocationData->objectHandle                 = objectHandle;
+            pAllocationData->allocationData.pGpuMemory    = pGpuMemory;
 
-        DeviceMemoryReportAllocateEvent(
-            objectHandle,
-            allocatedSize,
-            objectType,
-            memoryObjectId,
-            heapIndex,
-            isImport);
+            const auto& gpuMemoryDesc = pAllocationData->allocationData.pGpuMemory->Desc();
+
+            DeviceMemoryReportAllocateEvent(
+                pAllocationData->objectHandle,
+                gpuMemoryDesc.size,
+                pAllocationData->objectType,
+                gpuMemoryDesc.uniqueId,
+                heapIndex,
+                gpuMemoryDesc.flags.isExternal);
+        }
+        else
+        {
+            PAL_ALERT_ALWAYS_MSG("Vulkan is trying to report the allocation of an already reported allocation.");
+        }
+    }
+    else
+    {
+        PAL_ALERT_ALWAYS_MSG("Vulkan is trying to correlate an untracked allocation.");
+    }
+}
+
+// =====================================================================================================================
+void GpuMemoryEventHandler::VulkanAllocationFailedEvent(
+    Pal::gpusize                     allocatedSize,
+    VkObjectType                     objectType,
+    uint64_t                         heapIndex)
+{
+    DeviceMemoryReportAllocationFailedEvent(allocatedSize, objectType, heapIndex);
+}
+
+// =====================================================================================================================
+void GpuMemoryEventHandler::VulkanFreeEvent(
+    const Pal::IGpuMemory*           pGpuMemory)
+{
+    Util::RWLockAuto<RWLock::ReadWrite> lock(&m_allocationHashMapLock);
+    AllocationData* pAllocationData = m_allocationHashMap.FindKey(pGpuMemory);
+
+    if (pAllocationData != nullptr)
+    {
+        if (pAllocationData->reportedToDeviceMemoryReport == true)
+        {
+            const auto& gpuMemoryDesc = pAllocationData->allocationData.pGpuMemory->Desc();
+
+            DeviceMemoryReportFreeEvent(
+                pAllocationData->objectHandle,
+                pAllocationData->objectType,
+                gpuMemoryDesc.uniqueId,
+                gpuMemoryDesc.flags.isExternal);
+        }
+        else
+        {
+            PAL_ALERT_ALWAYS_MSG("Vulkan is trying to report the free of an unreported allocation.");
+        }
+    }
+    else
+    {
+        PAL_ALERT_ALWAYS_MSG("Vulkan is trying to report the free of an untracked allocation.");
+    }
+}
+
+// =====================================================================================================================
+void GpuMemoryEventHandler::VulkanSubAllocateEvent(
+    const Pal::IGpuMemory*           pGpuMemory,
+    Pal::gpusize                     offset,
+    Pal::gpusize                     subAllocationSize,
+    uint64_t                         objectHandle,
+    VkObjectType                     objectType,
+    uint64_t                         heapIndex)
+{
+    Util::RWLockAuto<RWLock::ReadWrite> lock(&m_vulkanSubAllocationHashMapLock);
+    SubAllocationKey key = {pGpuMemory->Desc().gpuVirtAddr,
+                            offset};
+
+    bool exists = false;
+    SubAllocationData* pSubAllocData = nullptr;
+
+    Pal::Result palResult = m_vulkanSubAllocationHashMap.FindAllocate(key, &exists, &pSubAllocData);
+
+    if (palResult == Pal::Result::Success)
+    {
+        if (exists == false)
+        {
+            pSubAllocData->reportedToDeviceMemoryReport = true;
+            pSubAllocData->allocationData.pGpuMemory    = pGpuMemory;
+            pSubAllocData->memoryObjectId               = GenerateMemoryObjectId();
+            pSubAllocData->objectType                   = objectType;
+            pSubAllocData->offset                       = offset;
+            pSubAllocData->subAllocationSize            = subAllocationSize;
+            pSubAllocData->objectHandle                 = objectHandle;
+            pSubAllocData->heapIndex                    = heapIndex;
+
+            DeviceMemoryReportAllocateEvent(
+                pSubAllocData->objectHandle,
+                pSubAllocData->subAllocationSize,
+                pSubAllocData->objectType,
+                pSubAllocData->memoryObjectId,
+                pSubAllocData->heapIndex,
+                pSubAllocData->allocationData.pGpuMemory->Desc().flags.isExternal);
+        }
+        else
+        {
+            PAL_ALERT_ALWAYS_MSG("Vulkan is reporting an already reported Vulkan suballocation.");
+        }
+    }
+}
+
+// =====================================================================================================================
+void GpuMemoryEventHandler::VulkanSubFreeEvent(
+    const Pal::IGpuMemory*           pGpuMemory,
+    Pal::gpusize                     offset)
+{
+    Util::RWLockAuto<RWLock::ReadWrite> lock(&m_vulkanSubAllocationHashMapLock);
+    SubAllocationKey key = {pGpuMemory->Desc().gpuVirtAddr,
+                            offset};
+
+    SubAllocationData* pSubAllocData = m_vulkanSubAllocationHashMap.FindKey(key);
+
+    if (pSubAllocData != nullptr)
+    {
+        if (pSubAllocData->reportedToDeviceMemoryReport == true)
+        {
+            DeviceMemoryReportFreeEvent(
+                pSubAllocData->objectHandle,
+                pSubAllocData->objectType,
+                pSubAllocData->memoryObjectId,
+                pSubAllocData->allocationData.pGpuMemory->Desc().flags.isExternal);
+        }
+        else
+        {
+            PAL_ALERT_ALWAYS_MSG("Vulkan is trying to report the free of an unreported Vulkan suballocation.");
+        }
+
+        m_vulkanSubAllocationHashMap.Erase(key);
+    }
+    else
+    {
+        PAL_ALERT_ALWAYS_MSG("Vulkan is trying to report the free of an untracked Vulkan suballocation.");
     }
 }
 
 // =====================================================================================================================
 void GpuMemoryEventHandler::DeviceMemoryReportAllocateEvent(
     uint64_t                         objectHandle,
-    Util::gpusize                    allocatedSize,
+    Pal::gpusize                     allocatedSize,
     VkObjectType                     objectType,
     uint64_t                         memoryObjectId,
     uint64_t                         heapIndex,
@@ -258,7 +521,7 @@ void GpuMemoryEventHandler::DeviceMemoryReportAllocateEvent(
 
 // =====================================================================================================================
 void GpuMemoryEventHandler::DeviceMemoryReportAllocationFailedEvent(
-    Util::gpusize                    allocatedSize,
+    Pal::gpusize                     allocatedSize,
     VkObjectType                     objectType,
     uint64_t                         heapIndex)
 {
@@ -311,9 +574,53 @@ void GpuMemoryEventHandler::DeviceMemoryReportFreeEvent(
 }
 
 // =====================================================================================================================
+void GpuMemoryEventHandler::ReportDeferredPalSubAlloc(
+    Pal::gpusize                     gpuVirtAddr,
+    Pal::gpusize                     offset,
+    const uint64_t                   objectHandle,
+    const VkObjectType               objectType)
+{
+    Util::RWLockAuto<RWLock::ReadWrite> lock(&m_palSubAllocationHashMapLock);
+
+    SubAllocationKey key = {gpuVirtAddr,
+                            offset};
+
+    SubAllocationData* pSubAllocData = m_palSubAllocationHashMap.FindKey(key);
+
+    if (pSubAllocData != nullptr)
+    {
+        if (pSubAllocData->reportedToDeviceMemoryReport == false)
+        {
+            // Report deferred Pal suballocation to device_memory_report now
+            pSubAllocData->objectHandle                 = objectHandle;
+            pSubAllocData->objectType                   = objectType;
+            pSubAllocData->reportedToDeviceMemoryReport = true;
+
+            DeviceMemoryReportAllocateEvent(
+                pSubAllocData->objectHandle,
+                pSubAllocData->allocationData.size,
+                pSubAllocData->objectType,
+                pSubAllocData->memoryObjectId,
+                pSubAllocData->heapIndex,
+                pSubAllocData->allocationData.flags.isExternal);
+        }
+        else
+        {
+            PAL_ALERT_ALWAYS_MSG("Vulkan is trying to report the allocation of an already reported Pal suballocation.");
+        }
+    }
+    else
+    {
+        PAL_ALERT_ALWAYS_MSG("Vulkan is trying to report the allocation of an untracked Pal suballocation.");
+    }
+}
+
+// =====================================================================================================================
 void GpuMemoryEventHandler::SendDeviceMemoryReportEvent(
     const VkDeviceMemoryReportCallbackDataEXT& callbackData)
 {
+    Util::RWLockAuto<RWLock::ReadWrite> lock(&m_callbacksLock);
+
     for (auto iter = m_callbacks.Begin(); iter.IsValid(); iter.Next())
     {
         iter.Get().callback(&callbackData, iter.Get().pData);

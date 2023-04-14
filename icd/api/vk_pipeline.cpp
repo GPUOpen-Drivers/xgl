@@ -441,6 +441,7 @@ Pipeline::Pipeline(
     m_dispatchRaysUserDataOffset(0),
 #endif
     m_pBinary(nullptr),
+    m_formatStrings(32, pDevice->VkInstance()->Allocator()),
     m_availableAmdIlSymbol(0)
 {
     memset(m_pPalPipeline, 0, sizeof(m_pPalPipeline));
@@ -493,6 +494,7 @@ void Pipeline::Init(
             m_pPalPipeline[devIdx] = nullptr;
         }
     }
+    m_formatStrings.Init();
 }
 
 // =====================================================================================================================

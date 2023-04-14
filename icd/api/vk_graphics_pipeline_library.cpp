@@ -319,11 +319,23 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
     PipelineCompiler* pCompiler         = pDevice->GetCompiler(DefaultDeviceIndex);
     uint32_t          dynamicStateFlags = GetDynamicStateFlags(pCreateInfo->pDynamicState, pLibInfo);
 
-    uint32_t tempIdx = 0;
+    // Pipeline info only includes the shaders that match the enabled VkGraphicsPipelineLibraryFlagBitsEXT.
+    // Use this information to skip the compilation of unused shader modules.
+    const Vkgc::PipelineShaderInfo* pShaderInfos[] =
+    {
+        &pBinaryCreateInfo->pipelineInfo.task,
+        &pBinaryCreateInfo->pipelineInfo.vs,
+        &pBinaryCreateInfo->pipelineInfo.tcs,
+        &pBinaryCreateInfo->pipelineInfo.tes,
+        &pBinaryCreateInfo->pipelineInfo.gs,
+        &pBinaryCreateInfo->pipelineInfo.mesh,
+        &pBinaryCreateInfo->pipelineInfo.fs,
+    };
 
     for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
     {
-        if ((pShaderStageInfo->stages[i].pModuleHandle != nullptr) &&
+        if ((pShaderInfos[i]->pModuleData != nullptr) &&
+            (pShaderStageInfo->stages[i].pModuleHandle != nullptr) &&
             pCompiler->IsValidShaderModule(pShaderStageInfo->stages[i].pModuleHandle))
         {
             VK_ASSERT(pShaderStageInfo->stages[i].pModuleHandle == &pTempModules[i]);

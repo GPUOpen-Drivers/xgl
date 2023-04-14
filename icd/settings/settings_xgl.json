@@ -135,6 +135,28 @@
       ]
     },
     {
+      "Name": "InvariantLoads",
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "Auto",
+          "Value": 0
+        },
+        {
+          "Name": "EnableOptimization",
+          "Value": 1
+        },
+        {
+          "Name": "DisableOptimization",
+          "Value": 2
+        },
+        {
+          "Name": "ClearInvariants",
+          "Value": 3
+        }
+      ]
+    },
+    {
       "Name": "PipelineBinningMode",
       "IsEnum": true,
       "Values": [
@@ -227,6 +249,47 @@
           "Name": "ThreadGroupSwizzleMode16x16",
           "Value": 3,
           "Description": "Swizzle thread groups with 16x16 tiles"
+        }
+      ]
+    },
+    {
+      "Name": "HwPipePoint",
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "HwPipeTop",
+          "Value": 0,
+          "Description": "Same as HwPipePreIndexBuffer"
+        },
+        {
+          "Name": "HwPipePostPrefetch",
+          "Value": 1,
+          "Description": "Same as HwPipePreCs for compute-specific work or HwPipePreBlt for BLT-specific work"
+        },
+        {
+          "Name": "HwPipePreRasterization",
+          "Value": 2,
+          "Description": "Same as HwPipePostIndexBuffer"
+        },
+        {
+          "Name": "HwPipePostPs",
+          "Value": 3
+        },
+        {
+          "Name": "HwPipePreColorTarget",
+          "Value": 4
+        },
+        {
+          "Name": "HwPipePostCs",
+          "Value": 5
+        },
+        {
+          "Name": "HwPipePostBlt",
+          "Value": 6
+        },
+        {
+          "Name": "HwPipeBottom",
+          "Value": 7
         }
       ]
     }
@@ -2255,6 +2318,18 @@
       "Name": "DumpDuplicatePipelines"
     },
     {
+      "Description": "If it is not 0, Dump pipeline compile and cache hit statistic info in <PipelineDumpDir>/PipelineCacheStat.txt, and the number of DumpPipelineCompileCacheMatrix is used to determine the update frequency.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "Name": "DumpPipelineCompileCacheMatrix"
+    },
+    {
       "Description": "Mask for enabling SPIR-V pass for internal ray tracing pipelines. The bit is corresponding to the enum defined in gpurt header.",
       "BuildTypes": [
         "VKI_RAY_TRACING"
@@ -2311,6 +2386,16 @@
             "Name": "TraceRayCounterTraversal",
             "Value": 3,
             "Description": "Enable per-ray traversal counter logging."
+          },
+          {
+            "Name": "TraceRayCounterCustom",
+            "Value": 4,
+            "Description": "Enable custom logging to counter buffer."
+          },
+          {
+            "Name": "TraceRayCounterDispatch",
+            "Value": 5,
+            "Description": "Enable dispatch traversal counters."
           }
         ]
       }
@@ -2394,86 +2479,6 @@
       "Type": "uint32",
       "Scope": "Driver",
       "VariableName": "rtProfileMaxIteration"
-    },
-    {
-      "Description": "BVH Builder NodeSort Type",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "Defaults": {
-        "Default": "BvhBuilderNodeSortOff"
-      },
-      "ValidValues": {
-        "IsEnum": true,
-        "Name": "BvhBuilderNodeSortType",
-        "Values": [
-          {
-            "Name": "BvhBuilderNodeSortOff",
-            "Value": 0
-          },
-          {
-            "Name": "BvhBuilderNodeSortFourWaySortOnTLAS",
-            "Value": 1
-          },
-          {
-            "Name": "BvhBuilderNodeSortFourWaySortOnBLAS",
-            "Value": 2
-          },
-          {
-            "Name": "BvhBuilderNodeSortFourWaySortOnBoth",
-            "Value": 3
-          },
-          {
-            "Name": "BvhBuilderNodeSortTwoLevelSortOnTLAS",
-            "Value": 4
-          },
-          {
-            "Name": "BvhBuilderNodeSortTwoLevelSortOnBLAS",
-            "Value": 5
-          },
-          {
-            "Name": "BvhBuilderNodeSortTwoLevelSortOnBoth",
-            "Value": 6
-          }
-        ]
-      },
-      "Type": "enum",
-      "Name": "BvhBuilderNodeSortType",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "BVH Builder NodeSort Heurstic. Currently only work when NodeSortType is set to be NodeSort4WaySort.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "Defaults": {
-        "Default": "BvhBuilderNodeSortHeuristicSurfaceAreaLargestFirst"
-      },
-      "ValidValues": {
-        "IsEnum": true,
-        "Name": "BvhBuilderNodeSortHeuristic",
-        "Values": [
-          {
-            "Name": "BvhBuilderNodeSortHeuristicSurfaceAreaLargestFirst",
-            "Value": 0
-          },
-          {
-            "Name": "BvhBuilderNodeSortHeuristicSurfaceAreaSmallestFirst",
-            "Value": 1
-          },
-          {
-            "Name": "BvhBuilderNodeSortHeuristicDensityLargestFirst",
-            "Value": 2
-          },
-          {
-            "Name": "BvhBuilderNodeSortHeuristicDensitySmallestFirst",
-            "Value": 3
-          }
-        ]
-      },
-      "Type": "enum",
-      "Name": "BvhBuilderNodeSortHeuristic",
-      "Scope": "Driver"
     },
     {
       "Name": "TraceRayProfileFlags",
@@ -4361,7 +4366,7 @@
       "Type": "uint64"
     },
     {
-      "Description": "For post-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier will wait.",
+      "Description": "For post-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier will wait. HwPipeTop is the heavy weight option.",
       "Tags": [
         "Debugging"
       ],
@@ -4369,36 +4374,7 @@
         "Default": 0
       },
       "ValidValues": {
-        "Values": [
-          {
-            "Value": 0,
-            "Description": "HwPipeTop (heavyweight option)"
-          },
-          {
-            "Value": 1,
-            "Description": "HwPipePostIndexFetch, HwPipePreCs, or HwPipePreBlt"
-          },
-          {
-            "Value": 3,
-            "Description": "HwPipePreRasterization"
-          },
-          {
-            "Value": 4,
-            "Description": "HwPipePostPs"
-          },
-          {
-            "Value": 5,
-            "Description": "HwPipePostCs"
-          },
-          {
-            "Value": 6,
-            "Description": "HwPipePostBlt"
-          },
-          {
-            "Value": 7,
-            "Description": "HwPipeBottom"
-          }
-        ]
+        "Name": "HwPipePoint"
       },
       "Flags": {
         "IsHex": true
@@ -4408,7 +4384,7 @@
       "Name": "DbgBarrierPostWaitPipePoint"
     },
     {
-      "Description": "For post-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier is signaled.",
+      "Description": "For post-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier is signaled. HwPipeBottom is the heavy weight option.",
       "Tags": [
         "Debugging"
       ],
@@ -4416,36 +4392,7 @@
         "Default": 0
       },
       "ValidValues": {
-        "Values": [
-          {
-            "Value": 0,
-            "Description": "HwPipeTop"
-          },
-          {
-            "Value": 1,
-            "Description": "HwPipePostIndexFetch, HwPipePreCs, or HwPipePreBlt"
-          },
-          {
-            "Value": 3,
-            "Description": "HwPipePreRasterization"
-          },
-          {
-            "Value": 4,
-            "Description": "HwPipePostPs"
-          },
-          {
-            "Value": 5,
-            "Description": "HwPipePostCs"
-          },
-          {
-            "Value": 6,
-            "Description": "HwPipePostBlt"
-          },
-          {
-            "Value": 7,
-            "Description": "HwPipeBottom (heavyweight option)"
-          }
-        ]
+        "Name": "HwPipePoint"
       },
       "Flags": {
         "IsHex": true
@@ -5023,21 +4970,6 @@
       },
       "Type": "uint32",
       "Name": "lbvhBuildThreshold",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Apply SAH into QBVH build. Open up the nodes with larger surface area in BVH2 to be the children in QBVH.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "SahQbvh",
       "Scope": "Driver"
     },
     {
@@ -6593,6 +6525,18 @@
       "Type": "uint32"
     },
     {
+      "Name": "LimitCbFetch256B",
+      "Description": "This bit limits CB color cache fetch to 256B on cache miss, regardless of sector size. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
       "Name": "UseAcquireReleaseInterface",
       "Description": "Enables the use of Pal::CmdReleaseThenAcquire(), Pal::CmdRelease() and Pal::CmdAcquire() barrier interfaces on supported ASICs (gfx9+).",
       "Tags": [
@@ -7576,6 +7520,33 @@
       "Scope": "Driver"
     },
     {
+      "Description": "[LLPC ONLY] Force Aggresive Invariant Loads.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "InvariantLoads::Auto"
+      },
+      "ValidValues": {
+        "Name": "InvariantLoads"
+      },
+      "Type": "enum",
+      "Name": "OverrideAggressiveInvariantLoads",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Force NSA Threshold Value. Valid values are 0-16, with 1 being ignored.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "OverrideNsaThreshold",
+      "Scope": "Driver"
+    },
+    {
       "Description": "[LLPC ONLY] Force LLPC loop unroll count",
       "Tags": [
         "Shader Tuning"
@@ -8134,6 +8105,58 @@
       "Type": "float",
       "VariableName": "rtMaxRayLength",
       "Scope": "Driver"
+    },
+    {
+      "Description": "Enable printf debug functionality",
+      "Tags": [
+        "Debug Printf"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "EnableDebugPrintf"
+    },
+    {
+      "Description": "Printf debug buffer size",
+      "Tags": [
+        "Debug Printf"
+      ],
+      "Defaults": {
+        "Default": 524288
+      },
+      "Type": "uint32",
+      "Scope": "Driver",
+      "Name": "DebugPrintfBufferSize"
+    },
+    {
+      "Description": "Relative directory where printf is dumped. Root directory is determined by AMD_DEBUG_DIR environment variable. ",
+      "Tags": [
+        "Debug Printf"
+      ],
+      "Flags": {
+        "IsPath": true
+      },
+      "Defaults": {
+        "Default": "DebugPrintfDump"
+      },
+      "Type": "string",
+      "Size": 256,
+      "Scope": "Driver",
+      "Name": "DebugPrintfDumpFolder"
+    },
+    {
+      "Description": "Printf debug stdout",
+      "Tags": [
+        "Debug Printf"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "DebugPrintfToStdout"
     }
   ]
 }

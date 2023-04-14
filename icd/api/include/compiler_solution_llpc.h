@@ -123,6 +123,7 @@ public:
         const Device*                     pDevice,
         const ShaderStage                 stage,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        void*                             pPipelineDumpHandle,
         ShaderModuleHandle*               pShaderModule) override;
 
     virtual VkResult CreateComputePipelineBinary(

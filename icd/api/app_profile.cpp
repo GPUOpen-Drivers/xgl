@@ -45,6 +45,7 @@
 
 #include "include/vk_instance.h"
 #include "include/vk_device.h"
+#include "include/vk_physical_device.h"
 #include "palPlatform.h"
 #include "gpuUtil/palAppProfileIterator.h"
 
@@ -144,6 +145,12 @@ constexpr AppProfilePatternEntry AppEngineDXVK =
 {
     PatternEngineNameLower,
     "dxvk"
+};
+
+constexpr AppProfilePatternEntry AppEngineZink =
+{
+    PatternEngineNameLower,
+    "mesa zink"
 };
 
 constexpr AppProfilePatternEntry AppNameTalosWin32Bit =
@@ -1263,6 +1270,14 @@ AppProfilePattern AppPatternTable[] =
             AppNameQuakeEnhanced,
             PatternEnd
         }
+    },
+
+    {
+        AppProfile::Zink,
+        {
+            AppEngineZink,
+            PatternEnd
+        }
     }
 };
 
@@ -1544,12 +1559,13 @@ static float ParseProfileDataToFloat(
 // =====================================================================================================================
 // Process profile token
 void ProcessProfileEntry(
-    const char*        entryName,
-    uint32_t           dataSize,
-    const void*        data,
-    ProfileSettings*   pProfileSettings,
-    uint32_t           appGpuID,
-    bool               isUser3DAreaFormat)
+    const PhysicalDevice*   pPhysicalDevice,
+    const char*             entryName,
+    uint32_t                dataSize,
+    const void*             data,
+    ProfileSettings*        pProfileSettings,
+    uint32_t                appGpuID,
+    bool                    isUser3DAreaFormat)
 {
     // Skip if the data is empty
     if (dataSize != 0)
@@ -1564,6 +1580,9 @@ void ProcessProfileEntry(
         {
             pUint32Setting = &(pProfileSettings->texFilterQuality);
         }
+
+#if VKI_RAY_TRACING
+#endif
 
         if (pBoolSetting != nullptr)
         {
@@ -1591,6 +1610,7 @@ void ProcessProfileEntry(
 // exeOrCdnName is something like "doom.exe" or "SteamAppId:570"
 // Return true if a profile is present.
 static bool QueryPalProfile(
+    const PhysicalDevice*         pPhysicalDevice,
     Instance*                     pInstance,
     ProfileSettings*              pProfileSettings,
     uint32_t                      appGpuID,
@@ -1610,7 +1630,8 @@ static bool QueryPalProfile(
         GpuUtil::AppProfileIterator iterator(rawProfile);
         while (iterator.IsValid())
         {
-            ProcessProfileEntry(iterator.GetName(),
+            ProcessProfileEntry(pPhysicalDevice,
+                                iterator.GetName(),
                                 iterator.GetDataSize(),
                                 iterator.GetData(),
                                 pProfileSettings,
@@ -1624,6 +1645,7 @@ static bool QueryPalProfile(
 }
 // =====================================================================================================================
 static bool QueryPalProfile(
+    const PhysicalDevice*         pPhysicalDevice,
     Instance*                     pInstance,
     ProfileSettings*              pProfileSettings,
     uint32_t                      appGpuID,
@@ -1634,7 +1656,8 @@ static bool QueryPalProfile(
     VK_ASSERT(strlen(exeOrCdnName) < Util::MaxFileNameStrLen);
     Mbstowcs(exeName, exeOrCdnName, Util::MaxFileNameStrLen);
 
-    return QueryPalProfile(pInstance,
+    return QueryPalProfile(pPhysicalDevice,
+                           pInstance,
                            pProfileSettings,
                            appGpuID,
                            client,
@@ -1644,6 +1667,7 @@ static bool QueryPalProfile(
 // =====================================================================================================================
 // Queries PAL for app profile settings
 void ReloadAppProfileSettings(
+    const PhysicalDevice*   pPhysicalDevice,
     Instance*               pInstance,
     ProfileSettings*        pProfileSettings,
     uint32_t                appGpuID)
@@ -1665,7 +1689,8 @@ void ReloadAppProfileSettings(
 
         bool foundProfile = false;
         // User 3D has highest priority, so query it first
-        foundProfile = QueryPalProfile(pInstance,
+        foundProfile = QueryPalProfile(pPhysicalDevice,
+                                       pInstance,
                                        pProfileSettings,
                                        appGpuID,
                                        Pal::ApplicationProfileClient::User3D,
@@ -1682,7 +1707,8 @@ void ReloadAppProfileSettings(
 
             if (hasValidCdnName == true)
             {
-                foundProfile = QueryPalProfile(pInstance,
+                foundProfile = QueryPalProfile(pPhysicalDevice,
+                                               pInstance,
                                                pProfileSettings,
                                                appGpuID,
                                                Pal::ApplicationProfileClient::User3D,

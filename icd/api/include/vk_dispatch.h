@@ -211,6 +211,11 @@ public:
         return reinterpret_cast<C*>(
             reinterpret_cast<Dispatchable<C>*>(handle)->m_C);
     }
+
+    static VK_FORCEINLINE uint64_t IntValueFromHandle(Dispatchable<C>* handle)
+    {
+        return reinterpret_cast<uint64_t>(handle);
+    }
 };
 
 // Helper macro to define a dispatchable driver object
@@ -273,7 +278,6 @@ public:
         return IntValueFromHandle(handle) == 0;
     }
 
-private:
     inline static uint64_t IntValueFromHandle(const ApiType& handle)
     {
 #ifdef ICD_X64_BUILD
@@ -282,6 +286,8 @@ private:
         return handle;
 #endif
     }
+
+private:
 };
 
 namespace entry

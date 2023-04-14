@@ -205,6 +205,23 @@ public:
         return m_queueFamilies[queueFamilyIndex].palQueueType;
     }
 
+    uint32_t GetQueueFamilyIndexByPalQueueType(
+        Pal::QueueType queueType) const
+    {
+        uint32_t index = 0;
+
+        for (uint32_t i = 0; i < Queue::MaxQueueFamilies; i++)
+        {
+            if (m_queueFamilies[i].palQueueType == queueType)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        return index;
+    }
+
     bool GetQueueGroupCompatible(
         uint32_t queueFamilyIndex) const
     {
@@ -606,6 +623,11 @@ public:
     VK_FORCEINLINE bool IsVirtualRemappingSupported() const
     {
         return m_properties.gpuMemoryProperties.flags.virtualRemappingSupport;
+    }
+
+    VK_FORCEINLINE bool IsComputeEngineSupported() const
+    {
+        return (m_properties.engineProperties[Pal::EngineTypeCompute].engineCount != 0);
     }
 
     const RuntimeSettings& GetRuntimeSettings() const

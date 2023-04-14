@@ -37,6 +37,7 @@
 
 #include "palFile.h"
 #include "palPipelineAbi.h"
+#include "debug_printf.h"
 
 namespace Pal
 {
@@ -194,6 +195,21 @@ public:
     bool HasRayTracing() const { return m_hasRayTracing; }
 #endif
 
+    void ClearFormatString()
+    {
+        m_formatStrings.Reset();
+    }
+
+    const PrintfFormatMap& GetFormatStrings() const
+    {
+        return m_formatStrings;
+    }
+
+    PrintfFormatMap* GetFormatStrings()
+    {
+        return &m_formatStrings;
+    }
+
     static void ElfHashToCacheId(
         const Device*                pDevice,
         uint32_t                     deviceIdx,
@@ -279,6 +295,7 @@ private:
         const Util::Abi::PipelineSymbolType pipelineSymbolType) const;
 
     PipelineBinaryInfo*                m_pBinary;
+    PrintfFormatMap                    m_formatStrings;
     uint32_t                           m_availableAmdIlSymbol; // Bit mask for Pal::ShaderStageFlagBits
 };
 

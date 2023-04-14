@@ -79,10 +79,6 @@ VkResult Memory::Create(
 
     Pal::GpuMemoryExportInfo exportInfo = {};
 
-    // take the allocation count ahead of time.
-    // it will set the VK_ERROR_TOO_MANY_OBJECTS
-    vkResult = pDevice->IncreaseAllocationCount();
-
     // Copy Vulkan API allocation info to local PAL version
     Pal::GpuMemoryCreateInfo createInfo = {};
     createInfo.heapAccess = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
@@ -375,8 +371,9 @@ VkResult Memory::Create(
         // Account for committed size in logical device. The destructor will decrease the counter accordingly.
         pDevice->IncreaseAllocatedMemorySize(pMemory->m_size, allocationMask, pMemory->m_heap0);
 
-        // Notify the memory object that it is counted so that the destructor can decrease the counter accordingly
-        pMemory->SetAllocationCounted(allocationMask);
+        // Notify the memory object that it is allocated so that the destructor can decrease the allocated
+        // memory size accordingly.
+        pMemory->MarkAllocatedMemory(allocationMask);
 
         *pMemoryHandle = Memory::HandleFromObject(pMemory);
 
@@ -402,15 +399,14 @@ VkResult Memory::Create(
 
         if (pPalGpuMem != nullptr)
         {
-            // TODO: MGPU not handled
-            pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanAllocateEvent(
-                pPalGpuMem,
-                reinterpret_cast<uint64_t>(pMemory),
-                pPalGpuMem->Desc().size,
-                VK_OBJECT_TYPE_DEVICE_MEMORY,
-                pPalGpuMem->Desc().uniqueId,
-                pAllocInfo->memoryTypeIndex,
-                isExternal);
+            if (pDevice->GetEnabledFeatures().deviceMemoryReport == true)
+            {
+                pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanAllocateEvent(
+                    pPalGpuMem,
+                    Memory::IntValueFromHandle(*pMemoryHandle),
+                    VK_OBJECT_TYPE_DEVICE_MEMORY,
+                    pAllocInfo->memoryTypeIndex);
+            }
 
             Pal::GpuMemoryResourceBindEventData bindData = {};
             bindData.pObj               = pMemory;
@@ -435,16 +431,13 @@ VkResult Memory::Create(
     }
     else
     {
-        if (vkResult != VK_ERROR_TOO_MANY_OBJECTS)
+        if (pDevice->GetEnabledFeatures().deviceMemoryReport == true)
         {
-            // Something failed after the allocation count was incremented
-            pDevice->DecreaseAllocationCount();
+            pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanAllocationFailedEvent(
+                pAllocInfo->allocationSize,
+                VK_OBJECT_TYPE_DEVICE_MEMORY,
+                pAllocInfo->memoryTypeIndex);
         }
-
-        pDevice->VkInstance()->GetGpuMemoryEventHandler()->DeviceMemoryReportAllocationFailedEvent(
-            pAllocInfo->allocationSize,
-            VK_OBJECT_TYPE_DEVICE_MEMORY,
-            pAllocInfo->memoryTypeIndex);
     }
 
     return vkResult;
@@ -907,7 +900,6 @@ Memory::Memory(
     m_flags.u32All = 0;
     m_flags.sharedViaNtHandle = info.flags.sharedViaNtHandle;
     m_flags.multiInstance = multiInstance ? 1 : 0;
-    m_flags.allocationCounted = 0;
 
     Init(ppPalMemory);
 }
@@ -984,24 +976,17 @@ void Memory::Free(
         Pal::IGpuMemory* pGpuMemory = m_pPalMemory[i][i];
         if (pGpuMemory != nullptr)
         {
+            if (pDevice->GetEnabledFeatures().deviceMemoryReport == true)
+            {
+                pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanFreeEvent(pGpuMemory);
+            }
+
             Pal::IDevice* pPalDevice = pDevice->PalDevice(i);
             pDevice->RemoveMemReference(pPalDevice, pGpuMemory);
-
-            pDevice->VkInstance()->GetGpuMemoryEventHandler()->DeviceMemoryReportFreeEvent(
-                reinterpret_cast<uint64_t>(this),
-                VK_OBJECT_TYPE_DEVICE_MEMORY,
-                pGpuMemory->Desc().uniqueId,
-                pGpuMemory->Desc().flags.isExternal);
 
             // Destroy PAL memory object
             pGpuMemory->Destroy();
         }
-    }
-
-    // Decrease the allocation count
-    if (m_flags.allocationCounted)
-    {
-        m_pDevice->DecreaseAllocationCount();
     }
 
     // Decrease the allocation size
@@ -1418,6 +1403,29 @@ VKAPI_ATTR void VKAPI_CALL vkUnmapMemory(
     VkDeviceMemory                              memory)
 {
     Memory::ObjectFromHandle(memory)->Unmap();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkMapMemory2KHR(
+    VkDevice                                    device,
+    const                                       VkMemoryMapInfoKHR* pMemoryMapInfo,
+    void**                                      ppData)
+{
+    return Memory::ObjectFromHandle(pMemoryMapInfo->memory)->Map(
+            pMemoryMapInfo->flags,
+            pMemoryMapInfo->offset,
+            pMemoryMapInfo->size,
+            ppData);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkUnmapMemory2KHR(
+    VkDevice                                    device,
+    const VkMemoryUnmapInfoKHR*                 pMemoryUnmapInfo)
+{
+    Memory::ObjectFromHandle(pMemoryUnmapInfo->memory)->Unmap();
+
+    return VK_SUCCESS;
 }
 
 // =====================================================================================================================

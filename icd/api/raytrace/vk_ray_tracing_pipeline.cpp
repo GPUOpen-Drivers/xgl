@@ -1363,6 +1363,18 @@ VkResult RayTracingPipeline::CreateImpl(
                  dispatchRaysUserDataOffset,
                  apiPsoHash,
                  elfHash);
+            if (settings.enableDebugPrintf)
+            {
+                ClearFormatString();
+                for (uint32_t i = 0; i < pipelineBinary[DefaultDeviceIndex].pipelineBinCount; ++i)
+                {
+                    DebugPrintf::DecodeFormatStringsFromElf(
+                        m_pDevice,
+                        pipelineBinary[DefaultDeviceIndex].pPipelineBins[i].codeSize,
+                        static_cast<const char*>(pipelineBinary[DefaultDeviceIndex].pPipelineBins[i].pCode),
+                        GetFormatStrings());
+                }
+            }
         }
         else
         {
@@ -1723,6 +1735,15 @@ void RayTracingPipeline::BindToCmdBuffer(
         Pal::ICmdBuffer* pPalCmdBuf = pCmdBuffer->PalCmdBuffer(deviceIdx);
 
         pPalCmdBuf->CmdBindPipeline(params);
+
+        uint32_t debugPrintfRegBase = (m_userDataLayout.scheme == PipelineLayoutScheme::Compact) ?
+            m_userDataLayout.compact.debugPrintfRegBase : m_userDataLayout.indirect.debugPrintfRegBase;
+        pCmdBuffer->GetDebugPrintf()->BindPipeline(m_pDevice,
+                                                   this,
+                                                   deviceIdx,
+                                                   pPalCmdBuf,
+                                                   static_cast<uint32_t>(Pal::PipelineBindPoint::Compute),
+                                                   debugPrintfRegBase);
 
         // Upload internal buffer data
         if (m_captureReplayVaMappingBufferInfo.dataSize > 0)
