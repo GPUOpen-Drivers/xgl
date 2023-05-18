@@ -539,6 +539,7 @@ inline Pal::TexFilter VkToPalTexFilter(
             break;
         default:
             VK_NOT_IMPLEMENTED;
+            break;
     }
 
     const Pal::XyFilter pointFilter  = (anisotropicEnabled != VK_FALSE) ? Pal::XyFilterAnisotropicPoint :
@@ -555,6 +556,7 @@ inline Pal::TexFilter VkToPalTexFilter(
             break;
         default:
             VK_NOT_IMPLEMENTED;
+            break;
     }
 
     switch (minFilter)
@@ -567,6 +569,7 @@ inline Pal::TexFilter VkToPalTexFilter(
             break;
         default:
             VK_NOT_IMPLEMENTED;
+            break;
     }
 
     return palTexFilter;
@@ -1226,17 +1229,15 @@ inline void VkToPalSubresRange(
     uint32_t*                       pPalSubresRangeIndex,
     const RuntimeSettings&          settings)
 {
-    constexpr uint32_t WHOLE_SIZE_UINT32 = (uint32_t)VK_WHOLE_SIZE;
+    // The minimums below are used for VkImageSubresourceRange VK_WHOLE_SIZE handling.
 
     Pal::SubresRange palSubresRange;
 
     palSubresRange.startSubres.arraySlice   = range.baseArrayLayer;
     palSubresRange.startSubres.mipLevel     = range.baseMipLevel;
     palSubresRange.numPlanes                = 1;
-    palSubresRange.numMips                  = (range.levelCount == WHOLE_SIZE_UINT32) ?
-        (mipLevels - range.baseMipLevel)   : range.levelCount;
-    palSubresRange.numSlices                = (range.layerCount == WHOLE_SIZE_UINT32) ?
-        (arraySize - range.baseArrayLayer) : range.layerCount;
+    palSubresRange.numMips                  = Util::Min(range.levelCount, (mipLevels - range.baseMipLevel));
+    palSubresRange.numSlices                = Util::Min(range.layerCount, (arraySize - range.baseArrayLayer));
 
     VkImageAspectFlags aspectMask = range.aspectMask;
     Pal::ChNumFormat palFormat = VkToPalFormat(format, settings).format;
@@ -1251,7 +1252,8 @@ inline void VkToPalSubresRange(
     {
         palSubresRange.startSubres.plane = VkToPalImagePlaneExtract(palFormat, &aspectMask);
         pPalSubresRanges[(*pPalSubresRangeIndex)++] = palSubresRange;
-    } while (aspectMask != 0);
+    }
+    while (aspectMask != 0);
 }
 
 // =====================================================================================================================
@@ -1568,69 +1570,6 @@ void VkToPalImageScaledCopyRegion(
         pPalRegions[(*pPalRegionIndex)++] = region;
     }
     while (aspectMask != 0);
-}
-
-// =====================================================================================================================
-// Converts a Vulkan image-blit structure to one or more PAL color-space-conversion-region structures.
-inline Pal::ColorSpaceConversionRegion VkToPalImageColorSpaceConversionRegion(
-    const VkImageBlit&  imageBlit,
-    Pal::SwizzledFormat srcFormat,
-    Pal::SwizzledFormat dstFormat)
-{
-
-    Pal::ColorSpaceConversionRegion region = {};
-
-    // Color conversion blits can only happen between a YUV and an RGB image.
-    VK_ASSERT((Pal::Formats::IsYuv(srcFormat.format) && (Pal::Formats::IsYuv(dstFormat.format) == false)) ||
-              ((Pal::Formats::IsYuv(srcFormat.format) == false) && (Pal::Formats::IsYuv(dstFormat.format))));
-
-    const VkImageSubresourceLayers& rgbSubresource =
-        Pal::Formats::IsYuv(srcFormat.format) ? imageBlit.dstSubresource : imageBlit.srcSubresource;
-
-    const VkImageSubresourceLayers& yuvSubresource =
-        Pal::Formats::IsYuv(srcFormat.format) ? imageBlit.srcSubresource : imageBlit.dstSubresource;
-
-    // Convert values to temporary 3D variables as the PAL interface currently only accepts 2D
-    Pal::Offset3d       srcOffset = VkToPalOffset3d(imageBlit.srcOffsets[0]);
-    Pal::SignedExtent3d srcExtent = VkToPalSignedExtent3d(imageBlit.srcOffsets);
-    Pal::Offset3d       dstOffset = VkToPalOffset3d(imageBlit.dstOffsets[0]);
-    Pal::SignedExtent3d dstExtent = VkToPalSignedExtent3d(imageBlit.dstOffsets);
-
-    region.rgbSubres.plane      = 0;
-    region.rgbSubres.mipLevel   = rgbSubresource.mipLevel;
-    region.rgbSubres.arraySlice = rgbSubresource.baseArrayLayer;
-
-    VK_ASSERT(yuvSubresource.mipLevel == 0);
-
-    region.yuvStartSlice        = yuvSubresource.baseArrayLayer;
-
-    VK_ASSERT(imageBlit.srcSubresource.layerCount == imageBlit.dstSubresource.layerCount);
-    VK_ASSERT(srcExtent.depth == dstExtent.depth);
-
-    region.sliceCount = Util::Max<uint32_t>(srcExtent.depth, imageBlit.srcSubresource.layerCount);
-
-    // Write the 2D coordinates and ignore the 3rd dimension for now
-    region.srcOffset.x = srcOffset.x;
-    region.srcOffset.y = srcOffset.y;
-
-    VK_ASSERT(srcOffset.z == 0);
-
-    region.srcExtent.width  = srcExtent.width;
-    region.srcExtent.height = srcExtent.height;
-
-    VK_ASSERT(srcExtent.depth == 1);
-
-    region.dstOffset.x = dstOffset.x;
-    region.dstOffset.y = dstOffset.y;
-
-    VK_ASSERT(dstOffset.z == 0);
-
-    region.dstExtent.width  = dstExtent.width;
-    region.dstExtent.height = dstExtent.height;
-
-    VK_ASSERT(dstExtent.depth == 1);
-
-    return region;
 }
 
 // =====================================================================================================================
@@ -3945,12 +3884,14 @@ struct UberFetchShaderFormatInfo
 
 // =====================================================================================================================
 class UberFetchShaderFormatInfoMap :
-    public Util::HashMap<VkFormat, UberFetchShaderFormatInfo, PalAllocator, Util::JenkinsHashFunc>
+    public Util::HashMap<VkFormat, UberFetchShaderFormatInfo, PalAllocator, Util::JenkinsHashFunc,
+        Util::DefaultEqualFunc, Util::HashAllocator<PalAllocator>, 1024>
 {
 public:
     explicit UberFetchShaderFormatInfoMap(uint32 numBuckets, PalAllocator* const pAllocator)
         :
-        Util::HashMap<VkFormat, UberFetchShaderFormatInfo, PalAllocator, Util::JenkinsHashFunc>(numBuckets, pAllocator),
+        Util::HashMap<VkFormat, UberFetchShaderFormatInfo, PalAllocator, Util::JenkinsHashFunc, Util::DefaultEqualFunc,
+            Util::HashAllocator<PalAllocator>, 1024>(numBuckets, pAllocator),
         m_bufferFormatMask(0)
     { }
 

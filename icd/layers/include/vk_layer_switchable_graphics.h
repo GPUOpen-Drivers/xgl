@@ -52,7 +52,8 @@ struct NextLinkFuncPointers
     PFN_vkEnumeratePhysicalDeviceGroupsKHR      pfnEnumeratePhysicalDeviceGroupsKHR;
 };
 
-typedef Util::HashMap<VkInstance, NextLinkFuncPointers, vk::PalAllocator> DispatchTableHashMap;
+typedef Util::HashMap<VkInstance, NextLinkFuncPointers, vk::PalAllocator, Util::DefaultHashFunc, Util::DefaultEqualFunc,
+    Util::HashAllocator<vk::PalAllocator>, 256> DispatchTableHashMap;
 
 typedef VkResult (VKAPI_PTR *PFN_vkCreateInstance_SG)(
     const VkInstanceCreateInfo*                 pCreateInfo,

@@ -215,7 +215,8 @@ public:
                                            uint32_t* pStaticFlags,
                                            uint32_t* pTriangleCompressMode,
                                            uint32_t* pCounterMode,
-                                           uint32_t  pipelineFlags);
+                                           uint32_t  pipelineFlags
+);
 
     void GetDispatchSize(uint32_t* pDispatchSizeX,
                          uint32_t* pDispatchSizeY,

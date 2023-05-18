@@ -264,6 +264,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         }
 
+        {
+            m_settings.disableImplicitInvariantExports = false;
+        }
+
 #if VKI_BUILD_GFX11
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
@@ -1062,14 +1066,17 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 #if VKI_BUILD_GFX11
             else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
             {
+                // Navi31 Mall and Tiling Settings
+                if (pInfo->revision == Pal::AsicRevision::Navi31)
+                {
+                    // Mall no alloc settings give a ~1% gain
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
 
-                // Mall no alloc settings give a ~1% gain
-                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-
-                // This provides ~6% gain at 4k
-                m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
+                    // This provides ~6% gain at 4k
+                    m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
+                }
             }
 #endif
         }
@@ -1252,6 +1259,21 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 pPalSettings->pwsMode = Pal::PwsMode::NoLateAcquirePoint;
             }
 #endif
+        }
+
+        if (appProfile == AppProfile::RomeRemastered)
+        {
+#if VKI_BUILD_GFX11
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+                pPalSettings->pwsMode = Pal::PwsMode::NoLateAcquirePoint;
+            }
+#endif
+        }
+
+        if (appProfile == AppProfile::Zink)
+        {
+            m_settings.padVertexBuffers = true;
         }
 
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);

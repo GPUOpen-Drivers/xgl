@@ -1789,6 +1789,9 @@ void Image::CalculateMemoryRequirementsInternal(
             ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD);
     }
 
+    // Images are not using memoryType for DescriptorBuffers
+    pMemoryRequirements->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskForDescriptorBuffers();
+
     // Add an extra memory padding. This can be enabled while capturing GFXR traces and disabled later. Capturing with
     // this setting enabled helps in replaying GFXR traces. When this setting is not used while capture, GFXR might
     // return a fatal error while replaying with different DCC threshold values. This is caused because gfxreconstruct

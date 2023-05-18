@@ -185,6 +185,8 @@ VkResult ComputePipeline::Create(
     uint64_t              apiPsoHash = {};
     BuildApiHash(pCreateInfo, shaderInfo, &elfHash, &apiPsoHash);
 
+    binaryCreateInfo.apiPsoHash = apiPsoHash;
+
     const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfo = nullptr;
     pDefaultCompiler->GetPipelineCreationFeedback(static_cast<const VkStructHeader*>(pCreateInfo->pNext),
         &pPipelineCreationFeedbackCreateInfo);
@@ -408,6 +410,7 @@ VkResult ComputePipeline::Create(
         (result == VK_SUCCESS))
     {
         pBinary = PipelineBinaryInfo::Create(
+            cacheId[DefaultDeviceIndex],
             pipelineBinarySizes[DefaultDeviceIndex],
             pPipelineBinaries[DefaultDeviceIndex],
             pAllocator);
@@ -490,6 +493,8 @@ VkResult ComputePipeline::Create(
 
     if (result == VK_SUCCESS)
     {
+        const Device::DeviceFeatures& deviceFeatures = pDevice->GetEnabledFeatures();
+
         uint64_t durationTicks = Util::GetPerfCpuTime() - startTimeTicks;
         uint64_t duration      = vk::utils::TicksToNano(durationTicks);
 
@@ -503,7 +508,7 @@ VkResult ComputePipeline::Create(
             &binaryCreateInfo.pipelineFeedback,
             &binaryCreateInfo.stageFeedback);
 
-        if (pDevice->GetEnabledFeatures().deviceMemoryReport == true)
+        if (deviceFeatures.gpuMemoryEventHandler)
         {
             size_t numEntries = 0;
             Util::Vector<Pal::GpuMemSubAllocInfo, 1, PalAllocator> palSubAllocInfos(pDevice->VkInstance()->Allocator());
@@ -519,6 +524,7 @@ VkResult ComputePipeline::Create(
             {
                 // Report the Pal suballocation for this pipeline to device_memory_report
                 pDevice->VkInstance()->GetGpuMemoryEventHandler()->ReportDeferredPalSubAlloc(
+                    pDevice,
                     palSubAllocInfos[i].address,
                     palSubAllocInfos[i].offset,
                     ComputePipeline::IntValueFromHandle(*pPipeline),

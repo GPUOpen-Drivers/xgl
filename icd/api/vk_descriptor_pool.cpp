@@ -159,9 +159,8 @@ VkResult DescriptorPool::Init(
 
                     if (m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
                     {
-                        m_addresses[deviceIdx].fmaskCpuAddr = static_cast<uint32_t*>(m_pHostOnlyMemory);
-                            static_cast<uint32_t*>(Util::VoidPtrInc(m_pHostOnlyMemory,
-                                memReqs.size * numPalDevices + memReqs.size * deviceIdx));
+                        m_addresses[deviceIdx].fmaskCpuAddr =  static_cast<uint32_t*>(Util::VoidPtrInc(m_pHostOnlyMemory,
+                            memReqs.size * numPalDevices + memReqs.size * deviceIdx));
                     }
                 }
 

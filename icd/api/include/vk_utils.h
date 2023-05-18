@@ -144,6 +144,9 @@ inline uint64_t TicksToNano(uint64_t ticks)
 uint32_t GetBuildTimeHash();
 
 #if DEBUG
+// =====================================================================================================================
+// If turned on and exe name is a match, this function spins idle until we have a debugger hooked.
+void WaitIdleForDebugger(bool waitIdleToggled, const char* pWaitIdleExeName, uint32_t debugTimeout);
 #endif
 
 // =====================================================================================================================

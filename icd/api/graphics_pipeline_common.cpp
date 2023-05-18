@@ -293,8 +293,6 @@ void GraphicsPipelineCommon::GetSubpassSampleCount(
     // subpassCoverageSampleCount would be equal to zero if there are zero attachments.
     coverageSampleCount = (coverageSampleCount == 0) ? rasterizationSampleCount : coverageSampleCount;
 
-    VK_ASSERT(rasterizationSampleCount == coverageSampleCount);
-
     if (pCoverageSampleCount != nullptr)
     {
         *pCoverageSampleCount = coverageSampleCount;
@@ -1012,9 +1010,6 @@ static void BuildRasterizationState(
             pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthBias);
         }
 
-        // point size must be set via gl_PointSize, otherwise it must be 1.0f.
-        constexpr float DefaultPointSize = 1.0f;
-
         pInfo->immedInfo.pointLineRasterParams.lineWidth    = pRs->lineWidth;
         pInfo->immedInfo.pointLineRasterParams.pointSize    = DefaultPointSize;
         pInfo->immedInfo.pointLineRasterParams.pointSizeMin = limits.pointSizeRange[0];
@@ -1397,12 +1392,13 @@ static void BuildMultisampleState(
             pInfo->immedInfo.msaaCreateInfo.flags.enable1xMsaaSampleLocations =
                 (pInfo->immedInfo.msaaCreateInfo.coverageSamples == 1);
 
-            if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::SampleLocations) == false)
+            if ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::SampleLocations) == false) &&
+                (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizationSamples) == false))
             {
                 if (pPipelineSampleLocationsStateCreateInfoEXT != nullptr)
                 {
                     // We store the custom sample locations if custom sample locations are enabled and the
-                    // sample locations state is static.
+                    // sample locations state is static and rasterizationSamples is not configured dynamically.
                     pInfo->immedInfo.samplePattern.sampleCount =
                         (uint32_t)pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo.sampleLocationsPerPixel;
 
@@ -1424,9 +1420,10 @@ static void BuildMultisampleState(
                     (1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocations));
             }
         }
-        else
+        else if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizationSamples) == false)
         {
-            // We store the standard sample locations if custom sample locations are not enabled.
+            // We store the standard sample locations if custom sample locations are not enabled and
+            // rasterizationSamples is not configured dynamically.
             pInfo->immedInfo.samplePattern.sampleCount = pMs->rasterizationSamples;
             pInfo->immedInfo.samplePattern.locations =
                 *Device::GetDefaultQuadSamplePattern(pMs->rasterizationSamples);

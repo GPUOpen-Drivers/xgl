@@ -2306,6 +2306,18 @@
       "Type": "uint64"
     },
     {
+      "Name": "DumpPipelineWithApiHash",
+      "Description": "Use PSO api hash as pipeline dump file name",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
       "Description": "If true, duplicate pipelines will be dumped to a file with a numeric suffix attached to the filename to distinguish each copy of the pipeline.",
       "Tags": [
         "SPIRV Options"
@@ -3608,7 +3620,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Type": "bool",
       "VariableName": "rtEnableBuildParallel",
@@ -3645,6 +3657,21 @@
       "Type": "bool",
       "Scope": "Driver",
       "VariableName": "rtEnableAcquireReleaseInterface"
+    },
+    {
+      "Name": "EnableFusedInstanceNode",
+      "Description": "Enable fused instance node for BVH builder",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
     },
     {
       "Name": "DispatchRaysThreadGroupSize",
@@ -6618,6 +6645,18 @@
       "Name": "CpDmaCmdCopyMemoryMaxBytes"
     },
     {
+      "Description": "Disables all implicit invariant marking of exports, which in turn disables MUL/ADD -> FMA. This option is legal but may cause issues if applications are sensitive to FMA influencing some export results.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "DisableImplicitInvariantExports"
+    },
+    {
       "Description": "This value denotes whether using CmdClearBoundAttachments/CmdClearBoundDepthStencilTargets for subpass load op clears or not.",
       "Tags": [
         "Optimization"
@@ -6786,7 +6825,7 @@
         "Optimization"
       ],
       "Defaults": {
-        "Default": 29
+        "Default": 30
       },
       "Scope": "Driver",
       "Type": "uint32",
@@ -8105,6 +8144,52 @@
       "Type": "float",
       "VariableName": "rtMaxRayLength",
       "Scope": "Driver"
+    },
+    {
+      "Description": "Used to wait idle on vkCreateInstance() call until a debugger is attached to running application. Effective only on Windows debug builds.",
+      "Tags": [
+        "Debugging"
+      ],
+      "BuildTypes": [
+        "DEBUG"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "WaitForDebugger",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Executable name of a Vulkan application (e.g. vkcube.exe) upon which to wait idle until a debugger is attached. If empty, it applies to all Vulkan applications",
+      "Tags": [
+        "Debugging"
+      ],
+      "BuildTypes": [
+        "DEBUG"
+      ],
+      "Defaults": {
+        "Default": ""
+      },
+      "Scope": "Driver",
+      "Name": "WaitForDebuggerExecutableName",
+      "Type": "string",
+      "Size": 256
+    },
+    {
+      "Description": "Timeout the driver in millisecond to give debuggers a chance to load all of the symbols",
+      "Tags": [
+        "Debugging"
+      ],
+      "BuildTypes": [
+        "DEBUG"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Name": "DebugTimeout",
+      "Type": "uint32"
     },
     {
       "Description": "Enable printf debug functionality",

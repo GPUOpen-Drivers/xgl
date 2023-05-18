@@ -27,6 +27,7 @@
 #include "raytrace/ray_tracing_device.h"
 #include "raytrace/ray_tracing_util.h"
 #include "raytrace/vk_acceleration_structure.h"
+#include "raytrace/vk_ray_tracing_pipeline.h"
 #include "include/vk_cmdbuffer.h"
 #include "include/vk_device.h"
 #include "include/vk_shader.h"
@@ -97,6 +98,24 @@ VkResult RayTracingDevice::Init()
             initInfo.pClientUserData           = m_pDevice;
             initInfo.pAccelStructTracker       = GetAccelStructTracker(deviceIdx);
             initInfo.accelStructTrackerGpuAddr = GetAccelStructTrackerGpuVa(deviceIdx);
+
+            initInfo.deviceSettings.emulatedRtIpLevel = Pal::RayTracingIpLevel::None;
+            switch (m_pDevice->GetRuntimeSettings().emulatedRtIpLevel)
+            {
+            case EmulatedRtIpLevelNone:
+                break;
+            case HardwareRtIpLevel1_1:
+            case EmulatedRtIpLevel1_1:
+                initInfo.deviceSettings.emulatedRtIpLevel = Pal::RayTracingIpLevel::RtIp1_1;
+                break;
+#if VKI_BUILD_GFX11
+            case EmulatedRtIpLevel2_0:
+                initInfo.deviceSettings.emulatedRtIpLevel = Pal::RayTracingIpLevel::RtIp2_0;
+                break;
+#endif
+            default:
+                break;
+            }
 
             GpuRt::ClientCallbacks callbacks             = {};
             callbacks.pfnInsertRGPMarker                 = &RayTracingDevice::ClientInsertRGPMarker;
@@ -179,6 +198,7 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->bvhCpuBuildModeFastBuild          = static_cast<GpuRt::BvhCpuBuildMode>(settings.rtBvhCpuBuildMode);
     pDeviceSettings->enableTriangleSplitting           = settings.rtEnableTriangleSplitting;
     pDeviceSettings->triangleSplittingFactor           = settings.rtTriangleSplittingFactor;
+    pDeviceSettings->enableFusedInstanceNode           = settings.enableFusedInstanceNode;
     pDeviceSettings->rebraidFactor                     = settings.rebraidFactor;
     pDeviceSettings->rebraidLengthPercentage           = settings.rebraidLengthPercentage;
     pDeviceSettings->maxTopDownBuildInstances          = settings.maxTopDownBuildInstances;
@@ -259,6 +279,16 @@ bool RayTracingDevice::AccelStructTrackerEnabled(
     return (GetAccelStructTracker(deviceIdx) != nullptr) &&
             (m_pDevice->GetRuntimeSettings().enableTraceRayAccelStructTracking ||
              m_pGpuRtDevice[deviceIdx]->AccelStructTraceEnabled());
+}
+
+// =====================================================================================================================
+GpuRt::TraceRayCounterMode RayTracingDevice::TraceRayCounterMode(
+    uint32_t deviceIdx) const
+{
+    // If the PAL trace path is enabled, then force RayHistoryLight
+    return m_pGpuRtDevice[deviceIdx]->RayHistoryTraceAvailable() ?
+            GpuRt::TraceRayCounterMode::TraceRayCounterRayHistoryLight :
+            static_cast<GpuRt::TraceRayCounterMode>(m_pDevice->GetRuntimeSettings().rtTraceRayCounterMode);
 }
 
 // =====================================================================================================================
@@ -514,6 +544,122 @@ uint64_t RayTracingDevice::GetAccelerationStructureUUID(
 }
 
 // =====================================================================================================================
+void RayTracingDevice::SetDispatchInfo(
+    GpuRt::RtPipelineType                  pipelineType,
+    uint32_t                               width,
+    uint32_t                               height,
+    uint32_t                               depth,
+    uint32_t                               shaderCount,
+    uint64_t                               apiHash,
+    const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
+    const VkStridedDeviceAddressRegionKHR* pMissSbt,
+    const VkStridedDeviceAddressRegionKHR* pHitSbt,
+    GpuRt::RtDispatchInfo*                 pDispatchInfo) const
+{
+    const RuntimeSettings& settings    = m_pDevice->GetRuntimeSettings();
+    GpuRt::RtDispatchInfo dispatchInfo = {};
+
+    dispatchInfo.dimX                = width;
+    dispatchInfo.dimY                = height;
+    dispatchInfo.dimZ                = depth;
+
+    dispatchInfo.pipelineShaderCount = shaderCount;
+    dispatchInfo.stateObjectHash     = apiHash;
+
+    dispatchInfo.boxSortMode         = settings.boxSortingHeuristic;
+#if VKI_BUILD_GFX11
+    dispatchInfo.usesNodePtrFlags    = settings.rtEnableNodePointerFlags ? 1 : 0;
+#endif
+
+    if (pipelineType == GpuRt::RtPipelineType::RayTracing)
+    {
+        dispatchInfo.raygenShaderTable.addr   = static_cast<Pal::gpusize>(pRaygenSbt->deviceAddress);
+        dispatchInfo.raygenShaderTable.size   = static_cast<Pal::gpusize>(pRaygenSbt->size);
+        dispatchInfo.raygenShaderTable.stride = static_cast<Pal::gpusize>(pRaygenSbt->stride);
+
+        dispatchInfo.missShaderTable.addr     = static_cast<Pal::gpusize>(pMissSbt->deviceAddress);
+        dispatchInfo.missShaderTable.size     = static_cast<Pal::gpusize>(pMissSbt->size);
+        dispatchInfo.missShaderTable.stride   = static_cast<Pal::gpusize>(pMissSbt->stride);
+
+        dispatchInfo.hitGroupTable.addr       = static_cast<Pal::gpusize>(pHitSbt->deviceAddress);
+        dispatchInfo.hitGroupTable.size       = static_cast<Pal::gpusize>(pHitSbt->size);
+        dispatchInfo.hitGroupTable.stride     = static_cast<Pal::gpusize>(pHitSbt->stride);
+    }
+
+    (*pDispatchInfo) = dispatchInfo;
+}
+
+// =====================================================================================================================
+void RayTracingDevice::TraceDispatch(
+    uint32_t                               deviceIdx,
+    Pal::ICmdBuffer*                       pPalCmdBuffer,
+    GpuRt::RtPipelineType                  pipelineType,
+    uint32_t                               width,
+    uint32_t                               height,
+    uint32_t                               depth,
+    uint32_t                               shaderCount,
+    uint64_t                               apiHash,
+    const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
+    const VkStridedDeviceAddressRegionKHR* pMissSbt,
+    const VkStridedDeviceAddressRegionKHR* pHitSbt,
+    GpuRt::DispatchRaysConstants*          pConstants)
+{
+    if (m_pGpuRtDevice[deviceIdx]->RayHistoryTraceActive())
+    {
+        GpuRt::RtDispatchInfo dispatchInfo = {};
+        SetDispatchInfo(pipelineType,
+                        width,
+                        height,
+                        depth,
+                        shaderCount,
+                        apiHash,
+                        pRaygenSbt,
+                        pMissSbt,
+                        pHitSbt,
+                        &dispatchInfo);
+
+        m_pGpuRtDevice[deviceIdx]->TraceRtDispatch(pPalCmdBuffer,
+                                                   pipelineType,
+                                                   dispatchInfo,
+                                                   pConstants);
+    }
+}
+
+// =====================================================================================================================
+void RayTracingDevice::TraceIndirectDispatch(
+    uint32_t                               deviceIdx,
+    GpuRt::RtPipelineType                  pipelineType,
+    uint32_t                               shaderCount,
+    uint64_t                               apiHash,
+    const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
+    const VkStridedDeviceAddressRegionKHR* pMissSbt,
+    const VkStridedDeviceAddressRegionKHR* pHitSbt,
+    Pal::gpusize*                          pCounterMetadataVa,
+    GpuRt::InitExecuteIndirectConstants*   pConstants)
+{
+    if (m_pGpuRtDevice[deviceIdx]->RayHistoryTraceActive())
+    {
+        GpuRt::RtDispatchInfo dispatchInfo = {};
+        SetDispatchInfo(pipelineType,
+                        0,
+                        0,
+                        0,
+                        shaderCount,
+                        apiHash,
+                        pRaygenSbt,
+                        pMissSbt,
+                        pHitSbt,
+                        &dispatchInfo);
+
+        m_pGpuRtDevice[deviceIdx]->TraceIndirectRtDispatch(pipelineType,
+                                                           dispatchInfo,
+                                                           1,
+                                                           pCounterMetadataVa,
+                                                           pConstants);
+    }
+}
+
+// =====================================================================================================================
 // Compile one of gpurt's internal pipelines.
 Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
     const GpuRt::DeviceInitInfo&        initInfo,              ///< [in]  Information about the host device
@@ -657,7 +803,7 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
                                                         static_cast<const uint8_t*>(buildInfo.code.pSpvCode),
                                                         buildInfo.nodeCount,
                                                         nodes,
-                                                        VK_SHADER_MODULE_RAY_TRACING_INTERNAL_SHADER_BIT,
+                                                        VK_INTERNAL_SHADER_FLAGS_RAY_TRACING_INTERNAL_SHADER_BIT,
                                                         forceWave64,
                                                         &specializationInfo,
                                                         &pDevice->GetInternalRayTracingPipeline());

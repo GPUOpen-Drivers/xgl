@@ -45,6 +45,42 @@ uint32_t GetBuildTimeHash()
 }
 
 #if DEBUG
+// =====================================================================================================================
+// If turned on and exe name is a match, this function spins idle until we have a debugger hooked.
+void WaitIdleForDebugger(
+    bool        waitIdleToggled,
+    const char* pWaitIdleExeName,
+    uint32_t    debugTimeout)
+{
+    if (waitIdleToggled)
+    {
+        bool waitForDebugger = false;
+
+        if (strlen(pWaitIdleExeName) == 0)
+        {
+            // No executable name specified, apply on all Vulkan applications
+            waitForDebugger = true;
+        }
+        else
+        {
+            // Apply if executable name is a match
+            char appName[PATH_MAX];
+            char appPath[PATH_MAX];
+            utils::GetExecutableNameAndPath(appName, appPath);
+
+            waitForDebugger = strcmp(pWaitIdleExeName, &appName[0]) == 0;
+        }
+
+        if (waitForDebugger)
+        {
+            // Timeout the driver to give debuggers a chance to load all of the symbols
+            if (debugTimeout != 0)
+            {
+                Util::SleepMs(debugTimeout);
+            }
+        }
+    }
+}
 #endif
 
 } // namespace utils

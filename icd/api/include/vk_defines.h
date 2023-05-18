@@ -205,6 +205,8 @@ namespace vk
         PipelineCompilerTypeLlpc,  // Use shader compiler provided by LLPC
     };
 
+    // Point size must be set via gl_PointSize, otherwise it must be 1.0f
+    static const float DefaultPointSize = 1.0f;
 }// namespace vk
 
 #endif

@@ -114,23 +114,19 @@ void DebugPrintf::BindPipeline(
             srdInfo.range = m_printfMemory.Size();
             pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &srdInfo, pTable);
             m_frame = 0;
-        }
-    }
+            const Pal::uint32* pEntry = reinterpret_cast<const Pal::uint32*>(&tableVa);
+            pCmdBuffer->CmdSetUserData(static_cast<Pal::PipelineBindPoint>(bindPoint), userDataOffset, 1, pEntry);
 
-    if (m_state == MemoryAllocated)
-    {
-        const Pal::uint32* pEntry = reinterpret_cast<const Pal::uint32*>(&tableVa);
-        pCmdBuffer->CmdSetUserData(static_cast<Pal::PipelineBindPoint>(bindPoint), userDataOffset, 1, pEntry);
-
-        m_parsedFormatStrings.Reset();
-        for (auto it = pPipeline->GetFormatStrings().Begin(); it.Get() != nullptr; it.Next())
-        {
-            bool found = true;
-            PrintfSubSection* pSubSections = nullptr;
-            m_parsedFormatStrings.FindAllocate(it.Get()->key, &found, &pSubSections);
-            VK_ASSERT(found == false);
-            pSubSections->Reserve(1);
-            ParseFormatStringsToSubSection(it.Get()->value.printStr, pSubSections);
+            m_parsedFormatStrings.Reset();
+            for (auto it = pPipeline->GetFormatStrings().Begin(); it.Get() != nullptr; it.Next())
+            {
+                bool found = true;
+                PrintfSubSection* pSubSections = nullptr;
+                m_parsedFormatStrings.FindAllocate(it.Get()->key, &found, &pSubSections);
+                VK_ASSERT(found == false);
+                pSubSections->Reserve(1);
+                ParseFormatStringsToSubSection(it.Get()->value.printStr, pSubSections);
+            }
         }
     }
 }
@@ -169,7 +165,8 @@ Pal::Result DebugPrintf::PostQueueProcess(
     uint64_t bufferSize = 0;
     uint32_t* pPrintBuffer = nullptr;
     uint32_t* pPtr = nullptr;
-    uint64_t maxBufferDWSize = m_printfMemory.Size() >> 2;
+    constexpr uint32_t bufferHeaderSize = 4;
+    uint64_t maxBufferDWSize = (m_printfMemory.Size() >> 2) - bufferHeaderSize;
     if (palResult == Pal::Result::Success)
     {
         // Buffer Header is 4 dword {BufferOffset_Loword, BufferOffset_Hiword, rerv0, rerv1};
@@ -179,76 +176,83 @@ Pal::Result DebugPrintf::PostQueueProcess(
         pPtr += 2;
         bufferSize = (static_cast<uint64_t>(bufferSizeHigh) << 32) | static_cast<uint64_t>(bufferSizeLower);
         bufferSize = Util::Min(bufferSize, maxBufferDWSize);
+        if (bufferSize > 0)
+        {
+            pPrintBuffer = static_cast<uint32_t*>(pDevice->VkInstance()->AllocMem(
+                bufferSize * sizeof(uint32_t), 4, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
 
-        pPrintBuffer = static_cast<uint32_t*>(pDevice->VkInstance()->AllocMem(
-            bufferSize * sizeof(uint32_t), 4, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
-
-        memcpy(pPrintBuffer, pPtr, bufferSize * 4);
+            memcpy(pPrintBuffer, pPtr, bufferSize * 4);
+        }
 
         m_printfMemory.Unmap(deviceIdx);
 
-        const auto& formatStrings = m_pPipeline->GetFormatStrings();
-        const uint32_t entryHeaderSize = 2;
-        uint64_t decodeOffset = 0;
-        PrintfString outputBufferStr(nullptr);
-        outputBufferStr.Reserve(10);
-        Vector<PrintfString, 5, GenericAllocator> outputDecodedSpecifiers(nullptr);
-        outputDecodedSpecifiers.Reserve(5);
-        while (decodeOffset < bufferSize)
+        if (bufferSize > 0)
         {
-            // Decode entry
-            uint32_t entryHeaderLow = *pPtr++;
-            uint32_t entryHeaderHigh = *pPtr++;
-            uint64_t entryHeader = ((uint64_t)(entryHeaderHigh) << 32) | uint64_t(entryHeaderLow);
-            // 64 bit header {[0:15], [16:63]} entrySize,hash value for the string
-            uint64_t entrySize = (entryHeader & 65535);
-            uint64_t entryHashValue = entryHeader >> 16;
-
-            decodeOffset += entryHeaderSize;
-            // Check hash value in the entry valid
-            auto pEntry = formatStrings.FindKey(entryHashValue);
-            if (pEntry == nullptr)
+            const auto& formatStrings = m_pPipeline->GetFormatStrings();
+            const uint32_t entryHeaderSize = 2;
+            uint64_t decodeOffset = 0;
+            PrintfString outputBufferStr(nullptr);
+            outputBufferStr.Reserve(10);
+            Vector<PrintfString, 5, GenericAllocator> outputDecodedSpecifiers(nullptr);
+            outputDecodedSpecifiers.Reserve(5);
+            // Set pPtr point to the head of the system memory
+            pPtr = pPrintBuffer;
+            while ((bufferSize - decodeOffset) > 1)
             {
-                break;
-            }
+                // Decode entry
+                uint32_t entryHeaderLow = *pPtr++;
+                uint32_t entryHeaderHigh = *pPtr++;
+                uint64_t entryHeader = ((uint64_t)(entryHeaderHigh) << 32) | uint64_t(entryHeaderLow);
+                // 64 bit header {[0:15], [16:63]} entrySize,hash value for the string
+                uint64_t entryValuesSize = (entryHeader & 65535) - entryHeaderSize;
+                uint64_t entryHashValue = entryHeader >> 16;
 
-            const PrintfString& formatString = pEntry->printStr;
-            const PrintfBit& bitPos = pEntry->bit64s;
-            PrintfSubSection* pSubSections = m_parsedFormatStrings.FindKey(entryHashValue);
-            int initSize = bitPos.size() - outputDecodedSpecifiers.size();
-            for (int i = 0; i < initSize; ++i)
-            {
-                outputDecodedSpecifiers.PushBack(nullptr);
-            }
-
-            // Get printf output variable in dword size
-            unsigned outputsInDwords = 0;
-            uint64_t outputVar;
-            for (uint32_t varIndex = 0; varIndex < bitPos.size(); varIndex++)
-            {
-                outputVar = *pPtr++;
-                outputsInDwords++;
-                bool is64bit = bitPos[varIndex];
-                if (is64bit)
+                decodeOffset += entryHeaderSize;
+                // Check hash value in the entry valid and if there is space to decoded entry values
+                auto pEntry = formatStrings.FindKey(entryHashValue);
+                if ((pEntry == nullptr) || ((bufferSize - decodeOffset) < entryValuesSize))
                 {
-                    uint64_t hiDword = *pPtr++;
-                    outputVar = (hiDword << 32) | outputVar;
-                    outputsInDwords++;
+                    break;
                 }
 
-                DecodeSpecifier(formatString,
-                                outputVar,
-                                is64bit,
-                                pSubSections,
-                                varIndex,
-                                &outputDecodedSpecifiers[varIndex]);
+                const PrintfString& formatString = pEntry->printStr;
+                const PrintfBit& bitPos = pEntry->bit64s;
+                PrintfSubSection* pSubSections = m_parsedFormatStrings.FindKey(entryHashValue);
+                int initSize = bitPos.size() - outputDecodedSpecifiers.size();
+                for (int i = 0; i < initSize; ++i)
+                {
+                    outputDecodedSpecifiers.PushBack(nullptr);
+                }
+
+                // Get printf output variable in dword size
+                unsigned outputsInDwords = 0;
+                uint64_t outputVar;
+                for (uint32_t varIndex = 0; varIndex < bitPos.size(); varIndex++)
+                {
+                    outputVar = *pPtr++;
+                    outputsInDwords++;
+                    bool is64bit = bitPos[varIndex];
+                    if (is64bit)
+                    {
+                        uint64_t hiDword = *pPtr++;
+                        outputVar = (hiDword << 32) | outputVar;
+                        outputsInDwords++;
+                    }
+
+                    DecodeSpecifier(formatString,
+                                    outputVar,
+                                    is64bit,
+                                    pSubSections,
+                                    varIndex,
+                                    &outputDecodedSpecifiers[varIndex]);
+                }
+                OutputBufferString(formatString, *pSubSections, &outputBufferStr);
+                decodeOffset += outputsInDwords;
             }
-            OutputBufferString(formatString, *pSubSections, &outputBufferStr);
-            decodeOffset += outputsInDwords;
+            WriteToFile(outputBufferStr);
+            pDevice->VkInstance()->FreeMem(pPrintBuffer);
+            m_frame++;
         }
-        WriteToFile(outputBufferStr);
-        pDevice->VkInstance()->FreeMem(pPrintBuffer);
-        m_frame++;
     }
 
     return palResult;
@@ -276,7 +280,7 @@ void DebugPrintf::WriteToFile(
         const char* fileBeginPostfix =" Begin ========================\n";
         const char* fileEnd = "========================= Session End ========================\n";
         file.Write(fileBeginPrefix, strlen(fileBeginPrefix));
-        file.Write(fileName.Data(), fileName.NumElements());
+        file.Write(fileName.Data(), strlen(fileName.Data()));
         file.Write(fileBeginPostfix, strlen(fileBeginPostfix));
         result = file.Write(outputBuffer.Data(), outputBuffer.size());
         if (result == Util::Result::Success)
@@ -316,7 +320,7 @@ PrintfString DebugPrintf::GetFileName(
         AppendPrintfString(&fName, pDumpFolder, strlen(pDumpFolder));
         AppendPrintfString(&fName, "/", 1);
         AppendPrintfString(&fName, fileName, strlen(fileName));
-        AppendPrintfString(&fName, ".txt", 4);
+        AppendPrintfString(&fName, ".txt\0", 5);
     }
     return fName;
 }

@@ -70,12 +70,13 @@ struct ShaderModuleHandle;
 // enabled.
 struct PipelineBinaryInfo
 {
-    static PipelineBinaryInfo* Create(size_t size, const void* pBinary, const VkAllocationCallbacks* pAllocator);
+    static PipelineBinaryInfo* Create(Util::MetroHash::Hash hash, size_t size, const void* pBinary, const VkAllocationCallbacks* pAllocator);
 
     void Destroy(const VkAllocationCallbacks* pAllocator);
 
     size_t binaryByteSize;
     void*  pBinary;
+    Util::MetroHash::Hash binaryHash;
 };
 
 enum class DynamicStatesInternal : uint32_t

@@ -308,6 +308,7 @@ static GraphicsPipelineBinaryCreateInfo* DumpGraphicsPipelineBinaryCreateInfo(
 // =====================================================================================================================
 VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
     const Device*                           pDevice,
+    PipelineCache*                          pPipelineCache,
     const VkGraphicsPipelineCreateInfo*     pCreateInfo,
     const GraphicsPipelineLibraryInfo*      pLibInfo,
     const GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
@@ -317,7 +318,7 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 {
     VkResult          result            = VK_SUCCESS;
     PipelineCompiler* pCompiler         = pDevice->GetCompiler(DefaultDeviceIndex);
-    uint32_t          dynamicStateFlags = GetDynamicStateFlags(pCreateInfo->pDynamicState, pLibInfo);
+    uint64_t          dynamicStateFlags = GetDynamicStateFlags(pCreateInfo->pDynamicState, pLibInfo);
 
     // Pipeline info only includes the shaders that match the enabled VkGraphicsPipelineLibraryFlagBitsEXT.
     // Use this information to skip the compilation of unused shader modules.
@@ -348,7 +349,7 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
             {
                 // We don't take care of the result. Early compile failure in some cases is expected
                 result = pCompiler->CreateGraphicsShaderBinary(
-                    pDevice, pShaderStageInfo->stages[i].stage, pBinaryCreateInfo, &pTempModules[i]);
+                    pDevice, pPipelineCache, pShaderStageInfo->stages[i].stage, pBinaryCreateInfo, &pTempModules[i]);
             }
 
             pTempModuleStages[i].stage          = pShaderStageInfo->stages[i].stage;
@@ -375,7 +376,7 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
                 pTempModules[TempIdx] = *pParentHandle;
 
                 result = pCompiler->CreateGraphicsShaderBinary(
-                    pDevice, ShaderStage::ShaderStageVertex, pBinaryCreateInfo, &pTempModules[TempIdx]);
+                    pDevice, pPipelineCache, ShaderStage::ShaderStageVertex, pBinaryCreateInfo, &pTempModules[TempIdx]);
 
                 pTempModuleStages[TempIdx].stage          = ShaderStage::ShaderStageVertex;
                 pTempModuleStages[TempIdx].freeBinaryOnly = true;
@@ -396,8 +397,8 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 
                 pTempModules[TempIdx] = *pParentHandle;
 
-                result = pCompiler->CreateGraphicsShaderBinary(
-                    pDevice, ShaderStage::ShaderStageFragment, pBinaryCreateInfo, &pTempModules[TempIdx]);
+                result = pCompiler->CreateGraphicsShaderBinary(pDevice, pPipelineCache,
+                    ShaderStage::ShaderStageFragment, pBinaryCreateInfo, &pTempModules[TempIdx]);
 
                 pTempModuleStages[TempIdx].stage          = ShaderStage::ShaderStageFragment;
                 pTempModuleStages[TempIdx].freeBinaryOnly = true;
@@ -407,12 +408,7 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 
     for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
     {
-        if (pCompiler->IsValidShaderModule(&pTempModules[i]))
-        {
-            PipelineCompiler::SetPartialGraphicsPipelineBinaryInfo(
-                &pTempModules[i], pTempModuleStages[i].stage, pBinaryCreateInfo);
-        }
-        else
+        if (pCompiler->IsValidShaderModule(&pTempModules[i]) == false)
         {
             pTempModuleStages[i].stage = ShaderStage::ShaderStageInvalid;
         }
@@ -442,6 +438,8 @@ VkResult GraphicsPipelineLibrary::Create(
     GraphicsPipelineShaderStageInfo  shaderStageInfo = {};
     ShaderModuleHandle               tempModules[ShaderStage::ShaderStageGfxCount] = {};
     TempModuleState                  tempModuleStates[ShaderStage::ShaderStageGfxCount] = {};
+
+    binaryCreateInfo.pipelineInfo.iaState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
     // 1. Build shader stage infos
     if (result == VK_SUCCESS)
@@ -481,6 +479,7 @@ VkResult GraphicsPipelineLibrary::Create(
     uint64_t              apiPsoHash = {};
     Util::MetroHash::Hash elfHash    = {};
     BuildApiHash(pCreateInfo, &apiPsoHash, &elfHash);
+    binaryCreateInfo.apiPsoHash = apiPsoHash;
 
     // 4. Get pipeline layout
     const PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
@@ -510,6 +509,7 @@ VkResult GraphicsPipelineLibrary::Create(
         // 6. Create partial pipeline binary for fast-link
         result = CreatePartialPipelineBinary(
             pDevice,
+            pPipelineCache,
             pCreateInfo,
             &libInfo,
             &shaderStageInfo,

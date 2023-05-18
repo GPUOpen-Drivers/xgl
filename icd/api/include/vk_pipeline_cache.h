@@ -36,13 +36,6 @@ namespace vk
 
 class Device;
 
-// Layout for pipeline cache private header, all fields are written with LSB first.
-struct PipelineCachePrivateHeaderData
-{
-    PipelineCompilerType cacheType;     // Cache data type
-    uint64_t blobSize[MaxPalDevices];   // Blob data size for each device
-};
-
 // =====================================================================================================================
 // Implementation of Vulkan pipeline cache object
 class PipelineCache final : public NonDispatchable<VkPipelineCache, PipelineCache>
@@ -60,12 +53,6 @@ public:
 
     VkResult GetData(void* pData, size_t* pSize);
 
-    ShaderCache const& GetShaderCache(uint32_t deviceIdx) const
-    {
-        VK_ASSERT(deviceIdx < MaxPalDevices);
-        return m_shaderCaches[deviceIdx];
-    }
-
     VkResult Merge(uint32_t srcCacheCount, const PipelineCache** ppSrcCaches);
 
     PipelineBinaryCache* GetPipelineCache() const { return m_pBinaryCache; }
@@ -75,15 +62,11 @@ public:
     }
 
 protected:
-    PipelineCache(const Device*  pDevice,
-            ShaderCache*         pShaderCaches,
-            PipelineBinaryCache* pBinaryCache
-            );
+    PipelineCache(const Device*  pDevice, PipelineBinaryCache* pBinaryCache);
 
     virtual ~PipelineCache();
 
     const Device*const  m_pDevice;
-    ShaderCache         m_shaderCaches[MaxPalDevices];
 
     PipelineBinaryCache* m_pBinaryCache;       // Pipeline binary cache object
 

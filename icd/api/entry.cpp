@@ -102,6 +102,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer(
     ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BindIndexBuffer(
         buffer,
         offset,
+        VK_WHOLE_SIZE,
         indexType);
 }
 

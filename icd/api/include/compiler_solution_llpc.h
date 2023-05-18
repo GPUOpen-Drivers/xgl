@@ -77,22 +77,17 @@ public:
 
 public:
     // Overridden functions
-    virtual VkResult Initialize(Vkgc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel, Vkgc::ICache* pCache) override;
+    virtual VkResult Initialize(
+        Vkgc::GfxIpVersion   gfxIp,
+        Pal::GfxIpLevel      gfxIpLevel,
+        PipelineBinaryCache* pCache) override;
 
     virtual void Destroy() override;
-
-    virtual size_t GetShaderCacheSize(PipelineCompilerType cacheType) override;
-
-    virtual VkResult CreateShaderCache(
-        const void*  pInitialData,
-        size_t       initialDataSize,
-        void*        pShaderCacheMem,
-        uint32_t     expectedEntries,
-        ShaderCache* pShaderCache) override;
 
     virtual VkResult BuildShaderModule(
         const Device*                pDevice,
         VkShaderModuleCreateFlags    flags,
+        VkShaderModuleCreateFlags    internalShaderFlags,
         size_t                       codeSize,
         const void*                  pCode,
         const bool                   adaptForFastLink,
@@ -121,6 +116,7 @@ public:
 
     virtual VkResult CreateGraphicsShaderBinary(
         const Device*                     pDevice,
+        PipelineCache*                    pPipelineCache,
         const ShaderStage                 stage,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         void*                             pPipelineDumpHandle,

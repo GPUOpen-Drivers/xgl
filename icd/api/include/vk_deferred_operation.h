@@ -57,7 +57,7 @@ typedef int32_t (*DeferredHostCallback)(Device*                pDevice,
 struct DeferredWorkload
 {
     uint32_t    nextInstance;          // Next workload instance to execute
-    uint32_t    completedInstances;    // # of workload instances fully executed
+    uint32_t    completedInstances;
     uint32_t    totalInstances;        // Actual # of workload instances (UINT_MAX if not yet known, 0 if no-op)
     uint32_t    maxInstances;          // Upper limit estimate of the # of instances (for when actual # is unavailable)
     void*       pPayloads;             // Array of payloads (per workload instance)

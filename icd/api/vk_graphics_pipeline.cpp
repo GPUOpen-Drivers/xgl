@@ -448,6 +448,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
         (result == VK_SUCCESS))
     {
         pBinaryInfo = PipelineBinaryInfo::Create(
+            pCacheIds[DefaultDeviceIndex],
             pPipelineBinarySizes[DefaultDeviceIndex],
             pPipelineBinaries[DefaultDeviceIndex],
             pAllocator);
@@ -582,6 +583,8 @@ VkResult GraphicsPipeline::Create(
     Util::MetroHash::Hash elfHash    = {};
     BuildApiHash(pCreateInfo, &apiPsoHash, &elfHash);
 
+    binaryCreateInfo.apiPsoHash = apiPsoHash;
+
     // 4. Get pipeline layout
     VK_ASSERT(pCreateInfo->layout != VK_NULL_HANDLE);
     PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
@@ -699,6 +702,8 @@ VkResult GraphicsPipeline::Create(
 
     if (result == VK_SUCCESS)
     {
+        const Device::DeviceFeatures& deviceFeatures = pDevice->GetEnabledFeatures();
+
         uint64_t durationTicks = Util::GetPerfCpuTime() - startTimeTicks;
         uint64_t duration = vk::utils::TicksToNano(durationTicks);
         binaryCreateInfo.pipelineFeedback.feedbackValid = true;
@@ -710,7 +715,7 @@ VkResult GraphicsPipeline::Create(
             &binaryCreateInfo.pipelineFeedback,
             binaryCreateInfo.stageFeedback);
 
-        if (pDevice->GetEnabledFeatures().deviceMemoryReport == true)
+        if (deviceFeatures.gpuMemoryEventHandler)
         {
             size_t numEntries = 0;
             Util::Vector<Pal::GpuMemSubAllocInfo, 1, PalAllocator> palSubAllocInfos(pDevice->VkInstance()->Allocator());
@@ -726,6 +731,7 @@ VkResult GraphicsPipeline::Create(
             {
                 // Report the Pal suballocation for this pipeline to device_memory_report
                 pDevice->VkInstance()->GetGpuMemoryEventHandler()->ReportDeferredPalSubAlloc(
+                    pDevice,
                     palSubAllocInfos[i].address,
                     palSubAllocInfos[i].offset,
                     GraphicsPipeline::IntValueFromHandle(*pPipeline),
@@ -1189,6 +1195,11 @@ GraphicsPipeline::GraphicsPipeline(
     if (ContainsDynamicState(DynamicStatesInternal::ColorBlendEquation))
     {
         m_info.graphicsShaderInfos.dynamicState.enable.dualSourceBlendEnable = 1;
+    }
+
+    if (ContainsDynamicState(DynamicStatesInternal::VertexInput))
+    {
+        m_info.graphicsShaderInfos.dynamicState.enable.vertexBufferCount = 1;
     }
 
     pPalPipelineHasher->Update(m_palPipelineHash);

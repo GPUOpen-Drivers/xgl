@@ -207,6 +207,12 @@ constexpr AppProfilePatternEntry AppNameSeriousSam4Win =
     "serious sam 4 - 64bit"
 };
 
+constexpr AppProfilePatternEntry AppNameRomeRemasteredLinux =
+{
+    PatternAppNameLower,
+    "rome"
+};
+
 constexpr AppProfilePatternEntry AppEngineSedp =
 {
     PatternEngineNameLower,
@@ -373,6 +379,13 @@ constexpr AppProfilePatternEntry AppEngineSaschaWillemsExamples =
 {
     PatternEngineNameLower,
     "vulkanexample"
+};
+
+//steam version of shadow of tomb raider
+constexpr AppProfilePatternEntry AppNameSOTTR =
+{
+    PatternAppNameLower,
+    "sottr.exe"
 };
 
 #if VKI_RAY_TRACING
@@ -903,6 +916,15 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::RomeRemastered,
+        {
+            AppNameRomeRemasteredLinux,
+            AppEngineFeral3D,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::ThreeKingdoms,
         {
             AppNameThreeKingdoms,
@@ -1157,6 +1179,15 @@ AppProfilePattern AppPatternTable[] =
         {
             AppNameSniperElite5,
             AppEngineSniperElite5,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::SOTTR,
+        {
+            AppNameSOTTR,
+            AppEngineDXVK,
             PatternEnd
         }
     },

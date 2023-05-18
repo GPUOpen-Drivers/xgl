@@ -353,6 +353,7 @@ VkResult Pipeline::BuildShaderStageInfo(
                 result = pCompiler->BuildShaderModule(
                     pDevice,
                     flags,
+                    0,
                     codeSize,
                     pCode,
                     adaptForFastLink,
@@ -699,6 +700,7 @@ VkResult Pipeline::GetShaderDisassembly(
 
 // =====================================================================================================================
 PipelineBinaryInfo* PipelineBinaryInfo::Create(
+    Util::MetroHash::Hash        hash,
     size_t                       size,
     const void*                  pBinary,
     const VkAllocationCallbacks* pAllocator)
@@ -717,9 +719,9 @@ PipelineBinaryInfo* PipelineBinaryInfo::Create(
         {
             pInfo = VK_PLACEMENT_NEW(pStorage) PipelineBinaryInfo();
 
+            pInfo->binaryHash     = hash;
             pInfo->binaryByteSize = size;
             pInfo->pBinary        = Util::VoidPtrInc(pStorage, sizeof(PipelineBinaryInfo));
-
             memcpy(pInfo->pBinary, pBinary, size);
         }
     }
@@ -887,11 +889,12 @@ void Pipeline::ElfHashToCacheId(
     hasher.Update(pDevice->GetEnabledFeatures().nullDescriptorExtended);
 
 #if VKI_RAY_TRACING
-    // The AccelStructTracker enable status gets stored inside the ELF within
-    // the static GpuRT flags. Needed for both TraceRay() and RayQuery().
     if (pDevice->RayTrace() != nullptr)
     {
+        // The accel struct tracker enable and the trace ray counter states get stored inside the ELF within
+        // the static GpuRT flags. Needed for both TraceRay() and RayQuery().
         hasher.Update(pDevice->RayTrace()->AccelStructTrackerEnabled(deviceIdx));
+        hasher.Update(pDevice->RayTrace()->TraceRayCounterMode(deviceIdx));
     }
 #endif
 

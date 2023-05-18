@@ -404,6 +404,7 @@ public:
     void BindIndexBuffer(
         VkBuffer                                    buffer,
         VkDeviceSize                                offset,
+        VkDeviceSize                                size,
         VkIndexType                                 indexType);
 
     void BindVertexBuffers(
@@ -1050,7 +1051,8 @@ public:
     void PalCmdBindIndexData(
                 Buffer* pBuffer,
                 Pal::gpusize offset,
-                Pal::IndexType indexType);
+                Pal::IndexType indexType,
+                Pal::gpusize bufferSize);
 
     void PalCmdUnbindIndexData(Pal::IndexType indexType);
 
@@ -1727,8 +1729,11 @@ private:
         GpuRt::DispatchRaysConstants*          pConstants);
 
     void BindRayQueryConstants(
-        const Pipeline* pPipeline,
-        Pal::PipelineBindPoint bindPoint);
+        const Pipeline*        pPipeline,
+        Pal::PipelineBindPoint bindPoint,
+        uint32_t               width,
+        uint32_t               height,
+        uint32_t               depth);
 #endif
 
     union CmdBufferFlags

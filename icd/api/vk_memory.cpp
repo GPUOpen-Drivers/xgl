@@ -366,6 +366,8 @@ VkResult Memory::Create(
         }
     }
 
+    const Device::DeviceFeatures& deviceFeatures = pDevice->GetEnabledFeatures();
+
     if (vkResult == VK_SUCCESS)
     {
         // Account for committed size in logical device. The destructor will decrease the counter accordingly.
@@ -399,9 +401,10 @@ VkResult Memory::Create(
 
         if (pPalGpuMem != nullptr)
         {
-            if (pDevice->GetEnabledFeatures().deviceMemoryReport == true)
+            if (deviceFeatures.gpuMemoryEventHandler)
             {
                 pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanAllocateEvent(
+                    pDevice,
                     pPalGpuMem,
                     Memory::IntValueFromHandle(*pMemoryHandle),
                     VK_OBJECT_TYPE_DEVICE_MEMORY,
@@ -431,9 +434,10 @@ VkResult Memory::Create(
     }
     else
     {
-        if (pDevice->GetEnabledFeatures().deviceMemoryReport == true)
+        if (deviceFeatures.deviceMemoryReport)
         {
             pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanAllocationFailedEvent(
+                pDevice,
                 pAllocInfo->allocationSize,
                 VK_OBJECT_TYPE_DEVICE_MEMORY,
                 pAllocInfo->memoryTypeIndex);
@@ -976,11 +980,6 @@ void Memory::Free(
         Pal::IGpuMemory* pGpuMemory = m_pPalMemory[i][i];
         if (pGpuMemory != nullptr)
         {
-            if (pDevice->GetEnabledFeatures().deviceMemoryReport == true)
-            {
-                pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanFreeEvent(pGpuMemory);
-            }
-
             Pal::IDevice* pPalDevice = pDevice->PalDevice(i);
             pDevice->RemoveMemReference(pPalDevice, pGpuMemory);
 

@@ -463,6 +463,7 @@ VkResult RayTracingPipeline::CreateImpl(
         BuildApiHash(pCreateInfo, &elfHash, &apiPsoHash);
 
         binaryCreateInfo.pDeferredWorkload = pDeferredWorkload;
+        binaryCreateInfo.apiPsoHash        = apiPsoHash;
 
         const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfo = nullptr;
         pDefaultCompiler->GetPipelineCreationFeedback(static_cast<const VkStructHeader*>(pCreateInfo->pNext),
@@ -1335,7 +1336,8 @@ VkResult RayTracingPipeline::CreateImpl(
 
         if ((result == VK_SUCCESS) && m_pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO))
         {
-            pBinary = PipelineBinaryInfo::Create(pipelineBinary[DefaultDeviceIndex].pPipelineBins[0].codeSize,
+            pBinary = PipelineBinaryInfo::Create(cacheId[DefaultDeviceIndex],
+                                                 pipelineBinary[DefaultDeviceIndex].pPipelineBins[0].codeSize,
                                                  pipelineBinary[DefaultDeviceIndex].pPipelineBins[0].pCode,
                                                  pAllocator);
         }
@@ -1948,22 +1950,24 @@ void RayTracingPipeline::ConvertStaticPipelineFlags(
     uint32_t*     pStaticFlags,
     uint32_t*     pTriangleCompressMode,
     uint32_t*     pCounterMode,
-    uint32_t      pipelineFlags)
+    uint32_t      pipelineFlags
+)
 {
-    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+    const RuntimeSettings& settings        = pDevice->GetRuntimeSettings();
+    GpuRt::TraceRayCounterMode counterMode = pDevice->RayTrace()->TraceRayCounterMode(DefaultDeviceIndex);
 
     uint32_t staticFlags = pDevice->RayTrace()->GpuRt(DefaultDeviceIndex)->GetStaticPipelineFlags(
         Util::TestAnyFlagSet(pipelineFlags, VK_PIPELINE_CREATE_RAY_TRACING_SKIP_TRIANGLES_BIT_KHR),
         Util::TestAnyFlagSet(pipelineFlags, VK_PIPELINE_CREATE_RAY_TRACING_SKIP_AABBS_BIT_KHR),
         settings.rtUseRayQueryForTraceRays,
         pDevice->RayTrace()->AccelStructTrackerEnabled(DefaultDeviceIndex),
-        (settings.rtTraceRayCounterMode != TraceRayCounterMode::TraceRayCounterDisable));
+        (counterMode != GpuRt::TraceRayCounterMode::TraceRayCounterDisable));
 
     *pStaticFlags = staticFlags;
 
     *pTriangleCompressMode = static_cast<uint32_t>(ConvertGpuRtTriCompressMode(settings.rtTriangleCompressionMode));
 
-    *pCounterMode = settings.rtTraceRayCounterMode;
+    *pCounterMode = static_cast<uint32_t>(counterMode);
 }
 
 // =====================================================================================================================
@@ -2142,7 +2146,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetRayTracingShaderGroupHandlesKHR(
 {
     RayTracingPipeline* pPipeline = RayTracingPipeline::ObjectFromHandle(pipeline);
 
-    // #raytracing: MGPU support - Return based on DefaultDeviceIndex since the result shouldn't vary between GPUs.
     pPipeline->GetRayTracingShaderGroupHandles(DefaultDeviceIndex, firstGroup, groupCount, dataSize, pData);
 
     return VK_SUCCESS;

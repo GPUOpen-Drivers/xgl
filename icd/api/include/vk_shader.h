@@ -35,7 +35,7 @@
 namespace Pal { enum class ResourceMappingNodeType : Pal::uint32; }
 
 #if VKI_RAY_TRACING
-#define VK_SHADER_MODULE_RAY_TRACING_INTERNAL_SHADER_BIT 0x80000000u
+#define VK_INTERNAL_SHADER_FLAGS_RAY_TRACING_INTERNAL_SHADER_BIT 0x80000000u
 #endif
 
 namespace vk

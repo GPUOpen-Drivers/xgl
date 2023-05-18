@@ -63,13 +63,12 @@ static void AmdvlkLog(
       return;
     }
 
-    va_list argList;
-    va_start(argList, pFormatStr);
-    va_end(argList);
-
 #if PAL_ENABLE_PRINTS_ASSERTS
+    va_list argList;
     Util::DbgPrintf(Util::DbgPrintCatMsgFile, Util::DbgPrintStyleNoPrefixNoCrLf, "%s-", LogTag[tagId]);
+    va_start(argList, pFormatStr);
     Util::DbgVPrintf(Util::DbgPrintCatMsgFile, Util::DbgPrintStyleNoPrefixNoCrLf, pFormatStr, argList);
+    va_end(argList);
     Util::DbgPrintf(Util::DbgPrintCatMsgFile, Util::DbgPrintStyleNoPrefixNoCrLf, "\n");
 #endif
 }

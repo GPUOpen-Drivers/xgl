@@ -59,18 +59,21 @@ CompilerSolutionLlpc::~CompilerSolutionLlpc()
 // =====================================================================================================================
 // Initialize CompilerSolutionLlpc class
 VkResult CompilerSolutionLlpc::Initialize(
-    Vkgc::GfxIpVersion gfxIp,
-    Pal::GfxIpLevel    gfxIpLevel,
-    Vkgc::ICache*      pCache)
+    Vkgc::GfxIpVersion    gfxIp,
+    Pal::GfxIpLevel       gfxIpLevel,
+    PipelineBinaryCache*  pCache)
 {
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
-    Vkgc::ICache* pInternalCache = pCache;
-    if (settings.shaderCacheMode == ShaderCacheDisable)
+    Vkgc::ICache* pInternalCache = nullptr;
+    if (pCache != nullptr)
     {
-        pInternalCache = nullptr;
+        if (settings.shaderCacheMode != ShaderCacheDisable)
+        {
+            pInternalCache = pCache->GetCacheAdapter();
+        }
     }
 
-    VkResult result = CompilerSolution::Initialize(gfxIp, gfxIpLevel, pInternalCache);
+    VkResult result = CompilerSolution::Initialize(gfxIp, gfxIpLevel, pCache);
 
     if (result == VK_SUCCESS)
     {
@@ -92,31 +95,11 @@ void CompilerSolutionLlpc::Destroy()
 }
 
 // =====================================================================================================================
-// Get size of shader cache object
-size_t CompilerSolutionLlpc::GetShaderCacheSize(
-    PipelineCompilerType cacheType)
-{
-    VK_NEVER_CALLED();
-    return 0;
-}
-
-// =====================================================================================================================
-// Creates shader cache object.
-VkResult CompilerSolutionLlpc::CreateShaderCache(
-    const void*  pInitialData,
-    size_t       initialDataSize,
-    void*        pShaderCacheMem,
-    uint32_t     expectedEntries,
-    ShaderCache* pShaderCache)
-{
-    return VK_ERROR_INITIALIZATION_FAILED;
-}
-
-// =====================================================================================================================
 // Builds shader module from SPIR-V binary code.
 VkResult CompilerSolutionLlpc::BuildShaderModule(
     const Device*                pDevice,
     VkShaderModuleCreateFlags    flags,
+    VkShaderModuleCreateFlags    internalShaderFlags,
     size_t                       codeSize,
     const void*                  pCode,
     const bool                   adaptForFastLink,
@@ -142,7 +125,7 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     pPipelineCompiler->ApplyPipelineOptions(pDevice, 0, &moduleInfo.options.pipelineOptions);
 
 #if VKI_RAY_TRACING
-    if ((flags & VK_SHADER_MODULE_RAY_TRACING_INTERNAL_SHADER_BIT) != 0)
+    if ((internalShaderFlags & VK_INTERNAL_SHADER_FLAGS_RAY_TRACING_INTERNAL_SHADER_BIT) != 0)
     {
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 55
         moduleInfo.options.pipelineOptions.internalRtShaders = true;
@@ -183,11 +166,6 @@ void CompilerSolutionLlpc::FreeShaderModule(ShaderModuleHandle* pShaderModule)
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
     pInstance->FreeMem(pShaderModule->pLlpcShaderModule);
-
-    if (pShaderModule->elfPackage.codeSize > 0)
-    {
-        pInstance->FreeMem(const_cast<void*>(pShaderModule->elfPackage.pCode));
-    }
 }
 
 // =====================================================================================================================
@@ -377,36 +355,72 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
 // Build ElfPackage for a specific shader module based on pipeine information
 VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
     const Device*                     pDevice,
+    PipelineCache*                    pPipelineCache,
     const ShaderStage                 stage,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
     void*                             pPipelineDumpHandle,
     ShaderModuleHandle*               pShaderModule)
 {
     VkResult result = VK_SUCCESS;
+    Util::MetroHash::Hash cacheId = {};
 
-    // Build the LLPC pipeline
-    Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
-
-    Vkgc::UnlinkedShaderStage unlinkedStage = UnlinkedStageCount;
-
-    // Belong to vertexProcess stage before fragment
-    if (stage < ShaderStage::ShaderStageFragment)
+    bool hitCache = false;
+    if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
     {
-        unlinkedStage = UnlinkedShaderStage::UnlinkedStageVertexProcess;
-    }
-    else if (stage == ShaderStage::ShaderStageFragment)
-    {
-        unlinkedStage = UnlinkedShaderStage::UnlinkedStageFragment;
+        Vkgc::BinaryData elfPackage = {};
+        Util::MetroHash128 hasher;
+        hasher.Update(pCreateInfo->libraryHash[stage]);
+        hasher.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
+        hasher.Finalize(cacheId.bytes);
+        auto pAppCache = pPipelineCache->GetPipelineCache();
+        hitCache = (pAppCache->LoadPipelineBinary(&cacheId, &elfPackage.codeSize, &elfPackage.pCode)
+            == Util::Result::Success);
+        pShaderModule->elfPackage = elfPackage;
     }
 
-    auto llpcResult = m_pLlpc->buildGraphicsShaderStage(
+    if (hitCache == false)
+    {
+        // Build the LLPC pipeline
+        Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
+        Vkgc::UnlinkedShaderStage unlinkedStage = UnlinkedStageCount;
+
+        // Belong to vertexProcess stage before fragment
+        if (stage < ShaderStage::ShaderStageFragment)
+        {
+            unlinkedStage = UnlinkedShaderStage::UnlinkedStageVertexProcess;
+        }
+        else if (stage == ShaderStage::ShaderStageFragment)
+        {
+            unlinkedStage = UnlinkedShaderStage::UnlinkedStageFragment;
+        }
+
+        auto llpcResult = m_pLlpc->buildGraphicsShaderStage(
             &pCreateInfo->pipelineInfo,
             &pipelineOut,
             unlinkedStage,
             pPipelineDumpHandle);
-    if (llpcResult == Vkgc::Result::Success)
+        if (llpcResult == Vkgc::Result::Success)
+        {
+            pShaderModule->elfPackage = pipelineOut.pipelineBin;
+            if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
+            {
+                pPipelineCache->GetPipelineCache()->StorePipelineBinary(
+                    &cacheId, pipelineOut.pipelineBin.codeSize, pipelineOut.pipelineBin.pCode);
+            }
+        }
+        else
+        {
+
+            result = (llpcResult == Vkgc::Result::ErrorOutOfMemory) ?
+                VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_INITIALIZATION_FAILED;
+
+        }
+    }
+
+    if (result == VK_SUCCESS)
     {
-        pShaderModule->elfPackage = pipelineOut.pipelineBin;
+        pCreateInfo->earlyElfPackage[stage]     = pShaderModule->elfPackage;
+        pCreateInfo->earlyElfPackageHash[stage] = cacheId;
     }
 
     return result;

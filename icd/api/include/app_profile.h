@@ -69,6 +69,7 @@ enum class AppProfile : uint32_t
     DawnOfWarIII,            // Dawn of War III by Feral3D
     WarHammerII,             // Total War: WarHammer II by Feral3D
     WarHammerIII,            // Total War: WarHammer III by Feral3D
+    RomeRemastered,          // Total War Rome Remastered
     AshesOfTheSingularity,   // Ashes Of The Singularity
     StrangeBrigade,          // Strange Brigade
     WorldWarZ,               // WorldWarZ
@@ -129,6 +130,7 @@ enum class AppProfile : uint32_t
     Satisfactory,            // Satisfactory by Coffee Stain Studios
     QuakeEnhanced,           // Quake Enhanced by id Software
     Zink,                    // Zink
+    SOTTR,                   // Shadow of the tomb raider steam version
 };
 
 struct ProfileSettings

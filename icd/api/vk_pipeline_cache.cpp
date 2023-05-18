@@ -39,28 +39,17 @@ namespace vk
 // =====================================================================================================================
 PipelineCache::PipelineCache(
     const Device*           pDevice,
-    ShaderCache*            pShaderCaches,
     PipelineBinaryCache*    pBinaryCache
     )
     :
     m_pDevice(pDevice),
-    m_shaderCaches{},
     m_pBinaryCache(pBinaryCache)
 {
-    for (uint32_t i = 0; i < pDevice->NumPalDevices(); ++i)
-    {
-        const auto& cache = pShaderCaches[i];
-        m_shaderCaches[i].Init(cache.GetCacheType(), cache.GetCachePtr());
-    }
 }
 
 // =====================================================================================================================
 PipelineCache::~PipelineCache()
 {
-    for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); i++)
-    {
-        m_shaderCaches[i].Destroy(m_pDevice->GetCompiler(i));
-    }
 }
 
 // =====================================================================================================================
@@ -73,19 +62,8 @@ VkResult PipelineCache::Create(
     VkResult                result           = VK_SUCCESS;
     const RuntimeSettings&  settings         = pDevice->GetRuntimeSettings();
     uint32_t                numPalDevices    = pDevice->NumPalDevices();
-    bool                    useInitialData   = false;
-    size_t                  shaderCacheSize  = 0;
-    size_t                  pipelineCacheSize[MaxPalDevices];
 
     bool                    usePipelineCacheInitialData   = false;
-
-    PipelineCompilerType       cacheType = pDevice->GetCompiler(DefaultDeviceIndex)->GetShaderCacheType();
-
-    for (uint32_t i = 0; i < numPalDevices; i++)
-    {
-        pipelineCacheSize[i] = pDevice->GetCompiler(DefaultDeviceIndex)->GetShaderCacheSize(cacheType);
-        shaderCacheSize += pipelineCacheSize[i];
-    }
 
     if ((pCreateInfo->initialDataSize > 0) && settings.usePipelineCacheInitialData)
     {
@@ -113,21 +91,13 @@ VkResult PipelineCache::Create(
                     {
                         usePipelineCacheInitialData = true;
                     }
-                    else
-                    {
-                        auto pPrivateDataHeader = reinterpret_cast<const PipelineCachePrivateHeaderData*>(pData);
-                        if (pPrivateDataHeader->cacheType == cacheType)
-                        {
-                            useInitialData = true;
-                        }
-                    }
                 }
             }
         }
     }
 
     // Allocate system memory for all objects
-    const size_t objSize = sizeof(PipelineCache) + shaderCacheSize;
+    const size_t objSize = sizeof(PipelineCache);
     void* pMemory = pDevice->AllocApiObject(pAllocator, objSize);
 
     if (pMemory == nullptr)
@@ -136,102 +106,40 @@ VkResult PipelineCache::Create(
     }
     else
     {
-        const PipelineCachePrivateHeaderData* pPrivateDataHeader = nullptr;
-        const void* pBlobs[MaxPalDevices] = {};
-
-        if (useInitialData)
-        {
-            pPrivateDataHeader = reinterpret_cast<const PipelineCachePrivateHeaderData*>(
-                Util::VoidPtrInc(pCreateInfo->pInitialData, sizeof(PipelineCacheHeaderData)));
-
-            pBlobs[0] = Util::VoidPtrInc(pPrivateDataHeader, sizeof(PipelineCachePrivateHeaderData));
-            for (uint32_t i = 1; i < numPalDevices; i++)
-            {
-                pBlobs[i] = Util::VoidPtrInc(pBlobs[i - 1], static_cast<size_t>(pPrivateDataHeader->blobSize[i - 1]));
-            }
-        }
-
-        ShaderCache shaderCaches[MaxPalDevices];
-        size_t shaderCacheOffset = sizeof(PipelineCache);
         uint32_t expectedEntries = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetPipelineCacheExpectedEntryCount();
 
-        for (uint32_t i = 0; i < numPalDevices; i++)
+        PipelineBinaryCache* pBinaryCache = nullptr;
+        if (settings.allowExternalPipelineCacheObject)
         {
             const void* pInitialData = nullptr;
             size_t initialDataSize = 0;
 
-            if (useInitialData)
+            if (usePipelineCacheInitialData)
             {
-                pInitialData    = pBlobs[i];
-                initialDataSize = static_cast<size_t>(pPrivateDataHeader->blobSize[i]);
+                pInitialData    = Util::VoidPtrInc(pCreateInfo->pInitialData, sizeof(PipelineCacheHeaderData));
+                initialDataSize = pCreateInfo->initialDataSize - sizeof(PipelineCacheHeaderData);
             }
 
-            if (result == VK_SUCCESS)
-            {
-                result = pDevice->GetCompiler(DefaultDeviceIndex)->CreateShaderCache(
-                    pInitialData,
-                    initialDataSize,
-                    expectedEntries,
-                    Util::VoidPtrInc(pMemory, shaderCacheOffset),
-                    &shaderCaches[i]);
-            }
-            else
-            {
-                break;
-            }
-
-            // Move to next shader cache object
-            shaderCacheOffset += pipelineCacheSize[i];
-        }
-
-        // Something went wrong with creating the PAL object. Free memory
-        if (result != VK_SUCCESS)
-        {
-            for (uint32_t i = 0; i < numPalDevices; i++)
-            {
-                shaderCaches[i].Destroy(pDevice->GetCompiler(i));
-            }
-        }
-
-        if (result == VK_SUCCESS)
-        {
-            PipelineBinaryCache* pBinaryCache = nullptr;
-            if (settings.allowExternalPipelineCacheObject)
-            {
-                const void* pInitialData = nullptr;
-                size_t initialDataSize = 0;
-
-                if (usePipelineCacheInitialData)
-                {
-                    pInitialData    = Util::VoidPtrInc(pCreateInfo->pInitialData, sizeof(PipelineCacheHeaderData));
-                    initialDataSize = pCreateInfo->initialDataSize - sizeof(PipelineCacheHeaderData);
-                }
-
-                vk::PhysicalDevice* pDefaultPhysicalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
-                pBinaryCache = PipelineBinaryCache::Create(
-                    pDefaultPhysicalDevice->VkInstance()->GetAllocCallbacks(),
-                    pDefaultPhysicalDevice->GetPlatformKey(),
-                    pDevice->GetCompiler(DefaultDeviceIndex)->GetGfxIp(),
-                    pDefaultPhysicalDevice->GetRuntimeSettings(),
-                    pDefaultPhysicalDevice->PalDevice()->GetCacheFilePath(),
+            vk::PhysicalDevice* pDefaultPhysicalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+            pBinaryCache = PipelineBinaryCache::Create(
+                pDefaultPhysicalDevice->VkInstance()->GetAllocCallbacks(),
+                pDefaultPhysicalDevice->GetPlatformKey(),
+                pDevice->GetCompiler(DefaultDeviceIndex)->GetGfxIp(),
+                pDefaultPhysicalDevice->GetRuntimeSettings(),
+                pDefaultPhysicalDevice->PalDevice()->GetCacheFilePath(),
 #if ICD_GPUOPEN_DEVMODE_BUILD
-                    pDefaultPhysicalDevice->VkInstance()->GetDevModeMgr(),
+                pDefaultPhysicalDevice->VkInstance()->GetDevModeMgr(),
 #endif
-                    expectedEntries,
-                    initialDataSize,
-                    pInitialData,
-                    false);
+                expectedEntries,
+                initialDataSize,
+                pInitialData,
+                false);
 
-                // This isn't a terminal failure, the device can continue without the pipeline cache if need be.
-                VK_ALERT(pBinaryCache == nullptr);
-            }
-            PipelineCache* pCache = VK_PLACEMENT_NEW(pMemory) PipelineCache(pDevice, shaderCaches, pBinaryCache);
-            *pPipelineCache = PipelineCache::HandleFromVoidPointer(pMemory);
+            // This isn't a terminal failure, the device can continue without the pipeline cache if need be.
+            VK_ALERT(pBinaryCache == nullptr);
         }
-        else
-        {
-            pDevice->FreeApiObject(pAllocator, pMemory);
-        }
+        PipelineCache* pCache = VK_PLACEMENT_NEW(pMemory) PipelineCache(pDevice, pBinaryCache);
+        *pPipelineCache = PipelineCache::HandleFromVoidPointer(pMemory);
     }
 
     return result;
@@ -257,6 +165,7 @@ VkResult PipelineCache::Destroy(
 }
 
 // =====================================================================================================================
+// Stores AMD specific pipeline cache data to binary cache.
 VkResult PipelineCache::GetData(
     void*   pData,
     size_t* pSize)
@@ -271,43 +180,7 @@ VkResult PipelineCache::GetData(
     }
     else
     {
-        uint32_t numPalDevices = m_pDevice->NumPalDevices();
-
-        size_t allBlobSize = sizeof(PipelineCachePrivateHeaderData);
-        PipelineCachePrivateHeaderData headerData = {};
-
-        headerData.cacheType = m_shaderCaches[0].GetCacheType();
-        for (uint32_t i = 0; i < numPalDevices; i++)
-        {
-            size_t blobSize = 0;
-            result = m_shaderCaches[i].Serialize(nullptr, &blobSize);
-            VK_ASSERT(result == VK_SUCCESS);
-            headerData.blobSize[i] = blobSize;
-            allBlobSize += blobSize;
-        }
-
-        if (*pSize == 0)
-        {
-            *pSize = allBlobSize;
-        }
-        else
-        {
-            VK_ASSERT(*pSize >= allBlobSize);
-            memcpy(pData, &headerData, sizeof(headerData));
-
-            void* pBlob = Util::VoidPtrInc(pData, sizeof(headerData));
-
-            for (uint32_t i = 0; i < numPalDevices; i++)
-            {
-                size_t blobSize = static_cast<size_t>(headerData.blobSize[i]);
-                result = m_shaderCaches[i].Serialize(pBlob, &blobSize);
-                if (result != VK_SUCCESS)
-                {
-                    break;
-                }
-                pBlob = Util::VoidPtrInc(pBlob, blobSize);
-            }
-        }
+        *pSize = 0;
     }
 
     return result;
@@ -332,34 +205,6 @@ VkResult PipelineCache::Merge(
         }
 
         result = m_pBinaryCache->Merge(srcCacheCount, &binaryCaches[0]);
-    }
-    else
-    {
-        Util::AutoBuffer<ShaderCache::ShaderCachePtr, 16, PalAllocator> shaderCaches(
-            srcCacheCount * m_pDevice->NumPalDevices(),
-            m_pDevice->VkInstance()->Allocator());
-
-        for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
-        {
-            for (uint32_t cacheIdx = 0; cacheIdx < srcCacheCount; cacheIdx++)
-            {
-                VK_ASSERT(ppSrcCaches[cacheIdx]->GetShaderCache(deviceIdx).GetCacheType() ==
-                    GetShaderCache(deviceIdx).GetCacheType());
-                // Store all PAL caches like this d0c0,d0c1,d0c2...,d1c0,d1c2,d1c3...
-                shaderCaches[deviceIdx * srcCacheCount + cacheIdx] =
-                    ppSrcCaches[cacheIdx]->GetShaderCache(deviceIdx).GetCachePtr();
-            }
-        }
-
-        for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); i++)
-        {
-            result = m_shaderCaches[i].Merge(srcCacheCount, &shaderCaches[i * srcCacheCount]);
-
-            if (result != VK_SUCCESS)
-            {
-                break;
-            }
-        }
     }
 
     return result;

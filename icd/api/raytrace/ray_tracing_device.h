@@ -85,6 +85,33 @@ public:
     uint32_t GetProfileRayFlags() const { return m_profileRayFlags; }
     uint32_t GetProfileMaxIterations() const { return m_profileMaxIterations; }
 
+    GpuRt::TraceRayCounterMode TraceRayCounterMode(uint32_t deviceIdx) const;
+
+    void TraceDispatch(
+        uint32_t                               deviceIdx,
+        Pal::ICmdBuffer*                       pPalCmdBuffer,
+        GpuRt::RtPipelineType                  pipelineType,
+        uint32_t                               width,
+        uint32_t                               height,
+        uint32_t                               depth,
+        uint32_t                               shaderCount,
+        uint64_t                               apiHash,
+        const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
+        const VkStridedDeviceAddressRegionKHR* pMissSbt,
+        const VkStridedDeviceAddressRegionKHR* pHitSbt,
+        GpuRt::DispatchRaysConstants*          pConstants);
+
+    void TraceIndirectDispatch(
+        uint32_t                               deviceIdx,
+        GpuRt::RtPipelineType                  pipelineType,
+        uint32_t                               shaderCount,
+        uint64_t                               apiHash,
+        const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
+        const VkStridedDeviceAddressRegionKHR* pMissSbt,
+        const VkStridedDeviceAddressRegionKHR* pHitSbt,
+        Pal::gpusize*                          pCounterMetadataVa,
+        GpuRt::InitExecuteIndirectConstants*   pConstants);
+
 private:
     Device*                         m_pDevice;
 
@@ -144,6 +171,18 @@ private:
     static void ClientFreeGpuMem(
         const GpuRt::DeviceInitInfo&    initInfo,
         ClientGpuMemHandle              gpuMem);
+
+    void SetDispatchInfo(
+        GpuRt::RtPipelineType                  pipelineType,
+        uint32_t                               width,
+        uint32_t                               height,
+        uint32_t                               depth,
+        uint32_t                               shaderCount,
+        uint64_t                               apiHash,
+        const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
+        const VkStridedDeviceAddressRegionKHR* pMissSbt,
+        const VkStridedDeviceAddressRegionKHR* pHitSbt,
+        GpuRt::RtDispatchInfo*                 pDispatchInfo) const;
 
     AccelStructTrackerResources     m_accelStructTrackerResources[MaxPalDevices];
 };

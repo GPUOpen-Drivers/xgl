@@ -301,6 +301,40 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
 
     const uint32_t pushConstRegCount = pushConstantsSizeInBytes / sizeof(uint32_t);
 
+    uint32_t gfxReservedCount = 0;
+    // Reserve an user-data to store the VA of buffer for transform feedback.
+    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK))
+    {
+        gfxReservedCount++;
+    }
+
+    if (pDevice->GetRuntimeSettings().enableDebugPrintf)
+    {
+        gfxReservedCount++;
+    }
+
+#if VKI_RAY_TRACING
+    if (HasRayTracing(pIn))
+    {
+        gfxReservedCount += (InternalConstBufferRegCount + MaxTraceRayUserDataRegCount);
+    }
+#endif
+
+    // the user data entries for uber-fetch shader const buffer
+    if (IsUberFetchShaderEnabled<PipelineLayoutScheme::Compact>(pDevice) &&
+        (settings.enableEarlyCompile == false))
+    {
+        gfxReservedCount += InternalConstBufferRegCount;
+    }
+
+    // Reseve PAL internal user data node for base vertex, base instance, draw id and lds_esgs_size.
+    gfxReservedCount += 4;
+
+    const uint32_t gfxInlinePushDescriptorUserDataLimit =
+        (settings.gfxInlinePushDescriptorUserDataLimit > gfxReservedCount) ?
+        settings.gfxInlinePushDescriptorUserDataLimit - gfxReservedCount :
+        0;
+
     // Populate user data layouts for each descriptor set that is active
     pUserDataLayout->setBindingRegBase = pInfo->userDataRegCount;
 
@@ -331,7 +365,8 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
             {
                 uint32_t regCountSpillLimit = (setLayoutInfo.activeStageMask == VK_SHADER_STAGE_COMPUTE_BIT) ?
                                                 settings.csInlinePushDescriptorUserDataLimit :
-                                                settings.gfxInlinePushDescriptorUserDataLimit;
+                                                gfxInlinePushDescriptorUserDataLimit;
+
                 uint32_t inlineRegCount     = pInfo->userDataRegCount +
                                               setLayoutInfo.sta.dwSize +
                                               pushConstRegCount;

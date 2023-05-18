@@ -403,6 +403,8 @@ VkResult Instance::Init(
 
     if (status == VK_SUCCESS)
     {
+        Pal::IPlatform::InstallDeveloperCb(m_pPalPlatform, &Instance::PalDeveloperCallback, this);
+
         // Get the platform property. Vulkan doesn't use it so far.
         Pal::PlatformProperties platformProps;
 
@@ -475,13 +477,6 @@ VkResult Instance::Init(
             utils::GetExecutableNameAndPath(executableName, executablePath);
             m_pPalPlatform->EnableSppProfile(executableName, executablePath);
         }
-    }
-
-    // Install PAL developer callback if the SQTT layer is enabled.  This is required to trap internal barriers
-    // and dispatches performed by PAL so that they can be correctly annotated to RGP.
-    if (status == VK_SUCCESS)
-    {
-        Pal::IPlatform::InstallDeveloperCb(m_pPalPlatform, &Instance::PalDeveloperCallback, this);
     }
 
     if (status == VK_SUCCESS)
@@ -567,6 +562,10 @@ VkResult Instance::Init(
         InitDispatchTable();
 
 #if DEBUG
+        // Optionally wait for a debugger to be attached
+        utils::WaitIdleForDebugger(pPhysicalDevice->GetRuntimeSettings().waitForDebugger,
+            &pPhysicalDevice->GetRuntimeSettings().waitForDebuggerExecutableName[0],
+            pPhysicalDevice->GetRuntimeSettings().debugTimeout);
 #endif
     }
 
@@ -1157,6 +1156,8 @@ void PAL_STDCALL Instance::PalDeveloperCallback(
 
     if (pInstance->IsTracingSupportEnabled())
     {
+        // This is required to trap internal barriers and dispatches performed by PAL so that they can be correctly
+        // annotated to RGP.
         SqttMgr::PalDeveloperCallback(pInstance, deviceIndex, type, pCbData);
     }
 

@@ -297,6 +297,31 @@ static bool VerifyAstcLdrFormatSupport(
         VerifyFormatSupport(dev, VK_FORMAT_ASTC_12x12_SRGB_BLOCK,  1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     return astcLdrSupport;
 }
+// =====================================================================================================================
+// Returns true if the given physical device supports the minimum required compressed texture formats to report ASTC-HDR
+// support
+static VkBool32 VerifyAstcHdrFormatSupport(
+    const PhysicalDevice& dev)
+{
+    // Based on vulkan spec Table 68. ASTC HDR compressed formats with VkImageType
+    // VK_IMAGE_TYPE_2D
+    const VkBool32 astcHdrSupport =
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_4x4_SFLOAT_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_5x4_SFLOAT_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_5x5_SFLOAT_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_6x5_SFLOAT_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_6x6_SFLOAT_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_8x5_SFLOAT_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_8x6_SFLOAT_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_8x8_SFLOAT_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_10x5_SFLOAT_BLOCK,  1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_10x6_SFLOAT_BLOCK,  1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_10x8_SFLOAT_BLOCK,  1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_10x10_SFLOAT_BLOCK, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_12x10_SFLOAT_BLOCK, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_12x12_SFLOAT_BLOCK, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    return astcHdrSupport;
+}
 
 // =====================================================================================================================
 // Returns true if the given physical device supports the minimum required BC compressed texture format
@@ -633,7 +658,7 @@ static void GenerateCacheUuid(
         uint32               vulkanIcdVersion;
         uint32               palInterfaceVersion;
         uint32               osHash;
-        uint32               buildTimeHas;
+        uint32               buildTimeHash;
     } cacheVersionInfo =
     {
         Util::HashLiteralString("pipelineCache"),
@@ -1010,7 +1035,9 @@ VkResult PhysicalDevice::Initialize()
 
     m_memoryTypeMaskForExternalSharing = m_memoryTypeMask;
 
-    if (result == Pal::Result::Success)
+    VkResult vkResult = PalToVkResult(result);
+
+    if (vkResult == VK_SUCCESS)
     {
         // Determine if EQAA is supported by checking if, for each MSAA fragment count, all sample combos are okay.
         const auto& imgProps = PalProperties().imageProperties;
@@ -1033,26 +1060,15 @@ VkResult PhysicalDevice::Initialize()
             m_eqaaSupported &= Util::TestAllFlagsSet(imgProps.msaaSupport, Pal::MsaaFlags::MsaaAllF1);
             break;
         }
-    }
 
-    // Generate our cache UUID.
-    // This can be use later as a "namespace" for Uuid3()/Uuid5() calls for individual pipelines
-    if (result == Pal::Result::Success)
-    {
+        // Generate our cache UUID.
+        // This can be use later as a "namespace" for Uuid3()/Uuid5() calls for individual pipelines
         GenerateCacheUuid(settings, PalProperties(), m_appProfile, &m_pipelineCacheUUID);
-    }
 
-    // Collect properties for perf experiments (this call can fail; we just don't report support for
-    // perf measurement extension then)
-    if (result == Pal::Result::Success)
-    {
+        // Collect properties for perf experiments (this call can fail; we just don't report support for
+        // perf measurement extension then)
         PopulateGpaProperties();
-    }
 
-    VkResult vkResult = PalToVkResult(result);
-
-    if (vkResult == VK_SUCCESS)
-    {
         InitializePlatformKey(settings);
         vkResult = m_compiler.Initialize();
     }
@@ -2505,36 +2521,24 @@ void PhysicalDevice::PopulateLimits()
     // Maximum number of components of output variables which may be output by a vertex shader.
     m_limits.maxVertexOutputComponents = 128;
 
-    // OGL: SI_MAX_VP_VARYING_COMPONENTS
-
     // Maximum tessellation generation level supported by the fixed function tessellation primitive generator.
     m_limits.maxTessellationGenerationLevel = 64;
-
-    // OGL: SI_MAX_TESS_FACTOR
 
     // Maximum patch size, in vertices, of patches that can be processed by the tessellation primitive generator.
     // This is specified by the patchControlPoints of the VkPipelineTessellationStateCreateInfo structure.
     m_limits.maxTessellationPatchSize = 32;
 
-    // OGL: pHpCaps->maxVertexCountPerPatch = SI_MAX_VERTEX_COUNT_PER_PATCH;
-
     // Maximum number of components of input variables which may be provided as per-vertex inputs to the tessellation
     // control shader stage.
     m_limits.maxTessellationControlPerVertexInputComponents = 128;
-
-    // OGL: pHpCaps->maxTessControlInputComponents = SI_MAX_TESS_CONTROL_INPUT_COMPONENTS;
 
     // Maximum number of components of per-vertex output variables which may be output from the tessellation control
     // shader stage.
     m_limits.maxTessellationControlPerVertexOutputComponents = 128;
 
-    // OGL: pHpCaps->maxHullVaryingComponents = SI_MAX_TESS_CONTROL_INPUT_COMPONENTS;
-
     // Maximum number of components of per-patch output variables which may be output from the tessellation control
     // shader stage.
     m_limits.maxTessellationControlPerPatchOutputComponents = 120;
-
-    // OGL: pHpCaps->maxTessControlPatchComponents = SI_MAX_TESS_CONTROL_PATCH_COMPONENTS;
 
     // Maximum total number of components of per-vertex and per-patch output variables which may be output from the
     // tessellation control shader stage.  (The total number of components of active per-vertex and per-patch outputs is
@@ -2542,34 +2546,22 @@ void PhysicalDevice::PopulateLimits()
     // per-patch output component count.  The total component count may not exceed this limit.)
     m_limits.maxTessellationControlTotalOutputComponents = 4096;
 
-    // OGL: pHpCaps->maxTessControlTotalOutputComponents = SI_MAX_TESS_CONTROL_TOTAL_OUTPUT_COMPONENTS;
-
     // Maximum number of components of input variables which may be provided as per-vertex inputs to the tessellation
     // evaluation shader stage.
     m_limits.maxTessellationEvaluationInputComponents = 128;
-
-    // OGL: pDpCaps->maxTessEvaluationInputComponents = SI_MAX_TESS_CONTROL_INPUT_COMPONENTS [sic]
 
     // Maximum number of components of per-vertex output variables which may be output from the tessellation evaluation
     // shader stage
     m_limits.maxTessellationEvaluationOutputComponents = 128;
 
-    // OGL: pDpCaps->maxDomainVaryingComponents = SI_MAX_TESS_CONTROL_INPUT_COMPONENTS [sic]
-
     // Maximum invocation count (per input primitive) supported for an instanced geometry shader.
     m_limits.maxGeometryShaderInvocations = palProps.gfxipProperties.maxGsInvocations;
-
-    // OGL: pGpCaps->maxGeometryInvocations = SI_MAX_GP_INVOCATIONS
 
     // Maximum number of components of input variables which may be provided as inputs to the geometry shader stage
     m_limits.maxGeometryInputComponents = 128;
 
-    // OGL: pGpCaps->maxGeometryVaryingComponents = SI_MAX_GP_VARYING_COMPONENTS
-
     // Maximum number of components of output variables which may be output from the geometry shader stage.
     m_limits.maxGeometryOutputComponents = 128;
-
-    // OGL: pGpCaps->maxGeometryVaryingComponents = SI_MAX_GP_VARYING_COMPONENTS; (NOTE: Not a separate cap)
 
     // Maximum number of vertices which may be emitted by any geometry shader.
     m_limits.maxGeometryOutputVertices = palProps.gfxipProperties.maxGsOutputVert;
@@ -2581,16 +2573,12 @@ void PhysicalDevice::PopulateLimits()
     // Maximum number of components of input variables which may be provided as inputs to the fragment shader stage.
     m_limits.maxFragmentInputComponents = 128;
 
-    // OGL: pFpCaps->maxFragmentInputComponents = SI_MAX_VP_VARYING_COMPONENTS;
-
     // Maximum number of output attachments which may be written to by the fragment shader stage.
     m_limits.maxFragmentOutputAttachments = Pal::MaxColorTargets;
 
     // Maximum number of output attachments which may be written to by the fragment shader stage when blending is
     // enabled and one of the dual source blend modes is in use.
     m_limits.maxFragmentDualSrcAttachments = 1;
-
-    // OGL: pCaps->buf.maxDualSourceDrawBuf = SI_MAX_DUAL_SOURCE_COLOR_BUFFERS;
 
     // NOTE: This could be num_cbs / 2 = 4.  When dual source blending is on, two source colors are written per
     // attachment and to facilitate this the HW operates such that the odd-numbered CBs do not get used.  OGL still
@@ -2615,8 +2603,6 @@ void PhysicalDevice::PopulateLimits()
     m_limits.maxComputeWorkGroupCount[0] = 65535;
     m_limits.maxComputeWorkGroupCount[1] = 65535;
     m_limits.maxComputeWorkGroupCount[2] = 65535;
-
-    // OGL: pCpCaps->maxComputeWorkGroupCount[i] = SI_MAX_WORK_GROUP_COUNT;
 
     const uint32_t clampedMaxThreads = Util::Min(palProps.gfxipProperties.maxThreadGroupSize,
                                                  palProps.gfxipProperties.maxAsyncComputeThreadGroupSize);
@@ -3827,6 +3813,9 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_QUEUE_FAMILY_FOREIGN));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DESCRIPTOR_INDEXING));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(VALVE_MUTABLE_DESCRIPTOR_TYPE));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MUTABLE_DESCRIPTOR_TYPE));
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VARIABLE_POINTERS));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_ATTRIBUTE_DIVISOR));
 
@@ -4106,6 +4095,12 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 #if defined(__unix__)
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PHYSICAL_DEVICE_DRM));
 #endif
+
+    if ((pPhysicalDevice == nullptr) ||
+        VerifyAstcHdrFormatSupport(*pPhysicalDevice))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_TEXTURE_COMPRESSION_ASTC_HDR));
+    }
 
     return availableExtensions;
 }
@@ -5940,7 +5935,7 @@ size_t PhysicalDevice::GetFeatures2(
                     pExtInfo->subgroupSizeControl                                = VK_TRUE;
                     pExtInfo->computeFullSubgroups                               = VK_TRUE;
                     pExtInfo->synchronization2                                   = VK_TRUE;
-                    pExtInfo->textureCompressionASTC_HDR                         = VK_FALSE;
+                    pExtInfo->textureCompressionASTC_HDR                         = VerifyAstcHdrFormatSupport(*this);
                     pExtInfo->shaderZeroInitializeWorkgroupMemory                = VK_TRUE;
                     pExtInfo->dynamicRendering                                   = VK_TRUE;
                     pExtInfo->shaderIntegerDotProduct                            = VK_TRUE;
@@ -6551,7 +6546,7 @@ size_t PhysicalDevice::GetFeatures2(
 
                 if (updateFeatures)
                 {
-                    pExtInfo->textureCompressionASTC_HDR = VK_FALSE;
+                    pExtInfo->textureCompressionASTC_HDR = VerifyAstcHdrFormatSupport(*this);
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6587,6 +6582,19 @@ size_t PhysicalDevice::GetFeatures2(
                     pExtInfo->workgroupMemoryExplicitLayoutScalarBlockLayout = VK_TRUE;
                     pExtInfo->workgroupMemoryExplicitLayout8BitAccess        = VK_TRUE;
                     pExtInfo->workgroupMemoryExplicitLayout16BitAccess       = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceAddressBindingReportFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->reportAddressBinding = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);

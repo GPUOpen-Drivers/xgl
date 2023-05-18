@@ -146,6 +146,10 @@
 #define PalFmt_ASTC(w, h, numfmt) \
     PalFmt(Pal::ChNumFormat::AstcLdr##w##x##h##_##numfmt, PalFmtX, PalFmtY, PalFmtZ, PalFmtW)
 
+// For VK_FORMAT_ASTC_{w}x{h}_SFLOAT_BLOCK_EXT:
+#define PalFmt_ASTC_HDR(w, h, numfmt) \
+    PalFmt(Pal::ChNumFormat::AstcHdr##w##x##h##_##numfmt, PalFmtX, PalFmtY, PalFmtZ, PalFmtW)
+
 // For VK_FORMAT_B{b}G{g}R{r}A{a}_{numfmt}_PACKn:
 #define PalFmt_BGRA_PACK(b, g, r, a, numfmt) \
     PalFmt(Pal::ChNumFormat::X##a##Y##r##Z##g##W##b##_##numfmt, PalFmtY, PalFmtZ, PalFmtW, PalFmtX)
@@ -322,6 +326,20 @@ VK_TO_PAL_STRUC_X(  FORMAT_ASTC_12x10_UNORM_BLOCK,                PalFmt_ASTC(12
 VK_TO_PAL_STRUC_X(  FORMAT_ASTC_12x10_SRGB_BLOCK,                 PalFmt_ASTC(12, 10, Srgb))
 VK_TO_PAL_STRUC_X(  FORMAT_ASTC_12x12_UNORM_BLOCK,                PalFmt_ASTC(12, 12, Unorm))
 VK_TO_PAL_STRUC_X(  FORMAT_ASTC_12x12_SRGB_BLOCK,                 PalFmt_ASTC(12, 12, Srgb))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_4x4_SFLOAT_BLOCK,                 PalFmt_ASTC_HDR(4, 4, Float))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_5x4_SFLOAT_BLOCK,                 PalFmt_ASTC_HDR(5, 4, Float))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_5x5_SFLOAT_BLOCK,                 PalFmt_ASTC_HDR(5, 5, Float))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_6x5_SFLOAT_BLOCK,                 PalFmt_ASTC_HDR(6, 5, Float))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_6x6_SFLOAT_BLOCK,                 PalFmt_ASTC_HDR(6, 6, Float))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_8x5_SFLOAT_BLOCK,                 PalFmt_ASTC_HDR(8, 5, Float))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_8x6_SFLOAT_BLOCK,                 PalFmt_ASTC_HDR(8, 6, Float))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_8x8_SFLOAT_BLOCK,                 PalFmt_ASTC_HDR(8, 8, Float))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_10x5_SFLOAT_BLOCK,                PalFmt_ASTC_HDR(10, 5, Float))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_10x6_SFLOAT_BLOCK,                PalFmt_ASTC_HDR(10, 6, Float))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_10x8_SFLOAT_BLOCK,                PalFmt_ASTC_HDR(10, 8, Float))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_10x10_SFLOAT_BLOCK,               PalFmt_ASTC_HDR(10, 10, Float))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_12x10_SFLOAT_BLOCK,               PalFmt_ASTC_HDR(12, 10, Float))
+VK_TO_PAL_STRUC_X(  FORMAT_ASTC_12x12_SFLOAT_BLOCK,               PalFmt_ASTC_HDR(12, 12, Float))
 VK_TO_PAL_STRUC_X(  FORMAT_B4G4R4A4_UNORM_PACK16,                 PalFmt_BGRA_PACK(4, 4, 4, 4, Unorm))
 VK_TO_PAL_STRUC_X(  FORMAT_B5G5R5A1_UNORM_PACK16,                 PalFmt_BGRA_PACK(5, 5, 5, 1, Unorm))
 VK_TO_PAL_STRUC_X(  FORMAT_B5G6R5_UNORM_PACK16,                   PalFmt_BGR_PACK(5, 6, 5, Unorm))

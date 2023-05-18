@@ -167,7 +167,8 @@ void ShaderOptimizer::CalculateMatchingProfileEntriesHash(
                 pHasher->Update(shaderAction.pipelineShader);
                 pHasher->Update(shaderAction.shaderCreate);
 
-                if (shaderAction.shaderReplace.pCode != nullptr)
+                if (shaderAction.shaderCreate.apply.shaderReplaceEnabled &&
+                    (shaderAction.shaderReplace.pCode != nullptr))
                 {
                     pHasher->Update(
                         static_cast<const uint8_t*>(shaderAction.shaderReplace.pCode),

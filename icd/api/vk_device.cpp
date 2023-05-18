@@ -376,14 +376,6 @@ VkResult Device::Create(
                   enabledDeviceExtensions.IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1)             == false);
     }
 
-    if (enabledDeviceExtensions.IsExtensionEnabled(DeviceExtensions::EXT_EXTENDED_DYNAMIC_STATE3))
-    {
-        if (pPhysicalDevice->GetRuntimeSettings().dynamicPrimitiveTopologyUnrestricted)
-        {
-            deviceFeatures.dynamicPrimitiveTopologyUnrestricted = true;
-        }
-    }
-
     uint32_t                          numDevices                      = 1;
     PhysicalDevice*                   pPhysicalDevices[MaxPalDevices] = { pPhysicalDevice              };
     Pal::IDevice*                     pPalDevices[MaxPalDevices]      = { pPhysicalDevice->PalDevice() };
@@ -641,6 +633,30 @@ VkResult Device::Create(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT:
+            {
+                const VkPhysicalDeviceAddressBindingReportFeaturesEXT* pAddressBindingReportFeaturesEXT =
+                    reinterpret_cast<const VkPhysicalDeviceAddressBindingReportFeaturesEXT*>(pHeader);
+
+                if (pAddressBindingReportFeaturesEXT->reportAddressBinding)
+                {
+                    deviceFeatures.deviceAddressBindingReport = true;
+                    deviceFeatures.gpuMemoryEventHandler      = true;
+
+                    uint32 enabledCallbacks = pInstance->PalPlatform()->GetEnabledCallbackTypes();
+
+                    enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::AllocGpuMemory);
+                    enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::FreeGpuMemory);
+                    enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::SubAllocGpuMemory);
+                    enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::SubFreeGpuMemory);
+                    enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::BindGpuMemory);
+
+                    pInstance->PalPlatform()->SetEnabledCallbackTypes(enabledCallbacks);
+                }
+
+                break;
+            }
+
             default:
                 break;
             }
@@ -687,6 +703,15 @@ VkResult Device::Create(
         else
         {
             deviceFeatures.mustWriteImmutableSamplers = false;
+        }
+
+        if (enabledDeviceExtensions.IsExtensionEnabled(DeviceExtensions::EXT_EXTENDED_DYNAMIC_STATE3))
+        {
+            if (pPhysicalDevice->GetRuntimeSettings().dynamicPrimitiveTopologyUnrestricted)
+            {
+                deviceFeatures.dynamicPrimitiveTopologyUnrestricted = true;
+                deviceFeatures.assumeDynamicTopologyInLibs = deviceFeatures.graphicsPipelineLibrary;
+            }
         }
 
         if ((pPhysicalDevice->GetRuntimeSettings().strictImageSizeRequirements == StrictImageSizeOn) ||
@@ -804,9 +829,8 @@ VkResult Device::Create(
 
             case VK_STRUCTURE_TYPE_DEVICE_DEVICE_MEMORY_REPORT_CREATE_INFO_EXT:
             {
-                deviceFeatures.deviceMemoryReport = true;
-
-                pInstance->GetGpuMemoryEventHandler()->EnableGpuMemoryEvents();
+                deviceFeatures.deviceMemoryReport    = true;
+                deviceFeatures.gpuMemoryEventHandler = true;
 
                 uint32 enabledCallbacks = pInstance->PalPlatform()->GetEnabledCallbackTypes();
 
@@ -878,8 +902,7 @@ VkResult Device::Create(
     if (vkResult == VK_SUCCESS)
     {
         pMemory = pInstance->AllocMem(
-            privateDataSize + apiDeviceSize
-            ,
+            privateDataSize + apiDeviceSize,
             VK_DEFAULT_MEM_ALIGN,
             VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
@@ -917,6 +940,11 @@ VkResult Device::Create(
 
         auto gpuMemoryEventHandler = pInstance->GetGpuMemoryEventHandler();
         Device* pDevice            = ApiDevice::ObjectFromHandle(reinterpret_cast<VkDevice>(pDispatchableDevice));
+
+        if (deviceFeatures.gpuMemoryEventHandler)
+        {
+            gpuMemoryEventHandler->EnableGpuMemoryEvents(pDevice);
+        }
 
         for (auto iter = deviceMemoryReportCallbacks.Begin(); iter.IsValid(); iter.Next())
         {
@@ -996,12 +1024,6 @@ VkResult Device::Create(
 
     return vkResult;
 }
-
-// =====================================================================================================================
-
-// ==================================================================================================================== =
-
-// =====================================================================================================================
 
 #if VKI_RAY_TRACING
 // =====================================================================================================================
@@ -1685,14 +1707,16 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 
     m_renderStateCache.Destroy();
 
-    const bool deviceMemoryReportEnabled = m_enabledFeatures.deviceMemoryReport;
-
     Util::Destructor(this);
 
-    if (deviceMemoryReportEnabled == true)
+    if (m_enabledFeatures.deviceMemoryReport)
     {
         VkInstance()->GetGpuMemoryEventHandler()->UnregisterDeviceMemoryReportCallbacks(this);
-        VkInstance()->GetGpuMemoryEventHandler()->DisableGpuMemoryEvents();
+    }
+
+    if (m_enabledFeatures.gpuMemoryEventHandler)
+    {
+        VkInstance()->GetGpuMemoryEventHandler()->DisableGpuMemoryEvents(this);
     }
 
     FreeApiObject(VkInstance()->GetAllocCallbacks(), ApiDevice::FromObject(this));
@@ -1744,7 +1768,7 @@ VkResult Device::CreateInternalComputePipeline(
     const uint8_t*                 pCode,
     uint32_t                       numUserDataNodes,
     Vkgc::ResourceMappingRootNode* pUserDataNodes,
-    VkShaderModuleCreateFlags      flags,
+    VkShaderModuleCreateFlags      internalShaderFlags,
     bool                           forceWave64,
     const VkSpecializationInfo*    pSpecializationInfo,
     InternalPipeline*              pInternalPipeline)
@@ -1775,7 +1799,8 @@ VkResult Device::CreateInternalComputePipeline(
     // Build shader module
     result = pCompiler->BuildShaderModule(
         this,
-        flags,
+        0,
+        internalShaderFlags,
         codeByteSize,
         pCode,
         false,
@@ -1927,7 +1952,7 @@ VkResult Device::CreateInternalComputePipeline(
         }
         memcpy(pInternalPipeline->pPipeline, pPipeline, sizeof(pPipeline));
 
-        if (GetEnabledFeatures().deviceMemoryReport == true)
+        if (GetEnabledFeatures().gpuMemoryEventHandler)
         {
             size_t numEntries = 0;
             Util::Vector<Pal::GpuMemSubAllocInfo, 1, PalAllocator> palSubAllocInfos(VkInstance()->Allocator());
@@ -1943,6 +1968,7 @@ VkResult Device::CreateInternalComputePipeline(
                 // Report the Pal suballocation for this pipeline to device_memory_report
                 // Internal pipelines are attributed to the device
                 VkInstance()->GetGpuMemoryEventHandler()->ReportDeferredPalSubAlloc(
+                    this,
                     palSubAllocInfos[i].address,
                     palSubAllocInfos[i].offset,
                     DispatchableDevice::IntValueFromHandle(DispatchableDevice::FromObject(this)),
@@ -2203,23 +2229,21 @@ void Device::GetQueue2(
 
     uint32 queueCount = VkPhysicalDevice(DefaultDeviceIndex)->GetQueueFamilyProperties(queueFamilyIndex).queueCount;
 
+    // Queues with flags will be indexed separately to queues without flags
+    // Consider only those queues with matching flags
+    uint32 testIndex = 0;
+    for (uint32 i = 0; i < queueCount; i++)
     {
-        // Queues with flags will be indexed separately to queues without flags
-        // Consider only those queues with matching flags
-        uint32 testIndex = 0;
-        for (uint32 i = 0; i < queueCount; i++)
-        {
-            DispatchableQueue* pFoundQueue = m_pQueues[queueFamilyIndex][i];
+        DispatchableQueue* pFoundQueue = m_pQueues[queueFamilyIndex][i];
 
-            if ((pFoundQueue != nullptr) && ((*pFoundQueue)->GetFlags() == flags))
+        if ((pFoundQueue != nullptr) && ((*pFoundQueue)->GetFlags() == flags))
+        {
+            if (testIndex == queueIndex)
             {
-                if (testIndex == queueIndex)
-                {
-                    *pQueue = reinterpret_cast<VkQueue>(pFoundQueue);
-                    break;
-                }
-                testIndex++;
+                *pQueue = reinterpret_cast<VkQueue>(pFoundQueue);
+                break;
             }
+            testIndex++;
         }
     }
 }
@@ -2236,8 +2260,6 @@ Pal::PrtFeatureFlags Device::GetPrtFeatures() const
 
     return featureFlags;
 }
-
-// =====================================================================================================================
 
 // =====================================================================================================================
 VkResult Device::WaitForFences(
@@ -4835,7 +4857,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetRayTracingCaptureReplayShaderGroupHandlesKHR
     // replaying and we will make use of them in vkCreateRayTracingPipelinesKHR.
     RayTracingPipeline* pPipeline = RayTracingPipeline::ObjectFromHandle(pipeline);
 
-    // #raytracing: MGPU support - Return based on DefaultDeviceIndex since the result shouldn't vary between GPUs.
     pPipeline->GetRayTracingShaderGroupHandles(DefaultDeviceIndex, firstGroup, groupCount, dataSize, pData);
 
     return VK_SUCCESS;

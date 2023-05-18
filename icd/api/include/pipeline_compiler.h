@@ -140,6 +140,7 @@ public:
     VkResult BuildShaderModule(
         const Device*                   pDevice,
         const VkShaderModuleCreateFlags flags,
+        const VkShaderModuleCreateFlags internalShaderFlags,
         size_t                          codeSize,
         const void*                     pCode,
         const bool                      adaptForFastLink,
@@ -169,6 +170,7 @@ public:
 
     VkResult CreateGraphicsShaderBinary(
         const Device*                     pDevice,
+        PipelineCache*                    pPipelineCache,
         const ShaderStage                 stage,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         ShaderModuleHandle*               pModule);
@@ -208,11 +210,6 @@ public:
         PipelineOptimizerKey*                           pPipelineProfileKey,
         PipelineMetadata*                               pBinaryMetadata,
         GraphicsPipelineBinaryCreateInfo*               pCreateInfo);
-
-    static void SetPartialGraphicsPipelineBinaryInfo(
-        const ShaderModuleHandle*         pShaderModuleHandle,
-        const ShaderStage                 stage,
-        GraphicsPipelineBinaryCreateInfo* pCreateInfo);
 
     VkResult ConvertComputePipelineInfo(
         const Device*                                   pDevice,

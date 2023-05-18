@@ -46,6 +46,7 @@ namespace vk
 
 class PhysicalDevice;
 class PipelineCache;
+class PipelineBinaryCache;
 class ShaderCache;
 class DeferredHostOperation;
 
@@ -64,8 +65,8 @@ enum FreeCompilerBinary : uint32_t
 struct ShaderModuleHandle
 {
     uint32_t* pRefCount;
-    void*            pLlpcShaderModule; // Shader module handle from LLPC
     Vkgc::BinaryData elfPackage;        // Generated ElfPacekage from LLPC
+    void*            pLlpcShaderModule; // Shader module handle from LLPC
 };
 
 // =====================================================================================================================
@@ -143,6 +144,9 @@ struct GraphicsPipelineBinaryCreateInfo
     PipelineCompilerType                   compilerType;
     bool                                   linkTimeOptimization;
     Vkgc::BinaryData                       earlyElfPackage[ShaderStage::ShaderStageGfxCount];
+    Util::MetroHash::Hash                  earlyElfPackageHash[ShaderStage::ShaderStageGfxCount];
+    uint64_t                               apiPsoHash;
+    uint64_t                               libraryHash[ShaderStage::ShaderStageGfxCount];
     FreeCompilerBinary                     freeCompilerBinary;
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback[ShaderStage::ShaderStageGfxCount];
@@ -167,6 +171,7 @@ struct ComputePipelineBinaryCreateInfo
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback;
     PipelineMetadata*                      pBinaryMetadata;
+    uint64_t                               apiPsoHash;
 };
 
 #if VKI_RAY_TRACING
@@ -186,6 +191,7 @@ struct RayTracingPipelineBinaryCreateInfo
     uint32_t                               maxAttributeSize;
     bool                                   allowShaderInlining;
     DeferredWorkload*                      pDeferredWorkload;
+    uint64_t                               apiPsoHash;
 };
 
 // =====================================================================================================================
@@ -209,22 +215,14 @@ public:
     CompilerSolution(PhysicalDevice* pPhysicalDevice);
     virtual ~CompilerSolution();
 
-    virtual VkResult Initialize(Vkgc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel, Vkgc::ICache* pCache) = 0;
+    virtual VkResult Initialize(Vkgc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel, PipelineBinaryCache* pCache);
 
     virtual void Destroy() = 0;
-
-    virtual size_t GetShaderCacheSize(PipelineCompilerType cacheType) = 0;
-
-    virtual VkResult CreateShaderCache(
-        const void*  pInitialData,
-        size_t       initialDataSize,
-        void*        pShaderCacheMem,
-        uint32_t     expectedEntries,
-        ShaderCache* pShaderCache) = 0;
 
     virtual VkResult BuildShaderModule(
         const Device*                pDevice,
         VkShaderModuleCreateFlags    flags,
+        VkShaderModuleCreateFlags    internalShaderFlags,
         size_t                       codeSize,
         const void*                  pCode,
         const bool                   adaptForFastLink,
@@ -253,6 +251,7 @@ public:
 
     virtual VkResult CreateGraphicsShaderBinary(
         const Device*                     pDevice,
+        PipelineCache*                    pPipelineCache,
         const ShaderStage                 stage,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         void*                             pPipelineDumpHandle,

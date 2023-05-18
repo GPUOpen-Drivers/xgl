@@ -51,12 +51,12 @@ struct LookupDefines
 
 const LookupDefines colorspaceLookup[] =
 {
-    { Pal::ScreenColorSpace::CsSrgb,         VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,       FmtSupport::Fmt_All          },
+    { Pal::ScreenColorSpace::CsSrgb,         VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,       FmtSupport::Fmt_8bpc         },
     { Pal::ScreenColorSpace::CsBt709,        VK_COLOR_SPACE_BT709_NONLINEAR_EXT,      FmtSupport::Fmt_All          },
     { Pal::ScreenColorSpace::TfHlg,          VK_COLOR_SPACE_HDR10_HLG_EXT,            FmtSupport::Fmt_KnownHDR     },
-    { Pal::ScreenColorSpace::TfPq2084,       VK_COLOR_SPACE_HDR10_ST2084_EXT,         FmtSupport::Fmt_KnownHDR     },
+    { Pal::ScreenColorSpace::TfPq2084,       VK_COLOR_SPACE_HDR10_ST2084_EXT,         FmtSupport::Fmt_10bpc        },
     { Pal::ScreenColorSpace::TfDolbyVision,  VK_COLOR_SPACE_DOLBYVISION_EXT,          FmtSupport::Fmt_8bpc_unorm   },
-    { Pal::ScreenColorSpace::CsBt2020,       VK_COLOR_SPACE_BT2020_LINEAR_EXT,        FmtSupport::Fmt_KnownHDR     },
+    { Pal::ScreenColorSpace::CsBt2020,       VK_COLOR_SPACE_BT2020_LINEAR_EXT,        FmtSupport::Fmt_10bpc        },
     { Pal::ScreenColorSpace::CsAdobe,        VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT,      FmtSupport::Fmt_All          },
     { Pal::ScreenColorSpace::CsDciP3,        VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT,     FmtSupport::Fmt_All          },
     { Pal::ScreenColorSpace::CsScrgb,        VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT, FmtSupport::Fmt_16bpc_sfloat },

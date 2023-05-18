@@ -795,18 +795,29 @@ void DescriptorUpdate::CopyDescriptorSets(
             VK_ASSERT(destBinding.sta.dwArrayStride > 0);
             VK_ASSERT(srcBinding.sta.dwArrayStride > 0);
             uint32_t* pSrcAddr  = pSrcSet->StaticCpuAddress(deviceIdx) + srcBinding.sta.dwOffset
-                                + params.srcArrayElement * srcBinding.sta.dwArrayStride * sizeof(uint32_t);
+                                + params.srcArrayElement * srcBinding.sta.dwArrayStride;
 
             uint32_t* pDestAddr = pDestSet->StaticCpuAddress(deviceIdx) + destBinding.sta.dwOffset
-                                + params.dstArrayElement * destBinding.sta.dwArrayStride * sizeof(uint32_t);
+                                + params.dstArrayElement * destBinding.sta.dwArrayStride;
 
-            for (uint32_t j = 0; j < count; ++j)
+            if (srcBinding.sta.dwArrayStride == destBinding.sta.dwArrayStride)
             {
-                uint32_t dstSizeInDw = destBinding.sta.dwArrayStride;
-                uint32_t srcSizeInDw = srcBinding.sta.dwArrayStride;
-                memcpy(pDestAddr + j * dstSizeInDw, pSrcAddr + j * srcSizeInDw,
-                    Util::Min(destBinding.sta.dwArrayStride * sizeof(uint32_t),
-                        srcBinding.sta.dwArrayStride * sizeof(uint32_t)));
+                // Source and destination have the same memory layout of array elements.
+                memcpy(pDestAddr, pSrcAddr, srcBinding.sta.dwArrayStride * sizeof(uint32_t) * count);
+            }
+            else
+            {
+                const auto arrayElementSize = Util::Min(
+                            destBinding.sta.dwArrayStride * sizeof(uint32_t),
+                            srcBinding.sta.dwArrayStride * sizeof(uint32_t));
+
+                for (uint32_t j = 0; j < count; ++j)
+                {
+                    memcpy(
+                        pDestAddr + j * destBinding.sta.dwArrayStride,
+                        pSrcAddr  + j * srcBinding.sta.dwArrayStride,
+                        arrayElementSize);
+                }
             }
         }
         else if ((srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||

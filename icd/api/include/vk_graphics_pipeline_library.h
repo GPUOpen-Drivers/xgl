@@ -87,6 +87,7 @@ private:
 
     static VkResult CreatePartialPipelineBinary(
         const Device*                          pDevice,
+        PipelineCache*                         pPipelineCache,
         const VkGraphicsPipelineCreateInfo*    pCreateInfo,
         const GraphicsPipelineLibraryInfo*     pLibInfo,
         const GraphicsPipelineShaderStageInfo* pShaderStageInfo,

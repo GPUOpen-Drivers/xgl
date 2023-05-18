@@ -156,7 +156,12 @@ public:
             uint32                dynamicPrimitiveTopologyUnrestricted : 1;
             uint32                graphicsPipelineLibrary              : 1;
             uint32                deviceMemoryReport                   : 1;
-            uint32                reserved                             : 18;
+            uint32                initializePointSizeInBegin           : 1;
+            uint32                deviceAddressBindingReport           : 1;
+            // True if EXT_DEVICE_MEMORY_REPORT or EXT_DEVICE_ADDRESS_BINDING_REPORT is enabled.
+            uint32                gpuMemoryEventHandler                : 1;
+            uint32                assumeDynamicTopologyInLibs          : 1;
+            uint32                reserved                             : 14;
         };
 
         uint32 u32All;
@@ -784,7 +789,7 @@ public:
         const uint8_t*                 pCode,
         uint32_t                       numUserDataNodes,
         Vkgc::ResourceMappingRootNode* pUserDataNodes,
-        VkShaderModuleCreateFlags      flags,
+        VkShaderModuleCreateFlags      internalShaderFlags,
         bool                           forceWave64,
         const VkSpecializationInfo*    pSpecializationInfo,
         InternalPipeline*              pInternalPipeline);
