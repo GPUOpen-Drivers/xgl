@@ -269,7 +269,13 @@ llvm::Expected<ElfLlpcCacheInfo> getElfLlpcCacheInfo(llvm::MemoryBufferRef elfBu
 
     for (const ElfFileTy::Elf_Note &note : noteRange) {
       if (note.getType() == llvm::ELF::NT_AMDGPU_METADATA)
+#if LLVM_MAIN_REVISION && LLVM_MAIN_REVISION < 460558
+        // Old version of the code
         return getCacheInfoFromMetadataBlob(note.getDescAsStringRef());
+#else
+        // New version of the code (also handles unknown version, which we treat as latest)
+        return getCacheInfoFromMetadataBlob(note.getDescAsStringRef(sectionHeader.sh_addralign));
+#endif
     }
   }
 
