@@ -245,6 +245,11 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                     options.pOptions->allowReZ = true;
                 }
 
+                if (shaderCreate.apply.disableFMA != 0)
+                {
+                    options.pOptions->disableFMA = shaderCreate.tuningOptions.disableFMA;
+                }
+
                 if (shaderCreate.apply.disableLoopUnrolls)
                 {
                     options.pOptions->disableLoopUnroll = true;
@@ -1186,6 +1191,15 @@ void ShaderOptimizer::BuildAppProfileLlpc()
         pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.tuningOptions.disableFastMathFlags = 8u | 32u;
         pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.disableFastMathFlags = true;
         pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.tuningOptions.disableFastMathFlags = 8u;
+    }
+
+    if (appProfile == AppProfile::SOTTR)
+    {
+        i = m_appProfile.entryCount++;
+        PipelineProfileEntry* pEntry = &m_appProfile.pEntries[i];
+        pEntry->pattern.match.always = true;
+        pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.apply.disableFMA = true;
+        pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.tuningOptions.disableFMA = true;
     }
 
     if (appProfile == AppProfile::CSGO)

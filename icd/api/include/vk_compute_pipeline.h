@@ -77,6 +77,9 @@ public:
     const Pal::DynamicComputeShaderInfo& GetBindInfo() const
         { return m_info.computeShaderInfo; }
 
+    const uint32_t* GetOrigThreadgroupDims() const
+        { return m_origThreadgroupDims; }
+
 protected:
     // Immediate state info that will be written during Bind() but is not
     // encapsulated within a state object.
@@ -98,6 +101,7 @@ protected:
         bool                                 hasRayTracing,
         uint32_t                             dispatchRaysUserDataOffset,
 #endif
+        const uint32_t*                      pOrigThreadgroupDims,
         uint64_t                             staticStateMask,
         uint64_t                             apiHash);
 
@@ -122,10 +126,17 @@ protected:
         Util::MetroHash::Hash*                pElfHash,
         uint64_t*                             pApiHash);
 
+    static void FetchPalMetadata(
+        PalAllocator* pAllocator,
+        const void*   pBinary,
+        uint32_t*     pOrigThreadgroupDims);
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(ComputePipeline);
 
     ImmedInfo m_info; // Immediate state that will go in CmdSet* functions
+
+    uint32_t m_origThreadgroupDims[3];
 };
 
 } // namespace vk

@@ -408,7 +408,8 @@ VkResult Memory::Create(
                     pPalGpuMem,
                     Memory::IntValueFromHandle(*pMemoryHandle),
                     VK_OBJECT_TYPE_DEVICE_MEMORY,
-                    pAllocInfo->memoryTypeIndex);
+                    pAllocInfo->memoryTypeIndex,
+                    false);
             }
 
             Pal::GpuMemoryResourceBindEventData bindData = {};
@@ -1096,7 +1097,9 @@ Pal::OsExternalHandle Memory::GetShareHandle(
 #if DEBUG
     bool condition = m_pDevice->IsExtensionEnabled(DeviceExtensions::KHR_EXTERNAL_MEMORY_FD);
 
-    condition |= m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0);
+    uint32_t enabledAPIVersion;
+    enabledAPIVersion = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion();
+    condition |= enabledAPIVersion >= VK_MAKE_API_VERSION( 0, 1, 1, 0);
     VK_ASSERT(condition);
 #endif
 

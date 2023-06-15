@@ -67,6 +67,12 @@ macro(xgl_set_compile_definitions)
     endif()
 #endif
 
+#if VKI_BUILD_NAVI33
+    if(XGL_BUILD_NAVI33)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI33=1)
+    endif()
+#endif
+
     if(XGL_BUILD_REMBRANDT)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_REMBRANDT=1)
     endif()
@@ -107,9 +113,6 @@ macro(xgl_set_compile_definitions)
     if(VKI_GPU_DECOMPRESS)
         target_compile_definitions(xgl PRIVATE VKI_GPU_DECOMPRESS)
     endif()
-#endif
-
-#if VKI_RAY_TRACING
 #endif
 
 #if VKI_RAY_TRACING

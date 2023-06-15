@@ -96,6 +96,7 @@ void GpuMemoryEventHandler::Destroy()
     PAL_ALERT_MSG(m_vulkanSubAllocationHashMap.GetNumEntries() != 0, "Vulkan suballocations were not freed.");
     PAL_ALERT_MSG(m_palSubAllocationHashMap.GetNumEntries() != 0, "Pal suballocations were not freed.");
 
+    m_bindHashMapMutex.Lock();
     for (auto iter = m_bindHashMap.Begin(); iter.Get() != nullptr; iter.Next())
     {
         const BindDataList& bindDataList = iter.Get()->value;
@@ -104,6 +105,7 @@ void GpuMemoryEventHandler::Destroy()
             PAL_ALERT_MSG(bindDataList.IsEmpty() == false, "Memory binds map is not empty.");
         }
     }
+    m_bindHashMapMutex.Unlock();
 
     Util::Destructor(this);
 
@@ -144,8 +146,9 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
                     (pAllocationData->allocationData.flags.isExternal     == 0))   // vkCreateMemory handles external
                 {
                     // This is a Pal internal allocation that is not suballocated report it to device_memory_report now
-                    Util::RWLockAuto<RWLock::ReadOnly> deviceHashSetLock(&m_deviceHashSetLock);
+                    m_deviceHashSetLock.LockForRead();
                     const Device*   pDevice         = m_deviceHashSet.Begin().Get()->key;
+                    m_deviceHashSetLock.UnlockForRead();
                     PhysicalDevice* pPhysicalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
                     uint32_t        heapIndex       = 0;
                     bool            validHeap       = pPhysicalDevice->GetVkHeapIndexFromPalHeap(pGpuMemoryData->heap,
@@ -184,8 +187,9 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
         {
             // Report non-suballocated frees to device_memory_report and device_address_binding_report now,
             // including Vulkan allocations
-            if ((pAllocationData->allocationData.flags.isCmdAllocator == 0) && // Command allocator is suballocated
-                (pAllocationData->allocationData.flags.buddyAllocated == 0))   // Buddy allocator is suballocated
+            if ((pAllocationData->allocationData.flags.isCmdAllocator == 0) &&   // Command allocator is suballocated
+                (pAllocationData->allocationData.flags.buddyAllocated == 0) &&   // Pal Buddy allocator is suballocated
+                (pAllocationData->isBuddyAllocated                    == false)) // Vulkan Buddy allocator, suballocated
             {
                 if (pAllocationData->reportedToDeviceMemoryReport == true)
                 {
@@ -195,13 +199,26 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
                         pAllocationData->allocationData.pGpuMemory->Desc().uniqueId,
                         pAllocationData->allocationData.flags.isExternal);
                 }
-                else if ((pAllocationData->allocationData.flags.isClient       != 1) &&
-                         (pAllocationData->allocationData.flags.isExternal     != 1))
+                else if ((pAllocationData->allocationData.flags.isClient  == 1) &&
+                         (pAllocationData->allocationData.flags.isVirtual == 1))
                 {
-                    PAL_ALERT_ALWAYS_MSG("Allocation freed that was never reported to device_memory_report");
+                    // Vulkan virtual only base allocation ok to never report to device_memory_report
+                }
+                else if ((pAllocationData->allocationData.flags.isClient  == 1) &&
+                         (pAllocationData->allocationData.flags.isVirtual == 0))
+                {
+                    PAL_ALERT_ALWAYS_MSG("Vulkan base allocation freed, was never reported to device_memory_report.");
+                }
+                else if (pAllocationData->allocationData.flags.isExternal == 1)
+                {
+                    PAL_ALERT_ALWAYS_MSG("External base allocation freed, was never reported to device_memory_report");
+                }
+                else
+                {
+                    PAL_ALERT_ALWAYS_MSG("Unknown base allocation freed, was never reported to device_memory_report");
                 }
 
-                DeviceAddressBindingReportUnbindEvent(pAllocationData);
+                DeviceAddressBindingReportAllocUnbindEvent(pAllocationData);
             }
 
             m_allocationHashMap.Erase(pGpuMemoryData->pGpuMemory);
@@ -238,8 +255,9 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
             // Add the new Pal suballocation if it did not exist already.
             if (exists == false)
             {
-                Util::RWLockAuto<RWLock::ReadOnly> deviceHashSetLock(&m_deviceHashSetLock);
+                m_deviceHashSetLock.LockForRead();
                 const Device*   pDevice         = m_deviceHashSet.Begin().Get()->key;
+                m_deviceHashSetLock.UnlockForRead();
                 PhysicalDevice* pPhysicalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
                 uint32_t        heapIndex       = 0;
                 bool            validHeap       = pPhysicalDevice->GetVkHeapIndexFromPalHeap(pGpuMemoryData->heap,
@@ -256,9 +274,9 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
                 pSubAllocData->objectType                   = VK_OBJECT_TYPE_UNKNOWN;
                 pSubAllocData->reportedToDeviceMemoryReport = false;
 
-                // Defer reporting of Pal buddy allocated suballocations to device_memory_report to
-                // ReportDeferredPalSubAlloc() but report CmdAllocator suballocations now
-                if (pGpuMemoryData->flags.isCmdAllocator)
+                // Defer reporting of application requested Pal internal suballocations to device_memory_report until
+                // ReportDeferredPalSubAlloc() but report all other Pal internal suballocations now
+                if (pDevice->GetEnabledFeatures().deviceMemoryReport && (pGpuMemoryData->flags.appRequested == 0))
                 {
                     auto* const pHandle                         = ApiPhysicalDevice::FromObject(pPhysicalDevice);
                     pSubAllocData->objectHandle                 = ApiPhysicalDevice::IntValueFromHandle(pHandle);
@@ -294,24 +312,35 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
 
         if (pSubAllocData != nullptr)
         {
-            if (pSubAllocData->reportedToDeviceMemoryReport == true)
+            m_deviceHashSetLock.LockForRead();
+            const Device* pDevice = m_deviceHashSet.Begin().Get()->key;
+            m_deviceHashSetLock.UnlockForRead();
+
+            if (pDevice->GetEnabledFeatures().deviceMemoryReport)
             {
-                DeviceMemoryReportFreeEvent(
-                    pSubAllocData->objectHandle,
-                    pSubAllocData->objectType,
-                    pSubAllocData->memoryObjectId,
-                    pSubAllocData->allocationData.flags.isExternal);
-            }
-            else if (pSubAllocData->allocationData.flags.isCmdAllocator == 1)
-            {
-                PAL_ALERT_ALWAYS_MSG("SubFree: CmdAllocator suballoc was never reported to device_memory_report");
-            }
-            else if (pSubAllocData->allocationData.flags.buddyAllocated == 1)
-            {
-                PAL_ALERT_ALWAYS_MSG("SubFree: Buddy Allocated suballoc was never reported to device_memory_report");
+                if (pSubAllocData->reportedToDeviceMemoryReport == true)
+                {
+                    DeviceMemoryReportFreeEvent(
+                        pSubAllocData->objectHandle,
+                        pSubAllocData->objectType,
+                        pSubAllocData->memoryObjectId,
+                        pSubAllocData->allocationData.flags.isExternal);
+                }
+                else if (pSubAllocData->allocationData.flags.isCmdAllocator == 1)
+                {
+                    PAL_ALERT_ALWAYS_MSG("SubFree: CmdAllocator suballoc was never reported to device_memory_report");
+                }
+                else if (pSubAllocData->allocationData.flags.buddyAllocated == 1)
+                {
+                    PAL_ALERT_ALWAYS_MSG("SubFree: Buddy Allocated suballoc never reported to device_memory_report");
+                }
+                else
+                {
+                    PAL_ALERT_ALWAYS_MSG("SubFree: Unknown suballoc was never reported to device_memory_report");
+                }
             }
 
-            DeviceAddressBindingReportUnbindEvent(pSubAllocData);
+            DeviceAddressBindingReportSuballocUnbindEvent(pSubAllocData);
 
             m_palSubAllocationHashMap.Erase(key);
         }
@@ -328,11 +357,11 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
 
         if (pBindGpuMemoryData->isSystemMemory == false)
         {
-            Util::MutexAuto lock(&m_bindHashMapMutex);
-
             bool          exists        = false;
             BindDataList* pBindDataList = nullptr;
+            BindDataListNode* pBindDataListNode = nullptr;
 
+            m_bindHashMapMutex.Lock();
             Pal::Result palResult = m_bindHashMap.FindAllocate(pBindGpuMemoryData->pGpuMemory, &exists, &pBindDataList);
 
             if (palResult == Pal::Result::Success)
@@ -342,17 +371,20 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
                     pBindDataList = VK_PLACEMENT_NEW(pBindDataList) BindDataList();
                 }
 
-                BindDataListNode* pBindDataListNode = nullptr;
                 BindDataListNode::Create(m_pInstance, pBindGpuMemoryData, &pBindDataListNode);
 
                 if (pBindDataListNode != nullptr)
                 {
-                    DeviceAddressBindingReportUnbindEvent(pBindDataListNode->GetData());
+                    DeviceAddressBindingReportNewUnbindEvent(pBindDataListNode->GetData());
 
                     pBindDataList->PushFront(pBindDataListNode->GetNode());
-
-                    DeviceAddressBindingReportBindEvent(pBindDataListNode->GetData());
                 }
+            }
+            m_bindHashMapMutex.Unlock();
+
+            if ((palResult == Pal::Result::Success) && (pBindDataListNode != nullptr))
+            {
+                DeviceAddressBindingReportNewBindEvent(pBindDataListNode->GetData());
             }
         }
 
@@ -419,7 +451,8 @@ void GpuMemoryEventHandler::VulkanAllocateEvent(
     const Pal::IGpuMemory*           pGpuMemory,
     uint64_t                         objectHandle,
     VkObjectType                     objectType,
-    uint64_t                         heapIndex)
+    uint64_t                         heapIndex,
+    bool                             isBuddyAllocated)
 {
     Util::RWLockAuto<RWLock::ReadOnly> lock(&m_allocationHashMapLock);
     AllocationData* pAllocationData = m_allocationHashMap.FindKey(pGpuMemory);
@@ -429,8 +462,9 @@ void GpuMemoryEventHandler::VulkanAllocateEvent(
         pAllocationData->objectType                   = objectType;
         pAllocationData->objectHandle                 = objectHandle;
         pAllocationData->allocationData.pGpuMemory    = pGpuMemory;
+        pAllocationData->isBuddyAllocated             = isBuddyAllocated;
 
-        if (pDevice->GetEnabledFeatures().deviceMemoryReport)
+        if (pDevice->GetEnabledFeatures().deviceMemoryReport && (isBuddyAllocated == false))
         {
             if (pAllocationData->reportedToDeviceMemoryReport == false)
             {
@@ -454,7 +488,7 @@ void GpuMemoryEventHandler::VulkanAllocateEvent(
 
         if (pDevice->GetEnabledFeatures().deviceAddressBindingReport)
         {
-            DeviceAddressBindingReportBindEvent(pAllocationData);
+            DeviceAddressBindingReportAllocBindEvent(pAllocationData);
         }
     }
     else
@@ -522,7 +556,7 @@ void GpuMemoryEventHandler::VulkanSubAllocateEvent(
 
             if (pDevice->GetEnabledFeatures().deviceAddressBindingReport)
             {
-                DeviceAddressBindingReportBindEvent(pSubAllocData);
+                DeviceAddressBindingReportSuballocBindEvent(pSubAllocData);
             }
         }
         else
@@ -564,7 +598,7 @@ void GpuMemoryEventHandler::VulkanSubFreeEvent(
 
         if (pDevice->GetEnabledFeatures().deviceAddressBindingReport)
         {
-            DeviceAddressBindingReportUnbindEvent(pSubAllocData);
+            DeviceAddressBindingReportSuballocUnbindEvent(pSubAllocData);
         }
 
         m_vulkanSubAllocationHashMap.Erase(key);
@@ -703,6 +737,11 @@ void GpuMemoryEventHandler::ReportDeferredPalSubAlloc(
                 PAL_ALERT_ALWAYS_MSG("Vulkan is trying to report allocation of an already reported Pal suballoc.");
             }
         }
+
+        if (pDevice->GetEnabledFeatures().deviceAddressBindingReport)
+        {
+            DeviceAddressBindingReportSuballocBindEvent(pSubAllocData);
+        }
     }
     else
     {
@@ -773,11 +812,11 @@ bool GpuMemoryEventHandler::CheckIntervalsIntersect(
 
     if (intervalOne.m_offset < intervalTwo.m_offset)
     {
-        intersect = intervalTwo.m_offset <= (intervalOne.m_offset + intervalOne.m_size);
+        intersect = intervalTwo.m_offset < (intervalOne.m_offset + intervalOne.m_size);
     }
     else
     {
-        intersect = intervalOne.m_offset <= (intervalTwo.m_offset + intervalTwo.m_size);
+        intersect = intervalOne.m_offset < (intervalTwo.m_offset + intervalTwo.m_size);
     }
 
     return intersect;
@@ -785,7 +824,7 @@ bool GpuMemoryEventHandler::CheckIntervalsIntersect(
 
 // =====================================================================================================================
 // The caller of this function must hold the m_bindHashMapMutex mutex
-void GpuMemoryEventHandler::DeviceAddressBindingReportUnbindEvent(
+void GpuMemoryEventHandler::DeviceAddressBindingReportUnbindEventCommon(
     const Pal::IGpuMemory* pGpuMemory,
     const Interval&        interval)
 {
@@ -830,7 +869,7 @@ void GpuMemoryEventHandler::DeviceAddressBindingReportUnbindEvent(
 }
 
 // =====================================================================================================================
-void GpuMemoryEventHandler::DeviceAddressBindingReportBindEvent(
+void GpuMemoryEventHandler::DeviceAddressBindingReportAllocBindEvent(
     const AllocationData* pAllocationData)
 {
     Util::MutexAuto lock(&m_bindHashMapMutex);
@@ -845,15 +884,15 @@ void GpuMemoryEventHandler::DeviceAddressBindingReportBindEvent(
     }
 }
 // =====================================================================================================================
-void GpuMemoryEventHandler::DeviceAddressBindingReportUnbindEvent(
+void GpuMemoryEventHandler::DeviceAddressBindingReportAllocUnbindEvent(
     const AllocationData* pAllocationData)
 {
     Util::MutexAuto lock(&m_bindHashMapMutex);
-    DeviceAddressBindingReportUnbindEvent(pAllocationData->allocationData.pGpuMemory, Interval());
+    DeviceAddressBindingReportUnbindEventCommon(pAllocationData->allocationData.pGpuMemory, Interval());
 }
 
 // =====================================================================================================================
-void GpuMemoryEventHandler::DeviceAddressBindingReportBindEvent(
+void GpuMemoryEventHandler::DeviceAddressBindingReportSuballocBindEvent(
     const SubAllocationData* pSubAllocData)
 {
     Util::MutexAuto lock(&m_bindHashMapMutex);
@@ -878,17 +917,17 @@ void GpuMemoryEventHandler::DeviceAddressBindingReportBindEvent(
 }
 
 // =====================================================================================================================
-void GpuMemoryEventHandler::DeviceAddressBindingReportUnbindEvent(
+void GpuMemoryEventHandler::DeviceAddressBindingReportSuballocUnbindEvent(
     const SubAllocationData* pSubAllocData)
 {
     Util::MutexAuto lock(&m_bindHashMapMutex);
-    DeviceAddressBindingReportUnbindEvent(
+    DeviceAddressBindingReportUnbindEventCommon(
         pSubAllocData->allocationData.pGpuMemory,
         Interval(pSubAllocData->offset, pSubAllocData->subAllocationSize));
 }
 
 // =====================================================================================================================
-void GpuMemoryEventHandler::DeviceAddressBindingReportBindEvent(
+void GpuMemoryEventHandler::DeviceAddressBindingReportNewBindEvent(
     BindData* pNewBindData)
 {
     // The caller of this function must hold the m_bindHashMapMutex mutex
@@ -907,7 +946,9 @@ void GpuMemoryEventHandler::DeviceAddressBindingReportBindEvent(
                  (pAllocationData->allocationData.flags.isCmdAllocator  == 0) &&
                  (pAllocationData->allocationData.flags.isExternal      == 0))
         {
+            m_deviceHashSetLock.LockForRead();
             const Device*   pDevice         = m_deviceHashSet.Begin().Get()->key;
+            m_deviceHashSetLock.UnlockForRead();
             PhysicalDevice* pPhysicalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
             auto* const     pHandle         = ApiPhysicalDevice::FromObject(pPhysicalDevice);
 
@@ -937,16 +978,21 @@ void GpuMemoryEventHandler::DeviceAddressBindingReportBindEvent(
 
             if (intersect)
             {
+                const bool isPalInternalSuballoc = ((pSubAllocData->allocationData.flags.buddyAllocated == 1)  &&
+                                                    (pSubAllocData->allocationData.flags.appRequested   == 0)) ||
+                                                   (pSubAllocData->allocationData.flags.isCmdAllocator  == 1);
+
                 if (pSubAllocData->objectHandle != NullHandle)
                 {
                     ReportBindEvent(pNewBindData, pSubAllocData->objectHandle, pSubAllocData->objectType);
                 }
-                else if ((pSubAllocData->allocationData.flags.isClient       == 0)  &&
-                        ((pSubAllocData->allocationData.flags.buddyAllocated == 1)  ||
-                         (pSubAllocData->allocationData.flags.isCmdAllocator == 1)) &&
-                         (pSubAllocData->allocationData.flags.isExternal     == 0))
+                else if ((pSubAllocData->allocationData.flags.isClient   == 0) && // Pal internal
+                         (pSubAllocData->allocationData.flags.isExternal == 0) && // External is handled by Vulkan
+                         isPalInternalSuballoc)                                   // Not app requested
                 {
+                    m_deviceHashSetLock.LockForRead();
                     const Device*   pDevice         = m_deviceHashSet.Begin().Get()->key;
+                    m_deviceHashSetLock.UnlockForRead();
                     PhysicalDevice* pPhysicalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
                     auto* const     pHandle         = ApiPhysicalDevice::FromObject(pPhysicalDevice);
 
@@ -993,11 +1039,11 @@ void GpuMemoryEventHandler::DeviceAddressBindingReportBindEvent(
 }
 
 // =====================================================================================================================
-void GpuMemoryEventHandler::DeviceAddressBindingReportUnbindEvent(
+void GpuMemoryEventHandler::DeviceAddressBindingReportNewUnbindEvent(
     BindData* pNewBindData)
 {
     // The caller of this function must hold the m_bindHashMapMutex mutex
-    DeviceAddressBindingReportUnbindEvent(
+    DeviceAddressBindingReportUnbindEventCommon(
         pNewBindData->bindGpuMemoryData.pGpuMemory,
         Interval(pNewBindData->bindGpuMemoryData.offset, pNewBindData->bindGpuMemoryData.requiredGpuMemSize));
 }

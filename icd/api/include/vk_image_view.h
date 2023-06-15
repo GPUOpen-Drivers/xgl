@@ -86,6 +86,9 @@ public:
     VkFormat GetViewFormat() const
         { return m_viewFormat; }
 
+    const Pal::SubresRange GetSubresRange() const
+        { return m_subresRange; }
+
     const Pal::Range GetZRange() const
         { return m_zRange; }
 

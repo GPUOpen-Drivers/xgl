@@ -371,18 +371,15 @@ void PipelineCompiler::Destroy()
         for (auto it = m_shaderModuleHandleMap.Begin(); it.Get() != nullptr; it.Next())
         {
             VK_ASSERT(it.Get()->value.pRefCount != nullptr);
+            // Free shader module regardless ref count, as the whole map is being destroyed.
+            VK_ALERT((*(it.Get()->value.pRefCount)) == 1);
+            *(it.Get()->value.pRefCount) = 0;
 
-            if (*(it.Get()->value.pRefCount) == 1)
-            {
-                // Force use un-lock version of FreeShaderModule.
-                pInstance->FreeMem(it.Get()->value.pRefCount);
-                it.Get()->value.pRefCount = nullptr;
-                FreeShaderModule(&it.Get()->value);
-            }
-            else
-            {
-                (*(it.Get()->value.pRefCount))--;
-            }
+            // Force use un-lock version of FreeShaderModule.
+            pInstance->FreeMem(it.Get()->value.pRefCount);
+            it.Get()->value.pRefCount = nullptr;
+            FreeShaderModule(&it.Get()->value);
+
         }
         m_shaderModuleHandleMap.Reset();
     }
@@ -518,6 +515,13 @@ VkResult PipelineCompiler::LoadShaderModuleFromCache(
                     *pShaderModule->pRefCount = 2;
                     result = PalToVkResult(m_shaderModuleHandleMap.Insert(shaderModuleCacheHash, *pShaderModule));
                     VK_ASSERT(result == VK_SUCCESS);
+
+                    if (result != VK_SUCCESS)
+                    {
+                        // In case map insertion fails for any reason, free the allocated memory.
+                        pInstance->FreeMem(pShaderModule->pRefCount);
+                        pShaderModule->pRefCount = nullptr;
+                    }
                 }
             }
         }
@@ -577,8 +581,9 @@ void PipelineCompiler::StoreShaderModuleToCache(
                 auto palResult = m_shaderModuleHandleMap.Insert(shaderModuleCacheHash, *pShaderModule);
                 if (palResult != Util::Result::Success)
                 {
-                    // Reset refference count to one if fail to add it to runtime cache
-                    *pShaderModule->pRefCount = 1;
+                    // In case map insertion fails for any reason, free the allocated memory.
+                    pInstance->FreeMem(pShaderModule->pRefCount);
+                    pShaderModule->pRefCount = nullptr;
                 }
             }
 
@@ -1161,7 +1166,9 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
         if (result == VK_SUCCESS)
         {
-            pCreateInfo->freeCompilerBinary = FreeWithCompiler;
+            {
+                pCreateInfo->freeCompilerBinary = FreeWithCompiler;
+            }
         }
     }
 
@@ -1356,7 +1363,9 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
         if (result == VK_SUCCESS)
         {
-            pCreateInfo->freeCompilerBinary = FreeWithCompiler;
+            {
+                pCreateInfo->freeCompilerBinary = FreeWithCompiler;
+            }
         }
     }
 
@@ -1651,9 +1660,7 @@ static void MergePipelineOptions(
 #endif
     pDst->enableInterpModePatch                 |= src.enableInterpModePatch;
     pDst->pageMigrationEnabled                  |= src.pageMigrationEnabled;
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 53
     pDst->optimizationLevel                     |= src.optimizationLevel;
-#endif
 
     pDst->shadowDescriptorTableUsage   = src.shadowDescriptorTableUsage;
     pDst->shadowDescriptorTablePtrHigh = src.shadowDescriptorTablePtrHigh;
@@ -1719,10 +1726,11 @@ static void CopyFragmentOutputInterfaceState(
         pCreateInfo->pipelineInfo.cbState.target[i] = libInfo.pipelineInfo.cbState.target[i];
     }
 
-    pCreateInfo->dbFormat                                   = libInfo.dbFormat;
-    pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable = libInfo.pipelineInfo.cbState.alphaToCoverageEnable;
-    pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable = libInfo.pipelineInfo.cbState.dualSourceBlendEnable;
-    pCreateInfo->pipelineInfo.iaState.enableMultiView       = libInfo.pipelineInfo.iaState.enableMultiView;
+    pCreateInfo->dbFormat                                    = libInfo.dbFormat;
+    pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable  = libInfo.pipelineInfo.cbState.alphaToCoverageEnable;
+    pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable  = libInfo.pipelineInfo.cbState.dualSourceBlendEnable;
+    pCreateInfo->pipelineInfo.cbState.dualSourceBlendDynamic = libInfo.pipelineInfo.cbState.dualSourceBlendDynamic;
+    pCreateInfo->pipelineInfo.iaState.enableMultiView        = libInfo.pipelineInfo.iaState.enableMultiView;
 }
 
 // =====================================================================================================================
@@ -1918,12 +1926,7 @@ void PipelineCompiler::BuildNggState(
             GraphicsPipelineTypeGs | GraphicsPipelineTypeTessGs);
         pCreateInfo->pipelineInfo.nggState.forceCullingMode          = settings.nggForceCullingMode;
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 60
-        pCreateInfo->pipelineInfo.nggState.compactMode               =
-            settings.nggCompactVertex ? Vkgc::NggCompactVertices : Vkgc::NggCompactDisable;
-#else
         pCreateInfo->pipelineInfo.nggState.compactVertex             = settings.nggCompactVertex;
-#endif
         pCreateInfo->pipelineInfo.nggState.enableBackfaceCulling     = (isConservativeOverestimation ?
                                                                         false : settings.nggEnableBackfaceCulling);
         pCreateInfo->pipelineInfo.nggState.enableFrustumCulling      = settings.nggEnableFrustumCulling;
@@ -2177,13 +2180,24 @@ static void BuildColorBlendState(
     const uint32_t                             subpass,
     GraphicsPipelineBinaryCreateInfo*          pCreateInfo)
 {
-    bool dualSourceBlendEnabled = false;
-
     if ((pCb != nullptr) || (pRendering != nullptr))
     {
         const uint32_t numColorTargets = (pRendering != nullptr) ?
             Util::Min(pRendering->colorAttachmentCount, Pal::MaxColorTargets) :
             Util::Min(pCb->attachmentCount, Pal::MaxColorTargets);
+
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation) ||
+            IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable))
+        {
+            {
+                pCreateInfo->pipelineInfo.cbState.dualSourceBlendDynamic = true;
+            }
+        }
+        else if (pCb != nullptr)
+        {
+            pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable =
+                GraphicsPipelineCommon::GetDualSourceBlendEnableState(pDevice, pCb);
+        }
 
         for (uint32_t i = 0; i < numColorTargets; ++i)
         {
@@ -2274,7 +2288,8 @@ static void BuildColorBlendState(
             else if (i == 1)
             {
                 // Duplicate CB0 state to support dual source blend.
-                if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation))
+                if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation) &&
+                    pCreateInfo->pipelineInfo.cbState.dualSourceBlendDynamic)
                 {
                     auto pTarget0 = &pCreateInfo->pipelineInfo.cbState.target[0];
                     if (pTarget0->blendEnable)
@@ -2284,21 +2299,7 @@ static void BuildColorBlendState(
                 }
             }
         }
-
-        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation) ||
-            IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable))
-        {
-            {
-                dualSourceBlendEnabled = true;
-            }
-        }
-        else if (pCb != nullptr)
-        {
-            dualSourceBlendEnabled = GraphicsPipelineCommon::GetDualSourceBlendEnableState(pDevice, pCb);
-        }
     }
-
-    pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable = dualSourceBlendEnabled;
 
     VkFormat dbFormat = VK_FORMAT_UNDEFINED;
 
@@ -3024,7 +3025,7 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
 
     if (((flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT) != 0) &&
         (((flags & VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT) != 0) ||
-         (m_pPhysicalDevice->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 3, 0))))
+         (m_pPhysicalDevice->GetEnabledAPIVersion() >= VK_MAKE_API_VERSION( 0, 1, 3, 0))))
     {
         pShaderOptions->allowVaryWaveSize = true;
     }
@@ -3196,6 +3197,10 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
 
     pCreateInfo->pipelineInfo.maxRecursionDepth = pIn->maxPipelineRayRecursionDepth;
     pCreateInfo->pipelineInfo.indirectStageMask = settings.rtIndirectStageMask;
+    static_assert(RaytracingNone == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::None));
+    static_assert(RaytracingLegacy == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Legacy));
+    static_assert(RaytracingRefactored == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Gpurt2));
+    pCreateInfo->pipelineInfo.mode = static_cast<Vkgc::LlpcRaytracingMode>(settings.llpcRaytracingMode);
 
     pCreateInfo->pipelineInfo.isReplay = isReplay;
 
@@ -3541,7 +3546,9 @@ VkResult PipelineCompiler::CreateRayTracingPipelineBinary(
 
         if (result == VK_SUCCESS)
         {
-            pCreateInfo->freeCompilerBinary = FreeWithCompiler;
+            {
+                pCreateInfo->freeCompilerBinary = FreeWithCompiler;
+            }
         }
     }
 

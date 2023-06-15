@@ -154,6 +154,7 @@ public:
     void StopInstructionTrace(CmdBuffer* pCmdBuffer);
 
     bool IsTracingEnabled() const;
+    bool IsCrashAnalysisEnabled() const { return m_crashAnalysisEnabled; }
 
     Pal::Result TimedQueueSubmit(
         uint32_t               deviceIdx,
@@ -336,6 +337,7 @@ private:
     uint32_t                            m_perfCounterFrequency;     // Counter sample frequency
     bool                                m_useStaticVmid;
     bool                                m_staticVmidActive;
+    bool                                m_crashAnalysisEnabled;
 
     using PerfCounterList = Util::Vector<GpuUtil::PerfCounterId, 8, PalAllocator>;
 

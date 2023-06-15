@@ -417,9 +417,8 @@ VkResult InternalMemMgr::CreateMemoryPoolList(
 VkResult InternalMemMgr::CreateMemoryPoolAndSubAllocate(
     MemoryPoolList*              pOwnerList,
     const InternalMemCreateInfo& initialSubAllocInfo,
-    InternalMemoryPool*          pNewPool,
-    uint32_t                     allocMask,
-    Pal::gpusize*                pSubAllocOffset)
+    InternalMemory*              pMemory,
+    uint32_t                     allocMask)
 {
     InternalMemCreateInfo poolInfo = initialSubAllocInfo;
 
@@ -481,7 +480,8 @@ VkResult InternalMemMgr::CreateMemoryPoolAndSubAllocate(
                                  poolInfo.flags,
                                  pInternalMemory,
                                  allocMask,
-                                 initialSubAllocInfo.flags.needShadow);
+                                 initialSubAllocInfo.flags.needShadow,
+                                 true);
     }
 
     // Persistently map the base allocation if requested.
@@ -493,8 +493,9 @@ VkResult InternalMemMgr::CreateMemoryPoolAndSubAllocate(
 
     if (result == VK_SUCCESS)
     {
-        *pNewPool        = *pInternalMemory;
-        *pSubAllocOffset = subAllocOffset;
+        pMemory->m_memoryPool = *pInternalMemory;
+        pMemory->m_offset     = subAllocOffset;
+        pMemory->m_size       = initialSubAllocInfo.pal.size;
     }
     else if (newPool.pBuddyAllocator != nullptr)
     {
@@ -622,9 +623,8 @@ VkResult InternalMemMgr::AllocGpuMem(
                 result = CreateMemoryPoolAndSubAllocate(
                     pPoolList,
                     createInfo,
-                    &pInternalMemory->m_memoryPool,
-                    allocMask,
-                    &pInternalMemory->m_offset);
+                    pInternalMemory,
+                    allocMask);
             }
 
             if (result == VK_SUCCESS)
@@ -665,7 +665,8 @@ VkResult InternalMemMgr::AllocGpuMem(
             createInfo.flags,
             &pInternalMemory->m_memoryPool,
             allocMask,
-            createInfo.flags.needShadow);
+            createInfo.flags.needShadow,
+            false);
 
         // Persistently map the allocation if necessary
         if ((result == VK_SUCCESS) && (createInfo.flags.persistentMapped))
@@ -840,7 +841,8 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
     const InternalMemCreateFlags&   memCreateFlags,
     InternalMemoryPool*             pGpuMemory,
     uint32_t                        allocMask,
-    bool                            needShadow)
+    const bool                      needShadow,
+    const bool                      isBuddyAllocated)
 {
     VK_ASSERT(pGpuMemory != nullptr);
 
@@ -919,6 +921,27 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
                             Util::VoidPtrInc(pSystemMem, palMemOffset),
                             &pGpuMemory->groupMemory.pPalMemory[deviceIdx]);
 
+                        const Device::DeviceFeatures& deviceFeatures = m_pDevice->GetEnabledFeatures();
+
+                        if ((palResult == Pal::Result::Success) && deviceFeatures.gpuMemoryEventHandler)
+                        {
+                            auto* const      pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+                            Pal::IGpuMemory* pPalGpuMem      = pGpuMemory->groupMemory.pPalMemory[DefaultDeviceIndex];
+
+                            uint32_t heapIndex = 0;
+                            bool     validHeap =
+                                pPhysicalDevice->GetVkHeapIndexFromPalHeap(pPalGpuMem->Desc().heaps[0], &heapIndex);
+                            VK_ASSERT(validHeap);
+
+                            m_pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanAllocateEvent(
+                                m_pDevice,
+                                pPalGpuMem,
+                                DispatchableDevice::IntValueFromHandle(DispatchableDevice::FromObject(m_pDevice)),
+                                VK_OBJECT_TYPE_DEVICE,
+                                heapIndex,
+                                isBuddyAllocated);
+                        }
+
                         if (pFirstAlloc == nullptr)
                         {
                             pFirstAlloc = pGpuMemory->groupMemory.pPalMemory[deviceIdx];
@@ -953,6 +976,27 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
                                 shadowCreateInfo,
                                 Util::VoidPtrInc(pSystemShadowMem, palMemOffset),
                                 &pGpuMemory->groupShadowMemory.pPalMemory[deviceIdx]);
+
+                            if ((palResult == Pal::Result::Success) && deviceFeatures.gpuMemoryEventHandler)
+                            {
+                                auto* const      pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+                                Pal::IGpuMemory* pPalGpuMem      =
+                                    pGpuMemory->groupShadowMemory.pPalMemory[DefaultDeviceIndex];
+
+                                uint32_t heapIndex = 0;
+                                bool     validHeap = pPhysicalDevice->GetVkHeapIndexFromPalHeap(
+                                                        pPalGpuMem->Desc().heaps[0],
+                                                        &heapIndex);
+                                VK_ASSERT(validHeap);
+
+                                m_pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanAllocateEvent(
+                                    m_pDevice,
+                                    pPalGpuMem,
+                                    DispatchableDevice::IntValueFromHandle(DispatchableDevice::FromObject(m_pDevice)),
+                                    VK_OBJECT_TYPE_DEVICE,
+                                    heapIndex,
+                                    isBuddyAllocated);
+                            }
                         }
                     }
 

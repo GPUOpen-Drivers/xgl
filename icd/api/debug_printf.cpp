@@ -31,6 +31,7 @@
 #include "palVectorImpl.h"
 #include "palHashBaseImpl.h"
 #include "palSysMemory.h"
+#include <cinttypes>
 
 using namespace vk;
 
@@ -144,6 +145,11 @@ void DebugPrintf::Init(
         m_frame = 0;
         m_pSettings = &settings;
         m_parsedFormatStrings.Init();
+
+        if (m_pSettings->debugPrintfToStdout == false)
+        {
+            Util::MkDirRecursively(m_pSettings->debugPrintfDumpFolder);
+        }
     }
 }
 
@@ -306,7 +312,7 @@ PrintfString DebugPrintf::GetFileName(
         , "Rays"
 #endif
         };
-    sprintf(fileName, "Pipeline%s_0x%016llX_%u", strPipelineTypes[pipelineType],
+    sprintf(fileName, "Pipeline%s_0x%016" PRIx64 "_%u", strPipelineTypes[pipelineType],
             pipelineHash, frameNumber);
     PrintfString fName(nullptr);
     fName.Reserve(10);

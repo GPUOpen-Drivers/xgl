@@ -199,7 +199,9 @@ VkResult Semaphore::Create(
                 &pPalSemaphores[0]);
         }
 
-        if (palResult == Pal::Result::Success)
+        vkResult = PalToVkResult(palResult);
+
+        if (vkResult == VK_SUCCESS)
         {
             uint32_t   semaphoreCount = 1;
 
@@ -216,11 +218,10 @@ VkResult Semaphore::Create(
             }
             else
             {
-                vkResult = PalToVkResult(Pal::Result::ErrorOutOfGpuMemory);
+                vkResult = VK_ERROR_OUT_OF_DEVICE_MEMORY;
             }
         }
     }
-
     else
     {
         //Allocation Failed.

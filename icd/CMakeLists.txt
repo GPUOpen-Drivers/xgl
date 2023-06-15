@@ -252,7 +252,7 @@ add_custom_target(
 
 add_dependencies(xgl RunVKStringsGenerator)
 
-    target_sources(xgl PRIVATE api/strings/strings.cpp)
+target_sources(xgl PRIVATE api/strings/strings.cpp)
 
 ### ICD Auto-generated Settings Files #########################################
 # ICD settings code generation main script

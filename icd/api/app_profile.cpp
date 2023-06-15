@@ -388,6 +388,12 @@ constexpr AppProfilePatternEntry AppNameSOTTR =
     "sottr.exe"
 };
 
+constexpr AppProfilePatternEntry AppNameSpidermanRemastered =
+{
+    PatternExeNameLower,
+    "spider-man.exe"
+};
+
 #if VKI_RAY_TRACING
 constexpr AppProfilePatternEntry AppEngineVKD3D =
 {
@@ -542,6 +548,12 @@ constexpr AppProfilePatternEntry AppNameEvilGenius2 =
 {
     PatternAppNameLower,
     "evil genius 2"
+};
+
+constexpr AppProfilePatternEntry AppNameCSGO =
+{
+    PatternAppNameLower,
+    "csgo"
 };
 
 constexpr AppProfilePatternEntry AppNameCSGOLinux32Bit =
@@ -741,14 +753,6 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::HalfLifeAlyx,
         {
             AppNameHalfLifeAlyx,
-            AppEngineSource2,
-            PatternEnd
-        }
-    },
-
-    {
-        AppProfile::Source2Engine,
-        {
             AppEngineSource2,
             PatternEnd
         }
@@ -1192,6 +1196,14 @@ AppProfilePattern AppPatternTable[] =
         }
     },
 
+    {
+        AppProfile::SpidermanRemastered,
+        {
+            AppNameSpidermanRemastered,
+            PatternEnd
+        }
+    },
+
 #if VKI_RAY_TRACING
     {
         AppProfile::ControlDX12,
@@ -1214,6 +1226,14 @@ AppProfilePattern AppPatternTable[] =
     {
         AppProfile::CSGO,
         {
+            AppNameCSGO,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::CSGO,
+        {
             AppNameCSGOLinux32Bit,
             PatternEnd
         }
@@ -1223,6 +1243,14 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::CSGO,
         {
             AppNameCSGOLinux64Bit,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Source2Engine,
+        {
+            AppEngineSource2,
             PatternEnd
         }
     },
@@ -1452,6 +1480,14 @@ AppProfile ScanApplicationProfile(
                 patternMatches = false;
             }
 
+            // If specific string is found in the exe name, pattern matches
+            if ((pattern.entries[entryIdx].type == PatternStrInExeNameLower) &&
+                (patternMatches == false) &&
+                (valid[PatternExeNameLower] == true) &&
+                (strstr(texts[PatternExeNameLower], entry.text) != nullptr))
+            {
+                patternMatches = true;
+            }
         }
 
         if (patternMatches)
@@ -1479,15 +1515,25 @@ static char* GetExecutableName(
     size_t* pLength,
     bool    includeExtension)  // true if you want the extension on the file name.
 {
+    pid_t pid = getpid();
     char* pExecutable = nullptr;
     char* pModuleFileName = nullptr;
     char  path[PATH_MAX] = {0};
-    pExecutable = static_cast<char*>(malloc(PATH_MAX));
-    int lens = readlink("/proc/self/exe", path, PATH_MAX);
-    pModuleFileName = strrchr(path, '/') ? strrchr(path, '/') + 1 : path;
-    strcpy(pExecutable, pModuleFileName);
-    *pLength = strlen(pExecutable);
-
+    char  commandStringBuffer[PATH_MAX] = {0};
+    sprintf(commandStringBuffer, "cat /proc/%d/cmdline", pid);
+    FILE* pCommand = popen(commandStringBuffer, "r");
+    if (pCommand != nullptr)
+    {
+        if (fgets(path, PATH_MAX, pCommand) != nullptr)
+        {
+            pExecutable = static_cast<char*>(malloc(PATH_MAX));
+            pModuleFileName = strrchr(path, '/') ? strrchr(path, '/') + 1 : path;
+            pModuleFileName = strrchr(pModuleFileName, '\\') ? strrchr(pModuleFileName, '\\') + 1 : pModuleFileName;
+            strcpy(pExecutable, pModuleFileName);
+            *pLength = strlen(pExecutable);
+        }
+        pclose(pCommand);
+    }
     return pExecutable;
 }
 

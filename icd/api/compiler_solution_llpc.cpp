@@ -127,11 +127,7 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
 #if VKI_RAY_TRACING
     if ((internalShaderFlags & VK_INTERNAL_SHADER_FLAGS_RAY_TRACING_INTERNAL_SHADER_BIT) != 0)
     {
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 55
         moduleInfo.options.pipelineOptions.internalRtShaders = true;
-#else
-        moduleInfo.options.isInternalRtShader = true;
-#endif
     }
 #endif
 
@@ -227,7 +223,8 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
 #if VKI_RAY_TRACING
             pCreateInfo->pBinaryMetadata->rayQueryUsed  |= pModuleData->usage.enableRayQuery;
 #endif
-            pCreateInfo->pBinaryMetadata->pointSizeUsed |= pModuleData->usage.usePointSize;
+            pCreateInfo->pBinaryMetadata->pointSizeUsed           |= pModuleData->usage.usePointSize;
+            pCreateInfo->pBinaryMetadata->shadingRateUsedInShader |= pModuleData->usage.useShadingRate;
         }
     }
 
@@ -376,6 +373,11 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
         hitCache = (pAppCache->LoadPipelineBinary(&cacheId, &elfPackage.codeSize, &elfPackage.pCode)
             == Util::Result::Success);
         pShaderModule->elfPackage = elfPackage;
+
+        // Update the shader feedback
+        PipelineCreationFeedback* pStageFeedBack = &pCreateInfo->stageFeedback[stage];
+        pStageFeedBack->feedbackValid = true;
+        pStageFeedBack->hitApplicationCache = hitCache;
     }
 
     if (hitCache == false)
@@ -421,6 +423,13 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
     {
         pCreateInfo->earlyElfPackage[stage]     = pShaderModule->elfPackage;
         pCreateInfo->earlyElfPackageHash[stage] = cacheId;
+
+        if (stage == ShaderStage::ShaderStageFragment)
+        {
+            const auto* pModuleData =
+                reinterpret_cast<const Vkgc::ShaderModuleData*>(pCreateInfo->pipelineInfo.fs.pModuleData);
+            pCreateInfo->pBinaryMetadata->needsSampleInfo = pModuleData->usage.useSampleInfo;
+        }
     }
 
     return result;
@@ -543,10 +552,8 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>(pPipelineBuildInfo->cs.pModuleData);
     if (pModuleData != nullptr)
     {
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 55
         // Propagate internal shader compilation options from module to pipeline
         pPipelineBuildInfo->options.internalRtShaders = pModuleData->usage.isInternalRtShader;
-#endif
         pCreateInfo->pBinaryMetadata->rayQueryUsed    = pModuleData->usage.enableRayQuery;
     }
 #endif

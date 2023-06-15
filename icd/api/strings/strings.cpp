@@ -35,14 +35,15 @@ namespace vk
 
 namespace strings
 {
-namespace entry
-{
-#include "strings/g_entry_points_impl.h"
-}
-namespace ext
-{
-#include "strings/g_extensions_impl.h"
-}
+    namespace entry
+    {
+        #include "strings/g_entry_points_impl.h"
+    }
+
+    namespace ext
+    {
+        #include "strings/g_extensions_impl.h"
+    }
 }
 
 } // namespace vk

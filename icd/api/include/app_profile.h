@@ -131,6 +131,7 @@ enum class AppProfile : uint32_t
     QuakeEnhanced,           // Quake Enhanced by id Software
     Zink,                    // Zink
     SOTTR,                   // Shadow of the tomb raider steam version
+    SpidermanRemastered,     // Spiderman Remastered
 };
 
 struct ProfileSettings

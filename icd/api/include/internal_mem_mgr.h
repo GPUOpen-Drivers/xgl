@@ -268,16 +268,16 @@ private:
     VkResult CreateMemoryPoolAndSubAllocate(
         MemoryPoolList*              pOwnerList,
         const InternalMemCreateInfo& initialSubAllocInfo,
-        InternalMemoryPool*          pNewPool,
-        uint32_t                     allocMask,
-        Pal::gpusize*                pSubAllocOffset);
+        InternalMemory*              pMemory,
+        uint32_t                     allocMask);
 
     VkResult AllocBaseGpuMem(
         const Pal::GpuMemoryCreateInfo& createInfo,
         const InternalMemCreateFlags&   memCreateFlags,
         InternalMemoryPool*             pGpuMemory,
         uint32_t                        allocMask,
-        bool                            needShadow);
+        const bool                      needShadow,
+        const bool                      isBuddyAllocated);
 
     void FreeBaseGpuMem(
         const InternalMemoryPool*       pGpuMemory);

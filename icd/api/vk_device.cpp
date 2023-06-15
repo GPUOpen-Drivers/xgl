@@ -922,6 +922,18 @@ VkResult Device::Create(
         // Finalize the physical device settings before they are cached in the device
         pPhysicalDevices[DefaultDeviceIndex]->GetSettingsLoader()->FinalizeSettings(enabledDeviceExtensions);
 
+        if (settings.simulateExtDeviceMemoryReport)
+        {
+            deviceFeatures.deviceMemoryReport    = true;
+            deviceFeatures.gpuMemoryEventHandler = true;
+        }
+
+        if (settings.simulateExtDeviceAddressBindingReport)
+        {
+            deviceFeatures.deviceAddressBindingReport = true;
+            deviceFeatures.gpuMemoryEventHandler      = true;
+        }
+
         // Construct API device object.
         VK_INIT_DISPATCHABLE(Device, pMemory, (
             numDevices,
@@ -941,9 +953,29 @@ VkResult Device::Create(
         auto gpuMemoryEventHandler = pInstance->GetGpuMemoryEventHandler();
         Device* pDevice            = ApiDevice::ObjectFromHandle(reinterpret_cast<VkDevice>(pDispatchableDevice));
 
-        if (deviceFeatures.gpuMemoryEventHandler)
+        if (settings.simulateExtDeviceMemoryReport)
         {
-            gpuMemoryEventHandler->EnableGpuMemoryEvents(pDevice);
+            uint32 enabledCallbacks = pInstance->PalPlatform()->GetEnabledCallbackTypes();
+
+            enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::AllocGpuMemory);
+            enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::FreeGpuMemory);
+            enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::SubAllocGpuMemory);
+            enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::SubFreeGpuMemory);
+
+            pInstance->PalPlatform()->SetEnabledCallbackTypes(enabledCallbacks);
+        }
+
+        if (settings.simulateExtDeviceAddressBindingReport)
+        {
+            uint32 enabledCallbacks = pInstance->PalPlatform()->GetEnabledCallbackTypes();
+
+            enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::AllocGpuMemory);
+            enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::FreeGpuMemory);
+            enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::SubAllocGpuMemory);
+            enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::SubFreeGpuMemory);
+            enabledCallbacks |= 1 << static_cast<uint32>(Pal::Developer::CallbackType::BindGpuMemory);
+
+            pInstance->PalPlatform()->SetEnabledCallbackTypes(enabledCallbacks);
         }
 
         for (auto iter = deviceMemoryReportCallbacks.Begin(); iter.IsValid(); iter.Next())
@@ -951,6 +983,11 @@ VkResult Device::Create(
             iter.Get().pDevice = pDevice;
 
             gpuMemoryEventHandler->RegisterDeviceMemoryReportCallback(iter.Get());
+        }
+
+        if (deviceFeatures.gpuMemoryEventHandler)
+        {
+            gpuMemoryEventHandler->EnableGpuMemoryEvents(pDevice);
         }
 
         size_t       palQueueMemoryOffset = 0;
@@ -1951,30 +1988,6 @@ VkResult Device::CreateInternalComputePipeline(
             pInternalPipeline->userDataNodeOffsets[i] = pUserDataNodes[i].node.offsetInDwords;
         }
         memcpy(pInternalPipeline->pPipeline, pPipeline, sizeof(pPipeline));
-
-        if (GetEnabledFeatures().gpuMemoryEventHandler)
-        {
-            size_t numEntries = 0;
-            Util::Vector<Pal::GpuMemSubAllocInfo, 1, PalAllocator> palSubAllocInfos(VkInstance()->Allocator());
-
-            (*pPipeline)->QueryAllocationInfo(&numEntries, nullptr);
-
-            palSubAllocInfos.Resize(numEntries);
-
-            (*pPipeline)->QueryAllocationInfo(&numEntries, &palSubAllocInfos[0]);
-
-            for (size_t i = 0; i < numEntries; ++i)
-            {
-                // Report the Pal suballocation for this pipeline to device_memory_report
-                // Internal pipelines are attributed to the device
-                VkInstance()->GetGpuMemoryEventHandler()->ReportDeferredPalSubAlloc(
-                    this,
-                    palSubAllocInfos[i].address,
-                    palSubAllocInfos[i].offset,
-                    DispatchableDevice::IntValueFromHandle(DispatchableDevice::FromObject(this)),
-                    VK_OBJECT_TYPE_DEVICE);
-            }
-        }
     }
     else
     {

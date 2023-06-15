@@ -91,7 +91,8 @@ public:
         const Pal::IGpuMemory*           pGpuMemory,
         uint64_t                         objectHandle,
         VkObjectType                     objectType,
-        uint64_t                         heapIndex);
+        uint64_t                         heapIndex,
+        bool                             isBuddyAllocated);
 
     void VulkanAllocationFailedEvent(
         const Device*                    pDevice,
@@ -133,6 +134,7 @@ private:
         uint64_t                      objectHandle;
         VkObjectType                  objectType;
         bool                          reportedToDeviceMemoryReport;
+        bool                          isBuddyAllocated;
     };
 
     struct SubAllocationData
@@ -225,26 +227,26 @@ private:
         const VkDeviceMemoryReportCallbackDataEXT& callbackData);
 
     // The caller of this function must hold the m_bindHashMapLock lock for read/write
-    void DeviceAddressBindingReportUnbindEvent(
+    void DeviceAddressBindingReportUnbindEventCommon(
         const Pal::IGpuMemory*                pGpuMemory,
         const Interval&                       interval);
 
-    void DeviceAddressBindingReportBindEvent(
+    void DeviceAddressBindingReportAllocBindEvent(
         const AllocationData* pAllocationData);
 
-    void DeviceAddressBindingReportUnbindEvent(
+    void DeviceAddressBindingReportAllocUnbindEvent(
         const AllocationData* pAllocationData);
 
-    void DeviceAddressBindingReportBindEvent(
+    void DeviceAddressBindingReportSuballocBindEvent(
         const SubAllocationData* pSubAllocData);
 
-    void DeviceAddressBindingReportUnbindEvent(
+    void DeviceAddressBindingReportSuballocUnbindEvent(
         const SubAllocationData* pSubAllocData);
 
-    void DeviceAddressBindingReportBindEvent(
+    void DeviceAddressBindingReportNewBindEvent(
         BindData* pNewBindData);
 
-    void DeviceAddressBindingReportUnbindEvent(
+    void DeviceAddressBindingReportNewUnbindEvent(
         BindData* pNewBindData);
 
     void DeviceAddressBindingReportCallback(

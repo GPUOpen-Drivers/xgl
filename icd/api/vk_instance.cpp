@@ -188,7 +188,7 @@ VkResult Instance::Create(
 
     // According to the Vulkan 1.1 spec, if pApplicationInfo is not provided or if the apiVersion requested is 0
     // it is equivalent of providing an apiVersion of 1.0.0
-    uint32_t apiVersion = VK_MAKE_VERSION(1,0,0);
+    uint32_t apiVersion = VK_MAKE_API_VERSION( 0,1,0,0);
 
     if ((pAppInfo != nullptr) && (pAppInfo->apiVersion != 0))
     {

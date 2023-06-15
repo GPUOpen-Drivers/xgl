@@ -141,6 +141,7 @@ VK_KHR_sampler_ycbcr_conversion
 #if VKI_RAY_TRACING
 VK_KHR_acceleration_structure
 VK_KHR_ray_tracing_pipeline
+VK_KHR_ray_tracing_position_fetch
 VK_KHR_ray_query
 VK_EXT_pipeline_library_group_handles
 #endif
@@ -161,6 +162,7 @@ VK_KHR_synchronization2
 VK_EXT_depth_clip_control
 VK_EXT_primitive_topology_list_restart
 VK_KHR_dynamic_rendering
+VK_EXT_dynamic_rendering_unused_attachments
 VK_KHR_format_feature_flags2
 VK_EXT_extended_dynamic_state2
 VK_EXT_descriptor_buffer

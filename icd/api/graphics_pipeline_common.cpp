@@ -898,7 +898,7 @@ static void CopyFragmentShaderState(
 #if VKI_RAY_TRACING
     pInfo->flags.hasRayTracing         |= libInfo.flags.hasRayTracing;
 #endif
-
+    pInfo->flags.fragmentShadingRateEnable |= libInfo.flags.fragmentShadingRateEnable;
     pInfo->staticStateMask            |= (libInfo.staticStateMask & FgsDynamicStatesMask);
 }
 
@@ -1248,7 +1248,7 @@ static void BuildViewportState(
 
             const bool maintenanceEnabled = pDevice->IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1);
             uint32_t   enabledApiVersion  = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion();
-            const bool khrMaintenance1    = (enabledApiVersion >= VK_MAKE_VERSION(1, 1, 0)) || maintenanceEnabled;
+            const bool khrMaintenance1    = (enabledApiVersion >= VK_MAKE_API_VERSION(0, 1, 1, 0)) || maintenanceEnabled;
 
             for (uint32_t i = 0; i < pVp->viewportCount; ++i)
             {
@@ -1286,29 +1286,36 @@ static void BuildVrsRateParams(
     const uint64_t                                         dynamicStateFlags,
     GraphicsPipelineObjectCreateInfo*                      pInfo)
 {
-    if ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::FragmentShadingRateStateKhr) == false) &&
-        (pFsr != nullptr))
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::FragmentShadingRateStateKhr) == false)
     {
-        pInfo->immedInfo.vrsRateParams.flags.exposeVrsPixelsMask = 1;
+        if (pFsr != nullptr)
+        {
+            pInfo->immedInfo.vrsRateParams.flags.exposeVrsPixelsMask = 1;
 
-        pInfo->immedInfo.vrsRateParams.shadingRate =
-            VkToPalShadingSize(VkClampShadingRate(pFsr->fragmentSize, pDevice->GetMaxVrsShadingRate()));
+            pInfo->immedInfo.vrsRateParams.shadingRate =
+                VkToPalShadingSize(VkClampShadingRate(pFsr->fragmentSize, pDevice->GetMaxVrsShadingRate()));
 
-        pInfo->immedInfo.vrsRateParams.combinerState[
-            static_cast<uint32_t>(Pal::VrsCombinerStage::ProvokingVertex)] =
-            VkToPalShadingRateCombinerOp(pFsr->combinerOps[0]);
+            pInfo->immedInfo.vrsRateParams.combinerState[
+                static_cast<uint32_t>(Pal::VrsCombinerStage::ProvokingVertex)] =
+                VkToPalShadingRateCombinerOp(pFsr->combinerOps[0]);
 
-        pInfo->immedInfo.vrsRateParams.combinerState[static_cast<uint32_t>(
-            Pal::VrsCombinerStage::Primitive)] = VkToPalShadingRateCombinerOp(pFsr->combinerOps[0]);
+            pInfo->immedInfo.vrsRateParams.combinerState[static_cast<uint32_t>(
+                Pal::VrsCombinerStage::Primitive)] = VkToPalShadingRateCombinerOp(pFsr->combinerOps[0]);
 
-        pInfo->immedInfo.vrsRateParams.combinerState[
-            static_cast<uint32_t>(Pal::VrsCombinerStage::Image)] = VkToPalShadingRateCombinerOp(pFsr->combinerOps[1]);
+            pInfo->immedInfo.vrsRateParams.combinerState[
+                static_cast<uint32_t>(Pal::VrsCombinerStage::Image)] = VkToPalShadingRateCombinerOp(pFsr->combinerOps[1]);
 
-        pInfo->immedInfo.vrsRateParams.combinerState[
-            static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] = Pal::VrsCombiner::Passthrough;
+            pInfo->immedInfo.vrsRateParams.combinerState[
+                static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] = Pal::VrsCombiner::Passthrough;
+            pInfo->flags.fragmentShadingRateEnable = 1;
 
+        }
         pInfo->staticStateMask |=
             1ULL << static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr);
+    }
+    else
+    {
+        pInfo->flags.fragmentShadingRateEnable = 1;
     }
 }
 
@@ -1427,21 +1434,15 @@ static void BuildMultisampleState(
             pInfo->immedInfo.samplePattern.sampleCount = pMs->rasterizationSamples;
             pInfo->immedInfo.samplePattern.locations =
                 *Device::GetDefaultQuadSamplePattern(pMs->rasterizationSamples);
-
-            pInfo->staticStateMask |=
-                1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocations);
         }
     }
     else
     {
         pInfo->pipeline.cbState.alphaToCoverageEnable =
             (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::AlphaToCoverageEnable) == true);
-    }
-
-    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::SampleLocationsEnable) == false)
-    {
-        pInfo->staticStateMask |=
-            1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsEnable);
+        pInfo->flags.customSampleLocations =
+            IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::SampleLocationsEnable) &&
+            IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::SampleLocations);
     }
 }
 
@@ -1458,61 +1459,6 @@ static void BuildDepthStencilState(
         pInfo->immedInfo.depthStencilCreateInfo.depthWriteEnable  = (pDs->depthWriteEnable == VK_TRUE);
         pInfo->immedInfo.depthStencilCreateInfo.depthFunc         = VkToPalCompareFunc(pDs->depthCompareOp);
         pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable = (pDs->depthBoundsTestEnable == VK_TRUE);
-
-        if ((pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable ||
-             IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthBoundsTestEnable)) &&
-            (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthBounds) == false))
-        {
-            pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthBounds);
-        }
-
-        // According to Graham, we should program the stencil state at PSO bind time,
-        // regardless of whether this PSO enables\disables Stencil. This allows a second PSO
-        // to inherit the first PSO's settings
-        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilCompareMask) == false)
-        {
-            pInfo->staticStateMask |= 1ULL <<  static_cast<uint32_t>(DynamicStatesInternal::StencilCompareMask);
-        }
-
-        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilWriteMask) == false)
-        {
-            pInfo->staticStateMask |= 1ULL <<  static_cast<uint32_t>(DynamicStatesInternal::StencilWriteMask);
-        }
-
-        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilReference) == false)
-        {
-            pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::StencilReference);
-        }
-
-        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthWriteEnable) == false)
-        {
-            pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnable);
-        }
-
-        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthTestEnable) == false)
-        {
-            pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthTestEnable);
-        }
-
-        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthCompareOp) == false)
-        {
-            pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthCompareOp);
-        }
-
-        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthBoundsTestEnable) == false)
-        {
-            pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthBoundsTestEnable);
-        }
-
-        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilTestEnable) == false)
-        {
-            pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::StencilTestEnable);
-        }
-
-        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilOp) == false)
-        {
-            pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::StencilOp);
-        }
 
         pInfo->immedInfo.depthStencilCreateInfo.front.stencilFailOp      = VkToPalStencilOp(pDs->front.failOp);
         pInfo->immedInfo.depthStencilCreateInfo.front.stencilPassOp      = VkToPalStencilOp(pDs->front.passOp);
@@ -1536,6 +1482,58 @@ static void BuildDepthStencilState(
 
     pInfo->immedInfo.stencilRefMasks.frontOpValue = DefaultStencilOpValue;
     pInfo->immedInfo.stencilRefMasks.backOpValue  = DefaultStencilOpValue;
+
+    if ((pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable ||
+        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthBoundsTestEnable)) &&
+        (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthBounds) == false))
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthBounds);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilCompareMask) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::StencilCompareMask);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilWriteMask) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::StencilWriteMask);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilReference) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::StencilReference);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthWriteEnable) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnable);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthTestEnable) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthTestEnable);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthCompareOp) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthCompareOp);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthBoundsTestEnable) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthBoundsTestEnable);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilTestEnable) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::StencilTestEnable);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilOp) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::StencilOp);
+    }
 }
 
 // =====================================================================================================================
@@ -1977,6 +1975,16 @@ static void BuildFragmentOutputInterfaceState(
     if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::AlphaToCoverageEnable) == false)
     {
         pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::AlphaToCoverageEnable);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::SampleLocationsEnable) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsEnable);
+    }
+
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::SampleLocations) == false)
+    {
+        pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocations);
     }
 }
 
@@ -2891,6 +2899,11 @@ void GraphicsPipelineCommon::GenerateHashForFragmentOutputInterfaceState(
     if ((pCreateInfo->pColorBlendState != nullptr) && (colorAttachmentCount != 0))
     {
         GenerateHashFromColorBlendStateCreateInfo(*pCreateInfo->pColorBlendState, pElfHasher, pApiHasher);
+    }
+
+    if (pCreateInfo->pMultisampleState != nullptr)
+    {
+        GenerateHashFromMultisampleStateCreateInfo(*pCreateInfo->pMultisampleState, pElfHasher, pApiHasher);
     }
 }
 

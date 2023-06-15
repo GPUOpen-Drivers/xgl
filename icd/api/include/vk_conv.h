@@ -822,7 +822,7 @@ inline Pal::TexFilterMode VkToPalTexFilterMode(VkSamplerReductionMode filterMode
 // Converts Vulkan video profile level to PAL equivalent.
 inline uint32_t VkToPalVideoProfileLevel(uint32_t level)
 {
-    // Vulkan level value is created using VK_MAKE_VERSION
+    // Vulkan level value is created using VK_MAKE_API_VERSION
     uint32_t major = level >> 22;
     uint32_t minor = (level >> 12) & 0x3FF;
 
@@ -838,8 +838,8 @@ inline uint32_t PalToVkVideoProfileLevel(uint32_t level)
     uint32_t major = level / 10;
     uint32_t minor = level % 10;
 
-    // Vulkan level value is created using VK_MAKE_VERSION
-    return VK_MAKE_VERSION(major, minor, 0);
+    // Vulkan level value is created using VK_MAKE_API_VERSION
+    return VK_MAKE_API_VERSION(0, major, minor, 0);
 }
 
 // Helper structure for mapping Vulkan primitive topology to PAL primitive type + adjacency
@@ -1578,7 +1578,6 @@ template<typename ImageResolveType>
 void VkToPalImageResolveRegion(
     const ImageResolveType&     imageResolve,
     Pal::ChNumFormat            srcFormat,
-    Pal::ChNumFormat            dstFormat,
     Pal::ImageResolveRegion*    pPalRegions,
     uint32_t*                   pPalRegionIndex)
 {

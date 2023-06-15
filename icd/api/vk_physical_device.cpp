@@ -3003,14 +3003,14 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
     Surface* pSurface = Surface::ObjectFromHandle(surface);
     result = UnpackDisplayableSurface(pSurface, &displayableInfo);
 
+    if (displayHandle != 0)
+    {
+        VK_ASSERT(displayableInfo.displayHandle == 0);
+        displayableInfo.displayHandle = displayHandle;
+    }
+
     if (result == VK_SUCCESS)
     {
-        if (displayHandle != 0)
-        {
-            VK_ASSERT(displayableInfo.displayHandle == 0);
-            displayableInfo.displayHandle = displayHandle;
-        }
-
         Pal::SwapChainProperties swapChainProperties = {};
 #if defined(__unix__)
         if (displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
@@ -3028,30 +3028,27 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
 
         if (result == VK_SUCCESS)
         {
-            {
-                // From Vulkan spec, currentExtent of a valid window surface(Win32/Xlib/Xcb) must have both width
-                // and height greater than 0, or both of them 0.
-                pSurfaceCapabilities->currentExtent.width   =
-                    (swapChainProperties.currentExtent.height == 0) ? 0 : swapChainProperties.currentExtent.width;
-                pSurfaceCapabilities->currentExtent.height  =
-                    (swapChainProperties.currentExtent.width == 0) ? 0 : swapChainProperties.currentExtent.height;
-                pSurfaceCapabilities->minImageExtent.width  = swapChainProperties.minImageExtent.width;
-                pSurfaceCapabilities->minImageExtent.height = swapChainProperties.minImageExtent.height;
-                pSurfaceCapabilities->maxImageExtent.width  = swapChainProperties.maxImageExtent.width;
-                pSurfaceCapabilities->maxImageExtent.height = swapChainProperties.maxImageExtent.height;
-                pSurfaceCapabilities->maxImageArrayLayers   = swapChainProperties.maxImageArraySize;
-            }
+            // From Vulkan spec, currentExtent of a valid window surface(Win32/Xlib/Xcb) must have both width
+            // and height greater than 0, or both of them 0.
+            pSurfaceCapabilities->currentExtent.width   =
+                (swapChainProperties.currentExtent.height == 0) ? 0 : swapChainProperties.currentExtent.width;
+            pSurfaceCapabilities->currentExtent.height  =
+                (swapChainProperties.currentExtent.width == 0) ? 0 : swapChainProperties.currentExtent.height;
+            pSurfaceCapabilities->minImageExtent.width  = swapChainProperties.minImageExtent.width;
+            pSurfaceCapabilities->minImageExtent.height = swapChainProperties.minImageExtent.height;
+            pSurfaceCapabilities->maxImageExtent.width  = swapChainProperties.maxImageExtent.width;
+            pSurfaceCapabilities->maxImageExtent.height = swapChainProperties.maxImageExtent.height;
+            pSurfaceCapabilities->maxImageCount         = swapChainProperties.maxImageCount;
+            pSurfaceCapabilities->maxImageArrayLayers   = swapChainProperties.maxImageArraySize;
 
             pSurfaceCapabilities->minImageCount =
                 Util::Max<uint32_t>(GetRuntimeSettings().forceMinImageCount, swapChainProperties.minImageCount);
-
-            pSurfaceCapabilities->maxImageCount = swapChainProperties.maxImageCount;
 
             pSurfaceCapabilities->supportedCompositeAlpha =
                 PalToVkSupportedCompositeAlphaMode(swapChainProperties.compositeAlphaMode);
 
             pSurfaceCapabilities->supportedTransforms = swapChainProperties.supportedTransforms;
-            pSurfaceCapabilities->currentTransform = PalToVkSurfaceTransform(swapChainProperties.currentTransforms);
+            pSurfaceCapabilities->currentTransform    = PalToVkSurfaceTransform(swapChainProperties.currentTransforms);
 
             pSurfaceCapabilities->supportedUsageFlags = PalToVkImageUsageFlags(swapChainProperties.supportedUsageFlags);
 
@@ -3781,7 +3778,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     // If RGP tracing is enabled, report support for VK_EXT_debug_marker extension since RGP traces can trap
     // application-provided debug markers and visualize them in RGP traces.
-    if (pInstance->IsTracingSupportEnabled())
+    if (pInstance->IsTracingSupportEnabled() || pInstance->PalPlatform()->IsCrashAnalysisModeEnabled())
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEBUG_MARKER));
     }
@@ -3813,8 +3810,11 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_QUEUE_FAMILY_FOREIGN));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DESCRIPTOR_INDEXING));
 
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(VALVE_MUTABLE_DESCRIPTOR_TYPE));
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MUTABLE_DESCRIPTOR_TYPE));
+    if ((pPhysicalDevice == nullptr) || pPhysicalDevice->GetRuntimeSettings().supportMutableDescriptors)
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(VALVE_MUTABLE_DESCRIPTOR_TYPE));
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MUTABLE_DESCRIPTOR_TYPE));
+    }
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VARIABLE_POINTERS));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_ATTRIBUTE_DIVISOR));
@@ -3934,6 +3934,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DEFERRED_HOST_OPERATIONS));
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RAY_TRACING_MAINTENANCE1));
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PIPELINE_LIBRARY_GROUP_HANDLES));
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RAY_TRACING_POSITION_FETCH));
 
         }
     }
@@ -3944,6 +3945,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAP_MEMORY2));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_INTEGER_DOT_PRODUCT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COPY_COMMANDS2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW));
@@ -4001,8 +4003,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE3));
 
         if ((pPhysicalDevice == nullptr) ||
-            ((pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9) &&
-             (pPhysicalDevice->GetAppProfile() != AppProfile::Zink)))
+            (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))
         {
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_INPUT_DYNAMIC_STATE));
         }
@@ -4050,7 +4051,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         }
 
         // Don't report VK_AMD_negative_viewport_height in Vulkan 1.1, it must not be used.
-        if (pInstance->GetAPIVersion() < VK_MAKE_VERSION(1, 1, 0))
+        if (pInstance->GetAPIVersion() < VK_MAKE_API_VERSION( 0, 1, 1, 0))
         {
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_NEGATIVE_VIEWPORT_HEIGHT));
         }
@@ -4090,6 +4091,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEVICE_FAULT));
     }
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEVICE_ADDRESS_BINDING_REPORT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ATTACHMENT_FEEDBACK_LOOP_LAYOUT));
 
 #if defined(__unix__)
@@ -6615,6 +6617,21 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+#if VKI_RAY_TRACING
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->rayTracingPositionFetch = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+#endif
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NON_SEAMLESS_CUBE_MAP_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT*>(pHeader);
@@ -6642,6 +6659,18 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->dynamicRenderingUnusedAttachments = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT*>(pHeader);

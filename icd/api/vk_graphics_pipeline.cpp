@@ -378,17 +378,18 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
 
     if (result == VK_SUCCESS)
     {
+        bool sampleShadingEnable = pObjectCreateInfo->flags.sampleShadingEnable;
         for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
         {
             Pal::IDevice* pPalDevice = pDevice->PalDevice(deviceIdx);
 
             // Create the PAL MSAA state object
-            if ((palResult == Pal::Result::Success) && pObjectCreateInfo->flags.bindMsaaObject)
+            if (palResult == Pal::Result::Success)
             {
                 // Force full sample shading if the app didn't enable it, but the shader wants
                 // per-sample shading by the use of SampleId or similar features.
                 if ((pObjectCreateInfo->immedInfo.rasterizerDiscardEnable != VK_TRUE) &&
-                    (pObjectCreateInfo->flags.sampleShadingEnable == false))
+                    (sampleShadingEnable == false))
                 {
                     const auto& palProperties = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
                     const auto& info          = pPalPipeline[deviceIdx]->GetInfo();
@@ -401,16 +402,24 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
                         // supportVrsWithDsExports is not supported and SampleMask used in shader.
                         Force1x1ShaderRate(&pObjectCreateInfo->immedInfo.vrsRateParams);
                         pObjectCreateInfo->flags.force1x1ShaderRate = true;
-                        pObjectCreateInfo->immedInfo.msaaCreateInfo.pixelShaderSamples  =
+                        if (pObjectCreateInfo->flags.bindMsaaObject == false)
+                        {
+                            pObjectCreateInfo->flags.sampleShadingEnable = true;
+                            pObjectCreateInfo->immedInfo.minSampleShading = 1.0f;
+                        }
+                        pObjectCreateInfo->immedInfo.msaaCreateInfo.pixelShaderSamples =
                             pObjectCreateInfo->immedInfo.msaaCreateInfo.coverageSamples;
                     }
                 }
 
-                palResult = pRSCache->CreateMsaaState(
-                    pObjectCreateInfo->immedInfo.msaaCreateInfo,
-                    pAllocator,
-                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
-                    pPalMsaa);
+                if (pObjectCreateInfo->flags.bindMsaaObject)
+                {
+                    palResult = pRSCache->CreateMsaaState(
+                        pObjectCreateInfo->immedInfo.msaaCreateInfo,
+                        pAllocator,
+                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
+                        pPalMsaa);
+                }
             }
 
             // Create the PAL color blend state object
@@ -635,6 +644,7 @@ VkResult GraphicsPipeline::Create(
         objectCreateInfo.flags.hasRayTracing = binaryMetadata.rayQueryUsed;
 #endif
         objectCreateInfo.flags.isPointSizeUsed = binaryMetadata.pointSizeUsed;
+        objectCreateInfo.flags.shadingRateUsedInShader = binaryMetadata.shadingRateUsedInShader;
         objectCreateInfo.flags.viewIndexFromDeviceIndex = Util::TestAnyFlagSet(pCreateInfo->flags,
             VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT);
 
@@ -1188,7 +1198,6 @@ GraphicsPipeline::GraphicsPipeline(
 
     if (ContainsDynamicState(DynamicStatesInternal::DepthClampEnable))
     {
-        m_info.graphicsShaderInfos.dynamicState.enable.depthClipMode = 1;
         m_info.graphicsShaderInfos.dynamicState.enable.depthClampMode = 1;
     }
 
@@ -1273,7 +1282,7 @@ void GraphicsPipeline::CreateStaticState()
         pStaticTokens->lineStippleState = pCache->CreateLineStipple(m_info.lineStippleParams);
     }
 
-    if (ContainsStaticState(DynamicStatesInternal::FragmentShadingRateStateKhr))
+    if (ContainsStaticState(DynamicStatesInternal::FragmentShadingRateStateKhr) && m_flags.fragmentShadingRateEnable)
     {
         pStaticTokens->fragmentShadingRate =
             pCache->CreateFragmentShadingRate(m_info.vrsRateParams);
@@ -1589,7 +1598,6 @@ void GraphicsPipeline::BindToCmdBuffer(
         pRenderState->colorBlendCreateInfo = m_info.blendCreateInfo;
     }
 
-    pRenderState->minSampleShading = m_info.minSampleShading;
     if (m_flags.bindMsaaObject == false)
     {
         if (ContainsStaticState(DynamicStatesInternal::SampleMask))
@@ -1652,11 +1660,28 @@ void GraphicsPipeline::BindToCmdBuffer(
                 }
             }
         }
+        else
+        {
+            uint32_t pixelShaderSamples = 1;
+            if (m_info.minSampleShading > 0.0f)
+            {
+                pixelShaderSamples = Pow2Pad(static_cast<uint32_t>(ceil(
+                    pRenderState->msaaCreateInfo.coverageSamples * m_info.minSampleShading)));
+            }
+
+            if (pRenderState->msaaCreateInfo.pixelShaderSamples != pixelShaderSamples)
+            {
+                pRenderState->msaaCreateInfo.pixelShaderSamples = pixelShaderSamples;
+                pRenderState->dirtyGraphics.msaa = 1;
+            }
+        }
     }
     else
     {
         pRenderState->msaaCreateInfo = m_info.msaaCreateInfo;
     }
+
+    pRenderState->minSampleShading = m_info.minSampleShading;
 
     if (m_flags.bindTriangleRasterState == false)
     {
@@ -1939,13 +1964,29 @@ void GraphicsPipeline::BindToCmdBuffer(
         }
 
         // Only set the Fragment Shading Rate if the dynamic state is not set.
-        if (ContainsStaticState(DynamicStatesInternal::FragmentShadingRateStateKhr) &&
-            CmdBuffer::IsStaticStateDifferent(oldTokens.fragmentShadingRate, newTokens.fragmentShadingRate))
+        if (m_flags.fragmentShadingRateEnable)
         {
-            pPalCmdBuf->CmdSetPerDrawVrsRate(m_info.vrsRateParams);
+            if (ContainsStaticState(DynamicStatesInternal::FragmentShadingRateStateKhr))
+            {
+                if (CmdBuffer::IsStaticStateDifferent(oldTokens.fragmentShadingRate, newTokens.fragmentShadingRate))
+                {
+                    pPalCmdBuf->CmdSetPerDrawVrsRate(m_info.vrsRateParams);
 
-            pRenderState->staticTokens.fragmentShadingRate = newTokens.fragmentShadingRate;
-            pRenderState->dirtyGraphics.vrs = 0;
+                    pRenderState->staticTokens.fragmentShadingRate = newTokens.fragmentShadingRate;
+                    pRenderState->dirtyGraphics.vrs = 0;
+                }
+            }
+            else
+            {
+                if (m_info.minSampleShading > 0.0)
+                {
+                    if ((pRenderState->vrsRate.shadingRate == Pal::VrsShadingRate::_1x1) &&
+                        (m_flags.shadingRateUsedInShader == false))
+                    {
+                        pRenderState->dirtyGraphics.vrs = 1;
+                    }
+                }
+            }
         }
 
         if ((useOptimizedPipeline == false) && (m_internalBufferInfo.dataSize > 0))

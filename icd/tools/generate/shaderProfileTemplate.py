@@ -1486,6 +1486,37 @@ SHADER_ACTION = {
         "jsonReaderTemplate": SHADER_CREATE_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
+    "disableFMA": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "disableFMA",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "disableFMA",
+                "dataType": "uint32_t",
+                "defaultValue": "",
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
+        ],
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+
     "useSiScheduler": {
         "type": [bool],
         "jsonReadable": True,
@@ -2611,6 +2642,9 @@ BuildTypesTemplate = {
     "llpc": "ICD_BUILD_LLPC",
 #if VKI_BUILD_NAVI31
     "Navi31": "VKI_BUILD_NAVI31",
+#endif
+#if VKI_BUILD_NAVI33
+    "Navi33": "VKI_BUILD_NAVI33",
 #endif
 #if VKI_BUILD_GFX11
     "gfxIp11_0": "VKI_BUILD_GFX11",

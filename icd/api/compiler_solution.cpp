@@ -211,6 +211,10 @@ void CompilerSolution::UpdateRayTracingFunctionNames(
         SetRayTracingFunctionName(
             entryFuncTable.intrinsic.pGetWorldToObjectTransform,
             pTable->pFunc[Vkgc::RT_ENTRY_WORLD_TO_OBJECT_TRANSFORM]);
+        SetRayTracingFunctionName(entryFuncTable.intrinsic.pFetchTrianglePositionFromNodePointer,
+                                  pTable->pFunc[Vkgc::RT_ENTRY_FETCH_HIT_TRIANGLE_FROM_NODE_POINTER]);
+        SetRayTracingFunctionName(entryFuncTable.intrinsic.pFetchTrianglePositionFromRayQuery,
+                                  pTable->pFunc[Vkgc::RT_ENTRY_FETCH_HIT_TRIANGLE_FROM_RAY_QUERY]);
     }
 }
 

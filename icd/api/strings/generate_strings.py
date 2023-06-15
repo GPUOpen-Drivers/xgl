@@ -136,7 +136,7 @@ def generate_entry_point_condition(f, name, cond):
     cond = core.sub(r'true', cond)
 
     core = re.compile(r'@CORE\( ( [^\.]* ) \. ( [^\)]* ) \)', re.VERBOSE)
-    cond = core.sub(r'CheckAPIVersion(VK_MAKE_VERSION(\1,\2,0))', cond)
+    cond = core.sub(r'CheckAPIVersion(VK_MAKE_API_VERSION(0,\1,\2,0))', cond)
 
     iext = re.compile(r'@IEXT\( ( [^\)]* ) \)', re.VERBOSE)
     cond = iext.sub(r'CheckInstanceExtension(InstanceExtensions::ExtensionId::\1)', cond)
@@ -163,14 +163,14 @@ def get_compile_condition(cond):
     return cond
 
 def make_version(version):
-    """Create VK_MAKE_VERSION invocation"""
+    """Create VK_MAKE_API_VERSION invocation"""
     tokens = version.split(".", 1)
-    return f"VK_MAKE_VERSION({tokens[0]}, {tokens[1]}, 0)"
+    return f"VK_MAKE_API_VERSION(0,{tokens[0]}, {tokens[1]}, 0)"
 
 def generate_string_file_pass(string_file_prefix, header_file_prefix, gentype):
     """Generate a single header or implementation file"""
     string_file = f"{string_file_prefix}.txt"
-    header_file = os.path.join(OUTPUT_DIR, PREFIX, f"g_{header_file_prefix}_{gentype}.h")
+    header_file = os.path.join(OUTPUT_DIR, f"g_{header_file_prefix}_{gentype}.h")
 
     print(f"Generating {os.path.basename(header_file)} from {string_file} ...")
 
@@ -223,7 +223,7 @@ def generate_func_table(entry_file, header_file):
     with open(entry_file) as f:
         lines = f.readlines()
 
-    header_path = os.path.join(OUTPUT_DIR, PREFIX, header_file)
+    header_path = os.path.join(OUTPUT_DIR, header_file)
     with open(header_path, 'w') as header:
         entry_point_members = ''
         prev_ext = ''
@@ -284,7 +284,6 @@ get_opt()
 os.chdir(WORK_DIR)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-PREFIX = ''
 generate_string_file("extensions")
 generate_string_file("entry_points")
 generate_func_table("entry_points.txt", "g_func_table.h")

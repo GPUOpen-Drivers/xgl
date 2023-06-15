@@ -106,25 +106,27 @@ union GraphicsPipelineObjectFlags
 {
     struct
     {
-        uint32_t   bresenhamEnable          : 1;
-        uint32_t   bindDepthStencilObject   : 1;
-        uint32_t   bindTriangleRasterState  : 1;
-        uint32_t   bindStencilRefMasks      : 1;
-        uint32_t   bindInputAssemblyState   : 1;
-        uint32_t   customMultiSampleState   : 1;
-        uint32_t   customSampleLocations    : 1;
-        uint32_t   force1x1ShaderRate       : 1;
-        uint32_t   sampleShadingEnable      : 1;
-        uint32_t   isPointSizeUsed          : 1;
-        uint32_t   bindColorBlendObject     : 1;
-        uint32_t   bindMsaaObject           : 1;
-        uint32_t   viewIndexFromDeviceIndex : 1;
-        uint32_t   perpLineEndCapsEnable    : 1;
+        uint32_t   bresenhamEnable           : 1;
+        uint32_t   bindDepthStencilObject    : 1;
+        uint32_t   bindTriangleRasterState   : 1;
+        uint32_t   bindStencilRefMasks       : 1;
+        uint32_t   bindInputAssemblyState    : 1;
+        uint32_t   customMultiSampleState    : 1;
+        uint32_t   customSampleLocations     : 1;
+        uint32_t   force1x1ShaderRate        : 1;
+        uint32_t   sampleShadingEnable       : 1;
+        uint32_t   isPointSizeUsed           : 1;
+        uint32_t   bindColorBlendObject      : 1;
+        uint32_t   bindMsaaObject            : 1;
+        uint32_t   viewIndexFromDeviceIndex  : 1;
+        uint32_t   perpLineEndCapsEnable     : 1;
+        uint32_t   shadingRateUsedInShader   : 1;
+        uint32_t   fragmentShadingRateEnable : 1;
 #if VKI_RAY_TRACING
-        uint32_t   hasRayTracing            : 1;
-        uint32_t   reserved                 : 17;
+        uint32_t   hasRayTracing             : 1;
+        uint32_t   reserved                  : 15;
 #else
-        uint32_t   reserved                 : 18;
+        uint32_t   reserved                  : 16;
 #endif
     };
     uint32_t value;

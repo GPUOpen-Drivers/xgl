@@ -366,11 +366,12 @@ Pal::Result ImageView::BuildDepthStencilView(
 {
     Pal::DepthStencilViewCreateInfo depthInfo = {};
 
-    depthInfo.flags.imageVaLocked = 1;
-    depthInfo.pImage              = pPalImage;
-    depthInfo.mipLevel            = subresRange.startSubres.mipLevel;
-    depthInfo.baseArraySlice      = subresRange.startSubres.arraySlice;
-    depthInfo.arraySize           = subresRange.numSlices;
+    depthInfo.flags.imageVaLocked           = 1;
+    depthInfo.flags.lowZplanePolyOffsetBits = 1;
+    depthInfo.pImage                        = pPalImage;
+    depthInfo.mipLevel                      = subresRange.startSubres.mipLevel;
+    depthInfo.baseArraySlice                = subresRange.startSubres.arraySlice;
+    depthInfo.arraySize                     = subresRange.numSlices;
 
     // Bypass Mall cache if no alloc policy is set for depth stencil resource
     // Global resource settings always takes precedence over everything else
@@ -400,11 +401,6 @@ Pal::Result ImageView::BuildDepthStencilView(
     {
         depthInfo.baseArraySlice = zRange.offset;
         depthInfo.arraySize      = zRange.extent;
-    }
-
-    if (pDevice->GetAppProfile() == AppProfile::AngleEngine)
-    {
-        depthInfo.flags.lowZplanePolyOffsetBits = 1;
     }
 
     Pal::Result result = pPalDevice->CreateDepthStencilView(

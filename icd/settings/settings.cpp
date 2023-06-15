@@ -292,8 +292,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
             }
 
-            if ((appProfile == AppProfile::DoomEternal) ||
-                (appProfile == AppProfile::SniperElite5)
+            if ((appProfile == AppProfile::DoomEternal)  ||
+                (appProfile == AppProfile::SniperElite5) ||
+                (appProfile == AppProfile::CSGO)
                 )
             {
                 m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc;
@@ -458,8 +459,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::WorldWarZ)
         {
-            m_settings.robustBufferAccess = FeatureForceEnable;
-
             // This application oversubscribes on 4 GB cards during ALT+TAB
             m_settings.memoryDeviceOverallocationAllowed = true;
 
@@ -1217,6 +1216,14 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                     m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
                 }
 #endif
+#if VKI_BUILD_NAVI33
+                if (pInfo->revision == Pal::AsicRevision::Navi33)
+                {
+                    {
+                        m_settings.forceCsThreadIdSwizzling = true;
+                    }
+                }
+#endif
             }
 #endif
         }
@@ -1232,6 +1239,15 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.forceImageSharingMode =
                     ForceImageSharingMode::ForceImageSharingModeExclusiveForNonColorAttachments;
+            }
+        }
+
+        if (appProfile == AppProfile::XPlane)
+        {
+
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.disableHtileBasedMsaaRead = true;
             }
         }
 
@@ -1274,6 +1290,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (appProfile == AppProfile::Zink)
         {
             m_settings.padVertexBuffers = true;
+        }
+
+        if (appProfile == AppProfile::SpidermanRemastered)
+        {
+            m_settings.supportMutableDescriptors = false;
         }
 
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);

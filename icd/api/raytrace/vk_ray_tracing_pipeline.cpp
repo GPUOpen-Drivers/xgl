@@ -924,6 +924,7 @@ VkResult RayTracingPipeline::CreateImpl(
                 // won't be created.  Otherwise, like if gl_DeviceIndex is used, they will be.
                 if (pBinaries[0].pCode != nullptr)
                 {
+                    localPipelineInfo.pipeline.flags.clientInternal = false;
                     localPipelineInfo.pipeline.pipelineBinarySize   = pBinaries[0].codeSize;
                     localPipelineInfo.pipeline.pPipelineBinary      = pBinaries[0].pCode;
                     localPipelineInfo.pipeline.maxFunctionCallDepth = pipelineBinary[deviceIdx].maxFunctionCallDepth;

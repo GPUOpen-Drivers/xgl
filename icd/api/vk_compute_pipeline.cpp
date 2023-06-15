@@ -34,6 +34,8 @@
 #include "include/vk_memory.h"
 
 #include "palPipeline.h"
+#include "palPipelineAbi.h"
+#include "palPipelineAbiReader.h"
 #include "palMetroHash.h"
 #include "palVectorImpl.h"
 
@@ -103,6 +105,37 @@ void ComputePipeline::ConvertComputePipelineInfo(
 }
 
 // =====================================================================================================================
+void ComputePipeline::FetchPalMetadata(
+    PalAllocator* pAllocator,
+    const void*   pBinary,
+    uint32_t*     pOrigThreadgroupDims)
+{
+    Util::Abi::PipelineAbiReader abiReader(pAllocator, pBinary);
+
+    Util::Result result = abiReader.Init();
+    if (result == Util::Result::Success)
+    {
+        Util::MsgPackReader              metadataReader;
+        Util::PalAbi::CodeObjectMetadata metadata;
+        result = abiReader.GetMetadata(&metadataReader, &metadata);
+
+        if (result == Util::Result::Success)
+        {
+            const auto& csStage = metadata.pipeline.hardwareStage[static_cast<uint32_t>(Util::Abi::HardwareStage::Cs)];
+
+            const uint32_t* pThreadgroupDims = (csStage.origThreadgroupDimensions[0] != 0) ?
+                csStage.origThreadgroupDimensions : csStage.threadgroupDimensions;
+
+            pOrigThreadgroupDims[0] = pThreadgroupDims[0];
+            pOrigThreadgroupDims[1] = pThreadgroupDims[1];
+            pOrigThreadgroupDims[2] = pThreadgroupDims[2];
+        }
+    }
+
+    VK_ASSERT(result == Util::Result::Success);
+}
+
+// =====================================================================================================================
 ComputePipeline::ComputePipeline(
     Device* const                        pDevice,
     Pal::IPipeline**                     pPalPipeline,
@@ -113,6 +146,7 @@ ComputePipeline::ComputePipeline(
     bool                                 hasRayTracing,
     uint32_t                             dispatchRaysUserDataOffset,
 #endif
+    const uint32_t*                      pOrigThreadgroupDims,
     uint64_t                             staticStateMask,
     uint64_t                             apiHash)
     :
@@ -133,6 +167,10 @@ ComputePipeline::ComputePipeline(
         dispatchRaysUserDataOffset,
 #endif
         apiHash);
+
+    m_origThreadgroupDims[0] = pOrigThreadgroupDims[0];
+    m_origThreadgroupDims[1] = pOrigThreadgroupDims[1];
+    m_origThreadgroupDims[2] = pOrigThreadgroupDims[2];
 }
 
 // =====================================================================================================================
@@ -320,8 +358,9 @@ VkResult ComputePipeline::Create(
 
     if (result == VK_SUCCESS)
     {
-        localPipelineInfo.pipeline.pipelineBinarySize = pipelineBinarySizes[DefaultDeviceIndex];
-        localPipelineInfo.pipeline.pPipelineBinary    = pPipelineBinaries[DefaultDeviceIndex];
+        localPipelineInfo.pipeline.flags.clientInternal = false;
+        localPipelineInfo.pipeline.pipelineBinarySize   = pipelineBinarySizes[DefaultDeviceIndex];
+        localPipelineInfo.pipeline.pPipelineBinary      = pPipelineBinaries[DefaultDeviceIndex];
 
         pipelineSize =
             pDevice->PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(localPipelineInfo.pipeline, &palResult);
@@ -428,6 +467,11 @@ VkResult ComputePipeline::Create(
         uint32_t dispatchRaysUserDataOffset = localPipelineInfo.pLayout->GetDispatchRaysUserData();
 #endif
 
+        uint32_t origThreadgroupDims[3];
+        FetchPalMetadata(pDevice->VkInstance()->Allocator(),
+                         pPipelineBinaries[DefaultDeviceIndex],
+                         origThreadgroupDims);
+
         // On success, wrap it up in a Vulkan object and return.
         VK_PLACEMENT_NEW(pSystemMem) ComputePipeline(pDevice,
             pPalPipeline,
@@ -438,6 +482,7 @@ VkResult ComputePipeline::Create(
             hasRayTracing,
             dispatchRaysUserDataOffset,
 #endif
+            origThreadgroupDims,
             localPipelineInfo.staticStateMask,
             apiPsoHash);
 

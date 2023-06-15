@@ -204,6 +204,8 @@ public:
     bool ViewIndexFromDeviceIndex() const
         { return m_flags.viewIndexFromDeviceIndex; }
 
+    GraphicsPipelineObjectFlags GetPipelineFlags() const
+        { return m_flags; }
 protected:
     GraphicsPipeline(
         Device* const                          pDevice,

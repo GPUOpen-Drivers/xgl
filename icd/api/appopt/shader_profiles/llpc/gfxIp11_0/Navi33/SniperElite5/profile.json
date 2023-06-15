@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x1c444eac602c4bb7 da09bb36370881e7"
+        }
+      },
+      "action": {
+        "ps": {
+          "allowReZ": 1,
+          "waveSize": 32
+        }
+      }
+    }
+  ]
+}

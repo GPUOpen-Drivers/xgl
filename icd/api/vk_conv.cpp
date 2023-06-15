@@ -899,7 +899,6 @@ const char* VkResultName(
     case VkResult::VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT:
         errName = "VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT";
         break;
-
     default:
         VK_NOT_IMPLEMENTED;
         errName = "??";
@@ -1037,7 +1036,6 @@ VkResult PalToVkError(
     case Pal::Result::ErrorImageFmaskUnavailable:
         // Fmask based reads will be handled by the API layer thus this error should
         // never get to the client, fall through to the default path.
-        // There's no private screen support yet. Fall through to the default path.
     default:
         VK_NOT_IMPLEMENTED;
         // VK_ERROR_UNKNOWN is an error that can be returned by any error returning API function

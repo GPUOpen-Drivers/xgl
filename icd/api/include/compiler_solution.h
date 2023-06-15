@@ -125,6 +125,8 @@ struct PipelineMetadata
     bool                       rayQueryUsed;
 #endif
     bool                       pointSizeUsed;
+    bool                       needsSampleInfo;
+    bool                       shadingRateUsedInShader;
     VbBindingInfo              vbInfo;
     bool                       enableEarlyCompile;
     bool                       enableUberFetchShader;

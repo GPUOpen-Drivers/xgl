@@ -109,7 +109,7 @@ private:
     Device*              m_pDevice;
     CmdBufferMap         m_cmdBufferMap; // Local command buffer cache
     const DispatchTable* m_pNextLayer;   // Pointer to next layer's dispatch table
-    uint32_t             m_enabledMarkers;
+    uint32_t             m_enabledMarkers; // RGP Markers
 };
 
 // =====================================================================================================================

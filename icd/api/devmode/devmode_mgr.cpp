@@ -335,7 +335,8 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
     m_useStaticVmid(false),
     m_staticVmidActive(false),
     m_perfCounterIds(pInstance->Allocator()),
-    m_pipelineCaches(pInstance->Allocator())
+    m_pipelineCaches(pInstance->Allocator()),
+    m_crashAnalysisEnabled(false)
 {
     memset(&m_trace, 0, sizeof(m_trace));
 }
@@ -426,6 +427,8 @@ void DevModeMgr::Finalize(
 
     // Finalize the devmode manager
     m_pDevDriverServer->Finalize();
+
+    m_crashAnalysisEnabled = m_pInstance->PalPlatform()->IsCrashAnalysisModeEnabled();
 
     m_finalized      = true;
 }

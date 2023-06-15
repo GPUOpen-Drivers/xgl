@@ -2079,7 +2079,8 @@
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": true
+        "Default": true,
+        "AndroidDefault": false
       },
       "Type": "bool",
       "VariableName": "enableOnDiskInternalPipelineCaches",
@@ -2340,6 +2341,42 @@
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "DumpPipelineCompileCacheMatrix"
+    },
+    {
+      "Name": "LlpcRaytracingMode",
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Description": "Control Legacy/Refactored raytracing and Continuations",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "RaytracingNone",
+            "Value": 0,
+            "Description": "No Raytracing compiling path."
+          },
+          {
+            "Name": "RaytracingLegacy",
+            "Value": 1,
+            "Description": "Legacy Raytracing."
+          },
+          {
+            "Name": "RaytracingRefactored",
+            "Value": 2,
+            "Description": "Refactored Raytracing path"
+          }
+        ],
+        "Name": "LlpcRaytracingMode"
+      },
+      "Defaults": {
+        "Default": "RaytracingLegacy"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
     },
     {
       "Description": "Mask for enabling SPIR-V pass for internal ray tracing pipelines. The bit is corresponding to the enum defined in gpurt header.",
@@ -5786,6 +5823,30 @@
       "Name": "ForceUMA"
     },
     {
+      "Description": "Enable allocation and suballocation tracking as if VK_EXT_device_memory_report is enabled, minus calling any callbacks (unless the extension is actually enabled by the application and it registers callbacks).",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "SimulateExtDeviceMemoryReport"
+    },
+    {
+      "Description": "Enable bind tracking as if VK_EXT_device_address_binding_report is enabled, minus calling any callbacks (unless the extension is actually enabled by the application and it registers callbacks).",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "SimulateExtDeviceAddressBindingReport"
+    },
+    {
       "Description": "Forces a particular AppProfile value.  The profile selected is the value of ForceAppProfileValue. ",
       "Tags": [
         "Optimization"
@@ -8242,6 +8303,18 @@
       "Type": "bool",
       "Scope": "Driver",
       "Name": "DebugPrintfToStdout"
+    },
+    {
+      "Description": "Support mutable descriptors",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "SupportMutableDescriptors"
     }
   ]
 }

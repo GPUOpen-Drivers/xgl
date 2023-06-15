@@ -518,6 +518,9 @@ VkResult GraphicsPipelineLibrary::Create(
             tempModuleStates);
     }
 
+    // Cleanup temp memory in binaryCreateInfo.
+    pDevice->GetCompiler(DefaultDeviceIndex)->FreeGraphicsPipelineCreateInfo(&binaryCreateInfo, false);
+
     if (result == VK_SUCCESS)
     {
         // 7. Build pipeline object create info
