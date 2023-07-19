@@ -25,6 +25,7 @@
 #include "cache_creator.h"
 #include "cache_info.h"
 #include "include/binary_cache_serialization.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/MD5.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Testing/Support/Error.h"
