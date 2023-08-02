@@ -61,7 +61,7 @@ namespace vk
 
 class CmdBuffer;
 class Device;
-class DispatchableImage;
+class ApiImage;
 class PeerImages;
 struct RPImageLayout;
 class SwapChain;
@@ -155,6 +155,12 @@ public:
         const VkDeviceImageMemoryRequirementsKHR* pInfo,
         uint32_t*                                 pSparseMemoryRequirementCount,
         VkSparseImageMemoryRequirements2*         pSparseMemoryRequirements);
+
+    static void CalculateSubresourceLayout(
+        Device*                   pDevice,
+        const VkImageCreateInfo*  pCreateInfo,
+        const VkImageSubresource* pSubresource,
+        VkSubresourceLayout*      pSubresourceLayout);
 
     VK_FORCEINLINE Pal::IImage* PalImage(int32_t idx) const
        { return m_perGpu[idx].pPalImage; }
@@ -302,9 +308,13 @@ private:
 
     struct ImageExtStructs
     {
-        const VkExternalMemoryImageCreateInfo*  pExternalMemoryImageCreateInfo;
-        const VkImageFormatListCreateInfo*      pImageFormatListCreateInfo;
-        const VkImageStencilUsageCreateInfo*    pImageStencilUsageCreateInfo;
+        const VkExternalMemoryImageCreateInfo*               pExternalMemoryImageCreateInfo;
+        const VkImageFormatListCreateInfo*                   pImageFormatListCreateInfo;
+        const VkImageStencilUsageCreateInfo*                 pImageStencilUsageCreateInfo;
+#if defined(__unix__)
+        const VkImageDrmFormatModifierListCreateInfoEXT*     pModifierListCreateInfo;
+        const VkImageDrmFormatModifierExplicitCreateInfoEXT* pModifierExplicitCreateInfo;
+#endif
     };
 
     union ExternalMemoryFlags
@@ -398,6 +408,32 @@ private:
         const VkImageCreateInfo* pCreateInfo,
         VkMemoryRequirements2*   pMemoryRequirements);
 
+#if defined(__unix__)
+    static VkResult CreateImageWithModifierList(
+        Device*                      pDevice,
+        const VkAllocationCallbacks* pAllocator,
+        VkFormat                     format,
+        const ImageExtStructs&       extStructs,
+        void*                        pPalImgAddr,
+        uint32                       deviceIdx,
+        Pal::ImageCreateInfo*        pPalCreateInfo,
+        Pal::IImage**                pPalImage);
+
+    static uint32 GetPreferableModifier(
+        Device*                      pDevice,
+        const VkAllocationCallbacks* pAllocator,
+        VkFormat                     format,
+        uint32                       modifierCount,
+        const uint64*                pModifiers,
+        Pal::ImageCreateInfo*        pPalCreateInfo);
+
+    static VkResult ValidateModifierInfo(
+        Device*                pDevice,
+        VkFormat               format,
+        const ImageExtStructs& extStructs,
+        Pal::ImageCreateInfo*  pPalCreateInfo);
+#endif
+
     uint32_t                m_mipLevels;          // This is the amount of mip levels contained in the image.
                                                   // We need this to support VK_WHOLE_SIZE during
                                                   // memory barrier creation
@@ -480,6 +516,13 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements2(
     const VkImageSparseMemoryRequirementsInfo2* pInfo,
     uint32_t*                                   pSparseMemoryRequirementCount,
     VkSparseImageMemoryRequirements2*           pSparseMemoryRequirements);
+
+#if defined(__unix__)
+VKAPI_ATTR VkResult VKAPI_CALL vkGetImageDrmFormatModifierPropertiesEXT(
+    VkDevice                                    device,
+    VkImage                                     image,
+    VkImageDrmFormatModifierPropertiesEXT*      pProperties);
+#endif
 
 } // namespace entry
 

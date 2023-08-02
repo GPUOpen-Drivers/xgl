@@ -92,7 +92,8 @@ public:
         uint64_t                         objectHandle,
         VkObjectType                     objectType,
         uint64_t                         heapIndex,
-        bool                             isBuddyAllocated);
+        bool                             isBuddyAllocated
+        );
 
     void VulkanAllocationFailedEvent(
         const Device*                    pDevice,
@@ -135,6 +136,8 @@ private:
         VkObjectType                  objectType;
         bool                          reportedToDeviceMemoryReport;
         bool                          isBuddyAllocated;
+        uint64_t                      memoryObjectId;
+        bool                          isExternal;
     };
 
     struct SubAllocationData
@@ -269,9 +272,6 @@ private:
         const Interval&                 intervalOne,
         const Interval&                 intervalTwo) const;
 
-    // Generates an ID, unique within the instance, for a GPU memory object
-    uint64_t GenerateMemoryObjectId() { return Util::AtomicIncrement64(&m_memoryObjectId); }
-
     Instance* m_pInstance;
 
     DeviceMemoryReportCallbacks m_callbacks;
@@ -315,7 +315,6 @@ private:
     DeviceHashSet                 m_deviceHashSet;
     Util::RWLock                  m_deviceHashSetLock;
 
-    volatile uint64_t m_memoryObjectId;             // Seed for memoryObjectId generation
     volatile uint32_t m_deviceCount;                // The number of devices with extensions that require memory events
 };
 

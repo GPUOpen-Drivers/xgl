@@ -150,6 +150,7 @@ public:
     VkResult CreateImpl(
         PipelineCache*                           pPipelineCache,
         const VkRayTracingPipelineCreateInfoKHR* pCreateInfo,
+        PipelineCreateFlags                      flags,
         const VkAllocationCallbacks*             pAllocator,
         DeferredWorkload*                        pDeferredWorkload);
 
@@ -312,6 +313,7 @@ protected:
 
     static void BuildApiHash(
         const VkRayTracingPipelineCreateInfoKHR* pCreateInfo,
+        PipelineCreateFlags                      flags,
         Util::MetroHash::Hash*                   pElfHash,
         uint64_t*                                pApiHash);
 

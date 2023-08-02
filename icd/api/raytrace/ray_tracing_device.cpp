@@ -368,7 +368,7 @@ VkResult RayTracingDevice::InitAccelStructTracker()
                 pTracker->pMem,
                 deviceMask,
                 VK_OBJECT_TYPE_DEVICE,
-                DispatchableDevice::IntValueFromHandle(DispatchableDevice::FromObject(m_pDevice))) == VK_SUCCESS) ?
+                ApiDevice::IntValueFromHandle(ApiDevice::FromObject(m_pDevice))) == VK_SUCCESS) ?
                     Pal::Result::Success : Pal::Result::ErrorUnknown;
 
             if (result != Pal::Result::Success)
@@ -635,7 +635,7 @@ void RayTracingDevice::TraceIndirectDispatch(
     const VkStridedDeviceAddressRegionKHR* pMissSbt,
     const VkStridedDeviceAddressRegionKHR* pHitSbt,
     Pal::gpusize*                          pCounterMetadataVa,
-    GpuRt::InitExecuteIndirectConstants*   pConstants)
+    void*                                  pConstants)
 {
     if (m_pGpuRtDevice[deviceIdx]->RayHistoryTraceActive())
     {
@@ -1025,7 +1025,7 @@ Pal::Result RayTracingDevice::ClientAllocateGpuMemory(
             pInternalMemory,
             deviceMask,
             VK_OBJECT_TYPE_DEVICE,
-            DispatchableDevice::IntValueFromHandle(DispatchableDevice::FromObject(pDevice))) == VK_SUCCESS) ?
+            ApiDevice::IntValueFromHandle(ApiDevice::FromObject(pDevice))) == VK_SUCCESS) ?
                 Pal::Result::Success : Pal::Result::ErrorUnknown;
     }
 

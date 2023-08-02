@@ -81,7 +81,7 @@ namespace vk
 // Forward declare Vulkan classes used in this file
 class ComputePipeline;
 class Device;
-class DispatchableCmdBuffer;
+class ApiCmdBuffer;
 class Framebuffer;
 class GraphicsPipeline;
 class Image;
@@ -122,6 +122,15 @@ union PipelineDynamicBindInfo
     Pal::DynamicGraphicsShaderInfos gfx;
 };
 
+// Internal buffer for dynamic vertex input
+struct DynamicVertexInputInternalData
+{
+    Pal::gpusize gpuAddress[MaxPalDevices];
+};
+
+typedef Util::HashMap<uint64_t, DynamicVertexInputInternalData, PalAllocator, Util::JenkinsHashFunc>
+    UberFetchShaderInternalDataMap;
+
 // This structure contains information about currently written user data entries within the command buffer
 struct PipelineBindState
 {
@@ -139,9 +148,9 @@ struct PipelineBindState
     VkDescriptorSet pushDescriptorSet;
     void*           pPushDescriptorSetMemory;
     size_t          pushDescriptorSetMaxSize;
-    // Cached copy of the uber fetch shader internal memory
-    void*           pUberFetchShaderInternalData;
-    size_t          uberFetchShaderInternalDataSize;
+
+    // Internal data of dynamic vertex input
+    DynamicVertexInputInternalData* pVertexInputInternalData;
     // Whether dynamic vertex input is enabled in current pipeline
     bool            hasDynamicVertexInput;
 };
@@ -1664,6 +1673,12 @@ private:
 
     void BindAlternatingThreadGroupConstant();
 
+    DynamicVertexInputInternalData* BuildUberFetchShaderInternalData(
+        uint32_t                                     vertexBindingDescriptionCount,
+        const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
+        uint32_t                                     vertexAttributeDescriptionCount,
+        const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions);
+
 #if VKI_RAY_TRACING
     void BuildAccelerationStructuresPerDevice(
         const uint32_t                                          deviceIndex,
@@ -1803,6 +1818,9 @@ private:
     Util::Vector<DynamicDepthStencil, 16, PalAllocator> m_palDepthStencilState;
     Util::Vector<DynamicColorBlend, 16, PalAllocator>   m_palColorBlendState;
     Util::Vector<DynamicMsaa, 16, PalAllocator>         m_palMsaaState;
+
+    UberFetchShaderInternalDataMap m_uberFetchShaderInternalDataMap;// Uber fetch shader internal data cache
+    void* m_pUberFetchShaderTempBuffer;
 
     uint32                        m_vbWatermark;  // tracks how many vb entries need to be reset
     DebugPrintf                   m_debugPrintf;

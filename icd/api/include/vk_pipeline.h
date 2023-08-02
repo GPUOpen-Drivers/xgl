@@ -217,7 +217,8 @@ public:
         const Util::MetroHash::Hash& elfHash,
         const Util::MetroHash::Hash& settingsHash,
         const PipelineOptimizerKey&  pipelineOptimizerKey,
-        Util::MetroHash::Hash*       pCacheId);
+        Util::MetroHash::Hash*       pCacheId
+    );
 
 protected:
     Pipeline(
@@ -237,8 +238,8 @@ protected:
 #endif
         uint64_t              apiHash);
 
-    static VkPipelineCreateFlags GetCacheIdControlFlags(
-        VkPipelineCreateFlags in);
+    static PipelineCreateFlags GetCacheIdControlFlags(
+        PipelineCreateFlags in);
 
     static void GenerateHashFromSpecializationInfo(
         const VkSpecializationInfo& desc,

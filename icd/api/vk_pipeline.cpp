@@ -103,11 +103,11 @@ static constexpr uint32_t ExecutableStatisticsCount = 5;
 
 // =====================================================================================================================
 // Filter VkPipelineCreateFlags to only values used for pipeline caching
-VkPipelineCreateFlags Pipeline::GetCacheIdControlFlags(
-    VkPipelineCreateFlags in)
+PipelineCreateFlags Pipeline::GetCacheIdControlFlags(
+    PipelineCreateFlags in)
 {
     // The following flags should NOT affect cache computation
-    static constexpr VkPipelineCreateFlags CacheIdIgnoreFlags = { 0
+    static constexpr PipelineCreateFlags CacheIdIgnoreFlags = { 0
         | VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR
         | VK_PIPELINE_CREATE_DERIVATIVE_BIT
         | VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT
@@ -868,7 +868,8 @@ void Pipeline::ElfHashToCacheId(
     const Util::MetroHash::Hash& elfHash,
     const Util::MetroHash::Hash& settingsHash,
     const PipelineOptimizerKey&  pipelineOptimizerKey,
-    Util::MetroHash::Hash*       pCacheId)
+    Util::MetroHash::Hash*       pCacheId
+)
 {
     Util::MetroHash128 hasher = {};
     hasher.Update(elfHash);
@@ -880,9 +881,11 @@ void Pipeline::ElfHashToCacheId(
 
     // Extensions and features whose enablement affects compiler inputs (and hence the binary)
     hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO));
-    hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT));
     hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_PRIMITIVES_GENERATED_QUERY));
-    hasher.Update(pDevice->GetEnabledFeatures().scalarBlockLayout);
+    {
+        hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT));
+        hasher.Update(pDevice->GetEnabledFeatures().scalarBlockLayout);
+    }
     hasher.Update(pDevice->GetEnabledFeatures().robustBufferAccess);
     hasher.Update(pDevice->GetEnabledFeatures().robustBufferAccessExtended);
     hasher.Update(pDevice->GetEnabledFeatures().robustImageAccessExtended);

@@ -140,7 +140,7 @@ struct GraphicsPipelineBinaryCreateInfo
     void*                                  pTempBuffer;
     void*                                  pMappingBuffer;
     size_t                                 mappingBufferSize;
-    VkPipelineCreateFlags                  flags;
+    PipelineCreateFlags                    flags;
     VkFormat                               dbFormat;
     PipelineOptimizerKey*                  pPipelineProfileKey;
     PipelineCompilerType                   compilerType;
@@ -152,7 +152,6 @@ struct GraphicsPipelineBinaryCreateInfo
     FreeCompilerBinary                     freeCompilerBinary;
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback[ShaderStage::ShaderStageGfxCount];
-    uint32_t                               rasterizationStream;
     VkGraphicsPipelineLibraryFlagsEXT      libFlags;    // These flags indicate the section(s) included in pipeline
                                                         // (library).  Including the sections in the referenced
                                                         // libraries.
@@ -166,7 +165,7 @@ struct ComputePipelineBinaryCreateInfo
     void*                                  pTempBuffer;
     void*                                  pMappingBuffer;
     size_t                                 mappingBufferSize;
-    VkPipelineCreateFlags                  flags;
+    PipelineCreateFlags                    flags;
     const PipelineOptimizerKey*            pPipelineProfileKey;
     PipelineCompilerType                   compilerType;
     FreeCompilerBinary                     freeCompilerBinary;
@@ -184,7 +183,7 @@ struct RayTracingPipelineBinaryCreateInfo
     void*                                  pTempBuffer;
     void*                                  pMappingBuffer;
     size_t                                 mappingBufferSize;
-    VkPipelineCreateFlags                  flags;
+    PipelineCreateFlags                    flags;
     const PipelineOptimizerKey*            pPipelineProfileKey;
     PipelineCompilerType                   compilerType;
     FreeCompilerBinary                     freeCompilerBinary;

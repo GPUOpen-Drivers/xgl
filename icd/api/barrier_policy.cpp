@@ -1260,7 +1260,7 @@ uint32_t ImageBarrierPolicy::GetQueueFamilyLayoutEngineMask(
 // Constructor for buffer barrier policies.
 BufferBarrierPolicy::BufferBarrierPolicy(
     Device*                             pDevice,
-    VkBufferUsageFlags                  usage,
+    BufferUsageFlagBits                 usage,
     VkSharingMode                       sharingMode,
     uint32_t                            queueFamilyIndexCount,
     const uint32_t*                     pQueueFamilyIndices)
@@ -1273,7 +1273,7 @@ BufferBarrierPolicy::BufferBarrierPolicy(
 // Initialize the cache policy of the buffer according to the input parameters.
 void BufferBarrierPolicy::InitBufferCachePolicy(
     Device*                             pDevice,
-    VkBufferUsageFlags                  usage,
+    BufferUsageFlagBits                 usage,
     VkSharingMode                       sharingMode,
     uint32_t                            queueFamilyIndexCount,
     const uint32_t*                     pQueueFamilyIndices)

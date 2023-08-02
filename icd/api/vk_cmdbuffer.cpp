@@ -506,6 +506,8 @@ CmdBuffer::CmdBuffer(
     m_palDepthStencilState(pDevice->VkInstance()->Allocator()),
     m_palColorBlendState(pDevice->VkInstance()->Allocator()),
     m_palMsaaState(pDevice->VkInstance()->Allocator()),
+    m_uberFetchShaderInternalDataMap(8, pDevice->VkInstance()->Allocator()),
+    m_pUberFetchShaderTempBuffer(nullptr),
     m_debugPrintf(pDevice->VkInstance()->Allocator()),
     m_reverseThreadGroupState(false)
 #if VKI_RAY_TRACING
@@ -753,6 +755,11 @@ VkResult CmdBuffer::Initialize(
         {
             result = Pal::Result::ErrorOutOfMemory;
         }
+    }
+
+    if (result == Pal::Result::Success)
+    {
+        result = m_uberFetchShaderInternalDataMap.Init();
     }
 
     if ((result == Pal::Result::Success) && (createInfo.queueType == Pal::QueueType::QueueTypeDma))
@@ -1005,7 +1012,7 @@ void CmdBuffer::PalCmdBindIndexData(
     }
     else
     {
-        indexCount = utils::BufferSizeToIndexCount(indexType, bufferSize - offset);
+        indexCount = utils::BufferSizeToIndexCount(indexType, bufferSize);
     }
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
@@ -1863,7 +1870,7 @@ void CmdBuffer::ResetPipelineState()
         m_allGpuState.pipelineState[bindIdx].pushedConstCount = 0;
         m_allGpuState.pipelineState[bindIdx].dynamicBindInfo  = {};
         m_allGpuState.pipelineState[bindIdx].hasDynamicVertexInput = false;
-
+        m_allGpuState.pipelineState[bindIdx].pVertexInputInternalData = nullptr;
         bindIdx++;
     }
     while (bindIdx < PipelineBindCount);
@@ -2093,7 +2100,7 @@ void CmdBuffer::RebindPipeline()
             {
                 if (pBindState->hasDynamicVertexInput == false)
                 {
-                    if (pBindState->uberFetchShaderInternalDataSize > 0)
+                    if (pBindState->pVertexInputInternalData != nullptr)
                     {
                         rebindFlags |= RebindUberFetchInternalMem;
                     }
@@ -2104,7 +2111,7 @@ void CmdBuffer::RebindPipeline()
                 {
                     SetUberFetchShaderUserData(&pBindState->userDataLayout, newUberFetchShaderUserData);
 
-                    if (pBindState->uberFetchShaderInternalDataSize > 0)
+                    if (pBindState->pVertexInputInternalData != nullptr)
                     {
                         rebindFlags |= RebindUberFetchInternalMem;
                     }
@@ -2375,27 +2382,18 @@ void CmdBuffer::RebindUserData(
         }
     }
 
-    if (((flags & RebindUberFetchInternalMem) != 0) && (bindState.uberFetchShaderInternalDataSize > 0))
+    if (((flags & RebindUberFetchInternalMem) != 0) && (bindState.pVertexInputInternalData != nullptr))
     {
-        const void* pUberFetchShaderInternalData = bindState.pUberFetchShaderInternalData;
         utils::IterateMask deviceGroup(m_curDeviceMask);
         do
         {
             const uint32_t deviceIdx = deviceGroup.Index();
 
-            Pal::gpusize gpuAddress = {};
-            uint32_t* pCpuAddr = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(
-                bindState.uberFetchShaderInternalDataSize, 1, &gpuAddress);
-
-            memcpy(pCpuAddr, pUberFetchShaderInternalData, bindState.uberFetchShaderInternalDataSize);
-            pUberFetchShaderInternalData = Util::VoidPtrInc(pUberFetchShaderInternalData,
-                                                            bindState.uberFetchShaderInternalDataSize);
-
             PalCmdBuffer(deviceIdx)->CmdSetUserData(
                 palBindPoint,
                 userDataLayout.uberFetchConstBufRegBase,
                 2,
-                reinterpret_cast<uint32_t*>(&gpuAddress));
+                reinterpret_cast<const uint32_t*>(&bindState.pVertexInputInternalData->gpuAddress[deviceIdx]));
         }
         while (deviceGroup.IterateNext());
     }
@@ -2444,7 +2442,6 @@ VkResult CmdBuffer::Destroy(void)
     for (uint32 i = 0; i < PipelineBindCount; ++i)
     {
         pInstance->FreeMem(m_allGpuState.pipelineState[i].pPushDescriptorSetMemory);
-        pInstance->FreeMem(m_allGpuState.pipelineState[i].pUberFetchShaderInternalData);
     }
 
     if (m_pSqttState != nullptr)
@@ -2457,6 +2454,11 @@ VkResult CmdBuffer::Destroy(void)
     if (m_pTransformFeedbackState != nullptr)
     {
         pInstance->FreeMem(m_pTransformFeedbackState);
+    }
+
+    if (m_pUberFetchShaderTempBuffer != nullptr)
+    {
+        pInstance->FreeMem(m_pUberFetchShaderTempBuffer);
     }
 
     // Unregister this command buffer from the pool
@@ -3085,6 +3087,8 @@ void CmdBuffer::ResetVertexBuffer()
     }
 
     m_vbWatermark = 0;
+
+    m_uberFetchShaderInternalDataMap.Reset();
 }
 
 // =====================================================================================================================
@@ -3443,6 +3447,10 @@ void CmdBuffer::DispatchIndirect(
 
     Buffer* pBuffer = Buffer::ObjectFromHandle(buffer);
 
+#if VKI_RAY_TRACING
+    BindRayQueryConstants(m_allGpuState.pComputePipeline, Pal::PipelineBindPoint::Compute, 0, 0, 0);
+#endif
+
     PalCmdDispatchIndirect(pBuffer, offset);
 
     DbgBarrierPostCmd(DbgBarrierDispatchIndirect);
@@ -3536,8 +3544,9 @@ void CmdBuffer::CopyImage(
             while ((regionIdx < regionCount) &&
                    (palRegionCount <= (regionBatch - MaxPalAspectsPerMask)))
             {
-                VkToPalImageCopyRegion(pRegions[regionIdx], srcFormat.format, dstFormat.format,
-                    pPalRegions, &palRegionCount);
+                VkToPalImageCopyRegion(pRegions[regionIdx], srcFormat.format,
+                    pSrcImage->GetArraySize(), dstFormat.format, pDstImage->GetArraySize(), pPalRegions,
+                    &palRegionCount);
 
                 ++regionIdx;
             }
@@ -3632,7 +3641,8 @@ void CmdBuffer::BlitImage(
                 Pal::ImageCopyRegion palRegions[MaxPalAspectsPerMask];
                 uint32_t             palRegionCount = 0;
 
-                VkToPalImageCopyRegion(imageCopy, srcFormat.format, dstFormat.format, palRegions, &palRegionCount);
+                VkToPalImageCopyRegion(imageCopy, srcFormat.format, pSrcImage->GetArraySize(), dstFormat.format,
+                    pDstImage->GetArraySize(), palRegions, &palRegionCount);
 
                 PalCmdCopyImage(pSrcImage, srcImageLayout, pDstImage, destImageLayout,
                     palRegionCount, palRegions);
@@ -3644,8 +3654,8 @@ void CmdBuffer::BlitImage(
                 while ((regionIdx < regionCount) &&
                        (palCopyInfo.regionCount <= (regionBatch - MaxPalAspectsPerMask)))
                 {
-                    VkToPalImageScaledCopyRegion(pRegions[regionIdx], srcFormat.format, dstFormat.format,
-                        pPalRegions, &palCopyInfo.regionCount);
+                    VkToPalImageScaledCopyRegion(pRegions[regionIdx], srcFormat.format, pSrcImage->GetArraySize(),
+                        dstFormat.format, pPalRegions, &palCopyInfo.regionCount);
 
                     ++regionIdx;
                 }
@@ -3714,7 +3724,8 @@ void CmdBuffer::CopyBufferToImage(
                 uint32 plane =  VkToPalImagePlaneSingle(pDstImage->GetFormat(),
                     pRegions[regionIdx + i].imageSubresource.aspectMask, m_pDevice->GetRuntimeSettings());
 
-                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], dstFormat.format, plane, srcMemOffset);
+                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], dstFormat.format, plane,
+                    pDstImage->GetArraySize(), srcMemOffset);
             }
 
             PalCmdCopyMemoryToImage(pSrcBuffer, pDstImage, layout, regionBatch, pPalRegions);
@@ -3776,7 +3787,8 @@ void CmdBuffer::CopyImageToBuffer(
                 uint32 plane = VkToPalImagePlaneSingle(pSrcImage->GetFormat(),
                     pRegions[regionIdx + i].imageSubresource.aspectMask, m_pDevice->GetRuntimeSettings());
 
-                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], srcFormat.format, plane, dstMemOffset);
+                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], srcFormat.format, plane,
+                    pSrcImage->GetArraySize(), dstMemOffset);
             }
 
             PalCmdCopyImageToMemory(pSrcImage, pDstBuffer, layout, regionBatch, pPalRegions);
@@ -4839,7 +4851,9 @@ void CmdBuffer::ResolveImage(
                 // We expect MSAA images to never have mipmaps
                 VK_ASSERT(pRects[rectIdx].srcSubresource.mipLevel == 0);
 
-                VkToPalImageResolveRegion(pRects[rectIdx], srcFormat.format, pPalRegions, &palRegionCount);
+                VkToPalImageResolveRegion(
+                    pRects[rectIdx], srcFormat.format, pSrcImage->GetArraySize(),
+                    pPalRegions, &palRegionCount);
 
                 ++rectIdx;
             }
@@ -10297,6 +10311,109 @@ void CmdBuffer::SetStencilReference(
 }
 
 // =====================================================================================================================
+// Calculate the hash of dynamic vertex input info
+static uint64_t GetDynamicVertexInputHash(
+    uint32_t                                     vertexBindingDescriptionCount,
+    const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
+    uint32_t                                     vertexAttributeDescriptionCount,
+    const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions)
+{
+    Util::MetroHash::Hash hash = {};
+    if (vertexBindingDescriptionCount > 0)
+    {
+        VK_ASSERT(vertexAttributeDescriptionCount > 0);
+        Util::MetroHash64 hasher;
+        hasher.Update(reinterpret_cast<const uint8_t*>(pVertexBindingDescriptions),
+            sizeof(VkVertexInputBindingDescription2EXT) * vertexBindingDescriptionCount);
+        hasher.Update(reinterpret_cast<const uint8_t*>(pVertexAttributeDescriptions),
+            sizeof(VkVertexInputAttributeDescription2EXT) * vertexAttributeDescriptionCount);
+        hasher.Finalize(hash.bytes);
+    }
+    return hash.qwords[0];
+}
+
+// =====================================================================================================================
+// Builds uber-fetch shader internal data according to dynamic vertex input info.
+DynamicVertexInputInternalData* CmdBuffer::BuildUberFetchShaderInternalData(
+    uint32_t                                     vertexBindingDescriptionCount,
+    const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
+    uint32_t                                     vertexAttributeDescriptionCount,
+    const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions)
+{
+    uint64_t vertexInputHash = GetDynamicVertexInputHash(
+        vertexBindingDescriptionCount,
+        pVertexBindingDescriptions,
+        vertexAttributeDescriptionCount,
+        pVertexAttributeDescriptions);
+
+    DynamicVertexInputInternalData* pVertexInputData = nullptr;
+
+    bool         existed = false;
+    Util::Result result  = m_uberFetchShaderInternalDataMap.FindAllocate(vertexInputHash, &existed, &pVertexInputData);
+    if (result == Util::Result::Success)
+    {
+        if (existed == false)
+        {
+            if (m_pUberFetchShaderTempBuffer == nullptr)
+            {
+                m_pUberFetchShaderTempBuffer = m_pDevice->VkInstance()->AllocMem(
+                    PipelineCompiler::GetMaxUberFetchShaderInternalDataSize() * NumPalDevices(),
+                    VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+            }
+
+            if (m_pUberFetchShaderTempBuffer != nullptr)
+            {
+                void* pUberFetchShaderInternalData = m_pUberFetchShaderTempBuffer;
+                utils::IterateMask deviceGroup(m_curDeviceMask);
+                do
+                {
+                    const uint32_t deviceIdx = deviceGroup.Index();
+
+                    uint32_t uberFetchShaderInternalDataSize =
+                        m_pDevice->GetCompiler(deviceIdx)->BuildUberFetchShaderInternalData(
+                            vertexBindingDescriptionCount,
+                            pVertexBindingDescriptions,
+                            vertexAttributeDescriptionCount,
+                            pVertexAttributeDescriptions,
+                            pUberFetchShaderInternalData);
+
+                    Pal::gpusize gpuAddress = {};
+                    if (uberFetchShaderInternalDataSize > 0)
+                    {
+                        void* pCpuAddr = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(
+                            uberFetchShaderInternalDataSize, 1, &gpuAddress);
+                        memcpy(pCpuAddr, pUberFetchShaderInternalData, uberFetchShaderInternalDataSize);
+                    }
+                    pVertexInputData->gpuAddress[deviceIdx] = gpuAddress;
+
+                    pUberFetchShaderInternalData =
+                        Util::VoidPtrInc(pUberFetchShaderInternalData, uberFetchShaderInternalDataSize);
+                } while (deviceGroup.IterateNext());
+
+                // we needn't set any user data if internal size is 0.
+                if (pVertexInputData->gpuAddress[0] == 0)
+                {
+                    pVertexInputData = nullptr;
+                }
+            }
+            else
+            {
+                // return nullptr for any fail case.
+                VK_NEVER_CALLED();
+                pVertexInputData = nullptr;
+            }
+        }
+    }
+    else
+    {
+        VK_NEVER_CALLED();
+        pVertexInputData = nullptr;
+    }
+
+    return pVertexInputData;
+}
+
+// =====================================================================================================================
 void CmdBuffer::SetVertexInput(
     uint32_t                                     vertexBindingDescriptionCount,
     const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
@@ -10306,58 +10423,32 @@ void CmdBuffer::SetVertexInput(
     PipelineBindState* pBindState = &m_allGpuState.pipelineState[PipelineBindGraphics];
     const bool padVertexBuffers = m_flags.padVertexBuffers;
 
-    if (pBindState->pUberFetchShaderInternalData == nullptr)
-    {
-        // Allocate max size to avoid relocate
-        pBindState->pUberFetchShaderInternalData = m_pDevice->VkInstance()->AllocMem(
-            PipelineCompiler::GetMaxUberFetchShaderInternalDataSize() * NumPalDevices(),
-            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-    }
+    pBindState->pVertexInputInternalData = BuildUberFetchShaderInternalData(
+        vertexBindingDescriptionCount,
+        pVertexBindingDescriptions,
+        vertexAttributeDescriptionCount,
+        pVertexAttributeDescriptions);
 
-    if (pBindState->pUberFetchShaderInternalData != nullptr)
+    if (pBindState->pVertexInputInternalData != nullptr)
     {
-        pBindState->uberFetchShaderInternalDataSize = 0;
-        void* pUberFetchShaderInternalData = pBindState->pUberFetchShaderInternalData;
-
         utils::IterateMask deviceGroup(m_curDeviceMask);
         do
         {
             const uint32_t deviceIdx = deviceGroup.Index();
-
-            // Build Uber-fetch shader internal data
-            uint32_t uberFetchShaderInternalDataSize =
-                m_pDevice->GetCompiler(deviceIdx)->BuildUberFetchShaderInternalData(
-                    vertexBindingDescriptionCount,
-                    pVertexBindingDescriptions,
-                    vertexAttributeDescriptionCount,
-                    pVertexAttributeDescriptions,
-                    pUberFetchShaderInternalData);
-
-            // Check internal memory size are same on all device.
-            VK_ASSERT(uberFetchShaderInternalDataSize == pBindState->uberFetchShaderInternalDataSize ||
-                pBindState->uberFetchShaderInternalDataSize == 0);
 
             // Upload internal memory
             if (pBindState->hasDynamicVertexInput && (m_allGpuState.pGraphicsPipeline != nullptr))
             {
                 VK_ASSERT(GetUberFetchShaderUserData(&pBindState->userDataLayout) != PipelineLayout::InvalidReg);
 
-                Pal::gpusize gpuAddress = {};
-                uint32_t* pCpuAddr = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(
-                    uberFetchShaderInternalDataSize, 1, &gpuAddress);
-                memcpy(pCpuAddr, pUberFetchShaderInternalData, uberFetchShaderInternalDataSize);
-
                 PalCmdBuffer(deviceIdx)->CmdSetUserData(
                     Pal::PipelineBindPoint::Graphics,
                     GetUberFetchShaderUserData(&pBindState->userDataLayout),
                     2,
-                    reinterpret_cast<uint32_t*>(&gpuAddress));
+                    reinterpret_cast<uint32_t*>(&pBindState->pVertexInputInternalData->gpuAddress[deviceIdx]));
             }
 
-            pBindState->uberFetchShaderInternalDataSize = uberFetchShaderInternalDataSize;
-            pUberFetchShaderInternalData = Util::VoidPtrInc(pUberFetchShaderInternalData, uberFetchShaderInternalDataSize);
-
-            // Updat vertex buffer stride
+            // Update vertex buffer stride
             uint32_t firstChanged = UINT_MAX;
             uint32_t lastChanged = 0;
             uint32_t vertexBufferCount = 0;
@@ -10423,6 +10514,29 @@ void CmdBuffer::DbgCmdBarrier(bool preCmd)
                    (static_cast<uint32_t>(Pal::HwPipePoint::HwPipePostBlt)          == HwPipePostBlt)          &&
                    (static_cast<uint32_t>(Pal::HwPipePoint::HwPipeBottom)           == HwPipeBottom)),
         "The PAL::HwPipePoint enum has changed. Vulkan settings might need to be updated.");
+
+    static_assert((
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherCpu)                == CoherCpu)                &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherShaderRead)         == CoherShaderRead)         &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherShaderWrite)        == CoherShaderWrite)        &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherCopySrc)            == CoherCopySrc)            &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherCopyDst)            == CoherCopyDst)            &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherColorTarget)        == CoherColorTarget)        &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherDepthStencilTarget) == CoherDepthStencilTarget) &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherResolveSrc)         == CoherResolveSrc)         &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherResolveDst)         == CoherResolveDst)         &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherClear)              == CoherClear)              &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherIndirectArgs)       == CoherIndirectArgs)       &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherIndexData)          == CoherIndexData)          &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherQueueAtomic)        == CoherQueueAtomic)        &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherTimestamp)          == CoherTimestamp)          &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherCeLoad)             == CoherCeLoad)             &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherCeDump)             == CoherCeDump)             &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherStreamOut)          == CoherStreamOut)          &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherMemory)             == CoherMemory)             &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherSampleRate)         == CoherSampleRate)         &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherPresent)            == CoherPresent)),
+        "The PAL::CacheCoherencyUsageFlags enum has changed. Vulkan settings might need to be updated.");
 
     Pal::HwPipePoint waitPoint;
     Pal::HwPipePoint signalPoint;
@@ -11490,7 +11604,7 @@ VkResult CmdBuffer::GetRayTracingIndirectMemory(
             pInternalMemory,
             m_pDevice->GetPalDeviceMask(),
             VK_OBJECT_TYPE_COMMAND_BUFFER,
-            DispatchableCmdBuffer::IntValueFromHandle(DispatchableCmdBuffer::FromObject(this)));
+            ApiCmdBuffer::IntValueFromHandle(ApiCmdBuffer::FromObject(this)));
 
         VK_ASSERT(result == VK_SUCCESS);
 
@@ -11592,33 +11706,52 @@ void CmdBuffer::BindRayQueryConstants(
                         sizeof(constants.descriptorTable.accelStructTrackerSrd));
                 }
 
-                // Ray history dumps for Graphics pipelines are not yet supported
-                if (rtCountersEnabled && (bindPoint == Pal::PipelineBindPoint::Compute))
+                if (rtCountersEnabled)
                 {
                     constants.descriptorTable.dispatchRaysConstGpuVa = constGpuAddr +
                         offsetof(GpuRt::DispatchRaysConstants, constData);
 
-                    const uint32_t* pOrigThreadgroupDims =
-                        static_cast<const ComputePipeline*>(pPipeline)->GetOrigThreadgroupDims();
+                    // Ray history dumps for Graphics pipelines are not yet supported
+                    if (bindPoint == Pal::PipelineBindPoint::Compute)
+                    {
+                        constants.constData.profileMaxIterations = m_pDevice->RayTrace()->GetProfileMaxIterations();
+                        constants.constData.profileRayFlags      = m_pDevice->RayTrace()->GetProfileRayFlags();
 
-                    constants.constData.profileMaxIterations = m_pDevice->RayTrace()->GetProfileMaxIterations();
-                    constants.constData.profileRayFlags = m_pDevice->RayTrace()->GetProfileRayFlags();
-                    constants.constData.rayDispatchWidth = width * pOrigThreadgroupDims[0];
-                    constants.constData.rayDispatchHeight = height * pOrigThreadgroupDims[1];
-                    constants.constData.rayDispatchDepth = depth * pOrigThreadgroupDims[2];
+                        if (width > 0)
+                        {
+                            const uint32_t* pOrigThreadgroupDims =
+                                static_cast<const ComputePipeline*>(pPipeline)->GetOrigThreadgroupDims();
 
-                    m_pDevice->RayTrace()->TraceDispatch(deviceIdx,
-                                                         PalCmdBuffer(deviceIdx),
-                                                         GpuRt::RtPipelineType::Compute,
-                                                         width * pOrigThreadgroupDims[0],
-                                                         height * pOrigThreadgroupDims[1],
-                                                         depth * pOrigThreadgroupDims[2],
-                                                         1,
-                                                         pPipeline->GetApiHash(),
-                                                         nullptr,
-                                                         nullptr,
-                                                         nullptr,
-                                                         &constants);
+                            constants.constData.rayDispatchWidth  = width * pOrigThreadgroupDims[0];
+                            constants.constData.rayDispatchHeight = height * pOrigThreadgroupDims[1];
+                            constants.constData.rayDispatchDepth  = depth * pOrigThreadgroupDims[2];
+
+                            m_pDevice->RayTrace()->TraceDispatch(deviceIdx,
+                                                                 PalCmdBuffer(deviceIdx),
+                                                                 GpuRt::RtPipelineType::Compute,
+                                                                 width * pOrigThreadgroupDims[0],
+                                                                 height * pOrigThreadgroupDims[1],
+                                                                 depth * pOrigThreadgroupDims[2],
+                                                                 1,
+                                                                 pPipeline->GetApiHash(),
+                                                                 nullptr,
+                                                                 nullptr,
+                                                                 nullptr,
+                                                                 &constants);
+                        }
+                        else
+                        {
+                            m_pDevice->RayTrace()->TraceIndirectDispatch(deviceIdx,
+                                                                         GpuRt::RtPipelineType::Compute,
+                                                                         1,
+                                                                         pPipeline->GetApiHash(),
+                                                                         nullptr,
+                                                                         nullptr,
+                                                                         nullptr,
+                                                                         nullptr,
+                                                                         &constants);
+                        }
+                    }
                 }
 
                 memcpy(pConstData, &constants, sizeof(constants));

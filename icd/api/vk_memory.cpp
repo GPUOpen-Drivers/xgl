@@ -409,7 +409,8 @@ VkResult Memory::Create(
                     Memory::IntValueFromHandle(*pMemoryHandle),
                     VK_OBJECT_TYPE_DEVICE_MEMORY,
                     pAllocInfo->memoryTypeIndex,
-                    false);
+                    false
+                );
             }
 
             Pal::GpuMemoryResourceBindEventData bindData = {};
@@ -430,7 +431,17 @@ VkResult Memory::Create(
         // so we don't need to update buffer handle's metadata.
         if (dedicatedImage != VK_NULL_HANDLE)
         {
-            pBoundImage->BindMemory(pDevice, *pMemoryHandle, 0, 0, nullptr, 0, nullptr);
+            VkDeviceSize memOffset = 0;
+
+#if defined(__unix__)
+            if ((pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().flags.hasModifier != 0) &&
+                (pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().modifierPlaneCount > 0))
+            {
+                memOffset =
+                    pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().modifierMemoryPlaneOffset[0];
+            }
+#endif
+            pBoundImage->BindMemory(pDevice, *pMemoryHandle, memOffset, 0, nullptr, 0, nullptr);
         }
     }
     else
@@ -790,6 +801,32 @@ VkResult Memory::OpenExternalSharedImage(
     palOpenInfo.resourceInfo.flags.ntHandle           = importInfo.isNtHandle;
 #if defined(__unix__)
     palOpenInfo.resourceInfo.handleType               = Pal::HandleType::DmaBufFd;
+
+    if (pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().flags.hasModifier != 0)
+    {
+        palOpenInfo.flags.hasModifier  = 1;
+        palOpenInfo.modifier           = pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().modifier;
+        palOpenInfo.modifierPlaneCount =
+            pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().modifierPlaneCount;
+        palOpenInfo.gpuMemOffset       =
+            pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().modifierMemoryPlaneOffset[0];
+
+        if (palOpenInfo.modifierPlaneCount > 1)
+        {
+            if (palOpenInfo.modifierPlaneCount == 2)
+            {
+                palOpenInfo.dccOffset        =
+                    pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().modifierMemoryPlaneOffset[1];
+            }
+            else if (palOpenInfo.modifierPlaneCount == 3)
+            {
+                palOpenInfo.dccOffset        =
+                    pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().modifierMemoryPlaneOffset[2];
+                palOpenInfo.displayDccOffset =
+                    pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().modifierMemoryPlaneOffset[1];
+            }
+        }
+    }
 #endif
     palOpenInfo.flags.perSubresInit = pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().flags.perSubresInit;
     Pal::Result palResult = Pal::Result::Success;

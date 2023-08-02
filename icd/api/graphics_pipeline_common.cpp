@@ -687,6 +687,7 @@ uint64_t GraphicsPipelineCommon::GetDynamicStateFlags(
 // =====================================================================================================================
 void GraphicsPipelineCommon::ExtractLibraryInfo(
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    PipelineCreateFlags                 flags,
     GraphicsPipelineLibraryInfo*        pLibInfo)
 {
 
@@ -698,9 +699,9 @@ void GraphicsPipelineCommon::ExtractLibraryInfo(
         GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT,
         PIPELINE_LIBRARY_CREATE_INFO_KHR)
 
-    pLibInfo->flags.isLibrary = (pCreateInfo->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) ? 1 : 0;
+    pLibInfo->flags.isLibrary = (flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) ? 1 : 0;
 
-    pLibInfo->flags.optimize  = (pCreateInfo->flags & VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT) ? 1 : 0;
+    pLibInfo->flags.optimize  = (flags & VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT) ? 1 : 0;
 
     pLibInfo->libFlags =
         (pLibInfo->flags.isLibrary == false) ? GraphicsPipelineLibraryAll :
@@ -797,22 +798,23 @@ VkResult GraphicsPipelineCommon::Create(
     Device*                             pDevice,
     PipelineCache*                      pPipelineCache,
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    PipelineCreateFlags                 flags,
     const VkAllocationCallbacks*        pAllocator,
     VkPipeline*                         pPipeline)
 {
     VkResult result;
 
-    const bool isLibrary = pCreateInfo->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
+    const bool isLibrary = flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
 
     if (isLibrary)
     {
         result =  GraphicsPipelineLibrary::Create(
-            pDevice, pPipelineCache, pCreateInfo, pAllocator, pPipeline);
+            pDevice, pPipelineCache, pCreateInfo, flags, pAllocator, pPipeline);
     }
     else
     {
         result =  GraphicsPipeline::Create(
-            pDevice, pPipelineCache, pCreateInfo, pAllocator, pPipeline);
+            pDevice, pPipelineCache, pCreateInfo, flags, pAllocator, pPipeline);
     }
 
     return result;
@@ -1172,7 +1174,7 @@ static void BuildRasterizationState(
         pInfo->pipeline.rsState.rasterizeLastLinePixel = 0;
 
         // Pipeline Binning Override
-        switch (settings.pipelineBinningMode)
+        switch (pDevice->GetPipelineBinningMode())
         {
         case PipelineBinningModeEnable:
             pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Enable;
@@ -2131,6 +2133,7 @@ static void BuildExecutablePipelineState(
 void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
+    PipelineCreateFlags                    flags,
     const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
     const PipelineLayout*                  pPipelineLayout,
     const PipelineOptimizerKey*            pOptimizerKey,
@@ -2140,7 +2143,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     VK_ASSERT(pBinMeta != nullptr);
 
     GraphicsPipelineLibraryInfo libInfo;
-    ExtractLibraryInfo(pIn, &libInfo);
+    ExtractLibraryInfo(pIn, flags, &libInfo);
 
     bool hasMesh = false;
 #if VKI_RAY_TRACING
@@ -2265,12 +2268,13 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
 void GraphicsPipelineCommon::GeneratePipelineOptimizerKey(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pCreateInfo,
+    PipelineCreateFlags                    flags,
     const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
     ShaderOptimizerKey*                    pShaderKeys,
     PipelineOptimizerKey*                  pPipelineKey)
 {
     GraphicsPipelineLibraryInfo libInfo;
-    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, &libInfo);
+    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, flags, &libInfo);
 
     pPipelineKey->shaderCount = VK_ARRAY_SIZE(pShaderStageInfo->stages);
     pPipelineKey->pShaders    = pShaderKeys;
@@ -2948,6 +2952,7 @@ bool GraphicsPipelineCommon::IsRasterizationDisabled(
 //     - pCreateInfo->subpass
 void GraphicsPipelineCommon::BuildApiHash(
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    PipelineCreateFlags                 flags,
     uint64_t*                           pApiHash,
     Util::MetroHash::Hash*              pElfHash)
 {
@@ -2955,16 +2960,16 @@ void GraphicsPipelineCommon::BuildApiHash(
     Util::MetroHash128 apiHasher;
 
     GraphicsPipelineLibraryInfo libInfo;
-    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, &libInfo);
+    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, flags, &libInfo);
 
     uint64_t dynamicStateFlags = GetDynamicStateFlags(pCreateInfo->pDynamicState, &libInfo);
     elfHasher.Update(dynamicStateFlags);
 
     // Hash only flags needed for pipeline caching
-    elfHasher.Update(GetCacheIdControlFlags(pCreateInfo->flags));
+    elfHasher.Update(GetCacheIdControlFlags(flags));
 
     // Hash flags not accounted for in the elf hash
-    apiHasher.Update(pCreateInfo->flags);
+    apiHasher.Update(flags);
 
     if (pCreateInfo->layout != VK_NULL_HANDLE)
     {
@@ -3025,7 +3030,7 @@ void GraphicsPipelineCommon::BuildApiHash(
         }
     }
 
-    if ((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
+    if ((flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
     {
         apiHasher.Update(GraphicsPipeline::ObjectFromHandle(pCreateInfo->basePipelineHandle)->GetApiHash());
     }

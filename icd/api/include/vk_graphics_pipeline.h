@@ -165,6 +165,7 @@ public:
         Device*                                 pDevice,
         PipelineCache*                          pPipelineCache,
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+        PipelineCreateFlags                     flags,
         const VkAllocationCallbacks*            pAllocator,
         VkPipeline*                             pPipeline);
 
@@ -233,6 +234,7 @@ protected:
     static VkResult CreatePipelineBinaries(
         Device*                                        pDevice,
         const VkGraphicsPipelineCreateInfo*            pCreateInfo,
+        PipelineCreateFlags                            flags,
         const GraphicsPipelineShaderStageInfo*         pShaderInfo,
         const PipelineLayout*                          pPipelineLayout,
         const Util::MetroHash::Hash*                   pElfHash,
@@ -248,6 +250,7 @@ protected:
     static VkResult CreatePipelineObjects(
         Device*                             pDevice,
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        PipelineCreateFlags                 flags,
         const VkAllocationCallbacks*        pAllocator,
         const PipelineLayout*               pPipelineLayout,
         const VbBindingInfo*                pVbInfo,

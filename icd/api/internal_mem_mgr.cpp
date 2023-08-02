@@ -936,10 +936,11 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
                             m_pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanAllocateEvent(
                                 m_pDevice,
                                 pPalGpuMem,
-                                DispatchableDevice::IntValueFromHandle(DispatchableDevice::FromObject(m_pDevice)),
+                                ApiDevice::IntValueFromHandle(ApiDevice::FromObject(m_pDevice)),
                                 VK_OBJECT_TYPE_DEVICE,
                                 heapIndex,
-                                isBuddyAllocated);
+                                isBuddyAllocated
+                                );
                         }
 
                         if (pFirstAlloc == nullptr)
@@ -992,10 +993,11 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
                                 m_pDevice->VkInstance()->GetGpuMemoryEventHandler()->VulkanAllocateEvent(
                                     m_pDevice,
                                     pPalGpuMem,
-                                    DispatchableDevice::IntValueFromHandle(DispatchableDevice::FromObject(m_pDevice)),
+                                    ApiDevice::IntValueFromHandle(ApiDevice::FromObject(m_pDevice)),
                                     VK_OBJECT_TYPE_DEVICE,
                                     heapIndex,
-                                    isBuddyAllocated);
+                                    isBuddyAllocated
+                                    );
                             }
                         }
                     }

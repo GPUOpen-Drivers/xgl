@@ -976,69 +976,93 @@ void RenderPassBuilder::PostProcessSyncPoint(
                                              VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     }
 
-    // Need a global cache transition if any of the sync flags are set or if there's an app
-    // subpass dependency that requires cache synchronization.
-    if (pSyncPoint->barrier.srcAccessMask != 0 ||
-        pSyncPoint->barrier.dstAccessMask != 0 ||
-        pSyncPoint->barrier.implicitSrcCacheMask != 0 ||
-        pSyncPoint->barrier.implicitDstCacheMask != 0)
+    if (m_pDevice->GetPalProperties().gfxipProperties.flags.supportReleaseAcquireInterface &&
+        m_pDevice->GetRuntimeSettings().useAcquireReleaseInterface)
     {
-        if (m_pDevice->GetPalProperties().gfxipProperties.flags.supportReleaseAcquireInterface &&
-            m_pDevice->GetRuntimeSettings().useAcquireReleaseInterface)
+        // Need a global cache transition if any of the sync flags are set or if there's an app
+        // subpass dependency that requires cache synchronization.
+        if (((pSyncPoint->barrier.srcAccessMask != 0)         ||
+             (pSyncPoint->barrier.dstAccessMask != 0)         ||
+             (pSyncPoint->barrier.implicitSrcCacheMask != 0)  ||
+             (pSyncPoint->barrier.implicitDstCacheMask != 0)) &&
+            (pSyncPoint->transitions.NumElements() == 0))
         {
             // Need a global cache transition only if there are no image transitions.
-            if (pSyncPoint->transitions.NumElements() == 0)
-            {
-                pSyncPoint->barrier.flags.needsGlobalTransition = 1;
-            }
-        }
-        else
-        {
             pSyncPoint->barrier.flags.needsGlobalTransition = 1;
         }
-    }
 
-    // The barrier is active if it does any waiting or global cache synchronization or attachment transitions
-    if (pSyncPoint->barrier.pipePointCount > 0 ||
-        pSyncPoint->barrier.flags.needsGlobalTransition ||
-        pSyncPoint->transitions.NumElements() > 0)
-    {
-        pSyncPoint->flags.active = 1;
-
-        if (pSyncPoint->barrier.dstStageMask == 0)
+        // The barrier is active if it does any waiting or global cache synchronization or attachment transitions
+        if ((pSyncPoint->barrier.pipePointCount > 0)          ||
+            (pSyncPoint->barrier.flags.needsGlobalTransition) ||
+            (pSyncPoint->transitions.NumElements() > 0))
         {
-            if (pSyncPoint->flags.top && (pSyncPoint->transitions.NumElements() > 0))
-            {
-                // If a transition occurs when entering a subpass (top == 1), it must be synced before the attachment
-                // is accessed. If we're leaving the subpass, chances are there's another barrier down the line that
-                // will sync the image correctly.
-                pSyncPoint->barrier.dstStageMask = AllShaderStages;
-            }
-            else
-            {
-                // BOTTOM_OF_PIPE in dst mask is effectively NONE.
-                pSyncPoint->barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
-            }
-        }
+            pSyncPoint->flags.active = 1;
 
-        if (pSyncPoint->barrier.srcStageMask == 0)
-        {
-            if(pSyncPoint->transitions.NumElements() > 0)
+            if (pSyncPoint->barrier.dstStageMask == 0)
             {
-                // RPBarrierInfo consists of one set of src/dst stage masks which currently applies to each transition
-                // in RPSyncPoint(). PAL now supports specifying src/dst stage masks for each individual image
-                // transition. Since with this change we will loop over each transition to check for undefined 'prev'
-                // layout, there might be some cases where we add unnecessary stalls for at least some transitions.
-                for (auto it = pSyncPoint->transitions.Begin(); it.Get() != nullptr; it.Next())
+                if (pSyncPoint->flags.top && (pSyncPoint->transitions.NumElements() > 0))
                 {
-                    RPTransitionInfo* info = it.Get();
+                    // If a transition occurs when entering a subpass (top == 1), it must be synced before the
+                    // attachment is accessed. If we're leaving the subpass, chances are there's another barrier down
+                    // the line that will sync the image correctly.
+                    pSyncPoint->barrier.dstStageMask = AllShaderStages;
+                }
+                else
+                {
+                    // BOTTOM_OF_PIPE in dst mask is effectively NONE.
+                    pSyncPoint->barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
+                }
+            }
 
-                    if (info->prevLayout.layout == VK_IMAGE_LAYOUT_UNDEFINED)
+            // If srcSubpass for this barrier is VK_SUBPASS_EXTERNAL, srcStageMask is TOP_OF_PIPE and srcAccessMask is
+            // 0 then this syncTop barrier might be doing a metadata Init with a layout transition out of undefined
+            // layout. Set a flag here that can be tested later to set the srcStageMask correctly.
+            const bool needsFixForMetaDataInit =
+                ((pSyncPoint->flags.top)                                                       &&
+                 (pSyncPoint->barrier.flags.explicitExternalIncoming)                          &&
+                 (pSyncPoint->barrier.srcStageMask == VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR) &&
+                 (pSyncPoint->barrier.srcAccessMask == 0));
+
+            if ((pSyncPoint->barrier.srcStageMask == 0) || needsFixForMetaDataInit)
+            {
+                if (pSyncPoint->transitions.NumElements() > 0)
+                {
+                    // RPBarrierInfo consists of one set of src/dst stage masks which currently applies to each
+                    // transition in RPSyncPoint(). PAL now supports specifying src/dst stage masks for each individual
+                    // image transition. Since with this change we will loop over each transition to check for
+                    // undefined 'prev' layout, there might be some cases where we add unnecessary stalls for at least
+                    // some transitions.
+                    for (auto it = pSyncPoint->transitions.Begin(); it.Get() != nullptr; it.Next())
                     {
-                        pSyncPoint->barrier.srcStageMask |= pSyncPoint->barrier.dstStageMask;
+                        RPTransitionInfo* info = it.Get();
+
+                        if (info->prevLayout.layout == VK_IMAGE_LAYOUT_UNDEFINED)
+                        {
+                            pSyncPoint->barrier.srcStageMask |= pSyncPoint->barrier.dstStageMask;
+                        }
                     }
                 }
             }
+        }
+    }
+    else
+    {
+        // Need a global cache transition if any of the sync flags are set or if there's an app
+        // subpass dependency that requires cache synchronization.
+        if ((pSyncPoint->barrier.srcAccessMask != 0)        ||
+            (pSyncPoint->barrier.dstAccessMask != 0)        ||
+            (pSyncPoint->barrier.implicitSrcCacheMask != 0) ||
+            (pSyncPoint->barrier.implicitDstCacheMask != 0))
+        {
+            pSyncPoint->barrier.flags.needsGlobalTransition = 1;
+        }
+
+        // The barrier is active if it does any waiting or global cache synchronization or attachment transitions
+        if ((pSyncPoint->barrier.pipePointCount > 0)          ||
+            (pSyncPoint->barrier.flags.needsGlobalTransition) ||
+            (pSyncPoint->transitions.NumElements() > 0))
+        {
+            pSyncPoint->flags.active = 1;
         }
     }
 }
@@ -1058,10 +1082,16 @@ Pal::Result RenderPassBuilder::BuildImplicitDependencies(
         // Set the flag that this syncpoint needs to handle an implicit external incoming dependency as per spec.
         // Because of how we handle our memory dependency visibility, this flag doesn't actually need to do anything
         // at this time, but it's added in case we need it in the future.
-        if (m_pSubpasses[dstSubpass].flags.hasFirstUseAttachments &&
-            (m_pSubpasses[dstSubpass].flags.hasExternalIncoming == false))
+        if (m_pSubpasses[dstSubpass].flags.hasExternalIncoming == false)
         {
-            pSync->barrier.flags.implicitExternalIncoming = 1;
+            if (m_pSubpasses[dstSubpass].flags.hasFirstUseAttachments)
+            {
+                pSync->barrier.flags.implicitExternalIncoming = 1;
+            }
+        }
+        else
+        {
+            pSync->barrier.flags.explicitExternalIncoming = 1;
         }
     }
     else

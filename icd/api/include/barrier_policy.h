@@ -354,7 +354,7 @@ class BufferBarrierPolicy final : public ResourceBarrierPolicy
 public:
     BufferBarrierPolicy(
         Device*                             pDevice,
-        VkBufferUsageFlags                  usage,
+        BufferUsageFlagBits                 usage,
         VkSharingMode                       sharingMode,
         uint32_t                            queueFamilyIndexCount,
         const uint32_t*                     pQueueFamilyIndices);
@@ -368,7 +368,7 @@ public:
 protected:
     void InitBufferCachePolicy(
         Device*                             pDevice,
-        VkBufferUsageFlags                  usage,
+        BufferUsageFlagBits                 usage,
         VkSharingMode                       sharingMode,
         uint32_t                            queueFamilyIndexCount,
         const uint32_t*                     pQueueFamilyIndices);

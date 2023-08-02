@@ -110,7 +110,7 @@ public:
         const VkStridedDeviceAddressRegionKHR* pMissSbt,
         const VkStridedDeviceAddressRegionKHR* pHitSbt,
         Pal::gpusize*                          pCounterMetadataVa,
-        GpuRt::InitExecuteIndirectConstants*   pConstants);
+        void*                                  pConstants);
 
 private:
     Device*                         m_pDevice;

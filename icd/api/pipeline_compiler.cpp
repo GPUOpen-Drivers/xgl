@@ -154,7 +154,6 @@ PipelineCompiler::PipelineCompiler(
     , m_pBinaryCache(nullptr)
     , m_pipelineCacheMatrix{}
     , m_uberFetchShaderInfoFormatMap(8, pPhysicalDevice->Manager()->VkInstance()->Allocator())
-    , m_uberFetchShaderInternalDataMap(8, pPhysicalDevice->Manager()->VkInstance()->Allocator())
     , m_shaderModuleHandleMap(8, pPhysicalDevice->Manager()->VkInstance()->Allocator())
 {
 
@@ -335,11 +334,6 @@ VkResult PipelineCompiler::Initialize()
 
     if (result == VK_SUCCESS)
     {
-        result = PalToVkResult(m_uberFetchShaderInternalDataMap.Init());
-    }
-
-    if (result == VK_SUCCESS)
-    {
         result = InitializeUberFetchShaderFormatTable(m_pPhysicalDevice, &m_uberFetchShaderInfoFormatMap);
     }
 
@@ -383,12 +377,6 @@ void PipelineCompiler::Destroy()
         }
         m_shaderModuleHandleMap.Reset();
     }
-
-    for (auto it = m_uberFetchShaderInternalDataMap.Begin(); it.Get() != nullptr; it.Next())
-    {
-        pInstance->FreeMem(const_cast<void*>(it.Get()->value.pCode));
-    }
-    m_uberFetchShaderInternalDataMap.Reset();
 }
 
 // =====================================================================================================================
@@ -1681,9 +1669,9 @@ static void CopyPreRasterizationShaderState(
     pCreateInfo->pipelineInfo.vpState.depthClipEnable         = libInfo.pipelineInfo.vpState.depthClipEnable;
     pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = libInfo.pipelineInfo.rsState.rasterizerDiscardEnable;
     pCreateInfo->pipelineInfo.rsState.provokingVertexMode     = libInfo.pipelineInfo.rsState.provokingVertexMode;
+    pCreateInfo->pipelineInfo.rsState.rasterStream            = libInfo.pipelineInfo.rsState.rasterStream;
     pCreateInfo->pipelineInfo.nggState                        = libInfo.pipelineInfo.nggState;
     pCreateInfo->pipelineInfo.enableUberFetchShader           = libInfo.pipelineInfo.enableUberFetchShader;
-    pCreateInfo->rasterizationStream                          = libInfo.rasterizationStream;
 
     MergePipelineOptions(libInfo.pipelineInfo.options, &pCreateInfo->pipelineInfo.options);
 
@@ -1771,7 +1759,12 @@ static void BuildRasterizationState(
 
         if (pPipelineRasterizationStateStreamCreateInfoEXT != nullptr)
         {
-            pCreateInfo->rasterizationStream = pPipelineRasterizationStateStreamCreateInfoEXT->rasterizationStream;
+            pCreateInfo->pipelineInfo.rsState.rasterStream =
+                pPipelineRasterizationStateStreamCreateInfoEXT->rasterizationStream;
+        }
+        else
+        {
+            pCreateInfo->pipelineInfo.rsState.rasterStream = 0;
         }
 
         if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizerDiscardEnable) == true)
@@ -2178,7 +2171,8 @@ static void BuildColorBlendState(
     uint64_t                                   dynamicStateFlags,
     const RenderPass*                          pRenderPass,
     const uint32_t                             subpass,
-    GraphicsPipelineBinaryCreateInfo*          pCreateInfo)
+    GraphicsPipelineBinaryCreateInfo*          pCreateInfo
+)
 {
     if ((pCb != nullptr) || (pRendering != nullptr))
     {
@@ -2459,7 +2453,8 @@ static void BuildFragmentOutputInterfaceState(
                          pIn->pColorBlendState,
                          pPipelineRenderingCreateInfoKHR,
                          dynamicStateFlags,
-                         pRenderPass, pIn->subpass, pCreateInfo);
+                         pRenderPass, pIn->subpass, pCreateInfo
+    );
 
     pCreateInfo->pipelineInfo.iaState.enableMultiView =
         (pRenderPass != nullptr) ? pRenderPass->IsMultiviewEnabled() :
@@ -2552,19 +2547,6 @@ static void BuildExecutablePipelineState(
     if (enableRayQuery)
     {
         pDefaultCompiler->SetRayTracingState(pDevice, &(pCreateInfo->pipelineInfo.rtState), 0);
-
-        uint32_t flags = GpuRtShaderLibraryFlags(pDevice);
-
-        const GpuRt::PipelineShaderCode codePatch = GpuRt::GetShaderLibraryCode(flags);
-
-        VK_ASSERT(codePatch.dxilSize > 0);
-
-        // copy the gpurt rayquery code to the pipeline shader library
-        auto pShaderLibrary = &pCreateInfo->pipelineInfo.shaderLibrary;
-
-        pShaderLibrary->pCode = codePatch.pSpvCode;
-        pShaderLibrary->codeSize = codePatch.spvSize;
-
     }
 #endif
 
@@ -2576,6 +2558,7 @@ static void BuildExecutablePipelineState(
 VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     const Device*                                   pDevice,
     const VkGraphicsPipelineCreateInfo*             pIn,
+    PipelineCreateFlags                             flags,
     const GraphicsPipelineShaderStageInfo*          pShaderInfo,
     const PipelineLayout*                           pPipelineLayout,
     PipelineOptimizerKey*                           pPipelineProfileKey,
@@ -2590,7 +2573,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
 
     GraphicsPipelineLibraryInfo libInfo;
-    GraphicsPipelineCommon::ExtractLibraryInfo(pIn, &libInfo);
+    GraphicsPipelineCommon::ExtractLibraryInfo(pIn, flags, &libInfo);
 
     pCreateInfo->libFlags = libInfo.libFlags;
 
@@ -2604,6 +2587,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                              0 : VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
 
     uint32_t libFlags = libInfo.libFlags;
+
     VkShaderStageFlagBits activeStages = GraphicsPipelineCommon::GetActiveShaderStages(pIn, &libInfo);
     uint64_t dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
 
@@ -2612,7 +2596,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     pDevice->GetCompiler(DefaultDeviceIndex)->ApplyPipelineOptions(pDevice,
                                                                    pIn->flags,
-                                                                   &pCreateInfo->pipelineInfo.options);
+                                                                   &pCreateInfo->pipelineInfo.options
+    );
 
     if (result == VK_SUCCESS)
     {
@@ -2764,7 +2749,8 @@ uint32_t PipelineCompiler::GetCompilerCollectionMask()
 void PipelineCompiler::ApplyPipelineOptions(
     const Device*            pDevice,
     VkPipelineCreateFlags    flags,
-    Vkgc::PipelineOptions*   pOptions)
+    Vkgc::PipelineOptions*   pOptions
+)
 {
     if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO) ||
         (pDevice->IsExtensionEnabled(DeviceExtensions::KHR_PIPELINE_EXECUTABLE_PROPERTIES) &&
@@ -2777,7 +2763,8 @@ void PipelineCompiler::ApplyPipelineOptions(
     pOptions->optimizationLevel = ((flags & VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT) != 0 ? 0 : 2);
 
     if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT) ||
-        pDevice->GetEnabledFeatures().scalarBlockLayout)
+        pDevice->GetEnabledFeatures().scalarBlockLayout
+        )
     {
         pOptions->scalarBlockLayout = true;
     }
@@ -2838,11 +2825,12 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     const ComputePipelineShaderStageInfo*           pShaderInfo,
     const PipelineOptimizerKey*                     pPipelineProfileKey,
     PipelineMetadata*                               pBinaryMetadata,
-    ComputePipelineBinaryCreateInfo*                pCreateInfo)
+    ComputePipelineBinaryCreateInfo*                pCreateInfo,
+    PipelineCreateFlags                             flags)
 {
     VkResult result    = VK_SUCCESS;
 
-    auto     pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+    auto pInstance            = m_pPhysicalDevice->Manager()->VkInstance();
 
     PipelineLayout* pLayout = nullptr;
 
@@ -2855,9 +2843,12 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 
     pCreateInfo->pBinaryMetadata     = pBinaryMetadata;
     pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
-    pCreateInfo->flags               = pIn->flags;
+    pCreateInfo->flags               = flags;
 
-    ApplyPipelineOptions(pDevice, pIn->flags, &pCreateInfo->pipelineInfo.options);
+    ApplyPipelineOptions(pDevice,
+                         flags,
+                         &pCreateInfo->pipelineInfo.options
+    );
 
     pCreateInfo->pipelineInfo.cs.pModuleData =
         ShaderModule::GetFirstValidShaderData(pShaderInfo->stage.pModuleHandle);
@@ -2931,21 +2922,6 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
          pModuleData->usage.enableRayQuery)
     {
         SetRayTracingState(pDevice, &(pCreateInfo->pipelineInfo.rtState), 0);
-
-        if (pDevice->RayTrace() != nullptr)
-        {
-            uint32_t flags = GpuRtShaderLibraryFlags(pDevice);
-
-            const GpuRt::PipelineShaderCode codePatch = GpuRt::GetShaderLibraryCode(flags);
-            VK_ASSERT(codePatch.dxilSize > 0);
-
-            // Include the GPURT ray query code to the pipeline shader library
-            auto pShaderLibrary      = &pCreateInfo->pipelineInfo.shaderLibrary;
-
-            pShaderLibrary->pCode    = codePatch.pDxilCode;
-            pShaderLibrary->codeSize = codePatch.dxilSize;
-
-        }
     }
 #endif
 
@@ -3109,6 +3085,7 @@ void PipelineCompiler::FreeGraphicsPipelineCreateInfo(
 VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
     const Device*                                   pDevice,
     const VkRayTracingPipelineCreateInfoKHR*        pIn,
+    PipelineCreateFlags                             flags,
     const RayTracingPipelineShaderStageInfo*        pShaderInfo,
     const PipelineOptimizerKey*                     pPipelineProfileKey,
     RayTracingPipelineBinaryCreateInfo*             pCreateInfo)
@@ -3127,7 +3104,7 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
     }
 
     pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
-    pCreateInfo->flags               = pIn->flags;
+    pCreateInfo->flags               = flags;
 
     bool hasLibraries  = ((pIn->pLibraryInfo != nullptr) && (pIn->pLibraryInfo->libraryCount > 0)) &&
                          settings.rtEnableCompilePipelineLibrary;
@@ -3191,7 +3168,8 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
         }
     }
 
-    ApplyPipelineOptions(pDevice, pIn->flags, &pCreateInfo->pipelineInfo.options);
+    ApplyPipelineOptions(pDevice, flags, &pCreateInfo->pipelineInfo.options
+    );
 
     pCreateInfo->pipelineInfo.options.disableImageResourceCheck = settings.disableRayTracingImageResourceTypeCheck;
 
@@ -3357,14 +3335,6 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
         {
             pCreateInfo->allowShaderInlining = false;
         }
-
-        uint32_t flags = GpuRtShaderLibraryFlags(pDevice);
-
-        const GpuRt::PipelineShaderCode codePatch = GpuRt::GetShaderLibraryCode(flags);
-        VK_ASSERT(codePatch.dxilSize > 0);
-
-        pCreateInfo->pipelineInfo.shaderTraceRay.pCode = codePatch.pSpvCode;
-        pCreateInfo->pipelineInfo.shaderTraceRay.codeSize = codePatch.spvSize;
 
         {
             pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
@@ -3816,7 +3786,18 @@ void PipelineCompiler::SetRayTracingState(
         break;
     }
 
+    pRtState->gpurtFeatureFlags = GpuRtShaderLibraryFlags(pDevice);
+
+    const GpuRt::PipelineShaderCode codePatch = GpuRt::GetShaderLibraryCode(pRtState->gpurtFeatureFlags);
+    VK_ASSERT(codePatch.dxilSize > 0);
+
+    pRtState->gpurtShaderLibrary.pCode = codePatch.pSpvCode;
+    pRtState->gpurtShaderLibrary.codeSize = codePatch.spvSize;
+
     CompilerSolution::UpdateRayTracingFunctionNames(pDevice, pRtState);
+
+    pRtState->rtIpOverride = settings.emulatedRtIpLevel != EmulatedRtIpLevelNone;
+
 }
 
 // =====================================================================================================================
@@ -4116,11 +4097,11 @@ Util::Result PipelineCompiler::RegisterAndLoadReinjectionBinary(
 
 // =====================================================================================================================
 // Filter VkPipelineCreateFlags to only values used for pipeline caching
-static VkPipelineCreateFlags GetCacheIdControlFlags(
-    VkPipelineCreateFlags in)
+static PipelineCreateFlags GetCacheIdControlFlags(
+    PipelineCreateFlags in)
 {
     // The following flags should NOT affect cache computation
-    static constexpr VkPipelineCreateFlags CacheIdIgnoreFlags = { 0
+    static constexpr PipelineCreateFlags CacheIdIgnoreFlags = { 0
         | VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR
         | VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR
         | VK_PIPELINE_CREATE_DERIVATIVE_BIT
@@ -4137,7 +4118,7 @@ static VkPipelineCreateFlags GetCacheIdControlFlags(
 // properties as well as options to avoid user error when changing performance tuning, compiler, or any other settings.
 static void GetCommonPipelineCacheId(
     uint32_t                         deviceIdx,
-    VkPipelineCreateFlags            flags,
+    PipelineCreateFlags              flags,
     const PipelineOptimizerKey*      pPipelineProfileKey,
     PipelineCompilerType             compilerType,
     uint64_t                         pipelineHash,
@@ -4707,28 +4688,6 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalDataImp(
 }
 
 // =====================================================================================================================
-// Calculate the hash of dynamic vertex input info
-static uint64_t GetDynamicVertexInputHash(
-    uint32_t                                     vertexBindingDescriptionCount,
-    const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
-    uint32_t                                     vertexAttributeDescriptionCount,
-    const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions)
-{
-    Util::MetroHash::Hash hash = {};
-    if (vertexBindingDescriptionCount > 0)
-    {
-        VK_ASSERT(vertexAttributeDescriptionCount > 0);
-        Util::MetroHash64 hasher;
-        hasher.Update(reinterpret_cast<const uint8_t*>(pVertexBindingDescriptions),
-            sizeof(VkVertexInputBindingDescription2EXT) * vertexBindingDescriptionCount);
-        hasher.Update(reinterpret_cast<const uint8_t*>(pVertexAttributeDescriptions),
-            sizeof(VkVertexInputAttributeDescription2EXT) * vertexAttributeDescriptionCount);
-        hasher.Finalize(hash.bytes);
-    }
-    return hash.qwords[0];
-}
-
-// =====================================================================================================================
 // Builds uber-fetch shader internal data according to dynamic vertex input info.
 uint32_t PipelineCompiler::BuildUberFetchShaderInternalData(
     uint32_t                                     vertexBindingDescriptionCount,
@@ -4737,59 +4696,15 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalData(
     const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions,
     void*                                        pUberFetchShaderInternalData)
 {
-    uint64_t hash64 = GetDynamicVertexInputHash(vertexBindingDescriptionCount,
-                                                pVertexBindingDescriptions,
-                                                vertexAttributeDescriptionCount,
-                                                pVertexAttributeDescriptions);
 
-    Vkgc::BinaryData* pBinaryData = nullptr;
-    bool existed = false;
-    uint32_t dataSize = 0;
-
-    if (hash64 != 0)
-    {
-        Util::MutexAuto mutexLock(&m_cacheLock);
-
-        Util::Result result = m_uberFetchShaderInternalDataMap.FindAllocate(hash64, &existed, &pBinaryData);
-        if (result == Util::Result::Success)
-        {
-            if (existed)
-            {
-                memcpy(pUberFetchShaderInternalData, pBinaryData->pCode, pBinaryData->codeSize);
-                dataSize = pBinaryData->codeSize;
-            }
-            else
-            {
-                dataSize = BuildUberFetchShaderInternalDataImp(vertexBindingDescriptionCount,
-                    pVertexBindingDescriptions,
-                    vertexAttributeDescriptionCount,
-                    pVertexAttributeDescriptions,
-                    vertexBindingDescriptionCount,
-                    pVertexBindingDescriptions,
-                    false,
-                    pUberFetchShaderInternalData);
-
-                void* pCacheData = m_pPhysicalDevice->VkInstance()->AllocMem(dataSize,
-                    VK_DEFAULT_MEM_ALIGN,
-                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-
-                if (pCacheData != nullptr)
-                {
-                    memcpy(pCacheData, pUberFetchShaderInternalData, dataSize);
-                    pBinaryData->pCode = pCacheData;
-                    pBinaryData->codeSize = dataSize;
-                }
-                else
-                {
-                    VK_NEVER_CALLED();
-                }
-            }
-        }
-        else
-        {
-            VK_NEVER_CALLED();
-        }
-    }
+    uint32_t dataSize = BuildUberFetchShaderInternalDataImp(vertexBindingDescriptionCount,
+                                                            pVertexBindingDescriptions,
+                                                            vertexAttributeDescriptionCount,
+                                                            pVertexAttributeDescriptions,
+                                                            vertexBindingDescriptionCount,
+                                                            pVertexBindingDescriptions,
+                                                            false,
+                                                            pUberFetchShaderInternalData);
 
     return dataSize;
 }

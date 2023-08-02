@@ -41,6 +41,35 @@ namespace vk
 {
 
 // =====================================================================================================================
+static const char* GetCacheAccessString(
+    Llpc::CacheAccessInfo cacheAccess)
+{
+    const char* pStr = "";
+    switch (cacheAccess)
+    {
+    case Llpc::CacheNotChecked:
+        pStr = "CacheNotChecked";
+        break;
+    case Llpc::CacheMiss:
+        pStr = "CacheMiss";
+        break;
+    case Llpc::CacheHit:
+        pStr = "CacheHit";
+        break;
+    case Llpc::InternalCacheHit:
+        pStr = "InternalCacheHit";
+        break;
+    case Llpc::PartialPipelineHit:
+        pStr = "PartialPipelineHit";
+        break;
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+    return pStr;
+}
+
+// =====================================================================================================================
 CompilerSolutionLlpc::CompilerSolutionLlpc(
     PhysicalDevice* pPhysicalDevice)
     :
@@ -122,7 +151,8 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     moduleInfo.shaderBin.codeSize = codeSize;
 
     auto pPipelineCompiler = m_pPhysicalDevice->GetCompiler();
-    pPipelineCompiler->ApplyPipelineOptions(pDevice, 0, &moduleInfo.options.pipelineOptions);
+    pPipelineCompiler->ApplyPipelineOptions(pDevice, 0, &moduleInfo.options.pipelineOptions
+    );
 
 #if VKI_RAY_TRACING
     if ((internalShaderFlags & VK_INTERNAL_SHADER_FLAGS_RAY_TRACING_INTERNAL_SHADER_BIT) != 0)
@@ -252,6 +282,14 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
         {
             elfPackage[UnlinkedStageVertexProcess] = pCreateInfo->earlyElfPackage[ShaderStageVertex];
         }
+        else if (pCreateInfo->earlyElfPackage[ShaderStageTask].pCode != nullptr)
+        {
+            elfPackage[UnlinkedStageVertexProcess] = pCreateInfo->earlyElfPackage[ShaderStageTask];
+        }
+        else if (pCreateInfo->earlyElfPackage[ShaderStageMesh].pCode != nullptr)
+        {
+            elfPackage[UnlinkedStageVertexProcess] = pCreateInfo->earlyElfPackage[ShaderStageMesh];
+        }
 
         if (pCreateInfo->earlyElfPackage[ShaderStageFragment].pCode != nullptr)
         {
@@ -322,6 +360,39 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
             char                      extraInfo[256] = {};
             const ShaderOptimizerKey* pShaderKey     = pipelineProfileKey.pShaders;
 
+            Util::Snprintf(extraInfo, sizeof(extraInfo),
+                "\n;CacheHitInfo: PipelineCache: %s ", GetCacheAccessString(pipelineOut.pipelineCacheAccess));
+            Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
+
+            for (uint32_t i = 0; i < ShaderStageGfxCount; i++)
+            {
+                if (pCreateInfo->libraryHash[i] != 0)
+                {
+                    const char* pName = GetShaderStageName(static_cast<ShaderStage>(i));
+                    Util::Snprintf(
+                        extraInfo,
+                        sizeof(extraInfo),
+                        "| %s Cache: %s ", pName, GetCacheAccessString(pipelineOut.stageCacheAccesses[i]));
+                    Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
+                }
+            }
+            Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, "\n");
+
+            for (uint32_t i = 0; i < ShaderStageGfxCount; i++)
+            {
+                if (pCreateInfo->libraryHash[i] != 0)
+                {
+                    const char* pName = GetShaderStageName(static_cast<ShaderStage>(i));
+                    Util::Snprintf(
+                        extraInfo,
+                        sizeof(extraInfo),
+                        ";%s GraphicsPipelineLibrary Hash: 0x%016" PRIX64 "\n",
+                        pName,
+                        pCreateInfo->libraryHash[i]);
+                    Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
+                }
+            }
+
             Util::Snprintf(extraInfo, sizeof(extraInfo), "\n;PipelineOptimizer\n");
             Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
 
@@ -349,7 +420,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
 }
 
 // =====================================================================================================================
-// Build ElfPackage for a specific shader module based on pipeine information
+// Build ElfPackage for a specific shader module based on pipeline information
 VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
     const Device*                     pDevice,
     PipelineCache*                    pPipelineCache,
@@ -421,14 +492,23 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
 
     if (result == VK_SUCCESS)
     {
-        pCreateInfo->earlyElfPackage[stage]     = pShaderModule->elfPackage;
-        pCreateInfo->earlyElfPackageHash[stage] = cacheId;
+        if (stage < ShaderStage::ShaderStageGfxCount)
+        {
+            pCreateInfo->earlyElfPackage[stage]     = pShaderModule->elfPackage;
+            pCreateInfo->earlyElfPackageHash[stage] = cacheId;
+        }
 
         if (stage == ShaderStage::ShaderStageFragment)
         {
             const auto* pModuleData =
                 reinterpret_cast<const Vkgc::ShaderModuleData*>(pCreateInfo->pipelineInfo.fs.pModuleData);
             pCreateInfo->pBinaryMetadata->needsSampleInfo = pModuleData->usage.useSampleInfo;
+        }
+
+        if (pPipelineDumpHandle != nullptr)
+        {
+            Vkgc::IPipelineDumper::DumpPipelineBinary(
+                pPipelineDumpHandle, m_gfxIp, &pCreateInfo->earlyElfPackage[stage]);
         }
     }
 
@@ -759,6 +839,7 @@ VkResult CompilerSolutionLlpc::CreateRayTracingPipelineBinary(
             memcpy(pShaderProp, pipelineOut.shaderPropSet.shaderProps, shaderPropSetSize);
         }
         pPipelineBinary->shaderPropSet.shaderCount = pipelineOut.shaderPropSet.shaderCount;
+        pPipelineBinary->shaderPropSet.traceRayIndex = pipelineOut.shaderPropSet.traceRayIndex;
 
         memcpy(pPipelineBinary->shaderGroupHandle.shaderHandles, pipelineOut.shaderGroupHandle.shaderHandles, shaderGroupHandleSize);
         pPipelineBinary->shaderGroupHandle.shaderHandleCount = pipelineOut.shaderGroupHandle.shaderHandleCount;

@@ -91,8 +91,8 @@ namespace vk
 class BarrierFilterLayer;
 class Buffer;
 class Device;
-class DispatchableDevice;
-class DispatchableQueue;
+class ApiDevice;
+class ApiQueue;
 class Instance;
 class OptLayer;
 class PhysicalDevice;
@@ -117,6 +117,7 @@ struct ImportSemaphoreInfo
     VkExternalSemaphoreHandleTypeFlagBits handleType;
     Pal::OsExternalHandle                 handle;
     VkSemaphoreImportFlags                importFlags;
+    bool                                  crossProcess;
 };
 
 // =====================================================================================================================
@@ -211,7 +212,7 @@ public:
         PhysicalDevice*                             pPhysicalDevice,
         const VkDeviceCreateInfo*                   pCreateInfo,
         const VkAllocationCallbacks*                pAllocator,
-        DispatchableDevice**                        ppDevice);
+        ApiDevice**                                 ppDevice);
 
     VkResult Destroy(const VkAllocationCallbacks*   pAllocator);
 
@@ -381,7 +382,7 @@ public:
 
     VkResult Initialize(
         PhysicalDevice*                             pPhysicalDevice,
-        DispatchableQueue**                         pQueues,
+        ApiQueue**                                  pQueues,
         const DeviceExtensions::Enabled&            enabled,
         const VkMemoryOverallocationBehaviorAMD     overallocationBehavior,
         bool                                        bufferDeviceAddressMultiDeviceEnabled,
@@ -742,6 +743,16 @@ public:
         return m_maxVrsShadingRate;
     }
 
+    VK_FORCEINLINE PipelineBinningMode GetPipelineBinningMode() const
+    {
+        return m_pipelineBinningMode;
+    }
+
+    VK_FORCEINLINE void SetPipelineBinningMode(PipelineBinningMode mode)
+    {
+        m_pipelineBinningMode = mode;
+    }
+
     size_t GetPrivateDataSize() const
     {
         return m_privateDataSize;
@@ -801,6 +812,13 @@ public:
 
     const PipelineLayout* GetNullPipelineLayout() const { return m_pNullPipelineLayout; }
 
+    template<typename CreateInfo>
+    static PipelineCreateFlags GetPipelineCreateFlags(
+        const CreateInfo* pCreateInfo);
+
+    static BufferUsageFlagBits GetBufferUsageFlagBits(
+        const VkBufferCreateInfo* pCreateInfo);
+
 protected:
     Device(
         uint32_t                         deviceCount,
@@ -845,11 +863,13 @@ protected:
 
     ShaderOptimizer                     m_shaderOptimizer;
 
+    PipelineBinningMode                 m_pipelineBinningMode;
+
     ResourceOptimizer                   m_resourceOptimizer;
 
     RenderStateCache                    m_renderStateCache;
 
-    DispatchableQueue*                  m_pQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily];
+    ApiQueue*                           m_pQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily];
 
     InternalPipeline                    m_timestampQueryCopyPipeline;
 

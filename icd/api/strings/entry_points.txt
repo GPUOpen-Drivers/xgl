@@ -549,3 +549,5 @@ vkCmdSetDepthClipNegativeOneToOneEXT                @device       @dext(EXT_exte
 
 vkCmdSetVertexInputEXT                              @device       @dext(EXT_vertex_input_dynamic_state)
 
+vkGetImageDrmFormatModifierPropertiesEXT            @device       @dext(EXT_image_drm_format_modifier)
+

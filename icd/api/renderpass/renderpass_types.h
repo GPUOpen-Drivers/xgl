@@ -132,7 +132,6 @@ struct RPBarrierInfo
             uint32_t implicitExternalOutgoing : 1; // Hint that this barrier includes an implicit incoming subpass
                                                    // dependency because no explicit external subpass dependency was
                                                    // provided, per spec-rules.
-
             uint32_t preColorResolveSync      : 1; // Barrier needs to synchronize prior color writes against an
                                                    // impending color resolve.
             uint32_t preDsResolveSync         : 1; // Barrier needs to synchronize against prior depth-stencil writes
@@ -142,8 +141,10 @@ struct RPBarrierInfo
                                                    // clear.
             uint32_t preDsClearSync           : 1; // Barrier needs to synchronize before an impending load-op
                                                    // depth/stencil clear.
-
-            uint32_t reserved                 : 24;
+            uint32_t explicitExternalIncoming : 1; // Hint that this barrier has an explicit incoming subpass
+                                                   // dependency and we might need to update some barrier flags for
+                                                   // meta data init correctness based on this one.
+            uint32_t reserved                 : 23;
         };
         uint32_t u32All;
     } flags;

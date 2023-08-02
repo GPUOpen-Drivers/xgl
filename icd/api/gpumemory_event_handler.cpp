@@ -37,6 +37,7 @@
 #include "palHashMapImpl.h"
 #include "palHashSetImpl.h"
 #include "palVectorImpl.h"
+#include "palGpuUtil.h"
 
 namespace vk
 {
@@ -55,7 +56,6 @@ GpuMemoryEventHandler::GpuMemoryEventHandler(Instance* pInstance)
     m_palSubAllocationHashMap(32, pInstance->Allocator()),
     m_bindHashMap(32, pInstance->Allocator()),
     m_deviceHashSet(32, pInstance->Allocator()),
-    m_memoryObjectId(0),
     m_deviceCount(0)
 {
     m_allocationHashMap.Init();
@@ -137,6 +137,8 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
                 pAllocationData->allocationData               = *pGpuMemoryData;
                 pAllocationData->objectHandle                 = NullHandle;
                 pAllocationData->objectType                   = VK_OBJECT_TYPE_UNKNOWN;
+                pAllocationData->memoryObjectId               = pGpuMemoryData->pGpuMemory->Desc().uniqueId;
+                pAllocationData->isExternal                   = pAllocationData->allocationData.flags.isExternal;
                 pAllocationData->reportedToDeviceMemoryReport = false;
 
                 // If this is a Pal internal allocation that is not suballocated report it to device_memory_report now
@@ -164,9 +166,9 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
                         pAllocationData->objectHandle,
                         pAllocationData->allocationData.size,
                         pAllocationData->objectType,
-                        pAllocationData->allocationData.pGpuMemory->Desc().uniqueId,
+                        pAllocationData->memoryObjectId,
                         heapIndex,
-                        pAllocationData->allocationData.flags.isExternal);
+                        pAllocationData->isExternal);
                 }
             }
             else
@@ -196,8 +198,8 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
                     DeviceMemoryReportFreeEvent(
                         pAllocationData->objectHandle,
                         pAllocationData->objectType,
-                        pAllocationData->allocationData.pGpuMemory->Desc().uniqueId,
-                        pAllocationData->allocationData.flags.isExternal);
+                        pAllocationData->memoryObjectId,
+                        pAllocationData->isExternal);
                 }
                 else if ((pAllocationData->allocationData.flags.isClient  == 1) &&
                          (pAllocationData->allocationData.flags.isVirtual == 1))
@@ -266,7 +268,7 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
 
                 // Store the Pal suballocation information
                 pSubAllocData->allocationData               = *pGpuMemoryData;
-                pSubAllocData->memoryObjectId               = GenerateMemoryObjectId();
+                pSubAllocData->memoryObjectId               = GpuUtil::GenerateGpuMemoryUniqueId(false);
                 pSubAllocData->heapIndex                    = heapIndex;
                 pSubAllocData->offset                       = pGpuMemoryData->offset;
                 pSubAllocData->subAllocationSize            = pGpuMemoryData->size;
@@ -452,7 +454,8 @@ void GpuMemoryEventHandler::VulkanAllocateEvent(
     uint64_t                         objectHandle,
     VkObjectType                     objectType,
     uint64_t                         heapIndex,
-    bool                             isBuddyAllocated)
+    bool                             isBuddyAllocated
+    )
 {
     Util::RWLockAuto<RWLock::ReadOnly> lock(&m_allocationHashMapLock);
     AllocationData* pAllocationData = m_allocationHashMap.FindKey(pGpuMemory);
@@ -476,9 +479,9 @@ void GpuMemoryEventHandler::VulkanAllocateEvent(
                     pAllocationData->objectHandle,
                     gpuMemoryDesc.size,
                     pAllocationData->objectType,
-                    gpuMemoryDesc.uniqueId,
+                    pAllocationData->memoryObjectId,
                     heapIndex,
-                    gpuMemoryDesc.flags.isExternal);
+                    pAllocationData->isExternal);
             }
             else
             {
@@ -534,7 +537,7 @@ void GpuMemoryEventHandler::VulkanSubAllocateEvent(
         if (exists == false)
         {
             pSubAllocData->allocationData.pGpuMemory    = pGpuMemory;
-            pSubAllocData->memoryObjectId               = GenerateMemoryObjectId();
+            pSubAllocData->memoryObjectId               = GpuUtil::GenerateGpuMemoryUniqueId(false);
             pSubAllocData->objectType                   = objectType;
             pSubAllocData->offset                       = offset;
             pSubAllocData->subAllocationSize            = subAllocationSize;

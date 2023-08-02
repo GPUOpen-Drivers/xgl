@@ -37,7 +37,7 @@ import pathlib
 from itertools import chain
 
 from shaderProfileTemplate import SHADER_PATTERN, ENTRIES_TEMPLATE, SHADER_ACTION, BRANCHES, PIPELINE_ACTION, \
-    INCREMENT_ENTRY_TEMPLATE, ENTRY_COUNT_TEMPLATE, UNINITIALIZED_VAR_TEMPLATE, INITIALIZED_VAR_TEMPLATE, \
+    INCREMENT_ENTRY_TEMPLATE, UNINITIALIZED_VAR_TEMPLATE, INITIALIZED_VAR_TEMPLATE, \
     ValidKeysForEntity, STRUCT_TEMPLATE, UNION_TEMPLATE, BIT_FIELD_VAR_TEMPLATE, INITIALIZED_ARR_TEMPLATE, \
     CONDITION_SHADER_MATCH_PATTERN, PROFILE_ENTRY_PATTERN_TO_JSON_FUNC, CONDITION_CREATE_INFO_APPLY, \
     PROFILE_ENTRY_ACTION_TO_JSON_FUNC, CONDITION_SHADER_CREATE_APPLY, CONDITION_SHADER_CREATE_TUNING_OPTIONS, \
@@ -313,18 +313,16 @@ def parse_json_profile_entry_action(action):
         code_action = code_action + cpp_code
     return result_ret, code_action
 
-def gen_profile(input_json, compiler, gfxip):
+def gen_profile(input_json, compiler):
     """
     Takes the entire json object as input, fetches corresponding code template from shaderProfileTemplate.py,
     manipulates it according to the tuning parameters present in the json file, and finally returns a block of code
     that is going to reside inside g_shader_profile.cpp.
     :param input_json:
     :param compiler:
-    :param gfxip:
     :return: Code to build the shader profile in g_shader_profile.cpp.
     """
     entries = input_json["entries"]
-    entry_count = 0
     cpp_code = ""
     result_ret = {'success': False}
 
@@ -346,30 +344,18 @@ def gen_profile(input_json, compiler, gfxip):
                     if result:
                         result_ret[branch] = True
 
-                if gfxip == "generic":
-                    cpp_code = cpp_code + INCREMENT_ENTRY_TEMPLATE + cpp_pattern + cpp_action + "\n"
-                    cpp_code = cpp_code.replace("%EntryNum%", 'i')
-                else:
-                    cpp_code = cpp_code + cpp_pattern + cpp_action + "\n"
-                    cpp_code = cpp_code.replace("%EntryNum%", str(entry_count))
-                    entry_count = entry_count + 1
+                cpp_code = cpp_code + INCREMENT_ENTRY_TEMPLATE + cpp_pattern + cpp_action + "\n"
+                cpp_code = cpp_code.replace("%EntryNum%", 'i')
             else:
                 print("************ Parsing failed ****************")
 
-        if gfxip == "generic":
-            entry_count_template = ""
-        else:
-            entry_count_template = ENTRY_COUNT_TEMPLATE.replace("%entryCount%", str(entry_count))
-
         var_template = ""
 
-        if gfxip == "generic":
-            var = INITIALIZED_VAR_TEMPLATE.replace("%DataType%", 'uint32_t')
-            var = var.replace("%VarName%", 'i')
-            var = var.replace("%DefaultValue%", str(0))
-            var_template = var_template + var + "\n"
+        var = UNINITIALIZED_VAR_TEMPLATE.replace("%DataType%", 'uint32_t')
+        var = var.replace("%VarName%", 'i')
+        var_template = var_template + var + "\n"
 
-        cpp_code = var_template + entry_count_template + cpp_code
+        cpp_code = var_template + cpp_code
 
     return dedent_all(cpp_code.rstrip("\n"))
 
@@ -1171,7 +1157,7 @@ def main():
                             if_generic = GENERIC_GFX_IP_APP_PROFILE.replace("%FuncName%", func_name)
                             if_generic_dict[title] = if_generic
 
-                        app_profile = gen_profile(content, compiler, gfxip)
+                        app_profile = gen_profile(content, compiler)
                         func_set_app_profile = SET_APP_PROFILE_FUNC.replace("%FuncName%", func_name)
                         func_set_app_profile = func_set_app_profile.replace("%FuncDefs%", indent(app_profile))
                         if compiler in BuildTypesTemplate:

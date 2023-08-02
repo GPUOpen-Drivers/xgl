@@ -366,7 +366,7 @@ void Queue::ConstructQueueCreateInfo(
     if ((dedicatedComputeUnits > 0) &&
         (rtCuHighComputeSubEngineIndex != UINT32_MAX))
     {
-        VK_ASSERT(queuePriority == VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT);
+        VK_ASSERT(queuePriority == VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR);
 
         pQueueCreateInfo->engineType = Pal::EngineType::EngineTypeCompute;
         pQueueCreateInfo->engineIndex = rtCuHighComputeSubEngineIndex;
@@ -374,16 +374,16 @@ void Queue::ConstructQueueCreateInfo(
     }
     else if (palQueueType == Pal::QueueType::QueueTypeCompute)
     {
+        constexpr uint32_t VrHighPriority    = Pal::SupportQueuePriorityMedium |
+                                               Pal::SupportQueuePriorityHigh |
+                                               Pal::SupportQueuePriorityRealtime;
+
+        const uint32_t     queuePriorityMask = ((queuePriority == VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR)        ?
+                                                Pal::SupportQueuePriorityHigh                               :
+                                                ((queuePriority == VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR) ?
+                                                 Pal::SupportQueuePriorityRealtime : Pal::SupportQueuePriorityNormal));
+
         pQueueCreateInfo->engineType = Pal::EngineType::EngineTypeCompute;
-
-        constexpr uint32_t VrHighPriority = Pal::SupportQueuePriorityMedium |
-            Pal::SupportQueuePriorityHigh |
-            Pal::SupportQueuePriorityRealtime;
-
-        const uint32_t engineIndex = physicalDevice.GetCompQueueEngineIndex(queueIndex);
-
-        const uint32_t queuePriorityMask = (1 << static_cast<uint8>(VkToPalGlobalPriority(queuePriority,
-            palProperties.engineProperties[pQueueCreateInfo->engineType].capabilities[engineIndex])));
 
         if ((tunnelComputeSubEngineIndex != UINT32_MAX) &&
             TestAnyFlagSet(tunnelPriorities, queuePriorityMask))
@@ -396,16 +396,13 @@ void Queue::ConstructQueueCreateInfo(
         {
             pQueueCreateInfo->engineIndex = vrHighPriorityIndex;
         }
+        else if (changeDMAToCompute)
+        {
+            pQueueCreateInfo->engineIndex = physicalDevice.GetCompQueueEngineIndex(0);
+        }
         else
         {
-            if (changeDMAToCompute)
-            {
-                pQueueCreateInfo->engineIndex = physicalDevice.GetCompQueueEngineIndex(0);
-            }
-            else
-            {
-                pQueueCreateInfo->engineIndex = engineIndex;
-            }
+            pQueueCreateInfo->engineIndex = physicalDevice.GetCompQueueEngineIndex(queueIndex);
         }
     }
     else
@@ -1308,8 +1305,8 @@ VkResult Queue::Submit(
 
                 // Get the PAL command buffer object from each Vulkan object and put it
                 // in the local array before submitting to PAL.
-                DispatchableCmdBuffer* const * pCommandBuffers =
-                    reinterpret_cast<DispatchableCmdBuffer*const*>(pCmdBuffers);
+                ApiCmdBuffer* const * pCommandBuffers =
+                    reinterpret_cast<ApiCmdBuffer*const*>(pCmdBuffers);
 
                 perSubQueueInfo.cmdBufferCount = 0;
 
@@ -2571,9 +2568,14 @@ bool Queue::BuildPostProcessCommands(
 
         if (pPresentInfo != nullptr)
         {
+            const DisplayableSurfaceInfo& displayableInfo = pSwapChain->GetProperties().displayableInfo;
+
             frameInfo.pSrcImage                = pPresentInfo->pSrcImage;
             frameInfo.debugOverlay.presentMode = pPresentInfo->presentMode;
-            frameInfo.debugOverlay.wsiPlatform = pSwapChain->GetProperties().displayableInfo.palPlatform;
+            frameInfo.debugOverlay.wsiPlatform = displayableInfo.palPlatform;
+            frameInfo.debugOverlay.presentKey = pSwapChain->IsDxgiEnabled()
+                ? Pal::PresentKeyFromPointer(pPresentInfo->pSwapChain)
+                : Pal::PresentKeyFromOsWindowHandle(displayableInfo.windowHandle);
         }
         else
         {

@@ -214,43 +214,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             m_settings.maxUnifiedNonRayGenShaders = static_cast<uint32_t>(atoi(pMaxInlinedShadersEnvVar));
         }
-
-        const Pal::RayTracingIpLevel rayTracingIpLevel = pInfo->gfxipProperties.rayTracingIp;
-        if (rayTracingIpLevel == Pal::RayTracingIpLevel::RtIp1_1)
-        {
-            if ((m_settings.boxSortingHeuristic != BoxSortingDisabled) &&
-                (m_settings.boxSortingHeuristic != BoxSortingDisabledOnAcceptFirstHit))
-            {
-                m_settings.boxSortingHeuristic = BoxSortingClosest;
-            }
-        }
-
-        // Disable ray tracing if enableRaytracingSupport is requested but no hardware or software emulation is available.
-        if ((m_settings.enableRaytracingSupport != RaytracingNotSupported) &&
-            (m_settings.emulatedRtIpLevel == EmulatedRtIpLevelNone) &&
-            (rayTracingIpLevel == Pal::RayTracingIpLevel::None))
-        {
-            m_settings.enableRaytracingSupport = RaytracingNotSupported;
-        }
-
-#if VKI_BUILD_GFX11
-        // RTIP 2.0+ is always expected to support hardware traversal stack
-        VK_ASSERT((rayTracingIpLevel <= Pal::RayTracingIpLevel::RtIp1_1) ||
-                  (pInfo->gfxipProperties.flags.supportRayTraversalStack == 1));
-#endif
-
-        // Clamp target occupancy to [0.0, 1.0]
-        m_settings.indirectCallTargetOccupancyPerSimd = Util::Clamp(m_settings.indirectCallTargetOccupancyPerSimd, 0.0f, 1.0f);
-
-        // Max number of callee saved registers for indirect functions is 255
-        m_settings.indirectCalleeRaygen = Util::Min(255U, m_settings.indirectCalleeRaygen);
-        m_settings.indirectCalleeMiss = Util::Min(255U, m_settings.indirectCalleeMiss);
-        m_settings.indirectCalleeClosestHit = Util::Min(255U, m_settings.indirectCalleeClosestHit);
-        m_settings.indirectCalleeAnyHit = Util::Min(255U, m_settings.indirectCalleeAnyHit);
-        m_settings.indirectCalleeIntersection = Util::Min(255U, m_settings.indirectCalleeIntersection);
-        m_settings.indirectCalleeCallable = Util::Min(255U, m_settings.indirectCalleeCallable);
-        m_settings.indirectCalleeTraceRays = Util::Min(255U, m_settings.indirectCalleeTraceRays);
-
 #endif
 
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
@@ -358,6 +321,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (appProfile == AppProfile::WolfensteinII)
         {
             m_settings.zeroInitIlRegs = true;
+
+            m_settings.disableSingleMipAnisoOverride = false;
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
@@ -971,6 +936,19 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
 #endif
         }
+
+        if (appProfile == AppProfile::RayTracingWeekends)
+        {
+#if VKI_BUILD_GFX11
+            if ((pInfo->revision != Pal::AsicRevision::Navi31)
+                )
+#endif
+            {
+                {
+                    m_settings.rtUnifiedVgprLimit = 64;
+                }
+            }
+        }
 #endif
 
         if (appProfile == AppProfile::DoomEternal)
@@ -1066,7 +1044,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
             {
                 // Navi31 Mall and Tiling Settings
-                if (pInfo->revision == Pal::AsicRevision::Navi31)
+                if ((pInfo->revision == Pal::AsicRevision::Navi31)
+                    )
                 {
                     // Mall no alloc settings give a ~1% gain
                     m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
@@ -1249,6 +1228,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.disableHtileBasedMsaaRead = true;
             }
+
+            m_settings.padVertexBuffers = true;
         }
 
         if (appProfile == AppProfile::Battlefield1)
@@ -1491,6 +1472,42 @@ void VulkanSettingsLoader::ValidateSettings()
     // Clamp target occupancy to [0.0, 1.0]
     m_settings.indirectCallTargetOccupancyPerSimd =
         Util::Clamp(m_settings.indirectCallTargetOccupancyPerSimd, 0.0f ,1.0f);
+
+    const Pal::RayTracingIpLevel rayTracingIpLevel = deviceProps.gfxipProperties.rayTracingIp;
+    if (rayTracingIpLevel == Pal::RayTracingIpLevel::RtIp1_1)
+    {
+        if ((m_settings.boxSortingHeuristic != BoxSortingDisabled) &&
+            (m_settings.boxSortingHeuristic != BoxSortingDisabledOnAcceptFirstHit))
+        {
+            m_settings.boxSortingHeuristic = BoxSortingClosest;
+        }
+    }
+
+    // Disable ray tracing if enableRaytracingSupport is requested but no hardware or software emulation is available.
+    if ((m_settings.enableRaytracingSupport != RaytracingNotSupported) &&
+        (m_settings.emulatedRtIpLevel == EmulatedRtIpLevelNone) &&
+        (rayTracingIpLevel == Pal::RayTracingIpLevel::None))
+    {
+        m_settings.enableRaytracingSupport = RaytracingNotSupported;
+    }
+
+#if VKI_BUILD_GFX11
+    // RTIP 2.0+ is always expected to support hardware traversal stack
+    VK_ASSERT((rayTracingIpLevel <= Pal::RayTracingIpLevel::RtIp1_1) ||
+        (deviceProps.gfxipProperties.flags.supportRayTraversalStack == 1));
+#endif
+
+    // Clamp target occupancy to [0.0, 1.0]
+    m_settings.indirectCallTargetOccupancyPerSimd = Util::Clamp(m_settings.indirectCallTargetOccupancyPerSimd, 0.0f, 1.0f);
+
+    // Max number of callee saved registers for indirect functions is 255
+    m_settings.indirectCalleeRaygen = Util::Min(255U, m_settings.indirectCalleeRaygen);
+    m_settings.indirectCalleeMiss = Util::Min(255U, m_settings.indirectCalleeMiss);
+    m_settings.indirectCalleeClosestHit = Util::Min(255U, m_settings.indirectCalleeClosestHit);
+    m_settings.indirectCalleeAnyHit = Util::Min(255U, m_settings.indirectCalleeAnyHit);
+    m_settings.indirectCalleeIntersection = Util::Min(255U, m_settings.indirectCalleeIntersection);
+    m_settings.indirectCalleeCallable = Util::Min(255U, m_settings.indirectCalleeCallable);
+    m_settings.indirectCalleeTraceRays = Util::Min(255U, m_settings.indirectCalleeTraceRays);
 #endif
 
     // SkipDstCacheInv should not be enabled by default when acquire-release barrier interface is used, because PAL

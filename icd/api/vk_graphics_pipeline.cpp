@@ -57,6 +57,7 @@ namespace vk
 VkResult GraphicsPipeline::CreatePipelineBinaries(
     Device*                                        pDevice,
     const VkGraphicsPipelineCreateInfo*            pCreateInfo,
+    PipelineCreateFlags                            flags,
     const GraphicsPipelineShaderStageInfo*         pShaderInfo,
     const PipelineLayout*                          pPipelineLayout,
     const Util::MetroHash::Hash*                   pElfHash,
@@ -88,7 +89,8 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
             *pElfHash,
             pDevice->VkPhysicalDevice(deviceIdx)->GetSettingsLoader()->GetSettingsHash(),
             *pPipelineOptimizerKey,
-            &pCacheIds[deviceIdx]);
+            &pCacheIds[deviceIdx]
+        );
 
         bool shouldCompile = true;
 
@@ -124,6 +126,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                     result = pDefaultCompiler->ConvertGraphicsPipelineInfo(
                         pDevice,
                         pCreateInfo,
+                        flags,
                         pShaderInfo,
                         pPipelineLayout,
                         pPipelineOptimizerKey,
@@ -161,6 +164,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                 result = pDefaultCompiler->ConvertGraphicsPipelineInfo(
                     pDevice,
                     pCreateInfo,
+                    flags,
                     pShaderInfo,
                     pPipelineLayout,
                     pPipelineOptimizerKey,
@@ -320,6 +324,7 @@ VkResult GraphicsPipeline::CreatePalPipelineObjects(
 VkResult GraphicsPipeline::CreatePipelineObjects(
     Device*                             pDevice,
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    PipelineCreateFlags                 flags,
     const VkAllocationCallbacks*        pAllocator,
     const PipelineLayout*               pPipelineLayout,
     const VbBindingInfo*                pVbInfo,
@@ -453,7 +458,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
 
     if ((pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO) ||
         (pDevice->IsExtensionEnabled(DeviceExtensions::KHR_PIPELINE_EXECUTABLE_PROPERTIES) &&
-        ((pCreateInfo->flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) != 0))) &&
+        ((flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) != 0))) &&
         (result == VK_SUCCESS))
     {
         pBinaryInfo = PipelineBinaryInfo::Create(
@@ -548,6 +553,7 @@ VkResult GraphicsPipeline::Create(
     Device*                                 pDevice,
     PipelineCache*                          pPipelineCache,
     const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+    PipelineCreateFlags                     flags,
     const VkAllocationCallbacks*            pAllocator,
     VkPipeline*                             pPipeline)
 {
@@ -568,7 +574,7 @@ VkResult GraphicsPipeline::Create(
     VkResult result = BuildShaderStageInfo(pDevice,
                                            pCreateInfo->stageCount,
                                            pCreateInfo->pStages,
-                                           pCreateInfo->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR,
+                                           flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR,
                                            [](const uint32_t inputIdx, const uint32_t stageIdx)
                                            {
                                                return stageIdx;
@@ -584,13 +590,13 @@ VkResult GraphicsPipeline::Create(
     if (result == VK_SUCCESS)
     {
         GeneratePipelineOptimizerKey(
-            pDevice, pCreateInfo, &shaderStageInfo, shaderOptimizerKeys, &pipelineOptimizerKey);
+            pDevice, pCreateInfo, flags, &shaderStageInfo, shaderOptimizerKeys, &pipelineOptimizerKey);
     }
 
     // 3. Build API and ELF hashes
     uint64_t              apiPsoHash = {};
     Util::MetroHash::Hash elfHash    = {};
-    BuildApiHash(pCreateInfo, &apiPsoHash, &elfHash);
+    BuildApiHash(pCreateInfo, flags, &apiPsoHash, &elfHash);
 
     binaryCreateInfo.apiPsoHash = apiPsoHash;
 
@@ -609,6 +615,7 @@ VkResult GraphicsPipeline::Create(
         result = CreatePipelineBinaries(
             pDevice,
             pCreateInfo,
+            flags,
             &shaderStageInfo,
             pPipelineLayout,
             &elfHash,
@@ -629,6 +636,7 @@ VkResult GraphicsPipeline::Create(
         BuildPipelineObjectCreateInfo(
             pDevice,
             pCreateInfo,
+            flags,
             &shaderStageInfo,
             pPipelineLayout,
             &pipelineOptimizerKey,
@@ -645,7 +653,7 @@ VkResult GraphicsPipeline::Create(
 #endif
         objectCreateInfo.flags.isPointSizeUsed = binaryMetadata.pointSizeUsed;
         objectCreateInfo.flags.shadingRateUsedInShader = binaryMetadata.shadingRateUsedInShader;
-        objectCreateInfo.flags.viewIndexFromDeviceIndex = Util::TestAnyFlagSet(pCreateInfo->flags,
+        objectCreateInfo.flags.viewIndexFromDeviceIndex = Util::TestAnyFlagSet(flags,
             VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT);
 
 #if VKI_RAY_TRACING
@@ -656,6 +664,7 @@ VkResult GraphicsPipeline::Create(
         result = CreatePipelineObjects(
             pDevice,
             pCreateInfo,
+            flags,
             pAllocator,
             pPipelineLayout,
             &binaryMetadata.vbInfo,
@@ -1041,6 +1050,7 @@ VkResult GraphicsPipeline::DeferCreateOptimizedPipeline(
     {
         result = CreatePipelineBinaries(pDevice,
                                         nullptr,
+                                        0,
                                         pShaderStageInfo,
                                         nullptr,
                                         pElfHash,

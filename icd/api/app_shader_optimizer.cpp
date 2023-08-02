@@ -250,6 +250,11 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                     options.pOptions->disableFMA = shaderCreate.tuningOptions.disableFMA;
                 }
 
+                if (shaderCreate.apply.workaroundStorageImageFormats)
+                {
+                    options.pOptions->workaroundStorageImageFormats = true;
+                }
+
                 if (shaderCreate.apply.disableLoopUnrolls)
                 {
                     options.pOptions->disableLoopUnroll = true;
@@ -1200,6 +1205,8 @@ void ShaderOptimizer::BuildAppProfileLlpc()
         pEntry->pattern.match.always = true;
         pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.apply.disableFMA = true;
         pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.tuningOptions.disableFMA = true;
+        pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.apply.disableFastMathFlags = true;
+        pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.tuningOptions.disableFastMathFlags = 8u | 32u;
     }
 
     if (appProfile == AppProfile::CSGO)
@@ -1212,6 +1219,26 @@ void ShaderOptimizer::BuildAppProfileLlpc()
             pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.disableFastMathFlags = true;
             pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.tuningOptions.disableFastMathFlags = 32u;
         }
+    }
+
+    if (appProfile == AppProfile::WarHammerIII)
+    {
+        i = m_appProfile.entryCount++;
+        PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
+        pEntry->pattern.shaders[ShaderStage::ShaderStageCompute].match.stageActive = true;
+        pEntry->pattern.shaders[ShaderStage::ShaderStageCompute].match.codeHash = true;
+        pEntry->pattern.shaders[ShaderStage::ShaderStageCompute].codeHash.lower = 0x0f30f0381ae22148;
+        pEntry->pattern.shaders[ShaderStage::ShaderStageCompute].codeHash.upper = 0xc36b57df811c69ff;
+        pEntry->action.shaders[ShaderStage::ShaderStageCompute].shaderCreate.apply.disableFastMathFlags = true;
+        pEntry->action.shaders[ShaderStage::ShaderStageCompute].shaderCreate.tuningOptions.disableFastMathFlags = 32u;
+    }
+
+    if (appProfile == AppProfile::TheSurge2)
+    {
+        i = m_appProfile.entryCount++;
+        PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
+        pEntry->pattern.match.always = true;
+        pEntry->action.shaders[ShaderStage::ShaderStageCompute].shaderCreate.apply.workaroundStorageImageFormats = true;
     }
 }
 

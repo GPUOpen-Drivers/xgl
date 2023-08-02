@@ -140,6 +140,13 @@ VkResult CmdPool::Create(
         createInfo.allocInfo[Pal::EmbeddedDataAlloc].allocSize    = pSettings->cmdAllocatorEmbeddedAllocSize;
         createInfo.allocInfo[Pal::EmbeddedDataAlloc].suballocSize = pSettings->cmdAllocatorEmbeddedSubAllocSize;
 
+        // Initialize large embedded data chunk allocation size
+        createInfo.allocInfo[Pal::LargeEmbeddedDataAlloc].allocHeap    = pSettings->cmdAllocatorEmbeddedHeap;
+        createInfo.allocInfo[Pal::LargeEmbeddedDataAlloc].allocSize    =
+            pSettings->cmdAllocatorLargeEmbeddedAllocSize;
+        createInfo.allocInfo[Pal::LargeEmbeddedDataAlloc].suballocSize =
+            pSettings->cmdAllocatorLargeEmbeddedSubAllocSize;
+
         // Initialize GPU scratch memory chunk allocation size
         createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocHeap    = pSettings->cmdAllocatorScratchHeap;
         createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocSize    = pSettings->cmdAllocatorScratchAllocSize;

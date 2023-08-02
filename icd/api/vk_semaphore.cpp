@@ -270,7 +270,7 @@ VkResult Semaphore::ImportSemaphore(
     VkExternalSemaphoreHandleTypeFlagBits handleType  = importInfo.handleType;
 
     palOpenInfo.externalSemaphore  = importInfo.handle;
-    palOpenInfo.flags.crossProcess = true;
+    palOpenInfo.flags.crossProcess = importInfo.crossProcess;
     palOpenInfo.flags.timeline     = m_palCreateInfo.flags.timeline;
 
 #if defined(__unix__)

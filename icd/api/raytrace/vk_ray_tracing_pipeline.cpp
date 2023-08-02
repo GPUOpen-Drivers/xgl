@@ -171,6 +171,7 @@ static void GenerateHashFromRayTracingPipelineInterfaceCreateInfo(
 //     - pCreateInfo->layout
 void RayTracingPipeline::BuildApiHash(
     const VkRayTracingPipelineCreateInfoKHR* pCreateInfo,
+    PipelineCreateFlags                      flags,
     Util::MetroHash::Hash*                   pElfHash,
     uint64_t*                                pApiHash)
 {
@@ -178,10 +179,10 @@ void RayTracingPipeline::BuildApiHash(
     Util::MetroHash128 apiHasher = {};
 
     // Hash only flags needed for pipeline caching
-    elfHasher.Update(GetCacheIdControlFlags(pCreateInfo->flags));
+    elfHasher.Update(GetCacheIdControlFlags(flags));
 
     // All flags (including ones not accounted for in the elf hash)
-    apiHasher.Update(pCreateInfo->flags);
+    apiHasher.Update(flags);
 
     elfHasher.Update(pCreateInfo->stageCount);
     for (uint32_t i = 0; i < pCreateInfo->stageCount; ++i)
@@ -219,7 +220,7 @@ void RayTracingPipeline::BuildApiHash(
         GenerateHashFromDynamicStateCreateInfo(*pCreateInfo->pDynamicState, &apiHasher);
     }
 
-    if (((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) != 0) &&
+    if (((flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) != 0) &&
         (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
     {
         apiHasher.Update(RayTracingPipeline::ObjectFromHandle(pCreateInfo->basePipelineHandle)->GetApiHash());
@@ -407,6 +408,7 @@ VkResult RayTracingPipeline::Destroy(
 VkResult RayTracingPipeline::CreateImpl(
     PipelineCache*                           pPipelineCache,
     const VkRayTracingPipelineCreateInfoKHR* pCreateInfo,
+    PipelineCreateFlags                      flags,
     const VkAllocationCallbacks*             pAllocator,
     DeferredWorkload*                        pDeferredWorkload)
 {
@@ -420,7 +422,7 @@ VkResult RayTracingPipeline::CreateImpl(
 
     UpdatePipelineImplCreateInfo(pCreateInfo);
 
-    if ((Util::TestAnyFlagSet(pCreateInfo->flags, VK_PIPELINE_CREATE_LIBRARY_BIT_KHR)) &&
+    if ((Util::TestAnyFlagSet(flags, VK_PIPELINE_CREATE_LIBRARY_BIT_KHR)) &&
         (settings.rtEnableCompilePipelineLibrary == false))
     {
         // The 1st attempt is to keep all library create info during library creation time,
@@ -460,7 +462,7 @@ VkResult RayTracingPipeline::CreateImpl(
 
         Util::MetroHash::Hash elfHash    = {};
         uint64_t              apiPsoHash = {};
-        BuildApiHash(pCreateInfo, &elfHash, &apiPsoHash);
+        BuildApiHash(pCreateInfo, flags, &elfHash, &apiPsoHash);
 
         binaryCreateInfo.pDeferredWorkload = pDeferredWorkload;
         binaryCreateInfo.apiPsoHash        = apiPsoHash;
@@ -712,7 +714,8 @@ VkResult RayTracingPipeline::CreateImpl(
                 elfHash,
                 m_pDevice->VkPhysicalDevice(deviceIdx)->GetSettingsLoader()->GetSettingsHash(),
                 optimizerKey,
-                &cacheId[deviceIdx]);
+                &cacheId[deviceIdx]
+            );
 
             bool forceCompilation = m_pDevice->GetRuntimeSettings().enablePipelineDump;
             if (forceCompilation == false)
@@ -754,6 +757,7 @@ VkResult RayTracingPipeline::CreateImpl(
                 result = pDefaultCompiler->ConvertRayTracingPipelineInfo(
                     m_pDevice,
                     &pipelineCreateInfo,
+                    flags,
                     &shaderInfo,
                     &optimizerKey,
                     &binaryCreateInfo);
@@ -1474,6 +1478,8 @@ static int32_t DeferredCreateRayTracingPipelineCallback(
         {
             VkResult                                 localResult = VK_SUCCESS;
             const VkRayTracingPipelineCreateInfoKHR* pCreateInfo = &pState->pInfos[index];
+            PipelineCreateFlags                      flags       =
+                Device::GetPipelineCreateFlags(pCreateInfo);
 
             if (pState->skipRemaining == VK_FALSE)
             {
@@ -1481,6 +1487,7 @@ static int32_t DeferredCreateRayTracingPipelineCallback(
 
                 localResult = pPipeline->CreateImpl(pState->pPipelineCache,
                                                     pCreateInfo,
+                                                    flags,
                                                     pState->pAllocator,
                                                     pOperation->Workload(index));
 
@@ -1653,6 +1660,8 @@ VkResult RayTracingPipeline::Create(
         {
             VkResult                                 localResult = VK_SUCCESS;
             const VkRayTracingPipelineCreateInfoKHR* pCreateInfo = &pCreateInfos[i];
+            PipelineCreateFlags                      flags       =
+                Device::GetPipelineCreateFlags(pCreateInfo);
 
             pObjMem = pDevice->AllocApiObject(
                 pAllocator,
@@ -1678,6 +1687,7 @@ VkResult RayTracingPipeline::Create(
                 {
                     localResult = ObjectFromHandle(pPipelines[i])->CreateImpl(pPipelineCache,
                         pCreateInfo,
+                        flags,
                         pAllocator,
                         nullptr);
                 }
@@ -1699,7 +1709,7 @@ VkResult RayTracingPipeline::Create(
                 // Capture the first failure result and save it to be returned
                 finalResult = (finalResult != VK_SUCCESS) ? finalResult : localResult;
 
-                if (pCreateInfo->flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT)
+                if (flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT)
                 {
                     break;
                 }

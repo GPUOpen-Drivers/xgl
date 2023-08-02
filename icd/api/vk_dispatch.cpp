@@ -807,6 +807,10 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetShaderModuleIdentifierEXT                  );
     INIT_DISPATCH_ENTRY(vkGetShaderModuleCreateInfoIdentifierEXT        );
 
+#if defined(__unix__)
+    INIT_DISPATCH_ENTRY(vkGetImageDrmFormatModifierPropertiesEXT        );
+#endif
+
 }
 
 // =====================================================================================================================

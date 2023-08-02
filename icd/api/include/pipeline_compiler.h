@@ -135,7 +135,8 @@ public:
     void ApplyPipelineOptions(
         const Device*          pDevice,
         VkPipelineCreateFlags  flags,
-        Vkgc::PipelineOptions* pOptions);
+        Vkgc::PipelineOptions* pOptions
+    );
 
     VkResult BuildShaderModule(
         const Device*                   pDevice,
@@ -205,6 +206,7 @@ public:
     VkResult ConvertGraphicsPipelineInfo(
         const Device*                                   pDevice,
         const VkGraphicsPipelineCreateInfo*             pIn,
+        PipelineCreateFlags                             flags,
         const GraphicsPipelineShaderStageInfo*          pShaderInfo,
         const PipelineLayout*                           pPipelineLayout,
         PipelineOptimizerKey*                           pPipelineProfileKey,
@@ -217,7 +219,8 @@ public:
         const ComputePipelineShaderStageInfo*           pShaderInfo,
         const PipelineOptimizerKey*                     pPipelineProfileKey,
         PipelineMetadata*                               pBinaryMetadata,
-        ComputePipelineBinaryCreateInfo*                pInfo);
+        ComputePipelineBinaryCreateInfo*                pInfo,
+        PipelineCreateFlags                             flags);
 
     void FreeComputePipelineBinary(
         ComputePipelineBinaryCreateInfo* pCreateInfo,
@@ -239,6 +242,7 @@ public:
     VkResult ConvertRayTracingPipelineInfo(
         const Device*                            pDevice,
         const VkRayTracingPipelineCreateInfoKHR* pIn,
+        PipelineCreateFlags                      flags,
         const RayTracingPipelineShaderStageInfo* pShaderInfo,
         const PipelineOptimizerKey*              pPipelineProfileKey,
         RayTracingPipelineBinaryCreateInfo*      pCreateInfo);
@@ -489,9 +493,6 @@ private:
     typedef Util::HashMap<Util::MetroHash::Hash, ShaderModuleHandle, PalAllocator, Util::JenkinsHashFunc>
         ShaderModuleHandleMap;
 
-    typedef Util::HashMap<uint64_t, Vkgc::BinaryData, PalAllocator, Util::JenkinsHashFunc>
-        UberFetchShaderInternalDataMap;
-
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object
     Vkgc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by Vkgcf
     DeferCompileManager m_deferCompileMgr;     // Defer compile thread manager
@@ -505,7 +506,6 @@ private:
     Util::Mutex                    m_cacheLock;
 
     UberFetchShaderFormatInfoMap   m_uberFetchShaderInfoFormatMap;  // Uber fetch shader format info map
-    UberFetchShaderInternalDataMap m_uberFetchShaderInternalDataMap;// Uber fetch shader internal data cache
 
     ShaderModuleHandleMap          m_shaderModuleHandleMap;
 

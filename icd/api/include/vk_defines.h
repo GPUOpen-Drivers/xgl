@@ -35,6 +35,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "include/khronos/vulkan.h"
 
 namespace vk
 {
@@ -207,6 +208,9 @@ namespace vk
 
     // Point size must be set via gl_PointSize, otherwise it must be 1.0f
     static const float DefaultPointSize = 1.0f;
+
+    typedef VkPipelineCreateFlags PipelineCreateFlags;
+    typedef VkBufferUsageFlagBits BufferUsageFlagBits;
 }// namespace vk
 
 #endif
