@@ -263,6 +263,7 @@ Device::Device(
     m_palDeviceCount(palDeviceCount),
     m_internalMemMgr(this, pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
     m_shaderOptimizer(this, pPhysicalDevices[DefaultDeviceIndex]),
+    m_pipelineBinningMode(m_settings.pipelineBinningMode),
     m_resourceOptimizer(this, pPhysicalDevices[DefaultDeviceIndex]),
     m_renderStateCache(this),
     m_barrierPolicy(
@@ -328,20 +329,20 @@ VkResult Device::Create(
     PhysicalDevice*                 pPhysicalDevice,
     const VkDeviceCreateInfo*       pCreateInfo,
     const VkAllocationCallbacks*    pAllocator,
-    DispatchableDevice**            ppDevice)
+    ApiDevice**                     ppDevice)
 {
     Pal::Result    palResult                            = Pal::Result::Success;
     DeviceFeatures deviceFeatures                       = {};
     uint32_t       queueCounts[Queue::MaxQueueFamilies] = {};
     uint32_t       queueFlags[Queue::MaxQueueFamilies]  = {};
 
-    // initialize queue priority with the default value VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT.
+    // initialize queue priority with the default value VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR.
     VkQueueGlobalPriorityKHR queuePriority[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
     for (uint32_t familyId = 0; familyId < Queue::MaxQueueFamilies; familyId++)
     {
         for (uint32_t queueId = 0; queueId < Queue::MaxQueuesPerFamily; queueId++)
         {
-            queuePriority[familyId][queueId] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT;
+            queuePriority[familyId][queueId] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
         }
     }
 
@@ -772,7 +773,7 @@ VkResult Device::Create(
 
             switch (static_cast<uint32>(pSubHeader->sType))
             {
-            case VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT:
+            case VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR:
             {
                 const auto* pPriorityInfo =
                     reinterpret_cast<const VkDeviceQueueGlobalPriorityCreateInfoEXT*>(pSubHeader);
@@ -880,8 +881,8 @@ VkResult Device::Create(
     }
 
     // Create the queues for the device up-front and hand them to the new device object.
-    size_t apiDeviceSize = ObjectSize(sizeof(DispatchableDevice), numDevices);
-    size_t apiQueueSize  = sizeof(DispatchableQueue);
+    size_t apiDeviceSize = ObjectSize(sizeof(ApiDevice), numDevices);
+    size_t apiQueueSize  = sizeof(ApiQueue);
 
     // Compute the amount of memory required for each queue type.
     uint32_t queueFamilyIndex;
@@ -947,8 +948,8 @@ VkResult Device::Create(
             privateDataSize,
             deviceFeatures));
 
-        DispatchableDevice* pDispatchableDevice = static_cast<DispatchableDevice*>(pMemory);
-        DispatchableQueue*  pDispatchableQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
+        ApiDevice* pDispatchableDevice = static_cast<ApiDevice*>(pMemory);
+        ApiQueue*  pDispatchableQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
 
         auto gpuMemoryEventHandler = pInstance->GetGpuMemoryEventHandler();
         Device* pDevice            = ApiDevice::ObjectFromHandle(reinterpret_cast<VkDevice>(pDispatchableDevice));
@@ -1014,7 +1015,7 @@ VkResult Device::Create(
 
                 if (vkResult == VK_SUCCESS)
                 {
-                    pDispatchableQueues[queueFamilyIndex][queueIndex] = reinterpret_cast<DispatchableQueue*>(vkQueue);
+                    pDispatchableQueues[queueFamilyIndex][queueIndex] = reinterpret_cast<ApiQueue*>(vkQueue);
                 }
             }
         }
@@ -1097,7 +1098,7 @@ VkResult Device::CreateRayTraceState()
 // Bring up the Vulkan device.
 VkResult Device::Initialize(
     PhysicalDevice*                         pPhysicalDevice,
-    DispatchableQueue**                     pQueues,
+    ApiQueue**                              pQueues,
     const DeviceExtensions::Enabled&        enabled,
     const VkMemoryOverallocationBehaviorAMD overallocationBehavior,
     bool                                    bufferDeviceAddressMultiDeviceEnabled,
@@ -1825,7 +1826,8 @@ VkResult Device::CreateInternalComputePipeline(
 
     ComputePipelineBinaryCreateInfo pipelineBuildInfo = {};
 
-    pCompiler->ApplyPipelineOptions(this, 0, &pipelineBuildInfo.pipelineInfo.options);
+    pCompiler->ApplyPipelineOptions(this, 0, &pipelineBuildInfo.pipelineInfo.options
+    );
 
     shaderOptimzierKey.stage              = ShaderStage::ShaderStageCompute;
     pipelineOptimizerKey.shaderCount      = 1;
@@ -2247,7 +2249,7 @@ void Device::GetQueue2(
     uint32 testIndex = 0;
     for (uint32 i = 0; i < queueCount; i++)
     {
-        DispatchableQueue* pFoundQueue = m_pQueues[queueFamilyIndex][i];
+        ApiQueue* pFoundQueue = m_pQueues[queueFamilyIndex][i];
 
         if ((pFoundQueue != nullptr) && ((*pFoundQueue)->GetFlags() == flags))
         {
@@ -2536,11 +2538,13 @@ VkResult Device::CreateGraphicsPipelines(
     for (uint32_t i = 0; i < count; ++i)
     {
         const VkGraphicsPipelineCreateInfo* pCreateInfo = &pCreateInfos[i];
+        PipelineCreateFlags flags = GetPipelineCreateFlags(pCreateInfo);
 
         VkResult result = GraphicsPipelineCommon::Create(
             this,
             pPipelineCache,
             pCreateInfo,
+            flags,
             pAllocator,
             &pPipelines[i]);
 
@@ -2552,7 +2556,7 @@ VkResult Device::CreateGraphicsPipelines(
             // Capture the first failure result and save it to be returned
             finalResult = (finalResult != VK_SUCCESS) ? finalResult : result;
 
-            if (pCreateInfo->flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT)
+            if (flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT)
             {
                 break;
             }
@@ -2585,13 +2589,14 @@ VkResult Device::CreateComputePipelines(
     for (uint32_t i = 0; i < count; ++i)
     {
         const VkComputePipelineCreateInfo* pCreateInfo = &pCreateInfos[i];
-
+        PipelineCreateFlags flags = GetPipelineCreateFlags(pCreateInfo);
         VkResult result = VK_SUCCESS;
 
             result = ComputePipeline::Create(
                 this,
                 pPipelineCache,
                 pCreateInfo,
+                flags,
                 pAllocator,
                 &pPipelines[i]);
 
@@ -2603,7 +2608,7 @@ VkResult Device::CreateComputePipelines(
             // Capture the first failure result and save it to be returned
             finalResult = (finalResult != VK_SUCCESS) ? finalResult : result;
 
-            if (pCreateInfo->flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT)
+            if (flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT)
             {
                 break;
             }
@@ -3377,6 +3382,11 @@ VkResult Device::CreateSharedPalCmdAllocator(
     createInfo.allocInfo[Pal::EmbeddedDataAlloc].allocSize    = m_settings.cmdAllocatorEmbeddedAllocSize;
     createInfo.allocInfo[Pal::EmbeddedDataAlloc].suballocSize = m_settings.cmdAllocatorEmbeddedSubAllocSize;
 
+    // Initialize large embedded data chunk allocation size
+    createInfo.allocInfo[Pal::LargeEmbeddedDataAlloc].allocHeap    = m_settings.cmdAllocatorEmbeddedHeap;
+    createInfo.allocInfo[Pal::LargeEmbeddedDataAlloc].allocSize    = m_settings.cmdAllocatorLargeEmbeddedAllocSize;
+    createInfo.allocInfo[Pal::LargeEmbeddedDataAlloc].suballocSize = m_settings.cmdAllocatorLargeEmbeddedSubAllocSize;
+
     // Initialize GPU scratch memory chunk allocation size
     createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocHeap    = m_settings.cmdAllocatorScratchHeap;
     createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocSize    = m_settings.cmdAllocatorScratchAllocSize;
@@ -3498,7 +3508,7 @@ VkResult Device::AllocBorderColorPalette()
             true,
             false,
             VK_OBJECT_TYPE_DEVICE,
-            DispatchableDevice::IntValueFromHandle(DispatchableDevice::FromObject(this)));
+            ApiDevice::IntValueFromHandle(ApiDevice::FromObject(this)));
     }
 
     if (result == VK_SUCCESS)
@@ -4033,6 +4043,25 @@ VkResult Device::GetDeviceFaultInfoEXT(
     return result;
 }
 
+// =================================================================================================================
+template<typename CreateInfo>
+PipelineCreateFlags Device::GetPipelineCreateFlags(
+    const CreateInfo* pCreateInfo)
+{
+    PipelineCreateFlags flags = pCreateInfo->flags;
+
+    return flags;
+}
+
+// =================================================================================================================
+BufferUsageFlagBits Device::GetBufferUsageFlagBits(
+    const VkBufferCreateInfo* pCreateInfo)
+{
+    BufferUsageFlagBits usage = static_cast<BufferUsageFlagBits>(pCreateInfo->usage);
+
+    return usage;
+}
+
 /**
  ***********************************************************************************************************************
  * C-Callable entry points start here. These entries go in the dispatch table(s).
@@ -4432,9 +4461,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkImportSemaphoreFdKHR(
     const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo)
 {
     ImportSemaphoreInfo importInfo = {};
-    importInfo.handleType  = pImportSemaphoreFdInfo->handleType;
-    importInfo.handle      = pImportSemaphoreFdInfo->fd;
-    importInfo.importFlags = pImportSemaphoreFdInfo->flags;
+    importInfo.handleType       = pImportSemaphoreFdInfo->handleType;
+    importInfo.handle           = pImportSemaphoreFdInfo->fd;
+    importInfo.importFlags      = pImportSemaphoreFdInfo->flags;
+    importInfo.crossProcess     = true;
 
     return ApiDevice::ObjectFromHandle(device)->ImportSemaphore(pImportSemaphoreFdInfo->semaphore, importInfo);
 }
@@ -4979,3 +5009,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceFaultInfoEXT(
 } // entry
 
 } // vk
+
+#if VKI_RAY_TRACING
+template
+vk::PipelineCreateFlags vk::Device::GetPipelineCreateFlags<VkRayTracingPipelineCreateInfoKHR>(
+    const VkRayTracingPipelineCreateInfoKHR* pCreateInfo);
+#endif
+

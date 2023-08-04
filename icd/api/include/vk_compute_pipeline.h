@@ -61,6 +61,7 @@ public:
         Device*                                pDevice,
         PipelineCache*                         pPipelineCache,
         const VkComputePipelineCreateInfo*     pCreateInfo,
+        PipelineCreateFlags                    flags,
         const VkAllocationCallbacks*           pAllocator,
         VkPipeline*                            pPipeline);
 
@@ -122,6 +123,7 @@ protected:
 
     static void BuildApiHash(
         const VkComputePipelineCreateInfo*    pCreateInfo,
+        PipelineCreateFlags                   flags,
         const ComputePipelineShaderStageInfo& stageInfo,
         Util::MetroHash::Hash*                pElfHash,
         uint64_t*                             pApiHash);

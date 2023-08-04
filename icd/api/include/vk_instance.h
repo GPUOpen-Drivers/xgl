@@ -61,7 +61,7 @@ namespace vk
 
 // Forward declare classes used in this file.
 class DevModeMgr;
-class DispatchableInstance;
+class ApiInstance;
 class DisplayManager;
 class GpuMemoryEventHandler;
 class PhysicalDeviceManager;

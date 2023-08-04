@@ -73,6 +73,10 @@ macro(xgl_set_compile_definitions)
     endif()
 #endif
 
+    if(XGL_BUILD_PHOENIX1)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_PHOENIX1=1)
+    endif()
+
     if(XGL_BUILD_REMBRANDT)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_REMBRANDT=1)
     endif()

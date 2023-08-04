@@ -51,7 +51,7 @@ Buffer::Buffer(
     m_memOffset(0),
     m_barrierPolicy(
         pDevice,
-        pCreateInfo->usage,
+        Device::GetBufferUsageFlagBits(pCreateInfo),
         pCreateInfo->sharingMode,
         pCreateInfo->queueFamilyIndexCount,
         pCreateInfo->pQueueFamilyIndices)
@@ -543,12 +543,14 @@ void Buffer::CalculateBufferFlags(
 {
     pBufferFlags->u32All = 0;
 
-    pBufferFlags->usageUniformBuffer    = (pCreateInfo->usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)    ? 1 : 0;
+    BufferUsageFlagBits usage = Device::GetBufferUsageFlagBits(pCreateInfo);
+
+    pBufferFlags->usageUniformBuffer    = (usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)    ? 1 : 0;
 #if VKI_RAY_TRACING
-    pBufferFlags->usageAccelStorage     = (pCreateInfo->usage &
+    pBufferFlags->usageAccelStorage     = (usage &
                                              VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR) ? 1 : 0;
 #endif
-    pBufferFlags->usageDescriptor       = (pCreateInfo->usage &
+    pBufferFlags->usageDescriptor       = (usage &
                                              (VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
                                               VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT  |
                                               VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT)) ? 1 : 0;

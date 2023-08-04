@@ -422,6 +422,7 @@ VkResult GraphicsPipelineLibrary::Create(
     Device*                             pDevice,
     PipelineCache*                      pPipelineCache,
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    PipelineCreateFlags                 flags,
     const VkAllocationCallbacks*        pAllocator,
     VkPipeline*                         pPipeline)
 {
@@ -432,7 +433,7 @@ VkResult GraphicsPipelineLibrary::Create(
     void*    pSysMem = nullptr;
 
     GraphicsPipelineLibraryInfo libInfo;
-    ExtractLibraryInfo(pCreateInfo, &libInfo);
+    ExtractLibraryInfo(pCreateInfo, flags, &libInfo);
 
     GraphicsPipelineBinaryCreateInfo binaryCreateInfo = {};
     GraphicsPipelineShaderStageInfo  shaderStageInfo = {};
@@ -470,6 +471,7 @@ VkResult GraphicsPipelineLibrary::Create(
         GeneratePipelineOptimizerKey(
             pDevice,
             pCreateInfo,
+            flags,
             &shaderStageInfo,
             shaderOptimizerKeys,
             &pipelineOptimizerKey);
@@ -478,7 +480,7 @@ VkResult GraphicsPipelineLibrary::Create(
     // 3. Build API and ELF hashes
     uint64_t              apiPsoHash = {};
     Util::MetroHash::Hash elfHash    = {};
-    BuildApiHash(pCreateInfo, &apiPsoHash, &elfHash);
+    BuildApiHash(pCreateInfo, flags, &apiPsoHash, &elfHash);
     binaryCreateInfo.apiPsoHash = apiPsoHash;
 
     // 4. Get pipeline layout
@@ -496,6 +498,7 @@ VkResult GraphicsPipelineLibrary::Create(
         result = pDevice->GetCompiler(DefaultDeviceIndex)->ConvertGraphicsPipelineInfo(
             pDevice,
             pCreateInfo,
+            flags,
             &shaderStageInfo,
             pPipelineLayout,
             &pipelineOptimizerKey,
@@ -527,6 +530,7 @@ VkResult GraphicsPipelineLibrary::Create(
         BuildPipelineObjectCreateInfo(
             pDevice,
             pCreateInfo,
+            flags,
             &shaderStageInfo,
             pPipelineLayout,
             &pipelineOptimizerKey,

@@ -113,6 +113,7 @@ enum class AppProfile : uint32_t
     SeriousSamVrTheLastHope, // Serious Sam VR The Last Hope by Croteam
 #if VKI_RAY_TRACING
     ControlDX12,             // VKD3D Control Ultimate Edition
+    RayTracingWeekends,      // RayTracingInVulkan demo
 #endif
     Maxon,                   // Maxon
     AngleEngine,             // Angle Engine
@@ -132,6 +133,8 @@ enum class AppProfile : uint32_t
     Zink,                    // Zink
     SOTTR,                   // Shadow of the tomb raider steam version
     SpidermanRemastered,     // Spiderman Remastered
+    TheSurge2,               // The Surge 2
+    Yuzu,                    // Yuzu Emulator by Team Yuzu | Citra
 };
 
 struct ProfileSettings

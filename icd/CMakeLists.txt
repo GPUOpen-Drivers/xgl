@@ -60,6 +60,10 @@ if (VKI_GPU_DECOMPRESS)
 endif()
 #endif
 
+if (UNIX)
+target_include_directories(xgl PRIVATE ${XGL_PAL_PATH}/src/core/os/amdgpu/include/drm)
+endif()
+
 ### XGL Subprojects ####################################################################################################
 # PAL
 add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
@@ -299,11 +303,11 @@ if(ICD_GPUOPEN_DEVMODE_BUILD)
 endif()
 
 ### ICD layer ##################################################################
-target_sources(xgl PRIVATE
-    layers/query_dlist.cpp
-    layers/vk_layer_all_null_devices.cpp
-    layers/vk_layer_switchable_graphics.cpp
-)
+    target_sources(xgl PRIVATE
+        layers/query_dlist.cpp
+        layers/vk_layer_all_null_devices.cpp
+        layers/vk_layer_switchable_graphics.cpp
+    )
 
 ### Link Libraries #####################################################################################################
 if (UNIX)

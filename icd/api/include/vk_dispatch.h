@@ -220,13 +220,12 @@ public:
 
 // Helper macro to define a dispatchable driver object
 #define VK_DEFINE_DISPATCHABLE(a) \
-    class Dispatchable##a : public Dispatchable<a> {};  \
-    typedef Dispatchable##a Api##a;
+    class Api##a : public Dispatchable<a> {};
 
 // Helper function to initialize a dispatchable object
 #define VK_INIT_DISPATCHABLE(obj_class, storage, constructor_params) \
-    do { VK_PLACEMENT_NEW (storage) Dispatchable##obj_class(); \
-         VK_PLACEMENT_NEW ((obj_class*)*(Dispatchable##obj_class*)storage) obj_class constructor_params; } while (0)
+    do { VK_PLACEMENT_NEW (storage) Api##obj_class(); \
+         VK_PLACEMENT_NEW ((obj_class*)*(Api##obj_class*)storage) obj_class constructor_params; } while (0)
 
 // =====================================================================================================================
 // Template base class for non-dispatchable Vulkan objects (e.g. VkImages, VkBuffers, etc.).  Adds type-safe helper

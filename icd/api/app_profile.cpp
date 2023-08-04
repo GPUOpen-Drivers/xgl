@@ -394,6 +394,18 @@ constexpr AppProfilePatternEntry AppNameSpidermanRemastered =
     "spider-man.exe"
 };
 
+constexpr AppProfilePatternEntry AppNameYuzu =
+{
+    PatternAppNameLower,
+    "yuzu emulator"
+};
+
+constexpr AppProfilePatternEntry AppEngineYuzu =
+{
+    PatternEngineNameLower,
+    "yuzu emulator"
+};
+
 #if VKI_RAY_TRACING
 constexpr AppProfilePatternEntry AppEngineVKD3D =
 {
@@ -415,6 +427,12 @@ constexpr AppProfilePatternEntry AppNameControlDX12 =
         0x57150c75,
         0xa990df0c
     }}}
+};
+
+constexpr AppProfilePatternEntry AppNameRayTracingWeekends =
+{
+    PatternAppNameLower,
+    "raytracingweekends"
 };
 #endif
 
@@ -662,6 +680,12 @@ constexpr AppProfilePatternEntry AppNameQuakeEnhanced =
 {
     PatternAppNameLower,
     "quake"
+};
+
+constexpr AppProfilePatternEntry AppNameTheSurge2 =
+{
+    PatternAppNameLower,
+    "fledge"
 };
 
 constexpr AppProfilePatternEntry PatternEnd = {};
@@ -1204,12 +1228,29 @@ AppProfilePattern AppPatternTable[] =
         }
     },
 
+    {
+        AppProfile::Yuzu,
+        {
+            AppNameYuzu,
+            AppEngineYuzu,
+            PatternEnd
+        }
+    },
+
 #if VKI_RAY_TRACING
     {
         AppProfile::ControlDX12,
         {
             AppNameControlDX12,
             AppEngineVKD3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::RayTracingWeekends,
+        {
+            AppNameRayTracingWeekends,
             PatternEnd
         }
     },
@@ -1327,6 +1368,14 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::QuakeEnhanced,
         {
             AppNameQuakeEnhanced,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::TheSurge2,
+        {
+            AppNameTheSurge2,
             PatternEnd
         }
     },

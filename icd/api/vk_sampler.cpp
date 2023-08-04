@@ -158,7 +158,7 @@ VkResult Sampler::Create(
     }
 
     // disableSingleMipAnisoOverride=1 ensure properly sampling with single mipmap level and anisotropic filtering.
-    samplerInfo.flags.disableSingleMipAnisoOverride = 1;
+    samplerInfo.flags.disableSingleMipAnisoOverride = settings.disableSingleMipAnisoOverride ? 1 : 0;
 
     samplerInfo.flags.useAnisoThreshold        = (settings.useAnisoThreshold == true) ? 1 : 0;
     samplerInfo.anisoThreshold                 = settings.anisoThreshold;

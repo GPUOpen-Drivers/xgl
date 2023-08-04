@@ -79,6 +79,10 @@
 #include "devmode/devmode_mgr.h"
 #include "protocols/rgpProtocol.h"
 
+#if defined(__unix__)
+#include "drm_fourcc.h"
+#endif
+
 namespace vk
 {
 // DisplayModeObject should be returned as a VkDisplayModeKHR, since in some cases we need to retrieve Pal::IScreen from
@@ -1374,7 +1378,7 @@ VkResult PhysicalDevice::CreateDevice(
         this,
         pCreateInfo,
         pAllocator,
-        reinterpret_cast<DispatchableDevice**>(pDevice));
+        reinterpret_cast<ApiDevice**>(pDevice));
 }
 
 // =====================================================================================================================
@@ -1452,20 +1456,20 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
 
                     if ((queuePrioritySupportMask & Pal::QueuePrioritySupport::SupportQueuePriorityIdle) != 0)
                     {
-                        pProperties->priorities[pProperties->priorityCount++] = VK_QUEUE_GLOBAL_PRIORITY_LOW_EXT;
+                        pProperties->priorities[pProperties->priorityCount++] = VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR;
                     }
 
                     // Everything gets Normal
-                    pProperties->priorities[pProperties->priorityCount++] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT;
+                    pProperties->priorities[pProperties->priorityCount++] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
 
                     if ((queuePrioritySupportMask & Pal::QueuePrioritySupport::SupportQueuePriorityHigh) != 0)
                     {
-                        pProperties->priorities[pProperties->priorityCount++] = VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT;
+                        pProperties->priorities[pProperties->priorityCount++] = VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR;
                     }
 
                     if ((queuePrioritySupportMask & Pal::QueuePrioritySupport::SupportQueuePriorityRealtime) != 0)
                     {
-                        pProperties->priorities[pProperties->priorityCount++] = VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT;
+                        pProperties->priorities[pProperties->priorityCount++] = VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR;
                     }
 
                     break;
@@ -1656,6 +1660,187 @@ VkResult PhysicalDevice::GetExtendedFormatProperties(
     return VK_SUCCESS;
 }
 
+#if defined(__unix__)
+// =====================================================================================================================
+template <typename FormatProperties_T, typename FormatFeatureFlags_T>
+static void GetDrmFormatModifierProperties(
+    uint64               modifier,
+    FormatProperties_T   pFormatProperties,
+    FormatFeatureFlags_T pFormatFeatureFlags)
+{
+    if (modifier == DRM_FORMAT_MOD_LINEAR)
+    {
+        *pFormatFeatureFlags = pFormatProperties->linearTilingFeatures;
+    }
+    else
+    {
+        *pFormatFeatureFlags = pFormatProperties->optimalTilingFeatures;
+    }
+
+    // Refer to ac_surface_supports_dcc_image_stores function of Mesa3d, Dcc image storage is only
+    // available on gfx10 and later.
+    // For gfx10 and later, DCC_INDEPENDENT_128B and DCC_MAX_COMPRESSED_BLOCK = 128B should be set.
+    // For gfx10_3 and later, DCC_INDEPENDENT_64B, DCC_INDEPENDENT_128B and
+    // DCC_MAX_COMPRESSED_BLOCK = 64B can also be set.
+    if (AMD_FMT_MOD_GET(DCC, modifier))
+    {
+        if ((((AMD_FMT_MOD_GET(TILE_VERSION, modifier) >= AMD_FMT_MOD_TILE_VER_GFX10)              &&
+              (AMD_FMT_MOD_GET(DCC_INDEPENDENT_64B, modifier) == 0)                                &&
+              (AMD_FMT_MOD_GET(DCC_INDEPENDENT_128B, modifier))                                    &&
+              (AMD_FMT_MOD_GET(DCC_MAX_COMPRESSED_BLOCK, modifier) == AMD_FMT_MOD_DCC_BLOCK_128B)) ||
+             ((AMD_FMT_MOD_GET(TILE_VERSION, modifier) >= AMD_FMT_MOD_TILE_VER_GFX10_RBPLUS)       &&
+              (AMD_FMT_MOD_GET(DCC_INDEPENDENT_64B, modifier))                                     &&
+              (AMD_FMT_MOD_GET(DCC_INDEPENDENT_128B, modifier))                                    &&
+              (AMD_FMT_MOD_GET(DCC_MAX_COMPRESSED_BLOCK, modifier) == AMD_FMT_MOD_DCC_BLOCK_64B))) == false)
+            {
+                static_assert(VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT == VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT);
+
+                *pFormatFeatureFlags &= ~VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
+            }
+    }
+
+    static_assert(VK_FORMAT_FEATURE_DISJOINT_BIT == VK_FORMAT_FEATURE_2_DISJOINT_BIT);
+
+    // When using modifiers, memory planes are used instead of format planes.
+    // Currently disjoint is not supported when using modifiers.
+    *pFormatFeatureFlags &= ~VK_FORMAT_FEATURE_DISJOINT_BIT;
+}
+
+// Instantiate the template for the linker.
+template
+void GetDrmFormatModifierProperties<VkFormatProperties*, VkFormatFeatureFlags*>(
+    uint64                modifier,
+    VkFormatProperties*   pFormatProperties,
+    VkFormatFeatureFlags* pFormatFeatureFlags);
+
+template
+void GetDrmFormatModifierProperties<VkFormatProperties3KHR*, VkFormatFeatureFlags2*>(
+    uint64                  modifier,
+    VkFormatProperties3KHR* pFormatProperties,
+    VkFormatFeatureFlags2*  pFormatFeatureFlags);
+
+// =====================================================================================================================
+template <typename ModifierPropertiesList_T>
+VkResult PhysicalDevice::GetDrmFormatModifierPropertiesList(
+    VkFormat                 format,
+    ModifierPropertiesList_T pPropertiesList) const
+{
+    uint32   modifierCount    = 0; // Supported total modifier count.
+    uint32   modifierCountCap = pPropertiesList->drmFormatModifierCount; // Capacity of modifier from app.
+    VkResult result           = VK_SUCCESS;
+
+    m_pPalDevice->GetModifiersList(VkToPalFormat(format, GetRuntimeSettings()).format,
+                                   &modifierCount,
+                                   nullptr);
+
+    if ((modifierCount == 0) || Formats::IsDepthStencilFormat(format))
+    {
+        pPropertiesList->drmFormatModifierCount = 0;
+        result = VK_ERROR_FORMAT_NOT_SUPPORTED;
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        void* pAllocMem = VkInstance()->AllocMem(modifierCount * sizeof(uint64),
+                                                 VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+        if (pAllocMem == nullptr)
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+
+        if (result == VK_SUCCESS)
+        {
+            uint64* pModifiersList = static_cast<uint64*>(pAllocMem);
+            m_pPalDevice->GetModifiersList(VkToPalFormat(format, GetRuntimeSettings()).format,
+                                           &modifierCount,
+                                           pModifiersList);
+
+            VkFormatProperties     formatProperties;
+            VkFormatProperties3KHR formatProperties3;
+            GetFormatProperties(format, &formatProperties);
+
+            if (std::is_same<ModifierPropertiesList_T, VkDrmFormatModifierPropertiesList2EXT*>::value)
+            {
+                formatProperties3.linearTilingFeatures  =
+                    static_cast<VkFlags64>(formatProperties.linearTilingFeatures);
+                formatProperties3.optimalTilingFeatures =
+                    static_cast<VkFlags64>(formatProperties.optimalTilingFeatures);
+                formatProperties3.bufferFeatures        =
+                    static_cast<VkFlags64>(formatProperties.bufferFeatures);
+                GetExtendedFormatProperties(format, &formatProperties3);
+            }
+
+            pPropertiesList->drmFormatModifierCount = 0;
+
+            for (uint32 i = 0; i < modifierCount; i++)
+            {
+                auto* pModifierProperties = pPropertiesList->pDrmFormatModifierProperties;
+
+                decltype(pModifierProperties[i].drmFormatModifierTilingFeatures) formatFeatureFlags;
+
+                if (std::is_same<ModifierPropertiesList_T, VkDrmFormatModifierPropertiesListEXT*>::value)
+                {
+                    GetDrmFormatModifierProperties(pModifiersList[i], &formatProperties, &formatFeatureFlags);
+                }
+                else
+                {
+                    GetDrmFormatModifierProperties(pModifiersList[i], &formatProperties3, &formatFeatureFlags);
+                }
+
+                if (formatFeatureFlags == 0)
+                {
+                    continue;
+                }
+
+                uint32 memoryPlaneCount = Formats::GetYuvPlaneCounts(format);
+
+                if (memoryPlaneCount == 1)
+                {
+                    if (AMD_FMT_MOD_GET(DCC_RETILE, pModifiersList[i]))
+                    {
+                        memoryPlaneCount = 3;
+                    }
+                    else if (AMD_FMT_MOD_GET(DCC, pModifiersList[i]))
+                    {
+                        memoryPlaneCount = 2;
+                    }
+                }
+
+                if (pModifierProperties != nullptr)
+                {
+                    if (i < modifierCountCap)
+                    {
+                        pModifierProperties[i].drmFormatModifier               = pModifiersList[i];
+                        pModifierProperties[i].drmFormatModifierPlaneCount     = memoryPlaneCount;
+                        pModifierProperties[i].drmFormatModifierTilingFeatures = formatFeatureFlags;
+                        pPropertiesList->drmFormatModifierCount++;
+                    }
+                }
+                else
+                {
+                    pPropertiesList->drmFormatModifierCount++;
+                }
+            }
+
+            VkInstance()->FreeMem(pAllocMem);
+        }
+    }
+
+    return result;
+}
+
+// Instantiate the template for the linker.
+template
+VkResult PhysicalDevice::GetDrmFormatModifierPropertiesList<VkDrmFormatModifierPropertiesListEXT*>(
+    VkFormat                              format,
+    VkDrmFormatModifierPropertiesListEXT* pPropertiesList) const;
+
+template
+VkResult PhysicalDevice::GetDrmFormatModifierPropertiesList<VkDrmFormatModifierPropertiesList2EXT*>(
+    VkFormat                               format,
+    VkDrmFormatModifierPropertiesList2EXT* pPropertiesList) const;
+#endif
+
 // =====================================================================================================================
 // Retrieve format properites. Called in response to vkGetPhysicalDeviceImageFormatProperties
 VkResult PhysicalDevice::GetImageFormatProperties(
@@ -1664,6 +1849,9 @@ VkResult PhysicalDevice::GetImageFormatProperties(
     VkImageTiling            tiling,
     VkImageUsageFlags        usage,
     VkImageCreateFlags       flags,
+#if defined(__unix__)
+    uint64                   modifier,
+#endif
     VkImageFormatProperties* pImageFormatProperties
     ) const
 {
@@ -1769,9 +1957,20 @@ VkResult PhysicalDevice::GetImageFormatProperties(
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     }
 
-    VkFormatFeatureFlags supportedFeatures = tiling == VK_IMAGE_TILING_OPTIMAL
-                                           ? formatProperties.optimalTilingFeatures
-                                           : formatProperties.linearTilingFeatures;
+    VkFormatFeatureFlags supportedFeatures = static_cast<VkFormatFeatureFlags>(0);
+
+#if defined(__unix__)
+    if (modifier != DRM_FORMAT_MOD_INVALID)
+    {
+        GetDrmFormatModifierProperties(modifier, &formatProperties, &supportedFeatures);
+    }
+    else
+#endif
+    {
+        supportedFeatures = tiling == VK_IMAGE_TILING_OPTIMAL
+                        ? formatProperties.optimalTilingFeatures
+                        : formatProperties.linearTilingFeatures;
+    }
 
     // 3D textures with depth or stencil format are not supported
     if ((type == VK_IMAGE_TYPE_3D) && (Formats::HasDepth(format) || Formats::HasStencil(format)))
@@ -1916,6 +2115,80 @@ VkResult PhysicalDevice::GetImageFormatProperties(
                   type == VK_IMAGE_TYPE_3D);
     }
 
+#if defined(__unix__)
+    if (modifier != DRM_FORMAT_MOD_INVALID)
+    {
+        if (((IS_AMD_FMT_MOD(modifier) == false)                  &&
+             (modifier != DRM_FORMAT_MOD_LINEAR))                 ||
+            (AMD_FMT_MOD_GET(DCC, modifier)                       &&
+             (Formats::IsYuvFormat(format)                        ||
+              Pal::Formats::IsBlockCompressed(palFormat.format))) ||
+            (type != VK_IMAGE_TYPE_2D)                            ||
+            (Pal::Formats::BitsPerPixel(palFormat.format) > 64)   ||
+            Formats::IsDepthStencilFormat(format)                 ||
+            (flags & (VK_IMAGE_CREATE_SPARSE_BINDING_BIT   |
+                      VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT |
+                      VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)))
+        {
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        }
+
+        uint32 modifierCount     = 0;
+        bool   isModifierSupport = false;
+
+        m_pPalDevice->GetModifiersList(VkToPalFormat(format, GetRuntimeSettings()).format,
+                                       &modifierCount,
+                                       nullptr);
+
+        if (modifierCount == 0)
+        {
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        }
+
+        void* pAllocMem = VkInstance()->AllocMem(modifierCount * sizeof(uint64),
+                                                 VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+        if (pAllocMem == nullptr)
+        {
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+
+        uint64* pModifiersList = static_cast<uint64*>(pAllocMem);
+        m_pPalDevice->GetModifiersList(VkToPalFormat(format, GetRuntimeSettings()).format,
+                                       &modifierCount,
+                                       pModifiersList);
+
+        for (uint32 i = 0; i < modifierCount; i++)
+        {
+            if (pModifiersList[i] == modifier)
+            {
+                isModifierSupport = true;
+                break;
+            }
+        }
+
+        if (isModifierSupport == false)
+        {
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        }
+
+        // For gfx10 and later, DCN requires DCC_INDEPENDENT_64B = 1 and
+        // DCC_MAX_COMPRESSED_BLOCK = AMD_FMT_MOD_DCC_BLOCK_64B for 4k.
+        if ((PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp10_1) &&
+            ((AMD_FMT_MOD_GET(DCC_INDEPENDENT_64B, modifier) == 0)   ||
+             (AMD_FMT_MOD_GET(DCC_MAX_COMPRESSED_BLOCK, modifier) != AMD_FMT_MOD_DCC_BLOCK_64B)))
+        {
+            pImageFormatProperties->maxExtent.width  = 2560;
+            pImageFormatProperties->maxExtent.height = 2560;
+        }
+
+        pImageFormatProperties->maxMipLevels   = 1;
+        pImageFormatProperties->maxArrayLayers = 1;
+        pImageFormatProperties->sampleCounts   = VK_SAMPLE_COUNT_1_BIT;
+
+        VkInstance()->FreeMem(pAllocMem);
+    }
+#endif
+
     return VK_SUCCESS;
 }
 
@@ -1965,6 +2238,9 @@ void PhysicalDevice::GetSparseImageFormatProperties(
                                               usage,
                                               (VK_IMAGE_CREATE_SPARSE_BINDING_BIT
                                                | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT),
+#if defined(__unix__)
+                                              DRM_FORMAT_MOD_INVALID,
+#endif
                                               &imageFormatProperties) == VK_SUCCESS);
     }
 
@@ -2379,6 +2655,9 @@ static uint32_t GetMaxFormatSampleCount(
                     tiling,
                     imgUsage,
                     0,
+#if defined(__unix__)
+                    DRM_FORMAT_MOD_INVALID,
+#endif
                     &formatProps);
 
                 if (result == VK_SUCCESS)
@@ -2600,9 +2879,9 @@ void PhysicalDevice::PopulateLimits()
     // the maximum number of work groups for the X, Y, and Z dimensions, respectively.  The x, y, and z parameters to
     // the vkCmdDispatch command, or members of the VkDispatchIndirectCmd structure must be less than or equal to the
     // corresponding limit.
-    m_limits.maxComputeWorkGroupCount[0] = 65535;
-    m_limits.maxComputeWorkGroupCount[1] = 65535;
-    m_limits.maxComputeWorkGroupCount[2] = 65535;
+    m_limits.maxComputeWorkGroupCount[0] = palProps.gfxipProperties.maxComputeThreadGroupCountX;
+    m_limits.maxComputeWorkGroupCount[1] = palProps.gfxipProperties.maxComputeThreadGroupCountY;
+    m_limits.maxComputeWorkGroupCount[2] = palProps.gfxipProperties.maxComputeThreadGroupCountZ;
 
     const uint32_t clampedMaxThreads = Util::Min(palProps.gfxipProperties.maxThreadGroupSize,
                                                  palProps.gfxipProperties.maxAsyncComputeThreadGroupSize);
@@ -3841,8 +4120,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_CLOCK));
 
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SPIRV_1_4));
-
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_USER_TYPE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_HLSL_FUNCTIONALITY1));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
@@ -3871,10 +4148,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_HOST_QUERY_RESET));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_UNIFORM_BUFFER_STANDARD_LAYOUT));
-
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_EXTENDED_TYPES));
-
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SUBGROUP_SIZE_CONTROL));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_LINE_RASTERIZATION));
 
@@ -3928,9 +4201,13 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     {
         if (exposeRT)
         {
+            if (pInstance->GetAPIVersion() >= VK_MAKE_API_VERSION(0, 1, 1, 0))
+            {
+                availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_ACCELERATION_STRUCTURE));
+            }
+
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RAY_QUERY));
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RAY_TRACING_PIPELINE));
-            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_ACCELERATION_STRUCTURE));
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DEFERRED_HOST_OPERATIONS));
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RAY_TRACING_MAINTENANCE1));
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PIPELINE_LIBRARY_GROUP_HANDLES));
@@ -3978,8 +4255,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_BORDER_COLOR_SWIZZLE));
     }
-
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE4));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PUSH_DESCRIPTOR));
 
@@ -4096,12 +4371,21 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
 #if defined(__unix__)
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PHYSICAL_DEVICE_DRM));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_DRM_FORMAT_MODIFIER));
 #endif
 
     if ((pPhysicalDevice == nullptr) ||
         VerifyAstcHdrFormatSupport(*pPhysicalDevice))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_TEXTURE_COMPRESSION_ASTC_HDR));
+    }
+
+    if (pInstance->GetAPIVersion() >= VK_MAKE_API_VERSION(0, 1, 1, 0))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SUBGROUP_SIZE_CONTROL));
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE4));
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_EXTENDED_TYPES));
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SPIRV_1_4));
     }
 
     return availableExtensions;
@@ -6770,6 +7054,9 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
     VK_ASSERT(pImageFormatInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2);
 
     VkFormat createInfoFormat = pImageFormatInfo->format;
+#if defined(__unix__)
+    uint64   modifier         = DRM_FORMAT_MOD_INVALID;
+#endif
 
     const VkStructHeader*                                   pHeader;
     const VkPhysicalDeviceExternalImageFormatInfo*          pExternalImageFormatInfo                     = nullptr;
@@ -6796,6 +7083,17 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
             pImageStencilUsageCreateInfo = reinterpret_cast<const VkImageStencilUsageCreateInfoEXT*>(pHeader);
             break;
         }
+
+#if defined(__unix__)
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT:
+        {
+            const auto* pExtInfo = reinterpret_cast<const VkPhysicalDeviceImageDrmFormatModifierInfoEXT*>(pHeader);
+
+            modifier = pExtInfo->drmFormatModifier;
+
+            break;
+        }
+#endif
 
         default:
             break;
@@ -6841,6 +7139,9 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
                 pImageStencilUsageCreateInfo ? pImageFormatInfo->usage | pImageStencilUsageCreateInfo->stencilUsage
                                              : pImageFormatInfo->usage,
                 pImageFormatInfo->flags,
+#if defined(__unix__)
+                modifier,
+#endif
                 &pImageFormatProperties->imageFormatProperties);
 
     // handle VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO
@@ -7724,6 +8025,20 @@ void PhysicalDevice::GetFormatProperties2(
             GetExtendedFormatProperties(format, pFormatPropertiesExtended);
             break;
         }
+#if defined(__unix__)
+        case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT:
+        {
+            auto* pDrmFormatModifierPropertiesList = static_cast<VkDrmFormatModifierPropertiesListEXT*>(pNext);
+            GetDrmFormatModifierPropertiesList(format, pDrmFormatModifierPropertiesList);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT:
+        {
+            auto* pDrmFormatModifierPropertiesList2 = static_cast<VkDrmFormatModifierPropertiesList2EXT*>(pNext);
+            GetDrmFormatModifierPropertiesList(format, pDrmFormatModifierPropertiesList2);
+            break;
+        }
+#endif
         default:
             break;
         }
@@ -8384,7 +8699,7 @@ static void VerifyRequiredFormats(
 static void VerifyExtensions(
     const PhysicalDevice& dev)
 {
-    const uint32_t apiVersion = dev.GetSupportedAPIVersion();
+    const uint32_t apiVersion = dev.VkInstance()->GetAPIVersion();
 
     // The spec does not require Vulkan 1.1 implementations to expose the corresponding 1.0 extensions, but we'll
     // continue doing so anyways to maximize application compatibility (which is why the spec allows this).
@@ -8982,6 +9297,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties(
         tiling,
         usage,
         flags,
+#if defined(__unix__)
+        DRM_FORMAT_MOD_INVALID,
+#endif
         pImageFormatProperties);
 }
 

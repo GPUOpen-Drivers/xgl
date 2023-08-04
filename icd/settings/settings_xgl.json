@@ -292,6 +292,97 @@
           "Value": 7
         }
       ]
+    },
+    {
+      "Name": "PalCacheCoherencyFlags",
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "CoherCpu",
+          "Value": 1
+        },
+        {
+          "Name": "CoherShaderRead",
+          "Value": 2
+        },
+        {
+          "Name": "CoherShaderWrite",
+          "Value": 4
+        },
+        {
+          "Name": "CoherCopySrc",
+          "Value": 8
+        },
+        {
+          "Name": "CoherCopyDst",
+          "Value": 16
+        },
+        {
+          "Name": "CoherColorTarget",
+          "Value": 32
+        },
+        {
+          "Name": "CoherDepthStencilTarget",
+          "Value": 64
+        },
+        {
+          "Name": "CoherResolveSrc",
+          "Value": 128
+        },
+        {
+          "Name": "CoherResolveDst",
+          "Value": 256
+        },
+        {
+          "Name": "CoherClear",
+          "Value": 512
+        },
+        {
+          "Name": "CoherIndirectArgs",
+          "Value": 1024
+        },
+        {
+          "Name": "CoherIndexData",
+          "Value": 2048
+        },
+        {
+          "Name": "CoherQueueAtomic",
+          "Value": 4096
+        },
+        {
+          "Name": "CoherTimestamp",
+          "Value": 8192
+        },
+        {
+          "Name": "CoherCeLoad",
+          "Value": 16384
+        },
+        {
+          "Name": "CoherCeDump",
+          "Value": 32768
+        },
+        {
+          "Name": "CoherStreamOut",
+          "Value": 65536
+        },
+        {
+          "Name": "CoherMemory",
+          "Value": 131072
+        },
+        {
+          "Name": "CoherSampleRate",
+          "Value": 262144
+        },
+        {
+          "Name": "CoherPresent",
+          "Value": 524288
+        },
+        {
+          "Name": "CoherAllUsages",
+          "Value": 2097151,
+          "Description": "(heavyweight option)"
+        }
+      ]
     }
   ],
   "Settings": [
@@ -470,6 +561,36 @@
       ],
       "Defaults": {
         "Default": 16384
+      },
+      "Type": "uint32",
+      "Flags": {
+        "IsHex": true
+      },
+      "Scope": "Driver"
+    },
+    {
+      "Name": "CmdAllocatorLargeEmbeddedAllocSize",
+      "Description": "Size of allocation chunks used by CmdAllocators for large embedded data",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": 2097152
+      },
+      "Type": "uint32",
+      "Flags": {
+        "IsHex": true
+      },
+      "Scope": "Driver"
+    },
+    {
+      "Name": "CmdAllocatorLargeEmbeddedSubAllocSize",
+      "Description": "Size of suballocations used by CmdAllocators for large embedded data",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": 65536
       },
       "Type": "uint32",
       "Flags": {
@@ -4474,72 +4595,7 @@
         "Default": 0
       },
       "ValidValues": {
-        "Values": [
-          {
-            "Value": 1,
-            "Description": "CoherCpu"
-          },
-          {
-            "Value": 2,
-            "Description": "CoherShader"
-          },
-          {
-            "Value": 4,
-            "Description": "CoherCopy"
-          },
-          {
-            "Value": 8,
-            "Description": "CoherColorTarget"
-          },
-          {
-            "Value": 16,
-            "Description": "CoherDepthStencilTarget"
-          },
-          {
-            "Value": 32,
-            "Description": "CoherResolve"
-          },
-          {
-            "Value": 64,
-            "Description": "CoherClear"
-          },
-          {
-            "Value": 128,
-            "Description": "CoherIndirectArgs"
-          },
-          {
-            "Value": 256,
-            "Description": "CoherIndexData"
-          },
-          {
-            "Value": 512,
-            "Description": "CoherQueueAtomic"
-          },
-          {
-            "Value": 1024,
-            "Description": "CoherTimestamp"
-          },
-          {
-            "Value": 2048,
-            "Description": "CoherCeLoad"
-          },
-          {
-            "Value": 4096,
-            "Description": "CoherCeDump"
-          },
-          {
-            "Value": 8192,
-            "Description": "CoherStreamOut"
-          },
-          {
-            "Value": 16384,
-            "Description": "CoherMemory"
-          },
-          {
-            "Value": 32767,
-            "Description": "CoherAllUsages (heavyweight option)"
-          }
-        ]
+        "Name": "PalCacheCoherencyFlags"
       },
       "Flags": {
         "IsHex": true,
@@ -4558,72 +4614,7 @@
         "Default": 0
       },
       "ValidValues": {
-        "Values": [
-          {
-            "Value": 1,
-            "Description": "CoherCpu"
-          },
-          {
-            "Value": 2,
-            "Description": "CoherShader"
-          },
-          {
-            "Value": 4,
-            "Description": "CoherCopy"
-          },
-          {
-            "Value": 8,
-            "Description": "CoherColorTarget"
-          },
-          {
-            "Value": 16,
-            "Description": "CoherDepthStencilTarget"
-          },
-          {
-            "Value": 32,
-            "Description": "CoherResolve"
-          },
-          {
-            "Value": 64,
-            "Description": "CoherClear"
-          },
-          {
-            "Value": 128,
-            "Description": "CoherIndirectArgs"
-          },
-          {
-            "Value": 256,
-            "Description": "CoherIndexData"
-          },
-          {
-            "Value": 512,
-            "Description": "CoherQueueAtomic"
-          },
-          {
-            "Value": 1024,
-            "Description": "CoherTimestamp"
-          },
-          {
-            "Value": 2048,
-            "Description": "CoherCeLoad"
-          },
-          {
-            "Value": 4096,
-            "Description": "CoherCeDump"
-          },
-          {
-            "Value": 8192,
-            "Description": "CoherStreamOut"
-          },
-          {
-            "Value": 16384,
-            "Description": "CoherMemory"
-          },
-          {
-            "Value": 32767,
-            "Description": "CoherAllUsages (heavyweight option)"
-          }
-        ]
+        "Name": "PalCacheCoherencyFlags"
       },
       "Flags": {
         "IsHex": true,
@@ -4693,6 +4684,9 @@
       "Defaults": {
         "Default": 0
       },
+      "ValidValues": {
+        "Name": "PalCacheCoherencyFlags"
+      },
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "DbgBarrierPreCacheSrcMask"
@@ -4708,6 +4702,9 @@
       },
       "Defaults": {
         "Default": 0
+      },
+      "ValidValues": {
+        "Name": "PalCacheCoherencyFlags"
       },
       "Scope": "Driver",
       "Type": "uint32",
@@ -5924,6 +5921,18 @@
       "Scope": "Driver",
       "Type": "enum",
       "Name": "PreciseAnisoMode"
+    },
+    {
+      "Description": "Allow to use anisotropy filtering sampling for images with single mipmap level.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "DisableSingleMipAnisoOverride"
     },
     {
       "Description": "Supply the threshold value for anisotropic filtering (DisablePreciseAniso needs to be true also) ",

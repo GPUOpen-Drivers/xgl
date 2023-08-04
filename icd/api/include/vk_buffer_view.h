@@ -38,7 +38,7 @@ namespace vk
 {
 // Forward declare Vulkan classes used in this file
 class Device;
-class DispatchableBufferView;
+class ApiBufferView;
 
 class BufferView final : public NonDispatchable<VkBufferView, BufferView>
 {

@@ -703,7 +703,43 @@ inline uint32 VkToPalImagePlaneExtract(
             VK_ASSERT(!"Unexpected YUV image format");
         }
     }
+#if defined(__unix__)
+    else if (((*pAspectMask) & (VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT |
+                                VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT |
+                                VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT |
+                                VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT)) != 0)
+    {
+        VK_ASSERT(((*pAspectMask) & ~(VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT |
+                                      VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT |
+                                      VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT |
+                                      VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT)) == 0);
 
+        if (((*pAspectMask) & VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT) != 0)
+        {
+            (*pAspectMask) ^= VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT;
+
+            return 0;
+        }
+        else if (((*pAspectMask) & VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT) != 0)
+        {
+            (*pAspectMask) ^= VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT;
+
+            return 1;
+        }
+        else if (((*pAspectMask) & VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT) != 0)
+        {
+            (*pAspectMask) ^= VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT;
+
+            return 2;
+        }
+        else if (((*pAspectMask) & VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT) != 0)
+        {
+            (*pAspectMask) ^= VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT;
+
+            return 3;
+        }
+    }
+#endif
     VK_ASSERT(!"Unexpected aspect mask");
     return 0;
 }
@@ -744,6 +780,13 @@ inline uint32 VkToPalImagePlaneSingle(
             return VkToPalImagePlaneExtract(VkToPalFormat(format, settings).format, &aspectMask);
         case VK_IMAGE_ASPECT_METADATA_BIT:
             return 0;
+#if defined(__unix__)
+        case VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT:
+        case VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT:
+        case VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT:
+        case VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT:
+            return VkToPalImagePlaneExtract(VkToPalFormat(format, settings).format, &aspectMask);
+#endif
         default:
             VK_ASSERT(!"Unsupported flag combination");
             return 0;
@@ -763,6 +806,13 @@ VK_TO_PAL_ENTRY_X(  IMAGE_TILING_OPTIMAL,                   ImageTiling::Optimal
 // Converts Vulkan image tiling to PAL equivalent
 inline Pal::ImageTiling VkToPalImageTiling(VkImageTiling tiling)
 {
+#if defined(__unix__)
+    // ImageTiling will be reset later according to its modifier.
+    if (tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT)
+    {
+        tiling = VK_IMAGE_TILING_OPTIMAL;
+    }
+#endif
     return convert::ImageTiling(tiling);
 }
 
@@ -1475,7 +1525,9 @@ template<typename ImageCopyType>
 void VkToPalImageCopyRegion(
     const ImageCopyType&    imageCopy,
     Pal::ChNumFormat        srcFormat,
+    uint32_t                srcArraySize,
     Pal::ChNumFormat        dstFormat,
+    uint32_t                dstArraySize,
     Pal::ImageCopyRegion*   pPalRegions,
     uint32_t*               pPalRegionIndex)
 {
@@ -1496,8 +1548,14 @@ void VkToPalImageCopyRegion(
     VK_ASSERT(imageCopy.extent.width  != 0u);
     VK_ASSERT(imageCopy.extent.height != 0u);
     VK_ASSERT(imageCopy.extent.depth  != 0u);
+
+    uint32_t srcLayerCount = (imageCopy.srcSubresource.layerCount == VK_REMAINING_ARRAY_LAYERS) ?
+        (srcArraySize - imageCopy.srcSubresource.baseArrayLayer) : imageCopy.srcSubresource.layerCount;
+    uint32_t dstLayerCount = (imageCopy.dstSubresource.layerCount == VK_REMAINING_ARRAY_LAYERS) ?
+        (dstArraySize - imageCopy.dstSubresource.baseArrayLayer) : imageCopy.dstSubresource.layerCount;
+
     // Layer count may be different if copying between 2D and 3D images
-    region.numSlices = Util::Max<uint32_t>(imageCopy.srcSubresource.layerCount, imageCopy.dstSubresource.layerCount);
+    region.numSlices = Util::Max<uint32_t>(srcLayerCount, dstLayerCount);
 
     // PAL expects all dimensions to be in blocks for compressed formats so let's handle that here
     if (Pal::Formats::IsBlockCompressed(srcFormat))
@@ -1534,6 +1592,7 @@ template<typename ImageBlitType>
 void VkToPalImageScaledCopyRegion(
     const ImageBlitType&        imageBlit,
     Pal::ChNumFormat            srcFormat,
+    uint32_t                    srcArraySize,
     Pal::ChNumFormat            dstFormat,
     Pal::ImageScaledCopyRegion* pPalRegions,
     uint32_t*                   pPalRegionIndex)
@@ -1556,7 +1615,8 @@ void VkToPalImageScaledCopyRegion(
     VK_ASSERT(imageBlit.srcSubresource.aspectMask == imageBlit.dstSubresource.aspectMask);
     VK_ASSERT(imageBlit.srcSubresource.layerCount == imageBlit.dstSubresource.layerCount);
 
-    region.numSlices = imageBlit.srcSubresource.layerCount;
+    region.numSlices = (imageBlit.srcSubresource.layerCount == VK_REMAINING_ARRAY_LAYERS) ?
+        (srcArraySize - imageBlit.srcSubresource.baseArrayLayer) : imageBlit.srcSubresource.layerCount;
 
     // As we don't allow copying between different types of aspects we don't need to worry about dealing with both
     // aspect masks separately.
@@ -1578,6 +1638,7 @@ template<typename ImageResolveType>
 void VkToPalImageResolveRegion(
     const ImageResolveType&     imageResolve,
     Pal::ChNumFormat            srcFormat,
+    uint32_t                    srcArraySize,
     Pal::ImageResolveRegion*    pPalRegions,
     uint32_t*                   pPalRegionIndex)
 {
@@ -1597,7 +1658,8 @@ void VkToPalImageResolveRegion(
 
     VK_ASSERT(imageResolve.srcSubresource.layerCount == imageResolve.dstSubresource.layerCount);
 
-    region.numSlices = imageResolve.srcSubresource.layerCount;
+    region.numSlices = (imageResolve.srcSubresource.layerCount == VK_REMAINING_ARRAY_LAYERS) ?
+        (srcArraySize - imageResolve.srcSubresource.baseArrayLayer) : imageResolve.srcSubresource.layerCount;
 
     // Source and destination aspect masks must match
     VK_ASSERT(imageResolve.srcSubresource.aspectMask == imageResolve.dstSubresource.aspectMask);
@@ -1623,6 +1685,7 @@ Pal::MemoryImageCopyRegion VkToPalMemoryImageCopyRegion(
     const BufferImageCopyType&  bufferImageCopy,
     Pal::ChNumFormat            format,
     uint32                      plane,
+    uint32_t                    arraySize,
     Pal::gpusize                baseMemOffset)
 {
     Pal::MemoryImageCopyRegion region = {};
@@ -1634,7 +1697,8 @@ Pal::MemoryImageCopyRegion VkToPalMemoryImageCopyRegion(
     region.imageOffset          = VkToPalOffset3d(bufferImageCopy.imageOffset);
     region.imageExtent          = VkToPalExtent3d(bufferImageCopy.imageExtent);
 
-    region.numSlices            = bufferImageCopy.imageSubresource.layerCount;
+    region.numSlices            = (bufferImageCopy.imageSubresource.layerCount == VK_REMAINING_ARRAY_LAYERS) ?
+        (arraySize - bufferImageCopy.imageSubresource.baseArrayLayer) : bufferImageCopy.imageSubresource.layerCount;
 
     region.gpuMemoryOffset      = baseMemOffset + bufferImageCopy.bufferOffset;
     region.gpuMemoryRowPitch    = (bufferImageCopy.bufferRowLength != 0)
@@ -3362,7 +3426,7 @@ inline Pal::QueuePriority VkToPalGlobalPriority(
     Pal::QueuePriority palPriority = Pal::QueuePriority::Normal;
     switch (static_cast<int32_t>(vkPriority))
     {
-    case VK_QUEUE_GLOBAL_PRIORITY_LOW_EXT:
+    case VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR:
         if (idleSupported)
         {
             palPriority = Pal::QueuePriority::Idle;
@@ -3384,7 +3448,7 @@ inline Pal::QueuePriority VkToPalGlobalPriority(
             palPriority = Pal::QueuePriority::Realtime;
         }
         break;
-    case VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT:
+    case VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR:
         if (highSupported)
         {
             palPriority = Pal::QueuePriority::High;
@@ -3406,7 +3470,7 @@ inline Pal::QueuePriority VkToPalGlobalPriority(
             palPriority = Pal::QueuePriority::Realtime;
         }
         break;
-    case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT:
+    case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR:
         if (realtimeSupported)
         {
             palPriority = Pal::QueuePriority::Realtime;
@@ -3428,7 +3492,7 @@ inline Pal::QueuePriority VkToPalGlobalPriority(
             palPriority = Pal::QueuePriority::Idle;
         }
         break;
-    case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT:
+    case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR:
     default:
         if (normalSupported)
         {
@@ -3463,16 +3527,16 @@ inline Pal::QueuePrioritySupport VkToPalGlobaPrioritySupport(
     Pal::QueuePrioritySupport palPrioritySupport = Pal::QueuePrioritySupport::SupportQueuePriorityNormal;
     switch (static_cast<int32_t>(vkPriority))
     {
-    case VK_QUEUE_GLOBAL_PRIORITY_LOW_EXT:
+    case VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR:
         palPrioritySupport = Pal::QueuePrioritySupport::SupportQueuePriorityIdle;
         break;
-    case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT:
+    case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR:
         palPrioritySupport = Pal::QueuePrioritySupport::SupportQueuePriorityNormal;
         break;
-    case VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT:
+    case VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR:
         palPrioritySupport = Pal::QueuePrioritySupport::SupportQueuePriorityHigh;
         break;
-    case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT:
+    case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR:
         palPrioritySupport = Pal::QueuePrioritySupport::SupportQueuePriorityRealtime;
         break;
     default:

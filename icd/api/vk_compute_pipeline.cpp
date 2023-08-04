@@ -32,6 +32,7 @@
 #include "include/vk_pipeline_cache.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_memory.h"
+#include "include/vk_pipeline.h"
 
 #include "palPipeline.h"
 #include "palPipelineAbi.h"
@@ -49,6 +50,7 @@ namespace vk
 //     - pCreateInfo->layout
 void ComputePipeline::BuildApiHash(
     const VkComputePipelineCreateInfo*    pCreateInfo,
+    PipelineCreateFlags                   flags,
     const ComputePipelineShaderStageInfo& stageInfo,
     Util::MetroHash::Hash*                pElfHash,
     uint64_t*                             pApiHash)
@@ -57,7 +59,7 @@ void ComputePipeline::BuildApiHash(
     Util::MetroHash128 elfHasher = {};
 
     // Hash only flags needed for pipeline caching
-    elfHasher.Update(GetCacheIdControlFlags(pCreateInfo->flags));
+    elfHasher.Update(GetCacheIdControlFlags(flags));
 
     GenerateHashFromShaderStageCreateInfo(stageInfo.stage, &elfHasher);
 
@@ -74,7 +76,7 @@ void ComputePipeline::BuildApiHash(
     apiHasher.Update(*pElfHash);
 
     // Hash flags not accounted for in the elf hash
-    apiHasher.Update(pCreateInfo->flags);
+    apiHasher.Update(flags);
 
     if (((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) != 0) &&
         (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
@@ -187,6 +189,7 @@ VkResult ComputePipeline::Create(
     Device*                                 pDevice,
     PipelineCache*                          pPipelineCache,
     const VkComputePipelineCreateInfo*      pCreateInfo,
+    PipelineCreateFlags                     flags,
     const VkAllocationCallbacks*            pAllocator,
     VkPipeline*                             pPipeline)
 {
@@ -221,7 +224,7 @@ VkResult ComputePipeline::Create(
 
     Util::MetroHash::Hash elfHash    = {};
     uint64_t              apiPsoHash = {};
-    BuildApiHash(pCreateInfo, shaderInfo, &elfHash, &apiPsoHash);
+    BuildApiHash(pCreateInfo, flags, shaderInfo, &elfHash, &apiPsoHash);
 
     binaryCreateInfo.apiPsoHash = apiPsoHash;
 
@@ -260,7 +263,8 @@ VkResult ComputePipeline::Create(
                 elfHash,
                 pDevice->VkPhysicalDevice(deviceIdx)->GetSettingsLoader()->GetSettingsHash(),
                 pipelineOptimizerKey,
-                &cacheId[deviceIdx]);
+                &cacheId[deviceIdx]
+            );
 
             bool forceCompilation = settings.enablePipelineDump;
 
@@ -289,7 +293,8 @@ VkResult ComputePipeline::Create(
                         &shaderInfo,
                         &pipelineOptimizerKey,
                         &binaryMetadata,
-                        &binaryCreateInfo);
+                        &binaryCreateInfo,
+                        flags);
                 }
 
                 if (result == VK_SUCCESS)
@@ -445,7 +450,7 @@ VkResult ComputePipeline::Create(
 
     if ((pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO) ||
          (pDevice->IsExtensionEnabled(DeviceExtensions::KHR_PIPELINE_EXECUTABLE_PROPERTIES) &&
-          ((pCreateInfo->flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) != 0))) &&
+          ((flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) != 0))) &&
         (result == VK_SUCCESS))
     {
         pBinary = PipelineBinaryInfo::Create(

@@ -97,8 +97,8 @@ void DebugPrintf::BindPipeline(
                                                          &m_printfMemory,
                                                          pDevice->GetPalDeviceMask(),
                                                          VK_OBJECT_TYPE_DEVICE,
-                                                         DispatchableDevice::IntValueFromHandle(
-                                                            DispatchableDevice::FromObject(pDevice)));
+                                                         ApiDevice::IntValueFromHandle(
+                                                         ApiDevice::FromObject(pDevice)));
 
         if (result == VK_SUCCESS)
         {

@@ -40,7 +40,7 @@ namespace vk
 
 // Forward declare Vulkan classes used in this file
 class Device;
-class DispatchableSampler;
+class ApiSampler;
 
 class Sampler final : public NonDispatchable<VkSampler, Sampler>
 {

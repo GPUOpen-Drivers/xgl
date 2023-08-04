@@ -481,6 +481,26 @@ void ResourceOptimizer::BuildAppProfile()
             m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
         }
     }
+#if PAL_BUILD_GFX11
+    else if (appProfile == AppProfile::Yuzu)
+    {
+        if (gfxIpLevel == Pal::GfxIpLevel::GfxIp11_0)
+        {
+            // 0x0000064000000384f83db7fb629521bd
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xf83db7fb629521bd;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+            // 0x00000640000003845a18ecbb795c8bed
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x5a18ecbb795c8bed;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+        }
+    }
+#endif
 }
 
 #if ICD_RUNTIME_APP_PROFILE

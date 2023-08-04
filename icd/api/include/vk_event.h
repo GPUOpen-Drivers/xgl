@@ -49,7 +49,7 @@ namespace vk
 {
 
 class Device;
-class DispatchableEvent;
+class ApiEvent;
 
 class Event final : public NonDispatchable<VkEvent, Event>
 {

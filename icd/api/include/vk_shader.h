@@ -42,7 +42,7 @@ namespace vk
 {
 
 class Device;
-class DispatchableShader;
+class ApiShader;
 class Instance;
 
 typedef void* (VKAPI_CALL *BilShaderAllocFun)(Instance* pInstance, void* pUserData, size_t size);
@@ -92,7 +92,7 @@ public:
 
 protected:
     ShaderModule(size_t codeSize, const void* pCode);
-    VkResult Init(const Device* pDevice, VkShaderModuleCreateFlags flags);
+    VkResult Init(Device* pDevice, VkShaderModuleCreateFlags flags);
 
     size_t                     m_codeSize;
     const void*                m_pCode;

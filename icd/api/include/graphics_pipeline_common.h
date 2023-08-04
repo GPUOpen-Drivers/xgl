@@ -197,6 +197,7 @@ public:
         Device*                             pDevice,
         PipelineCache*                      pPipelineCache,
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        PipelineCreateFlags                 flags,
         const VkAllocationCallbacks*        pAllocator,
         VkPipeline*                         pPipeline);
 
@@ -231,6 +232,7 @@ public:
     // Extract graphics pipeline library related info from VkGraphicsPipelineCreateInfo.
     static void ExtractLibraryInfo(
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        PipelineCreateFlags                 flags,
         GraphicsPipelineLibraryInfo*        pLibInfo);
 
     // Check whether pipeline binary will be built
@@ -249,6 +251,7 @@ protected:
     static void BuildPipelineObjectCreateInfo(
         const Device*                          pDevice,
         const VkGraphicsPipelineCreateInfo*    pIn,
+        PipelineCreateFlags                    flags,
         const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
         const PipelineLayout*                  pPipelineLayout,
         const PipelineOptimizerKey*            pOptimizerKey,
@@ -259,6 +262,7 @@ protected:
     static void GeneratePipelineOptimizerKey(
         const Device*                          pDevice,
         const VkGraphicsPipelineCreateInfo*    pCreateInfo,
+        PipelineCreateFlags                    flags,
         const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
         ShaderOptimizerKey*                    pShaderKeys,
         PipelineOptimizerKey*                  pPipelineKey);
@@ -266,6 +270,7 @@ protected:
     // Generates the API PSO hash using the contents of the VkGraphicsPipelineCreateInfo struct
     static void BuildApiHash(
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        PipelineCreateFlags                 flags,
         uint64_t*                           pApiHash,
         Util::MetroHash::Hash*              elfHash);
 

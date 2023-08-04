@@ -1949,6 +1949,28 @@ SHADER_ACTION = {
             ["Auto", "EnableOptimization", "DisableOptimization", "ClearInvariants"],
             prefix="Vkgc::InvariantLoads::")
     },
+
+    "workaroundStorageImageFormats": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "workaroundStorageImageFormats",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+            },
+        ],
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% \
+= %IntValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
+    },
 }
 
 SHADER_PATTERN = {

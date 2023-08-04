@@ -68,7 +68,7 @@ namespace vk
 {
 
 // Forward declare Vulkan classes used in this file.
-class DispatchablePhysicalDevice;
+class ApiPhysicalDevice;
 class Surface;
 
 // =====================================================================================================================
@@ -412,12 +412,22 @@ public:
         VkExternalMemoryHandleTypeFlagBits handleType,
         VkExternalMemoryProperties*        pExternalMemoryProperties) const;
 
+#if defined(__unix__)
+template <typename ModifierPropertiesList_T>
+    VkResult GetDrmFormatModifierPropertiesList(
+        VkFormat                 format,
+        ModifierPropertiesList_T pPropertiesList) const;
+#endif
+
     VkResult GetImageFormatProperties(
         VkFormat                 format,
         VkImageType              type,
         VkImageTiling            tiling,
         VkImageUsageFlags        usage,
         VkImageCreateFlags       flags,
+#if defined(__unix__)
+        uint64                   modifier,
+#endif
         VkImageFormatProperties* pImageFormatProperties) const;
 
     void GetSparseImageFormatProperties(

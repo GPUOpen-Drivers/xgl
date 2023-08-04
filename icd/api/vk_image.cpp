@@ -44,6 +44,10 @@
 #include "palImage.h"
 #include "palAutoBuffer.h"
 
+#if defined(__unix__)
+#include "drm_fourcc.h"
+#endif
+
 namespace vk
 {
 
@@ -526,6 +530,54 @@ void Image::ConvertImageCreateInfo(
 
     // Apply per application (or run-time) options
     pDevice->GetResourceOptimizer()->OverrideImageCreateInfo(resourceKey, pPalCreateInfo);
+
+#if defined(__unix__)
+    pPalCreateInfo->modifier = DRM_FORMAT_MOD_INVALID;
+
+    if (pCreateInfo->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT)
+    {
+        if ((extStructs.pModifierListCreateInfo != nullptr) &&
+            (extStructs.pModifierListCreateInfo->drmFormatModifierCount > 0))
+        {
+            VK_ASSERT(extStructs.pModifierExplicitCreateInfo == nullptr);
+        }
+        else if ((extStructs.pModifierExplicitCreateInfo != nullptr)                       &&
+                 (extStructs.pModifierExplicitCreateInfo->drmFormatModifierPlaneCount > 0) &&
+                 (extStructs.pModifierExplicitCreateInfo->drmFormatModifier != DRM_FORMAT_MOD_INVALID))
+        {
+            VK_ASSERT(extStructs.pModifierListCreateInfo == nullptr);
+
+            // Check if the explicit modifier is in the available list.
+            GetPreferableModifier(pDevice,
+                                  pAllocator,
+                                  createInfoFormat,
+                                  1,
+                                  &extStructs.pModifierExplicitCreateInfo->drmFormatModifier,
+                                  pPalCreateInfo);
+
+            if (pPalCreateInfo->flags.hasModifier != 0)
+            {
+                pPalCreateInfo->modifierPlaneCount =
+                    extStructs.pModifierExplicitCreateInfo->drmFormatModifierPlaneCount;
+
+                for (uint32 i = 0; i < extStructs.pModifierExplicitCreateInfo->drmFormatModifierPlaneCount; i++)
+                {
+                    pPalCreateInfo->modifierMemoryPlaneOffset[i] =
+                        extStructs.pModifierExplicitCreateInfo->pPlaneLayouts[i].offset;
+                }
+            }
+        }
+        else
+        {
+            VK_NEVER_CALLED();
+        }
+    }
+    else
+    {
+        VK_ASSERT((extStructs.pModifierListCreateInfo == nullptr) &&
+                  (extStructs.pModifierExplicitCreateInfo == nullptr));
+    }
+#endif
 }
 
 // =====================================================================================================================
@@ -718,6 +770,20 @@ void Image::HandleExtensionStructs(
             pExtStructs->pImageStencilUsageCreateInfo = static_cast<const VkImageStencilUsageCreateInfo*>(pNext);
             break;
         }
+#if defined(__unix__)
+        case VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT:
+        {
+            pExtStructs->pModifierListCreateInfo =
+                static_cast<const VkImageDrmFormatModifierListCreateInfoEXT*>(pNext);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT:
+        {
+            pExtStructs->pModifierExplicitCreateInfo =
+                static_cast<const VkImageDrmFormatModifierExplicitCreateInfoEXT*>(pNext);
+            break;
+        }
+#endif
         default:
             // Skip any unknown extension structures
             break;
@@ -856,6 +922,10 @@ VkResult Image::Create(
 
     VkImageUsageFlags stencilUsage = pCreateInfo->usage;
 
+#if defined(__unix__)
+    result = ValidateModifierInfo(pDevice, createInfoFormat, extStructs, &palCreateInfo);
+#endif
+
     if ((pCreateInfo->flags & VK_IMAGE_CREATE_PROTECTED_BIT) != 0)
     {
         imageFlags.isProtected = true;
@@ -883,7 +953,7 @@ VkResult Image::Create(
               (pCreateInfo->imageType == VK_IMAGE_TYPE_3D));
 
     // Fail image creation if the sample count is not supported based on the setting
-    if ((settings.limitSampleCounts & pCreateInfo->samples) == 0)
+    if ((result == VK_SUCCESS) && (settings.limitSampleCounts & pCreateInfo->samples) == 0)
     {
         result = VK_ERROR_UNKNOWN;
     }
@@ -936,18 +1006,35 @@ VkResult Image::Create(
     {
         for (uint32_t deviceIdx = 0; (result == VK_SUCCESS) && (deviceIdx < pDevice->NumPalDevices()); deviceIdx++)
         {
-            palResult = pDevice->PalDevice(deviceIdx)->CreateImage(
-                palCreateInfo,
-                Util::VoidPtrInc(pPalImgAddr, palImgOffset),
-                &pPalImages[deviceIdx]);
-            VK_ASSERT(palResult == Pal::Result::Success);
+#if defined(__unix__)
+            if (extStructs.pModifierListCreateInfo != nullptr)
+            {
+                result = CreateImageWithModifierList(
+                    pDevice,
+                    pAllocator,
+                    createInfoFormat,
+                    extStructs,
+                    Util::VoidPtrInc(pPalImgAddr, palImgOffset),
+                    deviceIdx,
+                    &palCreateInfo,
+                    &pPalImages[deviceIdx]);
+            }
+            else
+#endif
+            {
+                palResult = pDevice->PalDevice(deviceIdx)->CreateImage(
+                    palCreateInfo,
+                    Util::VoidPtrInc(pPalImgAddr, palImgOffset),
+                    &pPalImages[deviceIdx]);
+                VK_ASSERT(palResult == Pal::Result::Success);
+
+                if (palResult != Pal::Result::Success)
+                {
+                    result = VK_ERROR_INITIALIZATION_FAILED;
+                }
+            }
 
             palImgOffset += palImgSize;
-
-            if (palResult != Pal::Result::Success)
-            {
-                result = VK_ERROR_INITIALIZATION_FAILED;
-            }
         }
     }
 
@@ -1506,6 +1593,50 @@ VkResult Image::GetSubresourceLayout(
     pLayout->arrayPitch = (createInfo.arraySize > 1)    ? palLayout.depthPitch : 0;
     pLayout->depthPitch = (createInfo.extent.depth > 1) ? palLayout.depthPitch : 0;
 
+#if defined(__unix__)
+    // If the image’s tiling is VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT,
+    // then the aspectMask member of VkImageSubresource must be one of VK_IMAGE_ASPECT_MEMORY_PLANE_i_BIT_EXT.
+    if (PalImage(DefaultDeviceIndex)->GetImageCreateInfo().flags.hasModifier != 0)
+    {
+        VK_ASSERT((pSubresource->aspectMask >= VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT) &&
+                  (pSubresource->aspectMask <= VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT));
+
+        VK_ASSERT((pSubresource->arrayLayer == 0) && (pSubresource->mipLevel == 0));
+
+        // Planar yuv with Dcc is not supported when using drm format modifier.
+        if (Formats::GetYuvPlaneCounts(m_format) == 1)
+        {
+            // For non planar yuv with Dcc, memory plane layout is:
+            // image without Dcc:
+            // MEMORY_PLANE_0
+            // main surface
+
+            // image with gfx Dcc:
+            // MEMORY_PLANE_0           MEMORY_PLANE_1
+            // main surface             Dcc surface
+
+            // image with gfx Dcc and dcn Dcc:
+            // MEMORY_PLANE_0           MEMORY_PLANE_1           MEMORY_PLANE_2
+            // main surface             displayable Dcc surface  Dcc surface
+
+            // The main surface layout is already obtained from GetSubresourceLayout().
+            if (pSubresource->aspectMask != VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT)
+            {
+                palResult = PalImage(DefaultDeviceIndex)->GetModifierSubresourceLayout(palSubResId.plane,
+                                                                                       &palLayout);
+            }
+
+            pLayout->offset     = palLayout.offset;
+            pLayout->size       = palLayout.size;
+            pLayout->rowPitch   = palLayout.rowPitch;
+            pLayout->arrayPitch = 0;
+            pLayout->depthPitch = 0;
+
+            return PalToVkResult(palResult);
+        }
+    }
+#endif
+
     return VK_SUCCESS;
 }
 
@@ -1922,6 +2053,227 @@ void Image::GetPalImageMemoryRequirements(
     }
 }
 
+#if defined(__unix__)
+// =====================================================================================================================
+// Creates and initializes a new pal Image object with modifier list. If fails, try next preferable modifier.
+VkResult Image::CreateImageWithModifierList(
+    Device*                      pDevice,
+    const VkAllocationCallbacks* pAllocator,
+    VkFormat                     format,
+    const ImageExtStructs&       extStructs,
+    void*                        pPalImgAddr,
+    uint32                       deviceIdx,
+    Pal::ImageCreateInfo*        pPalCreateInfo,
+    Pal::IImage**                pPalImage)
+{
+    VkResult    result        = VK_SUCCESS;
+    Pal::Result palResult     = Pal::Result::Success;
+    uint32      modifierCount = extStructs.pModifierListCreateInfo->drmFormatModifierCount;
+
+    uint64 modifierArray[modifierCount];
+    memset(modifierArray, 0, sizeof(modifierArray));
+
+    memcpy(modifierArray,
+           extStructs.pModifierListCreateInfo->pDrmFormatModifiers,
+           sizeof(uint64) * modifierCount);
+
+    while (modifierCount-- > 0)
+    {
+        uint32 modifierNum = GetPreferableModifier(
+            pDevice,
+            pAllocator,
+            format,
+            extStructs.pModifierListCreateInfo->drmFormatModifierCount,
+            modifierArray,
+            pPalCreateInfo);
+
+        if (pPalCreateInfo->flags.hasModifier == 0)
+        {
+            result = VK_ERROR_INITIALIZATION_FAILED;
+            break;
+        }
+
+        palResult = pDevice->PalDevice(deviceIdx)->CreateImage(
+            *pPalCreateInfo,
+            pPalImgAddr,
+            pPalImage);
+
+        if (palResult == Pal::Result::Success)
+        {
+            break;
+        }
+        else
+        {
+            if (*pPalImage != nullptr)
+            {
+                (*pPalImage)->Destroy();
+                (*pPalImage) = nullptr;
+            }
+
+            pPalCreateInfo->flags.hasModifier = 0;
+            pPalCreateInfo->modifier          = DRM_FORMAT_MOD_INVALID;
+            modifierArray[modifierNum]        = DRM_FORMAT_MOD_INVALID;
+        }
+    }
+
+    VK_ASSERT(palResult == Pal::Result::Success);
+
+    if (palResult != Pal::Result::Success)
+    {
+        result = VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Get preferable drm format modifier from list.
+uint32 Image::GetPreferableModifier(
+    Device*                      pDevice,
+    const VkAllocationCallbacks* pAllocator,
+    VkFormat                     format,
+    uint32                       modifierCount,
+    const uint64*                pModifiers,
+    Pal::ImageCreateInfo*        pPalCreateInfo)
+{
+    const RuntimeSettings& settings   = pDevice->GetRuntimeSettings();
+    Pal::IDevice*          pPalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalDevice();
+
+    uint32 modifiersListCount = 0;
+    uint32 modifierNum        = 0;
+
+    pPalDevice->GetModifiersList(VkToPalFormat(format, settings).format,
+                                 &modifiersListCount,
+                                 nullptr);
+
+    if ((modifiersListCount != 0) && (Formats::IsDepthStencilFormat(format) == false))
+    {
+        uint64* pModifiersList = static_cast<uint64*>(pAllocator->pfnAllocation(
+                pAllocator->pUserData,
+                (modifiersListCount * sizeof(uint64)),
+                VK_DEFAULT_MEM_ALIGN,
+                VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
+
+        VK_ASSERT(pModifiersList != nullptr);
+
+        if (pModifiersList != nullptr)
+        {
+            pPalDevice->GetModifiersList(VkToPalFormat(format, settings).format,
+                                         &modifiersListCount,
+                                         pModifiersList);
+
+            for (uint32 i = 0; i < modifiersListCount; i++)
+            {
+                for (uint32 j = 0; j < modifierCount; j++)
+                {
+                    if (pModifiersList[i] == pModifiers[j])
+                    {
+                        modifierNum                       = j;
+                        pPalCreateInfo->modifier          = pModifiersList[i];
+                        pPalCreateInfo->flags.hasModifier = 1;
+                        pPalCreateInfo->tiling            =
+                            (pModifiersList[i] == DRM_FORMAT_MOD_LINEAR) ? Pal::ImageTiling::Linear :
+                                                                           Pal::ImageTiling::Optimal;
+                        break;
+                    }
+                }
+
+                if (pPalCreateInfo->flags.hasModifier == 1)
+                {
+                    break;
+                }
+            }
+
+            pAllocator->pfnFree(pAllocator->pUserData, pModifiersList);
+        }
+    }
+
+    return modifierNum;
+}
+
+// =====================================================================================================================
+// Validate info for drm format modifier.
+VkResult Image::ValidateModifierInfo(
+    Device*                pDevice,
+    VkFormat               format,
+    const ImageExtStructs& extStructs,
+    Pal::ImageCreateInfo*  pPalCreateInfo)
+{
+    VkResult result = VK_SUCCESS;
+
+    if (extStructs.pModifierExplicitCreateInfo != nullptr)
+    {
+        if (pPalCreateInfo->flags.hasModifier == 0)
+        {
+            result = VK_ERROR_INITIALIZATION_FAILED;
+        }
+        else
+        {
+            uint64 modifier   = extStructs.pModifierExplicitCreateInfo->drmFormatModifier;
+            uint32 planeCount = extStructs.pModifierExplicitCreateInfo->drmFormatModifierPlaneCount;
+
+            if (Formats::IsYuvPlanar(format))
+            {
+                if (Formats::GetYuvPlaneCounts(format) != planeCount)
+                {
+                    result = VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT;
+                }
+            }
+            else if (AMD_FMT_MOD_GET(DCC_RETILE, modifier))
+            {
+                if (planeCount != 3)
+                {
+                    result = VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT;
+                }
+            }
+            else if (AMD_FMT_MOD_GET(DCC, modifier))
+            {
+                if (planeCount != 2)
+                {
+                    result = VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT;
+                }
+            }
+            else
+            {
+                if (planeCount != 1)
+                {
+                    result = VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT;
+                }
+            }
+        }
+    }
+    else if ((extStructs.pModifierListCreateInfo != nullptr) &&
+             (extStructs.pModifierListCreateInfo->drmFormatModifierCount == 0))
+    {
+        result = VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    return result;
+}
+#endif
+
+// =====================================================================================================================
+// Create a Pal::Image and calculate its subresource layout
+void Image::CalculateSubresourceLayout(
+    Device*                   pDevice,
+    const VkImageCreateInfo*  pCreateInfo,
+    const VkImageSubresource* pSubresource,
+    VkSubresourceLayout*      pSubresourceLayout)
+{
+    VkImage image;
+
+    VkResult result = pDevice->CreateImage(pCreateInfo, pDevice->VkInstance()->GetAllocCallbacks(), &image);
+
+    if (result == VK_SUCCESS)
+    {
+        Image::ObjectFromHandle(image)->GetSubresourceLayout(
+            pDevice,
+            pSubresource,
+            pSubresourceLayout);
+        Image::ObjectFromHandle(image)->Destroy(pDevice, pDevice->VkInstance()->GetAllocCallbacks());
+    }
+}
+
 // =====================================================================================================================
 // Calculate image's memory requirements from VkImageCreateInfo
 void Image::CalculateMemoryRequirements(
@@ -2159,6 +2511,21 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements2(
         &pSparseMemoryRequirements->memoryRequirements);
     pImage->GetSparseMemoryRequirements(pDevice, pSparseMemoryRequirementCount, memReqsView);
 }
+
+#if defined(__unix__)
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetImageDrmFormatModifierPropertiesEXT(
+    VkDevice                                    device,
+    VkImage                                     image,
+    VkImageDrmFormatModifierPropertiesEXT*      pProperties)
+{
+    Image* pImage = Image::ObjectFromHandle(image);
+
+    pProperties->drmFormatModifier = pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().modifier;
+
+    return VK_SUCCESS;
+}
+#endif
 
 } // namespace entry
 

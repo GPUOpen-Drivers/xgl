@@ -203,7 +203,7 @@ bool Formats::IsColorFormat(VkFormat format)
 
     return ((format >= VK_FORMAT_R4G4_UNORM_PACK8)    && (format <= VK_FORMAT_E5B9G9R9_UFLOAT_PACK32)) ||
            ((format >= VK_FORMAT_BC1_RGB_UNORM_BLOCK) && (format <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK)) ||
-           ((format == VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT) || (format == VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT));
+           (format == VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT) || (format == VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT);
 }
 
 // =====================================================================================================================

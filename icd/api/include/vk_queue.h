@@ -57,7 +57,7 @@ struct CmdBufState;
 class  CmdBufferRing;
 class  Device;
 class  DevModeMgr;
-class  DispatchableQueue;
+class  ApiQueue;
 class  Instance;
 class  SwapChain;
 class  FrtcFramePacer;

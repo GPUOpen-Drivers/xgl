@@ -615,7 +615,9 @@ static VkResult gpuBlitImage(
             VkToPalImageCopyRegion(
                 pRegions[regionIdx],
                 dstSwzFormat.format,
+                pSrcImage->GetArraySize(),
                 dstSwzFormat.format,
+                pDstImage->GetArraySize(),
                 pPalRegions,
                 &palRegionCount);
 
@@ -720,6 +722,7 @@ static VkResult gpuBlitBuffer(
             pPalRegions[i] = VkToPalMemoryImageCopyRegion(
                 pRegions[regionIdx + i],
                 dstSwzFormat.format,
+                pDstImage->GetArraySize(),
                 plane,
                 pSrcBuffer->MemOffset());
         }

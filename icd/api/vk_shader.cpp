@@ -195,7 +195,9 @@ VkResult ShaderModule::Create(
 
 // =====================================================================================================================
 // Initialize shader module object, performing SPIR-V to AMD IL shader binary conversion.
-VkResult ShaderModule::Init(const Device* pDevice, VkShaderModuleCreateFlags flags)
+VkResult ShaderModule::Init(
+    Device*                      pDevice,
+    VkShaderModuleCreateFlags    flags)
 {
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 

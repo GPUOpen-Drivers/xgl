@@ -45,7 +45,7 @@ namespace vk
 
 class CmdBuffer;
 class Device;
-class DispatchableQueryPool;
+class ApiQueryPool;
 class PalQueryPool;
 class QueryPoolWithStorageView;
 class TimestampQueryPool;
