@@ -90,7 +90,7 @@ struct MemoryPoolProperties
 {
     InternalMemCreateFlags flags;                    // Create flags governing this pool
     Pal::VaRange           vaRange;                  // Virtual address range to use
-    size_t                 heapCount;                // Number of heaps in the heap preference array
+    uint32_t               heapCount;                // Number of heaps in the heap preference array
     Pal::GpuHeap           heaps[Pal::GpuHeapCount]; // Heap preference array
 };
 
@@ -281,6 +281,12 @@ private:
 
     void FreeBaseGpuMem(
         const InternalMemoryPool*       pGpuMemory);
+
+    void FilterViableHeaps(
+        const Pal::GpuHeap* pHeaps,
+        uint32_t            heapCount,
+        Pal::GpuHeap*       pOutHeaps,
+        uint32_t*           pOutHeapCount);
 
     Device* const       m_pDevice;          // Logical device this memory manager belongs to
 

@@ -454,20 +454,6 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
         result = PalToVkResult(palResult);
     }
 
-    PipelineBinaryInfo* pBinaryInfo = nullptr;
-
-    if ((pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO) ||
-        (pDevice->IsExtensionEnabled(DeviceExtensions::KHR_PIPELINE_EXECUTABLE_PROPERTIES) &&
-        ((flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) != 0))) &&
-        (result == VK_SUCCESS))
-    {
-        pBinaryInfo = PipelineBinaryInfo::Create(
-            pCacheIds[DefaultDeviceIndex],
-            pPipelineBinarySizes[DefaultDeviceIndex],
-            pPipelineBinaries[DefaultDeviceIndex],
-            pAllocator);
-    }
-
     // On success, wrap it up in a Vulkan object.
     if (result == VK_SUCCESS)
     {
@@ -494,7 +480,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
             pPalColorBlend,
             pPalDepthStencil,
             pObjectCreateInfo->sampleCoverage,
-            pBinaryInfo,
+            pCacheIds[DefaultDeviceIndex],
             apiPsoHash,
             &palPipelineHasher);
 
@@ -534,11 +520,6 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
             {
                 pPalPipeline[deviceIdx]->Destroy();
             }
-        }
-
-        if (pBinaryInfo != nullptr)
-        {
-            pBinaryInfo->Destroy(pAllocator);
         }
 
         pDevice->FreeApiObject(pAllocator, pSystemMem);
@@ -1131,7 +1112,7 @@ GraphicsPipeline::GraphicsPipeline(
     Pal::IColorBlendState**                pPalColorBlend,
     Pal::IDepthStencilState**              pPalDepthStencil,
     uint32_t                               coverageSamples,
-    PipelineBinaryInfo*                    pBinary,
+    const Util::MetroHash::Hash&           cacheHash,
     uint64_t                               apiHash,
     Util::MetroHash64*                     pPalPipelineHasher)
     :
@@ -1151,11 +1132,11 @@ GraphicsPipeline::GraphicsPipeline(
     Pipeline::Init(
         pPalPipeline,
         pLayout,
-        pBinary,
         staticStateMask,
 #if VKI_RAY_TRACING
         dispatchRaysUserDataOffset,
 #endif
+        cacheHash,
         apiHash);
 
     memcpy(m_pPalMsaa,         pPalMsaa,         sizeof(pPalMsaa[0])         * pDevice->NumPalDevices());

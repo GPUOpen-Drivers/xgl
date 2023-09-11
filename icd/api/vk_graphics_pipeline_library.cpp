@@ -652,14 +652,15 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
       m_libInfo(libInfo),
       m_elfHash(elfHash)
 {
+    Util::MetroHash::Hash dummyCacheHash = {};
     Pipeline::Init(
         nullptr,
         pPipelineLayout,
-        nullptr,
         objectInfo.staticStateMask,
 #if VKI_RAY_TRACING
         0,
 #endif
+        dummyCacheHash,
         apiHash);
 
     memcpy(m_tempModules,      pTempModules,      ShaderStage::ShaderStageGfxCount * sizeof(ShaderModuleHandle));

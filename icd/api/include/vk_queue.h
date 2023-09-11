@@ -251,7 +251,7 @@ public:
         CmdBufState*               pCmdBufState);
 
     VkResult SynchronizeBackBuffer(
-        Memory*  pMemory,
+        Memory* pMemory,
         uint32_t deviceIdx);
 
 protected:

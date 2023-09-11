@@ -65,17 +65,11 @@ struct RuntimeSettings;
 struct ShaderStageInfo;
 struct ShaderModuleHandle;
 
-// Structure containing information about a retrievable pipeline binary.  These are only retained by Pipeline objects
-// when specific device extensions (VK_AMD_shader_info/VK_KHR_pipeline_executable_properties) that can query them are
-// enabled.
+// Structure containing information about a retrievable pipeline binary.
 struct PipelineBinaryInfo
 {
-    static PipelineBinaryInfo* Create(Util::MetroHash::Hash hash, size_t size, const void* pBinary, const VkAllocationCallbacks* pAllocator);
-
-    void Destroy(const VkAllocationCallbacks* pAllocator);
-
-    size_t binaryByteSize;
-    void*  pBinary;
+    size_t                binaryByteSize;
+    const void*           pBinary;
     Util::MetroHash::Hash binaryHash;
 };
 
@@ -167,7 +161,9 @@ public:
 
     uint64_t GetApiHash() const { return m_apiHash; }
 
-    const PipelineBinaryInfo* GetBinary() const { return m_pBinary; }
+    bool GetBinary(
+        Pal::ShaderType     shaderType,
+        PipelineBinaryInfo* pBinaryInfo) const;
 
     VkPipelineBindPoint GetType() const { return m_type; }
 
@@ -180,7 +176,7 @@ public:
     bool ContainsDynamicState(DynamicStatesInternal dynamicState) const
         { return ((m_staticStateMask & (1ULL << static_cast<uint32_t>(dynamicState))) == 0); }
 
-    uint32_t GetAvailableAmdIlSymbol() const { return m_availableAmdIlSymbol; }
+    uint32_t GetAvailableAmdIlSymbol(uint32_t shaderStageMask) const;
 
     VkResult GetShaderDisassembly(
         const Device*                 pDevice,
@@ -229,14 +225,14 @@ protected:
         VkPipelineBindPoint   type);
 
     void Init(
-        Pal::IPipeline**      pPalPipeline,
-        const PipelineLayout* pLayout,
-        PipelineBinaryInfo*   pBinary,
-        uint64_t              staticStateMask,
+        Pal::IPipeline**            pPalPipeline,
+        const PipelineLayout*       pLayout,
+        uint64_t                    staticStateMask,
 #if VKI_RAY_TRACING
-        uint32_t              dispatchRaysUserDataOffset,
+        uint32_t                     dispatchRaysUserDataOffset,
 #endif
-        uint64_t              apiHash);
+        const Util::MetroHash::Hash& cacheHash,
+        uint64_t                     apiHash);
 
     static PipelineCreateFlags GetCacheIdControlFlags(
         PipelineCreateFlags in);
@@ -282,6 +278,7 @@ protected:
                                                           // static (written at bind-time as opposed to via vkCmd*).
     uint64_t                           m_apiHash;
     VkPipelineBindPoint                m_type;
+    Util::MetroHash::Hash              m_cacheHash;       // Cache Id of pipeline binary on default PAL device
 
 #if VKI_RAY_TRACING
     const bool                         m_hasRayTracing;
@@ -291,14 +288,7 @@ protected:
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Pipeline);
 
-    uint32_t GetShaderSymbolAvailability(
-        const Device*                       pDevice,
-        const Pal::IPipeline*               pPalPipeline,
-        const Util::Abi::PipelineSymbolType pipelineSymbolType) const;
-
-    PipelineBinaryInfo*                m_pBinary;
     PrintfFormatMap                    m_formatStrings;
-    uint32_t                           m_availableAmdIlSymbol; // Bit mask for Pal::ShaderStageFlagBits
 };
 
 namespace entry

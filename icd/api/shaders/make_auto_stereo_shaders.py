@@ -24,14 +24,10 @@
  #######################################################################################################################
 
 #**********************************************************************************************************************
-# @file  make_llpc_shaders.py
-# @brief LLPC python script file: generates SPIR-V binary for internal pipelines
+# @file  make_auto_stereo_shaders.py
+# @brief AutoStereo python script file: generates SPIR-V binary for auto stereo shaders
 #**********************************************************************************************************************
-"""Module to generate llpc shaders"""
-
+"""Module to generate auto stereo shaders"""
 from generate_shader_util import generate_spv_header_file
 
-generate_spv_header_file("copy_query_pool.comp", "copy_timestamp_query_pool", " ")
-generate_spv_header_file("copy_query_pool.comp", "copy_timestamp_query_pool_strided", "-DSTRIDED_COPY")
-generate_spv_header_file("copy_query_pool.comp", "copy_acceleration_structure_query_pool",\
-                         "-DACCELERATION_STRUCTURE_SERIALIZATION")
+generate_spv_header_file("auto_stereo.comp", "auto_stereo", " ")

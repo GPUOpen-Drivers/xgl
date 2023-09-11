@@ -249,7 +249,6 @@ protected:
         uint32_t                             shaderLibraryCount,
         Pal::IShaderLibrary**                ppPalShaderLibrary,
         const PipelineLayout*                pPipelineLayout,
-        PipelineBinaryInfo*                  pPipelineBinary,
         const ShaderOptimizerKey*            pShaderOptKeys,
         const ImmedInfo&                     immedInfo,
         uint64_t                             staticStateMask,
@@ -262,6 +261,7 @@ protected:
         uint32_t                             attributeSize,
         Pal::gpusize                         traceRayGpuVas[MaxPalDevices],
         uint32_t                             dispatchRaysUserDataOffset,
+        const Util::MetroHash::Hash&         cacheHash,
         uint64_t                             apiHash,
         const Util::MetroHash::Hash&         elfHash);
 

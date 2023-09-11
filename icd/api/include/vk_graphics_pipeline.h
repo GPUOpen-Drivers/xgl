@@ -224,7 +224,7 @@ protected:
         Pal::IColorBlendState**                pPalColorBlend,
         Pal::IDepthStencilState**              pPalDepthStencil,
         uint32_t                               coverageSamples,
-        PipelineBinaryInfo*                    pBinary,
+        const Util::MetroHash::Hash&           cacheHash,
         uint64_t                               apiHash,
         Util::MetroHash64*                     pPalPipelineHasher);
 

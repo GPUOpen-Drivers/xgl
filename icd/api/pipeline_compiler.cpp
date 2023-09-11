@@ -1212,8 +1212,10 @@ VkResult PipelineCompiler::CreateGraphicsShaderBinary(
 
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     const uint32_t compilerMask = GetCompilerCollectionMask();
+    GraphicsLibraryType gplType = GetGraphicsLibraryType(stage);
     uint64_t libraryHash = Vkgc::IPipelineDumper::GetGraphicsShaderBinaryHash(&pCreateInfo->pipelineInfo, stage);
-    pCreateInfo->libraryHash[stage] = libraryHash;
+    VK_ASSERT(pCreateInfo->libraryHash[gplType] == libraryHash || pCreateInfo->libraryHash[gplType] == 0);
+    pCreateInfo->libraryHash[gplType] = libraryHash;
 
     void* pPipelineDumpHandle = nullptr;
     if (settings.enablePipelineDump)
@@ -1598,11 +1600,17 @@ static void CopyPipelineShadersInfo(
     {
         if ((shaderMask & (1 << stage)) != 0)
         {
-            *pShaderInfosDst[stage]                           = *pShaderInfosSrc[stage];
+            *pShaderInfosDst[stage] = *pShaderInfosSrc[stage];
+        }
+    }
 
-            pCreateInfo->earlyElfPackage[stage]               = libInfo.earlyElfPackage[stage];
-            pCreateInfo->earlyElfPackageHash[stage]           = libInfo.earlyElfPackageHash[stage];
-            pCreateInfo->libraryHash[stage]                   = libInfo.libraryHash[stage];
+    for (uint32_t gplType = 0; gplType < GraphicsLibraryCount; ++gplType)
+    {
+        if (libInfo.libraryHash[gplType] != 0)
+        {
+            pCreateInfo->earlyElfPackage[gplType]      = libInfo.earlyElfPackage[gplType];
+            pCreateInfo->earlyElfPackageHash[gplType]  = libInfo.earlyElfPackageHash[gplType];
+            pCreateInfo->libraryHash[gplType]          = libInfo.libraryHash[gplType];
         }
     }
 }
@@ -2127,27 +2135,27 @@ static void BuildPipelineShadersInfo(
     {
         if (((shaderMask & (1 << stage)) != 0) && (pShaderInfo->stages[stage].pModuleHandle != nullptr))
         {
+            GraphicsLibraryType gplType = GetGraphicsLibraryType(static_cast<const ShaderStage>(stage));
+
             PipelineCompiler::BuildPipelineShaderInfo(pDevice,
                                     &pShaderInfo->stages[stage],
                                     ppShaderInfoOut[stage],
                                     &pCreateInfo->pipelineInfo.options,
                                     pCreateInfo->pPipelineProfileKey,
                                     &pCreateInfo->pipelineInfo.nggState
-            );
-
-            pCreateInfo->earlyElfPackage[stage] = pShaderInfo->stages[stage].pModuleHandle->elfPackage;
+                                    );
         }
     }
 
-    // Uber fetch shader is actully used in the following scenes:
+    // Uber fetch shader is actually used in the following scenes:
     // * enableUberFetchShader or enableEarlyCompile is set as TRUE in panel.
     // * When creating shader module, adaptForFastLink parameter of PipelineCompiler::BuildShaderModule() is set as
     //   TRUE.  This may happen when shader is created during pipeline creation, and that pipeline is a library, not
     //   executable.  More details can be found in Pipeline::BuildShaderStageInfo().
     // * When creating pipeline, GraphicsPipelineBuildInfo::enableUberFetchShader controls the actual enablement. It is
-    //   only set when Vertex Input Interface section (VII) is not avaible and Pre-Rasterization Shader section (PRS)is
+    //   only set when Vertex Input Interface section (VII) is not available and Pre-Rasterization Shader (PRS) is
     //   available, or inherits from its PRS parent (referenced library). However, enableUberFetchShader would also be
-    //   set as FALSE even if its parent set it as TRUE if current pipeline want to re-compile pre-rasterazation shaders
+    //   set as FALSE even if its parent set it as TRUE if current pipeline want to re-compile pre-rasterization shaders
     //   and VII is available.  This may happen when VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT is set.  More
     //   details can be found in PipelineCompiler::ConvertGraphicsPipelineInfo().
     // PS: For standard gfx pipeline, GraphicsPipelineBuildInfo::enableUberFetchShader is never set as TRUE with default
@@ -3644,6 +3652,8 @@ void PipelineCompiler::FreeRayTracingPipelineCreateInfo(
         pCreateInfo->pTempBuffer = nullptr;
     }
 }
+
+// =====================================================================================================================
 
 // =====================================================================================================================
 // Set the Rtstate info from device and gpurt info

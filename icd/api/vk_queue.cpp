@@ -935,42 +935,6 @@ VkResult Queue::CreateDummyCmdBuffer()
 }
 
 // =====================================================================================================================
-// Synchronize back buffer memory by doing a dummy submit with the written primary field set.
-VkResult Queue::SynchronizeBackBuffer(
-    Memory*  pMemory,
-    uint32_t deviceIdx)
-{
-    VkResult result = VK_SUCCESS;
-
-    if (m_pDummyCmdBuffer[deviceIdx] == nullptr)
-    {
-        result = CreateDummyCmdBuffer();
-    }
-
-    if (result == VK_SUCCESS)
-    {
-        Pal::IGpuMemory* pGpuMem = pMemory->PalMemory(deviceIdx);
-
-        Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
-
-        perSubQueueInfo.cmdBufferCount  = 1;
-        perSubQueueInfo.ppCmdBuffers    = &m_pDummyCmdBuffer[deviceIdx];
-        perSubQueueInfo.pCmdBufInfoList = nullptr;
-
-        Pal::SubmitInfo submitInfo = {};
-
-        submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
-        submitInfo.perSubQueueInfoCount = 1;
-        submitInfo.blockIfFlippingCount = 1;
-        submitInfo.ppBlockIfFlipping    = &pGpuMem;
-
-        result = PalToVkResult(m_pPalQueues[deviceIdx]->Submit(submitInfo));
-    }
-
-    return result;
-}
-
-// =====================================================================================================================
 // Submit a dummy command buffer with associated command buffer info to KMD for FRTC/TurboSync/DVR features
 VkResult Queue::NotifyFlipMetadata(
     uint32_t                     deviceIdx,
@@ -2564,6 +2528,8 @@ bool Queue::BuildPostProcessCommands(
     {
         Pal::ICmdBuffer* pCmdBuf = pCmdBufState->pCmdBuf;
 
+        hasWork = pSwapChain->BuildPostProcessingCommands(pCmdBuf, pPresentInfo, m_pDevice);
+
         Pal::CmdPostProcessFrameInfo frameInfo = {};
 
         if (pPresentInfo != nullptr)
@@ -2605,6 +2571,42 @@ VkResult Queue::SubmitInternalCmdBuf(
     CmdBufferRing* pRing = (pCmdBufferRing != nullptr) ? pCmdBufferRing : m_pCmdBufferRing;
 
     return pRing->SubmitCmdBuffer(m_pDevice, deviceIdx, m_pPalQueues[deviceIdx], cmdBufInfo, pCmdBufState);
+}
+
+// =====================================================================================================================
+// Synchronize back buffer memory by doing a dummy submit with the written primary field set.
+VkResult Queue::SynchronizeBackBuffer(
+    Memory*  pMemory,
+    uint32_t deviceIdx)
+{
+    VkResult result = VK_SUCCESS;
+
+    if (m_pDummyCmdBuffer[deviceIdx] == nullptr)
+    {
+        result = CreateDummyCmdBuffer();
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        Pal::IGpuMemory* pGpuMem = pMemory->PalMemory(deviceIdx);
+
+        Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+
+        perSubQueueInfo.cmdBufferCount  = 1;
+        perSubQueueInfo.ppCmdBuffers    = &m_pDummyCmdBuffer[deviceIdx];
+        perSubQueueInfo.pCmdBufInfoList = nullptr;
+
+        Pal::SubmitInfo submitInfo = {};
+
+        submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
+        submitInfo.perSubQueueInfoCount = 1;
+        submitInfo.blockIfFlippingCount = 1;
+        submitInfo.ppBlockIfFlipping    = &pGpuMem;
+
+        result = PalToVkResult(m_pPalQueues[deviceIdx]->Submit(submitInfo));
+    }
+
+    return result;
 }
 
 VkResult Queue::CreateSqttState(

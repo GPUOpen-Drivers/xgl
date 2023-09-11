@@ -147,6 +147,9 @@ static void GenerateHashFromRayTracingShaderGroupCreateInfo(
         VK_NEVER_CALLED();
         break;
     }
+
+    bool hasReplayHandle = (desc.pShaderGroupCaptureReplayHandle != nullptr);
+    pHasher->Update(hasReplayHandle);
 }
 
 // =====================================================================================================================
@@ -325,7 +328,6 @@ void RayTracingPipeline::Init(
     uint32_t                             shaderLibraryCount,
     Pal::IShaderLibrary**                ppPalShaderLibrary,
     const PipelineLayout*                pPipelineLayout,
-    PipelineBinaryInfo*                  pPipelineBinary,
     const ShaderOptimizerKey*            pShaderOptKeys,
     const ImmedInfo&                     immedInfo,
     uint64_t                             staticStateMask,
@@ -338,15 +340,16 @@ void RayTracingPipeline::Init(
     uint32_t                             attributeSize,
     gpusize                              traceRayGpuVas[MaxPalDevices],
     uint32_t                             dispatchRaysUserDataOffset,
+    const Util::MetroHash::Hash&         cacheHash,
     uint64_t                             apiHash,
     const Util::MetroHash::Hash&         elfHash)
 {
     Pipeline::Init(
         ppPalPipeline,
         pPipelineLayout,
-        pPipelineBinary,
         staticStateMask,
         dispatchRaysUserDataOffset,
+        cacheHash,
         apiHash);
 
     m_info               = immedInfo;
@@ -1336,17 +1339,6 @@ VkResult RayTracingPipeline::CreateImpl(
             result = PalToVkResult(palResult);
         }
 
-        // Retain a copy of the pipeline binary if an extension that can query it is enabled
-        PipelineBinaryInfo* pBinary = nullptr;
-
-        if ((result == VK_SUCCESS) && m_pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO))
-        {
-            pBinary = PipelineBinaryInfo::Create(cacheId[DefaultDeviceIndex],
-                                                 pipelineBinary[DefaultDeviceIndex].pPipelineBins[0].codeSize,
-                                                 pipelineBinary[DefaultDeviceIndex].pPipelineBins[0].pCode,
-                                                 pAllocator);
-        }
-
         if (result == VK_SUCCESS)
         {
             uint32_t dispatchRaysUserDataOffset = localPipelineInfo.pLayout->GetDispatchRaysUserData();
@@ -1355,7 +1347,6 @@ VkResult RayTracingPipeline::CreateImpl(
                  funcCount * m_pDevice->NumPalDevices(),
                  ppShaderLibraries,
                  localPipelineInfo.pLayout,
-                 pBinary,
                  optimizerKey.pShaders,
                  localPipelineInfo.immedInfo,
                  localPipelineInfo.staticStateMask,
@@ -1368,6 +1359,7 @@ VkResult RayTracingPipeline::CreateImpl(
                  binaryCreateInfo.maxAttributeSize,
                  traceRayGpuVas,
                  dispatchRaysUserDataOffset,
+                 cacheId[DefaultDeviceIndex],
                  apiPsoHash,
                  elfHash);
             if (settings.enableDebugPrintf)
@@ -1424,11 +1416,6 @@ VkResult RayTracingPipeline::CreateImpl(
         {
             // Free system memory for pipeline object
             pAllocator->pfnFree(pAllocator->pUserData, pSystemMem);
-
-            if (pBinary != nullptr)
-            {
-                pBinary->Destroy(pAllocator);
-            }
         }
 
         if (result == VK_SUCCESS)

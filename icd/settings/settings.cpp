@@ -543,6 +543,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         }
 
+        if (appProfile == AppProfile::CSGO)
+        {
+        }
+
         if (appProfile == AppProfile::Source2Engine)
         {
             pPalSettings->fastDepthStencilClearMode = Pal::FastDepthStencilClearMode::Graphics;
@@ -580,7 +584,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 #if VKI_BUILD_GFX11
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
             {
-                pPalSettings->pwsMode = Pal::PwsMode::NoLateAcquirePoint;
+                m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
             }
 #endif
         }
@@ -703,11 +707,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.forceEnableDcc = ForceDccDefault;
             }
-        }
-
-        if (appProfile == AppProfile::ThreeKingdoms)
-        {
-            m_settings.useAcquireReleaseInterface = false;
         }
 
         if (appProfile == AppProfile::RainbowSixSiege)
@@ -1124,6 +1123,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
+        if (appProfile == AppProfile::SHARK)
+        {
+            m_settings.initializeVramToZero = false;
+        }
+
         if (appProfile == AppProfile::Valheim)
         {
             m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
@@ -1253,7 +1257,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 #if VKI_BUILD_GFX11
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
             {
-                pPalSettings->pwsMode = Pal::PwsMode::NoLateAcquirePoint;
+                m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
             }
 #endif
         }
@@ -1263,7 +1267,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 #if VKI_BUILD_GFX11
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
             {
-                pPalSettings->pwsMode = Pal::PwsMode::NoLateAcquirePoint;
+                m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
             }
 #endif
         }
@@ -1407,6 +1411,16 @@ void VulkanSettingsLoader::ReadPublicSettings()
             m_settings.vulkanTexFilterQuality = static_cast<TextureFilterOptimizationSettings>(texFilterQuality);
         }
     }
+
+    uint32_t vSyncControl = static_cast<uint32_t>(VSyncControl::VSyncControlOffOrAppSpecify);
+    if (m_pDevice->ReadSetting("VSyncControl",
+                                Pal::SettingScope::Global,
+                                Util::ValueType::Uint,
+                                &vSyncControl,
+                                sizeof(uint32_t)))
+    {
+        m_settings.vSyncControl = static_cast<VSyncControl>(vSyncControl);
+    }
 }
 
 // =====================================================================================================================
@@ -1532,13 +1546,25 @@ void VulkanSettingsLoader::UpdatePalSettings()
     // if one of the built in clear colors are used (white/black) and the image is TCC compatible.
     pPalSettings->disableSkipFceOptimization = false;
 
-    // For vulkan driver, forceDepthClampBasedOnZExport should be false by default, this is required to pass depth_range_unrestricted CTS tests
-    // Set it to true for applications that have perf drops
+    // For vulkan driver, forceDepthClampBasedOnZExport should be false by default, this is required to pass
+    // depth_range_unrestricted CTS tests. Set it to true for applications that have perf drops
     pPalSettings->depthClampBasedOnZExport = m_settings.forceDepthClampBasedOnZExport;
     pPalSettings->cpDmaCmdCopyMemoryMaxBytes = m_settings.cpDmaCmdCopyMemoryMaxBytes;
 
     // The color cache fetch size is limited to 256Bytes MAX regardless of other register settings.
     pPalSettings->limitCbFetch256B = m_settings.limitCbFetch256B;
+
+    // Controls PWS enable mode: disabled, fully enabled or partially enabled. Only takes effect if HW supports PWS and
+    // Acq-rel barriers
+    if (m_settings.useAcquireReleaseInterface)
+    {
+        static_assert(((static_cast<uint32_t>(Pal::PwsMode::Disabled)           == PwsMode::Disabled)      &&
+                       (static_cast<uint32_t>(Pal::PwsMode::Enabled)            == PwsMode::Enabled)       &&
+                       (static_cast<uint32_t>(Pal::PwsMode::NoLateAcquirePoint) == PwsMode::NoLateAcquirePoint)),
+                       "The PAL::PwsMode enum has changed. Vulkan settings might need to be updated.");
+
+        pPalSettings->pwsMode = static_cast<Pal::PwsMode>(m_settings.forcePwsMode);
+    }
 
 }
 

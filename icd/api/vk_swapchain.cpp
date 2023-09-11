@@ -44,6 +44,7 @@
 #include "include/vk_swapchain.h"
 #include "include/vk_utils.h"
 #include "include/khronos/vk_icd.h"
+#include "include/vk_cmdbuffer.h"
 
 #include "palQueueSemaphore.h"
 #include "palSwapChain.h"
@@ -62,11 +63,12 @@ static bool EnableFullScreen(
 
 // =====================================================================================================================
 SwapChain::SwapChain(
-    Device*             pDevice,
-    const Properties&   properties,
-    VkPresentModeKHR    presentMode,
-    FullscreenMgr*      pFullscreenMgr,
-    Pal::ISwapChain*    pPalSwapChain)
+    Device*                    pDevice,
+    const Properties&          properties,
+    VkPresentModeKHR           presentMode,
+    FullscreenMgr*             pFullscreenMgr,
+    Pal::WorkstationStereoMode wsStereoMode,
+    Pal::ISwapChain*           pPalSwapChain)
     :
     m_pDevice(pDevice),
     m_properties(properties),
@@ -79,6 +81,7 @@ SwapChain::SwapChain(
     m_presentCount(0),
     m_presentMode(presentMode),
     m_deprecated(false)
+    , m_wsStereoMode(wsStereoMode)
 {
     // Initialize the color gamut with the native values.
     if (m_pFullscreenMgr != nullptr)
@@ -102,6 +105,7 @@ VkResult SwapChain::Create(
     VkResult result = VK_SUCCESS;
 
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+
     Properties properties = {};
 
     // the old swapchain should be flaged as deprecated no matter whether the new swapchain is created successfully.
@@ -109,6 +113,21 @@ VkResult SwapChain::Create(
     {
         SwapChain::ObjectFromHandle(pCreateInfo->oldSwapchain)->MarkAsDeprecated(pAllocator);
     }
+
+    // Find the index of the device associated with the PAL screen and therefore, the PAL swap chain to be created
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
+    {
+        if (pDevice->VkPhysicalDevice(deviceIdx)->PalProperties().attachedScreenCount > 0)
+        {
+            properties.presentationDeviceIdx = deviceIdx;
+            break;
+        }
+    }
+
+    Pal::IDevice* pPalDevice = pDevice->PalDevice(properties.presentationDeviceIdx);
+    const PhysicalDevice* pPhysicalDevice = pDevice->VkPhysicalDevice(properties.presentationDeviceIdx);
+
+    Pal::WorkstationStereoMode wsStereoMode = pPhysicalDevice->GetWorkstationStereoMode();
 
     uint32          viewFormatCount = 0;
     const VkFormat* pViewFormats    = nullptr;
@@ -126,6 +145,9 @@ VkResult SwapChain::Create(
     properties.imageCreateInfo.swizzledFormat     = VkToPalFormat(pCreateInfo->imageFormat, settings);
     properties.imageCreateInfo.flags.stereo       = properties.flags.stereo;
     properties.imageCreateInfo.flags.peerWritable = (pDevice->NumPalDevices() > 1) ? 1 : 0;
+#if defined(__unix__)
+    properties.imageCreateInfo.flags.initializeToZero = settings.initializeVramToZero;
+#endif
 
     VkFormatProperties formatProperties;
     pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetFormatProperties(pCreateInfo->imageFormat, &formatProperties);
@@ -250,15 +272,28 @@ VkResult SwapChain::Create(
                                                                      (VkImageUsageFlags)(0));
     swapChainCreateInfo.preTransform        = Pal::SurfaceTransformNone;
     swapChainCreateInfo.compositeAlpha      = VkToPalCompositeAlphaMode(pCreateInfo->compositeAlpha);
-    swapChainCreateInfo.imageArraySize      = 1;
-    swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(pCreateInfo->presentMode);
+    swapChainCreateInfo.imageArraySize      = pCreateInfo->imageArrayLayers;
     swapChainCreateInfo.colorSpace          = VkToPalScreenSpace(VkSurfaceFormatKHR{ pCreateInfo->imageFormat,
                                                                                      pCreateInfo->imageColorSpace });
     swapChainCreateInfo.frameLatency        = swapImageCount; // Only matters for DXGI swapchain
 
     swapChainCreateInfo.flags.canAcquireBeforeSignaling = settings.enableAcquireBeforeSignal;
 
-    Pal::IDevice* pPalDevice = pDevice->PalDevice(properties.presentationDeviceIdx);
+    // Override Vsync mode based on setting
+    switch (settings.vSyncControl)
+    {
+    case VSyncControl::VSyncControlAlwaysOff:
+        swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(VK_PRESENT_MODE_IMMEDIATE_KHR);
+        break;
+    case VSyncControl::VSyncControlAlwaysOn:
+        swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(VK_PRESENT_MODE_FIFO_KHR);
+        break;
+    case VSyncControl::VSyncControlOffOrAppSpecify:
+    case VSyncControl::VSyncControlOnOrAppSpecify:
+    default:
+        swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(pCreateInfo->presentMode);
+        break;
+    }
 
     // Find the monitor is associated with the given window handle
     Pal::IScreen* pScreen = pDevice->VkInstance()->FindScreen(pPalDevice,
@@ -278,16 +313,6 @@ VkResult SwapChain::Create(
     if (properties.displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
     {
         swapChainCreateInfo.pScreen = properties.displayableInfo.pScreen;
-    }
-
-    // Find the index of the device associated with the PAL screen and therefore, the PAL swap chain to be created
-    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
-    {
-        if (pDevice->VkPhysicalDevice(deviceIdx)->PalProperties().attachedScreenCount > 0)
-        {
-            properties.presentationDeviceIdx = deviceIdx;
-            break;
-        }
     }
 
     // Figure out the mode the FullscreenMgr should be working in
@@ -504,6 +529,7 @@ VkResult SwapChain::Create(
                                             properties,
                                             pCreateInfo->presentMode,
                                             pFullscreenMgr,
+                                            wsStereoMode,
                                             pPalSwapChain);
 
         *pSwapChain = SwapChain::HandleFromVoidPointer(pMemory);
@@ -551,6 +577,13 @@ void SwapChain::Init(const VkAllocationCallbacks* pAllocator)
 {
     VkResult result = VK_SUCCESS;
 
+    // Auto Stereo is implemented directly in the driver via shader. In this case the OS 3D mode isn't available.
+    if ((result == VK_SUCCESS) &&
+        (m_properties.flags.stereo) &&
+        (m_pDevice->VkPhysicalDevice(m_properties.presentationDeviceIdx)->IsAutoStereoEnabled()))
+    {
+        result = SetupAutoStereo(pAllocator);
+    }
 }
 
 // =====================================================================================================================
@@ -577,6 +610,59 @@ void SwapChain::InitSwCompositor(
 
         m_pSwCompositor = SwCompositor::Create(m_pDevice, pAllocCallbacks, m_properties, useSdmaBlt);
     }
+}
+
+// =====================================================================================================================
+VkResult SwapChain::SetupAutoStereo(
+    const VkAllocationCallbacks* pAllocator)
+{
+    VkResult result = VK_SUCCESS;
+
+    static constexpr uint8_t autoStereoShaderSpv[] =
+    {
+#include"shaders/auto_stereo_spv.h"
+    };
+
+    Vkgc::ResourceMappingRootNode userDataNodes[3] = {};
+
+    const uint32_t imageViewSize = m_pDevice->GetProperties().descriptorSizes.imageView / sizeof(uint32_t);
+
+    // Left Eye
+    userDataNodes[0].node.type                    = Vkgc::ResourceMappingNodeType::DescriptorImage;
+    userDataNodes[0].node.offsetInDwords          = 0;
+    userDataNodes[0].node.sizeInDwords            = imageViewSize;
+    userDataNodes[0].node.srdRange.set            = 0;
+    userDataNodes[0].node.srdRange.binding        = 0;
+    userDataNodes[0].node.srdRange.strideInDwords = 0;
+    userDataNodes[0].visibility                   = Vkgc::ShaderStageComputeBit;
+
+    // Right Eye
+    userDataNodes[1].node.type                    = Vkgc::ResourceMappingNodeType::DescriptorImage;
+    userDataNodes[1].node.offsetInDwords          = imageViewSize;
+    userDataNodes[1].node.sizeInDwords            = imageViewSize;
+    userDataNodes[1].node.srdRange.set            = 0;
+    userDataNodes[1].node.srdRange.binding        = 1;
+    userDataNodes[1].node.srdRange.strideInDwords = 0;
+    userDataNodes[1].visibility                   = Vkgc::ShaderStageComputeBit;
+
+    // Push Constant data
+    userDataNodes[2].node.type                    = Vkgc::ResourceMappingNodeType::PushConst;
+    userDataNodes[2].node.offsetInDwords          = 2 * imageViewSize;
+    userDataNodes[2].node.sizeInDwords            = sizeof(AutoStereoPushConstants) / sizeof(uint32_t);
+    userDataNodes[2].node.srdRange.set            = Vkgc::InternalDescriptorSetId;
+    userDataNodes[2].node.srdRange.strideInDwords = 0;
+    userDataNodes[2].visibility                   = Vkgc::ShaderStageComputeBit;
+
+    result = m_pDevice->CreateInternalComputePipeline(sizeof(autoStereoShaderSpv),
+                                                      autoStereoShaderSpv,
+                                                      3,
+                                                      userDataNodes,
+                                                      0,
+                                                      false,
+                                                      nullptr,
+                                                      &m_pAutoStereoPipeline);
+
+    return result;
 }
 
 // =====================================================================================================================
@@ -633,6 +719,8 @@ VkResult SwapChain::AcquireNextImage(
     VkSemaphore semaphore = VK_NULL_HANDLE;
     uint64_t    timeout   = UINT64_MAX;
 
+    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+
     union
     {
         const VkStructHeader*             pHeader;
@@ -678,7 +766,9 @@ VkResult SwapChain::AcquireNextImage(
         if (result == VK_SUCCESS)
         {
             acquireInfo.timeout    = timeout;
-            acquireInfo.pSemaphore = (pSemaphore != nullptr) ? pSemaphore->PalSemaphore(DefaultDeviceIndex) : nullptr;
+            acquireInfo.pSemaphore = (pSemaphore != nullptr) ?
+                                      pSemaphore->PalSemaphore(DefaultDeviceIndex) :
+                                      nullptr;
             acquireInfo.pFence     = (pFence != nullptr) ? pFence->PalFence(presentationDeviceIdx) : nullptr;
 
             if (pFence != nullptr)
@@ -686,7 +776,10 @@ VkResult SwapChain::AcquireNextImage(
                 pFence->SetActiveDevice(presentationDeviceIdx);
             }
 
-            result = PalToVkResult(m_pPalSwapChain->AcquireNextImage(acquireInfo, pImageIndex));
+            {
+                result = PalToVkResult(m_pPalSwapChain->AcquireNextImage(acquireInfo, pImageIndex));
+
+            }
         }
 
         if (result == VK_SUCCESS)
@@ -727,6 +820,7 @@ void SwapChain::PostPresent(
     }
 
     m_appOwnedImageCount--;
+
     m_presentCount++;
 }
 
@@ -812,6 +906,107 @@ Pal::IGpuMemory* SwapChain::UpdatePresentInfo(
     }
 
     return pSrcImageGpuMemory;
+}
+
+// =====================================================================================================================
+bool SwapChain::BuildPostProcessingCommands(
+    Pal::ICmdBuffer*                 pCmdBuf,
+    const Pal::PresentSwapChainInfo* pPresentInfo,
+    const Device*                    pDevice) const
+{
+    bool hasPostProcessing = false;
+
+    bool isAutoStereo = pDevice->VkPhysicalDevice(m_properties.presentationDeviceIdx)->IsAutoStereoEnabled();
+
+    constexpr uint32_t MaxUserDataSize = 32;
+
+    const Pal::IImage* pImage                   = pPresentInfo->pSrcImage;
+    const Pal::ImageCreateInfo& imageCreateInfo = pImage->GetImageCreateInfo();
+
+    // Only Autostereo needs additional work
+    if (isAutoStereo && m_properties.flags.stereo && (imageCreateInfo.arraySize == 2))
+    {
+        const Pal::IDevice*    pPalDevice                = pDevice->PalDevice(m_properties.presentationDeviceIdx);
+        uint32_t               userData[MaxUserDataSize] = {};
+        uint32_t               userDataCount             = 0;
+        const RuntimeSettings& settings                  = pDevice->GetRuntimeSettings();
+
+        Pal::ImageViewInfo imageViewInfo[2] = {};
+        imageViewInfo[0].pImage                             = pImage;
+        imageViewInfo[0].viewType                           = Pal::ImageViewType::Tex2d;
+        imageViewInfo[0].swizzledFormat                     = VkToPalFormat(m_properties.format, settings);
+        imageViewInfo[0].subresRange.numMips                = 1;
+        imageViewInfo[0].subresRange.numPlanes              = 1;
+        imageViewInfo[0].subresRange.numSlices              = 1;
+        imageViewInfo[0].subresRange.startSubres.arraySlice = 0;
+        imageViewInfo[0].subresRange.startSubres.mipLevel   = 0;
+        imageViewInfo[0].subresRange.startSubres.plane      = 0;
+        imageViewInfo[0].possibleLayouts.usages             = Pal::LayoutShaderRead | Pal::LayoutShaderWrite;
+        imageViewInfo[0].possibleLayouts.engines            = Pal::ImageLayoutEngineFlags::LayoutUniversalEngine;
+
+        // Update array slice for right eye SRD
+        imageViewInfo[1]                                    = imageViewInfo[0];
+        imageViewInfo[1].subresRange.startSubres.arraySlice = 1;
+
+        // Create ImageView SRD's for left and right eye.
+        pPalDevice->CreateImageViewSrds(2, &imageViewInfo[0], &userData[userDataCount]);
+
+        const uint32_t imageViewSize = m_pDevice->GetProperties().descriptorSizes.imageView / sizeof(uint32_t);
+
+        userDataCount += (imageViewSize * 2);
+
+        AutoStereoPushConstants pushConst = {};
+
+        pushConst.width                = imageCreateInfo.extent.width;
+        pushConst.height               = imageCreateInfo.extent.height;
+        pushConst.horizontalInterleave = (m_wsStereoMode == Pal::WorkstationStereoMode::AutoHoriz);
+
+        // Copy the push constants
+        memcpy(&userData[userDataCount], &pushConst, sizeof(pushConst));
+        userDataCount += (sizeof(pushConst) / sizeof(uint32_t));
+
+        pCmdBuf->CmdSaveComputeState(Pal::ComputeStateAll);
+
+        const Pal::IPipeline* pPipeline = m_pAutoStereoPipeline.pPipeline[m_properties.presentationDeviceIdx];
+
+        Pal::PipelineBindParams bindParams = {};
+        bindParams.pipelineBindPoint = Pal::PipelineBindPoint::Compute;
+        bindParams.pPipeline         = pPipeline;
+        bindParams.apiPsoHash        = Pal::InternalApiPsoHash;
+
+        pCmdBuf->CmdBindPipeline(bindParams);
+        pCmdBuf->CmdSetUserData(Pal::PipelineBindPoint::Compute, 0, userDataCount, &userData[0]);
+
+        Pal::ShaderStats shaderStats = {};
+        pPipeline->GetShaderStats(Pal::ShaderType::Compute, &shaderStats, false);
+
+        // Get the local workgroup size
+        const uint32_t workGroupSize[2] = { shaderStats.cs.numThreadsPerGroup.x, shaderStats.cs.numThreadsPerGroup.y };
+
+        // Calculate dispatch size
+        Pal::DispatchDims dispatchDimensions = {};
+        dispatchDimensions.x = Util::RoundUpToMultiple(imageCreateInfo.extent.width, workGroupSize[0]) / workGroupSize[0];
+        dispatchDimensions.y = Util::RoundUpToMultiple(imageCreateInfo.extent.width, workGroupSize[1]) / workGroupSize[1];
+        dispatchDimensions.z = 1;
+
+        pCmdBuf->CmdDispatch(dispatchDimensions);
+
+        Pal::AcquireReleaseInfo acquireRelInfo = {};
+
+        acquireRelInfo.srcGlobalStageMask  = Pal::PipelineStageCs;
+        acquireRelInfo.dstGlobalStageMask  = Pal::PipelineStageCs;
+        acquireRelInfo.srcGlobalAccessMask = Pal::CoherShaderWrite | Pal::CoherShaderRead;
+        acquireRelInfo.dstGlobalStageMask  = Pal::CoherShaderWrite | Pal::CoherShaderRead | Pal::CoherPresent;
+        acquireRelInfo.reason              = Pal::Developer::BarrierReasonUnknown;
+
+        pCmdBuf->CmdReleaseThenAcquire(acquireRelInfo);
+
+        pCmdBuf->CmdRestoreComputeState(Pal::ComputeStateAll);
+
+        hasPostProcessing = true;
+    }
+
+    return hasPostProcessing;
 }
 
 // =====================================================================================================================

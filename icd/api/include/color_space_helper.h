@@ -90,7 +90,12 @@ public:
 
     static bool IsFmtHdr(const Fmts& format)
     {
-        return (format.fmtSupported == FmtSupport::Fmt_KnownHDR);
+        return  Util::TestAnyFlagSet(FmtSupport::Fmt_KnownHDR, format.fmtSupported);
+    }
+
+    static bool IsColorSpaceHdr(VkColorSpaceKHR colorSpace)
+    {
+        return (colorSpace != VK_COLORSPACE_SRGB_NONLINEAR_KHR);
     }
 
 private:

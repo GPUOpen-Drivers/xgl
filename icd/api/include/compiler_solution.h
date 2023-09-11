@@ -65,7 +65,7 @@ enum FreeCompilerBinary : uint32_t
 struct ShaderModuleHandle
 {
     uint32_t* pRefCount;
-    Vkgc::BinaryData elfPackage;        // Generated ElfPacekage from LLPC
+    Vkgc::BinaryData elfPackage;        // Generated ElfPackage from LLPC
     void*            pLlpcShaderModule; // Shader module handle from LLPC
 };
 
@@ -114,7 +114,7 @@ struct PipelineInternalBufferInfo
     uint32_t            internalBufferCount;
     InternalBufferEntry internalBufferEntries[MaxPipelineInternalBufferCount];
     uint32_t            dataSize;
-    void* pData;
+    void*               pData;
 };
 
 // =====================================================================================================================
@@ -127,11 +127,30 @@ struct PipelineMetadata
     bool                       pointSizeUsed;
     bool                       needsSampleInfo;
     bool                       shadingRateUsedInShader;
-    VbBindingInfo              vbInfo;
     bool                       enableEarlyCompile;
     bool                       enableUberFetchShader;
+    bool                       postDepthCoverageEnable;
+    uint32_t                   psOnlyPointCoordEnable;
+    VbBindingInfo              vbInfo;
     PipelineInternalBufferInfo internalBufferInfo;
 };
+
+// =====================================================================================================================
+// Represents the graphics library type.
+enum GraphicsLibraryType : uint32_t
+{
+    GraphicsLibraryPreRaster,
+    GraphicsLibraryFragment,
+    GraphicsLibraryCount
+};
+
+// =====================================================================================================================
+static GraphicsLibraryType GetGraphicsLibraryType(
+    const ShaderStage stage)
+{
+    VK_ASSERT(stage < ShaderStage::ShaderStageGfxCount);
+    return stage == ShaderStage::ShaderStageFragment ? GraphicsLibraryFragment : GraphicsLibraryPreRaster;
+}
 
 // =====================================================================================================================
 struct GraphicsPipelineBinaryCreateInfo
@@ -145,10 +164,10 @@ struct GraphicsPipelineBinaryCreateInfo
     PipelineOptimizerKey*                  pPipelineProfileKey;
     PipelineCompilerType                   compilerType;
     bool                                   linkTimeOptimization;
-    Vkgc::BinaryData                       earlyElfPackage[ShaderStage::ShaderStageGfxCount];
-    Util::MetroHash::Hash                  earlyElfPackageHash[ShaderStage::ShaderStageGfxCount];
+    Vkgc::BinaryData                       earlyElfPackage[GraphicsLibraryCount];
+    Util::MetroHash::Hash                  earlyElfPackageHash[GraphicsLibraryCount];
     uint64_t                               apiPsoHash;
-    uint64_t                               libraryHash[ShaderStage::ShaderStageGfxCount];
+    uint64_t                               libraryHash[GraphicsLibraryCount];
     FreeCompilerBinary                     freeCompilerBinary;
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback[ShaderStage::ShaderStageGfxCount];
@@ -306,6 +325,7 @@ protected:
     Vkgc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by Vkgc
     Pal::GfxIpLevel    m_gfxIpLevel;           // Graphics IP level
     static const char* GetShaderStageName(ShaderStage shaderStage);
+    static const char* GetGraphicsLibraryName(GraphicsLibraryType libraryType);
 private:
 
 #if VKI_RAY_TRACING

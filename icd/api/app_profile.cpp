@@ -388,6 +388,12 @@ constexpr AppProfilePatternEntry AppNameSOTTR =
     "sottr.exe"
 };
 
+constexpr AppProfilePatternEntry AppNameSHARK =
+{
+    PatternAppNameLower,
+    "iree-ml"
+};
+
 constexpr AppProfilePatternEntry AppNameSpidermanRemastered =
 {
     PatternExeNameLower,
@@ -680,6 +686,18 @@ constexpr AppProfilePatternEntry AppNameQuakeEnhanced =
 {
     PatternAppNameLower,
     "quake"
+};
+
+constexpr AppProfilePatternEntry AppNameLiquidVrSdk =
+{
+    PatternAppNameLower,
+    "liquidvr sdk"
+};
+
+constexpr AppProfilePatternEntry AppExeAsyncPostProcessing =
+{
+    PatternExeNameLower,
+    "asyncpostprocessing"
 };
 
 constexpr AppProfilePatternEntry AppNameTheSurge2 =
@@ -1221,6 +1239,14 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::SHARK,
+        {
+            AppNameSHARK,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::SpidermanRemastered,
         {
             AppNameSpidermanRemastered,
@@ -1368,6 +1394,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::QuakeEnhanced,
         {
             AppNameQuakeEnhanced,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::AsyncPostProcessLVr,
+        {
+            AppNameLiquidVrSdk,
+            AppExeAsyncPostProcessing,
             PatternEnd
         }
     },

@@ -824,20 +824,14 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDebugMarkerBeginEXT(
     VkCommandBuffer                             commandBuffer,
     const VkDebugMarkerMarkerInfoEXT*           pMarkerInfo)
 {
-    // The SQTT layer shadows this extension's functions and contains extra code to make use of them.  This
-    // extension is not enabled when the SQTT layer is not also enabled, so these functions are currently
-    // just blank placeholder functions in case there will be a time where we need to do something with them
-    // on this path also.
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CmdDebugMarkerBegin(pMarkerInfo);
 }
 
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdDebugMarkerEndEXT(
     VkCommandBuffer                             commandBuffer)
 {
-    // The SQTT layer shadows this extension's functions and contains extra code to make use of them.  This
-    // extension is not enabled when the SQTT layer is not also enabled, so these functions are currently
-    // just blank placeholder functions in case there will be a time where we need to do something with them
-    // on this path also.
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CmdDebugMarkerEnd();
 }
 
 // =====================================================================================================================
@@ -856,12 +850,14 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginDebugUtilsLabelEXT(
     VkCommandBuffer                             commandBuffer,
     const VkDebugUtilsLabelEXT*                 pLabelInfo)
 {
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CmdBeginDebugUtilsLabel(pLabelInfo);
 }
 
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdEndDebugUtilsLabelEXT(
     VkCommandBuffer                             commandBuffer)
 {
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CmdEndDebugUtilsLabel();
 }
 
 // =====================================================================================================================

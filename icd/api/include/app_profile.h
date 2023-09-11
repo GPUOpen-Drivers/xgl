@@ -132,9 +132,11 @@ enum class AppProfile : uint32_t
     QuakeEnhanced,           // Quake Enhanced by id Software
     Zink,                    // Zink
     SOTTR,                   // Shadow of the tomb raider steam version
+    SHARK,                   // SHARK
     SpidermanRemastered,     // Spiderman Remastered
     TheSurge2,               // The Surge 2
     Yuzu,                    // Yuzu Emulator by Team Yuzu | Citra
+    AsyncPostProcessLVr,     // AsyncPostProcessing sample app for AMD Liquid VR SDK
 };
 
 struct ProfileSettings

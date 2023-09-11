@@ -386,6 +386,7 @@ PhysicalDevice::PhysicalDevice(
     m_compiler(this),
     m_memoryUsageTracker {},
     m_pipelineCacheUUID {},
+    m_workstationStereoMode(Pal::WorkstationStereoMode::Disabled),
     m_pPlatformKey(nullptr)
 {
     memset(&m_limits, 0, sizeof(m_limits));
@@ -601,6 +602,62 @@ bool PhysicalDevice::IsOverrideHeapChoiceToLocalWithinBudget(
     return ((m_memoryUsageTracker.allocatedMemorySize[Pal::GpuHeapLocal] + size) <
             m_memoryUsageTracker.totalMemorySize[Pal::GpuHeapLocal] *
                 (GetRuntimeSettings().overrideHeapChoiceToLocalBudget / 100.0f));
+}
+
+// =====================================================================================================================
+// Check if a supported workstation stereo mode is enabled
+bool PhysicalDevice::IsWorkstationStereoEnabled() const
+{
+    bool wsStereoEnabled = false;
+
+    switch (m_workstationStereoMode)
+    {
+    case Pal::WorkstationStereoMode::ViaConnector:
+    case Pal::WorkstationStereoMode::ViaBlueLine:
+    case Pal::WorkstationStereoMode::Passive:
+    case Pal::WorkstationStereoMode::PassiveInvertRightHoriz:
+    case Pal::WorkstationStereoMode::PassiveInvertRightVert:
+    case Pal::WorkstationStereoMode::Auto:
+    case Pal::WorkstationStereoMode::AutoHoriz:
+        wsStereoEnabled = true;
+        break;
+    case Pal::WorkstationStereoMode::Disabled:
+    case Pal::WorkstationStereoMode::AutoCheckerboard:
+    case Pal::WorkstationStereoMode::AutoTsl:
+    default:
+        wsStereoEnabled = false;
+    }
+
+    return wsStereoEnabled;
+}
+
+// =====================================================================================================================
+// Returns true if an Auto Stereo mode is enabled.
+bool PhysicalDevice::IsAutoStereoEnabled() const
+{
+    bool autoStereo = false;
+
+    switch (m_workstationStereoMode)
+    {
+    case Pal::WorkstationStereoMode::Auto:
+    case Pal::WorkstationStereoMode::AutoHoriz:
+        autoStereo = true;
+        break;
+    // Note AutoTsl is now an obsolete mode. Checkerboard is unused.
+    case Pal::WorkstationStereoMode::Disabled:
+    case Pal::WorkstationStereoMode::ViaConnector:
+    case Pal::WorkstationStereoMode::ViaBlueLine:
+    case Pal::WorkstationStereoMode::Passive:
+    case Pal::WorkstationStereoMode::PassiveInvertRightHoriz:
+    case Pal::WorkstationStereoMode::PassiveInvertRightVert:
+    case Pal::WorkstationStereoMode::AutoTsl:
+    case Pal::WorkstationStereoMode::AutoCheckerboard:
+    default:
+        autoStereo = false;
+        break;
+    }
+
+    return autoStereo;
 }
 
 // =====================================================================================================================
@@ -1075,6 +1132,12 @@ VkResult PhysicalDevice::Initialize()
 
         InitializePlatformKey(settings);
         vkResult = m_compiler.Initialize();
+    }
+
+    if (vkResult == VK_SUCCESS)
+    {
+        Pal::Result stereoResult = m_pPalDevice->GetWsStereoMode(&m_workstationStereoMode);
+        VK_ASSERT(stereoResult == Result::Success);
     }
 
     return vkResult;
@@ -3318,7 +3381,8 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
             pSurfaceCapabilities->maxImageExtent.width  = swapChainProperties.maxImageExtent.width;
             pSurfaceCapabilities->maxImageExtent.height = swapChainProperties.maxImageExtent.height;
             pSurfaceCapabilities->maxImageCount         = swapChainProperties.maxImageCount;
-            pSurfaceCapabilities->maxImageArrayLayers   = swapChainProperties.maxImageArraySize;
+            pSurfaceCapabilities->maxImageArrayLayers   = IsWorkstationStereoEnabled() ? 2
+                                                          : swapChainProperties.maxImageArraySize;
 
             pSurfaceCapabilities->minImageCount =
                 Util::Max<uint32_t>(GetRuntimeSettings().forceMinImageCount, swapChainProperties.minImageCount);
@@ -3788,7 +3852,7 @@ VkResult PhysicalDevice::GetSurfaceFormats(
             const VkColorSpaceKHR              colorSpaceFmt = pColorSpaces[colorSpaceIndex].colorSpace;
             const ColorSpaceHelper::FmtSupport bitSupport    = pColorSpaces[colorSpaceIndex].fmtSupported;
 
-            if (ColorSpaceHelper::IsFmtHdr(pColorSpaces[colorSpaceIndex]) && (reportHdrSupport == false))
+            if (ColorSpaceHelper::IsColorSpaceHdr(colorSpaceFmt) && (reportHdrSupport == false))
             {
                 // Goto next color space if we don't want to report HDR
                 continue;

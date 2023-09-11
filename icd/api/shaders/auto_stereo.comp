@@ -23,33 +23,44 @@
  *
  **********************************************************************************************************************/
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
+#version 460
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0, rgba8) uniform image2D leftImage;
+layout(binding = 1, rgba8) uniform image2D rightImage;
 
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
+layout (push_constant) uniform  AutoStereoPushConstants
+{
+    uvec2 dimension;
+    uint  horizontalInterleave;
+};
 
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
+void main()
+{
+    if (gl_GlobalInvocationID.x >= dimension.x ||
+        gl_GlobalInvocationID.y >= dimension.y)
+    {
+        return;
+    }
 
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
+    uvec2 fragCoord = gl_GlobalInvocationID.xy;
+    vec4 leftPixel  = imageLoad(leftImage, ivec2(fragCoord));
+    vec4 rightPixel = imageLoad(rightImage, ivec2(fragCoord));
 
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   281
+    vec4 presentPixel;
 
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
+	// Probably a little confusing but if you think about it, if you want a vertical interleave
+	// i.e. Every alternate vertical line of pixels are from the right image. You want to use the x
+	// dimension to determine that.
+    uint coord = (horizontalInterleave == 1) ? gl_GlobalInvocationID.y : gl_GlobalInvocationID.x;
 
-// These values specify the driver ID and driver info string
-#define VULKAN_DRIVER_ID            VK_DRIVER_ID_AMD_OPEN_SOURCE_KHR  // "AMDOPEN"
-#define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
-#define VULKAN_DRIVER_INFO_STR      "2023.Q1.3"
-#define VULKAN_DRIVER_INFO_STR_LLPC "(LLPC)"
+    if (coord % 2 == 0)
+    {
+        presentPixel = leftPixel;
+    }
+    else
+    {
+        presentPixel = rightPixel;
+    }
 
-// These values tell which version of the conformance test the driver is compliant against
-#define CTS_VERSION_MAJOR           1
-#define CTS_VERSION_MINOR           3
-#define CTS_VERSION_SUBMINOR        3
-#define CTS_VERSION_PATCH           1
+    imageStore(leftImage, ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y), presentPixel);
+}

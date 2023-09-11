@@ -316,6 +316,10 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pOptions->disableFastMathFlags = shaderCreate.tuningOptions.disableFastMathFlags;
                 }
+                if (shaderCreate.apply.scalarizeWaterfallLoads)
+                {
+                    options.pOptions->scalarizeWaterfallLoads = shaderCreate.tuningOptions.scalarizeWaterfallLoads;
+                }
                 if (shaderCreate.apply.waveSize)
                 {
                     options.pOptions->waveSize = shaderCreate.tuningOptions.waveSize;
@@ -1020,6 +1024,12 @@ void ShaderOptimizer::BuildTuningProfile()
                 pAction->shaderCreate.apply.aggressiveInvariantLoads = true;
                 pAction->shaderCreate.tuningOptions.aggressiveInvariantLoads =
                     static_cast<Vkgc::InvariantLoads>(m_settings.overrideAggressiveInvariantLoads);
+            }
+            if (m_settings.overrideScalarizeWaterfallLoads)
+            {
+                pAction->shaderCreate.apply.scalarizeWaterfallLoads = true;
+                pAction->shaderCreate.tuningOptions.scalarizeWaterfallLoads =
+                    m_settings.overrideScalarizeWaterfallLoads;
             }
 
             switch (m_settings.overrideWaveSize)

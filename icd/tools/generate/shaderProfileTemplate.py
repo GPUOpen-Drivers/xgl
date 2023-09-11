@@ -1971,6 +1971,38 @@ SHADER_ACTION = {
         "jsonWriterTemplate": SHADER_CREATE_APPLY_TEMPLATE,
         "jsonReaderTemplate": SHADER_CREATE_APPLY_RUNTIME_TEMPLATE
     },
+
+    "scalarizeWaterfallLoads": {
+        "type": [bool],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "scalarizeWaterfallLoads",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "scalarizeWaterfallLoads",
+                "dataType": "bool",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+            },
+        ],
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %BoolValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
 }
 
 SHADER_PATTERN = {

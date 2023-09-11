@@ -96,7 +96,6 @@ protected:
         Device* const                        pDevice,
         Pal::IPipeline**                     pPalPipeline,
         const PipelineLayout*                pPipelineLayout,
-        PipelineBinaryInfo*                  pPipelineBinary,
         const ImmedInfo&                     immedInfo,
 #if VKI_RAY_TRACING
         bool                                 hasRayTracing,
@@ -104,6 +103,7 @@ protected:
 #endif
         const uint32_t*                      pOrigThreadgroupDims,
         uint64_t                             staticStateMask,
+        const Util::MetroHash::Hash&         cacheHash,
         uint64_t                             apiHash);
 
     // Converted creation info parameters of the Vulkan compute pipeline

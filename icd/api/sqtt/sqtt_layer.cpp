@@ -980,29 +980,12 @@ void SqttCmdBufferState::DebugMarkerBegin(
     const VkDebugMarkerMarkerInfoEXT* pMarkerInfo)
 {
     WriteUserEventMarker(RgpSqttMarkerUserEventPush, pMarkerInfo->pMarkerName);
-
-    if (m_pDevModeMgr->IsCrashAnalysisEnabled())
-    {
-        m_pCmdBuf->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertExecutionMarker(
-                                                                          true,
-                                                                          MarkerSourceApplication,
-                                                                          pMarkerInfo->pMarkerName,
-                                                                          Util::StringLength(pMarkerInfo->pMarkerName));
-    }
 }
 
 // =====================================================================================================================
 void SqttCmdBufferState::DebugMarkerEnd()
 {
     WriteUserEventMarker(RgpSqttMarkerUserEventPop, nullptr);
-
-    if (m_pDevModeMgr->IsCrashAnalysisEnabled())
-    {
-        m_pCmdBuf->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertExecutionMarker(false,
-                                                                              MarkerSourceApplication,
-                                                                              nullptr,
-                                                                              0);
-    }
 }
 
 // =====================================================================================================================
@@ -1017,29 +1000,12 @@ void SqttCmdBufferState::DebugLabelBegin(
     const VkDebugUtilsLabelEXT* pMarkerInfo)
 {
     WriteUserEventMarker(RgpSqttMarkerUserEventPush, pMarkerInfo->pLabelName);
-
-    if (m_pDevModeMgr->IsCrashAnalysisEnabled())
-    {
-        m_pCmdBuf->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertExecutionMarker(
-                                                                        true,
-                                                                        MarkerSourceApplication,
-                                                                        pMarkerInfo->pLabelName,
-                                                                        Util::StringLength(pMarkerInfo->pLabelName));
-    }
 }
 
 // =====================================================================================================================
 void SqttCmdBufferState::DebugLabelEnd()
 {
     WriteUserEventMarker(RgpSqttMarkerUserEventPop, nullptr);
-
-    if (m_pDevModeMgr->IsCrashAnalysisEnabled())
-    {
-        m_pCmdBuf->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertExecutionMarker(false,
-                                                                              MarkerSourceApplication,
-                                                                              nullptr,
-                                                                              0);
-    }
 }
 
 // =====================================================================================================================

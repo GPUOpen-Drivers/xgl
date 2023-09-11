@@ -811,6 +811,13 @@ template <typename ModifierPropertiesList_T>
 
     Util::IPlatformKey* GetPlatformKey() const { return m_pPlatformKey; }
 
+    Pal::WorkstationStereoMode GetWorkstationStereoMode() const { return m_workstationStereoMode; }
+
+    // Only Active and Passive stereo are supported at the moment.
+    bool IsWorkstationStereoEnabled() const;
+
+    bool IsAutoStereoEnabled() const;
+
 protected:
     PhysicalDevice(PhysicalDeviceManager* pPhysicalDeviceManager,
                    Pal::IDevice*          pPalDevice,
@@ -886,6 +893,7 @@ protected:
     PhysicalDeviceGpaProperties      m_gpaProps;
 
     PipelineCompiler                 m_compiler;
+    Pal::WorkstationStereoMode       m_workstationStereoMode;
 
     struct
     {

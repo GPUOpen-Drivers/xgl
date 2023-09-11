@@ -142,7 +142,6 @@ ComputePipeline::ComputePipeline(
     Device* const                        pDevice,
     Pal::IPipeline**                     pPalPipeline,
     const PipelineLayout*                pPipelineLayout,
-    PipelineBinaryInfo*                  pPipelineBinary,
     const ImmedInfo&                     immedInfo,
 #if VKI_RAY_TRACING
     bool                                 hasRayTracing,
@@ -150,6 +149,7 @@ ComputePipeline::ComputePipeline(
 #endif
     const uint32_t*                      pOrigThreadgroupDims,
     uint64_t                             staticStateMask,
+    const Util::MetroHash::Hash&         cacheHash,
     uint64_t                             apiHash)
     :
     Pipeline(
@@ -163,11 +163,11 @@ ComputePipeline::ComputePipeline(
     Pipeline::Init(
         pPalPipeline,
         pPipelineLayout,
-        pPipelineBinary,
         staticStateMask,
 #if VKI_RAY_TRACING
         dispatchRaysUserDataOffset,
 #endif
+        cacheHash,
         apiHash);
 
     m_origThreadgroupDims[0] = pOrigThreadgroupDims[0];
@@ -445,21 +445,6 @@ VkResult ComputePipeline::Create(
         result = PalToVkResult(palResult);
     }
 
-    // Retain a copy of the pipeline binary if an extension that can query it is enabled
-    PipelineBinaryInfo* pBinary = nullptr;
-
-    if ((pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO) ||
-         (pDevice->IsExtensionEnabled(DeviceExtensions::KHR_PIPELINE_EXECUTABLE_PROPERTIES) &&
-          ((flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) != 0))) &&
-        (result == VK_SUCCESS))
-    {
-        pBinary = PipelineBinaryInfo::Create(
-            cacheId[DefaultDeviceIndex],
-            pipelineBinarySizes[DefaultDeviceIndex],
-            pPipelineBinaries[DefaultDeviceIndex],
-            pAllocator);
-    }
-
     if (result == VK_SUCCESS)
     {
 #if VKI_RAY_TRACING
@@ -481,7 +466,6 @@ VkResult ComputePipeline::Create(
         VK_PLACEMENT_NEW(pSystemMem) ComputePipeline(pDevice,
             pPalPipeline,
             localPipelineInfo.pLayout,
-            pBinary,
             localPipelineInfo.immedInfo,
 #if VKI_RAY_TRACING
             hasRayTracing,
@@ -489,6 +473,7 @@ VkResult ComputePipeline::Create(
 #endif
             origThreadgroupDims,
             localPipelineInfo.staticStateMask,
+            cacheId[DefaultDeviceIndex],
             apiPsoHash);
 
         *pPipeline = ComputePipeline::HandleFromVoidPointer(pSystemMem);
@@ -534,11 +519,6 @@ VkResult ComputePipeline::Create(
     {
         // Free system memory for pipeline object
         pDevice->FreeApiObject(pAllocator, pSystemMem);
-
-        if (pBinary != nullptr)
-        {
-            pBinary->Destroy(pAllocator);
-        }
     }
 
     if (result == VK_SUCCESS)

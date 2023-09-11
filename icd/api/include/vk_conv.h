@@ -1637,15 +1637,15 @@ void VkToPalImageScaledCopyRegion(
 template<typename ImageResolveType>
 void VkToPalImageResolveRegion(
     const ImageResolveType&     imageResolve,
-    Pal::ChNumFormat            srcFormat,
+    Pal::SwizzledFormat         srcFormat,
     uint32_t                    srcArraySize,
+    bool                        reinterpretToSrcFormat,
     Pal::ImageResolveRegion*    pPalRegions,
     uint32_t*                   pPalRegionIndex)
 {
     Pal::ImageResolveRegion region = {};
 
-    // We don't need to reinterpret the format during the resolve
-    region.swizzledFormat = Pal::UndefinedSwizzledFormat;
+    region.swizzledFormat = reinterpretToSrcFormat ? srcFormat : Pal::UndefinedSwizzledFormat;
 
     region.srcSlice     = imageResolve.srcSubresource.baseArrayLayer;
 
@@ -1672,7 +1672,7 @@ void VkToPalImageResolveRegion(
     {
         VK_ASSERT(pPalRegionIndex != nullptr);
 
-        region.srcPlane = region.dstPlane = VkToPalImagePlaneExtract(srcFormat, &aspectMask);
+        region.srcPlane = region.dstPlane = VkToPalImagePlaneExtract(srcFormat.format, &aspectMask);
         pPalRegions[(*pPalRegionIndex)++] = region;
     }
     while (aspectMask != 0);

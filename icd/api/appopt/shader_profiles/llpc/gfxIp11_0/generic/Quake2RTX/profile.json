@@ -63,6 +63,22 @@
           "maxWavesPerCu": 4
         }
       }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xdc8037d8038b53e3 27e5f9ff2f6e2393"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 96,
+          "disableLoopUnrolls": true,
+          "forceLoopUnrollCount": 1,
+          "scalarizeWaterfallLoads": true
+        }
+      }
     }
   ]
 }

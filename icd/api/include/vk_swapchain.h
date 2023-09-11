@@ -72,7 +72,8 @@ public:
                 uint32_t                summedImage   : 1;     // The image needs a final copy.
                 uint32_t                stereo        : 1;     // The swap chain is a stereo one
                 uint32_t                hwCompositing : 1;     // If true, only uses SW compositing for windowed mode AFR
-                uint32_t                reserved      : 29;
+                uint32_t                treatAsSrgb   : 1;     // Treat the backbuffer as a SRGB image.
+                uint32_t                reserved      : 28;
             };
         } flags;
         uint32_t                        presentationDeviceIdx; // The physical device that created the PAL swap chain
@@ -92,6 +93,13 @@ public:
         uint32_t*                       pQueueFamilyIndices;
         VkFormat                        format;
 
+    };
+
+    struct AutoStereoPushConstants
+    {
+        uint32_t width;
+        uint32_t height;
+        uint32_t horizontalInterleave;
     };
 
     static VkResult Create(
@@ -152,6 +160,11 @@ public:
         Pal::PresentSwapChainInfo*  pPresentInfo,
         const Pal::FlipStatusFlags& flipFlags);
 
+    bool BuildPostProcessingCommands(
+        Pal::ICmdBuffer*                 pCmdBuf,
+        const Pal::PresentSwapChainInfo* pPresentInfo,
+        const Device*                    pDevice) const;
+
     Pal::IQueue* PrePresent(
         uint32_t                   deviceIdx,
         Pal::PresentSwapChainInfo* pPresentInfo,
@@ -183,13 +196,17 @@ public:
 
 protected:
     SwapChain(
-        Device*             pDevice,
-        const Properties&   properties,
-        VkPresentModeKHR    presentMode,
-        FullscreenMgr*      pFullscreenMgr,
-        Pal::ISwapChain*    pPalSwapChain);
+        Device*                    pDevice,
+        const Properties&          properties,
+        VkPresentModeKHR           presentMode,
+        FullscreenMgr*             pFullscreenMgr,
+        Pal::WorkstationStereoMode wsStereoMode,
+        Pal::ISwapChain*           pPalSwapChain);
 
     void InitSwCompositor(Pal::QueueType presentQueueType);
+
+    VkResult SetupAutoStereo(
+        const VkAllocationCallbacks* pAllocator);
 
     Device*                 m_pDevice;
     const Properties        m_properties;
@@ -206,6 +223,9 @@ protected:
                                                // oldSwapChain when creating a new SwapChain.
 
     uint32_t                m_queueFamilyIndex;                    // Queue family index of the last present
+
+    Pal::WorkstationStereoMode  m_wsStereoMode; // Workstation Stereo Mode
+    Device::InternalPipeline    m_pAutoStereoPipeline; // Auto Stereo shader
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(SwapChain);

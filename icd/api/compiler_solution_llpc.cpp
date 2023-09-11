@@ -261,7 +261,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     Vkgc::Result llpcResult = Vkgc::Result::Success;
 
     bool isEarlyCompiler = false;
-    for (uint32_t i = 0; i < Vkgc::ShaderStageGfxCount; ++i)
+    for (uint32_t i = 0; i < GraphicsLibraryCount; ++i)
     {
         if (pCreateInfo->earlyElfPackage[i].pCode != nullptr)
         {
@@ -278,22 +278,14 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     {
         BinaryData elfPackage[Vkgc::UnlinkedShaderStage::UnlinkedStageCount] = {};
 
-        if (pCreateInfo->earlyElfPackage[ShaderStageVertex].pCode != nullptr)
+        if (pCreateInfo->earlyElfPackage[GraphicsLibraryPreRaster].pCode != nullptr)
         {
-            elfPackage[UnlinkedStageVertexProcess] = pCreateInfo->earlyElfPackage[ShaderStageVertex];
-        }
-        else if (pCreateInfo->earlyElfPackage[ShaderStageTask].pCode != nullptr)
-        {
-            elfPackage[UnlinkedStageVertexProcess] = pCreateInfo->earlyElfPackage[ShaderStageTask];
-        }
-        else if (pCreateInfo->earlyElfPackage[ShaderStageMesh].pCode != nullptr)
-        {
-            elfPackage[UnlinkedStageVertexProcess] = pCreateInfo->earlyElfPackage[ShaderStageMesh];
+            elfPackage[UnlinkedStageVertexProcess] = pCreateInfo->earlyElfPackage[GraphicsLibraryPreRaster];
         }
 
-        if (pCreateInfo->earlyElfPackage[ShaderStageFragment].pCode != nullptr)
+        if (pCreateInfo->earlyElfPackage[GraphicsLibraryFragment].pCode != nullptr)
         {
-            elfPackage[UnlinkedStageFragment] = pCreateInfo->earlyElfPackage[ShaderStageFragment];
+            elfPackage[UnlinkedStageFragment] = pCreateInfo->earlyElfPackage[GraphicsLibraryFragment];
         }
 
         CompilerSolution::DisableNggCulling(&pCreateInfo->pipelineInfo.nggState);
@@ -366,7 +358,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
 
             for (uint32_t i = 0; i < ShaderStageGfxCount; i++)
             {
-                if (pCreateInfo->libraryHash[i] != 0)
+                if (ppShadersInfo[i]->pModuleData != nullptr)
                 {
                     const char* pName = GetShaderStageName(static_cast<ShaderStage>(i));
                     Util::Snprintf(
@@ -378,11 +370,11 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
             }
             Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, "\n");
 
-            for (uint32_t i = 0; i < ShaderStageGfxCount; i++)
+            for (uint32_t i = 0; i < GraphicsLibraryCount; i++)
             {
                 if (pCreateInfo->libraryHash[i] != 0)
                 {
-                    const char* pName = GetShaderStageName(static_cast<ShaderStage>(i));
+                    const char* pName = GetGraphicsLibraryName(static_cast<GraphicsLibraryType>(i));
                     Util::Snprintf(
                         extraInfo,
                         sizeof(extraInfo),
@@ -431,84 +423,85 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
 {
     VkResult result = VK_SUCCESS;
     Util::MetroHash::Hash cacheId = {};
+    GraphicsLibraryType gplType = GetGraphicsLibraryType(stage);
 
     bool hitCache = false;
-    if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
+    if (pCreateInfo->earlyElfPackage[gplType].pCode == nullptr)
     {
-        Vkgc::BinaryData elfPackage = {};
-        Util::MetroHash128 hasher;
-        hasher.Update(pCreateInfo->libraryHash[stage]);
-        hasher.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
-        hasher.Finalize(cacheId.bytes);
-        auto pAppCache = pPipelineCache->GetPipelineCache();
-        hitCache = (pAppCache->LoadPipelineBinary(&cacheId, &elfPackage.codeSize, &elfPackage.pCode)
-            == Util::Result::Success);
-        pShaderModule->elfPackage = elfPackage;
-
-        // Update the shader feedback
-        PipelineCreationFeedback* pStageFeedBack = &pCreateInfo->stageFeedback[stage];
-        pStageFeedBack->feedbackValid = true;
-        pStageFeedBack->hitApplicationCache = hitCache;
-    }
-
-    if (hitCache == false)
-    {
-        // Build the LLPC pipeline
-        Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
-        Vkgc::UnlinkedShaderStage unlinkedStage = UnlinkedStageCount;
-
-        // Belong to vertexProcess stage before fragment
-        if (stage < ShaderStage::ShaderStageFragment)
+        if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
         {
-            unlinkedStage = UnlinkedShaderStage::UnlinkedStageVertexProcess;
-        }
-        else if (stage == ShaderStage::ShaderStageFragment)
-        {
-            unlinkedStage = UnlinkedShaderStage::UnlinkedStageFragment;
+            Vkgc::BinaryData elfPackage = {};
+            Util::MetroHash128 hasher;
+            hasher.Update(pCreateInfo->libraryHash[gplType]);
+            hasher.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
+            hasher.Finalize(cacheId.bytes);
+            auto pAppCache = pPipelineCache->GetPipelineCache();
+            hitCache = (pAppCache->LoadPipelineBinary(&cacheId, &elfPackage.codeSize, &elfPackage.pCode)
+                == Util::Result::Success);
+            pShaderModule->elfPackage = elfPackage;
+
+            // Update the shader feedback
+            PipelineCreationFeedback* pStageFeedBack = &pCreateInfo->stageFeedback[stage];
+            pStageFeedBack->feedbackValid = true;
+            pStageFeedBack->hitApplicationCache = hitCache;
         }
 
-        auto llpcResult = m_pLlpc->buildGraphicsShaderStage(
-            &pCreateInfo->pipelineInfo,
-            &pipelineOut,
-            unlinkedStage,
-            pPipelineDumpHandle);
-        if (llpcResult == Vkgc::Result::Success)
+        if (hitCache == false)
         {
-            pShaderModule->elfPackage = pipelineOut.pipelineBin;
-            if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
+            // Build the LLPC pipeline
+            Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
+            Vkgc::UnlinkedShaderStage unlinkedStage = UnlinkedStageCount;
+
+            // Belong to vertexProcess stage before fragment
+            if (stage < ShaderStage::ShaderStageFragment)
             {
-                pPipelineCache->GetPipelineCache()->StorePipelineBinary(
-                    &cacheId, pipelineOut.pipelineBin.codeSize, pipelineOut.pipelineBin.pCode);
+                unlinkedStage = UnlinkedShaderStage::UnlinkedStageVertexProcess;
+            }
+            else if (stage == ShaderStage::ShaderStageFragment)
+            {
+                unlinkedStage = UnlinkedShaderStage::UnlinkedStageFragment;
+            }
+
+            auto llpcResult = m_pLlpc->buildGraphicsShaderStage(
+                &pCreateInfo->pipelineInfo,
+                &pipelineOut,
+                unlinkedStage,
+                pPipelineDumpHandle);
+            if (llpcResult == Vkgc::Result::Success)
+            {
+                pShaderModule->elfPackage = pipelineOut.pipelineBin;
+                if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
+                {
+                    pPipelineCache->GetPipelineCache()->StorePipelineBinary(
+                        &cacheId, pipelineOut.pipelineBin.codeSize, pipelineOut.pipelineBin.pCode);
+                }
+            }
+            else
+            {
+
+                result = (llpcResult == Vkgc::Result::ErrorOutOfMemory) ?
+                    VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_INITIALIZATION_FAILED;
+
             }
         }
-        else
+
+        if (result == VK_SUCCESS)
         {
+            pCreateInfo->earlyElfPackage[gplType]     = pShaderModule->elfPackage;
+            pCreateInfo->earlyElfPackageHash[gplType] = cacheId;
 
-            result = (llpcResult == Vkgc::Result::ErrorOutOfMemory) ?
-                VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_INITIALIZATION_FAILED;
+            if (stage == ShaderStage::ShaderStageFragment)
+            {
+                const auto* pModuleData =
+                    reinterpret_cast<const Vkgc::ShaderModuleData*>(pCreateInfo->pipelineInfo.fs.pModuleData);
+                pCreateInfo->pBinaryMetadata->needsSampleInfo = pModuleData->usage.useSampleInfo;
+            }
 
-        }
-    }
-
-    if (result == VK_SUCCESS)
-    {
-        if (stage < ShaderStage::ShaderStageGfxCount)
-        {
-            pCreateInfo->earlyElfPackage[stage]     = pShaderModule->elfPackage;
-            pCreateInfo->earlyElfPackageHash[stage] = cacheId;
-        }
-
-        if (stage == ShaderStage::ShaderStageFragment)
-        {
-            const auto* pModuleData =
-                reinterpret_cast<const Vkgc::ShaderModuleData*>(pCreateInfo->pipelineInfo.fs.pModuleData);
-            pCreateInfo->pBinaryMetadata->needsSampleInfo = pModuleData->usage.useSampleInfo;
-        }
-
-        if (pPipelineDumpHandle != nullptr)
-        {
-            Vkgc::IPipelineDumper::DumpPipelineBinary(
-                pPipelineDumpHandle, m_gfxIp, &pCreateInfo->earlyElfPackage[stage]);
+            if (pPipelineDumpHandle != nullptr)
+            {
+                Vkgc::IPipelineDumper::DumpPipelineBinary(
+                    pPipelineDumpHandle, m_gfxIp, &pCreateInfo->earlyElfPackage[gplType]);
+            }
         }
     }
 

@@ -191,7 +191,8 @@ def parse_json_profile_action_shader(shader_actions):
         'nggEnableSphereCulling', 'nggEnableBackfaceCulling', 'nggEnableSmallPrimFilter', 'enableSubvector',
         'enableSubvectorSharedVgprs', 'maxWavesPerCu', 'maxThreadGroupsPerCu', 'useSiScheduler',
         'disableCodeSinking', 'favorLatencyHiding', 'reconfigWorkgroupLayout', 'forceLoopUnrollCount',
-        'enableLoadScalarizer', 'disableLicm', 'unrollThreshold', 'nsaThreshold', 'aggressiveInvariantLoads'
+        'enableLoadScalarizer', 'disableLicm', 'unrollThreshold', 'nsaThreshold', 'aggressiveInvariantLoads',
+        'scalarizeWaterfallLoads'
     ]
     :param shader_actions:
     :return:
@@ -1029,7 +1030,7 @@ def main():
 
     if len(sys.argv) >= 2:
         shader_profile_dir = sys.argv[1]
-        # if genDir was specified by the user
+        # If genDir was specified by the user
         if len(sys.argv) == 3:
             gen_dir = sys.argv[2]
     else:

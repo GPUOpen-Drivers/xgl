@@ -110,6 +110,8 @@ public:
         InitEntry(VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL,
             Pal::LayoutDepthStencilTarget | Pal::LayoutShaderRead);
 
+        InitEntry(VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT,
+                  Pal::LayoutShaderRead | Pal::LayoutShaderWrite);
     }
 
     // Return layout usage index corresponding to the specified layout.
@@ -198,6 +200,9 @@ public:
             case VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR:
                 index = VK_IMAGE_LAYOUT_RANGE_SIZE + 9;
                 break;
+            case VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
+                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 16;
+                break;
             default:
                 VK_NEVER_CALLED();
                 break;
@@ -234,7 +239,7 @@ protected:
         m_layoutUsageTable[2][usageIndex] = layoutUsage1;
     }
 
-    enum { LayoutUsageTableSize = VK_IMAGE_LAYOUT_RANGE_SIZE + 16 };
+    enum { LayoutUsageTableSize = VK_IMAGE_LAYOUT_RANGE_SIZE + 17 };
 
     uint32_t m_layoutUsageTable[MaxPalAspectsPerMask][LayoutUsageTableSize];
 };

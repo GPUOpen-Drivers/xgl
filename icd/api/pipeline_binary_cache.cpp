@@ -1071,7 +1071,8 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
                         {
                             if (totalSize >= settings.pipelineCacheDefaultLocationLimitation)
                             {
-                                Util::RemoveFilesOfDir(pCachePath, oldestTime + settings.thresholdOfCleanUpCache);
+                                Util::RemoveFilesOfDirOlderThan(pCachePath,
+                                                                oldestTime + settings.thresholdOfCleanUpCache);
                             }
                         }
                     }

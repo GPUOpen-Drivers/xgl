@@ -181,6 +181,7 @@ Image::Image(
     m_mipLevels(mipLevels),
     m_arraySize(arraySize),
     m_format(imageFormat),
+    m_srgbFormat(VK_FORMAT_UNDEFINED),
     m_imageSamples(pCreateInfo->samples),
     m_imageUsage(pCreateInfo->usage),
     m_imageType(pCreateInfo->imageType),
@@ -592,7 +593,7 @@ static VkResult InitSparseVirtualMemory(
 {
     VkResult result = VK_SUCCESS;
 
-    Pal::GpuMemoryCreateInfo sparseMemCreateInfo= {};
+    Pal::GpuMemoryCreateInfo sparseMemCreateInfo = {};
     Pal::GpuMemoryRequirements palReqs = {};
 
     pPalImage[DefaultDeviceIndex]->GetGpuMemoryRequirements(&palReqs);
@@ -609,6 +610,10 @@ static VkResult InitSparseVirtualMemory(
     sparseMemCreateInfo.size               = Util::RoundUpToMultiple(palReqs.size, sparseMemCreateInfo.alignment);
     sparseMemCreateInfo.heapCount          = 0;
     sparseMemCreateInfo.heapAccess         = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
+
+#if defined(__unix__)
+    sparseMemCreateInfo.flags.initializeToZero = pDevice->GetRuntimeSettings().initializeVramToZero;
+#endif
 
     // Virtual resource should return 0 on unmapped read if residencyNonResidentStrict is set.
     if (pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetPrtFeatures() & Pal::PrtFeatureStrictNull)
@@ -1202,7 +1207,7 @@ VkResult Image::CreatePresentableImage(
 
         // Default presentable images to a single mip and arraySize
         const uint32_t miplevels = 1;
-        const uint32_t arraySize = 1;
+        const uint32_t arraySize = pCreateInfo->flags.stereo ? 2 : 1;
 
         ImageFlags imageFlags;
 
@@ -1221,8 +1226,8 @@ VkResult Image::CreatePresentableImage(
         imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
         imageCreateInfo.format = imageFormat;
         imageCreateInfo.extent = { pCreateInfo->extent.width, pCreateInfo->extent.height, 1};
-        imageCreateInfo.mipLevels = 1;
-        imageCreateInfo.arrayLayers = 1;
+        imageCreateInfo.mipLevels = miplevels;
+        imageCreateInfo.arrayLayers = arraySize;
         imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imageCreateInfo.usage = imageUsageFlags;
@@ -2353,6 +2358,31 @@ void Image::CalculateSparseMemoryRequirements(
             pSparseMemoryRequirementCount,
             utils::ArrayView<VkSparseImageMemoryRequirements>(&pSparseMemoryRequirements->memoryRequirements));
         Image::ObjectFromHandle(image)->Destroy(pDevice, pDevice->VkInstance()->GetAllocCallbacks());
+    }
+}
+
+// =====================================================================================================================
+void Image::RegisterPresentableImageWithSwapChain(SwapChain* pSwapChain)
+{
+    // Registration is only allowed to happen once
+    VK_ASSERT(m_pSwapChain == nullptr);
+    m_pSwapChain = pSwapChain;
+
+    // If swapchain requires this image to be treated as SRGB.
+    m_internalFlags.treatAsSrgb = pSwapChain->GetProperties().flags.treatAsSrgb;
+
+    // Find the corresponding SRGB format
+    if (m_internalFlags.treatAsSrgb)
+    {
+        // Only two SRGB swapchain formats exist.
+        if (m_format == VK_FORMAT_R8G8B8A8_UNORM)
+        {
+            m_srgbFormat = VK_FORMAT_R8G8B8A8_SRGB;
+        }
+        else if (m_format == VK_FORMAT_B8G8R8A8_UNORM)
+        {
+            m_srgbFormat = VK_FORMAT_B8G8R8A8_SRGB;
+        }
     }
 }
 

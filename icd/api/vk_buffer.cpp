@@ -150,6 +150,10 @@ VkResult Buffer::Create(
         VK_ASSERT(palResult == Pal::Result::Success);
     }
 
+#if defined(__unix__)
+    gpuMemoryCreateInfo.flags.initializeToZero = pDevice->GetRuntimeSettings().initializeVramToZero;
+#endif
+
     // Allocate memory for the dispatchable object and for sparse buffers, the VA-only memory object
     void* pMemory = pDevice->AllocApiObject(
                         pAllocator,

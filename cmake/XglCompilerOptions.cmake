@@ -249,12 +249,18 @@ function(xgl_compiler_options TARGET)
             # Doesn’t guarantee the frame pointer is used in all functions.
             -fno-omit-frame-pointer
 
+            -ffunction-sections
+
+            -fdata-sections
+
             # Having simple optimization on results in dramatically smaller debug builds (and they actually build faster).
             # This is mostly due to constant-folding and dead-code-elimination of registers.
             $<$<CONFIG:Debug>:
                 -Og
             >
         )
+
+        target_link_options(${TARGET} PRIVATE LINKER:--gc-sections)
 
         target_compile_options(${TARGET} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:
             # Disable run time type information

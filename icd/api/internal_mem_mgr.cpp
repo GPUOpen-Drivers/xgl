@@ -106,9 +106,13 @@ VkResult InternalMemMgr::Init()
 
         m_commonPoolProps[InternalPoolGpuReadOnlyRemote].vaRange                = Pal::VaRange::Default;
 
-        m_commonPoolProps[InternalPoolGpuReadOnlyRemote].heapCount              = 2;
-        m_commonPoolProps[InternalPoolGpuReadOnlyRemote].heaps[0]               = Pal::GpuHeapGartUswc;
-        m_commonPoolProps[InternalPoolGpuReadOnlyRemote].heaps[1]               = Pal::GpuHeapGartCacheable;
+        constexpr Pal::GpuHeap HeapsGpuReadOnlyRemote[] = { Pal::GpuHeapGartUswc,
+                                                            Pal::GpuHeapGartCacheable };
+
+        FilterViableHeaps(HeapsGpuReadOnlyRemote,
+                          ArrayLen32(HeapsGpuReadOnlyRemote),
+                          m_commonPoolProps[InternalPoolGpuReadOnlyRemote].heaps,
+                          &m_commonPoolProps[InternalPoolGpuReadOnlyRemote].heapCount);
 
         result = CalcSubAllocationPool(
             m_commonPoolProps[InternalPoolGpuReadOnlyRemote],
@@ -122,10 +126,14 @@ VkResult InternalMemMgr::Init()
 
         m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible].vaRange                = Pal::VaRange::Default;
 
-        m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible].heapCount              = 3;
-        m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible].heaps[0]               = Pal::GpuHeapLocal;
-        m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible].heaps[1]               = Pal::GpuHeapGartUswc;
-        m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible].heaps[2]               = Pal::GpuHeapGartCacheable;
+        constexpr Pal::GpuHeap HeapsGpuReadOnlyCpuVisible[] = { Pal::GpuHeapLocal,
+                                                                Pal::GpuHeapGartUswc,
+                                                                Pal::GpuHeapGartCacheable };
+
+        FilterViableHeaps(HeapsGpuReadOnlyCpuVisible,
+                          ArrayLen32(HeapsGpuReadOnlyCpuVisible),
+                          m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible].heaps,
+                          &m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible].heapCount);
 
         result = CalcSubAllocationPool(
             m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible],
@@ -138,10 +146,14 @@ VkResult InternalMemMgr::Init()
 
         m_commonPoolProps[InternalPoolCpuVisible].vaRange   = Pal::VaRange::Default;
 
-        m_commonPoolProps[InternalPoolCpuVisible].heapCount = 3;
-        m_commonPoolProps[InternalPoolCpuVisible].heaps[0]  = Pal::GpuHeapLocal;
-        m_commonPoolProps[InternalPoolCpuVisible].heaps[1]  = Pal::GpuHeapGartUswc;
-        m_commonPoolProps[InternalPoolCpuVisible].heaps[2]  = Pal::GpuHeapGartCacheable;
+        constexpr Pal::GpuHeap HeapsCpuVisible[] = { Pal::GpuHeapLocal,
+                                                     Pal::GpuHeapGartUswc,
+                                                     Pal::GpuHeapGartCacheable };
+
+        FilterViableHeaps(HeapsCpuVisible,
+                          ArrayLen32(HeapsCpuVisible),
+                          m_commonPoolProps[InternalPoolCpuVisible].heaps,
+                          &m_commonPoolProps[InternalPoolCpuVisible].heapCount);
 
         result = CalcSubAllocationPool(
             m_commonPoolProps[InternalPoolCpuVisible],
@@ -152,11 +164,15 @@ VkResult InternalMemMgr::Init()
     {
         m_commonPoolProps[InternalPoolGpuAccess].vaRange = Pal::VaRange::Default;
 
-        m_commonPoolProps[InternalPoolGpuAccess].heapCount = 4;
-        m_commonPoolProps[InternalPoolGpuAccess].heaps[0] = Pal::GpuHeapInvisible;
-        m_commonPoolProps[InternalPoolGpuAccess].heaps[1] = Pal::GpuHeapLocal;
-        m_commonPoolProps[InternalPoolGpuAccess].heaps[2] = Pal::GpuHeapGartUswc;
-        m_commonPoolProps[InternalPoolGpuAccess].heaps[3] = Pal::GpuHeapGartCacheable;
+        constexpr Pal::GpuHeap HeapsGpuAccess[] = { Pal::GpuHeapInvisible,
+                                                    Pal::GpuHeapLocal,
+                                                    Pal::GpuHeapGartUswc,
+                                                    Pal::GpuHeapGartCacheable };
+
+        FilterViableHeaps(HeapsGpuAccess,
+                          ArrayLen32(HeapsGpuAccess),
+                          m_commonPoolProps[InternalPoolGpuAccess].heaps,
+                          &m_commonPoolProps[InternalPoolGpuAccess].heapCount);
 
         result = CalcSubAllocationPool(
             m_commonPoolProps[InternalPoolGpuAccess],
@@ -187,8 +203,12 @@ VkResult InternalMemMgr::Init()
 
         m_commonPoolProps[InternalPoolCpuCacheableGpuUncached].vaRange = Pal::VaRange::Default;
 
-        m_commonPoolProps[InternalPoolCpuCacheableGpuUncached].heapCount = 1;
-        m_commonPoolProps[InternalPoolCpuCacheableGpuUncached].heaps[0] = Pal::GpuHeapGartCacheable;
+        constexpr Pal::GpuHeap HeapsCpuCacheableGpuUncached[] = { Pal::GpuHeapGartCacheable };
+
+        FilterViableHeaps(HeapsCpuCacheableGpuUncached,
+                          ArrayLen32(HeapsCpuCacheableGpuUncached),
+                          m_commonPoolProps[InternalPoolCpuCacheableGpuUncached].heaps,
+                          &m_commonPoolProps[InternalPoolCpuCacheableGpuUncached].heapCount);
 
         result = CalcSubAllocationPool(
             m_commonPoolProps[InternalPoolCpuCacheableGpuUncached],
@@ -201,11 +221,16 @@ VkResult InternalMemMgr::Init()
     {
         m_commonPoolProps[InternalPoolDebugGpuAccess] = {};
         m_commonPoolProps[InternalPoolDebugGpuAccess].flags.debug = 1;
-        m_commonPoolProps[InternalPoolDebugGpuAccess].heapCount   = 4;
-        m_commonPoolProps[InternalPoolDebugGpuAccess].heaps[0]    = Pal::GpuHeapInvisible;
-        m_commonPoolProps[InternalPoolDebugGpuAccess].heaps[1]    = Pal::GpuHeapLocal;
-        m_commonPoolProps[InternalPoolDebugGpuAccess].heaps[2]    = Pal::GpuHeapGartUswc;
-        m_commonPoolProps[InternalPoolDebugGpuAccess].heaps[3]    = Pal::GpuHeapGartCacheable;
+
+        constexpr Pal::GpuHeap HeapsDebugGpuAccess[] = { Pal::GpuHeapInvisible,
+                                                         Pal::GpuHeapLocal,
+                                                         Pal::GpuHeapGartUswc,
+                                                         Pal::GpuHeapGartCacheable };
+
+        FilterViableHeaps(HeapsDebugGpuAccess,
+                          ArrayLen32(HeapsDebugGpuAccess),
+                          m_commonPoolProps[InternalPoolDebugGpuAccess].heaps,
+                          &m_commonPoolProps[InternalPoolDebugGpuAccess].heapCount);
 
         result = CalcSubAllocationPool(
             m_commonPoolProps[InternalPoolDebugGpuAccess],
@@ -216,8 +241,13 @@ VkResult InternalMemMgr::Init()
     {
         m_commonPoolProps[InternalPoolDebugCpuRead] = {};
         m_commonPoolProps[InternalPoolDebugCpuRead].flags.debug = 1;
-        m_commonPoolProps[InternalPoolDebugCpuRead].heapCount   = 1;
-        m_commonPoolProps[InternalPoolDebugCpuRead].heaps[0]    = Pal::GpuHeapGartCacheable;
+
+        constexpr Pal::GpuHeap HeapsDebugCpuRead[] = { Pal::GpuHeapGartCacheable };
+
+        FilterViableHeaps(HeapsDebugCpuRead,
+                          ArrayLen32(HeapsDebugCpuRead),
+                          m_commonPoolProps[InternalPoolDebugCpuRead].heaps,
+                          &m_commonPoolProps[InternalPoolDebugCpuRead].heapCount);
 
         result = CalcSubAllocationPool(
             m_commonPoolProps[InternalPoolDebugCpuRead],
@@ -1088,6 +1118,27 @@ void InternalMemMgr::FreeBaseGpuMem(
     // Free the GPU memory object and system memory used by the object
     DestroyDeviceGroupMemory(&pGpuMemory->groupMemory, m_pDevice->VkInstance());
     DestroyDeviceGroupMemory(&pGpuMemory->groupShadowMemory, m_pDevice->VkInstance());
+}
+
+// =====================================================================================================================
+// Copies only the valid heaps from pHeaps to pOutHeaps. The filtering happens based on if the heap exists on the
+// device.
+void InternalMemMgr::FilterViableHeaps(
+    const Pal::GpuHeap* pHeaps,
+    uint32_t            heapCount,
+    Pal::GpuHeap*       pOutHeaps,
+    uint32_t*           pOutHeapCount)
+{
+    *pOutHeapCount = 0;
+    for (uint32 heap = 0; heap < heapCount; ++heap)
+    {
+        if (m_heapProps[pHeaps[heap]].logicalSize > 0u)
+        {
+            pOutHeaps[(*pOutHeapCount)++] = pHeaps[heap];
+        }
+    }
+
+    VK_ASSERT((*pOutHeapCount) != 0);
 }
 
 // =====================================================================================================================

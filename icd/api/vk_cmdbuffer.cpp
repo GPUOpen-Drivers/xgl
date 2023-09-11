@@ -69,6 +69,10 @@
 
 #include <float.h>
 
+#if ICD_GPUOPEN_DEVMODE_BUILD
+#include "devmode/devmode_mgr.h"
+#endif
+
 namespace vk
 {
 namespace
@@ -3609,7 +3613,8 @@ void CmdBuffer::BlitImage(
         palCopyInfo.filter   = VkToPalTexFilter(VK_FALSE, filter, filter, VK_SAMPLER_MIPMAP_MODE_NEAREST);
         palCopyInfo.rotation = Pal::ImageRotation::Ccw0;
 
-        palCopyInfo.pRegions = pPalRegions;
+        palCopyInfo.pRegions        = pPalRegions;
+        palCopyInfo.flags.dstAsSrgb = pDstImage->TreatAsSrgb();
 
         for (uint32_t regionIdx = 0; regionIdx < regionCount;)
         {
@@ -3864,7 +3869,9 @@ void CmdBuffer::ClearColorImage(
 
     const Image* pImage = Image::ObjectFromHandle(image);
 
-    const Pal::SwizzledFormat palFormat = VkToPalFormat(pImage->GetFormat(), m_pDevice->GetRuntimeSettings());
+    VkFormat format = pImage->TreatAsSrgb() ? pImage->GetSrgbFormat() : pImage->GetFormat();
+
+    const Pal::SwizzledFormat palFormat = VkToPalFormat(format, m_pDevice->GetRuntimeSettings());
 
     if (Pal::Formats::IsBlockCompressed(palFormat.format))
     {
@@ -4102,7 +4109,8 @@ void CmdBuffer::ClearDynamicRenderingImages(
             {
                 const Image* pImage = attachment.pImageView->GetImage();
 
-                const Pal::SwizzledFormat palFormat = VkToPalFormat(pImage->GetFormat(), m_pDevice->GetRuntimeSettings());
+                const Pal::SwizzledFormat palFormat = VkToPalFormat(attachment.attachmentFormat,
+                                                                    m_pDevice->GetRuntimeSettings());
 
                 Util::Vector<Pal::Box, 8, VirtualStackFrame> clearBoxes{ &virtStackFrame };
                 Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges{ &virtStackFrame };
@@ -4852,8 +4860,8 @@ void CmdBuffer::ResolveImage(
                 VK_ASSERT(pRects[rectIdx].srcSubresource.mipLevel == 0);
 
                 VkToPalImageResolveRegion(
-                    pRects[rectIdx], srcFormat.format, pSrcImage->GetArraySize(),
-                    pPalRegions, &palRegionCount);
+                    pRects[rectIdx], srcFormat, pSrcImage->GetArraySize(),
+                    pDstImage->TreatAsSrgb(), pPalRegions, &palRegionCount);
 
                 ++rectIdx;
             }
@@ -10921,6 +10929,32 @@ void CmdBuffer::CmdEndConditionalRendering()
 }
 
 // =====================================================================================================================
+void CmdBuffer::CmdDebugMarkerBegin(
+    const VkDebugMarkerMarkerInfoEXT* pMarkerInfo)
+{
+    InsertDebugMarker(pMarkerInfo->pMarkerName, true);
+}
+
+// =====================================================================================================================
+void CmdBuffer::CmdDebugMarkerEnd()
+{
+    InsertDebugMarker(nullptr, false);
+}
+
+// =====================================================================================================================
+void CmdBuffer::CmdBeginDebugUtilsLabel(
+    const VkDebugUtilsLabelEXT* pLabelInfo)
+{
+    InsertDebugMarker(pLabelInfo->pLabelName, true);
+}
+
+// =====================================================================================================================
+void CmdBuffer::CmdEndDebugUtilsLabel()
+{
+    InsertDebugMarker(nullptr, false);
+}
+
+// =====================================================================================================================
 void CmdBuffer::BindAlternatingThreadGroupConstant()
 {
     uint32_t              data            = m_reverseThreadGroupState ? 1 : 0;
@@ -11767,6 +11801,29 @@ void CmdBuffer::BindRayQueryConstants(
 }
 
 #endif
+
+// =====================================================================================================================
+void CmdBuffer::InsertDebugMarker(
+    const char* pLabelName,
+    bool        isBegin)
+{
+#if ICD_GPUOPEN_DEVMODE_BUILD
+    constexpr uint8 MarkerSourceApplication = 0;
+
+    const DevModeMgr* pDevModeMgr = m_pDevice->VkInstance()->GetDevModeMgr();
+
+    // Insert Crash Analysis markers if requested
+    if ((pDevModeMgr != nullptr) && (pDevModeMgr->IsCrashAnalysisEnabled()))
+    {
+        PalCmdBuffer(DefaultDeviceIndex)->CmdInsertExecutionMarker(isBegin,
+                                                                   MarkerSourceApplication,
+                                                                   pLabelName,
+                                                                   (pLabelName != nullptr) ?
+                                                                   Util::StringLength(pLabelName) :
+                                                                   0);
+    }
+#endif
+}
 
 // =====================================================================================================================
 void CmdBuffer::BindDescriptorBuffers(

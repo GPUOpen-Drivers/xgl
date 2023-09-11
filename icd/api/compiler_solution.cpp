@@ -103,6 +103,26 @@ const char* CompilerSolution::GetShaderStageName(
 }
 
 // =====================================================================================================================
+// Gets the name string of graphics library type.
+const char* CompilerSolution::GetGraphicsLibraryName(
+    GraphicsLibraryType libraryType)
+{
+    const char* pName = nullptr;
+
+    VK_ASSERT(libraryType < GraphicsLibraryCount);
+
+    static const char* GraphicsLibraryTypeNames[] =
+    {
+        "PreRasterLib",
+        "FragmentLib"
+    };
+
+    pName = GraphicsLibraryTypeNames[static_cast<uint32_t>(libraryType)];
+
+    return pName;
+}
+
+// =====================================================================================================================
 // Helper to disable all NGG culling options
 void CompilerSolution::DisableNggCulling(
     Vkgc::NggState* pNggState)

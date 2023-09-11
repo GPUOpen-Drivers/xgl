@@ -5015,4 +5015,3 @@ template
 vk::PipelineCreateFlags vk::Device::GetPipelineCreateFlags<VkRayTracingPipelineCreateInfoKHR>(
     const VkRayTracingPipelineCreateInfoKHR* pCreateInfo);
 #endif
-

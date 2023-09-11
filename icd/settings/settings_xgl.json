@@ -5247,6 +5247,36 @@
       "Type": "bool"
     },
     {
+      "Name": "ForcePwsMode",
+      "Description": "Controls PWS enable mode: disabled, fully enabled or partially enabled. Only takes effect if HW supports PWS.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": "Enabled"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "Disabled",
+            "Value": 0
+          },
+          {
+            "Name": "Enabled",
+            "Value": 1
+          },
+          {
+            "Name": "NoLateAcquirePoint",
+            "Value": 2
+          }
+        ],
+        "Name": "PwsMode"
+      },
+      "Scope": "Driver",
+      "Type": "enum"
+    },
+    {
       "Description": "Custom device allocation count limitation, when larger than 0.",
       "Tags": [
         "Memory"
@@ -7716,6 +7746,18 @@
       "Scope": "Driver"
     },
     {
+      "Description": "[LLPC ONLY] Enable scalarizing of descriptor loads in waterfall loops",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "OverrideScalarizeWaterfallLoads",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Enable selective inlining behavior in the compiler.",
       "Tags": [
         "Shader Tuning"
@@ -8324,6 +8366,61 @@
       "Type": "bool",
       "Scope": "Driver",
       "Name": "SupportMutableDescriptors"
+    },
+    {
+      "Description": "Whether zero-initializes the allocated vram or not, Linux only",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "DependsOn": {
+        "OS": [
+          "Linux"
+        ]
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "InitializeVramToZero"
+    },
+    {
+      "Name": "VSyncControl",
+      "Description": "Control Vsync behavior of swapchain, on Windows this key is also read from Radeon Settings",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": "VSyncControlOffOrAppSpecify"
+      },
+      "Type": "enum",
+      "Scope": "Driver",
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "VSyncControlAlwaysOff",
+            "Description": "Vsync is always off",
+            "Value": 0
+          },
+          {
+            "Name": "VSyncControlOffOrAppSpecify",
+            "Description": "Vsync is determined by the app's present mode on swapchain creation'",
+            "Value": 1
+          },
+          {
+            "Name": "VSyncControlOnOrAppSpecify",
+            "Description": "Vsync is determined by the app's present mode on swapchain creation'",
+            "Value": 2
+          },
+          {
+            "Name": "VSyncControlAlwaysOn",
+            "Description": "Vsync is always on",
+            "Value": 3
+          }
+        ],
+        "Name": "VSyncControl"
+      }
     }
   ]
 }

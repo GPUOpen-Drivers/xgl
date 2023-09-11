@@ -261,6 +261,13 @@ public:
     VK_FORCEINLINE bool IsYuvFormat() const
         { return m_internalFlags.isYuvFormat == 1; }
 
+    VK_FORCEINLINE bool TreatAsSrgb() const
+        { return m_internalFlags.treatAsSrgb == 1; }
+
+    // Returns the SRGB version of the format to be used if TreatAsSrgb is true.
+    VK_FORCEINLINE VkFormat GetSrgbFormat() const
+        { return m_srgbFormat; }
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Image);
 
@@ -291,7 +298,8 @@ private:
             uint32_t is2DArrayCompat        : 1;  // VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT
             uint32_t sampleLocsCompatDepth  : 1;  // VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT
             uint32_t isProtected            : 1;  // VK_IMAGE_CREATE_PROTECTED_BIT
-            uint32_t reserved               : 16;
+            uint32_t treatAsSrgb            : 1;  // True if this image is to be interpreted as SRGB where possible
+            uint32_t reserved               : 15;
         };
         uint32_t     u32All;
     };
@@ -355,12 +363,7 @@ private:
     void CalcMemoryPriority(const Device* pDevice);
 
     // This function is used to register presentable images with swap chains
-    VK_FORCEINLINE void RegisterPresentableImageWithSwapChain(SwapChain* pSwapChain)
-    {
-        // Registration is only allowed to happen once
-        VK_ASSERT(m_pSwapChain == nullptr);
-        m_pSwapChain = pSwapChain;
-    }
+    void RegisterPresentableImageWithSwapChain(SwapChain* pSwapChain);
 
     static uint32_t GetPresentLayoutUsage(Pal::PresentMode imagePresentSupport);
 
@@ -445,6 +448,9 @@ private:
 
     VkFormat                m_format;             // The image format is needed for handling copy
                                                   // operations for compressed formats appropriately
+
+    VkFormat                m_srgbFormat;         // The corresponding SRGB format of the image (if applicable)
+                                                  // VK_FORMAT_UNDEFINED otherwise. See TreatAsSrgb
 
     MemoryPriority          m_priority;           // Minimum priority assigned to any VkMemory object that this image is
                                                   // bound to.

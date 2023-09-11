@@ -95,6 +95,9 @@ VkResult Memory::Create(
     VK_ASSERT(pAllocInfo->sType == VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
 
     createInfo.size = pAllocInfo->allocationSize;
+#if defined(__unix__)
+    createInfo.flags.initializeToZero = settings.initializeVramToZero;
+#endif
 
     // Calculate the required base address alignment for the given memory type.  These alignments are
     // roughly worst-case alignments required by images that may be hosted within this memory object.

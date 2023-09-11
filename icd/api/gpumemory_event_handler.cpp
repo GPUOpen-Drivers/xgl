@@ -227,7 +227,7 @@ void GpuMemoryEventHandler::PalDeveloperCallback(
         }
         else
         {
-            PAL_ASSERT_ALWAYS_MSG("Free reported for untracked allocation");
+            PAL_ALERT_ALWAYS_MSG("Free reported for untracked allocation");
         }
 
         break;

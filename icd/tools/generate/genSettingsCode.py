@@ -49,7 +49,7 @@ CLASS_NAME_OVERRIDE = "%ClassName%"
 
 SettingsFileBasePath = GENERATE_DIR_PATH + "/../../settings/"
 
-# if <genDir> was specified
+# If <genDir> was specified
 if len(sys.argv) == 4:
     GENERATE_DIR_PATH = sys.argv[3]
     SettingsFileBasePath = GENERATE_DIR_PATH + "/settings/"

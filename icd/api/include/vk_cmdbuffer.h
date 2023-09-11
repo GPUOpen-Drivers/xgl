@@ -924,6 +924,16 @@ public:
     void CmdBeginConditionalRendering(const VkConditionalRenderingBeginInfoEXT* pConditionalRenderingBegin);
     void CmdEndConditionalRendering();
 
+    void CmdDebugMarkerBegin(
+        const VkDebugMarkerMarkerInfoEXT* pMarkerInfo);
+
+    void CmdDebugMarkerEnd();
+
+    void CmdBeginDebugUtilsLabel(
+        const VkDebugUtilsLabelEXT* pLabelInfo);
+
+    void CmdEndDebugUtilsLabel();
+
     void SetDeviceMask(uint32_t deviceMask)
     {
         // Ensure we are enabling valid devices within the group
@@ -972,6 +982,11 @@ public:
     bool IsBackupBufferUsed() const
     {
         return m_flags.useBackupBuffer;
+    }
+
+    bool IsSecondaryLevel() const
+    {
+        return m_flags.is2ndLvl;
     }
 
     VkResult Destroy(void);
@@ -1751,6 +1766,10 @@ private:
         uint32_t               depth);
 #endif
 
+    void InsertDebugMarker(
+        const char* pLabelName,
+        bool        isBegin);
+
     union CmdBufferFlags
     {
         uint32_t u32All;
@@ -1777,8 +1796,7 @@ private:
 #else
             uint32_t reserved4                           :  1;
 #endif
-            uint32_t reserved5                           :  1;
-            uint32_t reserved                            : 13;
+            uint32_t reserved                            : 14;
         };
     };
 
