@@ -200,6 +200,10 @@ namespace vk
     // The max palette size for CustomBorderColor.
     static const uint32_t MaxBorderColorPaletteSize = 4096;
 
+    // The max number of descriptors required for a single descriptor type.
+    // This is currently 3 for YCbCr formats
+    static const uint32_t MaxCombinedImageSamplerDescriptorCount = 3;
+
     // Enumerates the compiler types
     enum PipelineCompilerType : uint32_t
     {
@@ -208,6 +212,7 @@ namespace vk
 
     // Point size must be set via gl_PointSize, otherwise it must be 1.0f
     static const float DefaultPointSize = 1.0f;
+    static const float DefaultLineWidth = 1.0f;
 
     typedef VkPipelineCreateFlags PipelineCreateFlags;
     typedef VkBufferUsageFlagBits BufferUsageFlagBits;

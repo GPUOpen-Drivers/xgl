@@ -284,6 +284,12 @@ private:
         void*                             pSystemMem,
         Pal::IPipeline**                  pPalPipeline);
 
+    static VkResult PrepareShaderLibrary(
+        Device*                           pDevice,
+        const VkAllocationCallbacks*      pAllocator,
+        GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
+        GraphicsPipelineObjectCreateInfo* pObjectCreateInfo);
+
     void SetOptimizedPipeline(Pal::IPipeline** pPalPipeline);
 
     bool UseOptimizedPipeline() const
@@ -316,7 +322,6 @@ private:
     uint64_t                        m_optimizedPipelineHash;           // Pipeline hash of optimized PAL pipelines
     Util::Mutex                     m_pipelineSwitchLock;              // Lock for optimized pipeline and default pipeline
     DeferredCompileWorkload         m_deferWorkload;                   // Workload of deferred compiled
-
     GraphicsPipelineObjectFlags     m_flags;
 };
 

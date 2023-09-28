@@ -146,6 +146,7 @@ struct SubpassDescription
     AttachmentReference         fragmentShadingRateAttachment;
 
     SubpassSampleCount          subpassSampleCount;
+    uint64_t                    hash;
 };
 
 struct SubpassDependency
@@ -270,6 +271,9 @@ public:
 
     uint64_t GetHash() const
         { return m_createInfo.hash; }
+
+    uint64_t GetSubpassHash(uint32_t subpass) const
+        { return m_createInfo.pSubpasses[subpass].hash; }
 
     uint32_t GetSubpassCount() const
         { return m_createInfo.subpassCount; }

@@ -93,6 +93,7 @@ private:
         const GraphicsPipelineLibraryInfo*     pLibInfo,
         const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
         GraphicsPipelineBinaryCreateInfo*      pBinaryCreateInfo,
+        const VkAllocationCallbacks*           pAllocator,
         ShaderModuleHandle*                    pTempModules,
         TempModuleState*                       pTempModuleStages);
 

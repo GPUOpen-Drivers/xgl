@@ -34,8 +34,6 @@
 #include "include/compiler_solution.h"
 #include "include/vk_utils.h"
 
-#include "llpc.h"
-
 namespace vk
 {
 
@@ -47,7 +45,6 @@ class ShaderCache
 public:
     union ShaderCachePtr
     {
-        Llpc::IShaderCache* pLlpcShaderCache; // Pointer to LLPC shader cache object
     };
 
     ShaderCache();

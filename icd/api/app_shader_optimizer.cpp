@@ -628,7 +628,7 @@ void ShaderOptimizer::ApplyProfileToGraphicsPipelineCreateInfo(
                     case ShaderStage::ShaderStageTessControl:
                         ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->hs);
                         break;
-                    case ShaderStage::ShaderStageTessEvaluation:
+                    case ShaderStage::ShaderStageTessEval:
                         ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ds);
                         break;
                     case ShaderStage::ShaderStageGeometry:
@@ -1300,7 +1300,7 @@ void ShaderOptimizer::PrintProfileEntryMatch(
             case ShaderStage::ShaderStageTessControl:
                 pStage = "HS";
                 break;
-            case ShaderStage::ShaderStageTessEvaluation:
+            case ShaderStage::ShaderStageTessEval:
                 pStage = "DS";
                 break;
             case ShaderStage::ShaderStageGeometry:

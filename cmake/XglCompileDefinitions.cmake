@@ -67,6 +67,12 @@ macro(xgl_set_compile_definitions)
     endif()
 #endif
 
+#if VKI_BUILD_NAVI32
+    if(XGL_BUILD_NAVI32)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI32=1)
+    endif()
+#endif
+
 #if VKI_BUILD_NAVI33
     if(XGL_BUILD_NAVI33)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI33=1)

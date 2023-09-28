@@ -122,6 +122,11 @@ public:
         void*                             pPipelineDumpHandle,
         ShaderModuleHandle*               pShaderModule) override;
 
+    VkResult CreateColorExportBinary(
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        void*                             pPipelineDumpHandle,
+        Vkgc::BinaryData*                 pOutputPackage);
+
     virtual VkResult CreateComputePipelineBinary(
         Device*                          pDevice,
         uint32_t                         deviceIdx,

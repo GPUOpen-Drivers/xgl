@@ -386,19 +386,7 @@ VkResult Instance::Init(
 
         Pal::Result palResult = Pal::CreatePlatform(createInfo, pPalMemory, &m_pPalPlatform);
 
-        if (palResult != Pal::Result::ErrorUnknown)
-        {
-            status = PalToVkResult(palResult);
-        }
-        else
-        {
-            // We _might_ hit this case when addrLib fails to initialize when an upper limit to the number
-            // of allocations is set by the application. So we report VK_ERROR_OUT_OF_HOST_MEMORY here.
-            // While receiving ErrorUnknown doesn't necessarily guarantee that the error came from AddrLib
-            // due to an OOM condition, the time needed to have a propper fix for all the possible cases is
-            // not worth spending.
-            status = VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
+        status = PalToVkResult(palResult);
     }
 
     if (status == VK_SUCCESS)

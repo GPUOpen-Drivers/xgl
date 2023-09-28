@@ -1423,6 +1423,9 @@ private:
         void*                           pPalMem,
         const Pal::CmdBufferCreateInfo& createInfo);
 
+    void SyncIndirectCopy(
+        Pal::ICmdBuffer*                pCmdBuffer);
+
     Pal::Result BackupInitialize(
         const Pal::CmdBufferCreateInfo& createInfo);
     void SwitchToBackupCmdBuffer();
@@ -1763,7 +1766,9 @@ private:
         Pal::PipelineBindPoint bindPoint,
         uint32_t               width,
         uint32_t               height,
-        uint32_t               depth);
+        uint32_t               depth,
+        Buffer*                pIndirectBuffer,
+        VkDeviceSize           indirectOffset);
 #endif
 
     void InsertDebugMarker(

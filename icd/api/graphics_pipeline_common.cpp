@@ -1571,122 +1571,126 @@ static void BuildColorBlendState(
         pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::LogicOpEnable);
     }
 
-    if (pCb != nullptr)
+    if (GetColorAttachmentCount(pRenderPass, subpass, pRendering) != 0)
     {
-        pInfo->immedInfo.logicOp = pCb->logicOp;
-        pInfo->immedInfo.logicOpEnable = pCb->logicOpEnable;
-    }
-
-    uint32_t numColorTargets = 0;
-    const VkPipelineColorWriteCreateInfoEXT* pColorWriteCreateInfo = nullptr;
-    if (pCb != nullptr)
-    {
-        numColorTargets = Min(pCb->attachmentCount, Pal::MaxColorTargets);
-
-        const void* pNext = static_cast<const VkStructHeader*>(pCb->pNext);
-
-        while (pNext != nullptr)
+        if (pCb != nullptr)
         {
-            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
-
-            switch (static_cast<uint32>(pHeader->sType))
-            {
-                case VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT:
-                {
-                    break;
-                }
-                case VK_STRUCTURE_TYPE_PIPELINE_COLOR_WRITE_CREATE_INFO_EXT:
-                {
-                    pColorWriteCreateInfo = reinterpret_cast<const VkPipelineColorWriteCreateInfoEXT*>(pHeader);
-                    break;
-                }
-
-                default:
-                    // Skip any unknown extension structures
-                    break;
-            }
-
-            pNext = pHeader->pNext;
+            pInfo->immedInfo.logicOp = pCb->logicOp;
+            pInfo->immedInfo.logicOpEnable = pCb->logicOpEnable;
         }
-    }
 
-    if (pRendering != nullptr)
-    {
-        numColorTargets = Min(pRendering->colorAttachmentCount, Pal::MaxColorTargets);
-    }
-
-    pInfo->immedInfo.colorWriteEnable = 0;
-    pInfo->immedInfo.colorWriteMask = 0;
-
-    if (numColorTargets > 0)
-    {
-        for (uint32_t i = 0; i < numColorTargets; ++i)
+        uint32_t numColorTargets = 0;
+        const VkPipelineColorWriteCreateInfoEXT* pColorWriteCreateInfo = nullptr;
+        if (pCb != nullptr)
         {
-            auto pCbDst     = &pInfo->pipeline.cbState.target[i];
+            numColorTargets = Min(pCb->attachmentCount, Pal::MaxColorTargets);
 
-            if (pRenderPass != nullptr)
+            const void* pNext = static_cast<const VkStructHeader*>(pCb->pNext);
+
+            while (pNext != nullptr)
             {
-                const VkFormat cbFormat = pRenderPass->GetColorAttachmentFormat(subpass, i);
-                pCbDst->swizzledFormat  = VkToPalFormat(cbFormat, pDevice->GetRuntimeSettings());
-            }
-            else if (pRendering != nullptr)
-            {
-                const VkFormat cbFormat = pRendering->pColorAttachmentFormats[i];
-                pCbDst->swizzledFormat  = VkToPalFormat(cbFormat, pDevice->GetRuntimeSettings());
-            }
-            // If the sub pass attachment format is UNDEFINED, then it means that that subpass does not
-            // want to write to any attachment for that output (VK_ATTACHMENT_UNUSED).  Under such cases,
-            // disable shader writes through that target.
-            if (pCbDst->swizzledFormat.format != Pal::ChNumFormat::Undefined)
-            {
-                const VkPipelineColorBlendAttachmentState* pSrc = (pCb != nullptr) ? &pCb->pAttachments[i] : nullptr;
-                VkColorComponentFlags colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-                                                       VK_COLOR_COMPONENT_G_BIT |
-                                                       VK_COLOR_COMPONENT_B_BIT |
-                                                       VK_COLOR_COMPONENT_A_BIT;
-                if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorWriteMask) == false)
+                const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+                switch (static_cast<uint32>(pHeader->sType))
                 {
-                    if (pSrc != nullptr)
+                    case VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT:
                     {
-                        colorWriteMask = pSrc->colorWriteMask;
+                        break;
+                    }
+                    case VK_STRUCTURE_TYPE_PIPELINE_COLOR_WRITE_CREATE_INFO_EXT:
+                    {
+                        pColorWriteCreateInfo = reinterpret_cast<const VkPipelineColorWriteCreateInfoEXT*>(pHeader);
+                        break;
+                    }
+
+                    default:
+                        // Skip any unknown extension structures
+                        break;
+                }
+
+                pNext = pHeader->pNext;
+            }
+        }
+
+        if (pRendering != nullptr)
+        {
+            numColorTargets = Min(pRendering->colorAttachmentCount, Pal::MaxColorTargets);
+        }
+
+        pInfo->immedInfo.colorWriteEnable = 0;
+        pInfo->immedInfo.colorWriteMask = 0;
+
+        if (numColorTargets > 0)
+        {
+            for (uint32_t i = 0; i < numColorTargets; ++i)
+            {
+                auto pCbDst     = &pInfo->pipeline.cbState.target[i];
+
+                if (pRenderPass != nullptr)
+                {
+                    const VkFormat cbFormat = pRenderPass->GetColorAttachmentFormat(subpass, i);
+                    pCbDst->swizzledFormat  = VkToPalFormat(cbFormat, pDevice->GetRuntimeSettings());
+                }
+                else if (pRendering != nullptr)
+                {
+                    const VkFormat cbFormat = pRendering->pColorAttachmentFormats[i];
+                    pCbDst->swizzledFormat  = VkToPalFormat(cbFormat, pDevice->GetRuntimeSettings());
+                }
+                // If the sub pass attachment format is UNDEFINED, then it means that that subpass does not
+                // want to write to any attachment for that output (VK_ATTACHMENT_UNUSED).  Under such cases,
+                // disable shader writes through that target.
+                if (pCbDst->swizzledFormat.format != Pal::ChNumFormat::Undefined)
+                {
+                    const VkPipelineColorBlendAttachmentState* pSrc =
+                        (pCb != nullptr) ? &pCb->pAttachments[i] : nullptr;
+                    VkColorComponentFlags colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+                                                           VK_COLOR_COMPONENT_G_BIT |
+                                                           VK_COLOR_COMPONENT_B_BIT |
+                                                           VK_COLOR_COMPONENT_A_BIT;
+                    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorWriteMask) == false)
+                    {
+                        if (pSrc != nullptr)
+                        {
+                            colorWriteMask = pSrc->colorWriteMask;
+                        }
+                    }
+
+                    if ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorWriteEnable) == false) &&
+                        (pColorWriteCreateInfo != nullptr) &&
+                        (pColorWriteCreateInfo->pColorWriteEnables != nullptr) &&
+                        (pColorWriteCreateInfo->pColorWriteEnables[i] == false))
+                    {
+                        pCbDst->channelWriteMask = 0;
+                    }
+                    else
+                    {
+                        pCbDst->channelWriteMask           = colorWriteMask;
+                        pInfo->immedInfo.colorWriteMask   |= colorWriteMask << (4 * i);
+                        pInfo->immedInfo.colorWriteEnable |= (0xF << (4 * i));
+                    }
+
+                    if ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable) == false))
+                    {
+                        if (pSrc != nullptr)
+                        {
+                            blendingEnabled |= (pSrc->blendEnable == VK_TRUE);
+                        }
                     }
                 }
+            }
 
-                if ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorWriteEnable) == false) &&
-                    (pColorWriteCreateInfo != nullptr) &&
-                    (pColorWriteCreateInfo->pColorWriteEnables != nullptr) &&
-                    (pColorWriteCreateInfo->pColorWriteEnables[i] == false))
-                {
-                    pCbDst->channelWriteMask = 0;
-                }
-                else
-                {
-                    pCbDst->channelWriteMask           = colorWriteMask;
-                    pInfo->immedInfo.colorWriteMask   |= colorWriteMask << (4 * i);
-                    pInfo->immedInfo.colorWriteEnable |= (0xF << (4 * i));
-                }
-
-                if ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable) == false))
-                {
-                    if (pSrc != nullptr)
-                    {
-                        blendingEnabled |= (pSrc->blendEnable == VK_TRUE);
-                    }
-                }
+            if ((pCb != nullptr) &&
+                ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable) == false) ||
+                 (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation) == false)))
+            {
+                BuildPalColorBlendStateCreateInfo(pCb, dynamicStateFlags, &pInfo->immedInfo.blendCreateInfo);
+                dualSourceBlend = GraphicsPipelineCommon::GetDualSourceBlendEnableState(
+                    pDevice, pCb, &pInfo->immedInfo.blendCreateInfo);
             }
         }
 
-        if ((pCb != nullptr) &&
-            ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable) == false) ||
-             (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation) == false)))
-        {
-            BuildPalColorBlendStateCreateInfo(pCb, dynamicStateFlags, &pInfo->immedInfo.blendCreateInfo);
-            dualSourceBlend =
-                GraphicsPipelineCommon::GetDualSourceBlendEnableState(pDevice, pCb, &pInfo->immedInfo.blendCreateInfo);
-        }
+        pInfo->pipeline.cbState.dualSourceBlendEnable = dualSourceBlend;
     }
-
-    pInfo->pipeline.cbState.dualSourceBlendEnable = dualSourceBlend;
 
     if (((blendingEnabled == true) ||
         IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable)) &&
@@ -1694,9 +1698,10 @@ static void BuildColorBlendState(
     {
         static_assert(sizeof(pInfo->immedInfo.blendConstParams) == sizeof(pCb->blendConstants),
             "Blend constant structure size mismatch!");
-
-        memcpy(&pInfo->immedInfo.blendConstParams, pCb->blendConstants, sizeof(pCb->blendConstants));
-
+        if (pCb != nullptr)
+        {
+            memcpy(&pInfo->immedInfo.blendConstParams, pCb->blendConstants, sizeof(pCb->blendConstants));
+        }
         pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::BlendConstants);
     }
 }
@@ -1755,7 +1760,9 @@ static void BuildVertexInputInterfaceState(
         pInfo->pipeline.iaState.topologyInfo.primitiveType = VkToPalPrimitiveType(pIa->topology);
     }
 
-    if ((pIa != nullptr) || isLibrary || IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInput))
+    if ((pIn->pVertexInputState != nullptr) ||
+        isLibrary ||
+        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInput))
     {
         pInfo->pipeline.iaState.vertexBufferCount = pVbInfo->bindingTableSize;
     }
@@ -1925,18 +1932,15 @@ static void BuildFragmentOutputInterfaceState(
 
     pInfo->dbFormat = GetDepthFormat(pRenderPass, subpass, pPipelineRenderingCreateInfoKHR);
 
-    if (GetColorAttachmentCount(pRenderPass, subpass, pPipelineRenderingCreateInfoKHR) != 0)
-    {
-        // Build states via VkPipelineColorBlendStateCreateInfo
-        BuildColorBlendState(
-            pDevice,
-            pPipelineRenderingCreateInfoKHR,
-            pIn->pColorBlendState,
-            pRenderPass,
-            subpass,
-            dynamicStateFlags,
-            pInfo);
-    }
+    // Build states via VkPipelineColorBlendStateCreateInfo
+    BuildColorBlendState(
+        pDevice,
+        pPipelineRenderingCreateInfoKHR,
+        pIn->pColorBlendState,
+        pRenderPass,
+        subpass,
+        dynamicStateFlags,
+        pInfo);
 
     BuildRenderingState(pDevice,
                         pPipelineRenderingCreateInfoKHR,
@@ -2797,10 +2801,8 @@ void GraphicsPipelineCommon::GenerateHashForPreRasterizationShadersState(
 
     if (pCreateInfo->renderPass != VK_NULL_HANDLE)
     {
-        pElfHasher->Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetHash());
+        pElfHasher->Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetSubpassHash(pCreateInfo->subpass));
     }
-
-    pElfHasher->Update(pCreateInfo->subpass);
 
     EXTRACT_VK_STRUCTURES_0(
         discardRectangle,
@@ -2896,8 +2898,7 @@ void GraphicsPipelineCommon::GenerateHashForFragmentOutputInterfaceState(
         const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pCreateInfo->renderPass);
         colorAttachmentCount = pRenderPass->GetSubpassColorReferenceCount(pCreateInfo->subpass);
 
-        pElfHasher->Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetHash());
-        pElfHasher->Update(pCreateInfo->subpass);
+        pElfHasher->Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetSubpassHash(pCreateInfo->subpass));
     }
 
     if ((pCreateInfo->pColorBlendState != nullptr) && (colorAttachmentCount != 0))

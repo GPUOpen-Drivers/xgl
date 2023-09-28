@@ -313,6 +313,7 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
     const GraphicsPipelineLibraryInfo*      pLibInfo,
     const GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
     GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
+    const VkAllocationCallbacks*            pAllocator,
     ShaderModuleHandle*                     pTempModules,
     TempModuleState*                        pTempModuleStages)
 {
@@ -366,7 +367,7 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
             const ShaderModuleHandle* pParentHandle =
                 pLibInfo->pPreRasterizationShaderLib->GetShaderModuleHandle(ShaderStage::ShaderStageVertex);
 
-            // Parent library may don't have vertex shader if it uses mesh shader.
+            // Parent library may not have vertex shader if it uses mesh shader.
             if ((pParentHandle != nullptr) && (result == VK_SUCCESS))
             {
                 constexpr uint32_t TempIdx = ShaderStage::ShaderStageVertex;
@@ -406,11 +407,23 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
         }
     }
 
-    for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
+    for (uint32_t stage = 0; (result == VK_SUCCESS) && (stage < ShaderStage::ShaderStageGfxCount); ++stage)
     {
-        if (pCompiler->IsValidShaderModule(&pTempModules[i]) == false)
+        if (pCompiler->IsValidShaderModule(&pTempModules[stage]) == false)
         {
-            pTempModuleStages[i].stage = ShaderStage::ShaderStageInvalid;
+            pTempModuleStages[stage].stage = ShaderStage::ShaderStageInvalid;
+        }
+        else if (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink)
+        {
+            // Create shader libraries for fast-link
+            GraphicsLibraryType gplType = GetGraphicsLibraryType(static_cast<ShaderStage>(stage));
+            if (pBinaryCreateInfo->earlyElfPackage[gplType].codeSize != 0)
+            {
+                result = pCompiler->CreateGraphicsShaderLibrary(pDevice,
+                                                                pBinaryCreateInfo->earlyElfPackage[gplType],
+                                                                pAllocator,
+                                                                &pBinaryCreateInfo->pShaderLibraries[gplType]);
+            }
         }
     }
 
@@ -517,6 +530,7 @@ VkResult GraphicsPipelineLibrary::Create(
             &libInfo,
             &shaderStageInfo,
             &binaryCreateInfo,
+            pAllocator,
             tempModules,
             tempModuleStates);
     }
@@ -625,6 +639,15 @@ VkResult GraphicsPipelineLibrary::Destroy(
             {
                 pCompiler->FreeShaderModule(m_tempModules + i);
             }
+        }
+    }
+
+    for (Pal::IShaderLibrary* pShaderLib : m_pBinaryCreateInfo->pShaderLibraries)
+    {
+        if (pShaderLib != nullptr)
+        {
+            pShaderLib->Destroy();
+            pAllocator->pfnFree(pAllocator->pUserData, pShaderLib);
         }
     }
 

@@ -141,20 +141,21 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                         deviceIdx,
                         pPipelineCache,
                         pBinaryCreateInfo,
+                        flags,
                         &pPipelineBinarySizes[deviceIdx],
                         &ppPipelineBinaries[deviceIdx],
                         &pCacheIds[deviceIdx]);
-                }
 
-                if (result == VK_SUCCESS)
-                {
-                    result = pDefaultCompiler->WriteBinaryMetadata(
-                        pDevice,
-                        pBinaryCreateInfo->compilerType,
-                        &pBinaryCreateInfo->freeCompilerBinary,
-                        &ppPipelineBinaries[deviceIdx],
-                        &pPipelineBinarySizes[deviceIdx],
-                        pBinaryCreateInfo->pBinaryMetadata);
+                    if (result == VK_SUCCESS && (pPipelineBinarySizes[deviceIdx] > 0))
+                    {
+                        result = pDefaultCompiler->WriteBinaryMetadata(
+                            pDevice,
+                            pBinaryCreateInfo->compilerType,
+                            &pBinaryCreateInfo->freeCompilerBinary,
+                            &ppPipelineBinaries[deviceIdx],
+                            &pPipelineBinarySizes[deviceIdx],
+                            pBinaryCreateInfo->pBinaryMetadata);
+                    }
                 }
             }
             else
@@ -178,6 +179,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                         deviceIdx,
                         pPipelineCache,
                         &binaryCreateInfoMGPU,
+                        flags,
                         &pPipelineBinarySizes[deviceIdx],
                         &ppPipelineBinaries[deviceIdx],
                         &pCacheIds[deviceIdx]);
@@ -215,9 +217,10 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
         if (result == VK_SUCCESS)
         {
             // Only store the optimized variant of the pipeline if deferCompileOptimizedPipeline is enabled
-            if ((pDevice->GetRuntimeSettings().deferCompileOptimizedPipeline == false) ||
+            if ((pPipelineBinarySizes[deviceIdx] != 0) &&
+                ((pDevice->GetRuntimeSettings().deferCompileOptimizedPipeline == false) ||
                 ((pBinaryMetadata->enableEarlyCompile == false) &&
-                 (pBinaryMetadata->enableUberFetchShader == false)))
+                 (pBinaryMetadata->enableUberFetchShader == false))))
             {
                 pDevice->GetCompiler(deviceIdx)->CachePipelineBinary(
                     &pCacheIds[deviceIdx],
@@ -624,43 +627,56 @@ VkResult GraphicsPipeline::Create(
             &binaryMetadata,
             &objectCreateInfo);
 
-        objectCreateInfo.immedInfo.checkDeferCompilePipeline =
-            pDevice->GetRuntimeSettings().deferCompileOptimizedPipeline &&
-            (binaryMetadata.enableEarlyCompile ||
-             binaryMetadata.enableUberFetchShader);
+        if (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink)
+        {
+            result = PrepareShaderLibrary(pDevice, pAllocator, &binaryCreateInfo, &objectCreateInfo);
+        }
+
+        if (result == VK_SUCCESS)
+        {
+            objectCreateInfo.immedInfo.checkDeferCompilePipeline =
+                pDevice->GetRuntimeSettings().deferCompileOptimizedPipeline &&
+                (binaryMetadata.enableEarlyCompile || binaryMetadata.enableUberFetchShader);
 
 #if VKI_RAY_TRACING
-        objectCreateInfo.flags.hasRayTracing = binaryMetadata.rayQueryUsed;
+            objectCreateInfo.flags.hasRayTracing            = binaryMetadata.rayQueryUsed;
 #endif
-        objectCreateInfo.flags.isPointSizeUsed = binaryMetadata.pointSizeUsed;
-        objectCreateInfo.flags.shadingRateUsedInShader = binaryMetadata.shadingRateUsedInShader;
-        objectCreateInfo.flags.viewIndexFromDeviceIndex = Util::TestAnyFlagSet(flags,
-            VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT);
+            objectCreateInfo.flags.isPointSizeUsed          = binaryMetadata.pointSizeUsed;
+            objectCreateInfo.flags.shadingRateUsedInShader  = binaryMetadata.shadingRateUsedInShader;
+            objectCreateInfo.flags.viewIndexFromDeviceIndex = Util::TestAnyFlagSet(flags,
+                VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT);
 
 #if VKI_RAY_TRACING
-        objectCreateInfo.dispatchRaysUserDataOffset = pPipelineLayout->GetDispatchRaysUserData();
+            objectCreateInfo.dispatchRaysUserDataOffset = pPipelineLayout->GetDispatchRaysUserData();
 #endif
 
-        // 7. Create pipeline objects
-        result = CreatePipelineObjects(
-            pDevice,
-            pCreateInfo,
-            flags,
-            pAllocator,
-            pPipelineLayout,
-            &binaryMetadata.vbInfo,
-            &binaryMetadata.internalBufferInfo,
-            pipelineBinarySizes,
-            pPipelineBinaries,
-            pPipelineCache,
-            cacheId,
-            apiPsoHash,
-            &objectCreateInfo,
-            pPipeline);
+            // 7. Create pipeline objects
+            result = CreatePipelineObjects(
+                pDevice,
+                pCreateInfo,
+                flags,
+                pAllocator,
+                pPipelineLayout,
+                &binaryMetadata.vbInfo,
+                &binaryMetadata.internalBufferInfo,
+                pipelineBinarySizes,
+                pPipelineBinaries,
+                pPipelineCache,
+                cacheId,
+                apiPsoHash,
+                &objectCreateInfo,
+                pPipeline);
+        }
     }
 
     // Free the temporary newly-built shader modules
     FreeTempModules(pDevice, ShaderStage::ShaderStageGfxCount, tempModules);
+
+    // Free the allocate space for shader library pointers
+    if (objectCreateInfo.pipeline.ppShaderLibraries != nullptr)
+    {
+        pAllocator->pfnFree(pAllocator->pUserData, objectCreateInfo.pipeline.ppShaderLibraries);
+    }
 
     if (binaryMetadata.internalBufferInfo.pData != nullptr)
     {
@@ -1076,6 +1092,73 @@ VkResult GraphicsPipeline::DeferCreateOptimizedPipeline(
                 pipelineBinarySizes[deviceIdx]);
         }
     }
+    return result;
+}
+
+// =====================================================================================================================
+VkResult GraphicsPipeline::PrepareShaderLibrary(
+    Device*                           pDevice,
+    const VkAllocationCallbacks*      pAllocator,
+    GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
+    GraphicsPipelineObjectCreateInfo* pObjectCreateInfo)
+{
+    VkResult result = VK_SUCCESS;
+    // Copy shader libraries to object create info if all necessary libraries were ready
+    if ((pBinaryCreateInfo->pShaderLibraries[GraphicsLibraryPreRaster] != nullptr) &&
+        (pBinaryCreateInfo->pShaderLibraries[GraphicsLibraryFragment]  != nullptr))
+    {
+        VK_ASSERT(pObjectCreateInfo->pipeline.ppShaderLibraries == nullptr);
+
+        size_t bufSize = sizeof(Pal::IShaderLibrary*) * GraphicsLibraryCount;
+        void* pTempBuf = pAllocator->pfnAllocation(pAllocator->pUserData,
+                                                   bufSize,
+                                                   VK_DEFAULT_MEM_ALIGN,
+                                                   VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+        if (pTempBuf != nullptr)
+        {
+            memset(pTempBuf, 0, bufSize);
+            Pal::IShaderLibrary** ppShaderLibraries     = static_cast<Pal::IShaderLibrary**>(pTempBuf);
+            ppShaderLibraries[GraphicsLibraryPreRaster] =
+                pBinaryCreateInfo->pShaderLibraries[GraphicsLibraryPreRaster];
+            ppShaderLibraries[GraphicsLibraryFragment]  =
+                pBinaryCreateInfo->pShaderLibraries[GraphicsLibraryFragment];
+
+            pObjectCreateInfo->pipeline.numShaderLibraries = 2;
+
+            if (pBinaryCreateInfo->pipelineInfo.enableColorExportShader)
+            {
+                result = pDevice->GetCompiler(DefaultDeviceIndex)->
+                    CreateColorExportShaderLibrary(pDevice,
+                        pBinaryCreateInfo,
+                        pAllocator,
+                        &ppShaderLibraries[GraphicsLibraryColorExport]);
+
+                if (result == VK_SUCCESS)
+                {
+                    pObjectCreateInfo->pipeline.numShaderLibraries += 1;
+                }
+            }
+
+            if (result == VK_SUCCESS)
+            {
+                pObjectCreateInfo->pipeline.ppShaderLibraries =
+                    const_cast<const Pal::IShaderLibrary**>(ppShaderLibraries);
+            }
+            else if (result == VK_PIPELINE_COMPILE_REQUIRED)
+            {
+                // Not applicable for shader library linking.
+                // Free allocated memory and reset the number of shader libraries to 0
+                pAllocator->pfnFree(pAllocator->pUserData, pTempBuf);
+                pObjectCreateInfo->pipeline.numShaderLibraries = 0;
+                result = VK_SUCCESS;
+            }
+        }
+        else
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+    }
+
     return result;
 }
 

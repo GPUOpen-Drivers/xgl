@@ -1121,21 +1121,21 @@ VkResult RayTracingPipeline::CreateImpl(
                         {
                             const auto pGroup = &pShaderGroups[deviceIdx][i];
                             bool       found = false;
-                            found |= MapShaderIdToGpuVa(pIndirectFuncInfo,
-                                                        pShaderNameMap,
-                                                        shaderCount,
-                                                        pShaderProp,
-                                                        &pGroup->shaderId);
-                            found |= MapShaderIdToGpuVa(pIndirectFuncInfo,
-                                                        pShaderNameMap,
-                                                        shaderCount,
-                                                        pShaderProp,
-                                                        &pGroup->intersectionId);
-                            found |= MapShaderIdToGpuVa(pIndirectFuncInfo,
-                                                        pShaderNameMap,
-                                                        shaderCount,
-                                                        pShaderProp,
-                                                        &pGroup->anyHitId);
+                            found |= MapShaderIdToShaderHandle(pIndirectFuncInfo,
+                                                               pShaderNameMap,
+                                                               shaderCount,
+                                                               pShaderProp,
+                                                               &pGroup->shaderId);
+                            found |= MapShaderIdToShaderHandle(pIndirectFuncInfo,
+                                                               pShaderNameMap,
+                                                               shaderCount,
+                                                               pShaderProp,
+                                                               &pGroup->intersectionId);
+                            found |= MapShaderIdToShaderHandle(pIndirectFuncInfo,
+                                                               pShaderNameMap,
+                                                               shaderCount,
+                                                               pShaderProp,
+                                                               &pGroup->anyHitId);
                             VK_ASSERT(found && "Failed to map shader to gpu address");
                         }
                     }
@@ -1782,7 +1782,7 @@ void RayTracingPipeline::BindNullPipeline(
 }
 
 // =====================================================================================================================
-bool RayTracingPipeline::MapShaderIdToGpuVa(
+bool RayTracingPipeline::MapShaderIdToShaderHandle(
     Pal::ShaderLibraryFunctionInfo*   pIndirectFuncList,
     uint32_t*                         pShaderNameMap,
     uint32_t                          shaderPropCount,
@@ -1798,7 +1798,12 @@ bool RayTracingPipeline::MapShaderIdToGpuVa(
             {
                 auto pIndirectFunc = &pIndirectFuncList[pShaderNameMap[i]];
                 VK_ASSERT(pIndirectFunc->pSymbolName == &pShaderProp[i].name[0]);
-                *pShaderId = pIndirectFunc->gpuVirtAddr;
+                uint64_t gpuVirtAddr = pIndirectFunc->gpuVirtAddr;
+                if (pShaderProp[i].onlyGpuVaLo)
+                {
+                    gpuVirtAddr = gpuVirtAddr & 0xffffffff;
+                }
+                *pShaderId = gpuVirtAddr | pShaderProp[i].shaderIdExtraBits;
                 found = true;
                 break;
             }
@@ -1957,7 +1962,6 @@ void RayTracingPipeline::ConvertStaticPipelineFlags(
     uint32_t staticFlags = pDevice->RayTrace()->GpuRt(DefaultDeviceIndex)->GetStaticPipelineFlags(
         Util::TestAnyFlagSet(pipelineFlags, VK_PIPELINE_CREATE_RAY_TRACING_SKIP_TRIANGLES_BIT_KHR),
         Util::TestAnyFlagSet(pipelineFlags, VK_PIPELINE_CREATE_RAY_TRACING_SKIP_AABBS_BIT_KHR),
-        settings.rtUseRayQueryForTraceRays,
         pDevice->RayTrace()->AccelStructTrackerEnabled(DefaultDeviceIndex),
         (counterMode != GpuRt::TraceRayCounterMode::TraceRayCounterDisable));
 

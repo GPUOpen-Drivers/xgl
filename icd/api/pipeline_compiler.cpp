@@ -43,6 +43,7 @@
 #include "palFile.h"
 #include "palHashSetImpl.h"
 #include "palListImpl.h"
+#include "palShaderLibrary.h"
 
 #include "include/pipeline_binary_cache.h"
 
@@ -155,6 +156,7 @@ PipelineCompiler::PipelineCompiler(
     , m_pipelineCacheMatrix{}
     , m_uberFetchShaderInfoFormatMap(8, pPhysicalDevice->Manager()->VkInstance()->Allocator())
     , m_shaderModuleHandleMap(8, pPhysicalDevice->Manager()->VkInstance()->Allocator())
+    , m_colorExportShaderMap(8, pPhysicalDevice->Manager()->VkInstance()->Allocator())
 {
 
 }
@@ -329,6 +331,11 @@ VkResult PipelineCompiler::Initialize()
 
     if (result == VK_SUCCESS)
     {
+        result = PalToVkResult(m_colorExportShaderMap.Init());
+    }
+
+    if (result == VK_SUCCESS)
+    {
         result = PalToVkResult(m_uberFetchShaderInfoFormatMap.Init());
     }
 
@@ -357,7 +364,7 @@ void PipelineCompiler::Destroy()
 
     DestroyPipelineBinaryCache();
 
-   auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+    auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
     Util::MutexAuto mutexLock(&m_cacheLock);
     if (SupportInternalModuleCache(m_pPhysicalDevice, GetCompilerCollectionMask()))
@@ -377,6 +384,13 @@ void PipelineCompiler::Destroy()
         }
         m_shaderModuleHandleMap.Reset();
     }
+
+    for (auto it = m_colorExportShaderMap.Begin(); it.Get() != nullptr; it.Next())
+    {
+        // Destory color export shader library
+        it.Get()->value->Destroy();
+    }
+    m_colorExportShaderMap.Reset();
 }
 
 // =====================================================================================================================
@@ -1049,6 +1063,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     uint32_t                          deviceIdx,
     PipelineCache*                    pPipelineCache,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    const PipelineCreateFlags         flags,
     size_t*                           pPipelineBinarySize,
     const void**                      ppPipelineBinary,
     Util::MetroHash::Hash*            pCacheId)
@@ -1113,6 +1128,18 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         {
             result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
         }
+    }
+
+    if (shouldCompile)
+    {
+        if ((pCreateInfo->linkTimeOptimization == false) &&
+            ((flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) == 0) &&
+            ((pCreateInfo->pShaderLibraries[GraphicsLibraryPreRaster] != nullptr) &&
+             (pCreateInfo->pShaderLibraries[GraphicsLibraryFragment] != nullptr)))
+            {
+                // No need to compile when the current pipeline meets all the conditions for shader library linking
+                shouldCompile = false;
+            }
     }
 
     if (settings.enablePipelineDump && (result == VK_SUCCESS))
@@ -1252,6 +1279,120 @@ VkResult PipelineCompiler::CreateGraphicsShaderBinary(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+// Create ISA/relocatable shader for a specific shader based on pipeline information
+VkResult PipelineCompiler::CreateColorExportShaderLibrary(
+    const Device*                     pDevice,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks*      pAllocator,
+    Pal::IShaderLibrary**             ppColExpLib)
+{
+    VkResult result = VK_SUCCESS;
+
+    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
+    const uint32_t compilerMask     = GetCompilerCollectionMask();
+    Vkgc::BinaryData colExpPackage  = {};
+
+    bool cacheHit                   = false;
+    Util::MetroHash::Hash cacheId   = {};
+    GetColorExportShaderCacheId(pCreateInfo, &cacheId);
+
+    // Look up cache with respect to the hash
+    {
+        Util::MutexAuto mutexLock(&m_cacheLock);
+        Pal::IShaderLibrary** ppCachedColExpLib = m_colorExportShaderMap.FindKey(cacheId);
+        if (ppCachedColExpLib != nullptr)
+        {
+            *ppColExpLib = *ppCachedColExpLib;
+            cacheHit = true;
+        }
+    }
+
+    if (cacheHit == false)
+    {
+        // Temporarily set the unlinked to true for the color export shader
+        pCreateInfo->pipelineInfo.unlinked = true;
+
+        void* pPipelineDumpHandle = nullptr;
+        if (settings.enablePipelineDump)
+        {
+            uint64_t dumpHash = settings.dumpPipelineWithApiHash ? pCreateInfo->apiPsoHash :
+                                                                   MetroHash::Compact64(&cacheId);
+
+            Vkgc::PipelineDumpOptions dumpOptions = {};
+            dumpOptions.pDumpDir                  = settings.pipelineDumpDir;
+            dumpOptions.filterPipelineDumpByType  = settings.filterPipelineDumpByType;
+            dumpOptions.filterPipelineDumpByHash  = settings.filterPipelineDumpByHash;
+            dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
+
+            Vkgc::PipelineBuildInfo pipelineInfo = {};
+            pipelineInfo.pGraphicsInfo = &pCreateInfo->pipelineInfo;
+            pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions,
+                                                                           pipelineInfo,
+                                                                           dumpHash);
+        }
+
+        if (compilerMask & (1 << PipelineCompilerTypeLlpc))
+        {
+            result = m_compilerSolutionLlpc.CreateColorExportBinary(
+                pCreateInfo,
+                pPipelineDumpHandle,
+                &colExpPackage);
+
+        }
+        if (result == VK_SUCCESS)
+        {
+            result = CreateGraphicsShaderLibrary(pDevice, colExpPackage, pAllocator, ppColExpLib);
+
+            if (result == VK_SUCCESS)
+            {
+                VK_ASSERT(*ppColExpLib != nullptr);
+                // Store the color export shader into cache
+                Util::MutexAuto mutexLock(&m_cacheLock);
+                result = PalToVkResult(m_colorExportShaderMap.Insert(cacheId, *ppColExpLib));
+                VK_ASSERT(result == VK_SUCCESS);
+            }
+        }
+
+        if (pPipelineDumpHandle != nullptr)
+        {
+            Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
+        }
+        pCreateInfo->pipelineInfo.unlinked = false;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Create shader libray object based on pipeline information
+VkResult PipelineCompiler::CreateGraphicsShaderLibrary(
+    const Device*                pDevice,
+    const Vkgc::BinaryData       shaderBinary,
+    const VkAllocationCallbacks* pAllocator,
+    Pal::IShaderLibrary**        ppShaderLibrary)
+{
+    Pal::Result palResult    = Pal::Result::Success;
+    Pal::IDevice* pPalDevice = pDevice->PalDevice(DefaultDeviceIndex);
+
+    Pal::ShaderLibraryCreateInfo shaderLibCreateInfo = {};
+    shaderLibCreateInfo.flags.isGraphics = true;
+    shaderLibCreateInfo.codeObjectSize   = shaderBinary.codeSize;
+    shaderLibCreateInfo.pCodeObject      = shaderBinary.pCode;
+
+    size_t librarySize = pPalDevice->GetShaderLibrarySize(shaderLibCreateInfo, &palResult);
+    void* pShaderLibBuffer = pAllocator->pfnAllocation(pAllocator->pUserData,
+                                                       librarySize,
+                                                       VK_DEFAULT_MEM_ALIGN,
+                                                       VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    palResult = pPalDevice->CreateShaderLibrary(shaderLibCreateInfo,
+                                                pShaderLibBuffer,
+                                                ppShaderLibrary);
+    VK_ASSERT(palResult == Pal::Result::Success);
+
+    return PalToVkResult(palResult);
 }
 
 // =====================================================================================================================
@@ -1574,6 +1715,22 @@ static void CopyPipelineShadersInfo(
 
     pCreateInfo->compilerType = libInfo.compilerType;
 
+    // Copy shader libraries
+    if (shaderMask == PrsShaderMask)
+    {
+        pCreateInfo->pShaderLibraries[GraphicsLibraryPreRaster] =
+            libInfo.pShaderLibraries[GraphicsLibraryPreRaster];
+    }
+    else if (shaderMask == FgsShaderMask)
+    {
+        pCreateInfo->pShaderLibraries[GraphicsLibraryFragment] = libInfo.pShaderLibraries[GraphicsLibraryFragment];
+        pCreateInfo->pBinaryMetadata->pFsOutputMetaData        = libInfo.pBinaryMetadata->pFsOutputMetaData;
+        pCreateInfo->pBinaryMetadata->fsOutputMetaDataSize     = libInfo.pBinaryMetadata->fsOutputMetaDataSize;
+        pCreateInfo->pipelineInfo.enableColorExportShader      =
+            (libInfo.pipelineInfo.enableColorExportShader &&
+                (libInfo.pBinaryMetadata->pFsOutputMetaData != nullptr));
+    }
+
     Vkgc::PipelineShaderInfo* pShaderInfosDst[] =
     {
         &pCreateInfo->pipelineInfo.task,
@@ -1608,9 +1765,9 @@ static void CopyPipelineShadersInfo(
     {
         if (libInfo.libraryHash[gplType] != 0)
         {
-            pCreateInfo->earlyElfPackage[gplType]      = libInfo.earlyElfPackage[gplType];
-            pCreateInfo->earlyElfPackageHash[gplType]  = libInfo.earlyElfPackageHash[gplType];
-            pCreateInfo->libraryHash[gplType]          = libInfo.libraryHash[gplType];
+            pCreateInfo->earlyElfPackage[gplType] = libInfo.earlyElfPackage[gplType];
+            pCreateInfo->earlyElfPackageHash[gplType] = libInfo.earlyElfPackageHash[gplType];
+            pCreateInfo->libraryHash[gplType] = libInfo.libraryHash[gplType];
         }
     }
 }
@@ -1657,6 +1814,7 @@ static void MergePipelineOptions(
     pDst->enableInterpModePatch                 |= src.enableInterpModePatch;
     pDst->pageMigrationEnabled                  |= src.pageMigrationEnabled;
     pDst->optimizationLevel                     |= src.optimizationLevel;
+    pDst->disableTruncCoordForGather            |= src.disableTruncCoordForGather;
 
     pDst->shadowDescriptorTableUsage   = src.shadowDescriptorTableUsage;
     pDst->shadowDescriptorTablePtrHigh = src.shadowDescriptorTablePtrHigh;
@@ -1697,6 +1855,7 @@ static void CopyFragmentShaderState(
     pCreateInfo->pipelineInfo.rsState.numSamples            = libInfo.pipelineInfo.rsState.numSamples;
     pCreateInfo->pipelineInfo.rsState.samplePatternIdx      = libInfo.pipelineInfo.rsState.samplePatternIdx;
     pCreateInfo->pipelineInfo.rsState.pixelShaderSamples    = libInfo.pipelineInfo.rsState.pixelShaderSamples;
+    pCreateInfo->pipelineInfo.rsState.dynamicSampleInfo     = libInfo.pipelineInfo.rsState.dynamicSampleInfo;
 
     pCreateInfo->pipelineInfo.dsState.depthTestEnable   = libInfo.pipelineInfo.dsState.depthTestEnable;
     pCreateInfo->pipelineInfo.dsState.depthWriteEnable  = libInfo.pipelineInfo.dsState.depthWriteEnable;
@@ -1800,39 +1959,53 @@ static void BuildMultisampleStateInFgs(
     const VkPipelineMultisampleStateCreateInfo* pMs,
     const RenderPass*                           pRenderPass,
     const uint32_t                              subpass,
-    GraphicsPipelineBinaryCreateInfo*           pCreateInfo)
+    GraphicsPipelineBinaryCreateInfo*           pCreateInfo,
+    const uint64_t                              dynamicStateFlags)
 {
     if (pMs != nullptr)
     {
-        if (pMs->rasterizationSamples != 1)
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizationSamples))
         {
-            uint32_t subpassCoverageSampleCount;
-            uint32_t subpassColorSampleCount;
-            GraphicsPipelineCommon::GetSubpassSampleCount(
-                pMs, pRenderPass, subpass, &subpassCoverageSampleCount, &subpassColorSampleCount, nullptr);
-
-            if (pMs->sampleShadingEnable && (pMs->minSampleShading > 0.0f))
-            {
-                pCreateInfo->pipelineInfo.rsState.perSampleShading =
-                    ((subpassColorSampleCount * pMs->minSampleShading) > 1.0f);
-                pCreateInfo->pipelineInfo.rsState.pixelShaderSamples =
-                    Pow2Pad(static_cast<uint32_t>(ceil(subpassColorSampleCount * pMs->minSampleShading)));
-            }
-            else
-            {
-                pCreateInfo->pipelineInfo.rsState.perSampleShading = false;
-                pCreateInfo->pipelineInfo.rsState.pixelShaderSamples = 1;
-            }
-
-            // NOTE: The sample pattern index here is actually the offset of sample position pair. This is
-            // different from the field of creation info of image view. For image view, the sample pattern
-            // index is really table index of the sample pattern.
-            pCreateInfo->pipelineInfo.rsState.samplePatternIdx =
-                Device::GetDefaultSamplePatternIndex(subpassCoverageSampleCount) * Pal::MaxMsaaRasterizerSamples;
+            // This will be updated later
+            pCreateInfo->pipelineInfo.rsState.perSampleShading = true;
+            pCreateInfo->pipelineInfo.rsState.pixelShaderSamples = 1;
+            pCreateInfo->pipelineInfo.rsState.samplePatternIdx = 0;
+            pCreateInfo->pipelineInfo.rsState.numSamples = 1;
+            pCreateInfo->pipelineInfo.rsState.dynamicSampleInfo = true;
+            pCreateInfo->pipelineInfo.options.enableInterpModePatch = false;
         }
+        else
+        {
+            if (pMs->rasterizationSamples != 1)
+            {
+                uint32_t subpassCoverageSampleCount;
+                uint32_t subpassColorSampleCount;
+                GraphicsPipelineCommon::GetSubpassSampleCount(
+                    pMs, pRenderPass, subpass, &subpassCoverageSampleCount, &subpassColorSampleCount, nullptr);
 
-        pCreateInfo->pipelineInfo.rsState.numSamples = pMs->rasterizationSamples;
-        pCreateInfo->pipelineInfo.options.enableInterpModePatch = false;
+                if (pMs->sampleShadingEnable && (pMs->minSampleShading > 0.0f))
+                {
+                    pCreateInfo->pipelineInfo.rsState.perSampleShading =
+                        ((subpassColorSampleCount * pMs->minSampleShading) > 1.0f);
+                    pCreateInfo->pipelineInfo.rsState.pixelShaderSamples =
+                        Pow2Pad(static_cast<uint32_t>(ceil(subpassColorSampleCount * pMs->minSampleShading)));
+                }
+                else
+                {
+                    pCreateInfo->pipelineInfo.rsState.perSampleShading = false;
+                    pCreateInfo->pipelineInfo.rsState.pixelShaderSamples = 1;
+                }
+
+                // NOTE: The sample pattern index here is actually the offset of sample position pair. This is
+                // different from the field of creation info of image view. For image view, the sample pattern
+                // index is really table index of the sample pattern.
+                pCreateInfo->pipelineInfo.rsState.samplePatternIdx =
+                    Device::GetDefaultSamplePatternIndex(subpassCoverageSampleCount) * Pal::MaxMsaaRasterizerSamples;
+            }
+
+            pCreateInfo->pipelineInfo.rsState.numSamples = pMs->rasterizationSamples;
+            pCreateInfo->pipelineInfo.options.enableInterpModePatch = false;
+        }
 
         if (pCreateInfo->pipelineInfo.rsState.perSampleShading)
         {
@@ -2427,11 +2600,13 @@ static void BuildFragmentShaderState(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
     const GraphicsPipelineShaderStageInfo* pShaderInfo,
-    GraphicsPipelineBinaryCreateInfo*      pCreateInfo)
+    GraphicsPipelineBinaryCreateInfo*      pCreateInfo,
+    const uint64_t                         dynamicStateFlags)
 {
     const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
 
-    BuildMultisampleStateInFgs(pDevice, pIn->pMultisampleState, pRenderPass, pIn->subpass, pCreateInfo);
+    BuildMultisampleStateInFgs(pDevice, pIn->pMultisampleState, pRenderPass, pIn->subpass, pCreateInfo,
+        dynamicStateFlags);
 
     BuildDepthStencilState(pIn->pDepthStencilState, pCreateInfo);
 
@@ -2601,7 +2776,6 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     libInfo.libFlags = libFlags;
     pCreateInfo->flags = pIn->flags;
-
     pDevice->GetCompiler(DefaultDeviceIndex)->ApplyPipelineOptions(pDevice,
                                                                    pIn->flags,
                                                                    &pCreateInfo->pipelineInfo.options
@@ -2636,7 +2810,10 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         {
             if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
             {
-                BuildFragmentShaderState(pDevice, pIn, pShaderInfo, pCreateInfo);
+                BuildFragmentShaderState(pDevice, pIn, pShaderInfo, pCreateInfo, dynamicStateFlags);
+                pCreateInfo->pipelineInfo.enableColorExportShader =
+                    (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink &&
+                     (pShaderInfo->stages[ShaderStageFragment].pModuleHandle != nullptr));
             }
             else if (libInfo.pFragmentShaderLib != nullptr)
             {
@@ -2811,6 +2988,8 @@ void PipelineCompiler::ApplyPipelineOptions(
 
     pOptions->reverseThreadGroup = settings.enableAlternatingThreadGroupOrder;
 
+    pOptions->disableTruncCoordForGather = settings.disableTruncCoordForGather;
+
     if (pDevice->GetEnabledFeatures().robustBufferAccessExtended)
     {
         pOptions->extendedRobustness.robustBufferAccess = true;
@@ -2970,7 +3149,7 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
     case ShaderStage::ShaderStageTessControl:
         pShaderOptions->waveSize = settings.tcsWaveSize;
         break;
-    case ShaderStage::ShaderStageTessEvaluation:
+    case ShaderStage::ShaderStageTessEval:
         pShaderOptions->waveSize = settings.tesWaveSize;
         break;
     case ShaderStage::ShaderStageGeometry:
@@ -4211,6 +4390,34 @@ void PipelineCompiler::GetGraphicsPipelineCacheId(
     hash.Finalize(pCacheId->bytes);
 }
 
+// =====================================================================================================================
+void PipelineCompiler::GetColorExportShaderCacheId(
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    Util::MetroHash::Hash*            pCacheId)
+{
+    Util::MetroHash64 hash = {};
+
+    // Update hash based on fragment output state
+    hash.Update(pCreateInfo->pipelineInfo.iaState.enableMultiView);
+
+    const auto& cbState = pCreateInfo->pipelineInfo.cbState;
+    hash.Update(cbState.alphaToCoverageEnable);
+    hash.Update(cbState.dualSourceBlendEnable);
+    hash.Update(cbState.dualSourceBlendDynamic);
+    for (uint32_t i = 0; i < MaxColorTargets; ++i)
+    {
+        hash.Update(cbState.target[i].channelWriteMask);
+        hash.Update(cbState.target[i].blendEnable);
+        hash.Update(cbState.target[i].blendSrcAlphaToColor);
+        hash.Update(cbState.target[i].format);
+    }
+
+    // Update hash based on fragment shader output metadata
+    hash.Update(static_cast<const uint8_t*>(pCreateInfo->pBinaryMetadata->pFsOutputMetaData),
+                                            pCreateInfo->pBinaryMetadata->fsOutputMetaDataSize);
+    hash.Finalize(pCacheId->bytes);
+}
+
 #if VKI_RAY_TRACING
 // =====================================================================================================================
 void PipelineCompiler::GetRayTracingPipelineCacheId(
@@ -4460,7 +4667,7 @@ VkResult PipelineCompiler::WriteBinaryMetadata(
 // Gets max size of uber-fetch shader internal data.
 size_t PipelineCompiler::GetMaxUberFetchShaderInternalDataSize()
 {
-    return sizeof(Vkgc::UberFetchShaderAttribInfo) * Vkgc::MaxVertexAttribs;
+    return sizeof(Vkgc::UberFetchShaderAttribInfo) * Vkgc::MaxVertexAttribs + sizeof(uint64_t);
 }
 
 // =====================================================================================================================
@@ -4552,20 +4759,51 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalDataImp(
     bool requirePerCompFetch = false;
 
     uint32_t maxLocation = 0;
+    void* pAttribInternalBase = pUberFetchShaderInternalData;
+    if (settings.enableRobustUberFetchShader)
+    {
+        uint64_t locationMask = 0;
+        for (uint32_t i = 0; i < vertexAttributeDescriptionCount; i++)
+        {
+            Vkgc::UberFetchShaderAttribInfo attribInfo = {};
+            auto pAttrib = &pVertexAttributeDescriptions[i];
+            bool hasDualLocation = Formats::IsDvec3Or4(pAttrib->format);
+            if (pAttrib->location >= maxLocation)
+            {
+                maxLocation = hasDualLocation ? (pAttrib->location + 1) : pAttrib->location;
+            }
+            locationMask |= (1ull << pAttrib->location);
+            if (hasDualLocation)
+            {
+                locationMask |= (1ull << (pAttrib->location + 1));
+            }
+        }
+
+        pAttribInternalBase = Util::VoidPtrInc(pUberFetchShaderInternalData, sizeof(uint64_t));
+        if (vertexAttributeDescriptionCount > 0)
+        {
+            memcpy(pUberFetchShaderInternalData, &locationMask, sizeof(uint64_t));
+            memset(pAttribInternalBase, 0, (maxLocation + 1) * sizeof(Vkgc::UberFetchShaderAttribInfo));
+        }
+    }
 
     for (uint32_t i = 0; i < vertexAttributeDescriptionCount; i++)
     {
         Vkgc::UberFetchShaderAttribInfo attribInfo = {};
         auto pAttrib  = &pVertexAttributeDescriptions[i];
-        auto pBinding = GetVertexInputBinding(pAttrib->binding, vertexBindingDescriptionCount, pVertexBindingDescriptions);
-        auto attribFormatInfo =
-            GetUberFetchShaderFormatInfo(&m_uberFetchShaderInfoFormatMap, pAttrib->format, pBinding->stride == 0);
+        auto pBinding = GetVertexInputBinding(pAttrib->binding,
+                                              vertexBindingDescriptionCount,
+                                              pVertexBindingDescriptions);
+        auto attribFormatInfo = GetUberFetchShaderFormatInfo(
+            &m_uberFetchShaderInfoFormatMap,
+            pAttrib->format,
+            (isDynamicStride == false) && (pBinding->stride == 0));
         void* pAttribInternalData =
-            Util::VoidPtrInc(pUberFetchShaderInternalData, sizeof(Vkgc::UberFetchShaderAttribInfo) * pAttrib->location);
+            Util::VoidPtrInc(pAttribInternalBase, sizeof(Vkgc::UberFetchShaderAttribInfo) * pAttrib->location);
 
         if (pAttrib->location >= maxLocation)
         {
-            maxLocation = Formats::IsDvec3Or4(pAttrib->format) ? pAttrib->location + 1 : pAttrib->location;
+            maxLocation = Formats::IsDvec3Or4(pAttrib->format) ? (pAttrib->location + 1) : pAttrib->location;
         }
 
         VK_ASSERT(attribFormatInfo.bufferFormat != 0);
@@ -4691,7 +4929,8 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalDataImp(
     uint32_t internalMemSize = 0;
     if (success && (vertexAttributeDescriptionCount > 0))
     {
-        internalMemSize = static_cast<uint32_t>(sizeof(Vkgc::UberFetchShaderAttribInfo) * (maxLocation + 1));
+        internalMemSize = Util::VoidPtrDiff(pAttribInternalBase, pUberFetchShaderInternalData) +
+                          + static_cast<uint32_t>(sizeof(Vkgc::UberFetchShaderAttribInfo) * (maxLocation + 1));
     }
 
     return internalMemSize;

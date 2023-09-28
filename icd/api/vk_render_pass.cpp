@@ -70,6 +70,21 @@ static void GenerateHashFromAttachmentReference(
 }
 
 // =====================================================================================================================
+static void GenerateHashForSubpassAttachment(
+    Util::MetroHash64*          pHasher,
+    const RenderPassCreateInfo* pRenderPassInfo,
+    const AttachmentReference&  desc)
+{
+    pHasher->Update(desc.aspectMask);
+    if (desc.attachment != VK_ATTACHMENT_UNUSED)
+    {
+        auto pAttachment = &pRenderPassInfo->pAttachments[desc.attachment];
+        pHasher->Update(pAttachment->format);
+        pHasher->Update(pAttachment->samples);
+    }
+}
+
+// =====================================================================================================================
 static void GenerateHashFromSubpassDependency(
     Util::MetroHash64*              pHasher,
     const SubpassDependency&        desc)
@@ -165,6 +180,34 @@ static uint64_t GenerateRenderPassHash(
     return hash;
 }
 
+// =====================================================================================================================
+static uint64_t GenerateSubpassHash(
+    const RenderPassCreateInfo* pRenderPassInfo,
+    uint32_t                    subpass)
+{
+    Util::MetroHash64 hasher;
+    const SubpassDescription& subpassDesc = pRenderPassInfo->pSubpasses[subpass];
+
+    hasher.Update(subpassDesc.viewMask);
+    hasher.Update(subpassDesc.inputAttachmentCount);
+    hasher.Update(subpassDesc.colorAttachmentCount);
+    hasher.Update(subpassDesc.subpassSampleCount);
+
+    GenerateHashForSubpassAttachment(&hasher, pRenderPassInfo, subpassDesc.depthStencilAttachment);
+
+    for (uint32_t i = 0; i < subpassDesc.inputAttachmentCount; ++i)
+    {
+        GenerateHashForSubpassAttachment(&hasher, pRenderPassInfo, subpassDesc.pInputAttachments[i]);
+    }
+
+    for (uint32_t i = 0; i < subpassDesc.colorAttachmentCount; ++i)
+    {
+        GenerateHashForSubpassAttachment(&hasher, pRenderPassInfo, subpassDesc.pColorAttachments[i]);
+    }
+    uint64_t hash;
+    hasher.Finalize(reinterpret_cast<uint8_t*>(&hash));
+    return hash;
+}
 // =====================================================================================================================
 AttachmentReference::AttachmentReference()
     :
@@ -389,7 +432,8 @@ SubpassDescription::SubpassDescription()
     preserveAttachmentCount (0),
     pPreserveAttachments    (nullptr),
     depthResolveMode        (VK_RESOLVE_MODE_NONE),
-    stencilResolveMode      (VK_RESOLVE_MODE_NONE)
+    stencilResolveMode      (VK_RESOLVE_MODE_NONE),
+    hash                    (0ull)
 {
 }
 
@@ -792,6 +836,10 @@ static void InitRenderPassCreateInfo(
     VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
 
     pOutRenderPassInfo->hash = GenerateRenderPassHash(pOutRenderPassInfo);
+    for (uint32_t i = 0; i < pOutRenderPassInfo->subpassCount; i++)
+    {
+        pOutRenderPassInfo->pSubpasses[i].hash = GenerateSubpassHash(pOutRenderPassInfo, i);
+    }
 }
 
 // =====================================================================================================================

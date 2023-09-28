@@ -61,18 +61,6 @@ VkResult ShaderCache::Serialize(
 {
     VkResult result = VK_SUCCESS;
 
-    {
-        if (m_cache.pLlpcShaderCache != nullptr)
-        {
-            Vkgc::Result llpcResult = m_cache.pLlpcShaderCache->Serialize(pBlob, pSize);
-            result = (llpcResult == Vkgc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
-        }
-        else
-        {
-            result = VK_ERROR_INITIALIZATION_FAILED;
-        }
-    }
-
     return result;
 }
 
@@ -84,19 +72,6 @@ VkResult ShaderCache::Merge(
 {
     VkResult result = VK_SUCCESS;
 
-    {
-        if (m_cache.pLlpcShaderCache != nullptr)
-        {
-            Vkgc::Result llpcResult = m_cache.pLlpcShaderCache->Merge(srcCacheCount,
-                const_cast<const Llpc::IShaderCache **>(&ppSrcCaches->pLlpcShaderCache));
-            result = (llpcResult == Vkgc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
-        }
-        else
-        {
-            result = VK_ERROR_INITIALIZATION_FAILED;
-        }
-    }
-
     return result;
 }
 
@@ -105,12 +80,6 @@ VkResult ShaderCache::Merge(
 void ShaderCache::Destroy(
     PipelineCompiler* pCompiler)
 {
-    {
-        if (m_cache.pLlpcShaderCache)
-        {
-            m_cache.pLlpcShaderCache->Destroy();
-        }
-    }
 }
 
 }

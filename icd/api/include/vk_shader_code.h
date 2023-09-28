@@ -32,7 +32,6 @@ namespace vk
 {
 
 typedef Vkgc::ShaderStage ShaderStage;
-#define ShaderStageTessEvaluation ShaderStageTessEval
 constexpr uint32_t ShaderStageCount = ShaderStage::ShaderStageCount;
 
 /// Translate shader stage flag bits to corresponding shader stage.
@@ -49,7 +48,7 @@ inline ShaderStage ShaderFlagBitToStage(const VkShaderStageFlagBits& shaderBits)
     }
     else if (shaderBits & VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)
     {
-        stage = ShaderStage::ShaderStageTessEvaluation;
+        stage = ShaderStage::ShaderStageTessEval;
     }
     else if (shaderBits & VK_SHADER_STAGE_GEOMETRY_BIT)
     {

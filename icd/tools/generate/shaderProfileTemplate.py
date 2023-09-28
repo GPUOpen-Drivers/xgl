@@ -2250,7 +2250,7 @@ ENTRIES_TEMPLATE = {
                 "ds": {
                     "type": [dict],
                     "branch": SHADER_PATTERN,
-                    "shaderStage": "ShaderStage::ShaderStageTessEvaluation"
+                    "shaderStage": "ShaderStage::ShaderStageTessEval"
                 },
                 "gs": {
                     "type": [dict],
@@ -2282,7 +2282,7 @@ ENTRIES_TEMPLATE = {
                 "ds": {
                     "type": [dict],
                     "branch": SHADER_ACTION,
-                    "shaderStage": "ShaderStage::ShaderStageTessEvaluation"
+                    "shaderStage": "ShaderStage::ShaderStageTessEval"
                 },
                 "gs": {
                     "type": [dict],
@@ -2724,7 +2724,7 @@ std::string ShaderProfile::getShaderStageName(uint32_t i)
         return "vs";
     case ShaderStage::ShaderStageTessControl:
         return "hs";
-    case ShaderStage::ShaderStageTessEvaluation:
+    case ShaderStage::ShaderStageTessEval:
         return "ds";
     case ShaderStage::ShaderStageGeometry:
         return "gs";

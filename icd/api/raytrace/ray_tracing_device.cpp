@@ -559,9 +559,12 @@ void RayTracingDevice::SetDispatchInfo(
     const RuntimeSettings& settings    = m_pDevice->GetRuntimeSettings();
     GpuRt::RtDispatchInfo dispatchInfo = {};
 
-    dispatchInfo.dimX                = width;
-    dispatchInfo.dimY                = height;
-    dispatchInfo.dimZ                = depth;
+    dispatchInfo.dimX                   = width;
+    dispatchInfo.dimY                   = height;
+    dispatchInfo.dimZ                   = depth;
+    dispatchInfo.threadGroupSizeX       = 0;
+    dispatchInfo.threadGroupSizeY       = 0;
+    dispatchInfo.threadGroupSizeZ       = 0;
 
     dispatchInfo.pipelineShaderCount = shaderCount;
     dispatchInfo.stateObjectHash     = apiHash;
@@ -629,6 +632,9 @@ void RayTracingDevice::TraceDispatch(
 void RayTracingDevice::TraceIndirectDispatch(
     uint32_t                               deviceIdx,
     GpuRt::RtPipelineType                  pipelineType,
+    uint32_t                               originalThreadGroupSizeX,
+    uint32_t                               originalThreadGroupSizeY,
+    uint32_t                               originalThreadGroupSizeZ,
     uint32_t                               shaderCount,
     uint64_t                               apiHash,
     const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
@@ -650,6 +656,10 @@ void RayTracingDevice::TraceIndirectDispatch(
                         pMissSbt,
                         pHitSbt,
                         &dispatchInfo);
+
+        dispatchInfo.threadGroupSizeX = originalThreadGroupSizeX;
+        dispatchInfo.threadGroupSizeY = originalThreadGroupSizeY;
+        dispatchInfo.threadGroupSizeZ = originalThreadGroupSizeZ;
 
         m_pGpuRtDevice[deviceIdx]->TraceIndirectRtDispatch(pipelineType,
                                                            dispatchInfo,
@@ -870,9 +880,7 @@ Pal::Result RayTracingDevice::ClientAccelStructBuildDumpEvent(
 // We keep this memory around for later and write it out to files.
 Pal::Result RayTracingDevice::ClientAccelStatsBuildDumpEvent(
     Pal::ICmdBuffer*                  pPalCmdbuf,
-    const GpuRt::AccelStructInfo&     info,
-    Pal::IGpuMemory**                 ppGpuMem,
-    uint64*                           pOffset)
+    GpuRt::AccelStructInfo*           pInfo)
 {
     Pal::Result result = Pal::Result::ErrorOutOfGpuMemory;
 

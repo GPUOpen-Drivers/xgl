@@ -165,6 +165,7 @@ public:
         uint32_t                          deviceIndex,
         PipelineCache*                    pPipelineCache,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        const PipelineCreateFlags         flags,
         size_t*                           pPipelineBinarySize,
         const void**                      ppPipelineBinary,
         Util::MetroHash::Hash*            pCacheId);
@@ -176,8 +177,20 @@ public:
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         ShaderModuleHandle*               pModule);
 
+    VkResult CreateColorExportShaderLibrary(
+        const Device*                     pDevice,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        const VkAllocationCallbacks*      pAllocator,
+        Pal::IShaderLibrary**             ppColExpLib);
+
+    VkResult CreateGraphicsShaderLibrary(
+        const Device*                     pDevice,
+        const Vkgc::BinaryData            shaderBinary,
+        const VkAllocationCallbacks*      pAllocator,
+        Pal::IShaderLibrary**             ppShaderLibrary);
+
     static void FreeGraphicsShaderBinary(
-        ShaderModuleHandle* pShaderModule);
+        ShaderModuleHandle*               pShaderModule);
 
     VkResult CreateComputePipelineBinary(
         Device*                           pDevice,
@@ -315,6 +328,10 @@ public:
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         uint64_t                          pipelineHash,
         const Util::MetroHash::Hash&      settingsHash,
+        Util::MetroHash::Hash*            pCacheId);
+
+    void GetColorExportShaderCacheId(
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         Util::MetroHash::Hash*            pCacheId);
 
 #if VKI_RAY_TRACING
@@ -493,6 +510,9 @@ private:
     typedef Util::HashMap<Util::MetroHash::Hash, ShaderModuleHandle, PalAllocator, Util::JenkinsHashFunc>
         ShaderModuleHandleMap;
 
+    typedef Util::HashMap<Util::MetroHash::Hash, Pal::IShaderLibrary*, PalAllocator, Util::JenkinsHashFunc>
+        ColorExportShaderMap;
+
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object
     Vkgc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by Vkgcf
     DeferCompileManager m_deferCompileMgr;     // Defer compile thread manager
@@ -508,6 +528,8 @@ private:
     UberFetchShaderFormatInfoMap   m_uberFetchShaderInfoFormatMap;  // Uber fetch shader format info map
 
     ShaderModuleHandleMap          m_shaderModuleHandleMap;
+
+    ColorExportShaderMap           m_colorExportShaderMap;
 
 }; // class PipelineCompiler
 

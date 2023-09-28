@@ -7047,8 +7047,16 @@ size_t PhysicalDevice::GetFeatures2(
                     pExtInfo->extendedDynamicState3ColorBlendEquation               = VK_TRUE;
                     pExtInfo->extendedDynamicState3ColorWriteMask                   = VK_TRUE;
                     pExtInfo->extendedDynamicState3RasterizationStream              = VK_FALSE;
-                    pExtInfo->extendedDynamicState3ConservativeRasterizationMode    = VK_TRUE;
-                    pExtInfo->extendedDynamicState3ExtraPrimitiveOverestimationSize = VK_TRUE;
+                    if (IsExtensionSupported(DeviceExtensions::EXT_CONSERVATIVE_RASTERIZATION))
+                    {
+                        pExtInfo->extendedDynamicState3ConservativeRasterizationMode = VK_TRUE;
+                        pExtInfo->extendedDynamicState3ExtraPrimitiveOverestimationSize = VK_TRUE;
+                    }
+                    else
+                    {
+                        pExtInfo->extendedDynamicState3ConservativeRasterizationMode = VK_FALSE;
+                        pExtInfo->extendedDynamicState3ExtraPrimitiveOverestimationSize = VK_FALSE;
+                    }
                     pExtInfo->extendedDynamicState3DepthClipEnable                  = VK_TRUE;
                     pExtInfo->extendedDynamicState3SampleLocationsEnable            = VK_TRUE;
                     pExtInfo->extendedDynamicState3ColorBlendAdvanced               = VK_FALSE;

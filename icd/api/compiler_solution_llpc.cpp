@@ -224,10 +224,6 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     pPipelineBuildInfo->pInstance      = pInstance;
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
     pPipelineBuildInfo->iaState.deviceIndex = deviceIdx;
-    if ((pPipelineCache != nullptr) && (settings.shaderCacheMode != ShaderCacheDisable))
-    {
-        pPipelineBuildInfo->cache = pPipelineCache->GetCacheAdapter();
-    }
 
     // By default the client hash provided to PAL is more accurate than the one used by pipeline
     // profiles.
@@ -412,6 +408,47 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
 }
 
 // =====================================================================================================================
+// Creates color export binary.
+VkResult CompilerSolutionLlpc::CreateColorExportBinary(
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    void*                             pPipelineDumpHandle,
+    Vkgc::BinaryData*                 pOutputPackage)
+{
+    const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
+    auto pInstance                   = m_pPhysicalDevice->Manager()->VkInstance();
+
+    VkResult result                            = VK_SUCCESS;
+    Llpc::GraphicsPipelineBuildOut pipelineOut = {};
+
+    auto pPipelineBuildInfo                 = &pCreateInfo->pipelineInfo;
+    pPipelineBuildInfo->pInstance           = pInstance;
+    pPipelineBuildInfo->pfnOutputAlloc      = AllocateShaderOutput;
+
+    VK_ASSERT(pCreateInfo->pBinaryMetadata->pFsOutputMetaData != nullptr);
+    Vkgc::Result llpcResult = m_pLlpc->BuildColorExportShader(pPipelineBuildInfo,
+                                                              pCreateInfo->pBinaryMetadata->pFsOutputMetaData,
+                                                              &pipelineOut,
+                                                              pPipelineDumpHandle);
+
+    if (llpcResult == Vkgc::Result::Success)
+    {
+        pOutputPackage->pCode    = pipelineOut.pipelineBin.pCode;
+        pOutputPackage->codeSize = pipelineOut.pipelineBin.codeSize;
+        if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
+        {
+            Vkgc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, &pipelineOut.pipelineBin);
+        }
+    }
+    else
+    {
+        result = (llpcResult == Vkgc::Result::RequireFullPipeline) ? VK_PIPELINE_COMPILE_REQUIRED :
+                                                                     VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 // Build ElfPackage for a specific shader module based on pipeline information
 VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
     const Device*                     pDevice,
@@ -469,6 +506,13 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
                 pPipelineDumpHandle);
             if (llpcResult == Vkgc::Result::Success)
             {
+                if (stage == ShaderStage::ShaderStageFragment)
+                {
+                    pCreateInfo->pBinaryMetadata->pFsOutputMetaData    = pipelineOut.fsOutputMetaData;
+                    pCreateInfo->pBinaryMetadata->fsOutputMetaDataSize = pipelineOut.fsOutputMetaDataSize;
+                    pipelineOut.pipelineBin.codeSize += pipelineOut.fsOutputMetaDataSize;
+                }
+
                 pShaderModule->elfPackage = pipelineOut.pipelineBin;
                 if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
                 {
@@ -476,31 +520,29 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
                         &cacheId, pipelineOut.pipelineBin.codeSize, pipelineOut.pipelineBin.pCode);
                 }
             }
-            else
+            else if (llpcResult != Vkgc::Result::RequireFullPipeline)
             {
-
-                result = (llpcResult == Vkgc::Result::ErrorOutOfMemory) ?
-                    VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_INITIALIZATION_FAILED;
-
-            }
-        }
-
-        if (result == VK_SUCCESS)
-        {
-            pCreateInfo->earlyElfPackage[gplType]     = pShaderModule->elfPackage;
-            pCreateInfo->earlyElfPackageHash[gplType] = cacheId;
-
-            if (stage == ShaderStage::ShaderStageFragment)
-            {
-                const auto* pModuleData =
-                    reinterpret_cast<const Vkgc::ShaderModuleData*>(pCreateInfo->pipelineInfo.fs.pModuleData);
-                pCreateInfo->pBinaryMetadata->needsSampleInfo = pModuleData->usage.useSampleInfo;
+                result = (llpcResult == Vkgc::Result::ErrorOutOfMemory) ? VK_ERROR_OUT_OF_HOST_MEMORY :
+                                                                          VK_ERROR_INITIALIZATION_FAILED;
             }
 
-            if (pPipelineDumpHandle != nullptr)
+            if (llpcResult == Vkgc::Result::Success)
             {
-                Vkgc::IPipelineDumper::DumpPipelineBinary(
-                    pPipelineDumpHandle, m_gfxIp, &pCreateInfo->earlyElfPackage[gplType]);
+                pCreateInfo->earlyElfPackage[gplType]     = pShaderModule->elfPackage;
+                pCreateInfo->earlyElfPackageHash[gplType] = cacheId;
+
+                if (stage == ShaderStage::ShaderStageFragment)
+                {
+                    const auto* pModuleData =
+                        reinterpret_cast<const Vkgc::ShaderModuleData*>(pCreateInfo->pipelineInfo.fs.pModuleData);
+                    pCreateInfo->pBinaryMetadata->needsSampleInfo = pModuleData->usage.useSampleInfo;
+                }
+
+                if (pPipelineDumpHandle != nullptr)
+                {
+                    Vkgc::IPipelineDumper::DumpPipelineBinary(
+                        pPipelineDumpHandle, m_gfxIp, &pCreateInfo->earlyElfPackage[gplType]);
+                }
             }
         }
     }
@@ -540,10 +582,6 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     // Fill pipeline create info for LLPC
     pPipelineBuildInfo->pInstance      = pInstance;
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
-    if ((pPipelineCache != nullptr) && (settings.shaderCacheMode != ShaderCacheDisable))
-    {
-        pPipelineBuildInfo->cache = pPipelineCache->GetCacheAdapter();
-    }
 
     // Force enable automatic workgroup reconfigure.
     if (appProfile == AppProfile::DawnOfWarIII)
@@ -798,10 +836,6 @@ VkResult CompilerSolutionLlpc::CreateRayTracingPipelineBinary(
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
     pPipelineBuildInfo->deviceIndex = deviceIdx;
     pPipelineBuildInfo->deviceCount = m_pPhysicalDevice->Manager()->GetDeviceCount();
-    if ((pPipelineCache != nullptr) && (settings.shaderCacheMode != ShaderCacheDisable))
-    {
-        pPipelineBuildInfo->cache = pPipelineCache->GetCacheAdapter();
-    }
 
     auto llpcResult = m_pLlpc->BuildRayTracingPipeline(pPipelineBuildInfo,
                                                        &pipelineOut,
@@ -966,13 +1000,15 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
         llpcOptions[numOptions++] = "-amdgpu-max-memory-clause=1";
     }
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 66
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-executable-name=%s", pExecutablePtr);
     ++optionLength;
     llpcOptions[numOptions++] = pOptionBuffer;
     pOptionBuffer += optionLength;
     bufSize -= optionLength;
 
-    optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-shader-cache-file-dir=%s", m_pPhysicalDevice->PalDevice()->GetCacheFilePath());
+    optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-shader-cache-file-dir=%s",
+        m_pPhysicalDevice->PalDevice()->GetCacheFilePath());
     ++optionLength;
     llpcOptions[numOptions++] = pOptionBuffer;
     pOptionBuffer += optionLength;
@@ -983,6 +1019,9 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
     llpcOptions[numOptions++] = pOptionBuffer;
     pOptionBuffer += optionLength;
     bufSize -= optionLength;
+#endif
+
+    llpcOptions[numOptions++] = "-cache-full-pipelines=0";
 
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-subgroup-size=%d", m_pPhysicalDevice->GetSubgroupSize());
     ++optionLength;

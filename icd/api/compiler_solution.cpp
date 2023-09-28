@@ -114,7 +114,8 @@ const char* CompilerSolution::GetGraphicsLibraryName(
     static const char* GraphicsLibraryTypeNames[] =
     {
         "PreRasterLib",
-        "FragmentLib"
+        "FragmentLib",
+        "ColorExportLib"
     };
 
     pName = GraphicsLibraryTypeNames[static_cast<uint32_t>(libraryType)];
@@ -204,17 +205,8 @@ void CompilerSolution::UpdateRayTracingFunctionNames(
 
         VK_ASSERT(result == VK_SUCCESS);
 
-        if (settings.rtUseRayQueryForTraceRays)
-        {
-            SetRayTracingFunctionName(
-                entryFuncTable.traceRay.pTraceRayUsingRayQuery, pTable->pFunc[Vkgc::RT_ENTRY_TRACE_RAY]);
-        }
-        else
-        {
-            SetRayTracingFunctionName(
-                entryFuncTable.traceRay.pTraceRay, pTable->pFunc[Vkgc::RT_ENTRY_TRACE_RAY]);
-        }
-
+        SetRayTracingFunctionName(
+            entryFuncTable.traceRay.pTraceRay, pTable->pFunc[Vkgc::RT_ENTRY_TRACE_RAY]);
         SetRayTracingFunctionName(
             entryFuncTable.traceRay.pTraceRayUsingHitToken, pTable->pFunc[Vkgc::RT_ENTRY_TRACE_RAY_HIT_TOKEN]);
         SetRayTracingFunctionName(

@@ -1047,6 +1047,30 @@
       "Scope": "Driver"
     },
     {
+      "Name": "UseShaderLibraryForPipelineLibraryFastLink",
+      "Description": "Whether use Pal shader library for pipeline library fast-link",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "ForceLinkTimeOptimizationInShaderObject",
+      "Description": "Whether force enable link time optimziation in shader object layer",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Name": "FullscreenFrameMetadataSupport",
       "Description": "Support Fullscreen Frame Metadata.",
       "Tags": [
@@ -1132,6 +1156,117 @@
       "Type": "uint32"
     },
     {
+      "Name": "DxgiPresent",
+      "Description": "Enable Presentation via DXGI",
+      "DependsOn": {
+        "OS": [
+          "Windows"
+        ]
+      },
+      "BuildTypes": [
+        "defined(_WIN32)"
+      ],
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": "DxgiEnabled"
+      },
+      "Type": "enum",
+      "Scope": "Driver",
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "DxgiDisabled",
+            "Description": "Disable DXGI present",
+            "Value": 0
+          },
+          {
+            "Name": "DxgiHdrStereoOnly",
+            "Description": "Enable DXGI present when the OS HDR mode is enabled or if Stereo is active",
+            "Value": 1
+          },
+          {
+            "Name": "DxgiEnabled",
+            "Description": "Always use DXGI present",
+            "Value": 2
+          }
+        ],
+        "Name": "DxgiEnable"
+      }
+    },
+    {
+      "Name": "DxgiSettings",
+      "Description": "Bitmask of various DXGI presentation settings.",
+      "DependsOn": {
+        "OS": [
+          "Windows"
+        ]
+      },
+      "BuildTypes": [
+        "defined(_WIN32)"
+      ],
+      "Tags": [
+        "Present"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": "DxgiDefault"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "DxgiDefault",
+            "Description": "Use default DXGI settings in PAL.",
+            "Value": 0
+          },
+          {
+            "Name": "DxgiUseIntermediateCopy",
+            "Description": "Use an intermdiate image as the backbuffer and copy it into the DXGI backbuffer on present. Use in the event any issues arise.",
+            "Value": 1
+          },
+          {
+            "Name": "DxgiUseSwapEffectDiscard",
+            "Description": "Enable Flip Effect Discard (Swapchain contents are not preserved after presentation), enabling this will allow the OS to optimize composition. Only use when you know swapchain contents will not be read after presentation.",
+            "Value": 2
+          },
+          {
+            "Name": "DxgiDisableWaitableSwapchain",
+            "Description": "Disables waitable swapchain behavior, this will make the swapchain block in Present() instead of AcquireImage(), it will also reset the frame latency to the DXGI default of 3",
+            "Value": 4
+          },
+          {
+            "Name": "DxgiUseSafeSynchronization",
+            "Description": "Force a minimum of 3 images with a frame latency of imageCount-1 for DXGI swapchains. Note that forcing different image counts may be problematic for some older apps",
+            "Value": 8
+          },
+          {
+            "Name": "DxgiHdrFormatCompatability",
+            "Description": "Report unsupported HDR formats for backwards compatability and override then at creation, affects ImageView creation also",
+            "Value": 16
+          },
+          {
+            "Name": "DxgiEnablePresentThread",
+            "Description": "Enable presenting from a different thread, can improve performance in CPU bound cases",
+            "Value": 32
+          },
+          {
+            "Name": "DxgiDelayAcquireToPostPresent",
+            "Description": "When acquiring more than one image, delay the acquire until after present. This may help cover some corner cases with respect to DWM presentation",
+            "Value": 64
+          }
+        ],
+        "Name": "DxgiPresentSettings"
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
       "Name": "EnableRelocatableShaders",
       "Description": "Builds a pipeline by linking reloctable shader elf, which have been built individually.  Only valid when LLPC is the pipeline compiler.",
       "Tags": [
@@ -1146,6 +1281,18 @@
     {
       "Name": "EnableUberFetchShader",
       "Description": "Enable uber fetch shder.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
+      "Name": "EnableRobustUberFetchShader",
+      "Description": "Enable robust access in uber fetch shder.",
       "Tags": [
         "SPIRV Options"
       ],
@@ -2106,6 +2253,11 @@
             "Name": "RelaxedPrecisionIgnoreSrcOperand",
             "Value": 8,
             "Description": "Ignore the relaxed precision limitation of source operands, this will relax the rule of determining whether the conversion can be performed."
+          },
+          {
+            "Name": "RelaxedPrecisionRelaxSpecialUniformBlock",
+            "Value": 16,
+            "Description": "Enable relaxed precision on special uniform block."
           }
         ],
         "Name": "RelaxedPrecisionFlags"
@@ -3738,22 +3890,6 @@
       "VariableName": "rtBvhCpuBuildMode"
     },
     {
-      "Description": "Use RayQuery to implement TraceRays",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "VariableName": "rtUseRayQueryForTraceRays",
-      "Name": "UseRayQueryForTraceRays",
-      "Scope": "Driver"
-    },
-    {
       "Name": "EnableUpdateParallel",
       "Description": "Enable update parallel optimization during acceleration structure builds",
       "Tags": [
@@ -3763,7 +3899,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Type": "bool",
       "Scope": "Driver",
@@ -6968,6 +7104,18 @@
       "Scope": "Driver"
     },
     {
+      "Name": "Ac01WaNotNeeded",
+      "Description": "Allows use AC01 fast clears. Please also check setting: Ac01WaState.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Potentially issue load op fast clears for load op don't care color attachments for subpasses with at least this many color attachments.",
       "Tags": [
         "Optimization"
@@ -7946,6 +8094,18 @@
       "Scope": "Driver"
     },
     {
+      "Name": "EliminateFuncLoadStore",
+      "Description": "Eliminate unnecessary function load and store instructions.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Name": "ModifyResourceKeyForAppProfile",
       "Description": "If this is true, resource key will include any modifications based on runtime settings. BEWARE: Modifying this setting can invalidate resource optimizations if enabled for an app profile.",
       "Tags": [
@@ -8421,6 +8581,18 @@
         ],
         "Name": "VSyncControl"
       }
+    },
+    {
+      "Description": "Disables trunc_coord of sampler srd for gather4.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "DisableTruncCoordForGather"
     }
   ]
 }

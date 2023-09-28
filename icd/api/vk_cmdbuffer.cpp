@@ -50,6 +50,7 @@
 #include "raytrace/ray_tracing_device.h"
 #include "raytrace/ray_tracing_util.h"
 #include "gpurt/gpurtLib.h"
+#include "gpurt/gpurtCounter.h"
 #endif
 
 #include "sqtt/sqtt_layer.h"
@@ -1717,9 +1718,9 @@ VkResult CmdBuffer::Begin(
 
         m_allGpuState.staticTokens.pointLineRasterState = DynamicRenderStateToken;
         const Pal::PointLineRasterStateParams params = { DefaultPointSize,
-                                                            0.0f, // Default line width is zero
-                                                            limits.pointSizeRange[0],
-                                                            limits.pointSizeRange[1] };
+                                                         DefaultLineWidth,
+                                                         limits.pointSizeRange[0],
+                                                         limits.pointSizeRange[1] };
 
         utils::IterateMask deviceGroup(GetDeviceMask());
         do
@@ -3063,11 +3064,11 @@ void CmdBuffer::InitializeVertexBuffer()
         for (uint32 i = 0; i < Pal::MaxVertexBuffers; ++i)
         {
             // Format needs to be set to invalid for struct srv SRDs
-            pBindings[i].swizzledFormat = Pal::UndefinedSwizzledFormat;
-            pBindings[i].gpuAddr        = 0;
-            pBindings[i].range          = 0;
-            pBindings[i].stride         = 0;
-            pBindings[i].flags.u32All   = 0;
+            pBindings[i].swizzledFormat  = Pal::UndefinedSwizzledFormat;
+            pBindings[i].gpuAddr         = 0;
+            pBindings[i].range           = 0;
+            pBindings[i].stride          = 0;
+            pBindings[i].flags.u32All    = 0;
         }
     }
 
@@ -3239,7 +3240,7 @@ void CmdBuffer::Draw(
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0);
+    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
 #endif
 
     {
@@ -3266,7 +3267,7 @@ void CmdBuffer::DrawIndexed(
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0);
+    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
 #endif
 
     {
@@ -3296,7 +3297,7 @@ void CmdBuffer::DrawIndirect(
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0);
+    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
 #endif
 
     Buffer* pBuffer = Buffer::ObjectFromHandle(buffer);
@@ -3354,7 +3355,7 @@ void CmdBuffer::DrawMeshTasks(
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0);
+    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
 #endif
 
     PalCmdDrawMeshTasks(x, y, z);
@@ -3377,7 +3378,7 @@ void CmdBuffer::DrawMeshTasksIndirect(
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0);
+    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
 #endif
 
     PalCmdDrawMeshTasksIndirect<useBufferCount>(buffer, offset, count, stride, countBuffer, countOffset);
@@ -3399,7 +3400,7 @@ void CmdBuffer::Dispatch(
     }
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pComputePipeline, Pal::PipelineBindPoint::Compute, x, y, z);
+    BindRayQueryConstants(m_allGpuState.pComputePipeline, Pal::PipelineBindPoint::Compute, x, y, z, nullptr, 0);
 #endif
 
     if (m_pDevice->GetRuntimeSettings().enableAlternatingThreadGroupOrder)
@@ -3429,7 +3430,8 @@ void CmdBuffer::DispatchOffset(
     }
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pComputePipeline, Pal::PipelineBindPoint::Compute, dim_x, dim_y, dim_z);
+    BindRayQueryConstants(
+        m_allGpuState.pComputePipeline, Pal::PipelineBindPoint::Compute, dim_x, dim_y, dim_z, nullptr, 0);
 #endif
 
     PalCmdDispatchOffset(base_x, base_y, base_z, dim_x, dim_y, dim_z);
@@ -3439,8 +3441,8 @@ void CmdBuffer::DispatchOffset(
 
 // =====================================================================================================================
 void CmdBuffer::DispatchIndirect(
-    VkBuffer     buffer,
-    VkDeviceSize offset)
+    VkBuffer        buffer,
+    VkDeviceSize    offset)
 {
     DbgBarrierPreCmd(DbgBarrierDispatchIndirect);
 
@@ -3452,7 +3454,13 @@ void CmdBuffer::DispatchIndirect(
     Buffer* pBuffer = Buffer::ObjectFromHandle(buffer);
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pComputePipeline, Pal::PipelineBindPoint::Compute, 0, 0, 0);
+    BindRayQueryConstants(m_allGpuState.pComputePipeline,
+                          Pal::PipelineBindPoint::Compute,
+                          0,
+                          0,
+                          0,
+                          pBuffer,
+                          offset);
 #endif
 
     PalCmdDispatchIndirect(pBuffer, offset);
@@ -10804,7 +10812,7 @@ void CmdBuffer::DrawIndirectByteCount(
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0);
+    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
 #endif
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
@@ -11459,6 +11467,47 @@ void CmdBuffer::TraceRaysIndirect(
 }
 
 // =====================================================================================================================
+// Sets a barrier from indirect_arg state to copy_source for rayquery copy arguments.
+void CmdBuffer::SyncIndirectCopy(
+    Pal::ICmdBuffer* pCmdBuffer)
+{
+    if (m_pDevice->GetRuntimeSettings().useAcquireReleaseInterface)
+    {
+        Pal::AcquireReleaseInfo acqRelInfo = {};
+        Pal::MemBarrier         memTransition = {};
+
+        memTransition.srcAccessMask = Pal::CoherIndirectArgs;
+        memTransition.dstAccessMask = Pal::CoherCopySrc | Pal::CoherIndirectArgs;
+        memTransition.srcStageMask  = Pal::PipelineStageCs;
+        memTransition.dstStageMask  = Pal::PipelineStageBlt;
+
+        acqRelInfo.pMemoryBarriers      = &memTransition;
+        acqRelInfo.memoryBarrierCount   = 1;
+        acqRelInfo.reason               = RgpBarrierInternalRayTracingSync;
+
+        pCmdBuffer->CmdReleaseThenAcquire(acqRelInfo);
+    }
+    else
+    {
+        Pal::BarrierTransition transition   = {};
+        transition.srcCacheMask             = Pal::CoherIndirectArgs;
+        transition.dstCacheMask             = Pal::CoherCopySrc | Pal::CoherIndirectArgs;
+
+        const Pal::HwPipePoint postBlt      = Pal::HwPipePreBlt;
+
+        Pal::BarrierInfo barrierInfo    = {};
+        barrierInfo.pipePointWaitCount  = 1;
+        barrierInfo.pPipePoints         = &postBlt;
+        barrierInfo.waitPoint           = Pal::HwPipeTop;
+        barrierInfo.transitionCount     = 1;
+        barrierInfo.pTransitions        = &transition;
+        barrierInfo.reason              = RgpBarrierInternalRayTracingSync;
+
+        pCmdBuffer->CmdBarrier(barrierInfo);
+    }
+}
+
+// =====================================================================================================================
 void CmdBuffer::TraceRaysIndirectPerDevice(
     const uint32_t                         deviceIdx,
     GpuRt::ExecuteIndirectArgType          indirectArgType,
@@ -11544,13 +11593,17 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
 
     GpuRt::InitExecuteIndirectUserData initUserData = {};
 
-    initUserData.constantsVa       = initConstantsVa;
-    initUserData.inputBufferVa     = indirectDeviceAddress;
-    initUserData.outputBufferVa    = pScratchMemory->GpuVirtAddr(deviceIdx);
-    initUserData.outputConstantsVa = constants.descriptorTable.dispatchRaysConstGpuVa;
+    initUserData.constantsVa            = initConstantsVa;
+    initUserData.inputBufferVa          = indirectDeviceAddress;
+    initUserData.outputBufferVa         = pScratchMemory->GpuVirtAddr(deviceIdx);
+    initUserData.outputConstantsVa      = constants.descriptorTable.dispatchRaysConstGpuVa;
+    initUserData.outputCounterMetaVa    = 0uLL;
 
     m_pDevice->RayTrace()->TraceIndirectDispatch(deviceIdx,
                                                  GpuRt::RtPipelineType::RayTracing,
+                                                 0,
+                                                 0,
+                                                 0,
                                                  pPipeline->GetShaderGroupCount() + 1,
                                                  pPipeline->GetApiHash(),
                                                  &raygenShaderBindingTable,
@@ -11709,7 +11762,9 @@ void CmdBuffer::BindRayQueryConstants(
     Pal::PipelineBindPoint bindPoint,
     uint32_t               width,
     uint32_t               height,
-    uint32_t               depth)
+    uint32_t               depth,
+    Buffer*                pIndirectBuffer,
+    VkDeviceSize           indirectOffset)
 {
     if ((pPipeline != nullptr) && pPipeline->HasRayTracing())
     {
@@ -11720,8 +11775,7 @@ void CmdBuffer::BindRayQueryConstants(
             const uint32_t deviceIdx = deviceGroup.Index();
 
             const bool asTrackingEnabled = VkDevice()->RayTrace()->AccelStructTrackerEnabled(deviceIdx);
-            const bool rtCountersEnabled = (VkDevice()->RayTrace()->TraceRayCounterMode(deviceIdx) !=
-                GpuRt::TraceRayCounterMode::TraceRayCounterDisable);
+            const bool rtCountersEnabled = VkDevice()->RayTrace()->RayHistoryTraceActive(deviceIdx);
 
             if (asTrackingEnabled || rtCountersEnabled)
             {
@@ -11748,24 +11802,28 @@ void CmdBuffer::BindRayQueryConstants(
                     // Ray history dumps for Graphics pipelines are not yet supported
                     if (bindPoint == Pal::PipelineBindPoint::Compute)
                     {
+                        const uint32_t* pOrigThreadgroupDims =
+                            static_cast<const ComputePipeline*>(pPipeline)->GetOrigThreadgroupDims();
+
                         constants.constData.profileMaxIterations = m_pDevice->RayTrace()->GetProfileMaxIterations();
                         constants.constData.profileRayFlags      = m_pDevice->RayTrace()->GetProfileRayFlags();
 
-                        if (width > 0)
-                        {
-                            const uint32_t* pOrigThreadgroupDims =
-                                static_cast<const ComputePipeline*>(pPipeline)->GetOrigThreadgroupDims();
+                        gpusize indirectBufferVa = (pIndirectBuffer != nullptr) ?
+                            pIndirectBuffer->GpuVirtAddr(deviceIdx) + indirectOffset :
+                            0;
 
-                            constants.constData.rayDispatchWidth  = width * pOrigThreadgroupDims[0];
+                        if (indirectBufferVa == 0)
+                        {
+                            constants.constData.rayDispatchWidth  = width  * pOrigThreadgroupDims[0];
                             constants.constData.rayDispatchHeight = height * pOrigThreadgroupDims[1];
-                            constants.constData.rayDispatchDepth  = depth * pOrigThreadgroupDims[2];
+                            constants.constData.rayDispatchDepth  = depth  * pOrigThreadgroupDims[2];
 
                             m_pDevice->RayTrace()->TraceDispatch(deviceIdx,
                                                                  PalCmdBuffer(deviceIdx),
                                                                  GpuRt::RtPipelineType::Compute,
-                                                                 width * pOrigThreadgroupDims[0],
+                                                                 width  * pOrigThreadgroupDims[0],
                                                                  height * pOrigThreadgroupDims[1],
-                                                                 depth * pOrigThreadgroupDims[2],
+                                                                 depth  * pOrigThreadgroupDims[2],
                                                                  1,
                                                                  pPipeline->GetApiHash(),
                                                                  nullptr,
@@ -11775,15 +11833,31 @@ void CmdBuffer::BindRayQueryConstants(
                         }
                         else
                         {
+                            uint64 counterMetadataGpuVa = 0uLL;
+
                             m_pDevice->RayTrace()->TraceIndirectDispatch(deviceIdx,
                                                                          GpuRt::RtPipelineType::Compute,
+                                                                         pOrigThreadgroupDims[0],
+                                                                         pOrigThreadgroupDims[1],
+                                                                         pOrigThreadgroupDims[2],
                                                                          1,
                                                                          pPipeline->GetApiHash(),
                                                                          nullptr,
                                                                          nullptr,
                                                                          nullptr,
-                                                                         nullptr,
+                                                                         &counterMetadataGpuVa,
                                                                          &constants);
+
+                            Pal::MemoryCopyRegion region = {};
+                            region.srcOffset = 0;
+                            region.copySize = sizeof(GpuRt::IndirectCounterMetadata) - sizeof(uint64);
+
+                            SyncIndirectCopy(PalCmdBuffer(deviceIdx));
+                            PalCmdBuffer(deviceIdx)->CmdCopyMemoryByGpuVa(
+                                indirectBufferVa,
+                                (counterMetadataGpuVa + offsetof(GpuRt::IndirectCounterMetadata, dispatchRayDimensionX)),
+                                1,
+                                &region);
                         }
                     }
                 }

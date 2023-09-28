@@ -133,6 +133,8 @@ struct PipelineMetadata
     uint32_t                   psOnlyPointCoordEnable;
     VbBindingInfo              vbInfo;
     PipelineInternalBufferInfo internalBufferInfo;
+    void*                      pFsOutputMetaData;
+    uint32_t                   fsOutputMetaDataSize;
 };
 
 // =====================================================================================================================
@@ -141,6 +143,7 @@ enum GraphicsLibraryType : uint32_t
 {
     GraphicsLibraryPreRaster,
     GraphicsLibraryFragment,
+    GraphicsLibraryColorExport,
     GraphicsLibraryCount
 };
 
@@ -166,6 +169,7 @@ struct GraphicsPipelineBinaryCreateInfo
     bool                                   linkTimeOptimization;
     Vkgc::BinaryData                       earlyElfPackage[GraphicsLibraryCount];
     Util::MetroHash::Hash                  earlyElfPackageHash[GraphicsLibraryCount];
+    Pal::IShaderLibrary*                   pShaderLibraries[GraphicsLibraryCount];
     uint64_t                               apiPsoHash;
     uint64_t                               libraryHash[GraphicsLibraryCount];
     FreeCompilerBinary                     freeCompilerBinary;

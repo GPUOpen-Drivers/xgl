@@ -129,6 +129,10 @@ macro(xgl_overrides_pal)
     set(PAL_BUILD_NAVI31 ${XGL_BUILD_NAVI31} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 #endif
 
+#if VKI_BUILD_NAVI32
+    set(PAL_BUILD_NAVI32 ${XGL_BUILD_NAVI32} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+#endif
+
 #if VKI_BUILD_NAVI33
     set(PAL_BUILD_NAVI33 ${XGL_BUILD_NAVI33} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 #endif
@@ -173,6 +177,10 @@ macro(xgl_overrides_vkgc)
 
 #if VKI_BUILD_NAVI31
     set(LLPC_BUILD_NAVI31 ${XGL_BUILD_NAVI31} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+#endif
+
+#if VKI_BUILD_NAVI32
+    set(LLPC_BUILD_NAVI32 ${XGL_BUILD_NAVI32} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 #endif
 
 #if VKI_BUILD_NAVI33

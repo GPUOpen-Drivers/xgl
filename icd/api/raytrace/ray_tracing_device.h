@@ -87,6 +87,9 @@ public:
 
     GpuRt::TraceRayCounterMode TraceRayCounterMode(uint32_t deviceIdx) const;
 
+    bool RayHistoryTraceActive(uint32_t deviceIdx) const
+        { return m_pGpuRtDevice[deviceIdx]->RayHistoryTraceActive(); }
+
     void TraceDispatch(
         uint32_t                               deviceIdx,
         Pal::ICmdBuffer*                       pPalCmdBuffer,
@@ -104,6 +107,9 @@ public:
     void TraceIndirectDispatch(
         uint32_t                               deviceIdx,
         GpuRt::RtPipelineType                  pipelineType,
+        uint32_t                               originalThreadGroupSizeX,
+        uint32_t                               originalThreadGroupSizeY,
+        uint32_t                               originalThreadGroupSizeZ,
         uint32_t                               shaderCount,
         uint64_t                               apiHash,
         const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
@@ -156,9 +162,7 @@ private:
 
     static Pal::Result ClientAccelStatsBuildDumpEvent(
         Pal::ICmdBuffer*                pPalCmdbuf,
-        const GpuRt::AccelStructInfo&   info,
-        Pal::IGpuMemory**               ppGpuMem,
-        uint64_t*                       pOffset);
+        GpuRt::AccelStructInfo*         pInfo);
 
     static Pal::Result ClientAcquireCmdContext(
         const GpuRt::DeviceInitInfo&    initInfo,

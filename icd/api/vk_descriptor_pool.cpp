@@ -468,12 +468,21 @@ VkResult DescriptorPool::FreeDescriptorSets(
             continue;
         }
 
-        // Free this set's GPU memory
-        DescriptorSet<numPalDevices>* pSet  = DescriptorSet<numPalDevices>::StateFromHandle(pDescriptorSets[i]);
-        m_gpuMemHeap.FreeSetGpuMem(pSet->AllocHandle());
+        DescriptorSet<numPalDevices>* pSet = DescriptorSet<numPalDevices>::StateFromHandle(pDescriptorSets[i]);
 
-        // Free this set's state
-        m_setHeap.FreeSetState<numPalDevices>(pDescriptorSets[i]);
+        // Check that this set is validly assigned
+        if (pSet->Layout() != nullptr)
+        {
+            // Free this set's GPU memory
+            m_gpuMemHeap.FreeSetGpuMem(pSet->AllocHandle());
+
+            // Free this set's state
+            m_setHeap.FreeSetState<numPalDevices>(pDescriptorSets[i]);
+        }
+        else
+        {
+            VK_NEVER_CALLED();
+        }
     }
 
     return VK_SUCCESS;
@@ -1263,10 +1272,8 @@ void DescriptorSetHeap::FreeSetState(
 
         VK_ASSERT(heapIndex < m_maxSets);
 
-#if DEBUG
-        // Clear the descriptor set state for debugging purposes
+        // Clear the descriptor set state
         pSet->Reset();
-#endif
 
         m_pFreeIndexStack[m_freeIndexStackCount++] = heapIndex;
     }
@@ -1284,7 +1291,7 @@ void DescriptorSetHeap::Reset()
     m_freeIndexStackCount = 0;
 
 #if DEBUG
-    // Clear the descriptor set states for debugging purposes
+    // Clear all the descriptor set states only when debugging (as it may take a while to iterate through all)
     for (uint32_t index = 0; index < m_maxSets; ++index)
     {
         VkDescriptorSet setHandle = DescriptorSetHandleFromIndex<numPalDevices>(index);

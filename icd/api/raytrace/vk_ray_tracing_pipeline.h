@@ -317,8 +317,8 @@ protected:
         Util::MetroHash::Hash*                   pElfHash,
         uint64_t*                                pApiHash);
 
-    // Return true if the shader id was found and mapped to a gpu address.
-    static bool MapShaderIdToGpuVa(
+    // Return true if the shader id was found and mapped to a shader handle with gpu address.
+    static bool MapShaderIdToShaderHandle(
         Pal::ShaderLibraryFunctionInfo*   pIndirectFuncList,
         uint32_t*                         pShaderNameMap,
         uint32_t                          shaderPropsCount,

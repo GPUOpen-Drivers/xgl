@@ -707,6 +707,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.forceEnableDcc = ForceDccDefault;
             }
+
+            m_settings.ac01WaNotNeeded = true;
+        }
+
+        if (appProfile == AppProfile::WarHammerIII)
+        {
+            m_settings.ac01WaNotNeeded = true;
         }
 
         if (appProfile == AppProfile::RainbowSixSiege)
@@ -862,6 +869,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 }
 #endif
             }
+
+            m_settings.ac01WaNotNeeded = true;
         }
 
         if (appProfile == AppProfile::GhostReconBreakpoint)
@@ -940,6 +949,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
 #if VKI_BUILD_GFX11
             if ((pInfo->revision != Pal::AsicRevision::Navi31)
+#if VKI_BUILD_NAVI32
+                && (pInfo->revision != Pal::AsicRevision::Navi32)
+#endif
                 )
 #endif
             {
@@ -1044,6 +1056,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 // Navi31 Mall and Tiling Settings
                 if ((pInfo->revision == Pal::AsicRevision::Navi31)
+#if VKI_BUILD_NAVI32
+                    || (pInfo->revision == Pal::AsicRevision::Navi32)
+#endif
                     )
                 {
                     // Mall no alloc settings give a ~1% gain
@@ -1090,6 +1105,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::Gfx9AvoidCpuMemoryCoher;
             }
+            const char *option = "-use-register-field-format=0";
+            Util::Strncpy(&m_settings.llpcOptions[0], option, strlen(option) + 1);
         }
 
         if (appProfile == AppProfile::WarThunder)
@@ -1282,6 +1299,17 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.supportMutableDescriptors = false;
         }
 
+        if (appProfile == AppProfile::Yuzu)
+        {
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage    |
+                                             ForceDccFor3DShaderStorage    |
+                                             ForceDccFor32BppShaderStorage |
+                                             ForceDccFor64BppShaderStorage);
+            }
+        }
+
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
     }
 
@@ -1370,6 +1398,12 @@ VkResult VulkanSettingsLoader::ProcessSettings(
         {
             m_settings.enableEarlyCompile = true;
             m_settings.pipelineLayoutMode = PipelineLayoutMode::PipelineLayoutAngle;
+        }
+
+        if (m_settings.ac01WaNotNeeded)
+        {
+            Pal::PalPublicSettings* pPalSettings = m_pDevice->GetPublicSettings();
+            pPalSettings->ac01WaNotNeeded = true;
         }
 
         DumpAppProfileChanges(*pAppProfile);

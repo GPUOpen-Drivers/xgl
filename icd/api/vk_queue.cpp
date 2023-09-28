@@ -1262,7 +1262,6 @@ VkResult Queue::Submit(
             palSubmitInfo.pGpuMemoryRefs       = nullptr;
 
             const uint32_t deviceCount = (pDeviceGroupInfo == nullptr) ? 1 : m_pDevice->NumPalDevices();
-
             for (uint32_t deviceIdx = 0; (deviceIdx < deviceCount) && (result == VK_SUCCESS); deviceIdx++)
             {
                 Pal::Result palResult = Pal::Result::Success;
@@ -2528,11 +2527,15 @@ bool Queue::BuildPostProcessCommands(
     {
         Pal::ICmdBuffer* pCmdBuf = pCmdBufState->pCmdBuf;
 
-        hasWork = pSwapChain->BuildPostProcessingCommands(pCmdBuf, pPresentInfo, m_pDevice);
+        if (pSwapChain != nullptr)
+        {
+            hasWork = pSwapChain->BuildPostProcessingCommands(pCmdBuf, pPresentInfo, m_pDevice);
+
+        }
 
         Pal::CmdPostProcessFrameInfo frameInfo = {};
 
-        if (pPresentInfo != nullptr)
+        if ((pPresentInfo != nullptr) && (pSwapChain != nullptr))
         {
             const DisplayableSurfaceInfo& displayableInfo = pSwapChain->GetProperties().displayableInfo;
 
