@@ -213,18 +213,69 @@ Util::Vector<Pal::Range, 16, Util::GenericAllocator> RangesOfOnesInBitMask(
 // Populate a vector with PAL clear regions converted from Vulkan clear rects.
 // If multiview is enabled layer ranges are overridden according to viewMask.
 // Returns Pal::Result::Success if completed successfully.
-template <typename PalClearRegionVect>
-Pal::Result CreateClearRegions (
-    const uint32_t              rectCount,
-    const VkClearRect* const    pRects,
-    const uint32_t              viewMask,
-    const uint32_t              zOffset,
-    PalClearRegionVect* const   pOutClearRegions)
+template<uint32 N>
+Pal::Result CreateClearBoxes(
+    const uint32_t                                      rectCount,
+    const VkClearRect* const                            pRects,
+    const uint32_t                                      viewMask,
+    const uint32_t                                      zOffset,
+    const bool                                          is3dImage,
+    Util::Vector<Pal::Box, N, VirtualStackFrame>* const pOutClearRegions)
 {
-    using ClearRegionType = typename std::remove_pointer<decltype(pOutClearRegions->Data())>::type;
+    VK_ASSERT(pOutClearRegions != nullptr);
 
-    static_assert(std::is_same<ClearRegionType, Pal::ClearBoundTargetRegion>::value ||
-                  std::is_same<ClearRegionType, Pal::Box>::value, "Wrong element type");
+    Pal::Result palResult = Pal::Result::Success;
+
+    pOutClearRegions->Clear();
+
+    // Note that it's only legal to override the default Z range in a Box if the image is 3D. If the image is not 3D
+    // then any layer overrides must be applied to the clear's subresource range.
+    if ((viewMask > 0) && is3dImage)
+    {
+        const auto layerRanges = RangesOfOnesInBitMask(viewMask);
+
+        palResult = pOutClearRegions->Reserve(rectCount * layerRanges.NumElements());
+
+        if (palResult == Pal::Result::Success)
+        {
+            for (auto layerRangeIt = layerRanges.Begin(); layerRangeIt.IsValid(); layerRangeIt.Next())
+            {
+                for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
+                {
+                    pOutClearRegions->PushBack(VkToPalClearBox(pRects[rectIndex], zOffset, is3dImage));
+                    OverrideLayerRanges(pOutClearRegions->Back(), layerRangeIt.Get());
+                }
+            }
+        }
+    }
+    else
+    {
+        palResult = pOutClearRegions->Reserve(rectCount);
+
+        if (palResult == Pal::Result::Success)
+        {
+            for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
+            {
+                pOutClearRegions->PushBack(VkToPalClearBox(pRects[rectIndex], zOffset, is3dImage));
+            }
+        }
+    }
+
+    return palResult;
+}
+
+// =====================================================================================================================
+// Populate a vector with PAL clear boxes converted from Vulkan clear rects.
+// If multiview is enabled layer ranges are overridden according to viewMask.
+// Returns Pal::Result::Success if completed successfully.
+template<uint32 N>
+Pal::Result CreateClearRegions(
+    const uint32_t                                                         rectCount,
+    const VkClearRect* const                                               pRects,
+    const uint32_t                                                         viewMask,
+    const uint32_t                                                         zOffset,
+    Util::Vector<Pal::ClearBoundTargetRegion, N, VirtualStackFrame>* const pOutClearRegions)
+{
     VK_ASSERT(pOutClearRegions != nullptr);
 
     Pal::Result palResult = Pal::Result::Success;
@@ -243,7 +294,7 @@ Pal::Result CreateClearRegions (
             {
                 for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
                 {
-                    pOutClearRegions->PushBack(VkToPalClearRegion<ClearRegionType>(pRects[rectIndex], zOffset));
+                    pOutClearRegions->PushBack(VkToPalClearRegion(pRects[rectIndex], zOffset));
                     OverrideLayerRanges(pOutClearRegions->Back(), layerRangeIt.Get());
                 }
             }
@@ -257,7 +308,7 @@ Pal::Result CreateClearRegions (
         {
             for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
             {
-                pOutClearRegions->PushBack(VkToPalClearRegion<ClearRegionType>(pRects[rectIndex], zOffset));
+                pOutClearRegions->PushBack(VkToPalClearRegion(pRects[rectIndex], zOffset));
             }
         }
     }
@@ -1207,234 +1258,6 @@ void CmdBuffer::PalCmdDispatchIndirect(
     }
     while (deviceGroup.IterateNext());
 }
-
-// =====================================================================================================================
-void CmdBuffer::PalCmdCopyBuffer(
-    Buffer*                pSrcBuffer,
-    Buffer*                pDstBuffer,
-    uint32_t               regionCount,
-    Pal::MemoryCopyRegion* pRegions)
-{
-    if (m_pDevice->IsMultiGpu() == false)
-    {
-        Pal::IGpuMemory* const pSrcMemory = pSrcBuffer->PalMemory(DefaultDeviceIndex);
-        Pal::IGpuMemory* const pDstMemory = pDstBuffer->PalMemory(DefaultDeviceIndex);
-        VK_ASSERT(pSrcMemory != nullptr);
-        VK_ASSERT(pDstMemory != nullptr);
-
-        PalCmdBuffer(DefaultDeviceIndex)->CmdCopyMemory(
-            *pSrcMemory,
-            *pDstMemory,
-            regionCount,
-            pRegions);
-    }
-    else
-    {
-        utils::IterateMask deviceGroup(m_curDeviceMask);
-        do
-        {
-            const uint32_t deviceIdx = deviceGroup.Index();
-
-            PalCmdBuffer(deviceIdx)->CmdCopyMemory(
-                *pSrcBuffer->PalMemory(deviceIdx),
-                *pDstBuffer->PalMemory(deviceIdx),
-                regionCount,
-                pRegions);
-        }
-        while (deviceGroup.IterateNext());
-    }
-}
-
-// =====================================================================================================================
-void CmdBuffer::PalCmdUpdateBuffer(
-    Buffer*         pDestBuffer,
-    Pal::gpusize    offset,
-    Pal::gpusize    size,
-    const uint32_t* pData)
-{
-    utils::IterateMask deviceGroup(m_curDeviceMask);
-    do
-    {
-        const uint32_t deviceIdx = deviceGroup.Index();
-
-        PalCmdBuffer(deviceIdx)->CmdUpdateMemory(*pDestBuffer->PalMemory(deviceIdx), offset, size, pData);
-    }
-    while (deviceGroup.IterateNext());
-}
-
-// =====================================================================================================================
-void CmdBuffer::PalCmdFillBuffer(
-    Buffer*         pDestBuffer,
-    Pal::gpusize    offset,
-    Pal::gpusize    size,
-    uint32_t        data)
-{
-    utils::IterateMask deviceGroup(m_curDeviceMask);
-    do
-    {
-        const uint32_t deviceIdx = deviceGroup.Index();
-
-        PalCmdBuffer(deviceIdx)->CmdFillMemory(*pDestBuffer->PalMemory(deviceIdx), offset, size, data);
-    }
-    while (deviceGroup.IterateNext());
-}
-
-// =====================================================================================================================
-void CmdBuffer::PalCmdCopyImage(
-    const Image* const    pSrcImage,
-    VkImageLayout         srcImageLayout,
-    const Image* const    pDstImage,
-    VkImageLayout         destImageLayout,
-    uint32_t              regionCount,
-    Pal::ImageCopyRegion* pRegions)
-{
-    if ((pSrcImage->GetImageSamples() == pDstImage->GetImageSamples()) &&
-        (pSrcImage->GetImageSamples() > 1) &&
-        (m_palQueueType == Pal::QueueType::QueueTypeDma))
-    {
-        SwitchToBackupCmdBuffer();
-    }
-
-    // Convert src/dest VkImageLayouts to PAL types here because we may have just switched to backup command buffer.
-    Pal::ImageLayout palSrcImageLayout = pSrcImage->GetBarrierPolicy().GetTransferLayout(
-        srcImageLayout, GetQueueFamilyIndex());
-    Pal::ImageLayout palDstImageLayout = pDstImage->GetBarrierPolicy().GetTransferLayout(
-        destImageLayout, GetQueueFamilyIndex());
-
-    if (m_pDevice->IsMultiGpu() == false)
-    {
-        PalCmdBuffer(DefaultDeviceIndex)->CmdCopyImage(
-            *pSrcImage->PalImage(DefaultDeviceIndex),
-            palSrcImageLayout,
-            *pDstImage->PalImage(DefaultDeviceIndex),
-            palDstImageLayout,
-            regionCount,
-            pRegions,
-            nullptr,
-            0);
-    }
-    else
-    {
-        utils::IterateMask deviceGroup(m_curDeviceMask);
-        do
-        {
-            const uint32_t deviceIdx = deviceGroup.Index();
-
-            PalCmdBuffer(deviceIdx)->CmdCopyImage(
-                *pSrcImage->PalImage(deviceIdx),
-                palSrcImageLayout,
-                *pDstImage->PalImage(deviceIdx),
-                palDstImageLayout,
-                regionCount,
-                pRegions,
-                nullptr,
-                0);
-        }
-        while (deviceGroup.IterateNext());
-    }
-}
-
-// =====================================================================================================================
-void CmdBuffer::PalCmdScaledCopyImage(
-    const Image* const   pSrcImage,
-    const Image* const   pDstImage,
-    Pal::ScaledCopyInfo& copyInfo)
-{
-    if (m_pDevice->IsMultiGpu() == false)
-    {
-        copyInfo.pSrcImage = pSrcImage->PalImage(DefaultDeviceIndex);
-        copyInfo.pDstImage = pDstImage->PalImage(DefaultDeviceIndex);
-
-        // This will do a scaled blit
-        PalCmdBuffer(DefaultDeviceIndex)->CmdScaledCopyImage(copyInfo);
-    }
-    else
-    {
-        utils::IterateMask deviceGroup(m_curDeviceMask);
-        do
-        {
-            const uint32_t deviceIdx = deviceGroup.Index();
-
-            copyInfo.pSrcImage = pSrcImage->PalImage(deviceIdx);
-            copyInfo.pDstImage = pDstImage->PalImage(deviceIdx);
-
-            // This will do a scaled blit
-            PalCmdBuffer(deviceIdx)->CmdScaledCopyImage(copyInfo);
-        }
-        while (deviceGroup.IterateNext());
-    }
-}
-
-// =====================================================================================================================
-void CmdBuffer::PalCmdCopyMemoryToImage(
-    const Buffer*               pSrcBuffer,
-    const Image*                pDstImage,
-    Pal::ImageLayout            layout,
-    uint32_t                    regionCount,
-    Pal::MemoryImageCopyRegion* pRegions)
-{
-    if (m_pDevice->IsMultiGpu() == false)
-    {
-        PalCmdBuffer(DefaultDeviceIndex)->CmdCopyMemoryToImage(
-            *pSrcBuffer->PalMemory(DefaultDeviceIndex),
-            *pDstImage->PalImage(DefaultDeviceIndex),
-            layout,
-            regionCount,
-            pRegions);
-    }
-    else
-    {
-        utils::IterateMask deviceGroup(m_curDeviceMask);
-        do
-        {
-            const uint32_t deviceIdx = deviceGroup.Index();
-
-            PalCmdBuffer(deviceIdx)->CmdCopyMemoryToImage(
-                *pSrcBuffer->PalMemory(deviceIdx),
-                *pDstImage->PalImage(deviceIdx),
-                layout,
-                regionCount,
-                pRegions);
-        }
-        while (deviceGroup.IterateNext());
-    }
-}
-
-// =====================================================================================================================
-void CmdBuffer::PalCmdCopyImageToMemory(
-    const Image*                pSrcImage,
-    const Buffer*               pDstBuffer,
-    Pal::ImageLayout            layout,
-    uint32_t                    regionCount,
-    Pal::MemoryImageCopyRegion* pRegions)
-{
-    if (m_pDevice->IsMultiGpu() == false)
-    {
-        PalCmdBuffer(DefaultDeviceIndex)->CmdCopyImageToMemory(
-            *pSrcImage->PalImage(DefaultDeviceIndex),
-            layout,
-            *pDstBuffer->PalMemory(DefaultDeviceIndex),
-            regionCount,
-            pRegions);
-    }
-    else
-    {
-        utils::IterateMask deviceGroup(m_curDeviceMask);
-        do
-        {
-            const uint32_t deviceIdx = deviceGroup.Index();
-
-            PalCmdBuffer(deviceIdx)->CmdCopyImageToMemory(
-                *pSrcImage->PalImage(deviceIdx),
-                layout,
-                *pDstBuffer->PalMemory(deviceIdx),
-                regionCount,
-                pRegions);
-        }
-        while (deviceGroup.IterateNext());
-    }
-}
-
 // =====================================================================================================================
 // Begin Vulkan command buffer
 VkResult CmdBuffer::Begin(
@@ -1925,7 +1748,7 @@ void CmdBuffer::ResetPipelineState()
         pPerGpuState->viewport.horzDiscardRatio = 1.0f;
         pPerGpuState->viewport.vertDiscardRatio = 1.0f;
         pPerGpuState->viewport.depthRange       = Pal::DepthRange::ZeroToOne;
-        pPerGpuState->maxPipelineStackSize      = 0;
+        pPerGpuState->maxPipelineStackSizes     = {};
 
         deviceIdx++;
     }
@@ -3469,402 +3292,6 @@ void CmdBuffer::DispatchIndirect(
 }
 
 // =====================================================================================================================
-template<typename BufferCopyType>
-void CmdBuffer::CopyBuffer(
-    VkBuffer                                    srcBuffer,
-    VkBuffer                                    destBuffer,
-    uint32_t                                    regionCount,
-    const BufferCopyType*                       pRegions)
-{
-    DbgBarrierPreCmd(DbgBarrierCopyBuffer);
-
-    PalCmdSuspendPredication(true);
-
-    VirtualStackFrame virtStackFrame(m_pStackAllocator);
-
-    const auto maxRegions  = EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions));
-    auto       regionBatch = Util::Min(regionCount, maxRegions);
-
-    // Allocate space to store memory copy regions
-    Pal::MemoryCopyRegion* pPalRegions = virtStackFrame.AllocArray<Pal::MemoryCopyRegion>(regionBatch);
-
-    if (pPalRegions != nullptr)
-    {
-        Buffer* pSrcBuffer = Buffer::ObjectFromHandle(srcBuffer);
-        Buffer* pDstBuffer = Buffer::ObjectFromHandle(destBuffer);
-
-        for (uint32_t regionIdx = 0; regionIdx < regionCount; regionIdx += regionBatch)
-        {
-            regionBatch = Util::Min(regionCount - regionIdx, maxRegions);
-
-            for (uint32_t i = 0; i < regionBatch; ++i)
-            {
-                pPalRegions[i].srcOffset    = pSrcBuffer->MemOffset() + pRegions[regionIdx + i].srcOffset;
-                pPalRegions[i].dstOffset    = pDstBuffer->MemOffset() + pRegions[regionIdx + i].dstOffset;
-                pPalRegions[i].copySize     = pRegions[regionIdx + i].size;
-            }
-
-            PalCmdCopyBuffer(pSrcBuffer, pDstBuffer, regionBatch, pPalRegions);
-        }
-
-        virtStackFrame.FreeArray(pPalRegions);
-    }
-    else
-    {
-        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-
-    PalCmdSuspendPredication(false);
-
-    DbgBarrierPostCmd(DbgBarrierCopyBuffer);
-}
-
-// =====================================================================================================================
-template<typename ImageCopyType>
-void CmdBuffer::CopyImage(
-    VkImage              srcImage,
-    VkImageLayout        srcImageLayout,
-    VkImage              destImage,
-    VkImageLayout        destImageLayout,
-    uint32_t             regionCount,
-    const ImageCopyType* pRegions)
-{
-    DbgBarrierPreCmd(DbgBarrierCopyImage);
-
-    PalCmdSuspendPredication(true);
-
-    VirtualStackFrame virtStackFrame(m_pStackAllocator);
-
-    const auto maxRegions  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions)), MaxPalAspectsPerMask);
-    auto       regionBatch = Util::Min(regionCount * MaxPalAspectsPerMask, maxRegions);
-
-    Pal::ImageCopyRegion* pPalRegions =
-        virtStackFrame.AllocArray<Pal::ImageCopyRegion>(regionBatch);
-
-    if (pPalRegions != nullptr)
-    {
-        const Image* const pSrcImage    = Image::ObjectFromHandle(srcImage);
-        const Image* const pDstImage    = Image::ObjectFromHandle(destImage);
-
-        const Pal::SwizzledFormat srcFormat = VkToPalFormat(pSrcImage->GetFormat(), m_pDevice->GetRuntimeSettings());
-        const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat(), m_pDevice->GetRuntimeSettings());
-
-        for (uint32_t regionIdx = 0; regionIdx < regionCount;)
-        {
-            uint32_t palRegionCount = 0;
-
-            while ((regionIdx < regionCount) &&
-                   (palRegionCount <= (regionBatch - MaxPalAspectsPerMask)))
-            {
-                VkToPalImageCopyRegion(pRegions[regionIdx], srcFormat.format,
-                    pSrcImage->GetArraySize(), dstFormat.format, pDstImage->GetArraySize(), pPalRegions,
-                    &palRegionCount);
-
-                ++regionIdx;
-            }
-
-            PalCmdCopyImage(pSrcImage, srcImageLayout, pDstImage, destImageLayout, palRegionCount, pPalRegions);
-        }
-
-        virtStackFrame.FreeArray(pPalRegions);
-    }
-    else
-    {
-        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-
-    PalCmdSuspendPredication(false);
-
-    DbgBarrierPostCmd(DbgBarrierCopyImage);
-}
-
-// =====================================================================================================================
-template<typename ImageBlitType>
-void CmdBuffer::BlitImage(
-    VkImage              srcImage,
-    VkImageLayout        srcImageLayout,
-    VkImage              destImage,
-    VkImageLayout        destImageLayout,
-    uint32_t             regionCount,
-    const ImageBlitType* pRegions,
-    VkFilter             filter)
-{
-    DbgBarrierPreCmd(DbgBarrierCopyImage);
-
-    PalCmdSuspendPredication(true);
-
-    VirtualStackFrame virtStackFrame(m_pStackAllocator);
-
-    const auto maxRegions  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions)), MaxPalAspectsPerMask);
-    auto       regionBatch = Util::Min(regionCount * MaxPalAspectsPerMask, maxRegions);
-
-    // Allocate space to store scaled image copy regions (we need a separate region per PAL aspect)
-    Pal::ImageScaledCopyRegion* pPalRegions =
-        virtStackFrame.AllocArray<Pal::ImageScaledCopyRegion>(regionBatch);
-
-    if (pPalRegions != nullptr)
-    {
-        const Image* const pSrcImage    = Image::ObjectFromHandle(srcImage);
-        const Image* const pDstImage    = Image::ObjectFromHandle(destImage);
-
-        const Pal::SwizzledFormat srcFormat = VkToPalFormat(pSrcImage->GetFormat(), m_pDevice->GetRuntimeSettings());
-        const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat(), m_pDevice->GetRuntimeSettings());
-
-        Pal::ScaledCopyInfo palCopyInfo = {};
-
-        palCopyInfo.srcImageLayout = pSrcImage->GetBarrierPolicy().GetTransferLayout(
-            srcImageLayout, GetQueueFamilyIndex());
-        palCopyInfo.dstImageLayout = pDstImage->GetBarrierPolicy().GetTransferLayout(
-            destImageLayout, GetQueueFamilyIndex());
-
-        // Maps blit filters to their PAL equivalent
-        palCopyInfo.filter   = VkToPalTexFilter(VK_FALSE, filter, filter, VK_SAMPLER_MIPMAP_MODE_NEAREST);
-        palCopyInfo.rotation = Pal::ImageRotation::Ccw0;
-
-        palCopyInfo.pRegions        = pPalRegions;
-        palCopyInfo.flags.dstAsSrgb = pDstImage->TreatAsSrgb();
-
-        for (uint32_t regionIdx = 0; regionIdx < regionCount;)
-        {
-            palCopyInfo.regionCount = 0;
-
-            // Attempt a lightweight copy image instead of the requested scaled blit.
-            const ImageBlitType& region    = pRegions[regionIdx];
-            const VkExtent3D     srcExtent =
-            {
-                static_cast<uint32_t>(region.srcOffsets[1].x - region.srcOffsets[0].x),
-                static_cast<uint32_t>(region.srcOffsets[1].y - region.srcOffsets[0].y),
-                static_cast<uint32_t>(region.srcOffsets[1].z - region.srcOffsets[0].z)
-            };
-
-            if ((pSrcImage->GetFormat() == pDstImage->GetFormat()) &&
-                (srcExtent.width  == static_cast<uint32_t>(region.dstOffsets[1].x - region.dstOffsets[0].x)) &&
-                (srcExtent.height == static_cast<uint32_t>(region.dstOffsets[1].y - region.dstOffsets[0].y)) &&
-                (srcExtent.depth  == static_cast<uint32_t>(region.dstOffsets[1].z - region.dstOffsets[0].z)))
-            {
-                const VkImageCopy imageCopy =
-                {
-                    region.srcSubresource,
-                    region.srcOffsets[0],
-                    region.dstSubresource,
-                    region.dstOffsets[0],
-                    srcExtent
-                };
-
-                Pal::ImageCopyRegion palRegions[MaxPalAspectsPerMask];
-                uint32_t             palRegionCount = 0;
-
-                VkToPalImageCopyRegion(imageCopy, srcFormat.format, pSrcImage->GetArraySize(), dstFormat.format,
-                    pDstImage->GetArraySize(), palRegions, &palRegionCount);
-
-                PalCmdCopyImage(pSrcImage, srcImageLayout, pDstImage, destImageLayout,
-                    palRegionCount, palRegions);
-
-                ++regionIdx;
-            }
-            else
-            {
-                while ((regionIdx < regionCount) &&
-                       (palCopyInfo.regionCount <= (regionBatch - MaxPalAspectsPerMask)))
-                {
-                    VkToPalImageScaledCopyRegion(pRegions[regionIdx], srcFormat.format, pSrcImage->GetArraySize(),
-                        dstFormat.format, pPalRegions, &palCopyInfo.regionCount);
-
-                    ++regionIdx;
-                }
-
-                // This will do a scaled blit
-                PalCmdScaledCopyImage(pSrcImage, pDstImage, palCopyInfo);
-            }
-        }
-
-        virtStackFrame.FreeArray(pPalRegions);
-    }
-    else
-    {
-        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-
-    PalCmdSuspendPredication(false);
-
-    DbgBarrierPostCmd(DbgBarrierCopyImage);
-}
-
-// =====================================================================================================================
-// Copies from a buffer of linear data to a region of an image (vkCopyBufferToImage)
-template<typename BufferImageCopyType>
-void CmdBuffer::CopyBufferToImage(
-    VkBuffer                   srcBuffer,
-    VkImage                    destImage,
-    VkImageLayout              destImageLayout,
-    uint32_t                   regionCount,
-    const BufferImageCopyType* pRegions)
-{
-    DbgBarrierPreCmd(DbgBarrierCopyBuffer | DbgBarrierCopyImage);
-
-    PalCmdSuspendPredication(true);
-
-    VirtualStackFrame virtStackFrame(m_pStackAllocator);
-
-    const auto maxRegions  = EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions));
-    auto       regionBatch = Util::Min(regionCount, maxRegions);
-
-    // Allocate space to store memory image copy regions
-    Pal::MemoryImageCopyRegion* pPalRegions = virtStackFrame.AllocArray<Pal::MemoryImageCopyRegion>(regionBatch);
-
-    if (pPalRegions != nullptr)
-    {
-        const Buffer* pSrcBuffer         = Buffer::ObjectFromHandle(srcBuffer);
-        const Pal::gpusize srcMemOffset  = pSrcBuffer->MemOffset();
-        const Image* pDstImage           = Image::ObjectFromHandle(destImage);
-
-        const Pal::ImageLayout layout = pDstImage->GetBarrierPolicy().GetTransferLayout(
-            destImageLayout, GetQueueFamilyIndex());
-
-        for (uint32_t regionIdx = 0; regionIdx < regionCount; regionIdx += regionBatch)
-        {
-            regionBatch = Util::Min(regionCount - regionIdx, maxRegions);
-
-            for (uint32_t i = 0; i < regionBatch; ++i)
-            {
-                // For image-buffer copies we have to override the format for depth-only and stencil-only copies
-                Pal::SwizzledFormat dstFormat = VkToPalFormat(
-                    Formats::GetAspectFormat(
-                    pDstImage->GetFormat(),
-                    pRegions[regionIdx + i].imageSubresource.aspectMask),
-                    m_pDevice->GetRuntimeSettings());
-
-                uint32 plane =  VkToPalImagePlaneSingle(pDstImage->GetFormat(),
-                    pRegions[regionIdx + i].imageSubresource.aspectMask, m_pDevice->GetRuntimeSettings());
-
-                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], dstFormat.format, plane,
-                    pDstImage->GetArraySize(), srcMemOffset);
-            }
-
-            PalCmdCopyMemoryToImage(pSrcBuffer, pDstImage, layout, regionBatch, pPalRegions);
-        }
-
-        virtStackFrame.FreeArray(pPalRegions);
-    }
-    else
-    {
-        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-
-    PalCmdSuspendPredication(false);
-
-    DbgBarrierPostCmd(DbgBarrierCopyBuffer | DbgBarrierCopyImage);
-}
-
-// =====================================================================================================================
-// Copies and detiles a region of an image to a buffer (vkCopyImageToBuffer)
-template<typename BufferImageCopyType>
-void CmdBuffer::CopyImageToBuffer(
-    VkImage                    srcImage,
-    VkImageLayout              srcImageLayout,
-    VkBuffer                   destBuffer,
-    uint32_t                   regionCount,
-    const BufferImageCopyType* pRegions)
-{
-    DbgBarrierPreCmd(DbgBarrierCopyBuffer | DbgBarrierCopyImage);
-
-    PalCmdSuspendPredication(true);
-
-    VirtualStackFrame virtStackFrame(m_pStackAllocator);
-
-    const auto maxRegions  = EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions));
-    auto       regionBatch = Util::Min(regionCount, maxRegions);
-
-    // Allocate space to store memory image copy regions
-    Pal::MemoryImageCopyRegion* pPalRegions = virtStackFrame.AllocArray<Pal::MemoryImageCopyRegion>(regionBatch);
-
-    if (pPalRegions != nullptr)
-    {
-        const Image* const pSrcImage      = Image::ObjectFromHandle(srcImage);
-        Buffer* pDstBuffer                = Buffer::ObjectFromHandle(destBuffer);
-        const Pal::gpusize dstMemOffset   = pDstBuffer->MemOffset();
-
-        const Pal::ImageLayout layout = pSrcImage->GetBarrierPolicy().GetTransferLayout(
-            srcImageLayout, GetQueueFamilyIndex());
-
-        for (uint32_t regionIdx = 0; regionIdx < regionCount; regionIdx += regionBatch)
-        {
-            regionBatch = Util::Min(regionCount - regionIdx, maxRegions);
-
-            for (uint32_t i = 0; i < regionBatch; ++i)
-            {
-                // For image-buffer copies we have to override the format for depth-only and stencil-only copies
-                Pal::SwizzledFormat srcFormat = VkToPalFormat(Formats::GetAspectFormat(pSrcImage->GetFormat(),
-                    pRegions[regionIdx + i].imageSubresource.aspectMask), m_pDevice->GetRuntimeSettings());
-
-                uint32 plane = VkToPalImagePlaneSingle(pSrcImage->GetFormat(),
-                    pRegions[regionIdx + i].imageSubresource.aspectMask, m_pDevice->GetRuntimeSettings());
-
-                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], srcFormat.format, plane,
-                    pSrcImage->GetArraySize(), dstMemOffset);
-            }
-
-            PalCmdCopyImageToMemory(pSrcImage, pDstBuffer, layout, regionBatch, pPalRegions);
-        }
-
-        virtStackFrame.FreeArray(pPalRegions);
-    }
-    else
-    {
-        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-
-    PalCmdSuspendPredication(false);
-
-    DbgBarrierPostCmd(DbgBarrierCopyBuffer | DbgBarrierCopyImage);
-}
-
-// =====================================================================================================================
-void CmdBuffer::UpdateBuffer(
-    VkBuffer        destBuffer,
-    VkDeviceSize    destOffset,
-    VkDeviceSize    dataSize,
-    const uint32_t* pData)
-{
-    DbgBarrierPreCmd(DbgBarrierCopyBuffer);
-
-    PalCmdSuspendPredication(true);
-
-    Buffer* pDestBuffer = Buffer::ObjectFromHandle(destBuffer);
-
-    PalCmdUpdateBuffer(pDestBuffer, pDestBuffer->MemOffset() + destOffset, dataSize, pData);
-
-    PalCmdSuspendPredication(false);
-
-    DbgBarrierPostCmd(DbgBarrierCopyBuffer);
-}
-
-// =====================================================================================================================
-void CmdBuffer::FillBuffer(
-    VkBuffer                                    destBuffer,
-    VkDeviceSize                                destOffset,
-    VkDeviceSize                                fillSize,
-    uint32_t                                    data)
-{
-    DbgBarrierPreCmd(DbgBarrierCopyBuffer);
-
-    PalCmdSuspendPredication(true);
-
-    Buffer* pDestBuffer = Buffer::ObjectFromHandle(destBuffer);
-
-    if (fillSize == VK_WHOLE_SIZE)
-    {
-        fillSize = Util::RoundDownToMultiple(pDestBuffer->GetSize() - destOffset, static_cast<VkDeviceSize>(sizeof(data) ) );
-    }
-
-    PalCmdFillBuffer(pDestBuffer, pDestBuffer->MemOffset() + destOffset, fillSize, data);
-
-    PalCmdSuspendPredication(false);
-
-    DbgBarrierPostCmd(DbgBarrierCopyBuffer);
-}
-
-// =====================================================================================================================
 // Performs a color clear (vkCmdClearColorImage)
 void CmdBuffer::ClearColorImage(
     VkImage                        image,
@@ -4137,11 +3564,12 @@ void CmdBuffer::ClearDynamicRenderingImages(
 
                         rectBatch = Util::Min(rectCount - rectIdx, maxRects);
 
-                        CreateClearRegions(
+                        CreateClearBoxes(
                             rectCount,
                             (pRects + rectIdx),
                             m_allGpuState.dynamicRenderingInstance.viewMask,
                             zOffset,
+                            pImage->GetImageType() == VK_IMAGE_TYPE_3D,
                             &clearBoxes);
 
                         CreateClearSubresRanges(
@@ -4716,11 +4144,12 @@ void CmdBuffer::ClearImageAttachments(
 
                         uint32_t viewMask = pRenderPass->GetViewMask(subpass);
 
-                        CreateClearRegions(
+                        CreateClearBoxes(
                             rectCount,
                             pRects + rectIdx,
                             viewMask,
                             zOffset,
+                            attachment.pImage->GetImageType() == VK_IMAGE_TYPE_3D,
                             &clearBoxes);
 
                         CreateClearSubresRanges(
@@ -7718,216 +7147,6 @@ void CmdBuffer::PalCmdSuspendPredication(
 }
 
 // =====================================================================================================================
-void CmdBuffer::CopyQueryPoolResults(
-    VkQueryPool        queryPool,
-    uint32_t           firstQuery,
-    uint32_t           queryCount,
-    VkBuffer           destBuffer,
-    VkDeviceSize       destOffset,
-    VkDeviceSize       destStride,
-    VkQueryResultFlags flags)
-{
-    DbgBarrierPreCmd(DbgBarrierCopyBuffer | DbgBarrierCopyQueryPool);
-
-    PalCmdSuspendPredication(true);
-
-    const QueryPool* pBasePool = QueryPool::ObjectFromHandle(queryPool);
-    const Buffer* pDestBuffer = Buffer::ObjectFromHandle(destBuffer);
-
-    if ((pBasePool->GetQueryType() != VK_QUERY_TYPE_TIMESTAMP)
-#if VKI_RAY_TRACING
-     && (IsAccelerationStructureQueryType(pBasePool->GetQueryType()) == false)
-#endif
-       )
-    {
-        const PalQueryPool* pPool = pBasePool->AsPalQueryPool();
-
-        utils::IterateMask deviceGroup(m_curDeviceMask);
-        do
-        {
-            const uint32_t deviceIdx = deviceGroup.Index();
-
-            PalCmdBuffer(deviceIdx)->CmdResolveQuery(
-                *pPool->PalPool(deviceIdx),
-                VkToPalQueryResultFlags(flags),
-                pPool->PalQueryType(),
-                firstQuery,
-                queryCount,
-                *pDestBuffer->PalMemory(deviceIdx),
-                pDestBuffer->MemOffset() + destOffset,
-                destStride);
-        }
-        while (deviceGroup.IterateNext());
-    }
-    else
-    {
-        QueryCopy(
-            pBasePool,
-            pDestBuffer,
-            firstQuery,
-            queryCount,
-            destOffset,
-            destStride,
-            flags);
-    }
-
-    PalCmdSuspendPredication(false);
-
-    DbgBarrierPostCmd(DbgBarrierCopyBuffer | DbgBarrierCopyQueryPool);
-}
-
-// ===================================================================================================================
-// Command to write a timestamp value to a location in a Timestamp query pool
-void CmdBuffer::QueryCopy(
-    const QueryPool*   pBasePool,
-    const Buffer*      pDestBuffer,
-    uint32_t           firstQuery,
-    uint32_t           queryCount,
-    VkDeviceSize       destOffset,
-    VkDeviceSize       destStride,
-    VkQueryResultFlags flags)
-{
-    const QueryPoolWithStorageView* pPool = pBasePool->AsQueryPoolWithStorageView();
-
-    const Device::InternalPipeline& pipeline =
-#if VKI_RAY_TRACING
-        (IsAccelerationStructureSerializationType(pBasePool->GetQueryType())) ?
-            m_pDevice->GetInternalAccelerationStructureQueryCopyPipeline() :
-#endif
-        m_pDevice->GetTimestampQueryCopyPipeline();
-
-    // Wait for all previous query timestamps to complete.  For now we have to do a full pipeline idle but once
-    // we have a PAL interface for doing a 64-bit WAIT_REG_MEM, we only have to wait on the queries being copied
-    // here
-    if ((flags & VK_QUERY_RESULT_WAIT_BIT) != 0)
-    {
-        static const Pal::BarrierTransition transition =
-        {
-            pBasePool->GetQueryType() == VK_QUERY_TYPE_TIMESTAMP ? Pal::CoherTimestamp : Pal::CoherMemory,
-            Pal::CoherShaderRead
-        };
-
-        static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
-
-        static const Pal::BarrierInfo WriteWaitIdle =
-        {
-            Pal::HwPipePreCs,                               // waitPoint
-            1,                                              // pipePointWaitCount
-            &pipePoint,                                     // pPipePoints
-            0,                                              // gpuEventWaitCount
-            nullptr,                                        // ppGpuEvents
-            0,                                              // rangeCheckedTargetWaitCount
-            nullptr,                                        // ppTargets
-            1,                                              // transitionCount
-            &transition,                                    // pTransitions
-            0,                                              // globalSrcCacheMask
-            0,                                              // globalDstCacheMask
-            RgpBarrierInternalPreCopyQueryPoolResultsSync   // reason
-        };
-
-        PalCmdBarrier(WriteWaitIdle, m_curDeviceMask);
-    }
-
-    uint32_t userData[16];
-
-    // Figure out which user data registers should contain what compute constants
-    const uint32_t storageViewSize   = m_pDevice->GetProperties().descriptorSizes.bufferView;
-    const uint32_t storageViewDwSize = storageViewSize / sizeof(uint32_t);
-    const uint32_t viewOffset        = 0;
-    const uint32_t bufferViewOffset  = storageViewDwSize;
-    const uint32_t queryCountOffset  = bufferViewOffset + storageViewDwSize;
-    const uint32_t copyFlagsOffset   = queryCountOffset + 1;
-    const uint32_t copyStrideOffset  = copyFlagsOffset + 1;
-    const uint32_t firstQueryOffset  = copyStrideOffset + 1;
-    const uint32_t ptrQueryOffset    = firstQueryOffset + 1;
-    const uint32_t userDataCount     = ptrQueryOffset + 1;
-
-    // Make sure they agree with pipeline mapping
-    VK_ASSERT(viewOffset == pipeline.userDataNodeOffsets[0]);
-    VK_ASSERT(bufferViewOffset == pipeline.userDataNodeOffsets[1]);
-    VK_ASSERT(queryCountOffset == pipeline.userDataNodeOffsets[2]);
-    VK_ASSERT(userDataCount <= VK_ARRAY_SIZE(userData));
-
-    // Create and set a raw storage view into the destination buffer (shader will choose to either write 32-bit or
-    // 64-bit values)
-    Pal::BufferViewInfo bufferViewInfo = {};
-
-    bufferViewInfo.range = destStride * queryCount;
-    bufferViewInfo.stride = 0; // Raw buffers have a zero byte stride
-    bufferViewInfo.swizzledFormat = Pal::UndefinedSwizzledFormat;
-
-    // Set query count
-    userData[queryCountOffset] = queryCount;
-
-    // These are magic numbers that match literal values in the shader
-    constexpr uint32_t Copy64Bit = 0x1;
-    constexpr uint32_t CopyIncludeAvailabilityBit = 0x2;
-
-    // Set copy flags
-    userData[copyFlagsOffset] = 0;
-    userData[copyFlagsOffset] |= (flags & VK_QUERY_RESULT_64_BIT) ? Copy64Bit : 0x0;
-    userData[copyFlagsOffset] |= (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) ? CopyIncludeAvailabilityBit : 0x0;
-
-    // Set destination stride
-    VK_ASSERT(destStride <= UINT_MAX); // TODO: Do we really need to handle this?
-
-    userData[copyStrideOffset] = static_cast<uint32_t>(destStride);
-
-    // Set start query index
-    userData[firstQueryOffset] = firstQuery;
-
-#if VKI_RAY_TRACING
-    // Set the acceleration structure query offset
-    userData[ptrQueryOffset] =
-        (pBasePool->GetQueryType() == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR) ?
-            0x1 : 0x0;
-#endif
-
-    utils::IterateMask deviceGroup(m_curDeviceMask);
-    do
-    {
-        const uint32_t deviceIdx = deviceGroup.Index();
-
-        // Backup PAL compute state
-        PalCmdBuffer(deviceIdx)->CmdSaveComputeState(Pal::ComputeStatePipelineAndUserData);
-
-        Pal::PipelineBindParams bindParams = {};
-        bindParams.pipelineBindPoint = Pal::PipelineBindPoint::Compute;
-        bindParams.pPipeline = pipeline.pPipeline[deviceIdx];
-        bindParams.apiPsoHash = Pal::InternalApiPsoHash;
-
-        // Bind the copy compute pipeline
-        PalCmdBuffer(deviceIdx)->CmdBindPipeline(bindParams);
-
-        // Set the query buffer SRD (copy source) as typed 64-bit storage view
-        memcpy(&userData[viewOffset], pPool->GetStorageView(deviceIdx), storageViewSize);
-
-        bufferViewInfo.gpuAddr = pDestBuffer->GpuVirtAddr(deviceIdx) + destOffset;
-        m_pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &bufferViewInfo, &userData[bufferViewOffset]);
-
-        // Write user data registers
-        PalCmdBuffer(deviceIdx)->CmdSetUserData(
-            Pal::PipelineBindPoint::Compute,
-            0,
-            userDataCount,
-            userData);
-
-        // Figure out how many thread groups we need to dispatch and dispatch
-        constexpr uint32_t ThreadsPerGroup = 64;
-
-        uint32_t threadGroupCount = Util::Max(1U, (queryCount + ThreadsPerGroup - 1) / ThreadsPerGroup);
-
-        PalCmdBuffer(deviceIdx)->CmdDispatch({ threadGroupCount, 1, 1 });
-
-        // Restore compute state
-        PalCmdBuffer(deviceIdx)->CmdRestoreComputeState(Pal::ComputeStatePipelineAndUserData);
-
-        // Note that the application is responsible for doing a post-copy sync using a barrier.
-    }
-    while (deviceGroup.IterateNext());
-}
-
-// =====================================================================================================================
 // Command to write a timestamp value to a location in a Timestamp query pool
 void CmdBuffer::WriteTimestamp(
     PipelineStageFlags        pipelineStage,
@@ -8401,30 +7620,70 @@ void CmdBuffer::RPBeginSubpass()
         RPBindTargets(subpass.begin.bindTargets);
     }
 
-    if ((subpass.begin.loadOps.colorClearCount > 0) ||
-        (subpass.begin.loadOps.dsClearCount > 0))
+    if (m_allGpuState.pRenderPass->DoClearsUpfront())
     {
-        PalCmdSuspendPredication(true);
-
-        // Execute any color clear load operations
-        if (subpass.begin.loadOps.colorClearCount > 0)
+        if (m_renderPassInstance.subpass == 0)
         {
-            RPLoadOpClearColor(subpass.begin.loadOps.colorClearCount, subpass.begin.loadOps.pColorClears);
-        }
+            const auto& subpasses    = m_renderPassInstance.pExecuteInfo->pSubpasses;
+            const auto  subpassCount = m_allGpuState.pRenderPass->GetSubpassCount();
 
-        // If we are manually pre-syncing color clears, we must post-sync also
-        if (subpass.begin.syncTop.barrier.flags.preColorClearSync)
+            PalCmdSuspendPredication(true);
+
+            for (uint32_t i = 0; i < subpassCount; ++i)
+            {
+                if (subpasses[i].begin.loadOps.colorClearCount > 0)
+                {
+                    RPLoadOpClearColor(subpasses[i].begin.loadOps.colorClearCount,
+                        subpasses[i].begin.loadOps.pColorClears);
+                }
+            }
+
+            // If we are manually pre-syncing color clears, we must post-sync also
+            if (subpasses[0].begin.syncTop.barrier.flags.preColorClearSync)
+            {
+                RPSyncPostLoadOpColorClear();
+            }
+
+            for (uint32_t i = 0; i < subpassCount; ++i)
+            {
+                // Execute any depth-stencil clear load operations
+                if (subpasses[i].begin.loadOps.dsClearCount > 0)
+                {
+                    RPLoadOpClearDepthStencil(subpasses[i].begin.loadOps.dsClearCount,
+                        subpasses[i].begin.loadOps.pDsClears);
+                }
+            }
+
+            PalCmdSuspendPredication(false);
+        }
+    }
+    else
+    {
+        if ((subpass.begin.loadOps.colorClearCount > 0) ||
+            (subpass.begin.loadOps.dsClearCount > 0))
         {
-            RPSyncPostLoadOpColorClear();
-        }
+            PalCmdSuspendPredication(true);
 
-        // Execute any depth-stencil clear load operations
-        if (subpass.begin.loadOps.dsClearCount > 0)
-        {
-            RPLoadOpClearDepthStencil(subpass.begin.loadOps.dsClearCount, subpass.begin.loadOps.pDsClears);
-        }
+            // Execute any color clear load operations
+            if (subpass.begin.loadOps.colorClearCount > 0)
+            {
+                RPLoadOpClearColor(subpass.begin.loadOps.colorClearCount, subpass.begin.loadOps.pColorClears);
+            }
 
-        PalCmdSuspendPredication(false);
+            // If we are manually pre-syncing color clears, we must post-sync also
+            if (subpass.begin.syncTop.barrier.flags.preColorClearSync)
+            {
+                RPSyncPostLoadOpColorClear();
+            }
+
+            // Execute any depth-stencil clear load operations
+            if (subpass.begin.loadOps.dsClearCount > 0)
+            {
+                RPLoadOpClearDepthStencil(subpass.begin.loadOps.dsClearCount, subpass.begin.loadOps.pDsClears);
+            }
+
+            PalCmdSuspendPredication(false);
+        }
     }
 
     if (m_flags.subpassLoadOpClearsBoundAttachments == false)
@@ -9126,23 +8385,31 @@ void CmdBuffer::RPResolveAttachments(
             if ((depthResolveMode != VK_RESOLVE_MODE_NONE) &&
                 ((depthStecilAcpect & VK_IMAGE_ASPECT_DEPTH_BIT) != 0))
             {
-                VK_ASSERT(Formats::HasDepth(srcResolveFormat) && Formats::HasDepth(dstResolveFormat));
 
-                resolveModes[aspectRegionCount]     = VkToPalResolveMode(depthResolveMode);
-                srcResolvePlanes[aspectRegionCount] = 0;
-                dstResolvePlanes[aspectRegionCount] = 0;
-                aspectRegionCount++;
+                bool bResolveAspect = Formats::HasDepth(srcResolveFormat) && Formats::HasDepth(dstResolveFormat);
+
+                if (bResolveAspect)
+                {
+                    resolveModes[aspectRegionCount] = VkToPalResolveMode(depthResolveMode);
+                    srcResolvePlanes[aspectRegionCount] = 0;
+                    dstResolvePlanes[aspectRegionCount] = 0;
+                    aspectRegionCount++;
+                }
             }
 
             if ((stencilResolveMode != VK_RESOLVE_MODE_NONE) &&
                 ((depthStecilAcpect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0))
             {
-                VK_ASSERT(Formats::HasStencil(srcResolveFormat) && Formats::HasStencil(dstResolveFormat));
 
-                resolveModes[aspectRegionCount]     = VkToPalResolveMode(stencilResolveMode);
-                srcResolvePlanes[aspectRegionCount] = Formats::HasDepth(srcResolveFormat) ? 1 : 0;
-                dstResolvePlanes[aspectRegionCount] = Formats::HasDepth(dstResolveFormat) ? 1 : 0;
-                aspectRegionCount++;
+                bool bResolveAspect = Formats::HasStencil(srcResolveFormat) && Formats::HasStencil(dstResolveFormat);
+
+                if (bResolveAspect)
+                {
+                    resolveModes[aspectRegionCount] = VkToPalResolveMode(stencilResolveMode);
+                    srcResolvePlanes[aspectRegionCount] = Formats::HasDepth(srcResolveFormat) ? 1 : 0;
+                    dstResolvePlanes[aspectRegionCount] = Formats::HasDepth(dstResolveFormat) ? 1 : 0;
+                    aspectRegionCount++;
+                }
             }
         }
 
@@ -11030,6 +10297,8 @@ void CmdBuffer::BuildAccelerationStructuresPerDevice(
     const uint32*                                           pIndirectStrides,
     const uint32* const*                                    ppMaxPrimitiveCounts)
 {
+    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+
     for (uint32_t infoIdx = 0; infoIdx < infoCount; ++infoIdx)
     {
         const VkAccelerationStructureBuildGeometryInfoKHR* pInfo         = &pInfos[infoIdx];
@@ -11060,6 +10329,19 @@ void CmdBuffer::BuildAccelerationStructuresPerDevice(
             &helper,
             &info.inputs);
 
+        const bool forceRebuildTopLevel =
+            Util::TestAnyFlagSet(settings.forceRebuildForUpdates, ForceRebuildForUpdatesTopLevel);
+
+        const bool forceRebuildBottomLevel =
+            Util::TestAnyFlagSet(settings.forceRebuildForUpdates, ForceRebuildForUpdatesBottomLevel);
+
+        if (((info.inputs.type == GpuRt::AccelStructType::TopLevel) && forceRebuildTopLevel) ||
+            ((info.inputs.type == GpuRt::AccelStructType::BottomLevel) && forceRebuildBottomLevel))
+        {
+            info.inputs.flags &=
+                ~(GpuRt::AccelStructBuildFlagAllowUpdate | GpuRt::AccelStructBuildFlagPerformUpdate);
+        }
+
         info.scratchAddr.gpu = pInfo->scratchData.deviceAddress;
 
         // Set Indirect Values
@@ -11082,75 +10364,6 @@ void CmdBuffer::BuildAccelerationStructuresPerDevice(
         DbgBarrierPostCmd((pInfo->type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR) ?
                             DbgBuildAccelerationStructureTLAS : DbgBuildAccelerationStructureBLAS);
     }
-}
-
-// =====================================================================================================================
-void CmdBuffer::CopyAccelerationStructure(
-    const VkCopyAccelerationStructureInfoKHR* pInfo)
-{
-    utils::IterateMask deviceGroup(m_curDeviceMask);
-    do
-    {
-        const uint32_t deviceIdx = deviceGroup.Index();
-        CopyAccelerationStructurePerDevice(
-            deviceIdx,
-            pInfo);
-    }
-    while (deviceGroup.IterateNext());
-}
-
-// =====================================================================================================================
-void CmdBuffer::CopyAccelerationStructurePerDevice(
-    const uint32_t                              deviceIdx,
-    const VkCopyAccelerationStructureInfoKHR*   pInfo)
-{
-    // Only valid modes for AS-AS copy
-    VK_ASSERT((pInfo->mode == VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR) ||
-              (pInfo->mode == VK_COPY_ACCELERATION_STRUCTURE_MODE_CLONE_KHR));
-
-    const AccelerationStructure* pDst   = AccelerationStructure::ObjectFromHandle(pInfo->dst);
-    const AccelerationStructure* pSrc   = AccelerationStructure::ObjectFromHandle(pInfo->src);
-    GpuRt::AccelStructCopyInfo copyInfo = {};
-
-    copyInfo.mode                       = AccelerationStructure::ConvertCopyAccelerationStructureModeKHR(pInfo->mode);
-    copyInfo.dstAccelStructAddr.gpu     = (pDst != nullptr) ? pDst->GetDeviceAddress(deviceIdx) : 0;
-    copyInfo.srcAccelStructAddr.gpu     = (pSrc != nullptr) ? pSrc->GetDeviceAddress(deviceIdx) : 0;
-
-    m_pDevice->RayTrace()->GpuRt(deviceIdx)->CopyAccelStruct(PalCmdBuffer(deviceIdx), copyInfo);
-}
-
-// =====================================================================================================================
-void CmdBuffer::CopyAccelerationStructureToMemory(
-    const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo)
-{
-    utils::IterateMask deviceGroup(m_curDeviceMask);
-    do
-    {
-        const uint32_t deviceIdx = deviceGroup.Index();
-        CopyAccelerationStructureToMemoryPerDevice(
-            deviceIdx,
-            pInfo);
-    }
-    while (deviceGroup.IterateNext());
-}
-
-// =====================================================================================================================
-void CmdBuffer::CopyAccelerationStructureToMemoryPerDevice(
-    const uint32_t                                    deviceIndex,
-    const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo)
-{
-    // Only valid mode
-    VK_ASSERT(pInfo->mode == VK_COPY_ACCELERATION_STRUCTURE_MODE_SERIALIZE_KHR);
-
-    const AccelerationStructure* pSrc   = AccelerationStructure::ObjectFromHandle(pInfo->src);
-    GpuRt::AccelStructCopyInfo copyInfo = {};
-
-    copyInfo.mode = AccelerationStructure::ConvertCopyAccelerationStructureModeKHR(pInfo->mode);
-
-    copyInfo.srcAccelStructAddr.gpu = (pSrc != nullptr) ? pSrc->GetDeviceAddress(deviceIndex) : 0;
-    copyInfo.dstAccelStructAddr.gpu = pInfo->dst.deviceAddress;
-
-    m_pDevice->RayTrace()->GpuRt(deviceIndex)->CopyAccelStruct(PalCmdBuffer(deviceIndex), copyInfo);
 }
 
 // =====================================================================================================================
@@ -11234,42 +10447,6 @@ void CmdBuffer::WriteAccelerationStructuresPropertiesPerDevice(
 }
 
 // =====================================================================================================================
-void CmdBuffer::CopyMemoryToAccelerationStructure(
-    const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo)
-{
-    // Only valid mode
-    VK_ASSERT(pInfo->mode == VK_COPY_ACCELERATION_STRUCTURE_MODE_DESERIALIZE_KHR);
-
-    utils::IterateMask deviceGroup(m_curDeviceMask);
-
-    do
-    {
-        const uint32_t deviceIdx = deviceGroup.Index();
-        CopyMemoryToAccelerationStructurePerDevice(
-            deviceIdx,
-            pInfo);
-    }
-    while (deviceGroup.IterateNext());
-}
-
-// =====================================================================================================================
-void CmdBuffer::CopyMemoryToAccelerationStructurePerDevice(
-    const uint32_t                                      deviceIndex,
-    const VkCopyMemoryToAccelerationStructureInfoKHR*   pInfo)
-{
-    GpuRt::AccelStructCopyInfo copyInfo = {};
-
-    copyInfo.mode = AccelerationStructure::ConvertCopyAccelerationStructureModeKHR(pInfo->mode);
-
-    const AccelerationStructure* pDst = AccelerationStructure::ObjectFromHandle(pInfo->dst);
-
-    copyInfo.srcAccelStructAddr.gpu = pInfo->src.deviceAddress;
-    copyInfo.dstAccelStructAddr.gpu = (pDst != nullptr) ? pDst->GetDeviceAddress(deviceIndex) : 0;
-
-    m_pDevice->RayTrace()->GpuRt(deviceIndex)->CopyAccelStruct(PalCmdBuffer(deviceIndex), copyInfo);
-}
-
-// =====================================================================================================================
 void CmdBuffer::TraceRays(
     const VkStridedDeviceAddressRegionKHR& raygenShaderBindingTable,
     const VkStridedDeviceAddressRegionKHR& missShaderBindingTable,
@@ -11344,6 +10521,18 @@ void CmdBuffer::GetRayTracingDispatchArgs(
            m_pDevice->RayTrace()->GetAccelStructTrackerSrd(deviceIdx),
            sizeof(pConstants->descriptorTable.accelStructTrackerSrd));
 
+    if (settings.llpcRaytracingMode >= RaytracingContinufy)
+    {
+        Pal::CompilerStackSizes stackSizes = PerGpuState(deviceIdx)->maxPipelineStackSizes;
+        pConstants->constData.cpsFrontendStackSize = stackSizes.frontendSize;
+        pConstants->constData.cpsBackendStackSize = stackSizes.backendSize;
+        if (settings.cpsFlags & CpsFlagStackInGlobalMem)
+        {
+            // TODO: Record Cps stack requirement, create Cps stack at queue submission, and fill
+            // pConstants->constData.cpsGlobalMemoryAddressLo/Hi
+        }
+    }
+
     static_assert(uint32_t(GpuRt::TraceRayCounterDisable) == uint32_t(TraceRayCounterDisable),
                   "Wrong enum value, TraceRayCounterDisable != GpuRt::TraceRayCounterDisable");
     static_assert(uint32_t(GpuRt::TraceRayCounterRayHistoryLight) == uint32_t(TraceRayCounterRayHistoryLight),
@@ -11377,6 +10566,44 @@ void CmdBuffer::GetRayTracingDispatchArgs(
 }
 
 // =====================================================================================================================
+void CmdBuffer::TraceRayPreSetup(
+    const uint32_t                         deviceIdx,
+    const VkStridedDeviceAddressRegionKHR& raygenShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR& missShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR& hitShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR& callableShaderBindingTable,
+    const uint32_t                         width,
+    const uint32_t                         height,
+    const uint32_t                         depth,
+    Pal::gpusize*                          pConstGpuAddr)
+{
+    const RuntimeSettings& settings     = m_pDevice->GetRuntimeSettings();
+    const RayTracingPipeline* pPipeline = m_allGpuState.pRayTracingPipeline;
+
+    void* pConstData = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(GpuRt::DispatchRaysConstantsDw,
+                                                                        1,
+                                                                        pConstGpuAddr);
+
+    GpuRt::DispatchRaysConstants constants = {};
+
+    GetRayTracingDispatchArgs(deviceIdx,
+                              settings,
+                              m_pCmdPool,
+                              pPipeline,
+                              *pConstGpuAddr,
+                              width,
+                              height,
+                              depth,
+                              raygenShaderBindingTable,
+                              missShaderBindingTable,
+                              hitShaderBindingTable,
+                              callableShaderBindingTable,
+                              &constants);
+
+    memcpy(pConstData, &constants, sizeof(constants));
+}
+
+// =====================================================================================================================
 void CmdBuffer::TraceRaysPerDevice(
     const uint32_t                         deviceIdx,
     const VkStridedDeviceAddressRegionKHR& raygenShaderBindingTable,
@@ -11392,36 +10619,22 @@ void CmdBuffer::TraceRaysPerDevice(
     const RuntimeSettings& settings     = m_pDevice->GetRuntimeSettings();
     const RayTracingPipeline* pPipeline = m_allGpuState.pRayTracingPipeline;
 
-    UpdateLargestPipelineStackSize(deviceIdx, pPipeline->GetDefaultPipelineStackSize(deviceIdx));
-
-    Pal::gpusize constGpuAddr;
-
-    void* pConstData = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(GpuRt::DispatchRaysConstantsDw,
-                                                                        1,
-                                                                        &constGpuAddr);
-
-    GpuRt::DispatchRaysConstants constants = {};
-
-    GetRayTracingDispatchArgs(deviceIdx,
-                              m_pDevice->GetRuntimeSettings(),
-                              m_pCmdPool,
-                              pPipeline,
-                              constGpuAddr,
-                              width,
-                              height,
-                              depth,
-                              raygenShaderBindingTable,
-                              missShaderBindingTable,
-                              hitShaderBindingTable,
-                              callableShaderBindingTable,
-                              &constants);
-
-    memcpy(pConstData, &constants, sizeof(constants));
-
     if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindRayTracing) == false)
     {
         RebindPipeline<PipelineBindRayTracing, false>();
     }
+
+    Pal::gpusize constGpuAddr;
+
+    TraceRayPreSetup(deviceIdx,
+                     raygenShaderBindingTable,
+                     missShaderBindingTable,
+                     hitShaderBindingTable,
+                     callableShaderBindingTable,
+                     width,
+                     height,
+                     depth,
+                     &constGpuAddr);
 
     uint32_t dispatchRaysUserData = pPipeline->GetDispatchRaysUserDataOffset();
     uint32_t constGpuAddrLow      = Util::LowPart(constGpuAddr);
@@ -11522,32 +10735,17 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
     const RuntimeSettings& settings     = m_pDevice->GetRuntimeSettings();
     const RayTracingPipeline* pPipeline = m_allGpuState.pRayTracingPipeline;
 
-    UpdateLargestPipelineStackSize(deviceIdx, pPipeline->GetDefaultPipelineStackSize(deviceIdx));
-
-    // Fill the dispatch launch constants
     Pal::gpusize constGpuAddr;
 
-    void* pConstData = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(GpuRt::DispatchRaysConstantsDw,
-                                                                        1,
-                                                                        &constGpuAddr);
-
-    GpuRt::DispatchRaysConstants constants = {};
-
-    GetRayTracingDispatchArgs(deviceIdx,
-                              m_pDevice->GetRuntimeSettings(),
-                              m_pCmdPool,
-                              pPipeline,
-                              constGpuAddr,
-                              0, // Pre-pass will populate width x height x depth
-                              0,
-                              0,
-                              raygenShaderBindingTable,
-                              missShaderBindingTable,
-                              hitShaderBindingTable,
-                              callableShaderBindingTable,
-                              &constants);
-
-    memcpy(pConstData, &constants, sizeof(constants));
+    TraceRayPreSetup(deviceIdx,
+                     raygenShaderBindingTable,
+                     missShaderBindingTable,
+                     hitShaderBindingTable,
+                     callableShaderBindingTable,
+                     0, // Pre-pass will populate width x height x depth
+                     0,
+                     0,
+                     &constGpuAddr);
 
     // Pre-pass
     gpusize initConstantsVa = 0;
@@ -11596,7 +10794,7 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
     initUserData.constantsVa            = initConstantsVa;
     initUserData.inputBufferVa          = indirectDeviceAddress;
     initUserData.outputBufferVa         = pScratchMemory->GpuVirtAddr(deviceIdx);
-    initUserData.outputConstantsVa      = constants.descriptorTable.dispatchRaysConstGpuVa;
+    initUserData.outputConstantsVa      = constGpuAddr + offsetof(GpuRt::DispatchRaysConstants, constData);;
     initUserData.outputCounterMetaVa    = 0uLL;
 
     m_pDevice->RayTrace()->TraceIndirectDispatch(deviceIdx,
@@ -11750,7 +10948,17 @@ void CmdBuffer::SetRayTracingPipelineStackSize(
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
-        UpdateLargestPipelineStackSize(deviceIdx, pipelineStackSize);
+        const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+        Pal::CompilerStackSizes stackSizes = {};
+        if (settings.llpcRaytracingMode >= RaytracingContinufy)
+        {
+            stackSizes.frontendSize = pipelineStackSize;
+        }
+        else
+        {
+            stackSizes.backendSize = pipelineStackSize;
+        }
+        UpdateLargestPipelineStackSizes(deviceIdx, stackSizes);
     }
     while (deviceGroup.IterateNext());
 }
@@ -11897,6 +11105,29 @@ void CmdBuffer::InsertDebugMarker(
                                                                    0);
     }
 #endif
+}
+
+// =====================================================================================================================
+const uint32_t CmdBuffer::GetPipelineScratchSize(
+    uint32_t deviceIdx) const
+{
+    uint32_t scratchSize = 0;
+#if VKI_RAY_TRACING
+    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+    auto stackSizes = PerGpuState(deviceIdx)->maxPipelineStackSizes;
+    if ((settings.llpcRaytracingMode >= RaytracingContinufy) &&
+        ((settings.cpsFlags & CpsFlagStackInGlobalMem) == 0))
+    {
+        // Continuations with stack in scratch
+        scratchSize = stackSizes.backendSize + stackSizes.frontendSize;
+    }
+    else
+    {
+        // Non-continuations or continuations stack in global memory
+        scratchSize = stackSizes.backendSize;
+    }
+#endif
+    return scratchSize;
 }
 
 // =====================================================================================================================
@@ -12993,90 +12224,6 @@ RenderPassInstanceState::RenderPassInstanceState(
 
 // =====================================================================================================================
 // Template instantiation needed for references entry.cpp.
-
-template
-void CmdBuffer::BlitImage<VkImageBlit>(
-    VkImage                 srcImage,
-    VkImageLayout           srcImageLayout,
-    VkImage                 destImage,
-    VkImageLayout           destImageLayout,
-    uint32_t                regionCount,
-    const VkImageBlit*      pRegions,
-    VkFilter                filter);
-
-template
-void CmdBuffer::BlitImage<VkImageBlit2>(
-    VkImage                 srcImage,
-    VkImageLayout           srcImageLayout,
-    VkImage                 destImage,
-    VkImageLayout           destImageLayout,
-    uint32_t                regionCount,
-    const VkImageBlit2*     pRegions,
-    VkFilter                filter);
-
-template
-void CmdBuffer::CopyBuffer<VkBufferCopy>(
-    VkBuffer                srcBuffer,
-    VkBuffer                destBuffer,
-    uint32_t                regionCount,
-    const VkBufferCopy*     pRegions);
-
-template
-void CmdBuffer::CopyBuffer<VkBufferCopy2>(
-    VkBuffer                srcBuffer,
-    VkBuffer                destBuffer,
-    uint32_t                regionCount,
-    const VkBufferCopy2*    pRegions);
-
-template
-void CmdBuffer::CopyBufferToImage<VkBufferImageCopy>(
-    VkBuffer                    srcBuffer,
-    VkImage                     destImage,
-    VkImageLayout               destImageLayout,
-    uint32_t                    regionCount,
-    const VkBufferImageCopy*    pRegions);
-
-template
-void CmdBuffer::CopyBufferToImage<VkBufferImageCopy2>(
-    VkBuffer                    srcBuffer,
-    VkImage                     destImage,
-    VkImageLayout               destImageLayout,
-    uint32_t                    regionCount,
-    const VkBufferImageCopy2*    pRegions);
-
-template
-void CmdBuffer::CopyImage<VkImageCopy>(
-    VkImage             srcImage,
-    VkImageLayout       srcImageLayout,
-    VkImage             destImage,
-    VkImageLayout       destImageLayout,
-    uint32_t            regionCount,
-    const VkImageCopy*  pRegions);
-
-template
-void CmdBuffer::CopyImage<VkImageCopy2>(
-    VkImage             srcImage,
-    VkImageLayout       srcImageLayout,
-    VkImage             destImage,
-    VkImageLayout       destImageLayout,
-    uint32_t            regionCount,
-    const VkImageCopy2* pRegions);
-
-template
-void CmdBuffer::CopyImageToBuffer<VkBufferImageCopy>(
-    VkImage                     srcImage,
-    VkImageLayout               srcImageLayout,
-    VkBuffer                    destBuffer,
-    uint32_t                    regionCount,
-    const VkBufferImageCopy*    pRegions);
-
-template
-void CmdBuffer::CopyImageToBuffer<VkBufferImageCopy2>(
-    VkImage                     srcImage,
-    VkImageLayout               srcImageLayout,
-    VkBuffer                    destBuffer,
-    uint32_t                    regionCount,
-    const VkBufferImageCopy2*   pRegions);
 
 template
 void CmdBuffer::DrawIndirect<false, false>(

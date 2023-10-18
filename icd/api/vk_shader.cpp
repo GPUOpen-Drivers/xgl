@@ -201,8 +201,11 @@ VkResult ShaderModule::Init(
 {
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
+    Vkgc::BinaryData shaderBinary = {};
+    shaderBinary.pCode    = m_pCode;
+    shaderBinary.codeSize = m_codeSize;
     VkResult result = pCompiler->BuildShaderModule(
-        pDevice, flags, 0, m_codeSize, m_pCode, false, false, nullptr, nullptr, &m_handle);
+        pDevice, flags, 0, shaderBinary, false, false, nullptr, nullptr, &m_handle);
 
     if (result == VK_SUCCESS)
     {

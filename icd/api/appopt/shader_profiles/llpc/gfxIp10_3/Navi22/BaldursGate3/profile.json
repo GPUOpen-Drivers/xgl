@@ -1,0 +1,81 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xe3acd3ef1d4e4c61 873d83c3007c363b"
+        }
+      },
+      "action": {
+        "cs": {
+          "threadGroupSwizzleMode": "_16x16"
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xddd2752710683f35 651efcd92453935f"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xb5eaf95bd9ddd3cd 8b0a9076160d26fe"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32,
+          "useSiScheduler": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x769367a6773e5ce3 86ad43d9fda40d74"
+        }
+      },
+      "action": {
+        "cs": {
+          "wgpMode": 2
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xdabd900b408807ec 3dc07ace96139f52"
+        }
+      },
+      "action": {
+        "cs": {
+          "disableLicm": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xd02572f9943475d7 b140405e242b7e8"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    }
+  ]
+}

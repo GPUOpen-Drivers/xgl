@@ -334,9 +334,9 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
     m_perfCounterFrequency(0),
     m_useStaticVmid(false),
     m_staticVmidActive(false),
+    m_crashAnalysisEnabled(false),
     m_perfCounterIds(pInstance->Allocator()),
-    m_pipelineCaches(pInstance->Allocator()),
-    m_crashAnalysisEnabled(false)
+    m_pipelineCaches(pInstance->Allocator())
 {
     memset(&m_trace, 0, sizeof(m_trace));
 }

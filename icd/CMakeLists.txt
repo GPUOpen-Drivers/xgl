@@ -107,6 +107,7 @@ target_sources(xgl PRIVATE
     api/vk_buffer.cpp
     api/vk_buffer_view.cpp
     api/vk_cmdbuffer.cpp
+    api/vk_cmdbuffer_transfer.cpp
     api/vk_cmd_pool.cpp
     api/vk_compute_pipeline.cpp
     api/vk_conv.cpp

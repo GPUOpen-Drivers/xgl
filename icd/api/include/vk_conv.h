@@ -3238,32 +3238,28 @@ inline uint32_t VkToPalPerfExperimentShaderFlags(
 }
 
 // =====================================================================================================================
-template <typename PalClearRegion>
-PalClearRegion VkToPalClearRegion(const VkClearRect& clearRect, const uint32_t zOffset);
-
-// =====================================================================================================================
 // Converts Vulkan clear rect to an equivalent PAL box
-template <>
-inline Pal::Box VkToPalClearRegion<Pal::Box>(
+inline Pal::Box VkToPalClearBox(
     const VkClearRect& clearRect,
-    const uint32_t     zOffset)
+    const uint32_t     zOffset,
+    const bool         is3dImage)
 {
     Pal::Box box { };
 
+    // Note that PAL requires z = 0, depth = 1 for all non-3D images.
     box.offset.x      = clearRect.rect.offset.x;
     box.offset.y      = clearRect.rect.offset.y;
-    box.offset.z      = clearRect.baseArrayLayer + zOffset;
+    box.offset.z      = is3dImage ? (clearRect.baseArrayLayer + zOffset) : 0;
     box.extent.width  = clearRect.rect.extent.width;
     box.extent.height = clearRect.rect.extent.height;
-    box.extent.depth  = clearRect.layerCount;
+    box.extent.depth  = is3dImage ? clearRect.layerCount : 1;
 
     return box;
 }
 
 // =====================================================================================================================
 // Converts Vulkan clear rect to an equivalent PAL clear bound target region
-template <>
-inline Pal::ClearBoundTargetRegion VkToPalClearRegion<Pal::ClearBoundTargetRegion>(
+inline Pal::ClearBoundTargetRegion VkToPalClearRegion(
     const VkClearRect& clearRect,
     const uint32_t     zOffset)
 {
@@ -3977,6 +3973,12 @@ UberFetchShaderFormatInfo GetUberFetchShaderFormatInfo(
     const UberFetchShaderFormatInfoMap* pFormatInfoMap,
     const VkFormat                      vkFormat,
     const bool                          isZeroStride);
+
+// =====================================================================================================================
+VkFormat GetLowPrecisionDepthFormat(
+    VkFormat                  format,
+    const VkImageUsageFlags&  imageUsage,
+    const RuntimeSettings&    settings);
 
 } // namespace vk
 

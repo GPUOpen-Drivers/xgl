@@ -94,9 +94,20 @@ struct PhysicalDeviceGpaProperties
 
 // =====================================================================================================================
 // Shader stage bit that represents all graphics stages
-static const uint32 ShaderStageAllGraphics = VK_SHADER_STAGE_TASK_BIT_EXT |
-                                             VK_SHADER_STAGE_MESH_BIT_EXT |
-                                             VK_SHADER_STAGE_ALL_GRAPHICS;
+constexpr uint32 ShaderStageAllGraphics = VK_SHADER_STAGE_TASK_BIT_EXT |
+                                          VK_SHADER_STAGE_MESH_BIT_EXT |
+                                          VK_SHADER_STAGE_ALL_GRAPHICS;
+
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+// Shader stage bit that represents all ray tracing stages
+constexpr uint32 ShaderStageAllRayTracing = VK_SHADER_STAGE_RAYGEN_BIT_KHR       |
+                                            VK_SHADER_STAGE_ANY_HIT_BIT_KHR      |
+                                            VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR  |
+                                            VK_SHADER_STAGE_MISS_BIT_KHR         |
+                                            VK_SHADER_STAGE_INTERSECTION_BIT_KHR |
+                                            VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+#endif
 
 // =====================================================================================================================
 // Represents the Vulkan view of physical device. All Vulkan functions on the VkPhysicalDevice land in

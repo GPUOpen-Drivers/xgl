@@ -54,6 +54,7 @@ class ShaderModule;
 class PipelineCompiler;
 struct PipelineInternalBufferInfo;
 struct ShaderModuleHandle;
+struct GraphicsPipelineLibraryInfo;
 
 class PipelineBinaryCache;
 
@@ -142,8 +143,7 @@ public:
         const Device*                   pDevice,
         const VkShaderModuleCreateFlags flags,
         const VkShaderModuleCreateFlags internalShaderFlags,
-        size_t                          codeSize,
-        const void*                     pCode,
+        const Vkgc::BinaryData&         shaderBinary,
         const bool                      adaptForFastLink,
         bool                            isInternal,
         PipelineBinaryCache*            pBinaryCache,
@@ -166,8 +166,7 @@ public:
         PipelineCache*                    pPipelineCache,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         const PipelineCreateFlags         flags,
-        size_t*                           pPipelineBinarySize,
-        const void**                      ppPipelineBinary,
+        Vkgc::BinaryData*                 pPipelineBinary,
         Util::MetroHash::Hash*            pCacheId);
 
     VkResult CreateGraphicsShaderBinary(
@@ -197,8 +196,7 @@ public:
         uint32_t                          deviceIndex,
         PipelineCache*                    pPipelineCache,
         ComputePipelineBinaryCreateInfo*  pInfo,
-        size_t*                           pPipelineBinarySize,
-        const void**                      ppPipelineBinary,
+        Vkgc::BinaryData*                 pPipelineBinary,
         Util::MetroHash::Hash*            pCacheId);
 
     static void GetPipelineCreationFeedback(
@@ -226,6 +224,15 @@ public:
         PipelineMetadata*                               pBinaryMetadata,
         GraphicsPipelineBinaryCreateInfo*               pCreateInfo);
 
+    VkResult BuildGplFastLinkCreateInfo(
+        const Device*                                   pDevice,
+        const VkGraphicsPipelineCreateInfo*             pIn,
+        PipelineCreateFlags                             flags,
+        const GraphicsPipelineLibraryInfo&              libInfo,
+        const PipelineLayout*                           pPipelineLayout,
+        PipelineMetadata*                               pBinaryMetadata,
+        GraphicsPipelineBinaryCreateInfo*               pCreateInfo);
+
     VkResult ConvertComputePipelineInfo(
         const Device*                                   pDevice,
         const VkComputePipelineCreateInfo*              pIn,
@@ -237,14 +244,12 @@ public:
 
     void FreeComputePipelineBinary(
         ComputePipelineBinaryCreateInfo* pCreateInfo,
-        const void*                      pPipelineBinary,
-        size_t                           binarySize);
+        const Vkgc::BinaryData&          pipelineBinary);
 
     void FreeGraphicsPipelineBinary(
         const PipelineCompilerType        compilerType,
         const FreeCompilerBinary          freeCompilerBinary,
-        const void*                       pPipelineBinary,
-        size_t                            binarySize);
+        const Vkgc::BinaryData&           pipelineBinary);
 
     void FreeComputePipelineCreateInfo(ComputePipelineBinaryCreateInfo* pCreateInfo);
 
@@ -302,6 +307,13 @@ public:
     PipelineCompilerType CheckCompilerType(const PipelineBuildInfo* pPipelineBuildInfo);
 
     uint32_t GetCompilerCollectionMask();
+
+    CompilerSolution* GetSolution(PipelineCompilerType type)
+    {
+        CompilerSolution* pSolution = nullptr;
+        pSolution = &m_compilerSolutionLlpc;
+        return pSolution;
+    }
 
     void ApplyDefaultShaderOptions(
         ShaderStage                      stage,
@@ -366,8 +378,7 @@ public:
     Util::Result GetCachedPipelineBinary(
         const Util::MetroHash::Hash* pCacheId,
         const PipelineBinaryCache*   pPipelineBinaryCache,
-        size_t*                      pPipelineBinarySize,
-        const void**                 ppPipelineBinary,
+        Vkgc::BinaryData*            pPipelineBinary,
         bool*                        pIsUserCacheHit,
         bool*                        pIsInternalCacheHit,
         FreeCompilerBinary*          pFreeCompilerBinary,
@@ -376,16 +387,15 @@ public:
     void CachePipelineBinary(
         const Util::MetroHash::Hash* pCacheId,
         PipelineBinaryCache*         pPipelineBinaryCache,
-        size_t                       pipelineBinarySize,
-        const void*                  pPipelineBinary,
+        Vkgc::BinaryData*            pPipelineBinary,
         bool                         isUserCacheHit,
         bool                         isInternalCacheHit);
 
     template<class PipelineBuildInfo>
-    bool ReplacePipelineBinary(
+    static bool ReplacePipelineBinary(
+        const PhysicalDevice*    pPhysicalDevice,
         const PipelineBuildInfo* pPipelineBuildInfo,
-        size_t*                  pPipelineBinarySize,
-        const void**             ppPipelineBinary,
+        Vkgc::BinaryData*        pPipelineBinary,
         uint64_t                 hashCode64);
 
     static size_t GetMaxUberFetchShaderInternalDataSize();
@@ -405,18 +415,16 @@ public:
         void*                                       pUberFetchShaderInternalData) const;
 
     static void ReadBinaryMetadata(
-        const Device*     pDevice,
-        const void*       pElfBinary,
-        const size_t      binarySize,
-        PipelineMetadata* pMetadata);
+        const Device*           pDevice,
+        const Vkgc::BinaryData& elfBinary,
+        PipelineMetadata*       pMetadata);
 
     static VkResult WriteBinaryMetadata(
-        const Device*                     pDevice,
-        PipelineCompilerType              compilerType,
-        FreeCompilerBinary*               pFreeCompilerBinary,
-        const void**                      ppElfBinary,
-        size_t*                           pBinarySize,
-        PipelineMetadata*                 pMetadata);
+        const Device*               pDevice,
+        PipelineCompilerType        compilerType,
+        FreeCompilerBinary*         pFreeCompilerBinary,
+        Vkgc::BinaryData*           pElfBinary,
+        PipelineMetadata*           pMetadata);
 
     static void DumpCacheMatrix(
         PhysicalDevice*             pPhysicalDevice,
@@ -441,22 +449,19 @@ private:
         const PipelineMetadata* pPipelineMetadata);
 
     void DropPipelineBinaryInst(
-        Device*                pDevice,
-        const RuntimeSettings& settings,
-        const void*            pPipelineBinary,
-        size_t                 pipelineBinarySize);
+        Device*                 pDevice,
+        const RuntimeSettings&  settings,
+        const Vkgc::BinaryData& pipelineBinary);
 
     void ReplacePipelineIsaCode(
-        Device*                pDevice,
-        uint64_t               pipelineHash,
-        uint32_t               pipelineIndex,
-        const void*            pPipelineBinary,
-        size_t                 pipelineBinarySize);
+        Device*                 pDevice,
+        uint64_t                pipelineHash,
+        uint32_t                pipelineIndex,
+        const Vkgc::BinaryData& pipelineBinary);
 
     bool LoadReplaceShaderBinary(
-        uint64_t shaderHash,
-        size_t*  pCodeSize,
-        void**   ppCode);
+        uint64_t          shaderHash,
+        Vkgc::BinaryData* pBinary);
 
     bool ReplacePipelineShaderModule(
         const Device*             pDevice,

@@ -1351,4 +1351,38 @@ UberFetchShaderFormatInfo GetUberFetchShaderFormatInfo(
     return formatInfo;
 }
 
+// =====================================================================================================================
+VkFormat GetLowPrecisionDepthFormat(
+    VkFormat                  format,
+    const VkImageUsageFlags&  imageUsage,
+    const RuntimeSettings&    settings)
+{
+    VK_ASSERT(settings.forceLowPrecisionDepthImage != ForceLowPrecisionDepthImageDefault);
+
+    if ((format == VK_FORMAT_D32_SFLOAT)          ||
+        (format == VK_FORMAT_X8_D24_UNORM_PACK32) ||
+        (format == VK_FORMAT_D32_SFLOAT_S8_UINT)  ||
+        (format == VK_FORMAT_D24_UNORM_S8_UINT))
+    {
+        const uint32_t lowPrecisionDepthImageMask = settings.forceLowPrecisionDepthImage;
+        const bool isDepthAttachment = (imageUsage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+
+        //This enables D32/D24 to D16 for DT + UAV
+        const bool shouldForceForDA =
+              Util::TestAnyFlagSet(lowPrecisionDepthImageMask, ForceLowPrecisionDepthImageForDepthAttachments) &&
+              (isDepthAttachment == true);
+        //This enables D32/D24 to D16 for non RT + UAV
+        const bool shouldForceForNonDA =
+              Util::TestAnyFlagSet(lowPrecisionDepthImageMask, ForceLowPrecisionDepthImageForNonDepthAttachments) &&
+              (isDepthAttachment == false);
+        if (shouldForceForDA || shouldForceForNonDA)
+        {
+            format = ((format == VK_FORMAT_D32_SFLOAT) || (format == VK_FORMAT_X8_D24_UNORM_PACK32)) ?
+                      VK_FORMAT_D16_UNORM : VK_FORMAT_D16_UNORM_S8_UINT;
+        }
+    }
+
+    return format;
+}
+
 } // namespace vk

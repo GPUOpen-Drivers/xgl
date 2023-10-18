@@ -132,6 +132,14 @@ void VulkanSettingsLoader::OverrideSettingsBySystemInfo()
 
     if (pRootPath != nullptr)
     {
+        if (m_settings.appendExeNameToPipelineDump)
+        {
+            char executableName[PATH_MAX];
+            char executablePath[PATH_MAX];
+            utils::GetExecutableNameAndPath(executableName, executablePath);
+            sprintf(m_settings.pipelineDumpDir, "%s/%s", m_settings.pipelineDumpDir, executableName);
+        }
+
         MakeAbsolutePath(m_settings.pipelineDumpDir, sizeof(m_settings.pipelineDumpDir),
                          pRootPath, m_settings.pipelineDumpDir);
         MakeAbsolutePath(m_settings.shaderReplaceDir, sizeof(m_settings.shaderReplaceDir),
@@ -189,23 +197,15 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) != 0);
         }
 
-        if (pInfo->gfxLevel <= Pal::GfxIpLevel::GfxIp9)
-        {
-            m_settings.useAcquireReleaseInterface = false;
-        }
-
         // In general, DCC is very beneficial for color attachments, 2D, 3D shader storage resources that have BPP>=32.
         // If this is completely offset, maybe by increased shader read latency or partial writes of DCC blocks, it should
         // be debugged on a case by case basis.
-        if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
-        {
-            m_settings.forceEnableDcc = (ForceDccForColorAttachments |
-                                         ForceDccFor2DShaderStorage |
-                                         ForceDccFor3DShaderStorage |
-                                         ForceDccFor32BppShaderStorage |
-                                         ForceDccFor64BppShaderStorage);
-            m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        }
+        m_settings.forceEnableDcc = (ForceDccForColorAttachments |
+                                        ForceDccFor2DShaderStorage |
+                                        ForceDccFor3DShaderStorage |
+                                        ForceDccFor32BppShaderStorage |
+                                        ForceDccFor64BppShaderStorage);
+        m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
 #if VKI_RAY_TRACING
         const char* pMaxInlinedShadersEnvVar = getenv("AMD_VK_MAX_INLINED_SHADERS");
@@ -257,8 +257,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             if ((appProfile == AppProfile::DoomEternal)  ||
                 (appProfile == AppProfile::SniperElite5) ||
-                (appProfile == AppProfile::CSGO)
-                )
+                (appProfile == AppProfile::CSGO))
             {
                 m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc;
             }
@@ -276,22 +275,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
 
-            // No gains were seen pre-GFX9
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp9)
-            {
-                m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
-                    SkipImageLayoutUndefined |
-                    SkipDuplicateResourceBarriers;
+            m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
+                SkipImageLayoutUndefined |
+                SkipDuplicateResourceBarriers;
 
-                m_settings.modifyResourceKeyForAppProfile = true;
-                m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
-            }
-
-            // Vega 20 has better performance on DOOM when DCC is disabled except for the 32 BPP surfaces
-            if (pInfo->revision == Pal::AsicRevision::Vega20)
-            {
-                m_settings.dccBitsPerPixelThreshold = 32;
-            }
+            m_settings.modifyResourceKeyForAppProfile = true;
+            m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
 
             // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
             // can't do any better than returning a non-null function pointer for them.
@@ -307,14 +296,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // This works around a crash at app startup.
             m_settings.ignoreSuboptimalSwapchainSize = true;
 
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.forceEnableDcc = ForceDccDefault;
+            m_settings.forceEnableDcc = ForceDccDefault;
 
-                if (pInfo->revision == Pal::AsicRevision::Navi14)
-                {
-                    m_settings.barrierFilterOptions = SkipImageLayoutUndefined;
-                }
+            if (pInfo->revision == Pal::AsicRevision::Navi14)
+            {
+                m_settings.barrierFilterOptions = SkipImageLayoutUndefined;
             }
         }
 
@@ -332,10 +318,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
 
             // Don't enable DCC for color attachments aside from those listed in the app_resource_optimizer
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.forceEnableDcc = ForceDccDefault;
-            }
+            m_settings.forceEnableDcc = ForceDccDefault;
         }
 
         if (appProfile == AppProfile::WolfensteinYoungblood)
@@ -384,26 +367,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
 
-            // No gains were seen pre-GFX9
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp9)
-            {
-                m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
-                    SkipImageLayoutUndefined;
+            m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
+                SkipImageLayoutUndefined;
 
-                m_settings.modifyResourceKeyForAppProfile = true;
-                m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
-            }
+            m_settings.modifyResourceKeyForAppProfile = true;
+            m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
 
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.asyncComputeQueueLimit = 1;
-            }
-
-            // The Vega 20 PAL default is slower on Wolfenstein II, so always allow DCC.
-            if (pInfo->revision == Pal::AsicRevision::Vega20)
-            {
-                m_settings.dccBitsPerPixelThreshold = 0;
-            }
+            m_settings.asyncComputeQueueLimit = 1;
 
             // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
             // can't do any better than returning a non-null function pointer for them.
@@ -427,25 +397,18 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // This application oversubscribes on 4 GB cards during ALT+TAB
             m_settings.memoryDeviceOverallocationAllowed = true;
 
+            m_settings.reportSuboptimalPresentAsOutOfDate = true;
+
             if (pInfo->revision != Pal::AsicRevision::Navi21)
             {
                 m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
             }
 
-            if (pInfo->revision == Pal::AsicRevision::Vega20)
-            {
-                m_settings.dccBitsPerPixelThreshold = 16;
-            }
-
             // WWZ performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage |
-                    ForceDccForNonColorAttachmentShaderStorage |
-                    ForceDccForColorAttachments |
-                    ForceDccFor2DShaderStorage);
-
-            }
+            m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage |
+                ForceDccForNonColorAttachmentShaderStorage |
+                ForceDccForColorAttachments |
+                ForceDccFor2DShaderStorage);
 
             // Mall no alloc setting gives a ~0.82% gain
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
@@ -525,11 +488,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             pPalSettings->fastDepthStencilClearMode = Pal::FastDepthStencilClearMode::Graphics;
 
-            //Vega 20 has better performance on Dota 2 when DCC is disabled.
-            if (pInfo->revision == Pal::AsicRevision::Vega20)
-            {
-                m_settings.dccBitsPerPixelThreshold = 128;
-            }
             m_settings.disableSmallSurfColorCompressionSize = 511;
 
             m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
@@ -643,11 +601,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (appProfile == AppProfile::ZombieArmy4)
         {
 
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
-            {
-                m_settings.dccBitsPerPixelThreshold = 512;
-            }
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
                 m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
                     ForceDccForColorAttachments |
@@ -676,10 +630,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (appProfile == AppProfile::F1_2017)
         {
             // F1 2017 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.forceEnableDcc = ForceDccDefault;
-            }
+            m_settings.forceEnableDcc = ForceDccDefault;
         }
 
         if (appProfile == AppProfile::ThronesOfBritannia)
@@ -691,10 +642,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (appProfile == AppProfile::DiRT4)
         {
             // DiRT 4 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.forceEnableDcc = ForceDccDefault;
-            }
+            m_settings.forceEnableDcc = ForceDccDefault;
 
             m_settings.forceDepthClampBasedOnZExport = true;
         }
@@ -703,10 +651,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             // WarHammer II performs worse with DCC forced on, so just let the PAL heuristics decide
             // what's best for now.
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.forceEnableDcc = ForceDccDefault;
-            }
+            m_settings.forceEnableDcc = ForceDccDefault;
 
             m_settings.ac01WaNotNeeded = true;
         }
@@ -725,11 +670,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // Ignore suboptimal swapchain size to fix crash on task switch
             m_settings.ignoreSuboptimalSwapchainSize = true;
 
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
-            {
-                m_settings.imageTilingOptMode = Pal::TilingOptMode::OptForSpeed;
-            }
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
                 m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
                     ForceDccForColorAttachments |
@@ -775,18 +716,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.disableImageResourceTypeCheck = true;
 
             m_settings.implicitExternalSynchronization = false;
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp8)
-            {
-                m_settings.asyncComputeQueueLimit = 0;
-            }
-
-            // Vega 20 seems to be do better on Rage 2 when dccBitsPerPixelThreshold is set to 16
-            // 3-5% gain when exclusive sharing mode is enabled.
-            if (pInfo->revision == Pal::AsicRevision::Vega20)
-            {
-                m_settings.dccBitsPerPixelThreshold = 16;
-            }
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
@@ -893,6 +822,52 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.syncOsHdrState = false;
         }
 
+        if (appProfile == AppProfile::BaldursGate3)
+        {
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.csWaveSize = 64;
+                m_settings.fsWaveSize = 64;
+            }
+
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.csWaveSize = 64;
+                m_settings.fsWaveSize = 64;
+
+                if (pInfo->revision == Pal::AsicRevision::Navi21)
+                {
+                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+                }
+
+                if (pInfo->revision == Pal::AsicRevision::Navi22)
+                {
+                    m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                        ForceDccFor3DShaderStorage |
+                        ForceDccForColorAttachments);
+
+                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+                }
+                else if (pInfo->revision == Pal::AsicRevision::Navi23)
+                {
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+                }
+                else if (pInfo->revision == Pal::AsicRevision::Navi24)
+                {
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+                }
+            }
+
+#if VKI_BUILD_GFX11
+#endif
+        }
+
 #if VKI_RAY_TRACING
         if (appProfile == AppProfile::Quake2RTX)
         {
@@ -995,10 +970,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
 
             // Coarse optimizations that apply to multiple GFXIPs go below
-            if ((pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1) &&
-                (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false))
+            if (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false)
             {
-                m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::Gfx9AvoidCpuMemoryCoher;
+                m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::AvoidCpuMemoryCoher;
             }
 
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
@@ -1018,12 +992,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
             }
 
-            // Finer GFXIP and ASIC specific optimizations go below
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
-            {
-                m_settings.dccBitsPerPixelThreshold = 1;
-            }
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
                 //  Doom Eternal performs better when DCC is not forced on. 2% gain on 4k.
                 m_settings.forceEnableDcc = ForceDccDefault;
@@ -1100,10 +1069,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // some scenes.
             m_settings.forceResolveLayoutForDepthStencilTransferUsage = true;
 
-            if ((pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1) &&
-                (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false))
+            if (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false)
             {
-                m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::Gfx9AvoidCpuMemoryCoher;
+                m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::AvoidCpuMemoryCoher;
             }
             const char *option = "-use-register-field-format=0";
             Util::Strncpy(&m_settings.llpcOptions[0], option, strlen(option) + 1);
@@ -1235,11 +1203,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::YamagiQuakeII)
         {
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.forceImageSharingMode =
-                    ForceImageSharingMode::ForceImageSharingModeExclusiveForNonColorAttachments;
-            }
+            m_settings.forceImageSharingMode =
+                ForceImageSharingMode::ForceImageSharingModeExclusiveForNonColorAttachments;
         }
 
         if (appProfile == AppProfile::XPlane)
@@ -1299,15 +1264,37 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.supportMutableDescriptors = false;
         }
 
-        if (appProfile == AppProfile::Yuzu)
+        if (appProfile == AppProfile::Enscape)
         {
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            m_settings.enableSpvPerfOptimal    = true;
+            m_settings.optimizeCmdbufMode      = EnableOptimizeCmdbuf;
+            m_settings.enableAceShaderPrefetch = false;
+
+#if VKI_RAY_TRACING
+            m_settings.rtEnableBuildParallel   = true;
+            m_settings.rtEnableUpdateParallel  = true;
+            m_settings.plocRadius              = 4;
+            m_settings.rtBvhBuildModeFastTrace = BvhBuildModeLinear;
+            m_settings.rtEnableTopDownBuild    = false;
+
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
-                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage    |
-                                             ForceDccFor3DShaderStorage    |
-                                             ForceDccFor32BppShaderStorage |
-                                             ForceDccFor64BppShaderStorage);
+                m_settings.asyncComputeQueueMaxWavesPerCu = 20;
+                m_settings.csWaveSize                     = 64;
             }
+#if VKI_BUILD_GFX11
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+                m_settings.rtIndirectVgprLimit = 120;
+#if VKI_BUILD_NAVI31
+                if (pInfo->revision == Pal::AsicRevision::Navi31)
+                {
+                    m_settings.indirectCallTargetOccupancyPerSimd = 0.75;
+                }
+#endif
+            }
+#endif
+#endif
         }
 
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);

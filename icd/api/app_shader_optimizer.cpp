@@ -320,6 +320,16 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pOptions->scalarizeWaterfallLoads = shaderCreate.tuningOptions.scalarizeWaterfallLoads;
                 }
+                if (shaderCreate.apply.backwardPropagateNoContract)
+                {
+                    options.pOptions->backwardPropagateNoContract =
+                        shaderCreate.tuningOptions.backwardPropagateNoContract;
+                }
+                if (shaderCreate.apply.forwardPropagateNoContract)
+                {
+                    options.pOptions->forwardPropagateNoContract =
+                        shaderCreate.tuningOptions.forwardPropagateNoContract;
+                }
                 if (shaderCreate.apply.waveSize)
                 {
                     options.pOptions->waveSize = shaderCreate.tuningOptions.waveSize;
@@ -1031,6 +1041,18 @@ void ShaderOptimizer::BuildTuningProfile()
                 pAction->shaderCreate.tuningOptions.scalarizeWaterfallLoads =
                     m_settings.overrideScalarizeWaterfallLoads;
             }
+            if (m_settings.overrideBackwardPropagateNoContract)
+            {
+                pAction->shaderCreate.apply.backwardPropagateNoContract = true;
+                pAction->shaderCreate.tuningOptions.backwardPropagateNoContract =
+                    m_settings.overrideBackwardPropagateNoContract;
+            }
+            if (m_settings.disableForwardPropagateNoContract)
+            {
+                pAction->shaderCreate.apply.forwardPropagateNoContract = true;
+                pAction->shaderCreate.tuningOptions.backwardPropagateNoContract =
+                    !m_settings.disableForwardPropagateNoContract;
+            }
 
             switch (m_settings.overrideWaveSize)
             {
@@ -1135,68 +1157,6 @@ void ShaderOptimizer::BuildAppProfileLlpc()
 
     m_appShaderProfile.BuildAppProfileLlpc(appProfile, gfxIpLevel, asicRevision, &m_appProfile);
 
-    if (appProfile == AppProfile::Dota2)
-    {
-        if ((asicRevision >= Pal::AsicRevision::Polaris10) && (asicRevision <= Pal::AsicRevision::Polaris12))
-        {
-            i = m_appProfile.entryCount++;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0xdd6c573c46e6adf8;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x751207727c904749;
-            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
-
-            i = m_appProfile.entryCount++;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x71093bf7c6e98da8;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0xfbc956d87a6d6631;
-            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
-
-            i = m_appProfile.entryCount++;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0xedd89880de2091f9;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x506d0ac3995d2f1b;
-            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
-
-            i = m_appProfile.entryCount++;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0xbc583b30527e9f1d;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x1ef8276d42a14220;
-            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
-
-            i = m_appProfile.entryCount++;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x012ddab000f80610;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x3a65a6325756203d;
-            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
-
-            i = m_appProfile.entryCount++;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x78095b5acf62f4d5;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x2c1afc1c6f669e33;
-            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
-
-            i = m_appProfile.entryCount++;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x22803b077988ec36;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x7ba50586c34e1662;
-            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
-
-            i = m_appProfile.entryCount++;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x313dab8ff9408da0;
-            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0xbb11905194a55485;
-            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
-        }
-    }
-
     if (appProfile == AppProfile::ShadowOfTheTombRaider)
     {
         i = m_appProfile.entryCount++;
@@ -1221,14 +1181,11 @@ void ShaderOptimizer::BuildAppProfileLlpc()
 
     if (appProfile == AppProfile::CSGO)
     {
-        if (gfxIpLevel >= Pal::GfxIpLevel::GfxIp10_1)
-        {
-            i = m_appProfile.entryCount++;
-            PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
-            pEntry->pattern.match.always = true;
-            pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.disableFastMathFlags = true;
-            pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.tuningOptions.disableFastMathFlags = 32u;
-        }
+        i = m_appProfile.entryCount++;
+        PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
+        pEntry->pattern.match.always = true;
+        pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.disableFastMathFlags = true;
+        pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.tuningOptions.disableFastMathFlags = 32u;
     }
 
     if (appProfile == AppProfile::WarHammerIII)
@@ -1250,6 +1207,7 @@ void ShaderOptimizer::BuildAppProfileLlpc()
         pEntry->pattern.match.always = true;
         pEntry->action.shaders[ShaderStage::ShaderStageCompute].shaderCreate.apply.workaroundStorageImageFormats = true;
     }
+
 }
 
 #if PAL_ENABLE_PRINTS_ASSERTS

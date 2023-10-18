@@ -49,6 +49,7 @@ class PipelineCache;
 class PipelineBinaryCache;
 class ShaderCache;
 class DeferredHostOperation;
+class PipelineCompiler;
 
 #if VKI_RAY_TRACING
 struct DeferredWorkload;
@@ -69,6 +70,11 @@ struct ShaderModuleHandle
     void*            pLlpcShaderModule; // Shader module handle from LLPC
 };
 
+struct LlpcShaderLibraryBlobHeader
+{
+    uint32_t binaryLength;    // Partial ELF binary length
+    uint32_t fragMetaLength;  // Fragment shader metadata length
+};
 // =====================================================================================================================
 // Pipeline Creation feedback info.
 struct PipelineCreationFeedback
@@ -125,7 +131,6 @@ struct PipelineMetadata
     bool                       rayQueryUsed;
 #endif
     bool                       pointSizeUsed;
-    bool                       needsSampleInfo;
     bool                       shadingRateUsedInShader;
     bool                       enableEarlyCompile;
     bool                       enableUberFetchShader;
@@ -247,8 +252,7 @@ public:
         const Device*                pDevice,
         VkShaderModuleCreateFlags    flags,
         VkShaderModuleCreateFlags    internalShaderFlags,
-        size_t                       codeSize,
-        const void*                  pCode,
+        const Vkgc::BinaryData&      shaderBinary,
         const bool                   adaptForFastLink,
         bool                         isInternal,
         ShaderModuleHandle*          pShaderModule,
@@ -261,12 +265,11 @@ public:
     virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) = 0;
 
     virtual VkResult CreateGraphicsPipelineBinary(
-        Device*                           pDevice,
+        const Device*                     pDevice,
         uint32_t                          deviceIdx,
         PipelineCache*                    pPipelineCache,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-        size_t*                           pPipelineBinarySize,
-        const void**                      ppPipelineBinary,
+        Vkgc::BinaryData*                 pPipelineBinary,
         Vkgc::PipelineShaderInfo**        ppShadersInfo,
         void*                             pPipelineDumpHandle,
         uint64_t                          pipelineHash,
@@ -286,20 +289,17 @@ public:
         uint32_t                    deviceIdx,
         PipelineCache*              pPipelineCache,
         ComputePipelineBinaryCreateInfo*  pCreateInfo,
-        size_t*                     pPipelineBinarySize,
-        const void**                ppPipelineBinary,
+        Vkgc::BinaryData*           pPipelineBinary,
         void*                       pPipelineDumpHandle,
         uint64_t                    pipelineHash,
         Util::MetroHash::Hash*      pCacheId,
         int64_t*                    pCompileTime) = 0;
 
     virtual void FreeGraphicsPipelineBinary(
-        const void*                 pPipelineBinary,
-        size_t                      binarySize) = 0;
+        const Vkgc::BinaryData& pipelineBinary) = 0;
 
     virtual void FreeComputePipelineBinary(
-        const void*                 pPipelineBinary,
-        size_t                      binarySize) = 0;
+        const Vkgc::BinaryData& pipelineBinary) = 0;
 
 #if VKI_RAY_TRACING
     virtual VkResult CreateRayTracingPipelineBinary(
@@ -316,6 +316,24 @@ public:
     virtual void FreeRayTracingPipelineBinary(
         RayTracingPipelineBinary* pPipelineBinary) = 0;
 #endif
+    virtual void BuildPipelineInternalBufferData(
+        const PipelineCompiler*           pCompiler,
+        const uint32_t                    uberFetchConstBufRegBase,
+        const uint32_t                    specConstBufVertexRegBase,
+        const uint32_t                    specConstBufFragmentRegBase,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo) = 0;
+
+    virtual VkResult CreateColorExportBinary(
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        void*                             pPipelineDumpHandle,
+        Vkgc::BinaryData*                 pOutputPackage) = 0;
+
+    virtual bool IsGplFastLinkCompatible(
+        const Device*                           pDevice,
+        uint32_t                                deviceIdx,
+        const GraphicsPipelineBinaryCreateInfo* pCreateInfo) = 0;
+
+    virtual Vkgc::BinaryData ExtractPalElfBinary(const Vkgc::BinaryData& shaderBinary) = 0;
 
     static void DisableNggCulling(Vkgc::NggState* pNggState);
 
@@ -325,9 +343,30 @@ public:
 #endif
 
 protected:
-    PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object
-    Vkgc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by Vkgc
-    Pal::GfxIpLevel    m_gfxIpLevel;           // Graphics IP level
+    void LoadShaderBinaryFromCache(
+        PipelineCache*               pPipelineCache,
+        const Util::MetroHash::Hash* pCacheId,
+        Vkgc::BinaryData*            pCacheBinary,
+        bool*                        pHitCache,
+        bool*                        pHitAppCache);
+
+    template<class ShaderLibraryBlobHeader>
+    void StoreShaderBinaryToCache(
+        PipelineCache*                 pPipelineCache,
+        const Util::MetroHash::Hash*   pCacheId,
+        const ShaderLibraryBlobHeader* pHeader,
+        const void*                    pBlob,
+        const void*                    pFragmentMeta,
+        bool                           hitCache,
+        bool                           hitAppCache,
+        Vkgc::BinaryData*              pCacheBinary);
+
+    PhysicalDevice*      m_pPhysicalDevice;      // Vulkan physical device object
+    Vkgc::GfxIpVersion   m_gfxIp;                // Graphics IP version info, used by Vkgc
+    Pal::GfxIpLevel      m_gfxIpLevel;           // Graphics IP level
+    PipelineBinaryCache* m_pBinaryCache;         // Internal pipeline binary cache
+                                                 // NOTE: It is owned by PipelineCompiler.
+    PipelineCompileCacheMatrix m_gplCacheMatrix; // Graphics pipeline compile statistic info
     static const char* GetShaderStageName(ShaderStage shaderStage);
     static const char* GetGraphicsLibraryName(GraphicsLibraryType libraryType);
 private:

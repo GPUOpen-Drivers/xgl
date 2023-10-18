@@ -117,14 +117,10 @@ private:
                                                     // flushes/invalidations in shader-to-shader barrier cases at the
                                                     // expense of always flushing/invalidating L1 caches.
                                                     // This does NOT violate the Vulkan separate access mask rule.
-                                                    // This behavior is likely preferred on GFX6-GFX8 but may not be
-                                                    // beneficial on GFX9+.
             uint32_t avoidCpuMemoryCoher    :  1;   // Avoid CPU and memory domain coherency unless corresponding
                                                     // flags are explicitly requested to lower the number of L2 cache
                                                     // flushes/invalidations.
                                                     // This does NOT violate the Vulkan separate access mask rule.
-                                                    // May or may not be beneficial on GFX6-GFX8 but should be
-                                                    // preferred on GFX9+ as all other accesses go through the L2.
             uint32_t reserved               : 27;   // Reserved for future use.
         };
         uint32_t        u32All;

@@ -599,13 +599,14 @@ VkResult Memory::CreateGpuMemory(
 
                 pDevice->FreeApiObject(pAllocator, pSystemMem);
 
-                if (palResult == Pal::Result::ErrorOutOfGpuMemory)
+                if ((palResult == Pal::Result::ErrorOutOfGpuMemory) ||
+                    (palResult == Pal::Result::ErrorUnavailable))
                 {
                     vkResult = VK_ERROR_OUT_OF_DEVICE_MEMORY;
                 }
                 else
                 {
-                    vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                    vkResult = PalToVkError(palResult);
                 }
             }
         }

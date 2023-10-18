@@ -2,52 +2,51 @@
   "entries": [
     {
       "pattern": {
+        "shaderOnly": true,
         "cs": {
-          "codeHash": "0x05240ad326c14f2c cd9739a9c35ebd5b"
+          "codeHash": "0x04d2d5e97a62c63a f0e7a98f8a3378c0"
         }
       },
       "action": {
         "cs": {
-          "maxWavesPerCu": 8,
+          "forceLoopUnrollCount": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x0c60459c2f1883c6 ee40ab0dcef5f327"
+        }
+      },
+      "action": {
+        "cs": {
           "useSiScheduler": true
         }
       }
     },
     {
       "pattern": {
-        "cs": {
-          "codeHash": "0x2ea7831a09905a97 5c9ca20ad6346d03"
+        "ps": {
+          "codeHash": "0xc412fe0973f91c52 a5a03aeebecd3083"
         }
       },
       "action": {
-        "cs": {
-          "vgprLimit": 48,
-          "useSiScheduler": true
-        }
-      }
-    },
-    {
-      "pattern": {
-        "cs": {
-          "codeHash": "0x6facb97bdf207624 1314dafef65eac10"
-        }
-      },
-      "action": {
-        "cs": {
-          "disableLoopUnrolls": true
+        "ps": {
+          "favorLatencyHiding": true
         }
       }
     },
     {
       "pattern": {
         "ps": {
-          "codeHash": "0xb39f2eec1fab4c8a 3b263a3c47c03e5e"
+          "codeHash": "0x2841218c6a53482e b50de2c597b18f35"
         }
       },
       "action": {
-        "binningOverride": 2,
         "ps": {
-          "allowReZ": 1
+          "favorLatencyHiding": true
         }
       }
     }

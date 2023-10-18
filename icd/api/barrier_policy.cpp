@@ -435,18 +435,8 @@ void BarrierPolicy::InitCachePolicy(
     m_flags.combinedAccessMasks     = (barrierOptions & CombinedAccessMasks) ? 1 : 0;
     m_flags.skipDstCacheInv         = (barrierOptions & SkipDstCacheInv) ? 1 : 0;
     m_flags.preferFlushOverInv      = (barrierOptions & PreferFlushOverInv) ? 1 : 0;
-    if (pPhysicalDevice->PalProperties().gfxLevel < Pal::GfxIpLevel::GfxIp9)
-    {
-        // GFX6-8 specific configuration.
-        m_flags.keepShaderCoher     = (barrierOptions & Gfx6KeepShaderCoher) ? 1 : 0;
-        m_flags.avoidCpuMemoryCoher = (barrierOptions & Gfx6AvoidCpuMemoryCoher) ? 1 : 0;
-    }
-    else
-    {
-        // GFX9+ specific configuration.
-        m_flags.keepShaderCoher     = (barrierOptions & Gfx9KeepShaderCoher) ? 1 : 0;
-        m_flags.avoidCpuMemoryCoher = (barrierOptions & Gfx9AvoidCpuMemoryCoher) ? 1 : 0;
-    }
+    m_flags.keepShaderCoher         = (barrierOptions & KeepShaderCoher) ? 1 : 0;
+    m_flags.avoidCpuMemoryCoher     = (barrierOptions & AvoidCpuMemoryCoher) ? 1 : 0;
 
     // Setting both SkipDstCacheInv and PreferFlushOverInv isn't supported, as SkipDstCacheInv assumes that the
     // Vulkan separate access mask rule would otherwise be fulfilled by invalidating input caches.

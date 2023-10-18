@@ -324,6 +324,13 @@ VkResult RenderPassBuilder::Build(
         result = BuildSubpass(subpass);
     }
 
+    if (m_pInfo->doClearsUpfront                                 &&
+        (m_pSubpasses[0].syncTop.barrier.flags.preColorClearSync ||
+         m_pSubpasses[0].syncTop.barrier.flags.preDsClearSync))
+    {
+        PostProcessSyncPoint(&m_pSubpasses[0].syncTop);
+    }
+
     if (result == Pal::Result::Success)
     {
         result = BuildEndState();
@@ -394,16 +401,36 @@ Pal::Result RenderPassBuilder::BuildSubpass(
         result = BuildResolveAttachmentReferences(subpass);
     }
 
-    // If we are clearing more than one color target, then we won't auto-sync (it ends up being slower and causing
-    // back-to-back syncs under the current implementation).  This means we need to manually pre-sync also.
-    if (pSubpass->colorClears.NumElements() > 1)
-    {
-        pSubpass->syncTop.barrier.flags.preColorClearSync = 1;
-    }
+    const auto numColorClears = pSubpass->colorClears.NumElements();
+    const auto numDsClears    = pSubpass->dsClears.NumElements();
 
-    if (pSubpass->dsClears.NumElements() > 1)
+    if (m_pInfo->doClearsUpfront)
     {
-        pSubpass->syncTop.barrier.flags.preDsClearSync = 1;
+        // Color and depth/stencil clears will be relocated to the beginning of the renderpass.  Handle the pre color
+        // and pre depth/stencil clear syncs in the syncTop barrier of subpass 0.
+        if (numColorClears > 1)
+        {
+            m_pSubpasses[0].syncTop.barrier.flags.preColorClearSync = 1;
+        }
+
+        if (numDsClears > 1)
+        {
+            m_pSubpasses[0].syncTop.barrier.flags.preDsClearSync = 1;
+        }
+    }
+    else
+    {
+        // If we are clearing more than one color target, then we won't auto-sync (it ends up being slower and causing
+        // back-to-back syncs under the current implementation).  This means we need to manually pre-sync also.
+        if (numColorClears > 1)
+        {
+            pSubpass->syncTop.barrier.flags.preColorClearSync = 1;
+        }
+
+        if (numDsClears > 1)
+        {
+            pSubpass->syncTop.barrier.flags.preDsClearSync = 1;
+        }
     }
 
     // Pre-calculate a master flag for whether this subpass's sync points are active based on what was added to them.

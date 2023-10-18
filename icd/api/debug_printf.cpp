@@ -85,7 +85,7 @@ void DebugPrintf::BindPipeline(
     uint32_t         userDataOffset)
 {
     uint64_t tableVa = 0;
-    if ((m_state == Enabled) && (pPipeline->GetFormatStrings().GetNumEntries() > 0))
+    if ((m_state == Enabled) && (pPipeline->GetFormatStrings()->GetNumEntries() > 0))
     {
         const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
         InternalMemCreateInfo allocInfo = {};
@@ -119,7 +119,7 @@ void DebugPrintf::BindPipeline(
             pCmdBuffer->CmdSetUserData(static_cast<Pal::PipelineBindPoint>(bindPoint), userDataOffset, 1, pEntry);
 
             m_parsedFormatStrings.Reset();
-            for (auto it = pPipeline->GetFormatStrings().Begin(); it.Get() != nullptr; it.Next())
+            for (auto it = pPipeline->GetFormatStrings()->Begin(); it.Get() != nullptr; it.Next())
             {
                 bool found = true;
                 PrintfSubSection* pSubSections = nullptr;
@@ -194,7 +194,7 @@ Pal::Result DebugPrintf::PostQueueProcess(
 
         if (bufferSize > 0)
         {
-            const auto& formatStrings = m_pPipeline->GetFormatStrings();
+            const auto& formatStrings = *m_pPipeline->GetFormatStrings();
             const uint32_t entryHeaderSize = 2;
             uint64_t decodeOffset = 0;
             PrintfString outputBufferStr(nullptr);

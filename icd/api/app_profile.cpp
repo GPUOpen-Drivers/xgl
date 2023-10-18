@@ -213,6 +213,12 @@ constexpr AppProfilePatternEntry AppNameRomeRemasteredLinux =
     "rome"
 };
 
+constexpr AppProfilePatternEntry AppNameEnscape =
+{
+    PatternAppNameLower,
+    "enscape"
+};
+
 constexpr AppProfilePatternEntry AppEngineSedp =
 {
     PatternEngineNameLower,
@@ -398,18 +404,6 @@ constexpr AppProfilePatternEntry AppNameSpidermanRemastered =
 {
     PatternExeNameLower,
     "spider-man.exe"
-};
-
-constexpr AppProfilePatternEntry AppNameYuzu =
-{
-    PatternAppNameLower,
-    "yuzu emulator"
-};
-
-constexpr AppProfilePatternEntry AppEngineYuzu =
-{
-    PatternEngineNameLower,
-    "yuzu emulator"
 };
 
 #if VKI_RAY_TRACING
@@ -704,6 +698,18 @@ constexpr AppProfilePatternEntry AppNameTheSurge2 =
 {
     PatternAppNameLower,
     "fledge"
+};
+
+constexpr AppProfilePatternEntry AppNameBaldursGate3 =
+{
+    PatternAppNameLower,
+    "baldur's gate 3"
+};
+
+constexpr AppProfilePatternEntry AppEngineDivinity =
+{
+    PatternEngineNameLower,
+    "the divinity engine"
 };
 
 constexpr AppProfilePatternEntry PatternEnd = {};
@@ -1230,6 +1236,15 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::BaldursGate3,
+        {
+            AppNameBaldursGate3,
+            AppEngineDivinity,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::SOTTR,
         {
             AppNameSOTTR,
@@ -1250,15 +1265,6 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::SpidermanRemastered,
         {
             AppNameSpidermanRemastered,
-            PatternEnd
-        }
-    },
-
-    {
-        AppProfile::Yuzu,
-        {
-            AppNameYuzu,
-            AppEngineYuzu,
             PatternEnd
         }
     },
@@ -1419,6 +1425,14 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::Zink,
         {
             AppEngineZink,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Enscape,
+        {
+            AppNameEnscape,
             PatternEnd
         }
     }

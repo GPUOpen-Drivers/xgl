@@ -196,17 +196,16 @@ VkResult ComputePipeline::Create(
     uint64 startTimeTicks = Util::GetPerfCpuTime();
 
     // Setup PAL create info from Vulkan inputs
-    size_t                          pipelineBinarySizes[MaxPalDevices] = {};
-    const void*                     pPipelineBinaries[MaxPalDevices]   = {};
-    Util::MetroHash::Hash           cacheId[MaxPalDevices]             = {};
-    PipelineCompiler*               pDefaultCompiler                   = pDevice->GetCompiler(DefaultDeviceIndex);
-    const RuntimeSettings&          settings                           = pDevice->GetRuntimeSettings();
-    ComputePipelineBinaryCreateInfo binaryCreateInfo                   = {};
-    PipelineOptimizerKey            pipelineOptimizerKey               = {};
-    ShaderOptimizerKey              shaderOptimizerKey                 = {};
-    ShaderModuleHandle              tempModule                         = {};
-    VkResult                        result                             = VK_SUCCESS;
-    PipelineMetadata                binaryMetadata                     = {};
+    Vkgc::BinaryData                pipelineBinaries[MaxPalDevices] = {};
+    Util::MetroHash::Hash           cacheId[MaxPalDevices]         = {};
+    PipelineCompiler*               pDefaultCompiler               = pDevice->GetCompiler(DefaultDeviceIndex);
+    const RuntimeSettings&          settings                       = pDevice->GetRuntimeSettings();
+    ComputePipelineBinaryCreateInfo binaryCreateInfo               = {};
+    PipelineOptimizerKey            pipelineOptimizerKey           = {};
+    ShaderOptimizerKey              shaderOptimizerKey             = {};
+    ShaderModuleHandle              tempModule                     = {};
+    VkResult                        result                         = VK_SUCCESS;
+    PipelineMetadata                binaryMetadata                 = {};
 
     ComputePipelineShaderStageInfo shaderInfo = {};
     result = BuildShaderStageInfo(pDevice,
@@ -274,8 +273,7 @@ VkResult ComputePipeline::Create(
                 cacheResult = pDevice->GetCompiler(deviceIdx)->GetCachedPipelineBinary(
                     &cacheId[deviceIdx],
                     pPipelineBinaryCache,
-                    &pipelineBinarySizes[deviceIdx],
-                    &pPipelineBinaries[deviceIdx],
+                    &pipelineBinaries[deviceIdx],
                     &isUserCacheHit,
                     &isInternalCacheHit,
                     &binaryCreateInfo.freeCompilerBinary,
@@ -304,8 +302,7 @@ VkResult ComputePipeline::Create(
                         deviceIdx,
                         pPipelineCache,
                         &binaryCreateInfo,
-                        &pipelineBinarySizes[deviceIdx],
-                        &pPipelineBinaries[deviceIdx],
+                        &pipelineBinaries[deviceIdx],
                         &cacheId[deviceIdx]);
                 }
 
@@ -315,8 +312,7 @@ VkResult ComputePipeline::Create(
                         pDevice,
                         binaryCreateInfo.compilerType,
                         &binaryCreateInfo.freeCompilerBinary,
-                        &pPipelineBinaries[deviceIdx],
-                        &pipelineBinarySizes[deviceIdx],
+                        &pipelineBinaries[deviceIdx],
                         binaryCreateInfo.pBinaryMetadata);
                 }
             }
@@ -324,8 +320,7 @@ VkResult ComputePipeline::Create(
             {
                 pDefaultCompiler->ReadBinaryMetadata(
                     pDevice,
-                    pPipelineBinaries[DefaultDeviceIndex],
-                    pipelineBinarySizes[DefaultDeviceIndex],
+                    pipelineBinaries[DefaultDeviceIndex],
                     &binaryMetadata);
             }
         }
@@ -336,8 +331,7 @@ VkResult ComputePipeline::Create(
             pDevice->GetCompiler(deviceIdx)->CachePipelineBinary(
                 &cacheId[deviceIdx],
                 pPipelineBinaryCache,
-                pipelineBinarySizes[deviceIdx],
-                pPipelineBinaries[deviceIdx],
+                &pipelineBinaries[deviceIdx],
                 isUserCacheHit,
                 isInternalCacheHit);
         }
@@ -364,8 +358,8 @@ VkResult ComputePipeline::Create(
     if (result == VK_SUCCESS)
     {
         localPipelineInfo.pipeline.flags.clientInternal = false;
-        localPipelineInfo.pipeline.pipelineBinarySize   = pipelineBinarySizes[DefaultDeviceIndex];
-        localPipelineInfo.pipeline.pPipelineBinary      = pPipelineBinaries[DefaultDeviceIndex];
+        localPipelineInfo.pipeline.pipelineBinarySize   = pipelineBinaries[DefaultDeviceIndex].codeSize;
+        localPipelineInfo.pipeline.pPipelineBinary      = pipelineBinaries[DefaultDeviceIndex].pCode;
 
         pipelineSize =
             pDevice->PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(localPipelineInfo.pipeline, &palResult);
@@ -397,10 +391,10 @@ VkResult ComputePipeline::Create(
 
             // If pPipelineBinaries[DefaultDeviceIndex] is sufficient for all devices, the other pipeline binaries
             // won't be created.  Otherwise, like if gl_DeviceIndex is used, they will be.
-            if (pPipelineBinaries[deviceIdx] != nullptr)
+            if (pipelineBinaries[deviceIdx].pCode != nullptr)
             {
-                localPipelineInfo.pipeline.pipelineBinarySize = pipelineBinarySizes[deviceIdx];
-                localPipelineInfo.pipeline.pPipelineBinary    = pPipelineBinaries[deviceIdx];
+                localPipelineInfo.pipeline.pipelineBinarySize = pipelineBinaries[deviceIdx].codeSize;
+                localPipelineInfo.pipeline.pPipelineBinary    = pipelineBinaries[deviceIdx].pCode;
             }
 
             palResult = pDevice->PalDevice(deviceIdx)->CreateComputePipeline(
@@ -459,7 +453,7 @@ VkResult ComputePipeline::Create(
 
         uint32_t origThreadgroupDims[3];
         FetchPalMetadata(pDevice->VkInstance()->Allocator(),
-                         pPipelineBinaries[DefaultDeviceIndex],
+                         pipelineBinaries[DefaultDeviceIndex].pCode,
                          origThreadgroupDims);
 
         // On success, wrap it up in a Vulkan object and return.
@@ -481,10 +475,11 @@ VkResult ComputePipeline::Create(
         {
             ComputePipeline* pComputePipeline = static_cast<ComputePipeline*>(pSystemMem);
             pComputePipeline->ClearFormatString();
-            DebugPrintf::DecodeFormatStringsFromElf(pDevice,
-                                                    pipelineBinarySizes[DefaultDeviceIndex],
-                                                    static_cast<const char*>(pPipelineBinaries[DefaultDeviceIndex]),
-                                                    pComputePipeline->GetFormatStrings());
+            DebugPrintf::DecodeFormatStringsFromElf(
+                pDevice,
+                pipelineBinaries[DefaultDeviceIndex].codeSize,
+                static_cast<const char*>(pipelineBinaries[DefaultDeviceIndex].pCode),
+                pComputePipeline->GetFormatStrings());
         }
     }
     else
@@ -505,10 +500,10 @@ VkResult ComputePipeline::Create(
     // Free the created pipeline binaries now that the PAL Pipelines/PipelineBinaryInfo have read them.
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
-        if (pPipelineBinaries[deviceIdx] != nullptr)
+        if (pipelineBinaries[deviceIdx].pCode != nullptr)
         {
             pDevice->GetCompiler(deviceIdx)->FreeComputePipelineBinary(
-                &binaryCreateInfo, pPipelineBinaries[deviceIdx], pipelineBinarySizes[deviceIdx]);
+                &binaryCreateInfo, pipelineBinaries[deviceIdx]);
         }
     }
 

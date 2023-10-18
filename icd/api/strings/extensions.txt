@@ -197,3 +197,4 @@ VK_EXT_attachment_feedback_loop_layout
 VK_EXT_physical_device_drm
 VK_EXT_texture_compression_astc_hdr
 VK_EXT_image_drm_format_modifier
+VK_EXT_frame_boundary

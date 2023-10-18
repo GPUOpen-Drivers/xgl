@@ -391,7 +391,8 @@ private:
 
     static VkFormat GetCreateInfoFormat(
         const VkImageCreateInfo* pCreateInfo,
-        const ImageExtStructs&   extStructs);
+        const ImageExtStructs&   extStructs,
+        const RuntimeSettings&   settings);
 
     static void GetExternalMemoryFlags(
         const Device*          pDevice,

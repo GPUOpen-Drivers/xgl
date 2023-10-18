@@ -1259,6 +1259,11 @@
             "Name": "DxgiDelayAcquireToPostPresent",
             "Description": "When acquiring more than one image, delay the acquire until after present. This may help cover some corner cases with respect to DWM presentation",
             "Value": 64
+          },
+          {
+            "Name": "DxgiAdaptiveSync",
+            "Description": "Allow PAL to use a lower overhead synchronization method when the expected present mode is fullsreen. This can improve performance but may cause momentary corruption when the present mode is transitioned to windowed",
+            "Value": 128
           }
         ],
         "Name": "DxgiPresentSettings"
@@ -1430,6 +1435,18 @@
       "Name": "PipelineDumpDir",
       "Type": "string",
       "Size": 256
+    },
+    {
+      "Description": "Append Executable Name in PipelineDumpDir",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "AppendExeNameToPipelineDump"
     },
     {
       "ValidValues": {
@@ -2175,12 +2192,12 @@
       "Name": "EnableSpvValidation"
     },
     {
-      "Description": "GFX10 plus-specific tessellation factor optimization.",
+      "Description": "GFX11 plus-specific tessellation factor optimization.",
       "Tags": [
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Scope": "Driver",
       "Type": "bool",
@@ -2638,9 +2655,14 @@
             "Description": "Legacy Raytracing."
           },
           {
-            "Name": "RaytracingRefactored",
+            "Name": "RaytracingContinufy",
             "Value": 2,
-            "Description": "Refactored Raytracing path"
+            "Description": "Raytracing Continufy path"
+          },
+          {
+            "Name": "RaytracingContinuations",
+            "Value": 3,
+            "Description": "Raytracing Continuations"
           }
         ],
         "Name": "LlpcRaytracingMode"
@@ -2649,6 +2671,41 @@
         "Default": "RaytracingLegacy"
       },
       "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Continuation flags",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "CpsNoFlag"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "CpsFlag",
+        "Values": [
+          {
+            "Name": "CpsNoFlag",
+            "Value": 0,
+            "Description": "No extra flag"
+          },
+          {
+            "Name": "CpsFlagStackInGlobalMem",
+            "Value": 1,
+            "Description": "Put stack in global memory instead of scratch, for ray sorting."
+          }
+        ]
+      },
+      "Type": "uint32",
+      "Name": "CpsFlags",
       "Scope": "Driver"
     },
     {
@@ -4928,49 +4985,39 @@
             "Description": "Default barrier queues"
           },
           {
-            "Name": "Gfx6KeepShaderCoher",
+            "Name": "KeepShaderCoher",
             "Value": 256,
-            "Description": "Keep shader domain always coherent on GFX6-GFX8 thus avoiding L2 cache flushes/invalidations in shader-to-shader barrier cases at the expense of always flushing/invalidating L1 caches. This does NOT violate the Vulkan separate access mask rule. This behavior is likely preferred on GFX6-GFX8."
+            "Description": "Keep shader domain always coherent on GFX10+ thus avoiding L2 cache flushes/invalidations in shader-to-shader barrier cases at the expense of always flushing/invalidating L1 caches. This does NOT violate the Vulkan separate access mask rule. This behavior may not be beneficial on GFX10+."
           },
           {
-            "Name": "Gfx6AvoidCpuMemoryCoher",
+            "Name": "AvoidCpuMemoryCoher",
             "Value": 512,
-            "Description": "Avoid CPU and memory domain coherency on GFX6-GFX8 unless corresponding flags are explicitly requested to lower the number of L2 cache flushes/invalidations. This does NOT violate the Vulkan separate access mask rule. This behavior may or may not be beneficial on GFX6-GFX8."
-          },
-          {
-            "Name": "Gfx9KeepShaderCoher",
-            "Value": 1024,
-            "Description": "Keep shader domain always coherent on GFX9+ thus avoiding L2 cache flushes/invalidations in shader-to-shader barrier cases at the expense of always flushing/invalidating L1 caches. This does NOT violate the Vulkan separate access mask rule. This behavior may not be beneficial on GFX9+."
-          },
-          {
-            "Name": "Gfx9AvoidCpuMemoryCoher",
-            "Value": 2048,
-            "Description": "Avoid CPU and memory domain coherency on GFX9+ unless corresponding flags are explicitly requested to lower the number of L2 cache flushes/invalidations. This does NOT violate the Vulkan separate access mask rule. This behavior is preferred on GFX9+ as all other accesses go through the L2."
+            "Description": "Avoid CPU and memory domain coherency on GFX10+ unless corresponding flags are explicitly requested to lower the number of L2 cache flushes/invalidations. This does NOT violate the Vulkan separate access mask rule. This behavior is preferred on GFX10+ as all other accesses go through the L2."
           },
           {
             "Name": "PreferFlushOverInv",
-            "Value": 8192,
+            "Value": 1024,
             "Description": "By default we invalidate input caches to accomodate the Vulkan separate access mask rule. When this is set we'll instead flush all output caches instead to achieve the same goal. Mutually exclusive with SkipDstCacheInv. May or may not be beneficial for certain applications."
           },
           {
             "Name": "CombinedAccessMasks",
-            "Value": 16384,
+            "Value": 2048,
             "Description": "Ignore Vulkan separate access mask rule"
           },
           {
             "Name": "SkipDstCacheInv",
-            "Value": 32768,
+            "Value": 4096,
             "Description": "Do not invalidate dest caches if src cache was not updated. This should be enabled by default for Legacy barriers only."
           }
         ],
         "Name": "ResourceBarrierOptions"
       },
-      "Description": "Force command buffer based barrier queue usage. Default Value: SkipDstCacheInv | Gfx6AvoidCpuMemoryCoher | Gfx9AvoidCpuMemoryCoher",
+      "Description": "Force command buffer based barrier queue usage. Default Value: SkipDstCacheInv | AvoidCpuMemoryCoher",
       "Tags": [
         "General"
       ],
       "Defaults": {
-        "Default": 35328
+        "Default": 4608
       },
       "Type": "uint32",
       "Name": "ResourceBarrierOptions",
@@ -5194,6 +5241,47 @@
       },
       "Type": "bool",
       "Name": "EnableTraceRayAccelStructTracking",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force rebuild for acceleration structure updates.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "ForceRebuildForUpdatesNone"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "ForceRebuildForUpdatesNone",
+            "Value": 0,
+            "Description": "Disable build flag overrides"
+          },
+          {
+            "Name": "ForceRebuildForUpdatesTopLevel",
+            "Value": 1,
+            "Description": "Override flags for top level acceleration structures only"
+          },
+          {
+            "Name": "ForceRebuildForUpdatesBottomLevel",
+            "Value": 2,
+            "Description": "Override flags for bottom level acceleration structures only"
+          },
+          {
+            "Name": "ForceRebuildForUpdatesAll",
+            "Value": 3,
+            "Description": "Override flags for all acceleration structures only"
+          }
+        ],
+        "Name": "ForceRebuildForUpdatesModes"
+      },
+      "Type": "enum",
+      "Name": "ForceRebuildForUpdates",
       "Scope": "Driver"
     },
     {
@@ -6788,6 +6876,43 @@
       "Type": "uint32"
     },
     {
+      "Name": "ForceLowPrecisionDepthImage",
+      "Description": "If not default, force convert D32 or D24 to D16 for depth image",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "ForceLowPrecisionDepthImageDefault"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "ForceLowPrecisionDepthImageDefault",
+            "Value": 0,
+            "Description": "Don't force anything in XGL."
+          },
+          {
+            "Name": "ForceLowPrecisionDepthImageForNonDepthAttachments",
+            "Value": 1,
+            "Description": "Force convert D32/D24 to D16 for depth attachments."
+          },
+          {
+            "Name": "ForceLowPrecisionDepthImageForDepthAttachments",
+            "Value": 2,
+            "Description": "Force convert D32/D24 to D16 for non depth attachments."
+          }
+        ],
+        "Name": "ForceLowPrecisionDepthImage"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Scope": "Driver",
+      "Type": "uint32"
+    },
+    {
       "Name": "LimitCbFetch256B",
       "Description": "This bit limits CB color cache fetch to 256B on cache miss, regardless of sector size. ",
       "Tags": [
@@ -6893,6 +7018,18 @@
       "Name": "DisableImplicitInvariantExports"
     },
     {
+      "Description": "[LLPC ONLY] Disables forward propagation of NoContract flags. This option is legal but may cause issues if applications are sensitive to FMA influencing results.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "DisableForwardPropagateNoContract"
+    },
+    {
       "Description": "This value denotes whether using CmdClearBoundAttachments/CmdClearBoundDepthStencilTargets for subpass load op clears or not.",
       "Tags": [
         "Optimization"
@@ -6903,6 +7040,18 @@
       "Scope": "Driver",
       "Type": "bool",
       "Name": "SubpassLoadOpClearsBoundAttachments"
+    },
+    {
+      "Description": "Move all load operation clears from the beginning of each subpass to beginning of render pass.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "false"
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "RenderPassClearUpfront"
     },
     {
       "Description": "Set default AllGpuRenderState before pipeline bind.",
@@ -7906,6 +8055,18 @@
       "Scope": "Driver"
     },
     {
+      "Description": "[LLPC ONLY] Backward propagate NoContract flags to all related operation. This is a workaround for SPIRV generated without sufficient NoContract flags.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Name": "OverrideBackwardPropagateNoContract",
+      "Type": "bool"
+    },
+    {
       "Description": "Enable selective inlining behavior in the compiler.",
       "Tags": [
         "Shader Tuning"
@@ -8593,6 +8754,18 @@
       "Type": "bool",
       "Scope": "Driver",
       "Name": "DisableTruncCoordForGather"
+    },
+    {
+      "Description": "Report suboptimal presents as OutOfDate to force swapchain recreation and resume presenting optimally",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "ReportSuboptimalPresentAsOutOfDate"
     }
   ]
 }

@@ -243,8 +243,7 @@ protected:
         PipelineCache*                                 pPipelineCache,
         const VkPipelineCreationFeedbackCreateInfoEXT* pCreationFeedbackInfo,
         Util::MetroHash::Hash*                         pCacheIds,
-        size_t*                                        pPipelineBinarySizes,
-        const void**                                   ppPipelineBinaries,
+        Vkgc::BinaryData*                              pPipelineBinaries,
         PipelineMetadata*                              pBinaryMetadata);
 
     static VkResult CreatePipelineObjects(
@@ -255,8 +254,7 @@ protected:
         const PipelineLayout*               pPipelineLayout,
         const VbBindingInfo*                pVbInfo,
         const PipelineInternalBufferInfo*   pInternalBuffer,
-        const size_t*                       pPipelineBinarySizes,
-        const void**                        pPipelineBinaries,
+        const Vkgc::BinaryData*             pPipelineBinaries,
         PipelineCache*                      pPipelineCache,
         const Util::MetroHash::Hash*        pCacheIds,
         uint64_t                            apiPsoHash,
@@ -278,17 +276,10 @@ private:
         Device*                           pDevice,
         PipelineCache*                    pPipelineCache,
         GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
-        const size_t*                     pPipelineBinarySizes,
-        const void**                      pPipelineBinaries,
+        const Vkgc::BinaryData*           pPipelineBinaries,
         const Util::MetroHash::Hash*      pCacheIds,
         void*                             pSystemMem,
         Pal::IPipeline**                  pPalPipeline);
-
-    static VkResult PrepareShaderLibrary(
-        Device*                           pDevice,
-        const VkAllocationCallbacks*      pAllocator,
-        GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
-        GraphicsPipelineObjectCreateInfo* pObjectCreateInfo);
 
     void SetOptimizedPipeline(Pal::IPipeline** pPalPipeline);
 

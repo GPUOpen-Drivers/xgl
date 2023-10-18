@@ -224,7 +224,7 @@ void Image::ConvertImageCreateInfo(
     VkImageUsageFlags            imageUsage       = pCreateInfo->usage;
     const RuntimeSettings&       settings         = pDevice->GetRuntimeSettings();
     const Pal::DeviceProperties& palProperties    = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
-    VkFormat                     createInfoFormat = GetCreateInfoFormat(pCreateInfo, extStructs);
+    VkFormat                     createInfoFormat = GetCreateInfoFormat(pCreateInfo, extStructs, settings);
 
     // VK_IMAGE_CREATE_EXTENDED_USAGE_BIT indicates that the image can be created with usage flags that are not
     // supported for the format the image is created with but are supported for at least one format a VkImageView
@@ -300,7 +300,6 @@ void Image::ConvertImageCreateInfo(
         ((pCreateInfo->flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) != 0) &&
         (pCreateInfo->mipLevels > 1)                                                  &&
         Pal::Formats::IsBlockCompressed(pPalCreateInfo->swizzledFormat.format)        &&
-        (palProperties.gfxLevel > Pal::GfxIpLevel::GfxIp9)                            &&
         (pCreateInfo->imageType == VK_IMAGE_TYPE_3D))
     {
         pPalCreateInfo->flags.view3dAs2dArray = 1;
@@ -419,12 +418,10 @@ void Image::ConvertImageCreateInfo(
 
     // Don't force DCC to be enabled for performance reasons unless the image is larger than the minimum size set for
     // compression, another performance optimization.
-    // Don't force DCC to be enabled for shader write image on pre-gfx10 ASICs as DCC is unsupported in shader write.
     const Pal::GfxIpLevel gfxLevel = palProperties.gfxLevel;
     if (((pPalCreateInfo->extent.width * pPalCreateInfo->extent.height) >
          (settings.disableSmallSurfColorCompressionSize * settings.disableSmallSurfColorCompressionSize)) &&
-        (Formats::IsColorFormat(createInfoFormat)) &&
-        ((gfxLevel > Pal::GfxIpLevel::GfxIp9) || (pPalCreateInfo->usageFlags.shaderWrite == false)))
+        (Formats::IsColorFormat(createInfoFormat)))
     {
         const uint32_t forceEnableDccMask = settings.forceEnableDcc;
 
@@ -844,9 +841,14 @@ void Image::SetCommonFlags(
 // Get the image format from the VkImageCreateInfo
 VkFormat Image::GetCreateInfoFormat(
     const VkImageCreateInfo* pCreateInfo,
-    const ImageExtStructs&   extStructs)
+    const ImageExtStructs&   extStructs,
+    const RuntimeSettings&   settings)
 {
     VkFormat format = pCreateInfo->format;
+    if (settings.forceLowPrecisionDepthImage != ForceLowPrecisionDepthImageDefault)
+    {
+        format = GetLowPrecisionDepthFormat(format, pCreateInfo->usage, settings);
+    }
 
     return format;
 }
@@ -916,7 +918,7 @@ VkResult Image::Create(
 
     ConvertImageCreateInfo(pDevice, pCreateInfo, pAllocator, extStructs, resourceKey, &palCreateInfo);
 
-    VkFormat               createInfoFormat      = GetCreateInfoFormat(pCreateInfo, extStructs);
+    VkFormat               createInfoFormat      = GetCreateInfoFormat(pCreateInfo, extStructs, settings);
     VkSharingMode          imageSharingMode      = pCreateInfo->sharingMode;
     const uint32_t         numDevices            = pDevice->NumPalDevices();
     const bool             isSparse              = (pCreateInfo->flags & SparseEnablingFlags) != 0;

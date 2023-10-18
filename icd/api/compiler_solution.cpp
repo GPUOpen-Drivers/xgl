@@ -31,6 +31,7 @@
 #include "include/compiler_solution.h"
 #include "include/vk_device.h"
 #include "include/vk_physical_device.h"
+#include "include/vk_pipeline_cache.h"
 
 #if VKI_RAY_TRACING
 #include "raytrace/ray_tracing_device.h"
@@ -44,7 +45,9 @@ namespace vk
     // =====================================================================================================================
 CompilerSolution::CompilerSolution(
     PhysicalDevice* pPhysicalDevice)
-    : m_pPhysicalDevice(pPhysicalDevice)
+    :
+    m_pPhysicalDevice(pPhysicalDevice),
+    m_gplCacheMatrix{}
 {
 
 }
@@ -62,9 +65,9 @@ VkResult CompilerSolution::Initialize(
     Pal::GfxIpLevel      gfxIpLevel,
     PipelineBinaryCache* pCache)
 {
-    m_gfxIp      = gfxIp;
-    m_gfxIpLevel = gfxIpLevel;
-
+    m_gfxIp        = gfxIp;
+    m_gfxIpLevel   = gfxIpLevel;
+    m_pBinaryCache = pCache;
     return VK_SUCCESS;
 }
 
@@ -135,6 +138,123 @@ void CompilerSolution::DisableNggCulling(
     pNggState->enableSmallPrimFilter     = false;
     pNggState->enableCullDistanceCulling = false;
 }
+
+// =====================================================================================================================
+void CompilerSolution::LoadShaderBinaryFromCache(
+    PipelineCache*               pPipelineCache,
+    const Util::MetroHash::Hash* pCacheId,
+    Vkgc::BinaryData*            pCacheBinary,
+    bool*                        pHitCache,
+    bool*                        pHitAppCache)
+{
+    Util::Result result = Util::Result::NotFound;
+    if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
+    {
+        auto pAppCache = pPipelineCache->GetPipelineCache();
+        result = pAppCache->LoadPipelineBinary(pCacheId, &pCacheBinary->codeSize, &pCacheBinary->pCode);
+    }
+
+    *pHitAppCache = (result == Util::Result::Success);
+    if (result != Util::Result::Success)
+    {
+        if (m_pBinaryCache != nullptr)
+        {
+            result = m_pBinaryCache->LoadPipelineBinary(pCacheId, &pCacheBinary->codeSize, &pCacheBinary->pCode);
+        }
+    }
+
+    m_gplCacheMatrix.cacheAttempts++;
+    if (result == Util::Result::Success)
+    {
+        m_gplCacheMatrix.cacheHits++;
+    }
+
+    *pHitCache = (result == Util::Result::Success);
+}
+
+// =====================================================================================================================
+template<class ShaderLibraryBlobHeader>
+void CompilerSolution::StoreShaderBinaryToCache(
+    PipelineCache*                       pPipelineCache,
+    const Util::MetroHash::Hash*         pCacheId,
+    const ShaderLibraryBlobHeader*       pHeader,
+    const void*                          pBlob,
+    const void*                          pFragmentMeta,
+    bool                                 hitCache,
+    bool                                 hitAppCache,
+    Vkgc::BinaryData*                    pCacheBinary)
+{
+    // Update app pipeline cache when cache is  available and flag hitAppCache is false
+    bool updateAppCache = (hitAppCache == false) &&
+                          (pPipelineCache != nullptr) &&
+                          (pPipelineCache->GetPipelineCache() != nullptr);
+
+    bool updateBinaryCache = false;
+    if (m_pBinaryCache != nullptr)
+    {
+        if (hitAppCache)
+        {
+            Util::QueryResult queryResult = {};
+            updateBinaryCache =
+                (m_pBinaryCache->QueryPipelineBinary(pCacheId, 0, &queryResult) != Util::Result::Success);
+        }
+        else
+        {
+            updateBinaryCache = (hitCache == false);
+        }
+    }
+
+    if (updateBinaryCache || updateAppCache || (pCacheBinary->pCode == nullptr))
+    {
+        if ((pHeader->binaryLength > 0) && (pCacheBinary->codeSize == 0))
+        {
+            size_t cacheSize = sizeof(ShaderLibraryBlobHeader) + pHeader->binaryLength + pHeader->fragMetaLength;
+
+            void* pBuffer = m_pPhysicalDevice->VkInstance()->AllocMem(
+                cacheSize,
+                VK_DEFAULT_MEM_ALIGN,
+                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+            if (pBuffer != nullptr)
+            {
+                memcpy(pBuffer, pHeader, sizeof(ShaderLibraryBlobHeader));
+                memcpy(Util::VoidPtrInc(pBuffer, sizeof(ShaderLibraryBlobHeader)), pBlob, pHeader->binaryLength);
+                if (pFragmentMeta != nullptr)
+                {
+                    memcpy(Util::VoidPtrInc(pBuffer, sizeof(ShaderLibraryBlobHeader) + pHeader->binaryLength),
+                          pFragmentMeta,
+                          pHeader->fragMetaLength);
+                }
+                pCacheBinary->codeSize = cacheSize;
+                pCacheBinary->pCode = pBuffer;
+            }
+        }
+
+        if (pCacheBinary->codeSize > 0)
+        {
+            if (updateBinaryCache)
+            {
+                m_pBinaryCache->StorePipelineBinary(pCacheId, pCacheBinary->codeSize, pCacheBinary->pCode);
+            }
+
+            if (updateAppCache)
+            {
+                pPipelineCache->GetPipelineCache()->StorePipelineBinary(
+                    pCacheId, pCacheBinary->codeSize, pCacheBinary->pCode);
+            }
+        }
+    }
+}
+
+template void CompilerSolution::StoreShaderBinaryToCache<LlpcShaderLibraryBlobHeader>(
+    PipelineCache*                       pPipelineCache,
+    const Util::MetroHash::Hash*         pCacheId,
+    const LlpcShaderLibraryBlobHeader*   pHeader,
+    const void*                          pBlob,
+    const void*                          pFragmentMeta,
+    bool                                 hitCache,
+    bool                                 hitAppCache,
+    Vkgc::BinaryData*                    pCacheBinary);
 
 #if VKI_RAY_TRACING
 // =====================================================================================================================

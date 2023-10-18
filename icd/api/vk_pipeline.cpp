@@ -309,8 +309,7 @@ VkResult Pipeline::BuildShaderStageInfo(
             VK_ASSERT(pTempModules != nullptr);
 
             VkShaderModuleCreateFlags flags           = 0;
-            size_t                    codeSize        = 0;
-            const void*               pCode           = nullptr;
+            Vkgc::BinaryData          shaderBinary    = {};
             Pal::ShaderHash           codeHash        = {};
             PipelineCreationFeedback* pShaderFeedback = (pFeedbacks == nullptr) ? nullptr : pFeedbacks + outIdx;
 
@@ -326,8 +325,8 @@ VkResult Pipeline::BuildShaderStageInfo(
             {
                 // Shader needs to be recompiled with additional options for compatibility with fast-link mode
                 const ShaderModule* pModule = ShaderModule::ObjectFromHandle(stageInfo.module);
-                codeSize = pModule->GetCodeSize();
-                pCode    = pModule->GetCode();
+                shaderBinary.codeSize = pModule->GetCodeSize();
+                shaderBinary.pCode    = pModule->GetCode();
             }
             else
             {
@@ -337,25 +336,24 @@ VkResult Pipeline::BuildShaderStageInfo(
                 if (pShaderModuleCreateInfo != nullptr)
                 {
                     flags    = pShaderModuleCreateInfo->flags;
-                    codeSize = pShaderModuleCreateInfo->codeSize;
-                    pCode    = pShaderModuleCreateInfo->pCode;
+                    shaderBinary.codeSize = pShaderModuleCreateInfo->codeSize;
+                    shaderBinary.pCode    = pShaderModuleCreateInfo->pCode;
 
                     codeHash = ShaderModule::BuildCodeHash(
-                        pCode,
-                        codeSize);
+                        shaderBinary.pCode,
+                        shaderBinary.codeSize);
                 }
             }
 
             PipelineBinaryCache* pBinaryCache = (pCache == nullptr) ? nullptr : pCache->GetPipelineCache();
 
-            if (pCode != nullptr)
+            if (shaderBinary.pCode != nullptr)
             {
                 result = pCompiler->BuildShaderModule(
                     pDevice,
                     flags,
                     0,
-                    codeSize,
-                    pCode,
+                    shaderBinary,
                     adaptForFastLink,
                     false,
                     pBinaryCache,
@@ -363,7 +361,7 @@ VkResult Pipeline::BuildShaderStageInfo(
                     &pTempModules[outIdx]);
 
                 pShaderStageInfo[outIdx].pModuleHandle = &pTempModules[outIdx];
-                pShaderStageInfo[outIdx].codeSize = codeSize;
+                pShaderStageInfo[outIdx].codeSize = shaderBinary.codeSize;
             }
             else if (pPipelineShaderStageModuleIdentifierCreateInfoEXT != nullptr)
             {
@@ -441,7 +439,7 @@ Pipeline::Pipeline(
     m_hasRayTracing(hasRayTracing),
     m_dispatchRaysUserDataOffset(0),
 #endif
-    m_formatStrings(32, pDevice->VkInstance()->Allocator())
+    m_pFormatStrings(nullptr)
 {
     memset(m_pPalPipeline, 0, sizeof(m_pPalPipeline));
 }
@@ -488,7 +486,6 @@ void Pipeline::Init(
             m_pPalPipeline[devIdx] = nullptr;
         }
     }
-    m_formatStrings.Init();
 }
 
 // =====================================================================================================================
@@ -503,6 +500,12 @@ VkResult Pipeline::Destroy(
          deviceIdx++)
     {
         m_pPalPipeline[deviceIdx]->Destroy();
+    }
+
+    if (m_pFormatStrings != nullptr)
+    {
+        Util::Destructor(m_pFormatStrings);
+        pDevice->VkInstance()->FreeMem(m_pFormatStrings);
     }
 
     Util::Destructor(this);
@@ -835,6 +838,7 @@ void Pipeline::ElfHashToCacheId(
     // Extensions and features whose enablement affects compiler inputs (and hence the binary)
     hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO));
     hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_PRIMITIVES_GENERATED_QUERY));
+    hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK));
     {
         hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT));
         hasher.Update(pDevice->GetEnabledFeatures().scalarBlockLayout);

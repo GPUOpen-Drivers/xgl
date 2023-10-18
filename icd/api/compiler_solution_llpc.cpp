@@ -121,6 +121,8 @@ void CompilerSolutionLlpc::Destroy()
         m_pLlpc->Destroy();
         m_pLlpc = nullptr;
     }
+
+    PipelineCompiler::DumpCacheMatrix(m_pPhysicalDevice, "GraphicsPipelineLibrary", UINT32_MAX, &m_gplCacheMatrix);
 }
 
 // =====================================================================================================================
@@ -129,8 +131,7 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     const Device*                pDevice,
     VkShaderModuleCreateFlags    flags,
     VkShaderModuleCreateFlags    internalShaderFlags,
-    size_t                       codeSize,
-    const void*                  pCode,
+    const Vkgc::BinaryData&      shaderBinary,
     const bool                   adaptForFastLink,
     bool                         isInternal,
     ShaderModuleHandle*          pShaderModule,
@@ -147,8 +148,7 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     moduleInfo.pInstance      = pInstance;
     moduleInfo.pfnOutputAlloc = AllocateShaderOutput;
     moduleInfo.pUserData      = &pShaderMemory;
-    moduleInfo.shaderBin.pCode    = pCode;
-    moduleInfo.shaderBin.codeSize = codeSize;
+    moduleInfo.shaderBin      = shaderBinary;
 
     auto pPipelineCompiler = m_pPhysicalDevice->GetCompiler();
     pPipelineCompiler->ApplyPipelineOptions(pDevice, 0, &moduleInfo.options.pipelineOptions
@@ -197,12 +197,11 @@ void CompilerSolutionLlpc::FreeShaderModule(ShaderModuleHandle* pShaderModule)
 // =====================================================================================================================
 // Creates graphics pipeline binary.
 VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
-    Device*                           pDevice,
+    const Device*                     pDevice,
     uint32_t                          deviceIdx,
     PipelineCache*                    pPipelineCache,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-    size_t*                           pPipelineBinarySize,
-    const void**                      ppPipelineBinary,
+    Vkgc::BinaryData*                 pPipelineBinary,
     Vkgc::PipelineShaderInfo**        ppShadersInfo,
     void*                             pPipelineDumpHandle,
     uint64_t                          pipelineHash,
@@ -276,12 +275,14 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
 
         if (pCreateInfo->earlyElfPackage[GraphicsLibraryPreRaster].pCode != nullptr)
         {
-            elfPackage[UnlinkedStageVertexProcess] = pCreateInfo->earlyElfPackage[GraphicsLibraryPreRaster];
+            elfPackage[UnlinkedStageVertexProcess] =
+                ExtractPalElfBinary(pCreateInfo->earlyElfPackage[GraphicsLibraryPreRaster]);
         }
 
         if (pCreateInfo->earlyElfPackage[GraphicsLibraryFragment].pCode != nullptr)
         {
-            elfPackage[UnlinkedStageFragment] = pCreateInfo->earlyElfPackage[GraphicsLibraryFragment];
+            elfPackage[UnlinkedStageFragment] =
+                ExtractPalElfBinary(pCreateInfo->earlyElfPackage[GraphicsLibraryFragment]);
         }
 
         CompilerSolution::DisableNggCulling(&pCreateInfo->pipelineInfo.nggState);
@@ -303,8 +304,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     }
     else
     {
-        *ppPipelineBinary   = pipelineOut.pipelineBin.pCode;
-        *pPipelineBinarySize = pipelineOut.pipelineBin.codeSize;
+        *pPipelineBinary = pipelineOut.pipelineBin;
         if (pipelineOut.pipelineCacheAccess != Llpc::CacheAccessInfo::CacheNotChecked)
         {
             pCreateInfo->pipelineFeedback.feedbackValid = true;
@@ -460,33 +460,53 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
 {
     VkResult result = VK_SUCCESS;
     Util::MetroHash::Hash cacheId = {};
+    Vkgc::BinaryData shaderLibraryBinary = {};
     GraphicsLibraryType gplType = GetGraphicsLibraryType(stage);
 
     bool hitCache = false;
+    bool hitAppCache = false;
+    bool elfReplace = false;
     if (pCreateInfo->earlyElfPackage[gplType].pCode == nullptr)
     {
-        if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
-        {
-            Vkgc::BinaryData elfPackage = {};
-            Util::MetroHash128 hasher;
-            hasher.Update(pCreateInfo->libraryHash[gplType]);
-            hasher.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
-            hasher.Finalize(cacheId.bytes);
-            auto pAppCache = pPipelineCache->GetPipelineCache();
-            hitCache = (pAppCache->LoadPipelineBinary(&cacheId, &elfPackage.codeSize, &elfPackage.pCode)
-                == Util::Result::Success);
-            pShaderModule->elfPackage = elfPackage;
+        Util::MetroHash128              hasher;
+        Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
+        int64_t                         startTime = Util::GetPerfCpuTime();
 
-            // Update the shader feedback
-            PipelineCreationFeedback* pStageFeedBack = &pCreateInfo->stageFeedback[stage];
-            pStageFeedBack->feedbackValid = true;
-            pStageFeedBack->hitApplicationCache = hitCache;
+        hasher.Update(pCreateInfo->libraryHash[gplType]);
+        hasher.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
+        hasher.Finalize(cacheId.bytes);
+
+        Vkgc::BinaryData finalBinary = {};
+        if ((pDevice->GetRuntimeSettings().shaderReplaceMode == ShaderReplacePipelineBinaryHash) ||
+            (pDevice->GetRuntimeSettings().shaderReplaceMode == ShaderReplaceShaderHashPipelineBinaryHash))
+        {
+            elfReplace = PipelineCompiler::ReplacePipelineBinary(pDevice->VkPhysicalDevice(DefaultDeviceIndex),
+                                                                 &pCreateInfo->pipelineInfo,
+                                                                 &finalBinary,
+                                                                 pCreateInfo->libraryHash[gplType]);
+            // Force hit flags to avoid update cache
+            if (elfReplace)
+            {
+                hitCache = true;
+                hitAppCache = true;
+            }
         }
 
-        if (hitCache == false)
+        if (elfReplace == false)
+        {
+            LoadShaderBinaryFromCache(pPipelineCache, &cacheId, &shaderLibraryBinary, &hitCache, &hitAppCache);
+            if (pPipelineCache != nullptr)
+            {
+                // Update the shader feedback
+                PipelineCreationFeedback* pStageFeedBack = &pCreateInfo->stageFeedback[stage];
+                pStageFeedBack->feedbackValid = true;
+                pStageFeedBack->hitApplicationCache = hitAppCache;
+            }
+        }
+
+        if ((hitCache == false) || elfReplace)
         {
             // Build the LLPC pipeline
-            Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
             Vkgc::UnlinkedShaderStage unlinkedStage = UnlinkedStageCount;
 
             // Belong to vertexProcess stage before fragment
@@ -504,21 +524,26 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
                 &pipelineOut,
                 unlinkedStage,
                 pPipelineDumpHandle);
+
+            if (elfReplace == false)
+            {
+                finalBinary = pipelineOut.pipelineBin;
+            }
+
             if (llpcResult == Vkgc::Result::Success)
             {
-                if (stage == ShaderStage::ShaderStageFragment)
-                {
-                    pCreateInfo->pBinaryMetadata->pFsOutputMetaData    = pipelineOut.fsOutputMetaData;
-                    pCreateInfo->pBinaryMetadata->fsOutputMetaDataSize = pipelineOut.fsOutputMetaDataSize;
-                    pipelineOut.pipelineBin.codeSize += pipelineOut.fsOutputMetaDataSize;
-                }
-
-                pShaderModule->elfPackage = pipelineOut.pipelineBin;
-                if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
-                {
-                    pPipelineCache->GetPipelineCache()->StorePipelineBinary(
-                        &cacheId, pipelineOut.pipelineBin.codeSize, pipelineOut.pipelineBin.pCode);
-                }
+                ShaderLibraryBlobHeader blobHeader = {};
+                blobHeader.binaryLength   = finalBinary.codeSize;
+                blobHeader.fragMetaLength = pipelineOut.fsOutputMetaDataSize;
+                StoreShaderBinaryToCache(
+                    pPipelineCache,
+                    &cacheId,
+                    &blobHeader,
+                    finalBinary.pCode,
+                    pipelineOut.fsOutputMetaData,
+                    hitCache,
+                    hitAppCache,
+                    &shaderLibraryBinary);
             }
             else if (llpcResult != Vkgc::Result::RequireFullPipeline)
             {
@@ -526,25 +551,77 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
                                                                           VK_ERROR_INITIALIZATION_FAILED;
             }
 
-            if (llpcResult == Vkgc::Result::Success)
+            // PipelineBin has been translated to blob start with ShaderLibraryBlobHeader in StoreShaderBinaryToCache
+            if (pipelineOut.pipelineBin.pCode != nullptr)
             {
-                pCreateInfo->earlyElfPackage[gplType]     = pShaderModule->elfPackage;
-                pCreateInfo->earlyElfPackageHash[gplType] = cacheId;
-
-                if (stage == ShaderStage::ShaderStageFragment)
-                {
-                    const auto* pModuleData =
-                        reinterpret_cast<const Vkgc::ShaderModuleData*>(pCreateInfo->pipelineInfo.fs.pModuleData);
-                    pCreateInfo->pBinaryMetadata->needsSampleInfo = pModuleData->usage.useSampleInfo;
-                }
-
-                if (pPipelineDumpHandle != nullptr)
-                {
-                    Vkgc::IPipelineDumper::DumpPipelineBinary(
-                        pPipelineDumpHandle, m_gfxIp, &pCreateInfo->earlyElfPackage[gplType]);
-                }
+                FreeGraphicsPipelineBinary(pipelineOut.pipelineBin);
             }
         }
+
+        if (result == VK_SUCCESS)
+        {
+            pShaderModule->elfPackage = shaderLibraryBinary;
+            pCreateInfo->earlyElfPackage[gplType] = pShaderModule->elfPackage;
+            pCreateInfo->earlyElfPackageHash[gplType] = cacheId;
+
+            if (stage == ShaderStage::ShaderStageFragment)
+            {
+                if (shaderLibraryBinary.pCode != nullptr)
+                {
+                    const auto* pShaderLibraryHeader =
+                        reinterpret_cast<const ShaderLibraryBlobHeader*>(shaderLibraryBinary.pCode);
+
+                    pCreateInfo->pBinaryMetadata->fsOutputMetaDataSize = pShaderLibraryHeader->fragMetaLength;
+                    pCreateInfo->pBinaryMetadata->pFsOutputMetaData    = (pShaderLibraryHeader->fragMetaLength > 0) ?
+                        const_cast<void*>(VoidPtrInc(pShaderLibraryHeader + 1, pShaderLibraryHeader->binaryLength)) :
+                        nullptr;
+                }
+            }
+
+            const PipelineShaderInfo* pShaders[ShaderStage::ShaderStageGfxCount] =
+            {
+                &pCreateInfo->pipelineInfo.task,
+                &pCreateInfo->pipelineInfo.vs,
+                &pCreateInfo->pipelineInfo.tcs,
+                &pCreateInfo->pipelineInfo.tes,
+                &pCreateInfo->pipelineInfo.gs,
+                &pCreateInfo->pipelineInfo.mesh,
+                &pCreateInfo->pipelineInfo.fs,
+            };
+
+            for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
+            {
+                if ((pShaders[i]->pModuleData != nullptr) &&
+                    (GetGraphicsLibraryType(static_cast<ShaderStage>(i)) == gplType))
+                {
+                    const auto* pModuleData =
+                        reinterpret_cast<const Vkgc::ShaderModuleData*>(pShaders[i]->pModuleData);
+#if VKI_RAY_TRACING
+                    pCreateInfo->pBinaryMetadata->rayQueryUsed            |= pModuleData->usage.enableRayQuery;
+#endif
+                    pCreateInfo->pBinaryMetadata->pointSizeUsed           |= pModuleData->usage.usePointSize;
+                    pCreateInfo->pBinaryMetadata->shadingRateUsedInShader |= pModuleData->usage.useShadingRate;
+                }
+            }
+
+            if (elfReplace && (finalBinary.pCode != nullptr))
+            {
+                m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(finalBinary.pCode));
+            }
+
+            if (pPipelineDumpHandle != nullptr)
+            {
+                Vkgc::BinaryData elfBinary = ExtractPalElfBinary(pCreateInfo->earlyElfPackage[gplType]);
+                Vkgc::IPipelineDumper::DumpPipelineBinary(
+                    pPipelineDumpHandle, m_gfxIp, &elfBinary);
+            }
+        }
+        m_gplCacheMatrix.totalBinaries++;
+        m_gplCacheMatrix.totalTimeSpent += (Util::GetPerfCpuTime() - startTime);
+
+        PipelineCompiler::DumpCacheMatrix(
+            m_pPhysicalDevice, "GraphicsPipelineLibrary_runtime", m_gplCacheMatrix.totalBinaries, &m_gplCacheMatrix);
+
     }
 
     return result;
@@ -557,8 +634,7 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     uint32_t                         deviceIdx,
     PipelineCache*                   pPipelineCache,
     ComputePipelineBinaryCreateInfo* pCreateInfo,
-    size_t*                          pPipelineBinarySize,
-    const void**                     ppPipelineBinary,
+    Vkgc::BinaryData*                pPipelineBinary,
     void*                            pPipelineDumpHandle,
     uint64_t                         pipelineHash,
     Util::MetroHash::Hash*           pCacheId,
@@ -701,8 +777,7 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     }
     else
     {
-        *ppPipelineBinary = pipelineOut.pipelineBin.pCode;
-        *pPipelineBinarySize = pipelineOut.pipelineBin.codeSize;
+        *pPipelineBinary = pipelineOut.pipelineBin;
         if (pipelineOut.pipelineCacheAccess != Llpc::CacheAccessInfo::CacheNotChecked)
         {
             pCreateInfo->pipelineFeedback.feedbackValid = true;
@@ -896,18 +971,16 @@ void CompilerSolutionLlpc::FreeRayTracingPipelineBinary(
 
 // =====================================================================================================================
 void CompilerSolutionLlpc::FreeGraphicsPipelineBinary(
-    const void*                 pPipelineBinary,
-    size_t                      binarySize)
+    const Vkgc::BinaryData& pipelineBinary)
 {
-    m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
+    m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pipelineBinary.pCode));
 }
 
 // =====================================================================================================================
 void CompilerSolutionLlpc::FreeComputePipelineBinary(
-    const void*                 pPipelineBinary,
-    size_t                      binarySize)
+    const Vkgc::BinaryData& pipelineBinary)
 {
-    m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
+    m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pipelineBinary.pCode));
 }
 
 // =====================================================================================================================
@@ -1163,4 +1236,26 @@ void CompilerSolutionLlpc::UpdateStageCreationFeedback(
         pStageFeedback[stage].hitApplicationCache = (pStageCacheAccesses[stage] == Llpc::CacheAccessInfo::CacheHit);
     }
 }
+
+// =====================================================================================================================
+bool CompilerSolutionLlpc::IsGplFastLinkCompatible(
+    const Device*                           pDevice,
+    uint32_t                                deviceIdx,
+    const GraphicsPipelineBinaryCreateInfo* pCreateInfo)
+{
+    return (pCreateInfo->pipelineInfo.iaState.enableMultiView == false) &&
+           ((pCreateInfo->flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) == 0);
+}
+
+// =====================================================================================================================
+Vkgc::BinaryData CompilerSolutionLlpc::ExtractPalElfBinary(
+    const Vkgc::BinaryData& shaderBinary)
+{
+    Vkgc::BinaryData elfBinary = {};
+    const ShaderLibraryBlobHeader* pHeader = reinterpret_cast<const ShaderLibraryBlobHeader*>(shaderBinary.pCode);
+    elfBinary.pCode    = pHeader + 1;
+    elfBinary.codeSize = pHeader->binaryLength;
+    return elfBinary;
+}
+
 }

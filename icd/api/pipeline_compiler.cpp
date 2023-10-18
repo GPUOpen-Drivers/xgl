@@ -251,26 +251,6 @@ VkResult PipelineCompiler::Initialize()
 
     switch (info.gfxLevel)
     {
-    case Pal::GfxIpLevel::GfxIp6:
-        m_gfxIp.major = 6;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp7:
-        m_gfxIp.major = 7;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp8:
-        m_gfxIp.major = 8;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp8_1:
-        m_gfxIp.major = 8;
-        m_gfxIp.minor = 1;
-        break;
-    case Pal::GfxIpLevel::GfxIp9:
-        m_gfxIp.major = 9;
-        m_gfxIp.minor = 0;
-        break;
     case Pal::GfxIpLevel::GfxIp10_1:
         m_gfxIp.major = 10;
         m_gfxIp.minor = 1;
@@ -373,7 +353,7 @@ void PipelineCompiler::Destroy()
         {
             VK_ASSERT(it.Get()->value.pRefCount != nullptr);
             // Free shader module regardless ref count, as the whole map is being destroyed.
-            VK_ALERT((*(it.Get()->value.pRefCount)) == 1);
+            VK_ALERT((*(it.Get()->value.pRefCount)) != 1);
             *(it.Get()->value.pRefCount) = 0;
 
             // Force use un-lock version of FreeShaderModule.
@@ -396,9 +376,8 @@ void PipelineCompiler::Destroy()
 // =====================================================================================================================
 // Loads shader binary  from replace shader folder with specified shader hash code.
 bool PipelineCompiler::LoadReplaceShaderBinary(
-    uint64_t shaderHash,
-    size_t*  pCodeSize,
-    void**   ppCode)
+    uint64_t          shaderHash,
+    Vkgc::BinaryData* pBinary)
 {
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
     const RuntimeSettings* pSettings = &m_pPhysicalDevice->GetRuntimeSettings();
@@ -420,8 +399,8 @@ bool PipelineCompiler::LoadReplaceShaderBinary(
         replaceFile.Read(pReplaceCode, replaceCodeSize, &readBytes);
         VK_ASSERT(readBytes == replaceCodeSize);
 
-        *ppCode = pReplaceCode;
-        *pCodeSize = replaceCodeSize;
+        pBinary->pCode    = pReplaceCode;
+        pBinary->codeSize = replaceCodeSize;
         findShader = true;
     }
 
@@ -602,8 +581,7 @@ VkResult PipelineCompiler::BuildShaderModule(
     const Device*                   pDevice,
     const VkShaderModuleCreateFlags flags,
     const VkShaderModuleCreateFlags internalShaderFlags,
-    size_t                          codeSize,
-    const void*                     pCode,
+    const Vkgc::BinaryData&         shaderBinary,
     const bool                      adaptForFastLink,
     bool                            isInternal,
     PipelineBinaryCache*            pBinaryCache,
@@ -618,7 +596,7 @@ VkResult PipelineCompiler::BuildShaderModule(
     Util::MetroHash::Hash uniqueHash = {};
 
     Util::MetroHash64 hasher;
-    hasher.Update(reinterpret_cast<const uint8_t*>(pCode), codeSize);
+    hasher.Update(reinterpret_cast<const uint8_t*>(shaderBinary.pCode), shaderBinary.codeSize);
     hasher.Finalize(stableHash.bytes);
 
     hasher.Update(adaptForFastLink);
@@ -626,18 +604,18 @@ VkResult PipelineCompiler::BuildShaderModule(
 
     bool findReplaceShader = false;
 
+    Vkgc::BinaryData finalData = shaderBinary;
     if ((pSettings->shaderReplaceMode == ShaderReplaceShaderHash) ||
         (pSettings->shaderReplaceMode == ShaderReplaceShaderHashPipelineBinaryHash))
     {
-        size_t replaceCodeSize = 0;
-        void* pReplaceCode = nullptr;
+        Vkgc::BinaryData replaceBinary = {};
         uint64_t hash64 = Util::MetroHash::Compact64(&stableHash);
-        findReplaceShader = LoadReplaceShaderBinary(hash64, &replaceCodeSize, &pReplaceCode);
+        findReplaceShader = LoadReplaceShaderBinary(hash64, &replaceBinary);
         if (findReplaceShader)
         {
-            pCode = pReplaceCode;
-            codeSize = replaceCodeSize;
-            Util::MetroHash64::Hash(reinterpret_cast<const uint8_t*>(pCode), codeSize, uniqueHash.bytes);
+            finalData = replaceBinary;
+            Util::MetroHash64::Hash(
+                reinterpret_cast<const uint8_t*>(replaceBinary.pCode), replaceBinary.codeSize, uniqueHash.bytes);
         }
     }
 
@@ -654,8 +632,7 @@ VkResult PipelineCompiler::BuildShaderModule(
                 pDevice,
                 flags,
                 internalFlags,
-                codeSize,
-                pCode,
+                finalData,
                 adaptForFastLink,
                 isInternal,
                 pShaderModule,
@@ -672,17 +649,14 @@ VkResult PipelineCompiler::BuildShaderModule(
         {
             if (pSettings->enablePipelineDump)
             {
-                Vkgc::BinaryData spvBin = {};
-                spvBin.pCode = pCode;
-                spvBin.codeSize = codeSize;
-                Vkgc::IPipelineDumper::DumpSpirvBinary(pSettings->pipelineDumpDir, &spvBin);
+                Vkgc::IPipelineDumper::DumpSpirvBinary(pSettings->pipelineDumpDir, &finalData);
             }
         }
     }
 
     if (findReplaceShader)
     {
-        pInstance->FreeMem(const_cast<void*>(pCode));
+        pInstance->FreeMem(const_cast<void*>(finalData.pCode));
     }
     return result;
 }
@@ -752,19 +726,21 @@ void PipelineCompiler::FreeShaderModule(
 // Replaces pipeline binary from external replacement file (<pipeline_name>_replace.elf)
 template<class PipelineBuildInfo>
 bool PipelineCompiler::ReplacePipelineBinary(
-        const PipelineBuildInfo* pPipelineBuildInfo,
-        size_t*                  pPipelineBinarySize,
-        const void**             ppPipelineBinary,
-        uint64_t                 hashCode64)
+    const PhysicalDevice*    pPhysicalDevice,
+    const PipelineBuildInfo* pPipelineBuildInfo,
+    Vkgc::BinaryData*        pPipelineBinary,
+    uint64_t                 hashCode64)
 {
-    const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
-    auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+    const RuntimeSettings& settings  = pPhysicalDevice->GetRuntimeSettings();
+    auto                   pInstance = pPhysicalDevice->Manager()->VkInstance();
 
     char fileName[Util::MaxFileNameStrLen] = {};
     Vkgc::IPipelineDumper::GetPipelineName(pPipelineBuildInfo, fileName, sizeof(fileName), hashCode64);
 
     char replaceFileName[Util::MaxPathStrLen] = {};
-    int32_t length = Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/%s_replace.elf", settings.shaderReplaceDir, fileName);
+    int32_t length = Util::Snprintf(
+        replaceFileName, sizeof(replaceFileName), "%s/%s_replace.elf", settings.shaderReplaceDir, fileName);
+
     VK_ASSERT(length > 0 && (static_cast<uint32_t>(length) < sizeof(replaceFileName)));
 
     Util::Result result = Util::File::Exists(replaceFileName) ? Util::Result::Success : Util::Result::ErrorUnavailable;
@@ -782,8 +758,8 @@ bool PipelineCompiler::ReplacePipelineBinary(
 
             elfFile.Read(pAllocBuf, binSize, nullptr);
 
-            *pPipelineBinarySize = binSize;
-            *ppPipelineBinary = pAllocBuf;
+            pPipelineBinary->codeSize = binSize;
+            pPipelineBinary->pCode    = pAllocBuf;
             return true;
         }
     }
@@ -804,13 +780,12 @@ bool PipelineCompiler::ReplacePipelineShaderModule(
     if (pShaderInfo->pModuleData != nullptr)
     {
         uint64_t hash64 = Vkgc::IPipelineDumper::GetShaderHash(pShaderInfo->pModuleData);
-        size_t codeSize = 0;
-        void* pCode = nullptr;
 
-        if (LoadReplaceShaderBinary(hash64, &codeSize, &pCode))
+        Vkgc::BinaryData shaderBinary = {};
+        if (LoadReplaceShaderBinary(hash64, &shaderBinary))
         {
             VkResult result =
-                BuildShaderModule(pDevice, 0, 0, codeSize, pCode, false, false, nullptr, nullptr, pShaderModule);
+                BuildShaderModule(pDevice, 0, 0, shaderBinary, false, false, nullptr, nullptr, pShaderModule);
 
             if (result == VK_SUCCESS)
             {
@@ -818,7 +793,7 @@ bool PipelineCompiler::ReplacePipelineShaderModule(
                 replaced = true;
             }
 
-            pInstance->FreeMem(pCode);
+            pInstance->FreeMem(const_cast<void*>(shaderBinary.pCode));
         }
     }
 
@@ -828,21 +803,20 @@ bool PipelineCompiler::ReplacePipelineShaderModule(
 // =====================================================================================================================
 // Drop pipeline binary instruction.
 void PipelineCompiler::DropPipelineBinaryInst(
-    Device*                pDevice,
-    const RuntimeSettings& settings,
-    const void*            pPipelineBinary,
-    size_t                 pipelineBinarySize)
+    Device*                 pDevice,
+    const RuntimeSettings&  settings,
+    const Vkgc::BinaryData& pipelineBinary)
 {
     if (settings.enableDropPipelineBinaryInst == true)
     {
-        Util::ElfReader::Reader elfReader(pPipelineBinary);
+        Util::ElfReader::Reader elfReader(pipelineBinary.pCode);
         Util::ElfReader::SectionId codeSectionId = elfReader.FindSection(".text");
         VK_ASSERT(codeSectionId != 0);
 
         const Util::Elf::SectionHeader& codeSection = elfReader.GetSection(codeSectionId);
 
         size_t pipelineCodeSize = static_cast<size_t>(codeSection.sh_size);
-        void* pPipelineCode = const_cast<void*>(Util::VoidPtrInc(pPipelineBinary,
+        void* pPipelineCode = const_cast<void*>(Util::VoidPtrInc(pipelineBinary.pCode,
             static_cast<size_t>(codeSection.sh_offset)));
         uint32_t* pFirstInstruction = static_cast<uint32_t*>(pPipelineCode);
 
@@ -869,11 +843,10 @@ void PipelineCompiler::DropPipelineBinaryInst(
 // =====================================================================================================================
 // Replace pipeline binary instruction.
 void PipelineCompiler::ReplacePipelineIsaCode(
-    Device *     pDevice,
-    uint64_t     pipelineHash,
-    uint32_t     pipelineIndex,
-    const void*  pPipelineBinary,
-    size_t       pipelineBinarySize)
+    Device *                pDevice,
+    uint64_t                pipelineHash,
+    uint32_t                pipelineIndex,
+    const Vkgc::BinaryData& pipelineBinary)
 {
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
 
@@ -896,7 +869,7 @@ void PipelineCompiler::ReplacePipelineIsaCode(
         return;
     }
 
-    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(), pPipelineBinary);
+    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(), pipelineBinary.pCode);
     Pal::Result palResult = abiReader.Init();
     if (palResult != Pal::Result::Success)
     {
@@ -908,7 +881,7 @@ void PipelineCompiler::ReplacePipelineIsaCode(
 
     const Util::Elf::SectionHeader& codeSection = abiReader.GetElfReader().GetSection(codeSectionId);
 
-    void* pPipelineCode = const_cast<void*>(Util::VoidPtrInc(pPipelineBinary,
+    void* pPipelineCode = const_cast<void*>(Util::VoidPtrInc(pipelineBinary.pCode,
         static_cast<size_t>(codeSection.sh_offset)));
     uint8_t* pFirstInstruction = static_cast<uint8_t*>(pPipelineCode);
 
@@ -969,8 +942,7 @@ void PipelineCompiler::ReplacePipelineIsaCode(
 Util::Result PipelineCompiler::GetCachedPipelineBinary(
     const Util::MetroHash::Hash* pCacheId,
     const PipelineBinaryCache*   pPipelineBinaryCache,
-    size_t*                      pPipelineBinarySize,
-    const void**                 ppPipelineBinary,
+    Vkgc::BinaryData*            pPipelineBinary,
     bool*                        pIsUserCacheHit,
     bool*                        pIsInternalCacheHit,
     FreeCompilerBinary*          pFreeCompilerBinary,
@@ -981,7 +953,8 @@ Util::Result PipelineCompiler::GetCachedPipelineBinary(
 
     if (pPipelineBinaryCache != nullptr)
     {
-        cacheResult = pPipelineBinaryCache->LoadPipelineBinary(pCacheId, pPipelineBinarySize, ppPipelineBinary);
+        cacheResult = pPipelineBinaryCache->LoadPipelineBinary(
+            pCacheId, &pPipelineBinary->codeSize, &pPipelineBinary->pCode);
         if (cacheResult == Util::Result::Success)
         {
             *pIsUserCacheHit = true;
@@ -1001,7 +974,8 @@ Util::Result PipelineCompiler::GetCachedPipelineBinary(
         }
         else
         {
-            cacheResult = m_pBinaryCache->LoadPipelineBinary(pCacheId, pPipelineBinarySize, ppPipelineBinary);
+            cacheResult = m_pBinaryCache->LoadPipelineBinary(
+                pCacheId, &pPipelineBinary->codeSize, &pPipelineBinary->pCode);
         }
         if (cacheResult == Util::Result::Success)
         {
@@ -1028,8 +1002,7 @@ Util::Result PipelineCompiler::GetCachedPipelineBinary(
 void PipelineCompiler::CachePipelineBinary(
     const Util::MetroHash::Hash* pCacheId,
     PipelineBinaryCache*         pPipelineBinaryCache,
-    size_t                       pipelineBinarySize,
-    const void*                  pPipelineBinary,
+    Vkgc::BinaryData*            pPipelineBinary,
     bool                         isUserCacheHit,
     bool                         isInternalCacheHit)
 {
@@ -1039,8 +1012,8 @@ void PipelineCompiler::CachePipelineBinary(
     {
         cacheResult = pPipelineBinaryCache->StorePipelineBinary(
             pCacheId,
-            pipelineBinarySize,
-            pPipelineBinary);
+            pPipelineBinary->codeSize,
+            pPipelineBinary->pCode);
 
         VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
     }
@@ -1049,8 +1022,8 @@ void PipelineCompiler::CachePipelineBinary(
     {
         cacheResult = m_pBinaryCache->StorePipelineBinary(
             pCacheId,
-            pipelineBinarySize,
-            pPipelineBinary);
+            pPipelineBinary->codeSize,
+            pPipelineBinary->pCode);
 
         VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
     }
@@ -1064,8 +1037,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     PipelineCache*                    pPipelineCache,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
     const PipelineCreateFlags         flags,
-    size_t*                           pPipelineBinarySize,
-    const void**                      ppPipelineBinary,
+    Vkgc::BinaryData*                 pPipelineBinary,
     Util::MetroHash::Hash*            pCacheId)
 {
     VkResult               result        = VK_SUCCESS;
@@ -1094,7 +1066,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     if ((settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash) ||
         (settings.shaderReplaceMode == ShaderReplaceShaderHashPipelineBinaryHash))
     {
-        if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary, pipelineHash))
+        if (ReplacePipelineBinary(m_pPhysicalDevice, &pCreateInfo->pipelineInfo, pPipelineBinary, pipelineHash))
         {
             shouldCompile = false;
         }
@@ -1130,18 +1102,6 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         }
     }
 
-    if (shouldCompile)
-    {
-        if ((pCreateInfo->linkTimeOptimization == false) &&
-            ((flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) == 0) &&
-            ((pCreateInfo->pShaderLibraries[GraphicsLibraryPreRaster] != nullptr) &&
-             (pCreateInfo->pShaderLibraries[GraphicsLibraryFragment] != nullptr)))
-            {
-                // No need to compile when the current pipeline meets all the conditions for shader library linking
-                shouldCompile = false;
-            }
-    }
-
     if (settings.enablePipelineDump && (result == VK_SUCCESS))
     {
         Vkgc::PipelineDumpOptions dumpOptions = {};
@@ -1163,21 +1123,17 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         pCreateInfo->pBinaryMetadata->enableEarlyCompile    = pCreateInfo->pipelineInfo.enableEarlyCompile;
         pCreateInfo->pBinaryMetadata->enableUberFetchShader = pCreateInfo->pipelineInfo.enableUberFetchShader;
 
-        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
-        {
-            result = m_compilerSolutionLlpc.CreateGraphicsPipelineBinary(
+        result = GetSolution(pCreateInfo->compilerType)->CreateGraphicsPipelineBinary(
                 pDevice,
                 deviceIdx,
                 pPipelineCache,
                 pCreateInfo,
-                pPipelineBinarySize,
-                ppPipelineBinary,
+                pPipelineBinary,
                 shaderInfos,
                 pPipelineDumpHandle,
                 pipelineHash,
                 pCacheId,
                 &compileTime);
-        }
 
         if (result == VK_SUCCESS)
         {
@@ -1197,17 +1153,14 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
     {
-        ReplacePipelineIsaCode(pDevice, pipelineHash, 0, *ppPipelineBinary, *pPipelineBinarySize);
+        ReplacePipelineIsaCode(pDevice, pipelineHash, 0, *pPipelineBinary);
     }
 
     if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
     {
         if (result == VK_SUCCESS)
         {
-            Vkgc::BinaryData pipelineBinary = {};
-            pipelineBinary.codeSize = *pPipelineBinarySize;
-            pipelineBinary.pCode = *ppPipelineBinary;
-            Vkgc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, &pipelineBinary);
+            Vkgc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, pPipelineBinary);
         }
         Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
     }
@@ -1221,7 +1174,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         }
     }
 
-    DropPipelineBinaryInst(pDevice, settings, *ppPipelineBinary, *pPipelineBinarySize);
+    DropPipelineBinaryInst(pDevice, settings, *pPipelineBinary);
 
     return result;
 }
@@ -1238,7 +1191,6 @@ VkResult PipelineCompiler::CreateGraphicsShaderBinary(
     VkResult result = VK_SUCCESS;
 
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
-    const uint32_t compilerMask = GetCompilerCollectionMask();
     GraphicsLibraryType gplType = GetGraphicsLibraryType(stage);
     uint64_t libraryHash = Vkgc::IPipelineDumper::GetGraphicsShaderBinaryHash(&pCreateInfo->pipelineInfo, stage);
     VK_ASSERT(pCreateInfo->libraryHash[gplType] == libraryHash || pCreateInfo->libraryHash[gplType] == 0);
@@ -1262,16 +1214,13 @@ VkResult PipelineCompiler::CreateGraphicsShaderBinary(
                                                                                         dumpHash);
     }
 
-    if (compilerMask & (1 << PipelineCompilerTypeLlpc))
-    {
-        result = m_compilerSolutionLlpc.CreateGraphicsShaderBinary(
+    result = GetSolution(pCreateInfo->compilerType)->CreateGraphicsShaderBinary(
                 pDevice,
                 pPipelineCache,
                 stage,
                 pCreateInfo,
                 pPipelineDumpHandle,
                 pModule);
-    }
 
     if (pPipelineDumpHandle != nullptr)
     {
@@ -1292,8 +1241,6 @@ VkResult PipelineCompiler::CreateColorExportShaderLibrary(
     VkResult result = VK_SUCCESS;
 
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
-    const uint32_t compilerMask     = GetCompilerCollectionMask();
-    Vkgc::BinaryData colExpPackage  = {};
 
     bool cacheHit                   = false;
     Util::MetroHash::Hash cacheId   = {};
@@ -1312,6 +1259,7 @@ VkResult PipelineCompiler::CreateColorExportShaderLibrary(
 
     if (cacheHit == false)
     {
+        Vkgc::BinaryData colExpPackage = {};
         // Temporarily set the unlinked to true for the color export shader
         pCreateInfo->pipelineInfo.unlinked = true;
 
@@ -1334,14 +1282,42 @@ VkResult PipelineCompiler::CreateColorExportShaderLibrary(
                                                                            dumpHash);
         }
 
-        if (compilerMask & (1 << PipelineCompilerTypeLlpc))
+        FreeCompilerBinary freeMethod = FreeWithCompiler;
+        bool elfReplace = false;
+        if ((pDevice->GetRuntimeSettings().shaderReplaceMode == ShaderReplacePipelineBinaryHash) ||
+            (pDevice->GetRuntimeSettings().shaderReplaceMode == ShaderReplaceShaderHashPipelineBinaryHash))
         {
-            result = m_compilerSolutionLlpc.CreateColorExportBinary(
-                pCreateInfo,
-                pPipelineDumpHandle,
-                &colExpPackage);
-
+            elfReplace = ReplacePipelineBinary(m_pPhysicalDevice,
+                &pCreateInfo->pipelineInfo,
+                &colExpPackage,
+                MetroHash::Compact64(&cacheId));
         }
+
+        bool hitAppCache = false;
+        bool hitInternalCache = false;
+        if (elfReplace == false)
+        {
+            GetCachedPipelineBinary(
+                &cacheId, nullptr, &colExpPackage, &hitAppCache, &hitInternalCache, &freeMethod, nullptr);
+
+            if (hitInternalCache == false)
+            {
+                result = GetSolution(pCreateInfo->compilerType)->CreateColorExportBinary(
+                    pCreateInfo,
+                    pPipelineDumpHandle,
+                    &colExpPackage);
+
+                if (result == VK_SUCCESS)
+                {
+                    CachePipelineBinary(&cacheId, nullptr, &colExpPackage, hitAppCache, hitInternalCache);
+                }
+            }
+        }
+        else
+        {
+            freeMethod = FreeWithInstanceAllocator;
+        }
+
         if (result == VK_SUCCESS)
         {
             result = CreateGraphicsShaderLibrary(pDevice, colExpPackage, pAllocator, ppColExpLib);
@@ -1361,13 +1337,18 @@ VkResult PipelineCompiler::CreateColorExportShaderLibrary(
             Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
         }
         pCreateInfo->pipelineInfo.unlinked = false;
+
+        if (colExpPackage.pCode != nullptr)
+        {
+            FreeGraphicsPipelineBinary(pCreateInfo->compilerType, freeMethod, colExpPackage);
+        }
     }
 
     return result;
 }
 
 // =====================================================================================================================
-// Create shader libray object based on pipeline information
+// Create shader library object based on pipeline information
 VkResult PipelineCompiler::CreateGraphicsShaderLibrary(
     const Device*                pDevice,
     const Vkgc::BinaryData       shaderBinary,
@@ -1409,8 +1390,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     uint32_t                         deviceIdx,
     PipelineCache*                   pPipelineCache,
     ComputePipelineBinaryCreateInfo* pCreateInfo,
-    size_t*                          pPipelineBinarySize,
-    const void**                     ppPipelineBinary,
+    Vkgc::BinaryData*                pPipelineBinary,
     Util::MetroHash::Hash*           pCacheId)
 {
     VkResult               result        = VK_SUCCESS;
@@ -1430,7 +1410,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     if ((settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash) ||
         (settings.shaderReplaceMode == ShaderReplaceShaderHashPipelineBinaryHash))
     {
-        if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary, pipelineHash))
+        if (ReplacePipelineBinary(m_pPhysicalDevice, &pCreateInfo->pipelineInfo, pPipelineBinary, pipelineHash))
         {
             shouldCompile = false;
         }
@@ -1477,20 +1457,16 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
     if (shouldCompile && (result == VK_SUCCESS))
     {
-        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
-        {
-            result = m_compilerSolutionLlpc.CreateComputePipelineBinary(
-                pDevice,
-                deviceIdx,
-                pPipelineCache,
-                pCreateInfo,
-                pPipelineBinarySize,
-                ppPipelineBinary,
-                pPipelineDumpHandle,
-                pipelineHash,
-                pCacheId,
-                &compileTime);
-        }
+        result = GetSolution(pCreateInfo->compilerType)->CreateComputePipelineBinary(
+            pDevice,
+            deviceIdx,
+            pPipelineCache,
+            pCreateInfo,
+            pPipelineBinary,
+            pPipelineDumpHandle,
+            pipelineHash,
+            pCacheId,
+            &compileTime);
 
         if (result == VK_SUCCESS)
         {
@@ -1510,17 +1486,14 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
     {
-        ReplacePipelineIsaCode(pDevice, pipelineHash, 0, *ppPipelineBinary, *pPipelineBinarySize);
+        ReplacePipelineIsaCode(pDevice, pipelineHash, 0, *pPipelineBinary);
     }
 
     if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
     {
         if (result == VK_SUCCESS)
         {
-            Vkgc::BinaryData pipelineBinary = {};
-            pipelineBinary.codeSize = *pPipelineBinarySize;
-            pipelineBinary.pCode = *ppPipelineBinary;
-            Vkgc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, &pipelineBinary);
+            Vkgc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, pPipelineBinary);
         }
         Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
     }
@@ -1531,7 +1504,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         FreeShaderModule(&shaderModuleReplaceHandle);
     }
 
-    DropPipelineBinaryInst(pDevice, settings, *ppPipelineBinary, *pPipelineBinarySize);
+    DropPipelineBinaryInst(pDevice, settings, *pPipelineBinary);
 
     return result;
 }
@@ -1716,10 +1689,19 @@ static void CopyPipelineShadersInfo(
     pCreateInfo->compilerType = libInfo.compilerType;
 
     // Copy shader libraries
+#if VKI_RAY_TRACING
+    pCreateInfo->pBinaryMetadata->rayQueryUsed            |= libInfo.pBinaryMetadata->rayQueryUsed;
+#endif
+    pCreateInfo->pBinaryMetadata->shadingRateUsedInShader |= libInfo.pBinaryMetadata->shadingRateUsedInShader;
+
     if (shaderMask == PrsShaderMask)
     {
         pCreateInfo->pShaderLibraries[GraphicsLibraryPreRaster] =
             libInfo.pShaderLibraries[GraphicsLibraryPreRaster];
+        pCreateInfo->pBinaryMetadata->pointSizeUsed = libInfo.pBinaryMetadata->pointSizeUsed;
+        pCreateInfo->pBinaryMetadata->enableUberFetchShader = libInfo.pBinaryMetadata->enableUberFetchShader;
+        pCreateInfo->pBinaryMetadata->enableEarlyCompile = libInfo.pBinaryMetadata->enableEarlyCompile;
+
     }
     else if (shaderMask == FgsShaderMask)
     {
@@ -1729,6 +1711,8 @@ static void CopyPipelineShadersInfo(
         pCreateInfo->pipelineInfo.enableColorExportShader      =
             (libInfo.pipelineInfo.enableColorExportShader &&
                 (libInfo.pBinaryMetadata->pFsOutputMetaData != nullptr));
+        pCreateInfo->pBinaryMetadata->postDepthCoverageEnable = libInfo.pBinaryMetadata->postDepthCoverageEnable;
+        pCreateInfo->pBinaryMetadata->psOnlyPointCoordEnable  = libInfo.pBinaryMetadata->psOnlyPointCoordEnable;
     }
 
     Vkgc::PipelineShaderInfo* pShaderInfosDst[] =
@@ -1851,11 +1835,19 @@ static void CopyFragmentShaderState(
 {
     const GraphicsPipelineBinaryCreateInfo& libInfo = pLibrary->GetPipelineBinaryCreateInfo();
 
-    pCreateInfo->pipelineInfo.rsState.perSampleShading      = libInfo.pipelineInfo.rsState.perSampleShading;
-    pCreateInfo->pipelineInfo.rsState.numSamples            = libInfo.pipelineInfo.rsState.numSamples;
-    pCreateInfo->pipelineInfo.rsState.samplePatternIdx      = libInfo.pipelineInfo.rsState.samplePatternIdx;
-    pCreateInfo->pipelineInfo.rsState.pixelShaderSamples    = libInfo.pipelineInfo.rsState.pixelShaderSamples;
-    pCreateInfo->pipelineInfo.rsState.dynamicSampleInfo     = libInfo.pipelineInfo.rsState.dynamicSampleInfo;
+    if (libInfo.pipelineInfo.rsState.perSampleShading || (libInfo.pipelineInfo.rsState.numSamples != 1))
+    {
+        // pMultisampleState is not NULL.
+        pCreateInfo->pipelineInfo.rsState.perSampleShading   = libInfo.pipelineInfo.rsState.perSampleShading;
+        pCreateInfo->pipelineInfo.rsState.dynamicSampleInfo  = libInfo.pipelineInfo.rsState.dynamicSampleInfo;
+        pCreateInfo->pipelineInfo.rsState.numSamples         = libInfo.pipelineInfo.rsState.numSamples;
+        pCreateInfo->pipelineInfo.rsState.samplePatternIdx   = libInfo.pipelineInfo.rsState.samplePatternIdx;
+        pCreateInfo->pipelineInfo.rsState.pixelShaderSamples = libInfo.pipelineInfo.rsState.pixelShaderSamples;
+    }
+    else
+    {
+        pCreateInfo->pipelineInfo.rsState.numSamples = 1;
+    }
 
     pCreateInfo->pipelineInfo.dsState.depthTestEnable   = libInfo.pipelineInfo.dsState.depthTestEnable;
     pCreateInfo->pipelineInfo.dsState.depthWriteEnable  = libInfo.pipelineInfo.dsState.depthWriteEnable;
@@ -1880,6 +1872,12 @@ static void CopyFragmentOutputInterfaceState(
     {
         pCreateInfo->pipelineInfo.cbState.target[i] = libInfo.pipelineInfo.cbState.target[i];
     }
+
+    pCreateInfo->pipelineInfo.rsState.perSampleShading   = libInfo.pipelineInfo.rsState.perSampleShading;
+    pCreateInfo->pipelineInfo.rsState.dynamicSampleInfo  = libInfo.pipelineInfo.rsState.dynamicSampleInfo;
+    pCreateInfo->pipelineInfo.rsState.numSamples         = libInfo.pipelineInfo.rsState.numSamples;
+    pCreateInfo->pipelineInfo.rsState.samplePatternIdx   = libInfo.pipelineInfo.rsState.samplePatternIdx;
+    pCreateInfo->pipelineInfo.rsState.pixelShaderSamples = libInfo.pipelineInfo.rsState.pixelShaderSamples;
 
     pCreateInfo->dbFormat                                    = libInfo.dbFormat;
     pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable  = libInfo.pipelineInfo.cbState.alphaToCoverageEnable;
@@ -1954,7 +1952,7 @@ static void BuildRasterizationState(
 }
 
 // =====================================================================================================================
-static void BuildMultisampleStateInFgs(
+static void BuildMultisampleState(
     const Device*                               pDevice,
     const VkPipelineMultisampleStateCreateInfo* pMs,
     const RenderPass*                           pRenderPass,
@@ -2084,7 +2082,7 @@ void PipelineCompiler::BuildNggState(
     {
         pCreateInfo->pipelineInfo.nggState.enableNgg = false;
     }
-    else if (deviceProp.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+    else
     {
         const bool hasGs   = activeStages & VK_SHADER_STAGE_GEOMETRY_BIT;
         const bool hasTess = activeStages & VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
@@ -2341,6 +2339,7 @@ static void BuildPipelineShadersInfo(
         )
     {
         pCreateInfo->pipelineInfo.enableUberFetchShader = true;
+        pCreateInfo->pBinaryMetadata->enableUberFetchShader = true;
     }
 }
 
@@ -2605,7 +2604,7 @@ static void BuildFragmentShaderState(
 {
     const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
 
-    BuildMultisampleStateInFgs(pDevice, pIn->pMultisampleState, pRenderPass, pIn->subpass, pCreateInfo,
+    BuildMultisampleState(pDevice, pIn->pMultisampleState, pRenderPass, pIn->subpass, pCreateInfo,
         dynamicStateFlags);
 
     BuildDepthStencilState(pIn->pDepthStencilState, pCreateInfo);
@@ -2632,6 +2631,9 @@ static void BuildFragmentOutputInterfaceState(
 
     BuildMultisampleStateInFoi(pIn->pMultisampleState, dynamicStateFlags, pCreateInfo);
 
+    BuildMultisampleState(pDevice, pIn->pMultisampleState, pRenderPass, pIn->subpass, pCreateInfo,
+        dynamicStateFlags);
+
     BuildColorBlendState(pDevice,
                          pIn->pColorBlendState,
                          pPipelineRenderingCreateInfoKHR,
@@ -2649,6 +2651,7 @@ static void BuildFragmentOutputInterfaceState(
 static void BuildExecutablePipelineState(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
+    PipelineCreateFlags                    flags,
     const GraphicsPipelineShaderStageInfo* pShaderInfo,
     const GraphicsPipelineLibraryInfo*     pLibInfo,
     const PipelineLayout*                  pPipelineLayout,
@@ -2698,6 +2701,7 @@ static void BuildExecutablePipelineState(
     if (pCreateInfo->pipelineInfo.enableUberFetchShader)
     {
         pDefaultCompiler->BuildPipelineInternalBufferData(pPipelineLayout, pCreateInfo);
+        pCreateInfo->pBinaryMetadata->enableUberFetchShader = pCreateInfo->pipelineInfo.enableUberFetchShader;
     }
 
 #if VKI_RAY_TRACING
@@ -2733,7 +2737,7 @@ static void BuildExecutablePipelineState(
     }
 #endif
 
-    pCreateInfo->linkTimeOptimization = (pIn->flags & VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT);
+    pCreateInfo->linkTimeOptimization = (flags & VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT);
 }
 
 // =====================================================================================================================
@@ -2887,7 +2891,108 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     if ((result == VK_SUCCESS) && (libInfo.flags.isLibrary == false))
     {
         BuildExecutablePipelineState(
-            pDevice, pIn, pShaderInfo, &libInfo, pPipelineLayout, dynamicStateFlags, pCreateInfo);
+            pDevice, pIn, flags, pShaderInfo, &libInfo, pPipelineLayout, dynamicStateFlags, pCreateInfo);
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Converts Vulkan graphics pipeline parameters to an internal structure for graphics library fast link
+VkResult PipelineCompiler::BuildGplFastLinkCreateInfo(
+    const Device*                                   pDevice,
+    const VkGraphicsPipelineCreateInfo*             pIn,
+    PipelineCreateFlags                             flags,
+    const GraphicsPipelineLibraryInfo&              libInfo,
+    const PipelineLayout*                           pPipelineLayout,
+    PipelineMetadata*                               pBinaryMetadata,
+    GraphicsPipelineBinaryCreateInfo*               pCreateInfo)
+{
+    VK_ASSERT(pIn != nullptr);
+    VkResult result = VK_SUCCESS;
+
+    pCreateInfo->pBinaryMetadata = pBinaryMetadata;
+    pCreateInfo->libFlags  = libInfo.libFlags;
+    pCreateInfo->libFlags |= (libInfo.pVertexInputInterfaceLib == nullptr) ?
+                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT;
+    pCreateInfo->libFlags |= (libInfo.pPreRasterizationShaderLib == nullptr) ?
+                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT;
+    pCreateInfo->libFlags |= (libInfo.pFragmentShaderLib == nullptr) ?
+                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT;
+    pCreateInfo->libFlags |= (libInfo.pFragmentOutputInterfaceLib == nullptr) ?
+                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
+
+    VkShaderStageFlagBits activeStages = GraphicsPipelineCommon::GetActiveShaderStages(pIn, &libInfo);
+    uint64_t dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
+
+    pCreateInfo->flags = pIn->flags;
+    ApplyPipelineOptions(pDevice,
+                         pIn->flags,
+                         &pCreateInfo->pipelineInfo.options
+    );
+
+    // Copy parameters
+    if (result == VK_SUCCESS)
+    {
+        // We needn't copy the state of pre-raster and fragment, they have been included in graphics shader libraries.
+        CopyPipelineShadersInfo<PrsShaderMask>(libInfo.pPreRasterizationShaderLib, pCreateInfo);
+        CopyPipelineShadersInfo<FgsShaderMask>(libInfo.pFragmentShaderLib, pCreateInfo);
+        pCreateInfo->pipelineInfo.enableUberFetchShader = pCreateInfo->pBinaryMetadata->enableUberFetchShader;
+
+        if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)
+        {
+            BuildVertexInputInterfaceState(pDevice, pIn, dynamicStateFlags, activeStages, pCreateInfo);
+        }
+        else if (libInfo.pVertexInputInterfaceLib != nullptr)
+        {
+            CopyVertexInputInterfaceState(pDevice, libInfo.pVertexInputInterfaceLib, pCreateInfo);
+        }
+
+        const bool enableRasterization =
+            (~libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) ||
+            (pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable == false) ||
+            IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizerDiscardEnable);
+
+        if (enableRasterization)
+        {
+            if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)
+            {
+                BuildFragmentOutputInterfaceState(pDevice, pIn, dynamicStateFlags, pCreateInfo);
+            }
+            else if (libInfo.pFragmentOutputInterfaceLib != nullptr)
+            {
+                CopyFragmentOutputInterfaceState(libInfo.pFragmentOutputInterfaceLib, pCreateInfo);
+            }
+        }
+        else
+        {
+            pCreateInfo->pipelineInfo.rsState.numSamples = 1;
+        }
+    }
+
+    // Check whether graphics library is compatible with other stages and states
+    if (result == VK_SUCCESS)
+    {
+        const uint32_t    numPalDevices = pDevice->NumPalDevices();
+        bool shouldCompile = false;
+        for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
+        {
+            shouldCompile |= (GetSolution(pCreateInfo->compilerType)->
+                IsGplFastLinkCompatible(pDevice, deviceIdx, pCreateInfo) == false);
+        }
+
+        if (shouldCompile)
+        {
+            result = VK_ERROR_PIPELINE_COMPILE_REQUIRED_EXT;
+        }
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        if (pCreateInfo->pipelineInfo.enableUberFetchShader)
+        {
+            BuildPipelineInternalBufferData(pPipelineLayout, pCreateInfo);
+        }
     }
 
     return result;
@@ -3192,26 +3297,23 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
     {
         pShaderOptions->allowVaryWaveSize = true;
     }
+
+    pShaderOptions->forwardPropagateNoContract = (settings.disableForwardPropagateNoContract == false);
 }
 
 // =====================================================================================================================
 // Free compute pipeline binary
 void PipelineCompiler::FreeComputePipelineBinary(
     ComputePipelineBinaryCreateInfo* pCreateInfo,
-    const void*                      pPipelineBinary,
-    size_t                           binarySize)
+    const Vkgc::BinaryData&          pipelineBinary)
 {
     if (pCreateInfo->freeCompilerBinary == FreeWithCompiler)
     {
-        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
-        {
-            m_compilerSolutionLlpc.FreeComputePipelineBinary(pPipelineBinary, binarySize);
-        }
-
+        GetSolution(pCreateInfo->compilerType)->FreeComputePipelineBinary(pipelineBinary);
     }
     else if (pCreateInfo->freeCompilerBinary == FreeWithInstanceAllocator)
     {
-        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
+        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pipelineBinary.pCode));
     }
 }
 
@@ -3220,20 +3322,15 @@ void PipelineCompiler::FreeComputePipelineBinary(
 void PipelineCompiler::FreeGraphicsPipelineBinary(
     const PipelineCompilerType        compilerType,
     const FreeCompilerBinary          freeCompilerBinary,
-    const void*                       pPipelineBinary,
-    size_t                            binarySize)
+    const Vkgc::BinaryData&           pipelineBinary)
 {
     if (freeCompilerBinary == FreeWithCompiler)
     {
-        if (compilerType == PipelineCompilerTypeLlpc)
-        {
-            m_compilerSolutionLlpc.FreeGraphicsPipelineBinary(pPipelineBinary, binarySize);
-        }
-
+        GetSolution(compilerType)->FreeGraphicsPipelineBinary(pipelineBinary);
     }
     else if (freeCompilerBinary == FreeWithInstanceAllocator)
     {
-        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
+        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pipelineBinary.pCode));
     }
 }
 
@@ -3364,7 +3461,12 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
     pCreateInfo->pipelineInfo.indirectStageMask = settings.rtIndirectStageMask;
     static_assert(RaytracingNone == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::None));
     static_assert(RaytracingLegacy == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Legacy));
-    static_assert(RaytracingRefactored == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Gpurt2));
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 69
+    static_assert(RaytracingContinufy == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Gpurt2));
+#else
+    static_assert(RaytracingContinufy == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Continufy));
+#endif
+    static_assert(RaytracingContinuations == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Continuations));
     pCreateInfo->pipelineInfo.mode = static_cast<Vkgc::LlpcRaytracingMode>(settings.llpcRaytracingMode);
 
     pCreateInfo->pipelineInfo.isReplay = isReplay;
@@ -3606,7 +3708,6 @@ VkResult PipelineCompiler::CreateRayTracingPipelineBinary(
         {
             result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
         }
-
     }
 
     if (settings.enablePipelineDump && (result == VK_SUCCESS))
@@ -3676,30 +3777,20 @@ VkResult PipelineCompiler::CreateRayTracingPipelineBinary(
 
     if (shouldCompile && (result == VK_SUCCESS))
     {
-        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
-        {
-            int64_t startTime = Util::GetPerfCpuTime();
+        int64_t startTime = Util::GetPerfCpuTime();
 
-            // Build the LLPC pipeline
-            Llpc::RayTracingPipelineBuildOut pipelineOut = {};
+        result = GetSolution(pCreateInfo->compilerType)->CreateRayTracingPipelineBinary(
+            pDevice,
+            deviceIdx,
+            pPipelineCache,
+            pCreateInfo,
+            pPipelineBinary,
+            pPipelineDumpHandle,
+            pipelineHash,
+            pCacheId,
+            &compileTime);
 
-            // Fill pipeline create info for LLPC
-            pPipelineBuildInfo->pInstance      = pInstance;
-            pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
-
-            result = m_compilerSolutionLlpc.CreateRayTracingPipelineBinary(
-                pDevice,
-                deviceIdx,
-                pPipelineCache,
-                pCreateInfo,
-                pPipelineBinary,
-                pPipelineDumpHandle,
-                pipelineHash,
-                pCacheId,
-                &compileTime);
-
-            compileTime = Util::GetPerfCpuTime() - startTime;
-        }
+        compileTime = Util::GetPerfCpuTime() - startTime;
 
         if (result == VK_SUCCESS)
         {
@@ -3727,7 +3818,7 @@ VkResult PipelineCompiler::CreateRayTracingPipelineBinary(
 
             if (pBin->pCode != nullptr)
             {
-                ReplacePipelineIsaCode(pDevice, pipelineHash, pipelineIndex, pBin->pCode, pBin->codeSize);
+                ReplacePipelineIsaCode(pDevice, pipelineHash, pipelineIndex, *pBin);
 
                 pipelineIndex++;
             }
@@ -3791,7 +3882,7 @@ VkResult PipelineCompiler::CreateRayTracingPipelineBinary(
 
         if (pBin->pCode != nullptr)
         {
-            DropPipelineBinaryInst(pDevice, settings, pBin->pCode, pBin->codeSize);
+            DropPipelineBinaryInst(pDevice, settings, *pBin);
         }
     }
 
@@ -3806,11 +3897,7 @@ void PipelineCompiler::FreeRayTracingPipelineBinary(
 {
     if (pCreateInfo->freeCompilerBinary == FreeWithCompiler)
     {
-        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
-        {
-            m_compilerSolutionLlpc.FreeRayTracingPipelineBinary(pPipelineBinary);
-        }
-
+        GetSolution(pCreateInfo->compilerType)->FreeRayTracingPipelineBinary(pPipelineBinary);
     }
     else if (pCreateInfo->freeCompilerBinary == FreeWithInstanceAllocator)
     {
@@ -4472,17 +4559,12 @@ void PipelineCompiler::BuildPipelineInternalBufferData(
         break;
     }
 
-    if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
-    {
-        m_compilerSolutionLlpc.BuildPipelineInternalBufferData(
-            this,
-            fetchShaderConstBufRegBase,
-            specConstBufVertexRegBase,
-            specConstBufFragmentRegBase,
-            pCreateInfo);
-
-    }
-
+    GetSolution(pCreateInfo->compilerType)->BuildPipelineInternalBufferData(
+        this,
+        fetchShaderConstBufRegBase,
+        specConstBufVertexRegBase,
+        specConstBufFragmentRegBase,
+        pCreateInfo);
 }
 
 // =====================================================================================================================
@@ -4507,18 +4589,17 @@ void PipelineCompiler::ExecuteDeferCompile(
 // =====================================================================================================================
 // Parses a given ELF binary and retrieves the binary metadata chunk
 void PipelineCompiler::ReadBinaryMetadata(
-    const Device*     pDevice,
-    const void*       pElfBinary,
-    const size_t      binarySize,
-    PipelineMetadata* pMetadata)
+    const Device*           pDevice,
+    const Vkgc::BinaryData& elfBinary,
+    PipelineMetadata*       pMetadata)
 {
-    VK_ASSERT(pElfBinary != nullptr);
-    VK_ASSERT(binarySize > 0);
+    VK_ASSERT(elfBinary.pCode != nullptr);
+    VK_ASSERT(elfBinary.codeSize > 0);
 
     bool found = false;
 
     // Read PipelineMetadata from ELF section
-    Util::ElfReader::Reader elfReader(pElfBinary);
+    Util::ElfReader::Reader elfReader(elfBinary.pCode);
     Util::ElfReader::SectionId sectionId = elfReader.FindSection(".pipelinemetadata");
 
     // If section ".pipelinemetadata" isn't found (sectionId == 0), we count on pCreateInfo->pipelineMetadata
@@ -4587,8 +4668,7 @@ VkResult PipelineCompiler::WriteBinaryMetadata(
     const Device*                     pDevice,
     PipelineCompilerType              compilerType,
     FreeCompilerBinary*               pFreeCompilerBinary,
-    const void**                      ppElfBinary,
-    size_t*                           pBinarySize,
+    Vkgc::BinaryData*                 pElfBinary,
     PipelineMetadata*                 pMetadata)
 {
     Pal::Result palResult = Pal::Result::Success;
@@ -4601,7 +4681,7 @@ VkResult PipelineCompiler::WriteBinaryMetadata(
         auto   pInstance       = pPhysicalDevice->Manager()->VkInstance();
 
         Util::Abi::PipelineAbiProcessor<PalAllocator> abiProcessor(pDevice->VkInstance()->Allocator());
-        palResult = abiProcessor.LoadFromBuffer(*ppElfBinary, *pBinarySize);
+        palResult = abiProcessor.LoadFromBuffer(pElfBinary->pCode, pElfBinary->codeSize);
 
         if (palResult == Pal::Result::Success)
         {
@@ -4634,13 +4714,13 @@ VkResult PipelineCompiler::WriteBinaryMetadata(
         if (palResult == Pal::Result::Success)
         {
             pPhysicalDevice->GetCompiler()->FreeGraphicsPipelineBinary(
-                compilerType, *pFreeCompilerBinary, *ppElfBinary, *pBinarySize);
+                compilerType, *pFreeCompilerBinary, *pElfBinary);
 
-            *ppElfBinary = nullptr;
-            *pBinarySize = abiProcessor.GetRequiredBufferSizeBytes();
+            pElfBinary->pCode = nullptr;
+            pElfBinary->codeSize = abiProcessor.GetRequiredBufferSizeBytes();
 
             void* pNewPipelineBinary = pInstance->AllocMem(
-                *pBinarySize, VK_DEFAULT_MEM_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+                pElfBinary->codeSize, VK_DEFAULT_MEM_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
             if (pNewPipelineBinary == nullptr)
             {
@@ -4649,7 +4729,7 @@ VkResult PipelineCompiler::WriteBinaryMetadata(
             else
             {
                 abiProcessor.SaveToBuffer(pNewPipelineBinary);
-                *ppElfBinary         = pNewPipelineBinary;
+                pElfBinary->pCode    = pNewPipelineBinary;
                 *pFreeCompilerBinary = FreeWithInstanceAllocator;
             }
         }

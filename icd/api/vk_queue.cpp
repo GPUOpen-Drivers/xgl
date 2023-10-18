@@ -1101,10 +1101,11 @@ VkResult Queue::Submit(
         for (uint32_t submitIdx = 0; (submitIdx < submitCount) && (result == VK_SUCCESS); ++submitIdx)
         {
             const SubmitInfoType& submitInfo = pSubmits[submitIdx];
-            const VkDeviceGroupSubmitInfo* pDeviceGroupInfo = nullptr;
-            const VkProtectedSubmitInfo* pProtectedSubmitInfo = nullptr;
-            bool  protectedSubmit = false;
 
+            const VkDeviceGroupSubmitInfo* pDeviceGroupInfo     = nullptr;
+            const VkProtectedSubmitInfo*   pProtectedSubmitInfo = nullptr;
+
+            bool            protectedSubmit        = false;
             uint32_t        waitValueCount         = 0;
             const uint64_t* pWaitSemaphoreValues   = nullptr;
             uint32_t        signalValueCount       = 0;
@@ -1144,6 +1145,12 @@ VkResult Queue::Submit(
 
                     pProtectedSubmitInfo = static_cast<const VkProtectedSubmitInfo*>(pNext);
                     protectedSubmit      = pProtectedSubmitInfo->protectedSubmit;
+                    break;
+
+                case VK_STRUCTURE_TYPE_FRAME_BOUNDARY_EXT:
+                    // Note: VK_EXT_frame_boundary is only intended for tools/debuggers
+                    // to be able to associate frame information with queue submissions.
+                    DevModeFrameBoundary(pDevModeMgr, static_cast<const VkFrameBoundaryEXT*>(pNext));
                     break;
 
                 default:
@@ -1366,7 +1373,7 @@ VkResult Queue::Submit(
                         }
 
                         const uint32_t stackSizeInDwords =
-                            Util::NumBytesToNumDwords(cmdBuf.PerGpuState(deviceIdx)->maxPipelineStackSize);
+                            Util::NumBytesToNumDwords(cmdBuf.GetPipelineScratchSize(deviceIdx));
 
                         palSubmitInfo.stackSizeInDwords =
                             Util::Max(palSubmitInfo.stackSizeInDwords, stackSizeInDwords);
@@ -1771,7 +1778,7 @@ VkResult Queue::Present(
     uint32_t presentationDeviceIdx = 0;
     bool     needSemaphoreFlush    = false;
 
-    const VkPresentRegionsKHR* pVkRegions = nullptr;
+    const VkPresentRegionsKHR*         pVkRegions                 = nullptr;
     const VkDeviceGroupPresentInfoKHR* pDeviceGroupPresentInfoKHR = nullptr;
 
     if (pPresentInfo == nullptr)
@@ -1809,6 +1816,15 @@ VkResult Queue::Present(
         {
             pVkRegions = static_cast<const VkPresentRegionsKHR*>(pNext);
             VK_ASSERT(pVkRegions->swapchainCount == pPresentInfo->swapchainCount);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_FRAME_BOUNDARY_EXT:
+        {
+            // Note: VK_EXT_frame_boundary is only intended for tools/debuggers
+            // to be able to associate frame information with queue submissions.
+            DevModeFrameBoundary(
+                m_pDevice->VkInstance()->GetDevModeMgr(),
+                static_cast<const VkFrameBoundaryEXT*>(pNext));
             break;
         }
         default:
@@ -1989,7 +2005,9 @@ VkResult Queue::Present(
 
         if ((curResult == VK_SUCCESS) && pSwapChain->IsSuboptimal(presentationDeviceIdx))
         {
-            curResult = VK_SUBOPTIMAL_KHR;
+            curResult = m_pDevice->GetRuntimeSettings().reportSuboptimalPresentAsOutOfDate ?
+                        VK_ERROR_OUT_OF_DATE_KHR :
+                        VK_SUBOPTIMAL_KHR;
         }
 
         if ((curResult == VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT) &&
@@ -2314,10 +2332,11 @@ End:
 // =====================================================================================================================
 // Peek the resource and memory device indices from a chained VkDeviceGroupBindSparseInfo structure.
 static void PeekDeviceGroupBindSparseDeviceIndicesAndSemaphoreInfo(
-    const VkBindSparseInfo& bindInfo,
-    uint32_t*               pResourceDeviceIndex,
-    uint32_t*               pMemoryDeviceIndex,
-    const VkTimelineSemaphoreSubmitInfo** ppTimelineSemaphoreInfo)
+    const VkBindSparseInfo&               bindInfo,
+    uint32_t*                             pResourceDeviceIndex,
+    uint32_t*                             pMemoryDeviceIndex,
+    const VkTimelineSemaphoreSubmitInfo** ppTimelineSemaphoreInfo,
+    const VkFrameBoundaryEXT**            ppFrameBoundaryInfo)
 {
     const void* pNext = bindInfo.pNext;
 
@@ -2346,6 +2365,13 @@ static void PeekDeviceGroupBindSparseDeviceIndicesAndSemaphoreInfo(
             {
                 const auto* pExtInfo = static_cast<const VkTimelineSemaphoreSubmitInfo*>(pNext);
                 *ppTimelineSemaphoreInfo = pExtInfo;
+                break;
+            }
+            case VK_STRUCTURE_TYPE_FRAME_BOUNDARY_EXT:
+            {
+                // Note: VK_EXT_frame_boundary is only intended for tools/debuggers
+                // to be able to associate frame information with queue submissions.
+                *ppFrameBoundaryInfo = static_cast<const VkFrameBoundaryEXT*>(pNext);
                 break;
             }
             default:
@@ -2397,19 +2423,34 @@ VkResult Queue::BindSparse(
         uint32_t    memoryDeviceIndex       = DefaultDeviceIndex;
         uint32_t    nextResourceDeviceIndex = DefaultDeviceIndex;
         bool        noWait                  = (bindInfo.waitSemaphoreCount == 0);
-        const VkTimelineSemaphoreSubmitInfo* pTimelineSemaphoreInfo = nullptr;
-        const VkTimelineSemaphoreSubmitInfo* pNextTimelineSemaphoreInfo = nullptr;
 
-        PeekDeviceGroupBindSparseDeviceIndicesAndSemaphoreInfo(bindInfo, &resourceDeviceIndex, &memoryDeviceIndex,
-                                                               &pTimelineSemaphoreInfo);
+        const VkTimelineSemaphoreSubmitInfo* pTimelineSemaphoreInfo     = nullptr;
+        const VkTimelineSemaphoreSubmitInfo* pNextTimelineSemaphoreInfo = nullptr;
+        const VkFrameBoundaryEXT*            pFrameBoundaryInfo         = nullptr;
+
+        PeekDeviceGroupBindSparseDeviceIndicesAndSemaphoreInfo(
+            bindInfo,
+            &resourceDeviceIndex,
+            &memoryDeviceIndex,
+            &pTimelineSemaphoreInfo,
+            &pFrameBoundaryInfo);
 
         if (!lastEntry)
         {
-            PeekDeviceGroupBindSparseDeviceIndicesAndSemaphoreInfo(pBindInfo[i + 1], &nextResourceDeviceIndex, nullptr,
-                                                                   &pNextTimelineSemaphoreInfo);
+            PeekDeviceGroupBindSparseDeviceIndicesAndSemaphoreInfo(
+                pBindInfo[i + 1],
+                &nextResourceDeviceIndex,
+                nullptr,
+                &pNextTimelineSemaphoreInfo,
+                &pFrameBoundaryInfo);
         }
         // Keep track of the PAL devices that need to signal the fence
         signalFenceDeviceMask |= (1 << resourceDeviceIndex);
+
+        // If VK_EXT_frame_boundary is in use and indicates end-of-frame, notify the tool about the frame boundary
+        DevModeFrameBoundary(
+            m_pDevice->VkInstance()->GetDevModeMgr(),
+            pFrameBoundaryInfo);
 
         if (bindInfo.waitSemaphoreCount > 0)
         {
@@ -2654,7 +2695,29 @@ void Queue::InsertDebugUtilsLabel(
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, DevModeMgr::FrameDelimiterType::QueueLabel);
         }
 #endif
+    }
 }
+
+// =====================================================================================================================
+// Notifies the trace tool about frame boundary, which is mainly used for unconventional vkQueuePresent-less
+// rendering or compute-only applications.
+void Queue::DevModeFrameBoundary(
+    DevModeMgr*               pDevModeMgr,
+    const VkFrameBoundaryEXT* pFrameBoundaryInfo)
+{
+#if ICD_GPUOPEN_DEVMODE_BUILD
+    if ((pDevModeMgr != nullptr) &&
+        (pFrameBoundaryInfo != nullptr))
+    {
+        if ((pFrameBoundaryInfo->flags & VK_FRAME_BOUNDARY_FRAME_END_BIT_EXT) != 0)
+        {
+            pDevModeMgr->NotifyFrameEnd(this,
+                DevModeMgr::FrameDelimiterType::QueuePresent);
+            pDevModeMgr->NotifyFrameBegin(this,
+                DevModeMgr::FrameDelimiterType::QueuePresent);
+        }
+    }
+#endif
 }
 
 /**

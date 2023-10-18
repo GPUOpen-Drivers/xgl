@@ -213,8 +213,11 @@ struct PerGpuRenderState
     const Pal::IColorBlendState*    pColorBlendState;
     const Pal::IDepthStencilState*  pDepthStencilState;
 
-    // The max stack size required by the pipelines referenced in this command buffer
-    uint32_t maxPipelineStackSize;
+    // Max stack sizes (bytes per lane) required by the pipelines referenced in this command buffer.
+    // frontendSize is the size of continuations stack, and will be added with backendSize to calculate total scratch
+    // size if global buffer is not used.
+    // backendSize is normally considered as scratch size.
+    Pal::CompilerStackSizes maxPipelineStackSizes;
 
     // VB bindings in source non-SRD form
     Pal::BufferViewInfo vbBindings[Pal::MaxVertexBuffers];
@@ -1350,7 +1353,16 @@ public:
 
     void SetRayTracingPipelineStackSize(uint32_t pipelineStackSize);
 
+    void UpdateLargestPipelineStackSizes(const uint32_t deviceIndex, const Pal::CompilerStackSizes size)
+    {
+        PerGpuState(deviceIndex)->maxPipelineStackSizes.backendSize =
+            Util::Max(PerGpuState(deviceIndex)->maxPipelineStackSizes.backendSize, size.backendSize);
+        PerGpuState(deviceIndex)->maxPipelineStackSizes.frontendSize =
+            Util::Max(PerGpuState(deviceIndex)->maxPipelineStackSizes.frontendSize, size.frontendSize);
+    }
 #endif
+
+    const uint32_t GetPipelineScratchSize(uint32_t deviceIdx) const;
 
     void BindDescriptorBuffers(
         uint32_t                                    bufferCount,
@@ -1683,12 +1695,6 @@ private:
     void ResetVertexBuffer();
     void UpdateVertexBufferStrides(const GraphicsPipeline* pPipeline);
 
-    void UpdateLargestPipelineStackSize(const uint32_t deviceIndex, const uint32_t pipelineStackSize)
-    {
-        PerGpuState(deviceIndex)->maxPipelineStackSize =
-            Util::Max(PerGpuState(deviceIndex)->maxPipelineStackSize, pipelineStackSize);
-    }
-
     void BindAlternatingThreadGroupConstant();
 
     DynamicVertexInputInternalData* BuildUberFetchShaderInternalData(
@@ -1760,6 +1766,17 @@ private:
         const VkStridedDeviceAddressRegionKHR& hitShaderBindingTable,
         const VkStridedDeviceAddressRegionKHR& callableShaderBindingTable,
         GpuRt::DispatchRaysConstants*          pConstants);
+
+    void TraceRayPreSetup(
+        const uint32_t                         deviceIdx,
+        const VkStridedDeviceAddressRegionKHR& raygenShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& missShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& hitShaderBindingTable,
+        const VkStridedDeviceAddressRegionKHR& callableShaderBindingTable,
+        const uint32_t                         width,
+        const uint32_t                         height,
+        const uint32_t                         depth,
+        Pal::gpusize*                          pConstGpuAddr);
 
     void BindRayQueryConstants(
         const Pipeline*        pPipeline,
@@ -2451,10 +2468,6 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWriteAccelerationStructuresPropertiesKHR(
     VkQueryType                                        queryType,
     VkQueryPool                                        queryPool,
     uint32_t                                           firstQuery);
-
-VKAPI_ATTR void VKAPI_CALL vkCmdCopyAccelerationStructureToMemoryKHR(
-    VkCommandBuffer                                   commandBuffer,
-    const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysIndirect2KHR(
     VkCommandBuffer                             commandBuffer,

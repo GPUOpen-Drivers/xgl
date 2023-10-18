@@ -2138,8 +2138,6 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
     PipelineCreateFlags                    flags,
-    const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
-    const PipelineLayout*                  pPipelineLayout,
     const PipelineOptimizerKey*            pOptimizerKey,
     const PipelineMetadata*                pBinMeta,
     GraphicsPipelineObjectCreateInfo*      pInfo)
@@ -2151,43 +2149,17 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
 
     bool hasMesh = false;
 #if VKI_RAY_TRACING
-    bool hasRayTracing = false;
+    bool hasRayTracing = pBinMeta->rayQueryUsed;
 #endif
-
-    for (uint32_t stageIdx = 0; stageIdx < ShaderStage::ShaderStageGfxCount; ++stageIdx)
-    {
-        if (pShaderStageInfo->stages[stageIdx].pModuleHandle != nullptr)
-        {
-            const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>(
-                ShaderModule::GetFirstValidShaderData(pShaderStageInfo->stages[stageIdx].pModuleHandle));
-
-            VK_ASSERT(pModuleData != nullptr);
-
-#if VKI_RAY_TRACING
-            if (pModuleData->usage.enableRayQuery != 0)
-            {
-                hasRayTracing = true;
-            }
-#endif
-            if (stageIdx == ShaderStageMesh)
-            {
-                hasMesh = true;
-            }
-        }
-    }
-
-    if (libInfo.pPreRasterizationShaderLib != nullptr)
-    {
-        if (Util::TestAnyFlagSet(libInfo.pPreRasterizationShaderLib->GetPipelineObjectCreateInfo().activeStages,
-                                 VK_SHADER_STAGE_MESH_BIT_EXT))
-        {
-            hasMesh = true;
-        }
-    }
 
     uint32_t libFlags = libInfo.libFlags;
 
     pInfo->activeStages = GetActiveShaderStages(pIn, &libInfo);
+
+    if (Util::TestAnyFlagSet(pInfo->activeStages, VK_SHADER_STAGE_MESH_BIT_EXT))
+    {
+        hasMesh = true;
+    }
 
     uint64_t dynamicStateFlags = GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
 

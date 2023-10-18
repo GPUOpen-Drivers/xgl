@@ -252,8 +252,6 @@ protected:
         const Device*                          pDevice,
         const VkGraphicsPipelineCreateInfo*    pIn,
         PipelineCreateFlags                    flags,
-        const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
-        const PipelineLayout*                  pPipelineLayout,
         const PipelineOptimizerKey*            pOptimizerKey,
         const PipelineMetadata*                pBinMeta,
         GraphicsPipelineObjectCreateInfo*      pObjInfo);

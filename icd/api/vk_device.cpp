@@ -1816,8 +1816,7 @@ VkResult Device::CreateInternalComputePipeline(
     VkResult             result               = VK_SUCCESS;
     PipelineCompiler*    pCompiler            = GetCompiler(DefaultDeviceIndex);
     ShaderModuleHandle   shaderModule         = {};
-    const void*          pPipelineBinary      = nullptr;
-    size_t               pipelineBinarySize   = 0;
+    Vkgc::BinaryData     pipelineBinary       = {};
     ShaderOptimizerKey   shaderOptimzierKey   = {};
     PipelineOptimizerKey pipelineOptimizerKey = {};
     PipelineMetadata     binaryMetadata       = {};
@@ -1836,19 +1835,17 @@ VkResult Device::CreateInternalComputePipeline(
     pipelineBuildInfo.pBinaryMetadata     = &binaryMetadata;
 
     // Build shader module
+    Vkgc::BinaryData spvBin = { codeByteSize, pCode };
     result = pCompiler->BuildShaderModule(
         this,
         0,
         internalShaderFlags,
-        codeByteSize,
-        pCode,
+        spvBin,
         false,
         true,
         nullptr,
         nullptr,
         &shaderModule);
-
-    Vkgc::BinaryData spvBin = { codeByteSize, pCode };
 
     if (result == VK_SUCCESS)
     {
@@ -1912,8 +1909,7 @@ VkResult Device::CreateInternalComputePipeline(
             cacheResult = pCompiler->GetCachedPipelineBinary(
                 &cacheId,
                 nullptr,
-                &pipelineBinarySize,
-                &pPipelineBinary,
+                &pipelineBinary,
                 &isUserCacheHit,
                 &isInternalCacheHit,
                 &pipelineBuildInfo.freeCompilerBinary,
@@ -1927,8 +1923,7 @@ VkResult Device::CreateInternalComputePipeline(
                 DefaultDeviceIndex,
                 nullptr,
                 &pipelineBuildInfo,
-                &pipelineBinarySize,
-                &pPipelineBinary,
+                &pipelineBinary,
                 &cacheId);
 
             if (result == VK_SUCCESS)
@@ -1936,8 +1931,7 @@ VkResult Device::CreateInternalComputePipeline(
                 pCompiler->CachePipelineBinary(
                     &cacheId,
                     nullptr,
-                    pipelineBinarySize,
-                    pPipelineBinary,
+                    &pipelineBinary,
                     isUserCacheHit,
                     isInternalCacheHit);
             }
@@ -1951,8 +1945,8 @@ VkResult Device::CreateInternalComputePipeline(
     {
         Pal::ComputePipelineCreateInfo pipelineInfo = {};
         pipelineInfo.flags.clientInternal = true;
-        pipelineInfo.pPipelineBinary      = pPipelineBinary;
-        pipelineInfo.pipelineBinarySize   = pipelineBinarySize;
+        pipelineInfo.pPipelineBinary      = pipelineBinary.pCode;
+        pipelineInfo.pipelineBinarySize   = pipelineBinary.codeSize;
 
         const size_t pipelineSize = PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(pipelineInfo, nullptr);
 
@@ -1975,9 +1969,9 @@ VkResult Device::CreateInternalComputePipeline(
     // Cleanup
     pCompiler->FreeShaderModule(&shaderModule);
 
-    if ((pPipelineBinary) || (result != VK_SUCCESS))
+    if ((pipelineBinary.pCode != nullptr) || (result != VK_SUCCESS))
     {
-        pCompiler->FreeComputePipelineBinary(&pipelineBuildInfo, pPipelineBinary, pipelineBinarySize);
+        pCompiler->FreeComputePipelineBinary(&pipelineBuildInfo, pipelineBinary);
         pCompiler->FreeComputePipelineCreateInfo(&pipelineBuildInfo);
     }
 
@@ -2785,8 +2779,13 @@ VkResult Device::BindBufferMemory(
     uint32_t                        bindInfoCount,
     const VkBindBufferMemoryInfo*   pBindInfos) const
 {
+    VkResult wholeOperationResult = VK_SUCCESS;
+
     for (uint32 bindIdx = 0; bindIdx < bindInfoCount; bindIdx++)
     {
+        VkResult                      perBindResult     = VK_SUCCESS;
+        VkResult*                     pPerBindResult    = nullptr;
+
         uint32                        deviceIndexCount  = 0;
         const uint32*                 pDeviceIndices    = nullptr;
         const VkBindBufferMemoryInfo& info              = pBindInfos[bindIdx];
@@ -2820,10 +2819,21 @@ VkResult Device::BindBufferMemory(
 
         VK_ASSERT((deviceIndexCount == 0) || (deviceIndexCount == NumPalDevices()));
 
-        Buffer::ObjectFromHandle(info.buffer)->BindMemory(this, info.memory, info.memoryOffset, pDeviceIndices);
+        perBindResult = Buffer::ObjectFromHandle(info.buffer)->BindMemory(this, info.memory, info.memoryOffset,
+                                                                          pDeviceIndices);
+
+        if (pPerBindResult != nullptr)
+        {
+            *pPerBindResult = perBindResult;
+        }
+
+        if (perBindResult != VK_SUCCESS)
+        {
+            wholeOperationResult = perBindResult;
+        }
     }
 
-    return VK_SUCCESS;
+    return wholeOperationResult;
 }
 
 // =====================================================================================================================
@@ -2831,8 +2841,13 @@ VkResult Device::BindImageMemory(
     uint32_t                          bindInfoCount,
     const VkBindImageMemoryInfo*      pBindInfos)
 {
+    VkResult wholeOperationResult = VK_SUCCESS;
+
     for (uint32 bindIdx = 0; bindIdx < bindInfoCount; bindIdx++)
     {
+        VkResult        perBindResult       = VK_SUCCESS;
+        VkResult*       pPerBindResult      = nullptr;
+
         uint32          deviceIndexCount    = 0;
         const uint32*   pDeviceIndices      = nullptr;
 
@@ -2886,7 +2901,7 @@ VkResult Device::BindImageMemory(
 
         if (pSwapchain != nullptr)
         {
-            Image::ObjectFromHandle(info.image)->BindSwapchainMemory(
+            perBindResult = Image::ObjectFromHandle(info.image)->BindSwapchainMemory(
                 this,
                 swapChainImageIndex,
                 pSwapchain,
@@ -2897,7 +2912,7 @@ VkResult Device::BindImageMemory(
         }
         else
         {
-            Image::ObjectFromHandle(info.image)->BindMemory(
+            perBindResult = Image::ObjectFromHandle(info.image)->BindMemory(
                 this,
                 info.memory,
                 info.memoryOffset,
@@ -2906,9 +2921,18 @@ VkResult Device::BindImageMemory(
                 SFRRectCount,
                 pSFRRects);
         }
+
+        if (pPerBindResult != nullptr)
+        {
+            *pPerBindResult = perBindResult;
+        }
+        if (perBindResult != VK_SUCCESS)
+        {
+            wholeOperationResult = perBindResult;
+        }
     }
 
-    return VK_SUCCESS;
+    return wholeOperationResult;
 }
 
 // =====================================================================================================================
@@ -3780,8 +3804,9 @@ void Device::GetAccelerationStructureBuildSizesKHR(
     const uint32_t*                                      pMaxPrimitiveCounts,
     VkAccelerationStructureBuildSizesInfoKHR*            pSizeInfo)
 {
-    GeometryConvertHelper         helper = {};
-    GpuRt::AccelStructBuildInputs inputs = {};
+    GeometryConvertHelper          helper   = {};
+    GpuRt::AccelStructBuildInputs  inputs   = {};
+    GpuRt::AccelStructPrebuildInfo prebuild = {};
 
     VkResult result = AccelerationStructure::ConvertBuildSizeInputs(
         DefaultDeviceIndex,
@@ -3790,9 +3815,28 @@ void Device::GetAccelerationStructureBuildSizesKHR(
         &helper,
         &inputs);
 
-    GpuRt::AccelStructPrebuildInfo prebuild = {};
+    const bool forceRebuildTopLevel =
+        Util::TestAnyFlagSet(m_settings.forceRebuildForUpdates, ForceRebuildForUpdatesTopLevel);
+
+    const bool forceRebuildBottomLevel =
+        Util::TestAnyFlagSet(m_settings.forceRebuildForUpdates, ForceRebuildForUpdatesBottomLevel);
+
+    const bool forceRebuild = ((inputs.type == GpuRt::AccelStructType::TopLevel) && forceRebuildTopLevel) ||
+                              ((inputs.type == GpuRt::AccelStructType::BottomLevel) && forceRebuildBottomLevel);
+
+    const bool allowUpdate = inputs.flags & GpuRt::AccelStructBuildFlagAllowUpdate;
+
+    if (forceRebuild)
+    {
+        inputs.flags &= ~GpuRt::AccelStructBuildFlagAllowUpdate;
+    }
 
     RayTrace()->GpuRt(DefaultDeviceIndex)->GetAccelStructPrebuildInfo(inputs, &prebuild);
+
+    if (forceRebuild && allowUpdate)
+    {
+        prebuild.updateScratchDataSizeInBytes = prebuild.scratchDataSizeInBytes;
+    }
 
     pSizeInfo->accelerationStructureSize = prebuild.resultDataMaxSizeInBytes;
 
@@ -3820,31 +3864,25 @@ void Device::GetAccelerationStructureBuildSizesKHR(
 VkResult Device::SetDebugUtilsObjectName(
     const VkDebugUtilsObjectNameInfoEXT* pNameInfo)
 {
-    // Log the object name if it is an object type that RMV cares about.
-    if ((pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_BUFFER) ||
-        (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_IMAGE) ||
-        (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_PIPELINE))
+    // For buffers, the RMV resource handle is the same as the handle passed in so we can log that directly,
+    // but for image and pipeline the RMV resource handle comes from the Pal object.
+    Pal::DebugNameEventData nameData = {};
+    if (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_IMAGE)
     {
-        // For buffers, the RMV resource handle is the same as the handle passed in so we can log that directly,
-        // but for image and pipeline the RMV resource handle comes from the Pal object.
-        Pal::DebugNameEventData nameData = {};
-        if (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_BUFFER)
-        {
-            nameData.pObj = reinterpret_cast<const void*>(pNameInfo->objectHandle);
-        }
-        else if (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_IMAGE)
-        {
-            Image* pImage = reinterpret_cast<Image*>(pNameInfo->objectHandle);
-            nameData.pObj = pImage->PalImage(DefaultDeviceIndex);
-        }
-        else // Pipeline
-        {
-            Pipeline* pPipeline = reinterpret_cast<Pipeline*>(pNameInfo->objectHandle);
-            nameData.pObj = pPipeline->PalPipeline(DefaultDeviceIndex);
-        }
-        nameData.pDebugName = pNameInfo->pObjectName;
-        VkInstance()->PalPlatform()->LogEvent(Pal::PalEvent::DebugName, &nameData, sizeof(nameData));
+         Image* pImage = reinterpret_cast<Image*>(pNameInfo->objectHandle);
+         nameData.pObj = pImage->PalImage(DefaultDeviceIndex)->GetResourceId();
     }
+    else if (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_PIPELINE)
+    {
+        Pipeline* pPipeline = reinterpret_cast<Pipeline*>(pNameInfo->objectHandle);
+        nameData.pObj = pPipeline->PalPipeline(DefaultDeviceIndex);
+    }
+    else
+    {
+        nameData.pObj = reinterpret_cast<const void*>(pNameInfo->objectHandle);
+    }
+    nameData.pDebugName = pNameInfo->pObjectName;
+    VkInstance()->PalPlatform()->LogEvent(Pal::PalEvent::DebugName, &nameData, sizeof(nameData));
 
     return VkResult::VK_SUCCESS;
 }

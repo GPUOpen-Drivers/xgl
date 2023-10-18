@@ -347,6 +347,10 @@ protected:
         uint32_t                         deviceIdx,
         const Pal::PresentSwapChainInfo* pPresentInfo);
 
+    void DevModeFrameBoundary(
+        DevModeMgr*               pDevModeMgr,
+        const VkFrameBoundaryEXT* pFrameBoundaryInfo);
+
     Pal::IQueue*                       m_pPalQueues[MaxPalDevices];
     Pal::IQueue*                       m_pPalBackupQueues[MaxPalDevices];
     Pal::IQueue*                       m_pPalBackupTmzQueues[MaxPalDevices];

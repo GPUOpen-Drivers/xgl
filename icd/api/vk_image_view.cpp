@@ -613,6 +613,11 @@ VkResult ImageView::Create(
 
     Pal::Result result = Pal::Result::Success;
 
+    if (settings.forceLowPrecisionDepthImage != ForceLowPrecisionDepthImageDefault)
+    {
+        createInfoFormat = GetLowPrecisionDepthFormat(createInfoFormat, pImage->GetImageUsage(), settings);
+    }
+
     // Get the view format (without component mapping)
     Pal::SwizzledFormat viewFormat = VkToPalFormat(createInfoFormat, pDevice->GetRuntimeSettings());
 

@@ -88,8 +88,7 @@ public:
         const Device*                pDevice,
         VkShaderModuleCreateFlags    flags,
         VkShaderModuleCreateFlags    internalShaderFlags,
-        size_t                       codeSize,
-        const void*                  pCode,
+        const Vkgc::BinaryData&      shaderBinary,
         const bool                   adaptForFastLink,
         bool                         isInternal,
         ShaderModuleHandle*          pShaderModule,
@@ -102,12 +101,11 @@ public:
     virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) override;
 
     virtual VkResult CreateGraphicsPipelineBinary(
-        Device*                           pDevice,
+        const Device*                     pDevice,
         uint32_t                          deviceIdx,
         PipelineCache*                    pPipelineCache,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-        size_t*                           pPipelineBinarySize,
-        const void**                      ppPipelineBinary,
+        Vkgc::BinaryData*                 pPipelineBinary,
         Vkgc::PipelineShaderInfo**        ppShadersInfo,
         void*                             pPipelineDumpHandle,
         uint64_t                          pipelineHash,
@@ -122,30 +120,28 @@ public:
         void*                             pPipelineDumpHandle,
         ShaderModuleHandle*               pShaderModule) override;
 
-    VkResult CreateColorExportBinary(
+    virtual VkResult CreateColorExportBinary(
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         void*                             pPipelineDumpHandle,
-        Vkgc::BinaryData*                 pOutputPackage);
+        Vkgc::BinaryData*                 pOutputPackage) override;
 
     virtual VkResult CreateComputePipelineBinary(
         Device*                          pDevice,
         uint32_t                         deviceIdx,
         PipelineCache*                   pPipelineCache,
         ComputePipelineBinaryCreateInfo* pCreateInfo,
-        size_t*                          pPipelineBinarySize,
-        const void**                     ppPipelineBinary,
+        Vkgc::BinaryData*                pPipelineBinary,
         void*                            pPipelineDumpHandle,
         uint64_t                         pipelineHash,
         Util::MetroHash::Hash*           pCacheId,
         int64_t*                         pCompileTime) override;
 
     virtual void FreeGraphicsPipelineBinary(
-        const void*                 pPipelineBinary,
-        size_t                      binarySize) override;
+        const Vkgc::BinaryData& pipelineBinary) override;
 
     virtual void FreeComputePipelineBinary(
-        const void*                 pPipelineBinary,
-        size_t                      binarySize) override;
+        const Vkgc::BinaryData& pipelineBinary) override;
+
 #if VKI_RAY_TRACING
     virtual VkResult CreateRayTracingPipelineBinary(
         Device*                             pDevice,
@@ -162,15 +158,24 @@ public:
         RayTracingPipelineBinary* pPipelineBinary) override;
 #endif
 
-    void BuildPipelineInternalBufferData(
+    virtual void BuildPipelineInternalBufferData(
         const PipelineCompiler*           pCompiler,
         const uint32_t                    uberFetchConstBufRegBase,
         const uint32_t                    specConstBufVertexRegBase,
         const uint32_t                    specConstBufFragmentRegBase,
-        GraphicsPipelineBinaryCreateInfo* pCreateInfo);
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo) override;
+
+    virtual bool IsGplFastLinkCompatible(
+        const Device*                           pDevice,
+        uint32_t                                deviceIdx,
+        const GraphicsPipelineBinaryCreateInfo* pCreateInfo) override;
+
+    virtual Vkgc::BinaryData ExtractPalElfBinary(const Vkgc::BinaryData& shaderBinary) override;
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(CompilerSolutionLlpc);
+
+    typedef LlpcShaderLibraryBlobHeader ShaderLibraryBlobHeader;
 
     VkResult CreateLlpcCompiler(Vkgc::ICache* pCache);
 
@@ -182,7 +187,6 @@ private:
 
 private:
     Llpc::ICompiler*    m_pLlpc;               // LLPC compiler object
-
 };
 
 }

@@ -194,17 +194,31 @@ public:
 
     void ClearFormatString()
     {
-        m_formatStrings.Reset();
+        if (m_pFormatStrings != nullptr)
+        {
+            m_pFormatStrings->Reset();
+        }
     }
 
-    const PrintfFormatMap& GetFormatStrings() const
+    const PrintfFormatMap* GetFormatStrings() const
     {
-        return m_formatStrings;
+        VK_ASSERT(m_pFormatStrings != nullptr);
+        return m_pFormatStrings;
     }
 
     PrintfFormatMap* GetFormatStrings()
     {
-        return &m_formatStrings;
+        if (m_pFormatStrings == nullptr)
+        {
+            void* pBuffer =
+                m_pDevice->VkInstance()->AllocMem(sizeof(PrintfFormatMap), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+            if (pBuffer != nullptr)
+            {
+                m_pFormatStrings = VK_PLACEMENT_NEW(pBuffer) PrintfFormatMap(32, m_pDevice->VkInstance()->Allocator());
+                m_pFormatStrings->Init();
+            }
+        }
+        return m_pFormatStrings;
     }
 
     static void ElfHashToCacheId(
@@ -288,7 +302,7 @@ protected:
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Pipeline);
 
-    PrintfFormatMap                    m_formatStrings;
+    PrintfFormatMap*                    m_pFormatStrings;
 };
 
 namespace entry

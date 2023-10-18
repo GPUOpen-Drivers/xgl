@@ -192,7 +192,7 @@ def parse_json_profile_action_shader(shader_actions):
         'enableSubvectorSharedVgprs', 'maxWavesPerCu', 'maxThreadGroupsPerCu', 'useSiScheduler',
         'disableCodeSinking', 'favorLatencyHiding', 'reconfigWorkgroupLayout', 'forceLoopUnrollCount',
         'enableLoadScalarizer', 'disableLicm', 'unrollThreshold', 'nsaThreshold', 'aggressiveInvariantLoads',
-        'scalarizeWaterfallLoads'
+        'scalarizeWaterfallLoads', 'backwardPropagageNoContract', 'forwardPropagageNoContract'
     ]
     :param shader_actions:
     :return:

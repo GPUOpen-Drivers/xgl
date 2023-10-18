@@ -384,9 +384,9 @@ PhysicalDevice::PhysicalDevice(
     m_allowedExtensions(),
     m_ignoredExtensions(),
     m_compiler(this),
+    m_workstationStereoMode(Pal::WorkstationStereoMode::Disabled),
     m_memoryUsageTracker {},
     m_pipelineCacheUUID {},
-    m_workstationStereoMode(Pal::WorkstationStereoMode::Disabled),
     m_pPlatformKey(nullptr)
 {
     memset(&m_limits, 0, sizeof(m_limits));
@@ -695,7 +695,6 @@ void PhysicalDevice::InitializePlatformKey(
 static void GenerateCacheUuid(
     const RuntimeSettings& settings,
     const Pal::DeviceProperties& palProps,
-    AppProfile appProfile,
     Util::Uuid::Uuid* pUuid)
 {
     VK_ASSERT(pUuid != nullptr);
@@ -715,7 +714,6 @@ static void GenerateCacheUuid(
         uint32               deviceId;
         Pal::GfxIpLevel      gfxLevel;
         VkPhysicalDeviceType deviceType;
-        AppProfile           appProfile;
         uint32               vulkanIcdVersion;
         uint32               palInterfaceVersion;
         uint32               osHash;
@@ -727,7 +725,6 @@ static void GenerateCacheUuid(
         palProps.deviceId,
         palProps.gfxLevel,
         PalToVkGpuType(palProps.gpuType),
-        appProfile,
         VulkanIcdVersion,
         PAL_CLIENT_INTERFACE_MAJOR_VERSION,
         Util::HashLiteralString("Linux"),
@@ -1124,7 +1121,7 @@ VkResult PhysicalDevice::Initialize()
 
         // Generate our cache UUID.
         // This can be use later as a "namespace" for Uuid3()/Uuid5() calls for individual pipelines
-        GenerateCacheUuid(settings, PalProperties(), m_appProfile, &m_pipelineCacheUUID);
+        GenerateCacheUuid(settings, PalProperties(), &m_pipelineCacheUUID);
 
         // Collect properties for perf experiments (this call can fail; we just don't report support for
         // perf measurement extension then)
@@ -1136,8 +1133,7 @@ VkResult PhysicalDevice::Initialize()
 
     if (vkResult == VK_SUCCESS)
     {
-        Pal::Result stereoResult = m_pPalDevice->GetWsStereoMode(&m_workstationStereoMode);
-        VK_ASSERT(stereoResult == Result::Success);
+        m_pPalDevice->GetWsStereoMode(&m_workstationStereoMode);
     }
 
     return vkResult;
@@ -2236,9 +2232,8 @@ VkResult PhysicalDevice::GetImageFormatProperties(
 
         // For gfx10 and later, DCN requires DCC_INDEPENDENT_64B = 1 and
         // DCC_MAX_COMPRESSED_BLOCK = AMD_FMT_MOD_DCC_BLOCK_64B for 4k.
-        if ((PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp10_1) &&
-            ((AMD_FMT_MOD_GET(DCC_INDEPENDENT_64B, modifier) == 0)   ||
-             (AMD_FMT_MOD_GET(DCC_MAX_COMPRESSED_BLOCK, modifier) != AMD_FMT_MOD_DCC_BLOCK_64B)))
+        if ((AMD_FMT_MOD_GET(DCC_INDEPENDENT_64B, modifier) == 0)   ||
+             (AMD_FMT_MOD_GET(DCC_MAX_COMPRESSED_BLOCK, modifier) != AMD_FMT_MOD_DCC_BLOCK_64B))
         {
             pImageFormatProperties->maxExtent.width  = 2560;
             pImageFormatProperties->maxExtent.height = 2560;
@@ -2640,7 +2635,6 @@ void PhysicalDevice::GetDeviceProperties(
     pProperties->sparseProperties.residencyStandard2DMultisampleBlockShape =
         GetPrtFeatures() & Pal::PrtFeatureImageMultisampled ? VK_TRUE : VK_FALSE;
 
-    // NOTE: GFX7 and GFX8 may expose sparseResidencyImage3D but are unable to support residencyStandard3DBlockShape
     pProperties->sparseProperties.residencyStandard3DBlockShape =
         GetPrtFeatures() & Pal::PrtFeatureImage3D ? VK_TRUE : VK_FALSE;
 
@@ -2998,8 +2992,6 @@ void PhysicalDevice::PopulateLimits()
     // the value of this limit.
     m_limits.maxViewports = Pal::MaxViewports;
 
-    // NOTE: These are temporarily from gfx6Chip.h
-
     // Maximum viewport dimensions in the X(width) and Y(height) dimensions, respectively.  The maximum viewport
     // dimensions must be greater than or equal to the largest image which can be created and used as a
     // framebuffer attachment.
@@ -3099,9 +3091,6 @@ void PhysicalDevice::PopulateLimits()
     m_limits.maxFramebufferWidth  = 16384;
     m_limits.maxFramebufferHeight = 16384;
     m_limits.maxFramebufferLayers = MaxFramebufferLayers;
-
-    // NOTE: These values are currently match OGL gfx6 values and they are probably overly conservative.  Need to
-    // compare CB/DB limits and test with attachmentless framebuffers for proper limits.
 
     // Framebuffer sample count support determination
     {
@@ -4297,10 +4286,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     if (supportFloatAtomics)
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_ATOMIC_FLOAT));
-    }
-    if ((pPhysicalDevice == nullptr) ||
-        ((pPhysicalDevice->PalProperties().gfxLevel > Pal::GfxIpLevel::GfxIp9) && supportFloatAtomics))
-    {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_ATOMIC_FLOAT2));
     }
 
@@ -4314,8 +4299,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_YCBCR_IMAGE_ARRAYS));
 
     if ((pPhysicalDevice == nullptr) ||
-        ((pPhysicalDevice->PalProperties().gfxLevel != Pal::GfxIpLevel::GfxIp9) &&
-         (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportBorderColorSwizzle)))
+        (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportBorderColorSwizzle))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_BORDER_COLOR_SWIZZLE));
     }
@@ -4335,17 +4319,18 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MESH_SHADER));
     }
 
-     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_FRAGMENT_SHADER_BARYCENTRIC));
+    if ((pPhysicalDevice == nullptr) ||
+        pPhysicalDevice->PalProperties().gfxipProperties.flags.supportSortAgnosticBarycentrics)
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_FRAGMENT_SHADER_BARYCENTRIC));
+    }
+
      availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_NON_SEAMLESS_CUBE_MAP));
      availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_MODULE_IDENTIFIER));
 
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE3));
 
-        if ((pPhysicalDevice == nullptr) ||
-            (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))
-        {
-            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_INPUT_DYNAMIC_STATE));
-        }
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_INPUT_DYNAMIC_STATE));
 
     bool disableAMDVendorExtensions = false;
     if (pPhysicalDevice != nullptr)
@@ -6830,7 +6815,8 @@ size_t PhysicalDevice::GetFeatures2(
 
                 if (updateFeatures)
                 {
-                    pExtInfo->fragmentShaderBarycentric = VK_TRUE;
+                    pExtInfo->fragmentShaderBarycentric =
+                        PalProperties().gfxipProperties.flags.supportSortAgnosticBarycentrics;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -7104,6 +7090,18 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAME_BOUNDARY_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceFrameBoundaryFeaturesEXT*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->frameBoundary = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures
@@ -7235,18 +7233,7 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
     // handle VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD
     if ((pTextureLODGatherFormatProperties != nullptr) && (result == VK_SUCCESS))
     {
-        if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)
-        {
-            pTextureLODGatherFormatProperties->supportsTextureGatherLODBiasAMD = VK_TRUE;
-        }
-        else
-        {
-            const auto formatType = vk::Formats::GetNumberFormat(createInfoFormat, GetRuntimeSettings());
-            const bool isInteger  = (formatType == Pal::Formats::NumericSupportFlags::Sint) ||
-                                    (formatType == Pal::Formats::NumericSupportFlags::Uint);
-
-            pTextureLODGatherFormatProperties->supportsTextureGatherLODBiasAMD = !isInteger;
-        }
+        pTextureLODGatherFormatProperties->supportsTextureGatherLODBiasAMD = VK_TRUE;
     }
 
     return result;

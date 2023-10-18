@@ -3,13 +3,12 @@
     {
       "pattern": {
         "ps": {
-          "stageActive": true,
-          "codeHash": "0x730eeeb82e6434a8 76d57aacbd824dbd"
+          "codeHash": "0x840F5E31E0457DC8 84AEDCE5D263265A"
         }
       },
       "action": {
         "ps": {
-          "forceLoopUnrollCount": 2
+          "favorLatencyHiding": true
         }
       }
     }

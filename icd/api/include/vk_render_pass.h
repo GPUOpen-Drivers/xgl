@@ -181,13 +181,15 @@ struct RenderPassCreateInfo
         const VkRenderPassCreateInfo*       pCreateInfo,
         const RenderPassExtCreateInfo&      renderPassExt,
         void*                               pMemoryPtr,
-        size_t                              memorySize);
+        size_t                              memorySize,
+        const RuntimeSettings&              settings);
 
     void Init(
         const VkRenderPassCreateInfo2*      pCreateInfo,
         const RenderPassExtCreateInfo&      renderPassExt,
         void*                               pMemoryPtr,
-        size_t                              memorySize);
+        size_t                              memorySize,
+        const RuntimeSettings&              settings);
 
     VkRenderPassCreateFlags  flags;
     uint32_t                 attachmentCount;
@@ -199,6 +201,7 @@ struct RenderPassCreateInfo
     uint32_t                 correlatedViewMaskCount;
     uint32_t*                pCorrelatedViewMasks;
     bool                     needForceLateZ;
+    bool                     doClearsUpfront;
     uint64_t                 hash;
 };
 
@@ -309,6 +312,11 @@ public:
     bool IsForceLateZNeeded() const
     {
         return m_createInfo.needForceLateZ;
+    }
+
+    bool DoClearsUpfront() const
+    {
+        return m_createInfo.doClearsUpfront;
     }
 
 protected:

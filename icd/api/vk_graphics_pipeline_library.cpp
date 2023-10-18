@@ -388,7 +388,7 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
             (pLibInfo->pFragmentShaderLib != nullptr))
         {
             const ShaderModuleHandle* pParentHandle =
-                pLibInfo->pPreRasterizationShaderLib->GetShaderModuleHandle(ShaderStage::ShaderStageFragment);
+                pLibInfo->pFragmentShaderLib->GetShaderModuleHandle(ShaderStage::ShaderStageFragment);
 
             VK_ASSERT(pParentHandle != nullptr);
 
@@ -417,10 +417,15 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
         {
             // Create shader libraries for fast-link
             GraphicsLibraryType gplType = GetGraphicsLibraryType(static_cast<ShaderStage>(stage));
-            if (pBinaryCreateInfo->earlyElfPackage[gplType].codeSize != 0)
+            if ((pBinaryCreateInfo->earlyElfPackage[gplType].codeSize != 0) &&
+                (pBinaryCreateInfo->pShaderLibraries[gplType] == nullptr))
             {
+                Vkgc::BinaryData  palElfBinary = {};
+
+                palElfBinary = pCompiler->GetSolution(pBinaryCreateInfo->compilerType)->
+                    ExtractPalElfBinary(pBinaryCreateInfo->earlyElfPackage[gplType]);
                 result = pCompiler->CreateGraphicsShaderLibrary(pDevice,
-                                                                pBinaryCreateInfo->earlyElfPackage[gplType],
+                                                                palElfBinary,
                                                                 pAllocator,
                                                                 &pBinaryCreateInfo->pShaderLibraries[gplType]);
             }
@@ -545,8 +550,6 @@ VkResult GraphicsPipelineLibrary::Create(
             pDevice,
             pCreateInfo,
             flags,
-            &shaderStageInfo,
-            pPipelineLayout,
             &pipelineOptimizerKey,
             &binaryMetadata,
             &objectCreateInfo);

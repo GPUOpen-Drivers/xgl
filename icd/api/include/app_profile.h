@@ -111,6 +111,7 @@ enum class AppProfile : uint32_t
     SeriousSam4,             // Serious Sam 4 by Croteam
     SniperElite5,            // Sniper Elite 5 by Rebellion
     SeriousSamVrTheLastHope, // Serious Sam VR The Last Hope by Croteam
+    BaldursGate3,            // Baldur's Gate by Larian Studios
 #if VKI_RAY_TRACING
     ControlDX12,             // VKD3D Control Ultimate Edition
     RayTracingWeekends,      // RayTracingInVulkan demo
@@ -135,8 +136,8 @@ enum class AppProfile : uint32_t
     SHARK,                   // SHARK
     SpidermanRemastered,     // Spiderman Remastered
     TheSurge2,               // The Surge 2
-    Yuzu,                    // Yuzu Emulator by Team Yuzu | Citra
     AsyncPostProcessLVr,     // AsyncPostProcessing sample app for AMD Liquid VR SDK
+    Enscape,                 // Enscape by Chaos
 };
 
 struct ProfileSettings

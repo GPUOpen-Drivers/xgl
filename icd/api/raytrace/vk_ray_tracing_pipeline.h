@@ -177,7 +177,7 @@ public:
     uint32_t GetAttributeSize() const
         { return m_attributeSize; }
 
-    uint32_t GetDefaultPipelineStackSize(uint32_t deviceIdx) const
+    Pal::CompilerStackSizes GetDefaultPipelineStackSizesSize(uint32_t deviceIdx) const
         { return m_defaultPipelineStackSizes[deviceIdx]; }
 
     uint32_t GetShaderGroupCount() const
@@ -344,7 +344,7 @@ private:
     Pal::gpusize                      m_traceRayGpuVas[MaxPalDevices];
     uint32_t                          m_shaderLibraryCount;
     Pal::IShaderLibrary**             m_ppShaderLibraries;
-    uint32_t                          m_defaultPipelineStackSizes[MaxPalDevices];
+    Pal::CompilerStackSizes           m_defaultPipelineStackSizes[MaxPalDevices];
 
     PipelineImplCreateInfo            m_createInfo;
     bool                              m_hasTraceRay;

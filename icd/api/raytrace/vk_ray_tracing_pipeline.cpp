@@ -319,7 +319,7 @@ RayTracingPipeline::RayTracingPipeline(
     memset(m_pShaderGroupHandles, 0, sizeof(Vkgc::RayTracingShaderIdentifier*) * MaxPalDevices);
     memset(m_pShaderGroupStackSizes, 0, sizeof(ShaderGroupStackSizes*) * MaxPalDevices);
     memset(m_traceRayGpuVas, 0, sizeof(gpusize) * MaxPalDevices);
-    memset(m_defaultPipelineStackSizes, 0, sizeof(uint32_t) * MaxPalDevices);
+    memset(m_defaultPipelineStackSizes, 0, sizeof(Pal::CompilerStackSizes) * MaxPalDevices);
 }
 
 // =====================================================================================================================
@@ -588,9 +588,10 @@ VkResult RayTracingPipeline::CreateImpl(
                         continue;
                     }
 
-                    const auto   pImportedShaderLibrary = pPipelineLib->PalShaderLibrary(deviceIdx);
-                    const auto   pImportedFuncInfoList  = pImportedShaderLibrary->GetShaderLibFunctionList();
-                    const uint32 numFunctions           = pImportedShaderLibrary->GetShaderLibFunctionCount();
+                    const auto pImportedShaderLibrary = pPipelineLib->PalShaderLibrary(deviceIdx);
+                    const auto pImportedFuncInfoList  = pImportedShaderLibrary->GetShaderLibFunctionInfos().Data();
+                    const auto numFunctions           = pImportedShaderLibrary->
+                                                        GetShaderLibFunctionInfos().NumElements();
 
                     // We only use one shader library per collection function
                     VK_ASSERT((pImportedFuncInfoList != nullptr) && (numFunctions == 1));
@@ -729,8 +730,7 @@ VkResult RayTracingPipeline::CreateImpl(
                 cacheResult = pDefaultCompiler->GetCachedPipelineBinary(
                     &cacheId[deviceIdx],
                     pPipelineBinaryCache,
-                    &cachedBinData.codeSize,
-                    &cachedBinData.pCode,
+                    &cachedBinData,
                     &isUserCacheHit,
                     &isInternalCacheHit,
                     &binaryCreateInfo.freeCompilerBinary,
@@ -742,8 +742,7 @@ VkResult RayTracingPipeline::CreateImpl(
                     m_pDevice->GetCompiler(deviceIdx)->CachePipelineBinary(
                         &cacheId[deviceIdx],
                         pPipelineBinaryCache,
-                        cachedBinData.codeSize,
-                        cachedBinData.pCode,
+                        &cachedBinData,
                         isUserCacheHit,
                         isInternalCacheHit);
 
@@ -791,8 +790,7 @@ VkResult RayTracingPipeline::CreateImpl(
                         m_pDevice->GetCompiler(deviceIdx)->CachePipelineBinary(
                             &cacheId[deviceIdx],
                             pPipelineBinaryCache,
-                            cachedBinData.codeSize,
-                            cachedBinData.pCode,
+                            &cachedBinData,
                             isUserCacheHit,
                             isInternalCacheHit);
 
@@ -947,8 +945,6 @@ VkResult RayTracingPipeline::CreateImpl(
                 {
                     if (pShaderProp[i].shaderId != RayTracingInvalidShaderId)
                     {
-                        pIndirectFuncInfo[funcIndex].pSymbolName = pShaderProp[i].name;
-                        pIndirectFuncInfo[funcIndex].gpuVirtAddr = 0;
                         pTraceRayUsage[funcIndex]                = pShaderProp[i].hasTraceRay;
                         pShaderNameMap[i]                        = funcIndex;
                         ++funcIndex;
@@ -979,19 +975,24 @@ VkResult RayTracingPipeline::CreateImpl(
                 // Create shader library and remap shader ID to indirect function GPU Va
                 if (palResult == Util::Result::Success)
                 {
-                    for (uint32_t i = 0; i < funcCount; ++i)
+                    for (uint32_t i = 0; (i < funcCount) && (palResult == Util::Result::Success); ++i)
                     {
                         VK_ASSERT((pBinaries[i + 1].pCode != nullptr) && (pBinaries[i + 1].codeSize != 0));
                         Pal::ShaderLibraryCreateInfo shaderLibraryCreateInfo = {};
                         shaderLibraryCreateInfo.pCodeObject = pBinaries[i + 1].pCode;
                         shaderLibraryCreateInfo.codeObjectSize = pBinaries[i + 1].codeSize;
-                        shaderLibraryCreateInfo.pFuncList = &pIndirectFuncInfo[i];
-                        shaderLibraryCreateInfo.funcCount = 1;
 
                         palResult = m_pDevice->PalDevice(deviceIdx)->CreateShaderLibrary(
                             shaderLibraryCreateInfo,
                             Util::VoidPtrInc(pDeviceShaderLibraryMem, shaderLibrarySize * i),
                             &ppDeviceShaderLibraries[i]);
+
+                        if (palResult == Util::Result::Success)
+                        {
+                            const auto pFunctionInfo = ppDeviceShaderLibraries[i]->GetShaderLibFunctionInfos().Data();
+                            pIndirectFuncInfo[i].symbolName  = pFunctionInfo[0].symbolName;
+                            pIndirectFuncInfo[i].gpuVirtAddr = pFunctionInfo[0].gpuVirtAddr;
+                        }
                     }
 
                     if (palResult == Util::Result::Success)
@@ -1006,6 +1007,7 @@ VkResult RayTracingPipeline::CreateImpl(
                     uint32_t missStackMax         = 0;
                     uint32_t intersectionStackMax = 0;
                     uint32_t callableStackMax     = 0;
+                    uint32_t backendStackSizeMax  = 0;
 
                     if ((palResult == Util::Result::Success) && ((funcCount > 0) || hasLibraries))
                     {
@@ -1017,6 +1019,38 @@ VkResult RayTracingPipeline::CreateImpl(
 
                         auto GetFuncStackSize = [&](uint32_t shaderIdx) -> VkDeviceSize
                         {
+                            auto UpdateLibStackSizes = [&](uint32_t libIdx)
+                            {
+                                auto pShaderLibrary = ppDeviceShaderLibraries[libIdx];
+                                if (settings.llpcRaytracingMode >= RaytracingContinufy)
+                                {
+                                    auto libFuncList = pShaderLibrary->GetShaderLibFunctionInfos();
+
+                                    pShaderStackSize[libIdx] = 0;
+                                    for (size_t i = 0; i < libFuncList.NumElements(); i++)
+                                    {
+                                        Pal::ShaderLibStats shaderStats = {};
+                                        pShaderLibrary->GetShaderFunctionStats(
+                                            libFuncList.Data()[i].symbolName.Data(),
+                                            &shaderStats);
+                                        pShaderStackSize[libIdx] += shaderStats.cpsStackSizes.frontendSize;
+                                        // NOTE: Backend stack size is determined across all shaders (functions), no
+                                        // need to record for each.
+                                        backendStackSizeMax =
+                                            Util::Max(backendStackSizeMax, shaderStats.cpsStackSizes.backendSize);
+                                    }
+                                }
+                                else
+                                {
+                                    Pal::ShaderLibStats shaderStats = {};
+                                    pShaderLibrary->GetShaderFunctionStats(
+                                        pIndirectFuncInfo[libIdx].symbolName.Data(),
+                                        &shaderStats);
+                                    pShaderStackSize[libIdx] = shaderStats.stackFrameSizeInBytes;
+                                }
+                                pShaderStackSize[libIdx] *= stackSizeFactor;
+                            };
+
                             VkDeviceSize stackSize = 0;
                             if (shaderIdx != VK_SHADER_UNUSED_KHR)
                             {
@@ -1025,12 +1059,7 @@ VkResult RayTracingPipeline::CreateImpl(
                                 {
                                     if (pShaderStackSize[funcIdx] == ~0ULL)
                                     {
-                                        Pal::ShaderLibStats shaderStats = {};
-                                        ppDeviceShaderLibraries[funcIdx]->GetShaderFunctionStats(
-                                            pIndirectFuncInfo[funcIdx].pSymbolName,
-                                            &shaderStats);
-                                        pShaderStackSize[funcIdx] = shaderStats.stackFrameSizeInBytes *
-                                                                    stackSizeFactor;
+                                        UpdateLibStackSizes(funcIdx);
 
                                         if (pTraceRayUsage[funcIdx])
                                         {
@@ -1038,12 +1067,7 @@ VkResult RayTracingPipeline::CreateImpl(
                                             if ((pShaderStackSize[traceRayFuncIdx] == ~0ULL) &&
                                                 (ppDeviceShaderLibraries[traceRayFuncIdx] != nullptr))
                                             {
-                                                Pal::ShaderLibStats traceRayShaderStats = {};
-                                                ppDeviceShaderLibraries[traceRayFuncIdx]->GetShaderFunctionStats(
-                                                    pIndirectFuncInfo[traceRayFuncIdx].pSymbolName,
-                                                    &traceRayShaderStats);
-                                                pShaderStackSize[traceRayFuncIdx] =
-                                                    traceRayShaderStats.stackFrameSizeInBytes * stackSizeFactor;
+                                                UpdateLibStackSizes(traceRayFuncIdx);
                                             }
                                             pShaderStackSize[funcIdx] += pShaderStackSize[traceRayFuncIdx];
                                         }
@@ -1270,13 +1294,24 @@ VkResult RayTracingPipeline::CreateImpl(
                     }
 
                     // Calculate the default pipeline size via spec definition
-                    m_defaultPipelineStackSizes[deviceIdx] =
+                    uint32_t defaultPipelineStackSize =
                         rayGenStackMax +
                         (Util::Min(1U, m_createInfo.GetMaxRecursionDepth()) *
                          Util::Max(closestHitStackMax, missStackMax, intersectionStackMax + anyHitStackMax)) +
                         (Util::Max(0U, m_createInfo.GetMaxRecursionDepth()) *
                          Util::Max(closestHitStackMax, missStackMax)) +
                         (2 * callableStackMax);
+
+                    if (settings.llpcRaytracingMode >= RaytracingContinufy)
+                    {
+                        // The size we calculated above is frontend stack size for continuations.
+                        m_defaultPipelineStackSizes[deviceIdx].frontendSize = defaultPipelineStackSize;
+                        m_defaultPipelineStackSizes[deviceIdx].backendSize = backendStackSizeMax;
+                    }
+                    else
+                    {
+                        m_defaultPipelineStackSizes[deviceIdx].backendSize = defaultPipelineStackSize;
+                    }
 
                     // TraceRay is the last function in function list, record it regardless we are building library or
                     // not, so that a pipeline will get its own TraceRayGpuVa correctly.
@@ -1745,6 +1780,8 @@ void RayTracingPipeline::BindToCmdBuffer(
                                                    static_cast<uint32_t>(Pal::PipelineBindPoint::Compute),
                                                    debugPrintfRegBase);
 
+        pCmdBuffer->UpdateLargestPipelineStackSizes(deviceIdx, GetDefaultPipelineStackSizesSize(deviceIdx));
+
         // Upload internal buffer data
         if (m_captureReplayVaMappingBufferInfo.dataSize > 0)
         {
@@ -1797,7 +1834,7 @@ bool RayTracingPipeline::MapShaderIdToShaderHandle(
             if (pShaderProp[i].shaderId == *pShaderId)
             {
                 auto pIndirectFunc = &pIndirectFuncList[pShaderNameMap[i]];
-                VK_ASSERT(pIndirectFunc->pSymbolName == &pShaderProp[i].name[0]);
+                VK_ASSERT(pIndirectFunc->symbolName.Data() == &pShaderProp[i].name[0]);
                 uint64_t gpuVirtAddr = pIndirectFunc->gpuVirtAddr;
                 if (pShaderProp[i].onlyGpuVaLo)
                 {

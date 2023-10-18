@@ -752,6 +752,7 @@ static void InitRenderPassCreateInfo(
     const RenderPassExtCreateInfo&      renderPassExt,
     void*                               pMemoryPtr,
     size_t                              memorySize,
+    const RuntimeSettings&              settings,
     RenderPassCreateInfo*               pOutRenderPassInfo)
 {
     void* nextPtr = pMemoryPtr;
@@ -776,10 +777,16 @@ static void InitRenderPassCreateInfo(
     pOutRenderPassInfo->attachmentCount  = pCreateInfo->attachmentCount;
     pOutRenderPassInfo->pAttachments     = static_cast<AttachmentDescription*>(nextPtr);
 
+    bool attachmentsAreAliased = false;
+
     for (uint32_t attachIndex = 0; attachIndex < pCreateInfo->attachmentCount; ++attachIndex)
     {
         pOutRenderPassInfo->pAttachments[attachIndex].Init(pCreateInfo->pAttachments[attachIndex]);
+        attachmentsAreAliased |= (pOutRenderPassInfo->pAttachments[attachIndex].flags &
+                                  VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT) != 0;
     }
+
+    pOutRenderPassInfo->doClearsUpfront = (attachmentsAreAliased == false) && settings.renderPassClearUpfront;
 
     nextPtr = Util::VoidPtrInc(nextPtr, pCreateInfo->attachmentCount * sizeof(AttachmentDescription));
     // Struct needs to be aligned
@@ -847,13 +854,15 @@ void RenderPassCreateInfo::Init(
     const VkRenderPassCreateInfo*       pCreateInfo,
     const RenderPassExtCreateInfo&      renderPassExt,
     void*                               pMemoryPtr,
-    size_t                              memorySize)
+    size_t                              memorySize,
+    const RuntimeSettings&              settings)
 {
     InitRenderPassCreateInfo<VkRenderPassCreateInfo>(
         pCreateInfo,
         renderPassExt,
         pMemoryPtr,
         memorySize,
+        settings,
         this);
 }
 
@@ -862,7 +871,8 @@ void RenderPassCreateInfo::Init(
     const VkRenderPassCreateInfo2*      pCreateInfo,
     const RenderPassExtCreateInfo&      renderPassExt,
     void*                               pMemoryPtr,
-    size_t                              memorySize)
+    size_t                              memorySize,
+    const RuntimeSettings&              settings)
 {
     // The multiview implementation does not exploit any coherence between views.
     if (renderPassExt.pMultiviewCreateInfo == nullptr)
@@ -881,6 +891,7 @@ void RenderPassCreateInfo::Init(
         renderPassExt,
         pMemoryPtr,
         memorySize,
+        settings,
         this);
 }
 
@@ -957,7 +968,8 @@ static VkResult CreateRenderPass(
         pCreateInfo,
         renderPassExt,
         pMemoryInfo,
-        infoMemorySize);
+        infoMemorySize,
+        pDevice->GetRuntimeSettings());
 
     RenderPassExecuteInfo* pExecuteInfo = nullptr;
 

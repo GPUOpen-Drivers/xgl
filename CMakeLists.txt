@@ -23,7 +23,8 @@
  #
  #######################################################################################################################
 
-cmake_minimum_required(VERSION 3.13.4)
+cmake_minimum_required(VERSION 3.21)
+cmake_policy(SET CMP0091 NEW)
 
 # This part set before "project(XGL VERSION 1 LANGUAGES C CXX)".
 # In a system has both gcc and clang compiler.
