@@ -687,7 +687,7 @@ uint64_t GraphicsPipelineCommon::GetDynamicStateFlags(
 // =====================================================================================================================
 void GraphicsPipelineCommon::ExtractLibraryInfo(
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
-    PipelineCreateFlags                 flags,
+    VkPipelineCreateFlags2KHR           flags,
     GraphicsPipelineLibraryInfo*        pLibInfo)
 {
 
@@ -798,13 +798,13 @@ VkResult GraphicsPipelineCommon::Create(
     Device*                             pDevice,
     PipelineCache*                      pPipelineCache,
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
-    PipelineCreateFlags                 flags,
+    VkPipelineCreateFlags2KHR           flags,
     const VkAllocationCallbacks*        pAllocator,
     VkPipeline*                         pPipeline)
 {
     VkResult result;
 
-    const bool isLibrary = flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
+    const bool isLibrary = Util::TestAnyFlagSet(flags, VK_PIPELINE_CREATE_LIBRARY_BIT_KHR);
 
     if (isLibrary)
     {
@@ -1288,12 +1288,14 @@ static void BuildVrsRateParams(
     const uint64_t                                         dynamicStateFlags,
     GraphicsPipelineObjectCreateInfo*                      pInfo)
 {
+    pInfo->flags.fragmentShadingRateEnable = 1;
+
+    Device::SetDefaultVrsRateParams(&pInfo->immedInfo.vrsRateParams);
+
     if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::FragmentShadingRateStateKhr) == false)
     {
         if (pFsr != nullptr)
         {
-            pInfo->immedInfo.vrsRateParams.flags.exposeVrsPixelsMask = 1;
-
             pInfo->immedInfo.vrsRateParams.shadingRate =
                 VkToPalShadingSize(VkClampShadingRate(pFsr->fragmentSize, pDevice->GetMaxVrsShadingRate()));
 
@@ -1301,23 +1303,17 @@ static void BuildVrsRateParams(
                 static_cast<uint32_t>(Pal::VrsCombinerStage::ProvokingVertex)] =
                 VkToPalShadingRateCombinerOp(pFsr->combinerOps[0]);
 
-            pInfo->immedInfo.vrsRateParams.combinerState[static_cast<uint32_t>(
-                Pal::VrsCombinerStage::Primitive)] = VkToPalShadingRateCombinerOp(pFsr->combinerOps[0]);
+            pInfo->immedInfo.vrsRateParams.combinerState[
+                static_cast<uint32_t>(Pal::VrsCombinerStage::Primitive)] =
+                VkToPalShadingRateCombinerOp(pFsr->combinerOps[0]);
 
             pInfo->immedInfo.vrsRateParams.combinerState[
-                static_cast<uint32_t>(Pal::VrsCombinerStage::Image)] = VkToPalShadingRateCombinerOp(pFsr->combinerOps[1]);
-
-            pInfo->immedInfo.vrsRateParams.combinerState[
-                static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] = Pal::VrsCombiner::Passthrough;
-            pInfo->flags.fragmentShadingRateEnable = 1;
-
+                static_cast<uint32_t>(Pal::VrsCombinerStage::Image)] =
+                VkToPalShadingRateCombinerOp(pFsr->combinerOps[1]);
         }
+
         pInfo->staticStateMask |=
             1ULL << static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr);
-    }
-    else
-    {
-        pInfo->flags.fragmentShadingRateEnable = 1;
     }
 }
 
@@ -2056,12 +2052,7 @@ static void BuildExecutablePipelineState(
 
     if (pInfo->flags.force1x1ShaderRate == true)
     {
-        pInfo->immedInfo.vrsRateParams.shadingRate = Pal::VrsShadingRate::_1x1;
-
-        for (uint32 idx = 0; idx <= static_cast<uint32>(Pal::VrsCombinerStage::Image); idx++)
-        {
-            pInfo->immedInfo.vrsRateParams.combinerState[idx] = Pal::VrsCombiner::Passthrough;
-        }
+        Device::SetDefaultVrsRateParams(&pInfo->immedInfo.vrsRateParams);
     }
 
     if ((pInfo->immedInfo.rasterizerDiscardEnable == true) ||
@@ -2086,7 +2077,6 @@ static void BuildExecutablePipelineState(
         pInfo->flags.sampleShadingEnable = false;
     }
 
-#if PAL_BUILD_GFX103
     // Both MSAA and VRS would utilize the value of PS_ITER_SAMPLES
     // Thus, choose the min combiner (i.e. choose the higher quality rate) when both features are enabled
     if ((pInfo->immedInfo.msaaCreateInfo.pixelShaderSamples > 1) &&
@@ -2095,7 +2085,6 @@ static void BuildExecutablePipelineState(
         pInfo->immedInfo.vrsRateParams.combinerState[
             static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] = Pal::VrsCombiner::Min;
     }
-#endif
 
     pInfo->flags.bindDepthStencilObject =
         !(IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilOp) ||
@@ -2137,7 +2126,7 @@ static void BuildExecutablePipelineState(
 void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
-    PipelineCreateFlags                    flags,
+    VkPipelineCreateFlags2KHR              flags,
     const PipelineOptimizerKey*            pOptimizerKey,
     const PipelineMetadata*                pBinMeta,
     GraphicsPipelineObjectCreateInfo*      pInfo)
@@ -2156,7 +2145,13 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
 
     pInfo->activeStages = GetActiveShaderStages(pIn, &libInfo);
 
-    if (Util::TestAnyFlagSet(pInfo->activeStages, VK_SHADER_STAGE_MESH_BIT_EXT))
+    VkShaderStageFlagBits preRasterStages = {};
+    if (libInfo.pPreRasterizationShaderLib != nullptr)
+    {
+        preRasterStages = libInfo.pPreRasterizationShaderLib->GetPipelineObjectCreateInfo().activeStages;
+    }
+
+    if (Util::TestAnyFlagSet(pInfo->activeStages | preRasterStages, VK_SHADER_STAGE_MESH_BIT_EXT))
     {
         hasMesh = true;
     }
@@ -2244,7 +2239,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
 void GraphicsPipelineCommon::GeneratePipelineOptimizerKey(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pCreateInfo,
-    PipelineCreateFlags                    flags,
+    VkPipelineCreateFlags2KHR              flags,
     const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
     ShaderOptimizerKey*                    pShaderKeys,
     PipelineOptimizerKey*                  pPipelineKey)
@@ -2268,8 +2263,6 @@ void GraphicsPipelineCommon::GeneratePipelineOptimizerKey(
                 {
                     const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>(
                         ShaderModule::GetFirstValidShaderData(stage.pModuleHandle));
-
-                    VK_ASSERT(pModuleData != nullptr);
 
                     pDevice->GetShaderOptimizer()->CreateShaderOptimizerKey(
                         pModuleData,
@@ -2295,8 +2288,6 @@ void GraphicsPipelineCommon::GeneratePipelineOptimizerKey(
                 {
                     const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>(
                         ShaderModule::GetFirstValidShaderData(stage.pModuleHandle));
-
-                    VK_ASSERT(pModuleData != nullptr);
 
                     pDevice->GetShaderOptimizer()->CreateShaderOptimizerKey(
                         pModuleData,
@@ -2925,7 +2916,7 @@ bool GraphicsPipelineCommon::IsRasterizationDisabled(
 //     - pCreateInfo->subpass
 void GraphicsPipelineCommon::BuildApiHash(
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
-    PipelineCreateFlags                 flags,
+    VkPipelineCreateFlags2KHR           flags,
     uint64_t*                           pApiHash,
     Util::MetroHash::Hash*              pElfHash)
 {

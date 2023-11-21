@@ -493,6 +493,8 @@ vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT @device     @dext(EXT_d
 
 vkCmdSetColorWriteEnableEXT                         @device       @dext(EXT_color_write_enable)
 
+vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR   @physDevice   @dext(KHR_cooperative_matrix)
+
 vkCmdSetRasterizerDiscardEnableEXT                  @device       @dext(EXT_extended_dynamic_state2)
 vkCmdSetPrimitiveRestartEnableEXT                   @device       @dext(EXT_extended_dynamic_state2)
 vkCmdSetDepthBiasEnableEXT                          @device       @dext(EXT_extended_dynamic_state2)
@@ -550,4 +552,9 @@ vkCmdSetDepthClipNegativeOneToOneEXT                @device       @dext(EXT_exte
 vkCmdSetVertexInputEXT                              @device       @dext(EXT_vertex_input_dynamic_state)
 
 vkGetImageDrmFormatModifierPropertiesEXT            @device       @dext(EXT_image_drm_format_modifier)
+
+vkGetDeviceImageSubresourceLayoutKHR                @device       @dext(KHR_maintenance5)
+vkGetImageSubresourceLayout2KHR                     @device       @dext(KHR_maintenance5)
+vkGetRenderingAreaGranularityKHR                    @device       @dext(KHR_maintenance5)
+vkCmdBindIndexBuffer2KHR                            @device       @dext(KHR_maintenance5)
 

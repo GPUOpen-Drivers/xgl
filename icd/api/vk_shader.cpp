@@ -153,10 +153,13 @@ void* ShaderModule::GetFirstValidShaderData(const ShaderModuleHandle* pHandle)
 // =====================================================================================================================
 ShaderModule::ShaderModule(
     size_t                       codeSize,
-    const void*                  pCode)
+    const void*                  pCode,
+    VkShaderModuleCreateFlags    flags)
+    :
+    m_codeSize(codeSize),
+    m_pCode(pCode),
+    m_flags(flags)
 {
-    m_codeSize = codeSize;
-    m_pCode    = pCode;
     m_codeHash = BuildCodeHash(pCode, codeSize);
 
     memset(&m_handle, 0, sizeof(m_handle));
@@ -182,10 +185,10 @@ VkResult ShaderModule::Create(
 
     memcpy(pCode, pCreateInfo->pCode, pCreateInfo->codeSize);
 
-    VK_PLACEMENT_NEW(pMemory) ShaderModule(pCreateInfo->codeSize, pCode);
+    VK_PLACEMENT_NEW(pMemory) ShaderModule(pCreateInfo->codeSize, pCode, pCreateInfo->flags);
 
     ShaderModule* pShaderModuleObj = static_cast<ShaderModule*>(pMemory);
-    VkResult vkResult = pShaderModuleObj->Init(pDevice, pCreateInfo->flags);
+    VkResult vkResult = pShaderModuleObj->Init(pDevice);
     VK_ASSERT(vkResult == VK_SUCCESS);
 
     *pShaderModule = ShaderModule::HandleFromVoidPointer(pMemory);
@@ -196,16 +199,25 @@ VkResult ShaderModule::Create(
 // =====================================================================================================================
 // Initialize shader module object, performing SPIR-V to AMD IL shader binary conversion.
 VkResult ShaderModule::Init(
-    Device*                      pDevice,
-    VkShaderModuleCreateFlags    flags)
+    Device*                      pDevice)
 {
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
+
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
     Vkgc::BinaryData shaderBinary = {};
     shaderBinary.pCode    = m_pCode;
     shaderBinary.codeSize = m_codeSize;
     VkResult result = pCompiler->BuildShaderModule(
-        pDevice, flags, 0, shaderBinary, false, false, nullptr, nullptr, &m_handle);
+        pDevice,
+        m_flags,
+        0,
+        shaderBinary,
+        false,
+        false,
+        nullptr,
+        nullptr,
+        &m_handle);
 
     if (result == VK_SUCCESS)
     {

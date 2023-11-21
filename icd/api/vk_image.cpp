@@ -296,10 +296,10 @@ void Image::ConvertImageCreateInfo(
         pPalCreateInfo->flags.optimalShareable = 1;
     }
 
-    if (((pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT) == 0)            &&
+    if (((pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT) == 0) &&
         ((pCreateInfo->flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) != 0) &&
-        (pCreateInfo->mipLevels > 1)                                                  &&
-        Pal::Formats::IsBlockCompressed(pPalCreateInfo->swizzledFormat.format)        &&
+        (pCreateInfo->mipLevels > 1) &&
+        Pal::Formats::IsBlockCompressed(pPalCreateInfo->swizzledFormat.format) &&
         (pCreateInfo->imageType == VK_IMAGE_TYPE_3D))
     {
         pPalCreateInfo->flags.view3dAs2dArray = 1;

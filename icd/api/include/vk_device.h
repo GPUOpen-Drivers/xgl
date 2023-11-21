@@ -161,7 +161,9 @@ public:
             // True if EXT_DEVICE_MEMORY_REPORT or EXT_DEVICE_ADDRESS_BINDING_REPORT is enabled.
             uint32                gpuMemoryEventHandler                : 1;
             uint32                assumeDynamicTopologyInLibs          : 1;
-            uint32                reserved                             : 15;
+            // True if EXT_PRIMITIVES_GENERATED_QUERY is enabled.
+            uint32                primitivesGeneratedQuery             : 1;
+            uint32                reserved                             : 14;
         };
 
         uint32 u32All;
@@ -575,8 +577,6 @@ public:
     }
 #endif
 
-    inline const Pal::IMsaaState* const * GetBltMsaaState(uint32_t imgSampleCount) const;
-
     bool IsExtensionEnabled(DeviceExtensions::ExtensionId id) const
         { return m_enabledExtensions.IsExtensionEnabled(id); }
 
@@ -813,11 +813,14 @@ public:
     const PipelineLayout* GetNullPipelineLayout() const { return m_pNullPipelineLayout; }
 
     template<typename CreateInfo>
-    static PipelineCreateFlags GetPipelineCreateFlags(
+    static VkPipelineCreateFlags2KHR GetPipelineCreateFlags(
         const CreateInfo* pCreateInfo);
 
-    static BufferUsageFlagBits GetBufferUsageFlagBits(
+    static VkBufferUsageFlagBits2KHR GetBufferUsageFlagBits(
         const VkBufferCreateInfo* pCreateInfo);
+
+    static void SetDefaultVrsRateParams(
+        Pal::VrsRateParams* pVrsRateParams);
 
 protected:
     Device(
@@ -836,7 +839,6 @@ protected:
 
     void DestroyInternalPipeline(InternalPipeline* pPipeline);
 
-    VkResult CreateBltMsaaStates();
     void DestroyInternalPipelines();
 #if VKI_RAY_TRACING
     VkResult CreateRayTraceState();
@@ -877,10 +879,6 @@ protected:
     InternalPipeline                    m_internalRayTracingPipeline;
     InternalPipeline                    m_accelerationStructureQueryCopyPipeline;
 #endif
-
-    static const uint32_t BltMsaaStateCount = 4;
-
-    Pal::IMsaaState*                    m_pBltMsaaState[BltMsaaStateCount][MaxPalDevices];
 
     const DeviceBarrierPolicy           m_barrierPolicy;           // Barrier policy to use for this device
 
@@ -975,22 +973,6 @@ private:
 };
 
 // =====================================================================================================================
-const Pal::IMsaaState* const * Device::GetBltMsaaState(
-    uint32_t imgSampleCount
-    ) const
-{
-    uint32_t i = Util::Log2(imgSampleCount);
-
-    if (i < BltMsaaStateCount)
-    {
-        return &m_pBltMsaaState[i][0];
-    }
-    else
-    {
-        return nullptr;
-    }
-}
-
 VK_DEFINE_DISPATCHABLE(Device);
 
 namespace entry
@@ -1176,6 +1158,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSwapchainKHR(
 VKAPI_ATTR void VKAPI_CALL vkGetRenderAreaGranularity(
     VkDevice                                    device,
     VkRenderPass                                renderPass,
+    VkExtent2D*                                 pGranularity);
+
+VKAPI_ATTR void VKAPI_CALL vkGetRenderingAreaGranularityKHR(
+    VkDevice                                    device,
+    const VkRenderingAreaInfoKHR*               pRenderingAreaInfo,
     VkExtent2D*                                 pGranularity);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory2(
@@ -1413,6 +1400,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceFaultInfoEXT(
     VkDevice                                    device,
     VkDeviceFaultCountsEXT*                     pFaultCounts,
     VkDeviceFaultInfoEXT*                       pFaultInfo);
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSubresourceLayoutKHR(
+    VkDevice                                    device,
+    const VkDeviceImageSubresourceInfoKHR*      pInfo,
+    VkSubresourceLayout2KHR*                    pLayout);
+VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout2KHR(
+    VkDevice                                    device,
+    VkImage                                     image,
+    const VkImageSubresource2KHR*               pSubresource,
+    VkSubresourceLayout2KHR*                    pLayout);
 
 } // namespace entry
 

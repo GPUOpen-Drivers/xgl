@@ -386,6 +386,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetPipelineCacheData                          );
     INIT_DISPATCH_ENTRY(vkGetQueryPoolResults                           );
     INIT_DISPATCH_ENTRY(vkGetRenderAreaGranularity                      );
+    INIT_DISPATCH_ENTRY(vkGetRenderingAreaGranularityKHR                );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceCapabilitiesKHR       );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceCapabilities2KHR      );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceFormatsKHR            );
@@ -729,6 +730,8 @@ void DispatchTable::Init()
 
     INIT_DISPATCH_ENTRY(vkCmdSetColorWriteEnableEXT                     );
 
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR);
+
     INIT_DISPATCH_ENTRY(vkCmdSetRasterizerDiscardEnable                 );
     INIT_DISPATCH_ENTRY(vkCmdSetPrimitiveRestartEnable                  );
     INIT_DISPATCH_ENTRY(vkCmdSetDepthBiasEnable                         );
@@ -810,6 +813,10 @@ void DispatchTable::Init()
 #if defined(__unix__)
     INIT_DISPATCH_ENTRY(vkGetImageDrmFormatModifierPropertiesEXT        );
 #endif
+
+    INIT_DISPATCH_ENTRY(vkGetDeviceImageSubresourceLayoutKHR            );
+    INIT_DISPATCH_ENTRY(vkGetImageSubresourceLayout2KHR                 );
+    INIT_DISPATCH_ENTRY(vkCmdBindIndexBuffer2KHR                        );
 
 }
 

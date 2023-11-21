@@ -131,6 +131,7 @@ struct PipelineMetadata
     bool                       rayQueryUsed;
 #endif
     bool                       pointSizeUsed;
+    bool                       dualSrcBlendingUsed;
     bool                       shadingRateUsedInShader;
     bool                       enableEarlyCompile;
     bool                       enableUberFetchShader;
@@ -167,7 +168,7 @@ struct GraphicsPipelineBinaryCreateInfo
     void*                                  pTempBuffer;
     void*                                  pMappingBuffer;
     size_t                                 mappingBufferSize;
-    PipelineCreateFlags                    flags;
+    VkPipelineCreateFlags2KHR              flags;
     VkFormat                               dbFormat;
     PipelineOptimizerKey*                  pPipelineProfileKey;
     PipelineCompilerType                   compilerType;
@@ -193,7 +194,7 @@ struct ComputePipelineBinaryCreateInfo
     void*                                  pTempBuffer;
     void*                                  pMappingBuffer;
     size_t                                 mappingBufferSize;
-    PipelineCreateFlags                    flags;
+    VkPipelineCreateFlags2KHR              flags;
     const PipelineOptimizerKey*            pPipelineProfileKey;
     PipelineCompilerType                   compilerType;
     FreeCompilerBinary                     freeCompilerBinary;
@@ -211,7 +212,7 @@ struct RayTracingPipelineBinaryCreateInfo
     void*                                  pTempBuffer;
     void*                                  pMappingBuffer;
     size_t                                 mappingBufferSize;
-    PipelineCreateFlags                    flags;
+    VkPipelineCreateFlags2KHR              flags;
     const PipelineOptimizerKey*            pPipelineProfileKey;
     PipelineCompilerType                   compilerType;
     FreeCompilerBinary                     freeCompilerBinary;

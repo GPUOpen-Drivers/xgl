@@ -134,9 +134,9 @@ public:
     PipelineBinaryCache* GetBinaryCache() const { return m_pBinaryCache; }
 
     void ApplyPipelineOptions(
-        const Device*          pDevice,
-        VkPipelineCreateFlags  flags,
-        Vkgc::PipelineOptions* pOptions
+        const Device*             pDevice,
+        VkPipelineCreateFlags2KHR flags,
+        Vkgc::PipelineOptions*    pOptions
     );
 
     VkResult BuildShaderModule(
@@ -165,7 +165,7 @@ public:
         uint32_t                          deviceIndex,
         PipelineCache*                    pPipelineCache,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-        const PipelineCreateFlags         flags,
+        const VkPipelineCreateFlags2KHR   flags,
         Vkgc::BinaryData*                 pPipelineBinary,
         Util::MetroHash::Hash*            pCacheId);
 
@@ -217,7 +217,7 @@ public:
     VkResult ConvertGraphicsPipelineInfo(
         const Device*                                   pDevice,
         const VkGraphicsPipelineCreateInfo*             pIn,
-        PipelineCreateFlags                             flags,
+        VkPipelineCreateFlags2KHR                       flags,
         const GraphicsPipelineShaderStageInfo*          pShaderInfo,
         const PipelineLayout*                           pPipelineLayout,
         PipelineOptimizerKey*                           pPipelineProfileKey,
@@ -227,7 +227,7 @@ public:
     VkResult BuildGplFastLinkCreateInfo(
         const Device*                                   pDevice,
         const VkGraphicsPipelineCreateInfo*             pIn,
-        PipelineCreateFlags                             flags,
+        VkPipelineCreateFlags2KHR                       flags,
         const GraphicsPipelineLibraryInfo&              libInfo,
         const PipelineLayout*                           pPipelineLayout,
         PipelineMetadata*                               pBinaryMetadata,
@@ -240,7 +240,7 @@ public:
         const PipelineOptimizerKey*                     pPipelineProfileKey,
         PipelineMetadata*                               pBinaryMetadata,
         ComputePipelineBinaryCreateInfo*                pInfo,
-        PipelineCreateFlags                             flags);
+        VkPipelineCreateFlags2KHR                       flags);
 
     void FreeComputePipelineBinary(
         ComputePipelineBinaryCreateInfo* pCreateInfo,
@@ -260,7 +260,7 @@ public:
     VkResult ConvertRayTracingPipelineInfo(
         const Device*                            pDevice,
         const VkRayTracingPipelineCreateInfoKHR* pIn,
-        PipelineCreateFlags                      flags,
+        VkPipelineCreateFlags2KHR                flags,
         const RayTracingPipelineShaderStageInfo* pShaderInfo,
         const PipelineOptimizerKey*              pPipelineProfileKey,
         RayTracingPipelineBinaryCreateInfo*      pCreateInfo);
@@ -479,8 +479,8 @@ private:
 #endif
 
     VkResult LoadShaderModuleFromCache(
-        const Device*                   pDevice,
         const VkShaderModuleCreateFlags flags,
+        const VkShaderModuleCreateFlags internalShaderFlags,
         const uint32_t                  compilerMask,
         const Util::MetroHash::Hash&    uniqueHash,
         PipelineBinaryCache*            pBinaryCache,
@@ -488,8 +488,8 @@ private:
         ShaderModuleHandle*             pShaderModule);
 
     void StoreShaderModuleToCache(
-        const Device*                   pDevice,
         const VkShaderModuleCreateFlags flags,
+        const VkShaderModuleCreateFlags internalShaderFlags,
         const uint32_t                  compilerMask,
         const Util::MetroHash::Hash&    uniqueHash,
         PipelineBinaryCache*            pBinaryCache,

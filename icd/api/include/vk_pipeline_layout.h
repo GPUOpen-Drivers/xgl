@@ -445,6 +445,8 @@ protected:
         return Util::Pow2Align((m_info.setCount * sizeof(SetUserDataLayout)), ExtraDataAlignment());
     }
 
+    static bool ReserveXfbNode(const Device* pDevice);
+
     const Info              m_info;
     const PipelineInfo      m_pipelineInfo;
     const Device* const     m_pDevice;

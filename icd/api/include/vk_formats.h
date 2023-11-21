@@ -92,8 +92,13 @@ struct Formats
 #define VK_YUV_FORMAT_END               VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM
 #define VK_YUV_IMAGE_FORMAT_COUNT       (VK_YUV_FORMAT_END     - VK_YUV_FORMAT_START        + 1)
 
+#define VK_MAINTENANCE5_FORMAT_START             VK_FORMAT_A1B5G5R5_UNORM_PACK16
+#define VK_MAINTENANCE5_FORMAT_END               VK_FORMAT_A8_UNORM_KHR
+#define VK_MAINTENANCE5_IMAGE_FORMAT_COUNT       (VK_MAINTENANCE5_FORMAT_END - VK_MAINTENANCE5_FORMAT_START        + 1)
+
 // Number of formats supported by the driver.
-#define VK_SUPPORTED_FORMAT_COUNT    (VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT)
+#define VK_SUPPORTED_FORMAT_COUNT    (VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT + \
+    VK_MAINTENANCE5_IMAGE_FORMAT_COUNT)
 
 // =====================================================================================================================
 // Get a linear index for a format (used to address tables indirectly indexed by formats).
@@ -111,6 +116,11 @@ uint32_t Formats::GetIndex(VkFormat format)
     else if ((format >= VK_EXT_4444_FORMAT_START) && (format <= VK_EXT_4444_FORMAT_END))
     {
         return VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT + (format - VK_EXT_4444_FORMAT_START);
+    }
+    else if ((format >= VK_MAINTENANCE5_FORMAT_START) && (format <= VK_MAINTENANCE5_FORMAT_END))
+    {
+        return VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT +
+            (format - VK_MAINTENANCE5_FORMAT_START);
     }
     else
     {
@@ -138,6 +148,14 @@ VkFormat Formats::FromIndex(uint32_t index)
     {
         return static_cast<VkFormat>(VK_EXT_4444_FORMAT_START + index - VK_FORMAT_RANGE_SIZE
                                                                       - VK_YUV_IMAGE_FORMAT_COUNT);
+    }
+    else if ((index >= (VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT)) &&
+             (index < (VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT +
+                 VK_MAINTENANCE5_IMAGE_FORMAT_COUNT)))
+    {
+        return static_cast<VkFormat>(VK_MAINTENANCE5_FORMAT_START + index - VK_FORMAT_RANGE_SIZE
+                                                                      - VK_YUV_IMAGE_FORMAT_COUNT
+                                                                      - VK_EXT_4444_FORMAT_COUNT);
     }
     else
     {
@@ -203,7 +221,8 @@ bool Formats::IsColorFormat(VkFormat format)
 
     return ((format >= VK_FORMAT_R4G4_UNORM_PACK8)    && (format <= VK_FORMAT_E5B9G9R9_UFLOAT_PACK32)) ||
            ((format >= VK_FORMAT_BC1_RGB_UNORM_BLOCK) && (format <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK)) ||
-           (format == VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT) || (format == VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT);
+           (format == VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT) || (format == VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT) ||
+           ((format == VK_FORMAT_A1B5G5R5_UNORM_PACK16) || (format == VK_FORMAT_A8_UNORM_KHR));
 }
 
 // =====================================================================================================================

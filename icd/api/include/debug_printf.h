@@ -113,8 +113,8 @@ public:
         uint32_t         userDataOffset);
 
     void PreQueueSubmit(Device* pDevice, uint32_t deviceIdx);
-    Pal::Result PostQueueProcess(Device* pDevice, uint32_t deviceIdx);
-    static void PostQueueSubmit(Device* pDevice, VkCommandBuffer* pCmdBuffers, uint32_t cmdBufferCount);
+    Pal::Result PostQueueProcess(Device* pDevice, uint32_t deviceIdx, Queue* pQueue);
+    static void PostQueueSubmit(Device* pDevice, Queue* pQueue, VkCommandBuffer* pCmdBuffers, uint32_t cmdBufferCount);
 
     static void DecodeFormatStringsFromElf(
         const Device*    pDevice,
@@ -142,7 +142,13 @@ private:
         const PrintfSubSection& subSections,
         PrintfString*           pOutputStr);
 
-    void WriteToFile(const PrintfString& outputBuffer);
+    void WriteToFile(Util::File* pFile, const PrintfString& outputBuffer);
+
+    uint64_t ProcessDebugPrintfBuffer(
+        Device*     pDevice,
+        uint32_t    deviceIdx,
+        uint64_t    decodeOffset,
+        Util::File* pFile);
 
     PrintfString GetFileName(
         uint64_t    pipelineHash,
@@ -158,6 +164,7 @@ private:
     uint32_t                m_frame;
     Util::Mutex             m_mutex;
     PalAllocator*           m_pAllocator;
+    VkSemaphore             m_semaphore;
 };
 }
 #endif

@@ -1217,10 +1217,6 @@ public:
         const Pal::ImageResolveRegion* pRegions,
         uint32_t                       deviceMask);
 
-    bool PreBltBindMsaaState(const Image& image);
-
-    void PostBltRestoreMsaaState(bool bltMsaaState);
-
     void PalCmdBindMsaaStates(const Pal::IMsaaState* const * pStates);
 
     inline void PalCmdBindMsaaState(
@@ -2038,6 +2034,13 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer(
     VkCommandBuffer                             commandBuffer,
     VkBuffer                                    buffer,
     VkDeviceSize                                offset,
+    VkIndexType                                 indexType);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    VkDeviceSize                                size,
     VkIndexType                                 indexType);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(

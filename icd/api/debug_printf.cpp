@@ -26,11 +26,14 @@
 #include "vk_utils.h"
 #include "vk_device.h"
 #include "vk_cmdbuffer.h"
+#include "vk_queue.h"
+#include "vk_semaphore.h"
+#include "palHashBaseImpl.h"
 #include "palPipelineAbi.h"
 #include "palPipelineAbiReader.h"
-#include "palVectorImpl.h"
-#include "palHashBaseImpl.h"
+#include "palQueue.h"
 #include "palSysMemory.h"
+#include "palVectorImpl.h"
 #include <cinttypes>
 
 using namespace vk;
@@ -44,7 +47,8 @@ DebugPrintf::DebugPrintf(
     m_pSettings(nullptr),
     m_parsedFormatStrings(8, pAllocator),
     m_frame(0),
-    m_pAllocator(pAllocator)
+    m_pAllocator(pAllocator),
+    m_semaphore(VK_NULL_HANDLE)
 {
 }
 
@@ -56,7 +60,9 @@ void DebugPrintf::Reset(
     if ((m_state == MemoryAllocated) && (m_printfMemory.Size() > 0))
     {
         pDevice->MemMgr()->FreeGpuMem(&m_printfMemory);
+        Semaphore::ObjectFromHandle(m_semaphore)->Destroy(pDevice, pDevice->VkInstance()->GetAllocCallbacks());
         m_state = Enabled;
+        m_frame = 1;
     }
 }
 
@@ -92,7 +98,7 @@ void DebugPrintf::BindPipeline(
         allocInfo.pal.size = Util::Pow2Align(settings.debugPrintfBufferSize, PAL_PAGE_BYTES);
         allocInfo.pal.alignment = PAL_PAGE_BYTES;
         allocInfo.pal.priority = Pal::GpuMemPriority::Normal;
-        pDevice->MemMgr()->GetCommonPool(InternalPoolDebugCpuRead, &allocInfo);
+        pDevice->MemMgr()->GetCommonPool(InternalPoolCpuCacheableGpuUncached, &allocInfo);
         VkResult result = pDevice->MemMgr()->AllocGpuMem(allocInfo,
                                                          &m_printfMemory,
                                                          pDevice->GetPalDeviceMask(),
@@ -102,7 +108,6 @@ void DebugPrintf::BindPipeline(
 
         if (result == VK_SUCCESS)
         {
-            m_state = MemoryAllocated;
             m_pPipeline = pPipeline;
 
             const size_t bufferSrdSize =
@@ -114,7 +119,7 @@ void DebugPrintf::BindPipeline(
             srdInfo.gpuAddr = m_printfMemory.GpuVirtAddr(deviceIdx);
             srdInfo.range = m_printfMemory.Size();
             pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &srdInfo, pTable);
-            m_frame = 0;
+            m_frame = 1;
             const Pal::uint32* pEntry = reinterpret_cast<const Pal::uint32*>(&tableVa);
             pCmdBuffer->CmdSetUserData(static_cast<Pal::PipelineBindPoint>(bindPoint), userDataOffset, 1, pEntry);
 
@@ -127,6 +132,28 @@ void DebugPrintf::BindPipeline(
                 VK_ASSERT(found == false);
                 pSubSections->Reserve(1);
                 ParseFormatStringsToSubSection(it.Get()->value.printStr, pSubSections);
+            }
+            constexpr VkSemaphoreTypeCreateInfo semaphoreTypeInfo
+            {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+                .pNext = nullptr,
+                .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+                .initialValue = 0
+            };
+
+            VkSemaphoreCreateInfo semaphoreInfo
+            {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+                .pNext = &semaphoreTypeInfo,
+                .flags = 0
+            };
+
+            result = pDevice->CreateSemaphore(
+                &semaphoreInfo, pDevice->VkInstance()->GetAllocCallbacks(), &m_semaphore);
+
+            if (result == VK_SUCCESS)
+            {
+                m_state = MemoryAllocated;
             }
         }
     }
@@ -142,7 +169,6 @@ void DebugPrintf::Init(
     {
         m_state = Enabled;
         m_pPipeline = nullptr;
-        m_frame = 0;
         m_pSettings = &settings;
         m_parsedFormatStrings.Init();
 
@@ -157,22 +183,64 @@ void DebugPrintf::Init(
 // PostQueue to process executed printf buffer
 Pal::Result DebugPrintf::PostQueueProcess(
     Device*  pDevice,
-    uint32_t deviceIdx)
+    uint32_t deviceIdx,
+    Queue*   pQueue)
 {
-    if (m_state != MemoryAllocated)
+    Pal::Result palResult = Pal::Result::NotReady;
+    if (m_state == MemoryAllocated)
     {
-        return Pal::Result::NotReady;
-    }
-    Util::MutexAuto lock(&m_mutex);
-    pDevice->WaitIdle();
+        Util::MutexAuto lock(&m_mutex);
 
+        Semaphore* pVkSemaphore = Semaphore::ObjectFromHandle(m_semaphore);
+
+        Pal::IQueueSemaphore* pPalSemaphore = pVkSemaphore->PalSemaphore(deviceIdx);
+        palResult = pQueue->PalQueue(deviceIdx)->SignalQueueSemaphore(pPalSemaphore, m_frame);
+        Util::File file;
+        PrintfString fileName = GetFileName(m_pPipeline->PalPipelineHash(),
+                                            ConvertVkPipelineType(m_pPipeline->GetType()),
+                                            m_frame,
+                                            m_pSettings->debugPrintfDumpFolder);
+        const char* pOutputName = m_pSettings->debugPrintfToStdout ? "-" : fileName.Data();
+        Util::Result result = file.Open(pOutputName, Util::FileAccessMode::FileAccessAppend);
+        if (result == Pal::Result::Success)
+        {
+            uint64_t decodeOffset = 0;
+            uint32_t loopIndex = 0;
+            Pal::IQueueSemaphore* palSemaphores[] = {pPalSemaphore};
+            uint64_t              waitValues[] =    {m_frame};
+            while (true)
+            {
+                palResult = pDevice->PalDevice(DefaultDeviceIndex)->WaitForSemaphores(
+                    1, palSemaphores, waitValues, 0, 1000000llu);
+
+                decodeOffset = ProcessDebugPrintfBuffer(pDevice, deviceIdx, decodeOffset, &file);
+                if ((PalToVkResult(palResult) <= 0) || (loopIndex++ > 1000))
+                {
+                    break;
+                }
+            }
+            file.Close();
+        }
+    }
+    return palResult;
+}
+
+// =====================================================================================================================
+// Process the output debug buffer and output the decoded printf strings
+uint64_t DebugPrintf::ProcessDebugPrintfBuffer(
+    Device*     pDevice,
+    uint32_t    deviceIdx,
+    uint64_t    decodeOffset,
+    Util::File* pFile)
+{
     void* pCpuAddr = nullptr;
     Pal::Result palResult = m_printfMemory.Map(deviceIdx, &pCpuAddr);
-    uint64_t bufferSize = 0;
+    uint64_t  bufferSize = 0;
     uint32_t* pPrintBuffer = nullptr;
     uint32_t* pPtr = nullptr;
     constexpr uint32_t bufferHeaderSize = 4;
     uint64_t maxBufferDWSize = (m_printfMemory.Size() >> 2) - bufferHeaderSize;
+
     if (palResult == Pal::Result::Success)
     {
         // Buffer Header is 4 dword {BufferOffset_Loword, BufferOffset_Hiword, rerv0, rerv1};
@@ -182,21 +250,21 @@ Pal::Result DebugPrintf::PostQueueProcess(
         pPtr += 2;
         bufferSize = (static_cast<uint64_t>(bufferSizeHigh) << 32) | static_cast<uint64_t>(bufferSizeLower);
         bufferSize = Util::Min(bufferSize, maxBufferDWSize);
-        if (bufferSize > 0)
+        uint64_t remainBufferSize = bufferSize - decodeOffset;
+        if (remainBufferSize > 1)
         {
             pPrintBuffer = static_cast<uint32_t*>(pDevice->VkInstance()->AllocMem(
-                bufferSize * sizeof(uint32_t), 4, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
+                remainBufferSize * sizeof(uint32_t), 4, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
 
-            memcpy(pPrintBuffer, pPtr, bufferSize * 4);
+            memcpy(pPrintBuffer, pPtr + decodeOffset, remainBufferSize * 4);
         }
 
         m_printfMemory.Unmap(deviceIdx);
 
-        if (bufferSize > 0)
+        if (remainBufferSize > 1)
         {
             const auto& formatStrings = *m_pPipeline->GetFormatStrings();
             const uint32_t entryHeaderSize = 2;
-            uint64_t decodeOffset = 0;
             PrintfString outputBufferStr(nullptr);
             outputBufferStr.Reserve(10);
             Vector<PrintfString, 5, GenericAllocator> outputDecodedSpecifiers(nullptr);
@@ -255,46 +323,33 @@ Pal::Result DebugPrintf::PostQueueProcess(
                 OutputBufferString(formatString, *pSubSections, &outputBufferStr);
                 decodeOffset += outputsInDwords;
             }
-            WriteToFile(outputBufferStr);
+            WriteToFile(pFile, outputBufferStr);
             pDevice->VkInstance()->FreeMem(pPrintBuffer);
             m_frame++;
         }
     }
-
-    return palResult;
+    return decodeOffset;
 }
 
 // =====================================================================================================================
 // Write the outputBuffer to the file
 void DebugPrintf::WriteToFile(
+    Util::File*         pFile,
     const PrintfString& outputBuffer)
 {
     if (outputBuffer.size() == 0)
     {
         return;
     }
-    Util::File file;
-    PrintfString fileName = GetFileName(m_pPipeline->PalPipelineHash(),
-                                        ConvertVkPipelineType(m_pPipeline->GetType()),
-                                        m_frame,
-                                        m_pSettings->debugPrintfDumpFolder);
-    const char* pOutputName = m_pSettings->debugPrintfToStdout ? "-" : fileName.Data();
-    Util::Result result = file.Open(pOutputName, Util::FileAccessMode::FileAccessAppend);
+
+    const char *pFileBegin = "========================= Session Begin ========================\n\0";
+    const char *pFileEnd = "========================== Session End =========================\n\0";
+    pFile->Write(pFileBegin, strlen(pFileBegin));
+    auto result = pFile->Write(outputBuffer.Data(), outputBuffer.size());
     if (result == Util::Result::Success)
     {
-        const char* fileBeginPrefix = "========================= ";
-        const char* fileBeginPostfix =" Begin ========================\n";
-        const char* fileEnd = "========================= Session End ========================\n";
-        file.Write(fileBeginPrefix, strlen(fileBeginPrefix));
-        file.Write(fileName.Data(), strlen(fileName.Data()));
-        file.Write(fileBeginPostfix, strlen(fileBeginPostfix));
-        result = file.Write(outputBuffer.Data(), outputBuffer.size());
-        if (result == Util::Result::Success)
-        {
-            file.Write(fileEnd, strlen(fileEnd));
-            file.Flush();
-            file.Close();
-        }
+        pFile->Write(pFileEnd, strlen(pFileEnd));
+        pFile->Flush();
     }
 }
 
@@ -315,19 +370,11 @@ PrintfString DebugPrintf::GetFileName(
     sprintf(fileName, "Pipeline%s_0x%016" PRIx64 "_%u", strPipelineTypes[pipelineType],
             pipelineHash, frameNumber);
     PrintfString fName(nullptr);
-    fName.Reserve(10);
-
-    if (m_pSettings->debugPrintfToStdout)
-    {
-        AppendPrintfString(&fName, fileName, strlen(fileName));
-    }
-    else
-    {
-        AppendPrintfString(&fName, pDumpFolder, strlen(pDumpFolder));
-        AppendPrintfString(&fName, "/", 1);
-        AppendPrintfString(&fName, fileName, strlen(fileName));
-        AppendPrintfString(&fName, ".txt\0", 5);
-    }
+    fName.Reserve(50);
+    AppendPrintfString(&fName, pDumpFolder, strlen(pDumpFolder));
+    AppendPrintfString(&fName, "/", 1);
+    AppendPrintfString(&fName, fileName, strlen(fileName));
+    AppendPrintfString(&fName, ".txt\0", 5);
     return fName;
 }
 
@@ -435,6 +482,7 @@ void DebugPrintf::DecodeSpecifier(
 // static function called after QueueSubmit
 void DebugPrintf::PostQueueSubmit(
     Device*          pDevice,
+    Queue*           pQueue,
     VkCommandBuffer* pCmdBuffers,
     uint32_t         cmdBufferCount)
 {
@@ -446,7 +494,7 @@ void DebugPrintf::PostQueueSubmit(
         for (uint32_t j = 0; j < cmdBufferCount; ++j)
         {
             CmdBuffer* pCmdBuf = ApiCmdBuffer::ObjectFromHandle(pCmdBuffers[j]);
-            palResult = pCmdBuf->GetDebugPrintf()->PostQueueProcess(pDevice, deviceIdx);
+            palResult = pCmdBuf->GetDebugPrintf()->PostQueueProcess(pDevice, deviceIdx, pQueue);
         }
     }
 }

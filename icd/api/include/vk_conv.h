@@ -1846,6 +1846,10 @@ inline Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings&
             Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::W);
         case VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT:   return PalFmt(Pal::ChNumFormat::X4Y4Z4W4_Unorm,
             Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+        case VK_FORMAT_A1B5G5R5_UNORM_PACK16:   return PalFmt(Pal::ChNumFormat::X5Y5Z5W1_Unorm,
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+        case VK_FORMAT_A8_UNORM_KHR:            return PalFmt(Pal::ChNumFormat::A8_Unorm,
+            Pal::ChannelSwizzle::Zero, Pal::ChannelSwizzle::Zero, Pal::ChannelSwizzle::Zero, Pal::ChannelSwizzle::X);
         }
         return Pal::UndefinedSwizzledFormat;
     }
@@ -2731,12 +2735,11 @@ inline uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
     flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)       ? 1 : 0;
     flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)                  ? 1 : 0;
     flags.tmzProtected       = (imageCreateFlags & VK_IMAGE_CREATE_PROTECTED_BIT)              ? 1 : 0;
-    flags.view3dAs2dArray    = (imageCreateFlags & VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT) ? 1 : 0;
+    flags.view3dAs2dArray    = (imageCreateFlags &
+        (VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT | VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT)) ? 1 : 0;
 
     // Always provide pQuadSamplePattern to PalCmdResolveImage for depth formats to allow optimizations
     flags.sampleLocsAlwaysKnown = Formats::HasDepth(format) ? 1 : 0;
-
-    // Ignore Flag VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT. It is supported by default for all 3D images
 
     return flags.u32All;
 }

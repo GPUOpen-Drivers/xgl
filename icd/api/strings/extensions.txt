@@ -118,6 +118,7 @@ VK_KHR_imageless_framebuffer
 VK_EXT_shader_demote_to_helper_invocation
 VK_EXT_subgroup_size_control
 VK_EXT_calibrated_timestamps
+VK_EXT_fragment_shader_interlock
 VK_KHR_pipeline_executable_properties
 VK_EXT_line_rasterization
 VK_EXT_shader_atomic_float
@@ -172,6 +173,7 @@ VK_EXT_ycbcr_image_arrays
 VK_KHR_zero_initialize_workgroup_memory
 VK_EXT_load_store_op_none
 VK_KHR_maintenance4
+VK_KHR_maintenance5
 VK_AMD_shader_early_and_late_fragment_tests
 VK_EXT_mesh_shader
 VK_EXT_image_view_min_lod
@@ -195,6 +197,7 @@ VK_EXT_device_address_binding_report
 VK_EXT_device_fault
 VK_EXT_attachment_feedback_loop_layout
 VK_EXT_physical_device_drm
+VK_KHR_cooperative_matrix
 VK_EXT_texture_compression_astc_hdr
 VK_EXT_image_drm_format_modifier
 VK_EXT_frame_boundary

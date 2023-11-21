@@ -686,6 +686,12 @@ void CmdBuffer::CopyQueryPoolResults(
         )
     {
         const PalQueryPool* pPool = pBasePool->AsPalQueryPool();
+        Pal::QueryResultFlags palFlags = VkToPalQueryResultFlags(flags);
+        if (pBasePool->GetQueryType() == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT)
+        {
+            palFlags = static_cast<Pal::QueryResultFlags>(
+                static_cast<uint32_t>(palFlags) | static_cast<uint32_t>(Pal::QueryResultOnlyPrimNeeded));
+        }
 
         utils::IterateMask deviceGroup(m_curDeviceMask);
         do
@@ -694,7 +700,7 @@ void CmdBuffer::CopyQueryPoolResults(
 
             PalCmdBuffer(deviceIdx)->CmdResolveQuery(
                 *pPool->PalPool(deviceIdx),
-                VkToPalQueryResultFlags(flags),
+                palFlags,
                 pPool->PalQueryType(),
                 firstQuery,
                 queryCount,

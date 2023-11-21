@@ -1559,19 +1559,9 @@ VkResult CmdBuffer::Begin(
         if (supportedVrsRates & (1 << static_cast<uint32_t>(Pal::VrsShadingRate::_1x1)))
         {
             Pal::VrsCenterState centerState = {};
-            m_allGpuState.vrsRate     = {};
+            m_allGpuState.vrsRate = {};
 
-            m_allGpuState.vrsRate.flags.exposeVrsPixelsMask = 1;
-
-            // Don't use coarse shading.
-            m_allGpuState.vrsRate.shadingRate = Pal::VrsShadingRate::_1x1;
-
-            // Set combiner state for for PsIterator and ProvokingVertex
-            m_allGpuState.vrsRate.combinerState[static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] =
-                Pal::VrsCombiner::Override;
-
-            m_allGpuState.vrsRate.combinerState[static_cast<uint32_t>(Pal::VrsCombinerStage::ProvokingVertex)] =
-                Pal::VrsCombiner::Override;
+            Device::SetDefaultVrsRateParams(&m_allGpuState.vrsRate);
 
             utils::IterateMask deviceGroupVrs(GetDeviceMask());
 
@@ -1583,8 +1573,7 @@ VkResult CmdBuffer::Begin(
 
                 // A null source image implies 1x1 shading rate for the image combiner stage.
                 PalCmdBuffer(deviceIdx)->CmdBindSampleRateImage(nullptr);
-            }
-            while (deviceGroupVrs.IterateNext());
+            } while (deviceGroupVrs.IterateNext());
         }
     }
 
@@ -3173,17 +3162,20 @@ void CmdBuffer::DrawMeshTasks(
     uint32_t y,
     uint32_t z)
 {
-    DbgBarrierPreCmd(DbgBarrierDrawMeshTasks);
+    if ((x * y * z) > 0)
+    {
+        DbgBarrierPreCmd(DbgBarrierDrawMeshTasks);
 
-    ValidateGraphicsStates();
+        ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
+        BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
 #endif
 
-    PalCmdDrawMeshTasks(x, y, z);
+        PalCmdDrawMeshTasks(x, y, z);
 
-    DbgBarrierPostCmd(DbgBarrierDrawMeshTasks);
+        DbgBarrierPostCmd(DbgBarrierDrawMeshTasks);
+    }
 }
 
 // =====================================================================================================================
@@ -3367,48 +3359,6 @@ void CmdBuffer::ClearColorImage(
     }
 
     PalCmdSuspendPredication(false);
-}
-
-// =====================================================================================================================
-bool CmdBuffer::PreBltBindMsaaState(
-    const Image& image)
-{
-    const Pal::IMsaaState* const* pBltMsaa = nullptr;
-
-    if (GetPalQueueType() == Pal::QueueTypeUniversal)
-    {
-        const Pal::ImageCreateInfo& imgInfo = image.PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
-
-        if (imgInfo.samples > 1)
-        {
-            pBltMsaa = m_pDevice->GetBltMsaaState(imgInfo.samples);
-        }
-
-        PalCmdBindMsaaStates(pBltMsaa);
-    }
-
-    return (pBltMsaa != nullptr) ? true : false;
-}
-
-// =====================================================================================================================
-void CmdBuffer::PostBltRestoreMsaaState(
-    bool bltMsaaState)
-{
-    if (GetPalQueueType() == Pal::QueueTypeUniversal)
-    {
-        if (bltMsaaState &&
-            (m_allGpuState.pGraphicsPipeline != nullptr))
-        {
-            if (m_allGpuState.pGraphicsPipeline->GetPipelineFlags().bindMsaaObject)
-            {
-                PalCmdBindMsaaStates(m_allGpuState.pGraphicsPipeline->GetMsaaStates());
-            }
-            else
-            {
-                m_allGpuState.dirtyGraphics.msaa = 1;
-            }
-        }
-    }
 }
 
 // =====================================================================================================================
@@ -3947,8 +3897,6 @@ void CmdBuffer::PalCmdClearColorImage(
 {
     DbgBarrierPreCmd(DbgBarrierClearColor);
 
-    bool bltMsaaState = PreBltBindMsaaState(image);
-
     utils::IterateMask deviceGroup(m_curDeviceMask);
 
     do
@@ -3968,8 +3916,6 @@ void CmdBuffer::PalCmdClearColorImage(
     }
     while (deviceGroup.IterateNext());
 
-    PostBltRestoreMsaaState(bltMsaaState);
-
     DbgBarrierPostCmd(DbgBarrierClearColor);
 }
 
@@ -3987,8 +3933,6 @@ void CmdBuffer::PalCmdClearDepthStencil(
     uint32_t                flags)
 {
     DbgBarrierPreCmd(DbgBarrierClearDepth);
-
-    bool bltMsaaState = PreBltBindMsaaState(image);
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
@@ -4009,8 +3953,6 @@ void CmdBuffer::PalCmdClearDepthStencil(
             flags);
     }
     while (deviceGroup.IterateNext());
-
-    PostBltRestoreMsaaState(bltMsaaState);
 
     DbgBarrierPostCmd(DbgBarrierClearDepth);
 }
@@ -4060,8 +4002,6 @@ void CmdBuffer::PalCmdResolveImage(
 {
     DbgBarrierPreCmd(DbgBarrierResolve);
 
-    bool bltMsaaState = PreBltBindMsaaState(srcImage);
-
     utils::IterateMask deviceGroup(deviceMask);
     do
     {
@@ -4078,8 +4018,6 @@ void CmdBuffer::PalCmdResolveImage(
                     0);
     }
     while (deviceGroup.IterateNext());
-
-    PostBltRestoreMsaaState(bltMsaaState);
 
     DbgBarrierPostCmd(DbgBarrierResolve);
 }
@@ -4549,10 +4487,6 @@ void CmdBuffer::LoadOpClearDepthStencil(
                 clearDepth = pDepthAttachmentInfo->clearValue.depthStencil.depth;
             }
         }
-    }
-    else
-    {
-        depthLayout = stencilLayout;
     }
 
     if (pDepthStencilImage != nullptr)
@@ -8640,11 +8574,6 @@ void CmdBuffer::BindTargets(
             params.depthTarget.pDepthStencilView = pStencilImageView->PalDepthStencilView(deviceIdx);
             params.depthTarget.stencilLayout = stencilLayout;
         }
-        else
-        {
-            params.depthTarget.pDepthStencilView = nullptr;
-            params.depthTarget.stencilLayout     = NullLayout;
-        }
 
         const VkRenderingAttachmentInfoKHR* pDepthAttachmentInfo = pRenderingInfo->pDepthAttachment;
 
@@ -8666,11 +8595,6 @@ void CmdBuffer::BindTargets(
 
             params.depthTarget.pDepthStencilView = pDepthImageView->PalDepthStencilView(deviceIdx);
             params.depthTarget.depthLayout       = depthLayout;
-        }
-        else
-        {
-            // Set the depthLayout for stencil only formats to avoid incorrect PAL asserts.
-            params.depthTarget.depthLayout       = params.depthTarget.stencilLayout;
         }
 
         PalCmdBuffer(deviceIdx)->CmdBindTargets(params);
@@ -11253,6 +11177,17 @@ void CmdBuffer::ValidateGraphicsStates()
         const DynamicColorBlend*   pColorBlend   = nullptr;
         const DynamicMsaa*         pMsaa         = nullptr;
 
+        if (m_allGpuState.dirtyGraphics.msaa || m_allGpuState.dirtyGraphics.samplePattern)
+        {
+            uint32_t enable1xMsaaSampleLocations =
+                (m_allGpuState.sampleLocationsEnable && (m_allGpuState.msaaCreateInfo.coverageSamples == 1)) ? 1 : 0;
+            if (m_allGpuState.msaaCreateInfo.flags.enable1xMsaaSampleLocations != enable1xMsaaSampleLocations)
+            {
+                m_allGpuState.msaaCreateInfo.flags.enable1xMsaaSampleLocations = enable1xMsaaSampleLocations;
+                m_allGpuState.dirtyGraphics.msaa = 1;
+            }
+        }
+
         utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
         do
         {
@@ -11417,7 +11352,7 @@ void CmdBuffer::ValidateGraphicsStates()
                 Pal::VrsRateParams vrsRate = m_allGpuState.vrsRate;
                 if (force1x1)
                 {
-                    Force1x1ShaderRate(&vrsRate);
+                    Device::SetDefaultVrsRateParams(&vrsRate);
                 }
 
                 if (m_allGpuState.minSampleShading > 0.0)
@@ -11915,8 +11850,6 @@ void CmdBuffer::SetRasterizationSamples(
         m_allGpuState.msaaCreateInfo.shaderExportMaskSamples = rasterizationSampleCount;
         m_allGpuState.msaaCreateInfo.alphaToCoverageSamples = rasterizationSampleCount;
         m_allGpuState.msaaCreateInfo.occlusionQuerySamples = rasterizationSampleCount;
-        m_allGpuState.msaaCreateInfo.flags.enable1xMsaaSampleLocations = (rasterizationSampleCount == 1);
-
         m_allGpuState.dirtyGraphics.msaa = 1;
     }
 

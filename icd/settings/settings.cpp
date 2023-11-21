@@ -214,6 +214,18 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             m_settings.maxUnifiedNonRayGenShaders = static_cast<uint32_t>(atoi(pMaxInlinedShadersEnvVar));
         }
+#if VKI_BUILD_GFX11
+        // Default optimized RT settings for Navi31 / 32,
+        // which has physical VGPR 1536 per SIMD
+        if (pInfo->gfxipProperties.shaderCore.vgprsPerSimd == 1536)
+        {
+            // 1.2% faster - Corresponds to 1.5x VGPR feature
+            m_settings.rtIndirectVgprLimit = 120;
+
+            // 1% faster using indirectCallTargetOccupancyPerSimd of 0.75
+            m_settings.indirectCallTargetOccupancyPerSimd = 0.75;
+        }
+#endif
 #endif
 
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
@@ -229,6 +241,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         {
             m_settings.disableImplicitInvariantExports = false;
+
+#if VKI_BUILD_GFX11
+            m_settings.optimizeTessFactor = true;
+#endif
         }
 
 #if VKI_BUILD_GFX11
@@ -249,6 +265,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (pInfo->gpuMemoryProperties.barSize > (7ull * _1GB))
         {
             if ((appProfile != AppProfile::WorldWarZ)
+                && (appProfile != AppProfile::XPlane)
                )
             {
                 m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
@@ -778,7 +795,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             // Force exclusive sharing mode - 2% gain
             m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
-            m_settings.delayFullScreenAcquireToFirstPresent = true;
             m_settings.implicitExternalSynchronization = false;
 
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
@@ -818,8 +834,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
 
             m_settings.implicitExternalSynchronization = false;
-
-            m_settings.syncOsHdrState = false;
         }
 
         if (appProfile == AppProfile::BaldursGate3)
@@ -865,6 +879,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
 
 #if VKI_BUILD_GFX11
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+                m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
+            }
 #endif
         }
 
@@ -877,13 +895,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
 
-                //////////////////////////////////////////////
-                // Ray Tracing Settings
-                m_settings.rtEnableBuildParallel = true;
-
-                m_settings.rtEnableUpdateParallel = true;
-
                 m_settings.rtEnableTriangleSplitting = true;
+
+                m_settings.rtTriangleCompressionMode = NoTriangleCompression;
 
                 m_settings.useFlipHint = false;
 
@@ -978,10 +992,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
             {
 #if VKI_RAY_TRACING
-                // Ray Tracing Settings
-                m_settings.rtEnableBuildParallel  = true;
-                m_settings.rtEnableUpdateParallel = true;
-
                 m_settings.rtBvhBuildModeFastTrace = BvhBuildModeLinear;
                 m_settings.rtEnableTopDownBuild    = false;
                 m_settings.plocRadius              = 4;
@@ -1271,8 +1281,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.enableAceShaderPrefetch = false;
 
 #if VKI_RAY_TRACING
-            m_settings.rtEnableBuildParallel   = true;
-            m_settings.rtEnableUpdateParallel  = true;
             m_settings.plocRadius              = 4;
             m_settings.rtBvhBuildModeFastTrace = BvhBuildModeLinear;
             m_settings.rtEnableTopDownBuild    = false;
@@ -1282,18 +1290,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.asyncComputeQueueMaxWavesPerCu = 20;
                 m_settings.csWaveSize                     = 64;
             }
-#if VKI_BUILD_GFX11
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
-                m_settings.rtIndirectVgprLimit = 120;
-#if VKI_BUILD_NAVI31
-                if (pInfo->revision == Pal::AsicRevision::Navi31)
-                {
-                    m_settings.indirectCallTargetOccupancyPerSimd = 0.75;
-                }
-#endif
-            }
-#endif
 #endif
         }
 
@@ -1501,8 +1497,11 @@ void VulkanSettingsLoader::ValidateSettings()
         m_settings.bvhBuildModeOverrideTLAS = buildMode;
     }
 
-#if VKI_RAY_TRACING
-#endif
+    // Compression is not compatible with collapse or triangle splitting.
+    if (m_settings.rtEnableBVHCollapse || m_settings.rtEnableTriangleSplitting)
+    {
+        m_settings.rtTriangleCompressionMode = NoTriangleCompression;
+    }
 
     // Clamp target occupancy to [0.0, 1.0]
     m_settings.indirectCallTargetOccupancyPerSimd =
@@ -1570,7 +1569,9 @@ void VulkanSettingsLoader::UpdatePalSettings()
     // For vulkan driver, forceDepthClampBasedOnZExport should be false by default, this is required to pass
     // depth_range_unrestricted CTS tests. Set it to true for applications that have perf drops
     pPalSettings->depthClampBasedOnZExport = m_settings.forceDepthClampBasedOnZExport;
+
     pPalSettings->cpDmaCmdCopyMemoryMaxBytes = m_settings.cpDmaCmdCopyMemoryMaxBytes;
+    pPalSettings->cmdBufBatchedSubmitChainLimit = m_settings.cmdBufBatchedSubmitChainLimit;
 
     // The color cache fetch size is limited to 256Bytes MAX regardless of other register settings.
     pPalSettings->limitCbFetch256B = m_settings.limitCbFetch256B;

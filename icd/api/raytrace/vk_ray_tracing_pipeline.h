@@ -150,7 +150,7 @@ public:
     VkResult CreateImpl(
         PipelineCache*                           pPipelineCache,
         const VkRayTracingPipelineCreateInfoKHR* pCreateInfo,
-        PipelineCreateFlags                      flags,
+        VkPipelineCreateFlags2KHR                flags,
         const VkAllocationCallbacks*             pAllocator,
         DeferredWorkload*                        pDeferredWorkload);
 
@@ -214,7 +214,6 @@ public:
 
     static void ConvertStaticPipelineFlags(const Device* pDevice,
                                            uint32_t* pStaticFlags,
-                                           uint32_t* pTriangleCompressMode,
                                            uint32_t* pCounterMode,
                                            uint32_t  pipelineFlags
 );
@@ -313,7 +312,7 @@ protected:
 
     static void BuildApiHash(
         const VkRayTracingPipelineCreateInfoKHR* pCreateInfo,
-        PipelineCreateFlags                      flags,
+        VkPipelineCreateFlags2KHR                flags,
         Util::MetroHash::Hash*                   pElfHash,
         uint64_t*                                pApiHash);
 

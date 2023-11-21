@@ -128,6 +128,38 @@ constexpr VkFormatFeatureFlags AllBufFeatures =
 #endif
     VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
 
+struct CooperativeMatrixType
+{
+    VkComponentTypeKHR a;
+    VkComponentTypeKHR b;
+    VkComponentTypeKHR c;
+};
+
+constexpr CooperativeMatrixType CooperativeMatrixTypes[] =
+{
+    { VK_COMPONENT_TYPE_FLOAT16_KHR, VK_COMPONENT_TYPE_FLOAT16_KHR, VK_COMPONENT_TYPE_FLOAT32_KHR },
+    { VK_COMPONENT_TYPE_FLOAT16_KHR, VK_COMPONENT_TYPE_FLOAT16_KHR, VK_COMPONENT_TYPE_FLOAT16_KHR },
+    { VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
+    { VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
+    { VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
+    { VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
+};
+
+constexpr uint32_t CooperativeMatrixTypesCount = VK_ARRAY_SIZE(CooperativeMatrixTypes);
+
+constexpr CooperativeMatrixType CooperativeMatrixSaturatingTypes[] =
+{
+    { VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
+    { VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
+    { VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
+    { VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
+};
+
+constexpr uint32_t CooperativeMatrixSaturatingTypesCount = VK_ARRAY_SIZE(CooperativeMatrixSaturatingTypes);
+
+// Dimension size for M, N and K
+constexpr uint32_t CooperativeMatrixDimension = 16;
+
 #if PAL_ENABLE_PRINTS_ASSERTS
 static void VerifyProperties(const PhysicalDevice& device);
 #endif
@@ -4039,6 +4071,13 @@ bool PhysicalDevice::HwSupportsRayTracing() const
 }
 #endif
 
+static bool IsKhrCooperativeMatrixSupported(
+    const PhysicalDevice* pPhysicalDevice)
+{
+    return ((pPhysicalDevice == nullptr) ||
+            (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportCooperativeMatrix));
+}
+
 // =====================================================================================================================
 // Get available device extensions or populate the specified physical device with the extensions supported by it.
 //
@@ -4241,6 +4280,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_TERMINATE_INVOCATION));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_FORMAT_FEATURE_FLAGS2));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_FRAME_BOUNDARY));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_CLIP_CONTROL));
 
@@ -4303,6 +4343,13 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_BORDER_COLOR_SWIZZLE));
     }
+
+    if (IsKhrCooperativeMatrixSupported(pPhysicalDevice))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COOPERATIVE_MATRIX));
+    }
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE5));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PUSH_DESCRIPTOR));
 
@@ -6043,6 +6090,21 @@ size_t PhysicalDevice::GetFeatures2(
 
                 break;
             }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT:
+            {
+                auto *pExtInfo = reinterpret_cast<VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT *>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->fragmentShaderSampleInterlock = VK_FALSE;
+                    pExtInfo->fragmentShaderPixelInterlock = VK_FALSE;
+                    pExtInfo->fragmentShaderShadingRateInterlock = VK_FALSE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+
+                break;
+            }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceLineRasterizationFeaturesEXT*>(pHeader);
@@ -6642,6 +6704,20 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceCooperativeMatrixFeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->cooperativeMatrix = VK_TRUE;
+                    pExtInfo->cooperativeMatrixRobustBufferAccess = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT*>(pHeader);
@@ -6662,8 +6738,8 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     pExtInfo->primitivesGeneratedQuery                      = VK_TRUE;
-                    pExtInfo->primitivesGeneratedQueryWithRasterizerDiscard = VK_FALSE;
-                    pExtInfo->primitivesGeneratedQueryWithNonZeroStreams    = VK_FALSE;
+                    pExtInfo->primitivesGeneratedQueryWithRasterizerDiscard = VK_TRUE;
+                    pExtInfo->primitivesGeneratedQueryWithNonZeroStreams    = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6790,6 +6866,19 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     pExtInfo->maintenance4 = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceMaintenance5FeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->maintenance5 = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -7901,6 +7990,13 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_KHR:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceCooperativeMatrixPropertiesKHR*>(pNext);
+            pProps->cooperativeMatrixSupportedStages = VK_SHADER_STAGE_COMPUTE_BIT;
+            break;
+        }
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT:
         {
             if (IsExtensionSupported(DeviceExtensions::EXT_GRAPHICS_PIPELINE_LIBRARY))
@@ -7917,6 +8013,19 @@ void PhysicalDevice::GetDeviceProperties2(
             auto* pProps = static_cast<VkPhysicalDeviceMaintenance4PropertiesKHR*>(pNext);
 
             GetDevicePropertiesMaxBufferSize(&pProps->maxBufferSize);
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_PROPERTIES_KHR:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceMaintenance5PropertiesKHR*>(pNext);
+
+            pProps->earlyFragmentMultisampleCoverageAfterSampleCounting = VK_TRUE;
+            pProps->earlyFragmentSampleMaskTestBeforeSampleCounting = VK_TRUE;
+            pProps->depthStencilSwizzleOneSupport = VK_TRUE;
+            pProps->polygonModePointSize = VK_TRUE;
+            pProps->nonStrictSinglePixelWideLinesUseParallelogram = VK_TRUE;
+            pProps->nonStrictWideLinesUseParallelogram = VK_TRUE;
             break;
         }
 
@@ -9293,6 +9402,57 @@ VkResult PhysicalDevice::GetFragmentShadingRates(
     return (*pFragmentShadingRateCount < numberOfSupportedShaderRates) ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
+// =====================================================================================================================
+// Retrieve KHR cooperative matrix properties. Called in response to vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR
+VkResult PhysicalDevice::GetPhysicalDeviceCooperativeMatrixPropertiesKHR(
+    uint32_t*                                   pPropertyCount,
+    VkCooperativeMatrixPropertiesKHR*           pProperties)
+{
+    VkResult result = VK_SUCCESS;
+
+    if (IsKhrCooperativeMatrixSupported(this))
+    {
+        constexpr uint32_t totalCount = CooperativeMatrixTypesCount + CooperativeMatrixSaturatingTypesCount;
+
+        if (pProperties == nullptr)
+        {
+            *pPropertyCount = totalCount;
+        }
+        else
+        {
+            if (*pPropertyCount < totalCount)
+            {
+                result = VK_INCOMPLETE;
+            }
+
+            *pPropertyCount = Util::Min(*pPropertyCount, totalCount);
+
+            for (uint32_t i = 0; i < *pPropertyCount; ++i)
+            {
+                const bool sat = (i >= CooperativeMatrixTypesCount);
+                const uint32_t n = sat ? i - CooperativeMatrixTypesCount : i;
+                const CooperativeMatrixType* types = sat ? CooperativeMatrixSaturatingTypes : CooperativeMatrixTypes;
+
+                pProperties[i].MSize                  = CooperativeMatrixDimension;
+                pProperties[i].NSize                  = CooperativeMatrixDimension;
+                pProperties[i].KSize                  = CooperativeMatrixDimension;
+                pProperties[i].AType                  = types[n].a;
+                pProperties[i].BType                  = types[n].b;
+                pProperties[i].CType                  = types[n].c;
+                pProperties[i].ResultType             = types[n].c;
+                pProperties[i].scope                  = VK_SCOPE_SUBGROUP_KHR;
+                pProperties[i].saturatingAccumulation = sat ? VK_TRUE : VK_FALSE;
+            }
+        }
+    }
+    else
+    {
+        *pPropertyCount = 0;
+    }
+
+    return result;
+}
+
 // C-style entry points
 namespace entry
 {
@@ -9928,6 +10088,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceFragmentShadingRatesKHR(
     return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetFragmentShadingRates(
         pFragmentShadingRateCount,
         pFragmentShadingRates);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkCooperativeMatrixPropertiesKHR*           pProperties)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetPhysicalDeviceCooperativeMatrixPropertiesKHR(
+        pPropertyCount,
+        pProperties);
 }
 
 }

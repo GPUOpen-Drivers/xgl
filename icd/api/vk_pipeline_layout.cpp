@@ -249,6 +249,14 @@ bool PipelineLayout::HasRayTracing(
 #endif
 
 // =====================================================================================================================
+bool PipelineLayout::ReserveXfbNode(
+    const Device* pDevice)
+{
+    return pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK)
+        ;
+}
+
+// =====================================================================================================================
 VkResult PipelineLayout::BuildCompactSchemeInfo(
     const Device*                     pDevice,
     const VkPipelineLayoutCreateInfo* pIn,
@@ -303,7 +311,7 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
 
     uint32_t gfxReservedCount = 0;
     // Reserve an user-data to store the VA of buffer for transform feedback.
-    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK))
+    if (ReserveXfbNode(pDevice))
     {
         gfxReservedCount++;
     }
@@ -354,7 +362,7 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
     }
 
     // Reserve an user-data to store the VA of buffer for transform feedback.
-    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK))
+    if (ReserveXfbNode(pDevice))
     {
         pUserDataLayout->transformFeedbackRegBase = pInfo->userDataRegCount;
         pUserDataLayout->transformFeedbackRegCount = 1;
@@ -610,7 +618,7 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
     pInfo->userDataRegCount              += 1;
 
     // Allocate user data for transform feedback buffer
-    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK))
+    if (ReserveXfbNode(pDevice))
     {
         pUserDataLayout->transformFeedbackRegBase = pInfo->userDataRegCount;
         pPipelineInfo->numUserDataNodes          += 1;
@@ -1466,7 +1474,8 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
     const auto& userDataLayout = m_info.userDataLayout.indirect;
 
     const bool uberFetchShaderEnabled     = IsUberFetchShaderEnabled<PipelineLayoutScheme::Indirect>(m_pDevice);
-    const bool transformFeedbackEnabled   = m_pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK);
+    const bool transformFeedbackEnabled   = ReserveXfbNode(m_pDevice);
+
     const bool threadGroupReversalEnabled = userDataLayout.threadGroupReversalRegBase != InvalidReg;
 #if VKI_RAY_TRACING
     const bool rayTracingEnabled          = m_pipelineInfo.hasRayTracing;

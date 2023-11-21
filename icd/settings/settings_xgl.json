@@ -1120,30 +1120,6 @@
       "Type": "bool"
     },
     {
-      "Name": "DelayFullScreenAcquireToFirstPresent",
-      "Description": "When true, delays acquiring exclusive full screen to the first present. May be needed in cases where the OS state gets messed up because of early acquires by the application",
-      "Tags": [
-        "Present"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool"
-    },
-    {
-      "Name": "SyncOsHdrState",
-      "Description": "When true, create a dummy FP16 swapchain to sync the OS HDR state and avoid dim desktop issues during Alt+Tab and app exit from HDR modes",
-      "Tags": [
-        "Present"
-      ],
-      "Defaults": {
-        "Default": true
-      },
-      "Scope": "Driver",
-      "Type": "bool"
-    },
-    {
       "Name": "ForceMinImageCount",
       "Description": "A non-zero value will force to set the minimum count of swap chain images",
       "Tags": [
@@ -1302,7 +1278,7 @@
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Scope": "Driver",
       "Type": "bool"
@@ -2197,7 +2173,7 @@
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": true
+        "Default": false
       },
       "Scope": "Driver",
       "Type": "bool",
@@ -3016,7 +2992,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": "BoxSortingClosest"
+        "Default": "BoxSortingLargestFirstAndClosestMidpoint"
       },
       "ValidValues": {
         "IsEnum": true,
@@ -3325,7 +3301,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": "TriangleCompressionAutoModeDisabled"
+        "Default": "TriangleCompressionAutoModeFastTraceOrCompaction"
       },
       "ValidValues": {
         "IsEnum": true,
@@ -3605,7 +3581,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": "NoTriangleCompression"
+        "Default": "AutoTriangleCompression"
       },
       "ValidValues": {
         "IsEnum": true,
@@ -7004,6 +6980,18 @@
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "CpDmaCmdCopyMemoryMaxBytes"
+    },
+    {
+      "Description": "Limits the number of command buffers that will be chained together; reduce to prevent problems due to long running submits or to minimize the scope of commands being debugged.",
+      "Tags": [
+        "Debugging"
+      ],
+      "Defaults": {
+        "Default": 128
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "Name": "CmdBufBatchedSubmitChainLimit"
     },
     {
       "Description": "Disables all implicit invariant marking of exports, which in turn disables MUL/ADD -> FMA. This option is legal but may cause issues if applications are sensitive to FMA influencing some export results.",

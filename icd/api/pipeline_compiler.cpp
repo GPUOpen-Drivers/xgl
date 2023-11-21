@@ -427,8 +427,8 @@ Util::MetroHash::Hash PipelineCompiler::GetShaderModuleCacheHash(
 // =====================================================================================================================
 // Loads shader module from cache, include both run-time cache and binary cache
 VkResult PipelineCompiler::LoadShaderModuleFromCache(
-    const Device*                   pDevice,
     const VkShaderModuleCreateFlags flags,
+    const VkShaderModuleCreateFlags internalShaderFlags,
     const uint32_t                  compilerMask,
     const Util::MetroHash::Hash&    uniqueHash,
     PipelineBinaryCache*            pBinaryCache,
@@ -438,6 +438,7 @@ VkResult PipelineCompiler::LoadShaderModuleFromCache(
     VkResult result = VK_ERROR_INITIALIZATION_FAILED;
 
     const bool supportInternalModuleCache = SupportInternalModuleCache(m_pPhysicalDevice, compilerMask);
+    const bool delayConversion = false;
 
     VK_ASSERT(pShaderModule->pRefCount == nullptr);
 
@@ -483,7 +484,7 @@ VkResult PipelineCompiler::LoadShaderModuleFromCache(
         if ((result != VK_SUCCESS) && (cacheResult == Util::Result::Success))
         {
 
-            if ((result == VK_SUCCESS) && (supportInternalModuleCache))
+            if ((result == VK_SUCCESS) && supportInternalModuleCache && (delayConversion == false))
             {
                 Instance* pInstance = m_pPhysicalDevice->VkInstance();
                 pShaderModule->pRefCount = reinterpret_cast<uint32_t*>(
@@ -526,8 +527,8 @@ VkResult PipelineCompiler::LoadShaderModuleFromCache(
 // =====================================================================================================================
 // Stores shader module to cache, include both run-time cache and binary cache
 void PipelineCompiler::StoreShaderModuleToCache(
-    const Device*                   pDevice,
     const VkShaderModuleCreateFlags flags,
+    const VkShaderModuleCreateFlags internalShaderFlags,
     const uint32_t                  compilerMask,
     const Util::MetroHash::Hash&    uniqueHash,
     PipelineBinaryCache*            pBinaryCache,
@@ -620,9 +621,7 @@ VkResult PipelineCompiler::BuildShaderModule(
     }
 
     result = LoadShaderModuleFromCache(
-        pDevice, flags, compilerMask, uniqueHash, pBinaryCache, pFeedback, pShaderModule);
-
-    VkShaderModuleCreateFlags internalFlags = internalShaderFlags;
+        flags, internalShaderFlags, compilerMask, uniqueHash, pBinaryCache, pFeedback, pShaderModule);
 
     if (result != VK_SUCCESS)
     {
@@ -631,26 +630,22 @@ VkResult PipelineCompiler::BuildShaderModule(
             result = m_compilerSolutionLlpc.BuildShaderModule(
                 pDevice,
                 flags,
-                internalFlags,
+                internalShaderFlags,
                 finalData,
                 adaptForFastLink,
                 isInternal,
                 pShaderModule,
                 PipelineOptimizerKey{});
+
         }
 
-        {
-            StoreShaderModuleToCache(pDevice, flags, compilerMask, uniqueHash, pBinaryCache, pShaderModule);
-        }
+        StoreShaderModuleToCache(flags, internalShaderFlags, compilerMask, uniqueHash, pBinaryCache, pShaderModule);
     }
     else
     {
-        if (result == VK_SUCCESS)
+        if (pSettings->enablePipelineDump)
         {
-            if (pSettings->enablePipelineDump)
-            {
-                Vkgc::IPipelineDumper::DumpSpirvBinary(pSettings->pipelineDumpDir, &finalData);
-            }
+            Vkgc::IPipelineDumper::DumpSpirvBinary(pSettings->pipelineDumpDir, &finalData);
         }
     }
 
@@ -1036,7 +1031,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     uint32_t                          deviceIdx,
     PipelineCache*                    pPipelineCache,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-    const PipelineCreateFlags         flags,
+    const VkPipelineCreateFlags2KHR   flags,
     Vkgc::BinaryData*                 pPipelineBinary,
     Util::MetroHash::Hash*            pCacheId)
 {
@@ -1713,6 +1708,7 @@ static void CopyPipelineShadersInfo(
                 (libInfo.pBinaryMetadata->pFsOutputMetaData != nullptr));
         pCreateInfo->pBinaryMetadata->postDepthCoverageEnable = libInfo.pBinaryMetadata->postDepthCoverageEnable;
         pCreateInfo->pBinaryMetadata->psOnlyPointCoordEnable  = libInfo.pBinaryMetadata->psOnlyPointCoordEnable;
+        pCreateInfo->pBinaryMetadata->dualSrcBlendingUsed     = libInfo.pBinaryMetadata->dualSrcBlendingUsed;
     }
 
     Vkgc::PipelineShaderInfo* pShaderInfosDst[] =
@@ -2531,6 +2527,7 @@ static void BuildVertexInputInterfaceState(
 static void BuildPreRasterizationShaderState(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
+    const GraphicsPipelineLibraryInfo&     libInfo,
     const GraphicsPipelineShaderStageInfo* pShaderInfo,
     const uint64_t                         dynamicStateFlags,
     const VkShaderStageFlagBits            activeStages,
@@ -2538,10 +2535,16 @@ static void BuildPreRasterizationShaderState(
 {
     const RenderPass* pRenderPass                  = RenderPass::ObjectFromHandle(pIn->renderPass);
     bool              isConservativeOverestimation = false;
+    bool              vertexInputAbsent =
+        libInfo.flags.isLibrary &&
+        (libInfo.pVertexInputInterfaceLib == nullptr) &&
+        ((libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) == 0);
+
     bool              unrestrictedPrimitiveTopology =
         pDevice->GetEnabledFeatures().assumeDynamicTopologyInLibs ||
         (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::PrimitiveTopology) &&
-        pDevice->GetEnabledFeatures().dynamicPrimitiveTopologyUnrestricted);
+        pDevice->GetEnabledFeatures().dynamicPrimitiveTopologyUnrestricted) ||
+        (vertexInputAbsent && pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink);
 
     BuildRasterizationState(pIn->pRasterizationState, dynamicStateFlags, &isConservativeOverestimation, pCreateInfo);
 
@@ -2651,7 +2654,7 @@ static void BuildFragmentOutputInterfaceState(
 static void BuildExecutablePipelineState(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
-    PipelineCreateFlags                    flags,
+    VkPipelineCreateFlags2KHR              flags,
     const GraphicsPipelineShaderStageInfo* pShaderInfo,
     const GraphicsPipelineLibraryInfo*     pLibInfo,
     const PipelineLayout*                  pPipelineLayout,
@@ -2745,7 +2748,7 @@ static void BuildExecutablePipelineState(
 VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     const Device*                                   pDevice,
     const VkGraphicsPipelineCreateInfo*             pIn,
-    PipelineCreateFlags                             flags,
+    VkPipelineCreateFlags2KHR                       flags,
     const GraphicsPipelineShaderStageInfo*          pShaderInfo,
     const PipelineLayout*                           pPipelineLayout,
     PipelineOptimizerKey*                           pPipelineProfileKey,
@@ -2756,37 +2759,45 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     VkResult result = VK_SUCCESS;
 
-    pCreateInfo->pBinaryMetadata = pBinaryMetadata;
-    pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
-
     GraphicsPipelineLibraryInfo libInfo;
-    GraphicsPipelineCommon::ExtractLibraryInfo(pIn, flags, &libInfo);
-
-    pCreateInfo->libFlags = libInfo.libFlags;
-
-    pCreateInfo->libFlags |= (libInfo.pVertexInputInterfaceLib == nullptr) ?
-                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT;
-    pCreateInfo->libFlags |= (libInfo.pPreRasterizationShaderLib == nullptr) ?
-                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT;
-    pCreateInfo->libFlags |= (libInfo.pFragmentShaderLib == nullptr) ?
-                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT;
-    pCreateInfo->libFlags |= (libInfo.pFragmentOutputInterfaceLib == nullptr) ?
-                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
-
-    uint32_t libFlags = libInfo.libFlags;
-
-    VkShaderStageFlagBits activeStages = GraphicsPipelineCommon::GetActiveShaderStages(pIn, &libInfo);
-    uint64_t dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
-
-    libInfo.libFlags = libFlags;
-    pCreateInfo->flags = pIn->flags;
-    pDevice->GetCompiler(DefaultDeviceIndex)->ApplyPipelineOptions(pDevice,
-                                                                   pIn->flags,
-                                                                   &pCreateInfo->pipelineInfo.options
-    );
 
     if (result == VK_SUCCESS)
     {
+        pCreateInfo->pBinaryMetadata = pBinaryMetadata;
+        pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
+
+        GraphicsPipelineCommon::ExtractLibraryInfo(pIn, flags, &libInfo);
+
+        pCreateInfo->libFlags = libInfo.libFlags;
+
+        pCreateInfo->libFlags |= (libInfo.pVertexInputInterfaceLib == nullptr) ?
+                                 0 : VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT;
+        pCreateInfo->libFlags |= (libInfo.pPreRasterizationShaderLib == nullptr) ?
+                                 0 : VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT;
+        pCreateInfo->libFlags |= (libInfo.pFragmentShaderLib == nullptr) ?
+                                 0 : VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT;
+        pCreateInfo->libFlags |= (libInfo.pFragmentOutputInterfaceLib == nullptr) ?
+                                 0 : VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
+
+        uint32_t libFlags = libInfo.libFlags;
+
+        libInfo.libFlags = libFlags;
+        pCreateInfo->flags = pIn->flags;
+        pDevice->GetCompiler(DefaultDeviceIndex)->ApplyPipelineOptions(pDevice,
+                                                                       pIn->flags,
+                                                                       &pCreateInfo->pipelineInfo.options
+        );
+
+    }
+
+    uint64_t dynamicStateFlags = 0;
+
+    if (result == VK_SUCCESS)
+    {
+        VkShaderStageFlagBits activeStages = GraphicsPipelineCommon::GetActiveShaderStages(pIn, &libInfo);
+
+        dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
+
         if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)
         {
             BuildVertexInputInterfaceState(pDevice, pIn, dynamicStateFlags, activeStages, pCreateInfo);
@@ -2798,7 +2809,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
         if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT)
         {
-            BuildPreRasterizationShaderState(pDevice, pIn, pShaderInfo, dynamicStateFlags, activeStages, pCreateInfo);
+            BuildPreRasterizationShaderState(
+                pDevice, pIn, libInfo, pShaderInfo, dynamicStateFlags, activeStages, pCreateInfo);
         }
         else if (libInfo.pPreRasterizationShaderLib != nullptr)
         {
@@ -2902,7 +2914,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 VkResult PipelineCompiler::BuildGplFastLinkCreateInfo(
     const Device*                                   pDevice,
     const VkGraphicsPipelineCreateInfo*             pIn,
-    PipelineCreateFlags                             flags,
+    VkPipelineCreateFlags2KHR                       flags,
     const GraphicsPipelineLibraryInfo&              libInfo,
     const PipelineLayout*                           pPipelineLayout,
     PipelineMetadata*                               pBinaryMetadata,
@@ -3037,9 +3049,9 @@ uint32_t PipelineCompiler::GetCompilerCollectionMask()
 
 // =====================================================================================================================
 void PipelineCompiler::ApplyPipelineOptions(
-    const Device*            pDevice,
-    VkPipelineCreateFlags    flags,
-    Vkgc::PipelineOptions*   pOptions
+    const Device*             pDevice,
+    VkPipelineCreateFlags2KHR flags,
+    Vkgc::PipelineOptions*    pOptions
 )
 {
     if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO) ||
@@ -3107,6 +3119,10 @@ void PipelineCompiler::ApplyPipelineOptions(
     {
         pOptions->extendedRobustness.nullDescriptor = true;
     }
+    if (pDevice->GetEnabledFeatures().primitivesGeneratedQuery)
+    {
+        pOptions->enablePrimGeneratedQuery = true;
+    }
 }
 
 // =====================================================================================================================
@@ -3118,104 +3134,108 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     const PipelineOptimizerKey*                     pPipelineProfileKey,
     PipelineMetadata*                               pBinaryMetadata,
     ComputePipelineBinaryCreateInfo*                pCreateInfo,
-    PipelineCreateFlags                             flags)
+    VkPipelineCreateFlags2KHR                       flags)
 {
     VkResult result    = VK_SUCCESS;
+    auto     pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
-    auto pInstance            = m_pPhysicalDevice->Manager()->VkInstance();
-
-    PipelineLayout* pLayout = nullptr;
-
-    VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO);
-
-    if (pIn->layout != VK_NULL_HANDLE)
+    if (result == VK_SUCCESS)
     {
-        pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
-    }
+        PipelineLayout* pLayout = nullptr;
 
-    pCreateInfo->pBinaryMetadata     = pBinaryMetadata;
-    pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
-    pCreateInfo->flags               = flags;
-
-    ApplyPipelineOptions(pDevice,
-                         flags,
-                         &pCreateInfo->pipelineInfo.options
-    );
-
-    pCreateInfo->pipelineInfo.cs.pModuleData =
-        ShaderModule::GetFirstValidShaderData(pShaderInfo->stage.pModuleHandle);
-
-    pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pShaderInfo->stage.pSpecializationInfo;
-    pCreateInfo->pipelineInfo.cs.pEntryTarget        = pShaderInfo->stage.pEntryPoint;
-    pCreateInfo->pipelineInfo.cs.entryStage          = Vkgc::ShaderStageCompute;
-
-    if (pShaderInfo->stage.waveSize != 0)
-    {
-        pCreateInfo->pipelineInfo.cs.options.waveSize          = pShaderInfo->stage.waveSize;
-        pCreateInfo->pipelineInfo.cs.options.allowVaryWaveSize = true;
-    }
-
-    if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
-    {
-
-        size_t genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
-
-        size_t tempBufferSize    = genericMappingBufferSize + pCreateInfo->mappingBufferSize;
-        pCreateInfo->pTempBuffer = pInstance->AllocMem(tempBufferSize,
-                                                       VK_DEFAULT_MEM_ALIGN,
-                                                       VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-
-        if (pCreateInfo->pTempBuffer == nullptr)
+        if (pIn->layout != VK_NULL_HANDLE)
         {
-            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
         }
-        else
-        {
-            pCreateInfo->pipelineInfo.pipelineLayoutApiHash = pLayout->GetApiHash();
 
-            pCreateInfo->pMappingBuffer = Util::VoidPtrInc(pCreateInfo->pTempBuffer, genericMappingBufferSize);
+        pCreateInfo->pBinaryMetadata     = pBinaryMetadata;
+        pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
+        pCreateInfo->flags               = flags;
 
-            // NOTE: Zero the allocated space that is used to create pipeline resource mappings. Some
-            // fields of resource mapping nodes are unused for certain node types. We must initialize
-            // them to zeroes.
-            memset(pCreateInfo->pTempBuffer, 0, tempBufferSize);
+        ApplyPipelineOptions(pDevice,
+                             flags,
+                             &pCreateInfo->pipelineInfo.options
+        );
 
-            // Build the LLPC resource mapping description. This data contains things about how shader
-            // inputs like descriptor set bindings are communicated to this pipeline in a form that
-            // LLPC can understand.
-            result = pLayout->BuildLlpcPipelineMapping(Vkgc::ShaderStageComputeBit,
-                                                       nullptr,
-                                                       false,
-#if VKI_RAY_TRACING
-                                                       false,
-#endif
-                                                       pCreateInfo->pTempBuffer,
-                                                       &pCreateInfo->pipelineInfo.resourceMapping,
-                                                       &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
-        }
-    }
-
-    pCreateInfo->compilerType                   = CheckCompilerType(&pCreateInfo->pipelineInfo);
-
-    if (pShaderInfo->stage.pModuleHandle != nullptr)
-    {
         pCreateInfo->pipelineInfo.cs.pModuleData =
-            ShaderModule::GetShaderData(pCreateInfo->compilerType, pShaderInfo->stage.pModuleHandle);
+            ShaderModule::GetFirstValidShaderData(pShaderInfo->stage.pModuleHandle);
+
+        pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pShaderInfo->stage.pSpecializationInfo;
+        pCreateInfo->pipelineInfo.cs.pEntryTarget        = pShaderInfo->stage.pEntryPoint;
+        pCreateInfo->pipelineInfo.cs.entryStage          = Vkgc::ShaderStageCompute;
+
+        if (pShaderInfo->stage.waveSize != 0)
+        {
+            pCreateInfo->pipelineInfo.cs.options.waveSize          = pShaderInfo->stage.waveSize;
+            pCreateInfo->pipelineInfo.cs.options.allowVaryWaveSize = true;
+        }
+
+        if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
+        {
+
+            size_t genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
+
+            size_t tempBufferSize    = genericMappingBufferSize + pCreateInfo->mappingBufferSize;
+            pCreateInfo->pTempBuffer = pInstance->AllocMem(tempBufferSize,
+                                                           VK_DEFAULT_MEM_ALIGN,
+                                                           VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+            if (pCreateInfo->pTempBuffer == nullptr)
+            {
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+            else
+            {
+                pCreateInfo->pipelineInfo.pipelineLayoutApiHash = pLayout->GetApiHash();
+
+                pCreateInfo->pMappingBuffer = Util::VoidPtrInc(pCreateInfo->pTempBuffer, genericMappingBufferSize);
+
+                // NOTE: Zero the allocated space that is used to create pipeline resource mappings. Some
+                // fields of resource mapping nodes are unused for certain node types. We must initialize
+                // them to zeroes.
+                memset(pCreateInfo->pTempBuffer, 0, tempBufferSize);
+
+                // Build the LLPC resource mapping description. This data contains things about how shader
+                // inputs like descriptor set bindings are communicated to this pipeline in a form that
+                // LLPC can understand.
+                result = pLayout->BuildLlpcPipelineMapping(Vkgc::ShaderStageComputeBit,
+                                                           nullptr,
+                                                           false,
+#if VKI_RAY_TRACING
+                                                           false,
+#endif
+                                                           pCreateInfo->pTempBuffer,
+                                                           &pCreateInfo->pipelineInfo.resourceMapping,
+                                                           &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
+            }
+        }
     }
 
-#if VKI_RAY_TRACING
-    auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
-#endif
-#if VKI_RAY_TRACING
-    const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>
-        (pCreateInfo->pipelineInfo.cs.pModuleData);
-
-    if ((pModuleData != nullptr) &&
-         pModuleData->usage.enableRayQuery)
+    if (result == VK_SUCCESS)
     {
-        SetRayTracingState(pDevice, &(pCreateInfo->pipelineInfo.rtState), 0);
-    }
+        pCreateInfo->compilerType                   = CheckCompilerType(&pCreateInfo->pipelineInfo);
+
+        if (pShaderInfo->stage.pModuleHandle != nullptr)
+        {
+            pCreateInfo->pipelineInfo.cs.pModuleData =
+                ShaderModule::GetShaderData(pCreateInfo->compilerType, pShaderInfo->stage.pModuleHandle);
+        }
+
+#if VKI_RAY_TRACING
+        auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
 #endif
+#if VKI_RAY_TRACING
+        const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>
+            (pCreateInfo->pipelineInfo.cs.pModuleData);
+
+        if ((pModuleData != nullptr) &&
+             pModuleData->usage.enableRayQuery)
+        {
+            SetRayTracingState(pDevice, &(pCreateInfo->pipelineInfo.rtState), 0);
+        }
+#endif
+
+    }
 
     if (result == VK_SUCCESS)
     {
@@ -3369,306 +3389,306 @@ void PipelineCompiler::FreeGraphicsPipelineCreateInfo(
 VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
     const Device*                                   pDevice,
     const VkRayTracingPipelineCreateInfoKHR*        pIn,
-    PipelineCreateFlags                             flags,
+    VkPipelineCreateFlags2KHR                       flags,
     const RayTracingPipelineShaderStageInfo*        pShaderInfo,
     const PipelineOptimizerKey*                     pPipelineProfileKey,
     RayTracingPipelineBinaryCreateInfo*             pCreateInfo)
 {
-    VkResult result = VK_SUCCESS;
+    VkResult result    = VK_SUCCESS;
     auto     pInstance = m_pPhysicalDevice->Manager()->VkInstance();
-    auto&    settings = m_pPhysicalDevice->GetRuntimeSettings();
-
-    PipelineLayout* pLayout = nullptr;
-
-    VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR);
-
-    if (pIn->layout != VK_NULL_HANDLE)
-    {
-        pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
-    }
-
-    pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
-    pCreateInfo->flags               = flags;
-
-    bool hasLibraries  = ((pIn->pLibraryInfo != nullptr) && (pIn->pLibraryInfo->libraryCount > 0)) &&
-                         settings.rtEnableCompilePipelineLibrary;
-    bool isLibrary     = Util::TestAnyFlagSet(pIn->flags, VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) &&
-                         settings.rtEnableCompilePipelineLibrary;
-    bool hasProcedural = false;
-
-    bool isReplay      = ((pIn->groupCount > 0) && (pIn->pGroups[0].pShaderGroupCaptureReplayHandle != nullptr));
-
-    if (hasLibraries)
-    {
-        VkShaderStageFlags libraryStageMask = 0;
-
-        // Visit the library shader groups
-        for (uint32_t libraryIdx = 0; libraryIdx < pIn->pLibraryInfo->libraryCount; ++libraryIdx)
-        {
-            VkPipeline             libraryHandle     = pIn->pLibraryInfo->pLibraries[libraryIdx];
-            RayTracingPipeline*    pLibrary          = RayTracingPipeline::ObjectFromHandle(libraryHandle);
-            const ShaderGroupInfo* pShaderGroupInfos = pLibrary->GetShaderGroupInfos();
-
-            if (pLibrary->CheckHasTraceRay())
-            {
-                libraryStageMask |= VK_SHADER_STAGE_COMPUTE_BIT;
-            }
-
-            for (uint32_t groupIdx = 0; groupIdx < pLibrary->GetShaderGroupCount(); groupIdx++)
-            {
-                libraryStageMask |= pShaderGroupInfos[groupIdx].stages;
-
-                if (pShaderGroupInfos[groupIdx].type ==
-                    VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR)
-                {
-                    hasProcedural = true;
-                }
-            }
-        }
-
-        pCreateInfo->pipelineInfo.pipelineLibStageMask = VkToVkgcShaderStageMask(libraryStageMask);
-    }
-
-    // Implicitly include the SKIP_AABBS pipeline flag if there are no procedural
-    // shader groups. This should be common for triangle-only setups and will
-    // simplify the traversal routine. Note this guarantee cannot be made for
-    // pipeline libraries
-    if (settings.rtAutoSkipAabbIntersections && (isLibrary == false))
-    {
-        for (uint32_t groupIdx = 0; groupIdx < pIn->groupCount; groupIdx++)
-        {
-            if (pIn->pGroups[groupIdx].type ==
-                VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR)
-            {
-                hasProcedural = true;
-
-                break;
-            }
-        }
-
-        if (hasProcedural == false)
-        {
-            pCreateInfo->flags |= VK_PIPELINE_CREATE_RAY_TRACING_SKIP_AABBS_BIT_KHR;
-        }
-    }
-
-    ApplyPipelineOptions(pDevice, flags, &pCreateInfo->pipelineInfo.options
-    );
-
-    pCreateInfo->pipelineInfo.options.disableImageResourceCheck = settings.disableRayTracingImageResourceTypeCheck;
-
-    pCreateInfo->pipelineInfo.maxRecursionDepth = pIn->maxPipelineRayRecursionDepth;
-    pCreateInfo->pipelineInfo.indirectStageMask = settings.rtIndirectStageMask;
-    static_assert(RaytracingNone == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::None));
-    static_assert(RaytracingLegacy == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Legacy));
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 69
-    static_assert(RaytracingContinufy == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Gpurt2));
-#else
-    static_assert(RaytracingContinufy == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Continufy));
-#endif
-    static_assert(RaytracingContinuations == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Continuations));
-    pCreateInfo->pipelineInfo.mode = static_cast<Vkgc::LlpcRaytracingMode>(settings.llpcRaytracingMode);
-
-    pCreateInfo->pipelineInfo.isReplay = isReplay;
-
-    // pLibraryInterface must be populated (per spec) if the pipeline is a library or has libraries
-    VK_ASSERT((pIn->pLibraryInterface != nullptr) || ((isLibrary || hasLibraries) == false));
-
-    if (isLibrary || hasLibraries)
-    {
-        // When pipeline libraries are involved maxPayloadSize and maxAttributeSize are read from
-        pCreateInfo->pipelineInfo.payloadSizeMaxInLib   = pIn->pLibraryInterface->maxPipelineRayPayloadSize;
-        pCreateInfo->pipelineInfo.attributeSizeMaxInLib = pIn->pLibraryInterface->maxPipelineRayHitAttributeSize;
-    }
-
-    if (hasLibraries)
-    {
-        // pipeline library, or pipeline that contains pipeline library(s)
-        pCreateInfo->pipelineInfo.hasPipelineLibrary = true;
-    }
-    else
-    {
-        pCreateInfo->pipelineInfo.hasPipelineLibrary = false;
-    }
-
-    size_t pipelineInfoBufferSize = pShaderInfo->stageCount * sizeof(Vkgc::PipelineShaderInfo);
-    size_t tempBufferSize         = pipelineInfoBufferSize;
-
-    size_t genericMappingBufferSize = 0;
-    if (pLayout != nullptr)
-    {
-        genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
-
-        tempBufferSize += genericMappingBufferSize + pCreateInfo->mappingBufferSize;
-    }
-
-    // We can't have a pipeline with 0 shader stages
-    VK_ASSERT(tempBufferSize > 0);
-
-    pCreateInfo->pTempBuffer = pInstance->AllocMem(tempBufferSize,
-                                                   VK_DEFAULT_MEM_ALIGN,
-                                                   VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-
-    size_t tempBufferOffset = 0;
-
-    if (pCreateInfo->pTempBuffer == nullptr)
-    {
-        result = VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-    else
-    {
-        // NOTE: Zero the allocated space that is used to create pipeline resource mappings. Some
-        // fields of resource mapping nodes are unused for certain node types. We must initialize
-        // them to zeroes.
-        memset(pCreateInfo->pTempBuffer, 0, tempBufferSize);
-
-        if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
-        {
-            pCreateInfo->pipelineInfo.pipelineLayoutApiHash = pLayout->GetApiHash();
-
-            pCreateInfo->pMappingBuffer = pCreateInfo->pTempBuffer;
-            tempBufferOffset           += pCreateInfo->mappingBufferSize;
-
-            constexpr uint32_t RayTracingStageMask = Vkgc::ShaderStageRayTracingRayGenBit |
-                                                     Vkgc::ShaderStageRayTracingIntersectBit |
-                                                     Vkgc::ShaderStageRayTracingAnyHitBit |
-                                                     Vkgc::ShaderStageRayTracingClosestHitBit |
-                                                     Vkgc::ShaderStageRayTracingMissBit |
-                                                     Vkgc::ShaderStageRayTracingCallableBit;
-
-            // Build the LLPC resource mapping description. This data contains things about how shader
-            // inputs like descriptor set bindings are communicated to this pipeline in a form that
-            // LLPC can understand.
-            result = pLayout->BuildLlpcPipelineMapping(RayTracingStageMask,
-                                                       nullptr,
-                                                       false,
-#if VKI_RAY_TRACING
-                                                       isReplay,
-#endif
-                                                       Util::VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferOffset),
-                                                       &pCreateInfo->pipelineInfo.resourceMapping,
-                                                       &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
-
-            tempBufferOffset += genericMappingBufferSize;
-        }
-    }
+    auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
 
     if (result == VK_SUCCESS)
     {
-        pCreateInfo->pipelineInfo.shaderCount = pShaderInfo->stageCount;
-        pCreateInfo->pipelineInfo.pShaderGroups = pIn->pGroups;
-        pCreateInfo->pipelineInfo.shaderGroupCount = pIn->groupCount;
-        pCreateInfo->pipelineInfo.pShaders = static_cast<Vkgc::PipelineShaderInfo*>(
-            Util::VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferOffset));
-        tempBufferOffset += pipelineInfoBufferSize;
+        PipelineLayout* pLayout = nullptr;
 
-        uint32_t nonRayGenCount = 0;
-        bool shaderCanInline = (settings.rtCompileMode != RtCompileMode::RtCompileModeIndirect);
-
-        for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
+        if (pIn->layout != VK_NULL_HANDLE)
         {
-            pCreateInfo->pipelineInfo.pShaders[i].pModuleData =
-                ShaderModule::GetFirstValidShaderData(pShaderInfo->pStages[i].pModuleHandle);
-            pCreateInfo->pipelineInfo.pShaders[i].pSpecializationInfo =
-                pShaderInfo->pStages[i].pSpecializationInfo;
-            pCreateInfo->pipelineInfo.pShaders[i].pEntryTarget = pShaderInfo->pStages[i].pEntryPoint;
-            pCreateInfo->pipelineInfo.pShaders[i].entryStage = pShaderInfo->pStages[i].stage;
+            pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
+        }
 
-            if (pShaderInfo->pStages[i].stage != ShaderStage::ShaderStageRayTracingRayGen)
+        pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
+        pCreateInfo->flags               = flags;
+
+        bool hasLibraries  = ((pIn->pLibraryInfo != nullptr) && (pIn->pLibraryInfo->libraryCount > 0)) &&
+                             settings.rtEnableCompilePipelineLibrary;
+        bool isLibrary     = Util::TestAnyFlagSet(flags, VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) &&
+                             settings.rtEnableCompilePipelineLibrary;
+        bool hasProcedural = false;
+
+        bool isReplay      = ((pIn->groupCount > 0) && (pIn->pGroups[0].pShaderGroupCaptureReplayHandle != nullptr));
+
+        if (hasLibraries)
+        {
+            VkShaderStageFlags libraryStageMask = 0;
+
+            // Visit the library shader groups
+            for (uint32_t libraryIdx = 0; libraryIdx < pIn->pLibraryInfo->libraryCount; ++libraryIdx)
             {
-                ++nonRayGenCount;
+                VkPipeline             libraryHandle     = pIn->pLibraryInfo->pLibraries[libraryIdx];
+                RayTracingPipeline*    pLibrary          = RayTracingPipeline::ObjectFromHandle(libraryHandle);
+                const ShaderGroupInfo* pShaderGroupInfos = pLibrary->GetShaderGroupInfos();
+
+                if (pLibrary->CheckHasTraceRay())
+                {
+                    libraryStageMask |= VK_SHADER_STAGE_COMPUTE_BIT;
+                }
+
+                for (uint32_t groupIdx = 0; groupIdx < pLibrary->GetShaderGroupCount(); groupIdx++)
+                {
+                    libraryStageMask |= pShaderGroupInfos[groupIdx].stages;
+
+                    if (pShaderGroupInfos[groupIdx].type ==
+                        VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR)
+                    {
+                        hasProcedural = true;
+                    }
+                }
             }
 
-            if (shaderCanInline && (settings.shaderInlineFlags != ShaderInlineFlags::InlineAll))
+            pCreateInfo->pipelineInfo.pipelineLibStageMask = VkToVkgcShaderStageMask(libraryStageMask);
+        }
+
+        // Implicitly include the SKIP_AABBS pipeline flag if there are no procedural
+        // shader groups. This should be common for triangle-only setups and will
+        // simplify the traversal routine. Note this guarantee cannot be made for
+        // pipeline libraries
+        if (settings.rtAutoSkipAabbIntersections && (isLibrary == false))
+        {
+            for (uint32_t groupIdx = 0; groupIdx < pIn->groupCount; groupIdx++)
             {
-                switch (pShaderInfo->pStages[i].stage)
+                if (pIn->pGroups[groupIdx].type ==
+                    VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR)
                 {
-                case ShaderStage::ShaderStageRayTracingRayGen:
-                    // Raygen can always be inlined.
-                    break;
-                case ShaderStage::ShaderStageRayTracingMiss:
-                    shaderCanInline =
-                        Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineMissShader);
-                    break;
-                case ShaderStage::ShaderStageRayTracingClosestHit:
-                    shaderCanInline =
-                        Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineClosestHitShader);
-                    break;
-                case ShaderStage::ShaderStageRayTracingAnyHit:
-                    shaderCanInline =
-                        Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineAnyHitShader);
-                    break;
-                case ShaderStage::ShaderStageRayTracingIntersect:
-                    shaderCanInline =
-                        Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineIntersectionShader);
-                    break;
-                case ShaderStage::ShaderStageRayTracingCallable:
-                    shaderCanInline =
-                        Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineCallableShader);
-                    break;
-                default:
-                    VK_NEVER_CALLED();
+                    hasProcedural = true;
+
                     break;
                 }
             }
+
+            if (hasProcedural == false)
+            {
+                pCreateInfo->flags |= VK_PIPELINE_CREATE_RAY_TRACING_SKIP_AABBS_BIT_KHR;
+            }
         }
 
-        const uint32_t raygenCount = pShaderInfo->stageCount - nonRayGenCount;
+        ApplyPipelineOptions(pDevice, flags, &pCreateInfo->pipelineInfo.options
+        );
 
-        pCreateInfo->allowShaderInlining = (shaderCanInline &&
-            (nonRayGenCount <= settings.maxUnifiedNonRayGenShaders) &&
-            (raygenCount <= settings.maxUnifiedRayGenShaders));
-        // if it is a pipeline library, or a main pipeline which would link to a library,
-        // force indirect path by set pCreateInfo->allowShaderInlining = false
+        pCreateInfo->pipelineInfo.options.disableImageResourceCheck = settings.disableRayTracingImageResourceTypeCheck;
+
+        pCreateInfo->pipelineInfo.maxRecursionDepth = pIn->maxPipelineRayRecursionDepth;
+        pCreateInfo->pipelineInfo.indirectStageMask = settings.rtIndirectStageMask;
+        static_assert(RaytracingNone == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::None));
+        static_assert(RaytracingLegacy == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Legacy));
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 69
+        static_assert(RaytracingContinufy == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Gpurt2));
+#else
+        static_assert(RaytracingContinufy == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Continufy));
+#endif
+        static_assert(RaytracingContinuations == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Continuations));
+        pCreateInfo->pipelineInfo.mode = static_cast<Vkgc::LlpcRaytracingMode>(settings.llpcRaytracingMode);
+
+        pCreateInfo->pipelineInfo.isReplay = isReplay;
+
+        // pLibraryInterface must be populated (per spec) if the pipeline is a library or has libraries
+        VK_ASSERT((pIn->pLibraryInterface != nullptr) || ((isLibrary || hasLibraries) == false));
+
         if (isLibrary || hasLibraries)
         {
-            pCreateInfo->allowShaderInlining = false;
+            // When pipeline libraries are involved maxPayloadSize and maxAttributeSize are read from
+            pCreateInfo->pipelineInfo.payloadSizeMaxInLib   = pIn->pLibraryInterface->maxPipelineRayPayloadSize;
+            pCreateInfo->pipelineInfo.attributeSizeMaxInLib = pIn->pLibraryInterface->maxPipelineRayHitAttributeSize;
         }
 
+        if (hasLibraries)
         {
-            pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
+            // pipeline library, or pipeline that contains pipeline library(s)
+            pCreateInfo->pipelineInfo.hasPipelineLibrary = true;
+        }
+        else
+        {
+            pCreateInfo->pipelineInfo.hasPipelineLibrary = false;
         }
 
-        for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
+        size_t pipelineInfoBufferSize = pShaderInfo->stageCount * sizeof(Vkgc::PipelineShaderInfo);
+        size_t tempBufferSize         = pipelineInfoBufferSize;
+
+        size_t genericMappingBufferSize = 0;
+        if (pLayout != nullptr)
         {
-            ApplyDefaultShaderOptions(pShaderInfo->pStages[i].stage,
-                pShaderInfo->pStages[i].flags,
-                &pCreateInfo->pipelineInfo.pShaders[i].options);
+            genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
+
+            tempBufferSize += genericMappingBufferSize + pCreateInfo->mappingBufferSize;
         }
 
-        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
+        // We can't have a pipeline with 0 shader stages
+        VK_ASSERT(tempBufferSize > 0);
+
+        pCreateInfo->pTempBuffer = pInstance->AllocMem(tempBufferSize,
+                                                       VK_DEFAULT_MEM_ALIGN,
+                                                       VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+        size_t tempBufferOffset = 0;
+
+        if (pCreateInfo->pTempBuffer == nullptr)
         {
-            // TODO: move it to llpc
-            if (pCreateInfo->allowShaderInlining)
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        else
+        {
+            // NOTE: Zero the allocated space that is used to create pipeline resource mappings. Some
+            // fields of resource mapping nodes are unused for certain node types. We must initialize
+            // them to zeroes.
+            memset(pCreateInfo->pTempBuffer, 0, tempBufferSize);
+
+            if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
             {
-                pCreateInfo->pipelineInfo.indirectStageMask = 0;
-            }
+                pCreateInfo->pipelineInfo.pipelineLayoutApiHash = pLayout->GetApiHash();
 
-            uint32_t vgprLimit =
-                m_compilerSolutionLlpc.GetRayTracingVgprLimit(pCreateInfo->pipelineInfo.indirectStageMask != 0);
+                pCreateInfo->pMappingBuffer = pCreateInfo->pTempBuffer;
+                tempBufferOffset           += pCreateInfo->mappingBufferSize;
+
+                constexpr uint32_t RayTracingStageMask = Vkgc::ShaderStageRayTracingRayGenBit |
+                                                         Vkgc::ShaderStageRayTracingIntersectBit |
+                                                         Vkgc::ShaderStageRayTracingAnyHitBit |
+                                                         Vkgc::ShaderStageRayTracingClosestHitBit |
+                                                         Vkgc::ShaderStageRayTracingMissBit |
+                                                         Vkgc::ShaderStageRayTracingCallableBit;
+
+                // Build the LLPC resource mapping description. This data contains things about how shader
+                // inputs like descriptor set bindings are communicated to this pipeline in a form that
+                // LLPC can understand.
+                result = pLayout->BuildLlpcPipelineMapping(RayTracingStageMask,
+                                                           nullptr,
+                                                           false,
+#if VKI_RAY_TRACING
+                                                           isReplay,
+#endif
+                                                           Util::VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferOffset),
+                                                           &pCreateInfo->pipelineInfo.resourceMapping,
+                                                           &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
+
+                tempBufferOffset += genericMappingBufferSize;
+            }
+        }
+
+        if (result == VK_SUCCESS)
+        {
+            pCreateInfo->pipelineInfo.shaderCount = pShaderInfo->stageCount;
+            pCreateInfo->pipelineInfo.pShaderGroups = pIn->pGroups;
+            pCreateInfo->pipelineInfo.shaderGroupCount = pIn->groupCount;
+            pCreateInfo->pipelineInfo.pShaders = static_cast<Vkgc::PipelineShaderInfo*>(
+                Util::VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferOffset));
+            tempBufferOffset += pipelineInfoBufferSize;
+
+            uint32_t nonRayGenCount = 0;
+            bool shaderCanInline = (settings.rtCompileMode != RtCompileMode::RtCompileModeIndirect);
 
             for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
             {
-                pCreateInfo->pipelineInfo.pShaders[i].options.vgprLimit = vgprLimit;
-            }
-        }
+                pCreateInfo->pipelineInfo.pShaders[i].pModuleData =
+                    ShaderModule::GetFirstValidShaderData(pShaderInfo->pStages[i].pModuleHandle);
+                pCreateInfo->pipelineInfo.pShaders[i].pSpecializationInfo =
+                    pShaderInfo->pStages[i].pSpecializationInfo;
+                pCreateInfo->pipelineInfo.pShaders[i].pEntryTarget = pShaderInfo->pStages[i].pEntryPoint;
+                pCreateInfo->pipelineInfo.pShaders[i].entryStage = pShaderInfo->pStages[i].stage;
 
-        {
+                if (pShaderInfo->pStages[i].stage != ShaderStage::ShaderStageRayTracingRayGen)
+                {
+                    ++nonRayGenCount;
+                }
+
+                if (shaderCanInline && (settings.shaderInlineFlags != ShaderInlineFlags::InlineAll))
+                {
+                    switch (pShaderInfo->pStages[i].stage)
+                    {
+                    case ShaderStage::ShaderStageRayTracingRayGen:
+                        // Raygen can always be inlined.
+                        break;
+                    case ShaderStage::ShaderStageRayTracingMiss:
+                        shaderCanInline =
+                            Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineMissShader);
+                        break;
+                    case ShaderStage::ShaderStageRayTracingClosestHit:
+                        shaderCanInline =
+                            Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineClosestHitShader);
+                        break;
+                    case ShaderStage::ShaderStageRayTracingAnyHit:
+                        shaderCanInline =
+                            Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineAnyHitShader);
+                        break;
+                    case ShaderStage::ShaderStageRayTracingIntersect:
+                        shaderCanInline =
+                            Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineIntersectionShader);
+                        break;
+                    case ShaderStage::ShaderStageRayTracingCallable:
+                        shaderCanInline =
+                            Util::TestAnyFlagSet(settings.shaderInlineFlags, ShaderInlineFlags::InlineCallableShader);
+                        break;
+                    default:
+                        VK_NEVER_CALLED();
+                        break;
+                    }
+                }
+            }
+
+            const uint32_t raygenCount = pShaderInfo->stageCount - nonRayGenCount;
+
+            pCreateInfo->allowShaderInlining = (shaderCanInline &&
+                (nonRayGenCount <= settings.maxUnifiedNonRayGenShaders) &&
+                (raygenCount <= settings.maxUnifiedRayGenShaders));
+            // if it is a pipeline library, or a main pipeline which would link to a library,
+            // force indirect path by set pCreateInfo->allowShaderInlining = false
+            if (isLibrary || hasLibraries)
+            {
+                pCreateInfo->allowShaderInlining = false;
+            }
+
+            {
+                pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
+            }
+
             for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
             {
-
-                ApplyProfileOptions(pDevice,
-                                    i,
-                                    &pCreateInfo->pipelineInfo.options,
-                                    &pCreateInfo->pipelineInfo.pShaders[i],
-                                    pPipelineProfileKey,
-                                    nullptr);
+                ApplyDefaultShaderOptions(pShaderInfo->pStages[i].stage,
+                    pShaderInfo->pStages[i].flags,
+                    &pCreateInfo->pipelineInfo.pShaders[i].options);
             }
 
+            if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
+            {
+                // TODO: move it to llpc
+                if (pCreateInfo->allowShaderInlining)
+                {
+                    pCreateInfo->pipelineInfo.indirectStageMask = 0;
+                }
+
+                uint32_t vgprLimit =
+                    m_compilerSolutionLlpc.GetRayTracingVgprLimit(pCreateInfo->pipelineInfo.indirectStageMask != 0);
+
+                for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
+                {
+                    pCreateInfo->pipelineInfo.pShaders[i].options.vgprLimit = vgprLimit;
+                }
+            }
+
+            {
+                for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
+                {
+
+                    ApplyProfileOptions(pDevice,
+                                        i,
+                                        &pCreateInfo->pipelineInfo.options,
+                                        &pCreateInfo->pipelineInfo.pShaders[i],
+                                        pPipelineProfileKey,
+                                        nullptr);
+                }
+
+            }
+
+            SetRayTracingState(pDevice, &pCreateInfo->pipelineInfo.rtState, pCreateInfo->flags);
         }
-
-        SetRayTracingState(pDevice, &pCreateInfo->pipelineInfo.rtState, pCreateInfo->flags);
-
     }
 
     return result;
@@ -3962,7 +3982,6 @@ void PipelineCompiler::SetRayTracingState(
 
     RayTracingPipeline::ConvertStaticPipelineFlags(pDevice,
                                                    &pRtState->staticPipelineFlags,
-                                                   &pRtState->triCompressMode,
                                                    &pRtState->counterMode,
                                                    pRtState->pipelineFlags
     );
@@ -4372,12 +4391,12 @@ Util::Result PipelineCompiler::RegisterAndLoadReinjectionBinary(
 #endif
 
 // =====================================================================================================================
-// Filter VkPipelineCreateFlags to only values used for pipeline caching
-static PipelineCreateFlags GetCacheIdControlFlags(
-    PipelineCreateFlags in)
+// Filter VkPipelineCreateFlags2KHR to only values used for pipeline caching
+static VkPipelineCreateFlags2KHR GetCacheIdControlFlags(
+    VkPipelineCreateFlags2KHR in)
 {
     // The following flags should NOT affect cache computation
-    static constexpr PipelineCreateFlags CacheIdIgnoreFlags = { 0
+    static constexpr VkPipelineCreateFlags2KHR CacheIdIgnoreFlags = { 0
         | VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR
         | VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR
         | VK_PIPELINE_CREATE_DERIVATIVE_BIT
@@ -4394,7 +4413,7 @@ static PipelineCreateFlags GetCacheIdControlFlags(
 // properties as well as options to avoid user error when changing performance tuning, compiler, or any other settings.
 static void GetCommonPipelineCacheId(
     uint32_t                         deviceIdx,
-    PipelineCreateFlags              flags,
+    VkPipelineCreateFlags2KHR        flags,
     const PipelineOptimizerKey*      pPipelineProfileKey,
     PipelineCompilerType             compilerType,
     uint64_t                         pipelineHash,
@@ -4486,6 +4505,7 @@ void PipelineCompiler::GetColorExportShaderCacheId(
 
     // Update hash based on fragment output state
     hash.Update(pCreateInfo->pipelineInfo.iaState.enableMultiView);
+    hash.Update(pCreateInfo->pBinaryMetadata->dualSrcBlendingUsed);
 
     const auto& cbState = pCreateInfo->pipelineInfo.cbState;
     hash.Update(cbState.alphaToCoverageEnable);
@@ -4772,7 +4792,8 @@ size_t PipelineCompiler::GetUberFetchShaderInternalDataSize(
         }
         VK_ASSERT(maxLocation < Vkgc::MaxVertexAttribs);
 
-        memSize = static_cast<uint32_t>(sizeof(Vkgc::UberFetchShaderAttribInfo) * (maxLocation + 1));
+        memSize =
+            static_cast<uint32_t>(sizeof(Vkgc::UberFetchShaderAttribInfo) * (maxLocation + 1)) + sizeof(uint64_t);
     }
 
     return memSize;
@@ -5070,4 +5091,22 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalData(
                                                dynamicStride,
                                                pUberFetchShaderInternalData);
 }
+
+// =====================================================================================================================
+// Template instantiation needed for references in other files.  Linux complains if we don't do this.
+
+template
+PipelineCompilerType PipelineCompiler::CheckCompilerType(
+    const Vkgc::ComputePipelineBuildInfo* pPipelineBuildInfo);
+
+template
+PipelineCompilerType PipelineCompiler::CheckCompilerType(
+    const Vkgc::GraphicsPipelineBuildInfo* pPipelineBuildInfo);
+
+#if VKI_RAY_TRACING
+template
+PipelineCompilerType PipelineCompiler::CheckCompilerType(
+    const Vkgc::RayTracingPipelineBuildInfo* pPipelineBuildInfo);
+#endif
+
 }

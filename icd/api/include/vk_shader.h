@@ -91,13 +91,14 @@ public:
     static void* GetFirstValidShaderData(const ShaderModuleHandle* pHandle);
 
 protected:
-    ShaderModule(size_t codeSize, const void* pCode);
-    VkResult Init(Device* pDevice, VkShaderModuleCreateFlags flags);
+    ShaderModule(size_t codeSize, const void* pCode, VkShaderModuleCreateFlags flags);
+    VkResult Init(Device* pDevice);
 
     size_t                     m_codeSize;
     const void*                m_pCode;
     ShaderModuleHandle         m_handle;
     Pal::ShaderHash            m_codeHash;
+    VkShaderModuleCreateFlags  m_flags;
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(ShaderModule);

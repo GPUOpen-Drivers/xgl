@@ -41,7 +41,7 @@ public:
         Device*                             pDevice,
         PipelineCache*                      pPipelineCache,
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
-        PipelineCreateFlags                 flags,
+        VkPipelineCreateFlags2KHR           flags,
         const VkAllocationCallbacks*        pAllocator,
         VkPipeline*                         pPipeline);
 

@@ -2469,8 +2469,10 @@ void DevModeMgr::PipelineCreated(
     {
         GpuUtil::RegisterPipelineInfo pipelineInfo = { 0 };
         pipelineInfo.apiPsoHash = pPipeline->GetApiHash();
-
-        m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex), pipelineInfo);
+        if (pPipeline->PalPipeline(DefaultDeviceIndex) != nullptr)
+        {
+            m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex), pipelineInfo);
+        }
     }
 }
 

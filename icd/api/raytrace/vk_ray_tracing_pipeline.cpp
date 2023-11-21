@@ -174,7 +174,7 @@ static void GenerateHashFromRayTracingPipelineInterfaceCreateInfo(
 //     - pCreateInfo->layout
 void RayTracingPipeline::BuildApiHash(
     const VkRayTracingPipelineCreateInfoKHR* pCreateInfo,
-    PipelineCreateFlags                      flags,
+    VkPipelineCreateFlags2KHR                flags,
     Util::MetroHash::Hash*                   pElfHash,
     uint64_t*                                pApiHash)
 {
@@ -411,7 +411,7 @@ VkResult RayTracingPipeline::Destroy(
 VkResult RayTracingPipeline::CreateImpl(
     PipelineCache*                           pPipelineCache,
     const VkRayTracingPipelineCreateInfoKHR* pCreateInfo,
-    PipelineCreateFlags                      flags,
+    VkPipelineCreateFlags2KHR                flags,
     const VkAllocationCallbacks*             pAllocator,
     DeferredWorkload*                        pDeferredWorkload)
 {
@@ -1031,7 +1031,7 @@ VkResult RayTracingPipeline::CreateImpl(
                                     {
                                         Pal::ShaderLibStats shaderStats = {};
                                         pShaderLibrary->GetShaderFunctionStats(
-                                            libFuncList.Data()[i].symbolName.Data(),
+                                            libFuncList.Data()[i].symbolName,
                                             &shaderStats);
                                         pShaderStackSize[libIdx] += shaderStats.cpsStackSizes.frontendSize;
                                         // NOTE: Backend stack size is determined across all shaders (functions), no
@@ -1044,7 +1044,7 @@ VkResult RayTracingPipeline::CreateImpl(
                                 {
                                     Pal::ShaderLibStats shaderStats = {};
                                     pShaderLibrary->GetShaderFunctionStats(
-                                        pIndirectFuncInfo[libIdx].symbolName.Data(),
+                                        pIndirectFuncInfo[libIdx].symbolName,
                                         &shaderStats);
                                     pShaderStackSize[libIdx] = shaderStats.stackFrameSizeInBytes;
                                 }
@@ -1500,7 +1500,7 @@ static int32_t DeferredCreateRayTracingPipelineCallback(
         {
             VkResult                                 localResult = VK_SUCCESS;
             const VkRayTracingPipelineCreateInfoKHR* pCreateInfo = &pState->pInfos[index];
-            PipelineCreateFlags                      flags       =
+            VkPipelineCreateFlags2KHR                flags       =
                 Device::GetPipelineCreateFlags(pCreateInfo);
 
             if (pState->skipRemaining == VK_FALSE)
@@ -1682,7 +1682,7 @@ VkResult RayTracingPipeline::Create(
         {
             VkResult                                 localResult = VK_SUCCESS;
             const VkRayTracingPipelineCreateInfoKHR* pCreateInfo = &pCreateInfos[i];
-            PipelineCreateFlags                      flags       =
+            VkPipelineCreateFlags2KHR                flags       =
                 Device::GetPipelineCreateFlags(pCreateInfo);
 
             pObjMem = pDevice->AllocApiObject(
@@ -1834,7 +1834,9 @@ bool RayTracingPipeline::MapShaderIdToShaderHandle(
             if (pShaderProp[i].shaderId == *pShaderId)
             {
                 auto pIndirectFunc = &pIndirectFuncList[pShaderNameMap[i]];
-                VK_ASSERT(pIndirectFunc->symbolName.Data() == &pShaderProp[i].name[0]);
+                VK_ASSERT(strncmp(pIndirectFunc->symbolName.Data(),
+                                  &pShaderProp[i].name[0],
+                                  pIndirectFunc->symbolName.Length()) == 0);
                 uint64_t gpuVirtAddr = pIndirectFunc->gpuVirtAddr;
                 if (pShaderProp[i].onlyGpuVaLo)
                 {
@@ -1988,7 +1990,6 @@ void RayTracingPipeline::UpdatePipelineImplCreateInfo(
 void RayTracingPipeline::ConvertStaticPipelineFlags(
     const Device* pDevice,
     uint32_t*     pStaticFlags,
-    uint32_t*     pTriangleCompressMode,
     uint32_t*     pCounterMode,
     uint32_t      pipelineFlags
 )
@@ -2003,8 +2004,6 @@ void RayTracingPipeline::ConvertStaticPipelineFlags(
         (counterMode != GpuRt::TraceRayCounterMode::TraceRayCounterDisable));
 
     *pStaticFlags = staticFlags;
-
-    *pTriangleCompressMode = static_cast<uint32_t>(ConvertGpuRtTriCompressMode(settings.rtTriangleCompressionMode));
 
     *pCounterMode = static_cast<uint32_t>(counterMode);
 }

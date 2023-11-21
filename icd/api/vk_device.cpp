@@ -290,8 +290,6 @@ Device::Device(
     m_retrievedFaultData(false),
     m_pNullPipelineLayout(nullptr)
 {
-    memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
-
     memset(m_pQueues, 0, sizeof(m_pQueues));
 
     m_maxVrsShadingRate = {0, 0};
@@ -655,6 +653,17 @@ VkResult Device::Create(
                     pInstance->PalPlatform()->SetEnabledCallbackTypes(enabledCallbacks);
                 }
 
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVES_GENERATED_QUERY_FEATURES_EXT:
+            {
+                const VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT* pFeaturesExt =
+                    reinterpret_cast<const VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT*>(pHeader);
+                if (pFeaturesExt->primitivesGeneratedQuery)
+                {
+                    deviceFeatures.primitivesGeneratedQuery = true;
+                }
                 break;
             }
 
@@ -1187,11 +1196,6 @@ VkResult Device::Initialize(
 
     if (result == VK_SUCCESS)
     {
-        result = CreateBltMsaaStates();
-    }
-
-    if (result == VK_SUCCESS)
-    {
         Pal::SamplePatternPalette palette = {};
         InitSamplePatternPalette(&palette);
         result = PalToVkResult(PalDevice(DefaultDeviceIndex)->SetSamplePatternPalette(palette));
@@ -1709,11 +1713,6 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
         }
     }
 
-    for (uint32_t i = 0; i < BltMsaaStateCount; ++i)
-    {
-        m_renderStateCache.DestroyMsaaState(&m_pBltMsaaState[i][0], nullptr);
-    }
-
     DestroyInternalPipelines();
 
     DestroySharedPalCmdAllocator();
@@ -1817,7 +1816,7 @@ VkResult Device::CreateInternalComputePipeline(
     PipelineCompiler*    pCompiler            = GetCompiler(DefaultDeviceIndex);
     ShaderModuleHandle   shaderModule         = {};
     Vkgc::BinaryData     pipelineBinary       = {};
-    ShaderOptimizerKey   shaderOptimzierKey   = {};
+    ShaderOptimizerKey   shaderOptimizerKey   = {};
     PipelineOptimizerKey pipelineOptimizerKey = {};
     PipelineMetadata     binaryMetadata       = {};
 
@@ -1828,9 +1827,9 @@ VkResult Device::CreateInternalComputePipeline(
     pCompiler->ApplyPipelineOptions(this, 0, &pipelineBuildInfo.pipelineInfo.options
     );
 
-    shaderOptimzierKey.stage              = ShaderStage::ShaderStageCompute;
+    shaderOptimizerKey.stage              = ShaderStage::ShaderStageCompute;
     pipelineOptimizerKey.shaderCount      = 1;
-    pipelineOptimizerKey.pShaders         = &shaderOptimzierKey;
+    pipelineOptimizerKey.pShaders         = &shaderOptimizerKey;
     pipelineBuildInfo.pPipelineProfileKey = &pipelineOptimizerKey;
     pipelineBuildInfo.pBinaryMetadata     = &binaryMetadata;
 
@@ -1851,8 +1850,11 @@ VkResult Device::CreateInternalComputePipeline(
     {
         // Build pipeline binary
         auto pShaderInfo = &pipelineBuildInfo.pipelineInfo.cs;
-        pipelineBuildInfo.compilerType   = PipelineCompilerTypeLlpc;
-        pShaderInfo->pModuleData         = shaderModule.pLlpcShaderModule;
+
+        pShaderInfo->pModuleData         = ShaderModule::GetFirstValidShaderData(&shaderModule);
+        pipelineBuildInfo.compilerType   = pCompiler->CheckCompilerType(&pipelineBuildInfo.pipelineInfo);
+        pShaderInfo->pModuleData         = ShaderModule::GetShaderData(pipelineBuildInfo.compilerType, &shaderModule);
+
         pShaderInfo->pSpecializationInfo = pSpecializationInfo;
         pShaderInfo->pEntryTarget        = Vkgc::IUtil::GetEntryPointNameFromSpirvBinary(&spvBin);
         pShaderInfo->entryStage          = Vkgc::ShaderStageCompute;
@@ -1878,7 +1880,7 @@ VkResult Device::CreateInternalComputePipeline(
             codeHash,
             Vkgc::ShaderStage::ShaderStageCompute,
             codeByteSize,
-            &shaderOptimzierKey);
+            &shaderOptimizerKey);
 
         PipelineShaderOptionsPtr options = {};
         options.pPipelineOptions = &pipelineBuildInfo.pipelineInfo.options;
@@ -1899,12 +1901,30 @@ VkResult Device::CreateInternalComputePipeline(
 
         if (pCompiler->GetBinaryCache() != nullptr)
         {
-            pCompiler->GetComputePipelineCacheId(
+            // Set up the ELF hash, which is used for indexing the pipeline cache
+            Util::MetroHash::Hash elfHash   = {};
+            Util::MetroHash128    elfHasher = {};
+            ShaderStageInfo       stageInfo = {};
+
+            stageInfo.stage               = ShaderStage::ShaderStageCompute;
+            stageInfo.codeHash            = codeHash;
+            stageInfo.codeSize            = codeByteSize;
+            stageInfo.pEntryPoint         = pShaderInfo->pEntryTarget;
+            stageInfo.pSpecializationInfo = pSpecializationInfo;
+            stageInfo.waveSize            = pShaderInfo->options.waveSize;
+
+            ComputePipeline::GenerateHashFromShaderStageCreateInfo(stageInfo, &elfHasher);
+
+            elfHasher.Finalize(reinterpret_cast<uint8_t*>(&elfHash));
+
+            Pipeline::ElfHashToCacheId(
+                this,
                 DefaultDeviceIndex,
-                &pipelineBuildInfo,
-                Vkgc::IPipelineDumper::GetPipelineHash(&pipelineBuildInfo.pipelineInfo),
+                elfHash,
                 VkPhysicalDevice(DefaultDeviceIndex)->GetSettingsLoader()->GetSettingsHash(),
-                &cacheId);
+                pipelineOptimizerKey,
+                &cacheId
+                );
 
             cacheResult = pCompiler->GetCachedPipelineBinary(
                 &cacheId,
@@ -1918,13 +1938,17 @@ VkResult Device::CreateInternalComputePipeline(
 
         if (cacheResult != Util::Result::Success)
         {
-            result = pCompiler->CreateComputePipelineBinary(
-                this,
-                DefaultDeviceIndex,
-                nullptr,
-                &pipelineBuildInfo,
-                &pipelineBinary,
-                &cacheId);
+
+            if (result == VK_SUCCESS)
+            {
+                result = pCompiler->CreateComputePipelineBinary(
+                        this,
+                        DefaultDeviceIndex,
+                        nullptr,
+                        &pipelineBuildInfo,
+                        &pipelineBinary,
+                        &cacheId);
+            }
 
             if (result == VK_SUCCESS)
             {
@@ -2532,7 +2556,7 @@ VkResult Device::CreateGraphicsPipelines(
     for (uint32_t i = 0; i < count; ++i)
     {
         const VkGraphicsPipelineCreateInfo* pCreateInfo = &pCreateInfos[i];
-        PipelineCreateFlags flags = GetPipelineCreateFlags(pCreateInfo);
+        VkPipelineCreateFlags2KHR flags = GetPipelineCreateFlags(pCreateInfo);
 
         VkResult result = GraphicsPipelineCommon::Create(
             this,
@@ -2583,7 +2607,7 @@ VkResult Device::CreateComputePipelines(
     for (uint32_t i = 0; i < count; ++i)
     {
         const VkComputePipelineCreateInfo* pCreateInfo = &pCreateInfos[i];
-        PipelineCreateFlags flags = GetPipelineCreateFlags(pCreateInfo);
+        VkPipelineCreateFlags2KHR flags = GetPipelineCreateFlags(pCreateInfo);
         VkResult result = VK_SUCCESS;
 
             result = ComputePipeline::Create(
@@ -3106,36 +3130,6 @@ void Device::RemoveMemReference(
     Pal::IGpuMemory* pPalMemory)
 {
     pPalDevice->RemoveGpuMemoryReferences(1, &pPalMemory, nullptr);
-}
-
-// =====================================================================================================================
-VkResult Device::CreateBltMsaaStates()
-{
-    Pal::Result palResult = Pal::Result::Success;
-
-    for (uint32_t log2Samples = 0;
-         (log2Samples < BltMsaaStateCount) && (palResult == Pal::Result::Success);
-         ++log2Samples)
-    {
-        uint32_t samples = (1UL << log2Samples);
-
-        Pal::MsaaStateCreateInfo info = {};
-
-        info.coverageSamples         = samples;
-        info.exposedSamples          = samples;
-        info.pixelShaderSamples      = samples;
-        info.depthStencilSamples     = samples;
-        info.shaderExportMaskSamples = samples;
-        info.sampleMask              = (1UL << samples) - 1;
-        info.sampleClusters          = 0;
-        info.alphaToCoverageSamples  = 0;
-        info.occlusionQuerySamples   = samples;
-
-        palResult = m_renderStateCache.CreateMsaaState(
-            info, nullptr, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &m_pBltMsaaState[log2Samples][0]);
-    }
-
-    return PalToVkResult(palResult);
 }
 
 // =====================================================================================================================
@@ -4083,21 +4077,203 @@ VkResult Device::GetDeviceFaultInfoEXT(
 
 // =================================================================================================================
 template<typename CreateInfo>
-PipelineCreateFlags Device::GetPipelineCreateFlags(
+VkPipelineCreateFlags2KHR Device::GetPipelineCreateFlags(
     const CreateInfo* pCreateInfo)
 {
-    PipelineCreateFlags flags = pCreateInfo->flags;
+    VkPipelineCreateFlags2KHR flags = pCreateInfo->flags;
+
+    static_assert(VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT ==
+        VK_PIPELINE_CREATE_2_DISABLE_OPTIMIZATION_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT ==
+        VK_PIPELINE_CREATE_2_ALLOW_DERIVATIVES_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_DERIVATIVE_BIT ==
+        VK_PIPELINE_CREATE_2_DERIVATIVE_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT ==
+        VK_PIPELINE_CREATE_2_VIEW_INDEX_FROM_DEVICE_INDEX_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_DISPATCH_BASE_BIT ==
+        VK_PIPELINE_CREATE_2_DISPATCH_BASE_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_DEFER_COMPILE_BIT_NV ==
+        VK_PIPELINE_CREATE_2_DEFER_COMPILE_BIT_NV, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR ==
+        VK_PIPELINE_CREATE_2_CAPTURE_STATISTICS_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR ==
+        VK_PIPELINE_CREATE_2_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT ==
+        VK_PIPELINE_CREATE_2_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT ==
+        VK_PIPELINE_CREATE_2_EARLY_RETURN_ON_FAILURE_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT ==
+        VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_RETAIN_LINK_TIME_OPTIMIZATION_INFO_BIT_EXT ==
+        VK_PIPELINE_CREATE_2_RETAIN_LINK_TIME_OPTIMIZATION_INFO_BIT_EXT, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_LIBRARY_BIT_KHR ==
+        VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_RAY_TRACING_SKIP_TRIANGLES_BIT_KHR ==
+        VK_PIPELINE_CREATE_2_RAY_TRACING_SKIP_TRIANGLES_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_RAY_TRACING_SKIP_AABBS_BIT_KHR ==
+        VK_PIPELINE_CREATE_2_RAY_TRACING_SKIP_AABBS_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_RAY_TRACING_NO_NULL_ANY_HIT_SHADERS_BIT_KHR ==
+        VK_PIPELINE_CREATE_2_RAY_TRACING_NO_NULL_ANY_HIT_SHADERS_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_RAY_TRACING_NO_NULL_CLOSEST_HIT_SHADERS_BIT_KHR ==
+        VK_PIPELINE_CREATE_2_RAY_TRACING_NO_NULL_CLOSEST_HIT_SHADERS_BIT_KHR,
+        "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_RAY_TRACING_NO_NULL_MISS_SHADERS_BIT_KHR ==
+        VK_PIPELINE_CREATE_2_RAY_TRACING_NO_NULL_MISS_SHADERS_BIT_KHR, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_RAY_TRACING_NO_NULL_INTERSECTION_SHADERS_BIT_KHR ==
+        VK_PIPELINE_CREATE_2_RAY_TRACING_NO_NULL_INTERSECTION_SHADERS_BIT_KHR,
+        "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_RAY_TRACING_SHADER_GROUP_HANDLE_CAPTURE_REPLAY_BIT_KHR ==
+        VK_PIPELINE_CREATE_2_RAY_TRACING_SHADER_GROUP_HANDLE_CAPTURE_REPLAY_BIT_KHR,
+        "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_INDIRECT_BINDABLE_BIT_NV ==
+        VK_PIPELINE_CREATE_2_INDIRECT_BINDABLE_BIT_NV, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_RAY_TRACING_ALLOW_MOTION_BIT_NV ==
+        VK_PIPELINE_CREATE_2_RAY_TRACING_ALLOW_MOTION_BIT_NV, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR ==
+        VK_PIPELINE_CREATE_2_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR,
+        "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_RENDERING_FRAGMENT_DENSITY_MAP_ATTACHMENT_BIT_EXT ==
+        VK_PIPELINE_CREATE_2_RENDERING_FRAGMENT_DENSITY_MAP_ATTACHMENT_BIT_EXT,
+        "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_RAY_TRACING_OPACITY_MICROMAP_BIT_EXT ==
+        VK_PIPELINE_CREATE_2_RAY_TRACING_OPACITY_MICROMAP_BIT_EXT, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_COLOR_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT ==
+        VK_PIPELINE_CREATE_2_COLOR_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT ==
+        VK_PIPELINE_CREATE_2_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT,
+        "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_NO_PROTECTED_ACCESS_BIT_EXT ==
+        VK_PIPELINE_CREATE_2_NO_PROTECTED_ACCESS_BIT_EXT, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_PROTECTED_ACCESS_ONLY_BIT_EXT ==
+        VK_PIPELINE_CREATE_2_PROTECTED_ACCESS_ONLY_BIT_EXT, "VkPipelineCreateFlags2KHR Flag Mismatch");
+    static_assert(VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT ==
+        VK_PIPELINE_CREATE_2_DESCRIPTOR_BUFFER_BIT_EXT, "VkPipelineCreateFlags2KHR Flag Mismatch");
+
+    const void* pNext = pCreateInfo->pNext;
+
+    while (pNext != nullptr)
+    {
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
+        {
+            case VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR:
+            {
+                const auto* pCreateFlags = reinterpret_cast<const VkPipelineCreateFlags2CreateInfoKHR*>(pHeader);
+                flags = pCreateFlags->flags;
+            }
+            break;
+
+            default:
+                // Skip any unknown extension structures
+                break;
+        }
+
+        pNext = pHeader->pNext;
+    }
 
     return flags;
 }
 
 // =================================================================================================================
-BufferUsageFlagBits Device::GetBufferUsageFlagBits(
+VkBufferUsageFlagBits2KHR Device::GetBufferUsageFlagBits(
     const VkBufferCreateInfo* pCreateInfo)
 {
-    BufferUsageFlagBits usage = static_cast<BufferUsageFlagBits>(pCreateInfo->usage);
+    VkBufferUsageFlagBits2KHR usage = static_cast<VkBufferUsageFlagBits2KHR>(pCreateInfo->usage);
+
+    static_assert(VK_BUFFER_USAGE_TRANSFER_SRC_BIT == VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_TRANSFER_DST_BIT == VK_BUFFER_USAGE_2_TRANSFER_DST_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT == VK_BUFFER_USAGE_2_UNIFORM_TEXEL_BUFFER_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT == VK_BUFFER_USAGE_2_STORAGE_TEXEL_BUFFER_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT == VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT == VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_INDEX_BUFFER_BIT == VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT == VK_BUFFER_USAGE_2_VERTEX_BUFFER_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT == VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT == VK_BUFFER_USAGE_2_CONDITIONAL_RENDERING_BIT_EXT,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR == VK_BUFFER_USAGE_2_SHADER_BINDING_TABLE_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT ==
+        VK_BUFFER_USAGE_2_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT, "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT ==
+        VK_BUFFER_USAGE_2_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT, "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_VIDEO_DECODE_SRC_BIT_KHR == VK_BUFFER_USAGE_2_VIDEO_DECODE_SRC_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_VIDEO_DECODE_DST_BIT_KHR == VK_BUFFER_USAGE_2_VIDEO_DECODE_DST_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+    static_assert(VK_BUFFER_USAGE_VIDEO_ENCODE_DST_BIT_KHR == VK_BUFFER_USAGE_2_VIDEO_ENCODE_DST_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+#endif
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+    static_assert(VK_BUFFER_USAGE_VIDEO_ENCODE_SRC_BIT_KHR == VK_BUFFER_USAGE_2_VIDEO_ENCODE_SRC_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+#endif
+    static_assert(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR == VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR ==
+        VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR ==
+        VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT ==
+        VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT, "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT ==
+        VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT, "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT ==
+        VK_BUFFER_USAGE_2_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT, "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT ==
+        VK_BUFFER_USAGE_2_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT, "VkBufferUsageFlags2KHR Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_MICROMAP_STORAGE_BIT_EXT == VK_BUFFER_USAGE_2_MICROMAP_STORAGE_BIT_EXT,
+        "VkBufferUsageFlags2KHR Flag Mismatch");
+
+    const void* pNext = pCreateInfo->pNext;
+
+    while (pNext != nullptr)
+    {
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
+        {
+            case VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR:
+            {
+                const auto* pCreateFlags = reinterpret_cast<const VkBufferUsageFlags2CreateInfoKHR*>(pHeader);
+                usage = pCreateFlags->usage;
+            }
+            break;
+
+            default:
+                // Skip any unknown extension structures
+                break;
+        }
+
+        pNext = pHeader->pNext;
+    }
 
     return usage;
+}
+
+// =====================================================================================================================
+void Device::SetDefaultVrsRateParams(
+    Pal::VrsRateParams* pVrsRateParams)
+{
+    pVrsRateParams->shadingRate               = Pal::VrsShadingRate::_1x1;
+    pVrsRateParams->flags.exposeVrsPixelsMask = 1;
+
+    for (uint32 idx = 0; idx < static_cast<uint32>(Pal::VrsCombinerStage::Max); idx++)
+    {
+        pVrsRateParams->combinerState[idx] = Pal::VrsCombiner::Passthrough;
+    }
 }
 
 /**
@@ -4449,6 +4625,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSwapchainKHR(
 VKAPI_ATTR void VKAPI_CALL vkGetRenderAreaGranularity(
     VkDevice                                    device,
     VkRenderPass                                renderPass,
+    VkExtent2D*                                 pGranularity)
+{
+    pGranularity->width  = 1;
+    pGranularity->height = 1;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetRenderingAreaGranularityKHR(
+    VkDevice                                    device,
+    const VkRenderingAreaInfoKHR*               pRenderingAreaInfo,
     VkExtent2D*                                 pGranularity)
 {
     pGranularity->width  = 1;
@@ -5044,12 +5230,37 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceFaultInfoEXT(
     return pDevice->GetDeviceFaultInfoEXT(pFaultCounts, pFaultInfo);
 }
 
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSubresourceLayoutKHR(
+    VkDevice                                    device,
+    const VkDeviceImageSubresourceInfoKHR*      pInfo,
+    VkSubresourceLayout2KHR*                    pLayout)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    Image::CalculateSubresourceLayout(pDevice, pInfo->pCreateInfo, &pInfo->pSubresource->imageSubresource,
+        &pLayout->subresourceLayout);
+}
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout2KHR(
+    VkDevice                                    device,
+    VkImage                                     image,
+    const VkImageSubresource2KHR*               pSubresource,
+    VkSubresourceLayout2KHR*                    pLayout)
+{
+    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    Image::ObjectFromHandle(image)->GetSubresourceLayout(
+        pDevice,
+        &pSubresource->imageSubresource,
+        &pLayout->subresourceLayout);
+}
+
 } // entry
 
 } // vk
 
 #if VKI_RAY_TRACING
 template
-vk::PipelineCreateFlags vk::Device::GetPipelineCreateFlags<VkRayTracingPipelineCreateInfoKHR>(
+VkPipelineCreateFlags2KHR vk::Device::GetPipelineCreateFlags<VkRayTracingPipelineCreateInfoKHR>(
     const VkRayTracingPipelineCreateInfoKHR* pCreateInfo);
 #endif

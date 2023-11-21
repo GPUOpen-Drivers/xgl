@@ -347,6 +347,8 @@ void CompilerSolution::UpdateRayTracingFunctionNames(
                                   pTable->pFunc[Vkgc::RT_ENTRY_FETCH_HIT_TRIANGLE_FROM_NODE_POINTER]);
         SetRayTracingFunctionName(entryFuncTable.intrinsic.pFetchTrianglePositionFromRayQuery,
                                   pTable->pFunc[Vkgc::RT_ENTRY_FETCH_HIT_TRIANGLE_FROM_RAY_QUERY]);
+        SetRayTracingFunctionName(entryFuncTable.rayQuery.pGet64BitInstanceNodePtr,
+                                  pTable->pFunc[Vkgc::RT_ENTRY_GET_INSTANCE_NODE]);
     }
 }
 

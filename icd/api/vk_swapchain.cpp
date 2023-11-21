@@ -814,9 +814,7 @@ void SwapChain::PostPresent(
 {
     if (m_pFullscreenMgr != nullptr)
     {
-
         m_pFullscreenMgr->PostPresent(this, presentInfo, pPresentResult);
-
     }
 
     m_appOwnedImageCount--;
@@ -900,9 +898,7 @@ Pal::IGpuMemory* SwapChain::UpdatePresentInfo(
     // information in case it has enabled fullscreen.
     if (m_pFullscreenMgr != nullptr)
     {
-
         m_pFullscreenMgr->UpdatePresentInfo(this, pPresentInfo, flipFlags);
-
     }
 
     return pSrcImageGpuMemory;

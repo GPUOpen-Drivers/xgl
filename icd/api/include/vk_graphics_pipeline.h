@@ -144,19 +144,6 @@ static void ConvertToPalMsaaQuadSamplePattern(
 }
 
 // =====================================================================================================================
-// Force 1x1 shader rate
-static void Force1x1ShaderRate(
-    Pal::VrsRateParams* pVrsRateParams)
-{
-    pVrsRateParams->shadingRate = Pal::VrsShadingRate::_1x1;
-
-    for (uint32 idx = 0; idx <= static_cast<uint32>(Pal::VrsCombinerStage::Image); idx++)
-    {
-        pVrsRateParams->combinerState[idx] = Pal::VrsCombiner::Passthrough;
-    }
-}
-
-// =====================================================================================================================
 // Vulkan implementation of graphics pipelines created by vkCreateGraphicsPipeline
 class GraphicsPipeline final : public GraphicsPipelineCommon, public NonDispatchable<VkPipeline, GraphicsPipeline>
 {
@@ -165,7 +152,7 @@ public:
         Device*                                 pDevice,
         PipelineCache*                          pPipelineCache,
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,
-        PipelineCreateFlags                     flags,
+        VkPipelineCreateFlags2KHR               flags,
         const VkAllocationCallbacks*            pAllocator,
         VkPipeline*                             pPipeline);
 
@@ -234,7 +221,7 @@ protected:
     static VkResult CreatePipelineBinaries(
         Device*                                        pDevice,
         const VkGraphicsPipelineCreateInfo*            pCreateInfo,
-        PipelineCreateFlags                            flags,
+        VkPipelineCreateFlags2KHR                      flags,
         const GraphicsPipelineShaderStageInfo*         pShaderInfo,
         const PipelineLayout*                          pPipelineLayout,
         const Util::MetroHash::Hash*                   pElfHash,
@@ -249,7 +236,7 @@ protected:
     static VkResult CreatePipelineObjects(
         Device*                             pDevice,
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
-        PipelineCreateFlags                 flags,
+        VkPipelineCreateFlags2KHR           flags,
         const VkAllocationCallbacks*        pAllocator,
         const PipelineLayout*               pPipelineLayout,
         const VbBindingInfo*                pVbInfo,

@@ -141,33 +141,33 @@ private:
         const GpuRt::DeviceInitInfo&        initInfo,
         const GpuRt::PipelineBuildInfo&     buildInfo,
         const GpuRt::CompileTimeConstants&  compileConstants,
-        Pal::IPipeline**                    ppResultPipeline,
+        ClientPipelineHandle*               pResultPipeline,
         void**                              ppResultMemory);
 
     static void ClientDestroyInternalComputePipeline(
         const GpuRt::DeviceInitInfo&    initInfo,
-        Pal::IPipeline*                 pPipeline,
+        ClientPipelineHandle            pipeline,
         void*                           pMemory);
 
     static void ClientInsertRGPMarker(
-        Pal::ICmdBuffer*    pCmdBuffer,
-        const char*         pMarker,
-        bool                isPush);
+        ClientCmdBufferHandle   cmdBuffer,
+        const char*             pMarker,
+        bool                    isPush);
 
     static Pal::Result ClientAccelStructBuildDumpEvent(
-        Pal::ICmdBuffer*                    pPalCmdbuf,
+        ClientCmdBufferHandle               cmdbuf,
         const GpuRt::AccelStructInfo&       info,
         const GpuRt::AccelStructBuildInfo&  buildInfo,
         Pal::gpusize*                       pDumpGpuVirtAddr);
 
     static Pal::Result ClientAccelStatsBuildDumpEvent(
-        Pal::ICmdBuffer*                pPalCmdbuf,
+        ClientCmdBufferHandle           cmdbuf,
         GpuRt::AccelStructInfo*         pInfo);
 
     static Pal::Result ClientAcquireCmdContext(
         const GpuRt::DeviceInitInfo&    initInfo,
         ClientCmdContextHandle*         pContext,
-        Pal::ICmdBuffer**               ppCmdBuffer);
+        ClientCmdBufferHandle*          pCmdBuffer);
 
     static Pal::Result ClientFlushCmdContext(
         ClientCmdContextHandle          context);

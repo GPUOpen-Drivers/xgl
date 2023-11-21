@@ -197,7 +197,7 @@ public:
         Device*                             pDevice,
         PipelineCache*                      pPipelineCache,
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
-        PipelineCreateFlags                 flags,
+        VkPipelineCreateFlags2KHR           flags,
         const VkAllocationCallbacks*        pAllocator,
         VkPipeline*                         pPipeline);
 
@@ -232,7 +232,7 @@ public:
     // Extract graphics pipeline library related info from VkGraphicsPipelineCreateInfo.
     static void ExtractLibraryInfo(
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
-        PipelineCreateFlags                 flags,
+        VkPipelineCreateFlags2KHR           flags,
         GraphicsPipelineLibraryInfo*        pLibInfo);
 
     // Check whether pipeline binary will be built
@@ -251,7 +251,7 @@ protected:
     static void BuildPipelineObjectCreateInfo(
         const Device*                          pDevice,
         const VkGraphicsPipelineCreateInfo*    pIn,
-        PipelineCreateFlags                    flags,
+        VkPipelineCreateFlags2KHR              flags,
         const PipelineOptimizerKey*            pOptimizerKey,
         const PipelineMetadata*                pBinMeta,
         GraphicsPipelineObjectCreateInfo*      pObjInfo);
@@ -260,7 +260,7 @@ protected:
     static void GeneratePipelineOptimizerKey(
         const Device*                          pDevice,
         const VkGraphicsPipelineCreateInfo*    pCreateInfo,
-        PipelineCreateFlags                    flags,
+        VkPipelineCreateFlags2KHR              flags,
         const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
         ShaderOptimizerKey*                    pShaderKeys,
         PipelineOptimizerKey*                  pPipelineKey);
@@ -268,7 +268,7 @@ protected:
     // Generates the API PSO hash using the contents of the VkGraphicsPipelineCreateInfo struct
     static void BuildApiHash(
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
-        PipelineCreateFlags                 flags,
+        VkPipelineCreateFlags2KHR           flags,
         uint64_t*                           pApiHash,
         Util::MetroHash::Hash*              elfHash);
 

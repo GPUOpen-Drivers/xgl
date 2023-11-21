@@ -37,34 +37,6 @@ namespace vk
 #define MAKE_GPURT_VERSION(MAJOR, MINOR) ((MAJOR << 16) | MINOR)
 
 // =====================================================================================================================
-// Converts a Vulkan triangle compression mode setting to the GpuRT equivalent of TriangleCompressionMode
-inline GpuRt::TriangleCompressionMode ConvertGpuRtTriCompressMode(
-     TriangleCompressionMode vkMode)
- {
-    GpuRt::TriangleCompressionMode gpuRtMode = GpuRt::TriangleCompressionMode::None;
-
-     switch (vkMode)
-     {
-     case NoTriangleCompression:
-        gpuRtMode = GpuRt::TriangleCompressionMode::None;
-        break;
-     case PairTriangleCompression:
-        gpuRtMode = GpuRt::TriangleCompressionMode::Pair;
-        break;
-     case AutoTriangleCompression:
-        // Driver will do the auto selection, no need to translate to GpuRt::TriangleCompressionMode
-        gpuRtMode = GpuRt::TriangleCompressionMode::None;
-        break;
-     default:
-        VK_NEVER_CALLED();
-        gpuRtMode = GpuRt::TriangleCompressionMode::None;
-        break;
-     }
-
-     return gpuRtMode;
-}
-
-// =====================================================================================================================
 // Converts a Vulkan triangle compression mode setting to the GpuRT equivalent of TriangleCompressionAutoMode
 inline GpuRt::TriangleCompressionAutoMode ConvertGpuRtTriCompressionAutoMode(
     TriangleCompressionAutoMode triCompressionAutoMode)

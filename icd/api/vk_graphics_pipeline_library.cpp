@@ -440,7 +440,7 @@ VkResult GraphicsPipelineLibrary::Create(
     Device*                             pDevice,
     PipelineCache*                      pPipelineCache,
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
-    PipelineCreateFlags                 flags,
+    VkPipelineCreateFlags2KHR           flags,
     const VkAllocationCallbacks*        pAllocator,
     VkPipeline*                         pPipeline)
 {
@@ -466,7 +466,7 @@ VkResult GraphicsPipelineLibrary::Create(
         result = BuildShaderStageInfo(pDevice,
                                       pCreateInfo->stageCount,
                                       pCreateInfo->pStages,
-                                      pCreateInfo->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR,
+                                      Util::TestAnyFlagSet(flags, VK_PIPELINE_CREATE_LIBRARY_BIT_KHR),
                                       [](const uint32_t inputIdx, const uint32_t stageIdx)
                                       {
                                           return stageIdx;

@@ -103,8 +103,8 @@ VkResult PalQueryPool::Create(
     else if ((pCreateInfo->queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT) ||
              (pCreateInfo->queryType == VK_QUERY_TYPE_MESH_PRIMITIVES_GENERATED_EXT))
     {
-        queryType                = Pal::QueryType::PipelineStats;
-        createInfo.queryPoolType = Pal::QueryPoolType::PipelineStats;
+        queryType                = Pal::QueryType::StreamoutStats;
+        createInfo.queryPoolType = Pal::QueryPoolType::StreamoutStats;
     }
 
     if (VK_ENUM_IN_RANGE(pCreateInfo->queryType, VK_QUERY_TYPE))
@@ -116,11 +116,6 @@ VkResult PalQueryPool::Create(
     createInfo.numSlots = pCreateInfo->queryCount;
 
     VkQueryPipelineStatisticFlags enabledStats = pCreateInfo->pipelineStatistics;
-
-    if (pCreateInfo->queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT)
-    {
-        enabledStats |= VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT;
-    }
 
     createInfo.enabledStats = VkToPalQueryPipelineStatsFlags(enabledStats);
 
@@ -277,13 +272,15 @@ VkResult PalQueryPool::GetResults(
         // HW will returns two 64-bits integers for the query of transform feedback, they are written primitives and the
         // number of needed primitives. And if the flag VK_QUERY_RESULT_WITH_AVAILABILITY_BIT is set, an extra integer
         // which indicates the availability state needs to be written.
-        const uint32_t numXfbQueryDataElems = availability ? 3 : 2;
+        const uint32_t numCounters = (m_queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT) ? 1 : 2;
+        const uint32_t numXfbQueryDataElems = availability ? (numCounters + 1) : numCounters;
 
         // Vulkan supports 32-bit unsigned integer values data of transform feedback query, but Pal supports 64-bit only.
         // So the query data is stored into pXfbQueryData first.
         uint64_t* pXfbQueryData = nullptr;
 
-        if (m_queryType == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT)
+        if ((m_queryType == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) ||
+            (m_queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT))
         {
             queryDataStride  = sizeof(uint64_t) * numXfbQueryDataElems;
             queryDataSize    = queryDataStride * queryCount;
@@ -300,8 +297,14 @@ VkResult PalQueryPool::GetResults(
 
         if (result == VK_SUCCESS)
         {
+            Pal::QueryResultFlags palFlags = VkToPalQueryResultFlags(queryFlags);
+            if (m_queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT)
+            {
+                palFlags = static_cast<Pal::QueryResultFlags>(
+                    static_cast<uint32_t>(palFlags) | static_cast<uint32_t>(Pal::QueryResultOnlyPrimNeeded));
+            }
             Pal::Result palResult = m_pPalQueryPool[DefaultDeviceIndex]->GetResults(
-                VkToPalQueryResultFlags(queryFlags),
+                palFlags,
                 m_palQueryType,
                 startQuery,
                 queryCount,
@@ -313,7 +316,8 @@ VkResult PalQueryPool::GetResults(
             result = PalToVkResult(palResult);
         }
 
-        if ((m_queryType == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) &&
+        if (((m_queryType == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) ||
+             (m_queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT)) &&
             ((result == VK_SUCCESS) || (result == VK_NOT_READY)))
         {
             stride = (stride == 0) ? queryDataStride : stride;
@@ -327,32 +331,68 @@ VkResult PalQueryPool::GetResults(
                 {
                     uint32_t* pPrimitivesCount = static_cast<uint32_t*>(pData);
 
-                    if ((result == VK_SUCCESS) || (flags & VK_QUERY_RESULT_PARTIAL_BIT))
+                    switch (m_queryType)
                     {
-                        pPrimitivesCount[0] = static_cast<uint32_t>(pXfbQueryElem[1]);
-                        pPrimitivesCount[1] = static_cast<uint32_t>(pXfbQueryElem[0]);
+                        case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
+                            if ((result == VK_SUCCESS) || (flags & VK_QUERY_RESULT_PARTIAL_BIT))
+                            {
+                                pPrimitivesCount[0] = static_cast<uint32_t>(pXfbQueryElem[1]);
+                                pPrimitivesCount[1] = static_cast<uint32_t>(pXfbQueryElem[0]);
+                            }
+                            pPrimitivesCount += 2;
+                            pXfbQueryElem += 2;
+                            break;
+                        case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
+                            if ((result == VK_SUCCESS) || (flags & VK_QUERY_RESULT_PARTIAL_BIT))
+                            {
+                                pPrimitivesCount[0] = static_cast<uint32_t>(pXfbQueryElem[0]);
+                            }
+                            pPrimitivesCount++;
+                            pXfbQueryElem++;
+                            break;
+                        default:
+                            VK_NEVER_CALLED();
+                            break;
                     }
 
                     if (availability)
                     {
                         // Set the availability state to the last slot.
-                        pPrimitivesCount[2] = static_cast<uint32_t>(pXfbQueryElem[2]);
+                        *pPrimitivesCount = static_cast<uint32_t>(*pXfbQueryElem);
                     }
                 }
                 else
                 {
                     uint64_t* pPrimitivesCount = static_cast<uint64_t*>(pData);
 
-                    if ((result == VK_SUCCESS) || (flags & VK_QUERY_RESULT_PARTIAL_BIT))
+                    switch (m_queryType)
                     {
-                        pPrimitivesCount[0] = pXfbQueryElem[1];
-                        pPrimitivesCount[1] = pXfbQueryElem[0];
+                        case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
+                            if ((result == VK_SUCCESS) || (flags & VK_QUERY_RESULT_PARTIAL_BIT))
+                            {
+                                pPrimitivesCount[0] = pXfbQueryElem[1];
+                                pPrimitivesCount[1] = pXfbQueryElem[0];
+                            }
+                            pPrimitivesCount += 2;
+                            pXfbQueryElem += 2;
+                            break;
+                        case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
+                            if ((result == VK_SUCCESS) || (flags & VK_QUERY_RESULT_PARTIAL_BIT))
+                            {
+                                pPrimitivesCount[0] = pXfbQueryElem[0];
+                            }
+                            pPrimitivesCount++;
+                            pXfbQueryElem++;
+                            break;
+                        default:
+                            VK_NEVER_CALLED();
+                            break;
                     }
 
                     if (availability)
                     {
                         // Set the availability state to the last slot.
-                        pPrimitivesCount[2] = pXfbQueryElem[2];
+                        *pPrimitivesCount = *pXfbQueryElem;
                     }
                 }
 

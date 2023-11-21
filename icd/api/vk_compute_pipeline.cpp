@@ -50,7 +50,7 @@ namespace vk
 //     - pCreateInfo->layout
 void ComputePipeline::BuildApiHash(
     const VkComputePipelineCreateInfo*    pCreateInfo,
-    PipelineCreateFlags                   flags,
+    VkPipelineCreateFlags2KHR             flags,
     const ComputePipelineShaderStageInfo& stageInfo,
     Util::MetroHash::Hash*                pElfHash,
     uint64_t*                             pApiHash)
@@ -189,7 +189,7 @@ VkResult ComputePipeline::Create(
     Device*                                 pDevice,
     PipelineCache*                          pPipelineCache,
     const VkComputePipelineCreateInfo*      pCreateInfo,
-    PipelineCreateFlags                     flags,
+    VkPipelineCreateFlags2KHR               flags,
     const VkAllocationCallbacks*            pAllocator,
     VkPipeline*                             pPipeline)
 {

@@ -705,6 +705,7 @@ void DeviceBarrierPolicy::InitQueueFamilyPolicy(
                                              | Pal::CoherClear
                                              | Pal::CoherIndirectArgs
                                              | Pal::CoherIndexData
+                                             | Pal::CoherSampleRate
                                              | Pal::CoherPresent;
         pPolicy->supportedLayoutUsageMask   |= Pal::LayoutColorTarget
                                              | Pal::LayoutDepthStencilTarget
@@ -1041,6 +1042,12 @@ void ImageBarrierPolicy::InitImageCachePolicy(
         supportedInputCacheMask  |= Pal::CoherDepthStencilTarget | Pal::CoherClear;
     }
 
+    if (usage & VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR)
+    {
+        supportedOutputCacheMask |= Pal::CoherSampleRate;
+        supportedInputCacheMask  |= Pal::CoherSampleRate;
+    }
+
     // Apply device specific supported cache masks to limit the scope.
     supportedOutputCacheMask &= pDevice->GetBarrierPolicy().GetSupportedOutputCacheMask();
     supportedInputCacheMask  &= pDevice->GetBarrierPolicy().GetSupportedInputCacheMask();
@@ -1255,7 +1262,7 @@ uint32_t ImageBarrierPolicy::GetQueueFamilyLayoutEngineMask(
 // Constructor for buffer barrier policies.
 BufferBarrierPolicy::BufferBarrierPolicy(
     Device*                             pDevice,
-    BufferUsageFlagBits                 usage,
+    VkBufferUsageFlagBits2KHR           usage,
     VkSharingMode                       sharingMode,
     uint32_t                            queueFamilyIndexCount,
     const uint32_t*                     pQueueFamilyIndices)
@@ -1268,7 +1275,7 @@ BufferBarrierPolicy::BufferBarrierPolicy(
 // Initialize the cache policy of the buffer according to the input parameters.
 void BufferBarrierPolicy::InitBufferCachePolicy(
     Device*                             pDevice,
-    BufferUsageFlagBits                 usage,
+    VkBufferUsageFlagBits2KHR           usage,
     VkSharingMode                       sharingMode,
     uint32_t                            queueFamilyIndexCount,
     const uint32_t*                     pQueueFamilyIndices)

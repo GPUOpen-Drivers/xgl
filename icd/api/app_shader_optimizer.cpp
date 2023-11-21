@@ -86,6 +86,8 @@ void ShaderOptimizer::CreateShaderOptimizerKey(
 
     if (settings.pipelineUseShaderHashAsProfileHash)
     {
+        VK_ASSERT(pModuleData != nullptr);
+
         pShaderKey->codeHash.lower = Vkgc::IPipelineDumper::GetShaderHash(pModuleData);
         pShaderKey->codeHash.upper = 0;
     }
@@ -249,7 +251,6 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pOptions->disableFMA = shaderCreate.tuningOptions.disableFMA;
                 }
-
                 if (shaderCreate.apply.workaroundStorageImageFormats)
                 {
                     options.pOptions->workaroundStorageImageFormats = true;

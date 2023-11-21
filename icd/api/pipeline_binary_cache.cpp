@@ -685,109 +685,120 @@ Util::Result PipelineBinaryCache::InjectBinariesFromDirectory(
 
     if (settings.devModeElfReplacementDirectoryEnable)
     {
-        Util::File      file;
-        char            filePath[Util::PathBufferLen] = {};
-        uint32_t        fileCount                     = 0u;
-        const char**    ppFileNames                   = nullptr;
-        size_t          fileNameBufferSize            = 0u;
-        void*           pFileNameBuffer               = nullptr;
-        size_t          dirLength                     = strlen(settings.devModeElfReplacementDirectory) + 1u;
+        size_t                  fileCount                     = 0u;
+        size_t                  fileNameBufferSize            = 0u;
 
-        Util::Hash128   pipelineHash                  = {};
-        size_t          pipelineBinarySize            = 0u;
-        void*           pPipelineBinary               = nullptr;
+        // Get the number of files in dir and the size of the buffer to hold their names.
+        result = Util::CountFilesInDir(settings.devModeElfReplacementDirectory, &fileCount, &fileNameBufferSize);
 
-        // Get the number of files in dir and the size of the buffer to hold their names
-        result = Util::ListDir(
-            settings.devModeElfReplacementDirectory,
-            &fileCount,
-            nullptr,
-            &fileNameBufferSize,
-            nullptr);
-
-        if (fileCount == 0u)
+        if ((fileCount > 0u) && (result == Util::Result::Success))
         {
-            return result;
-        }
+            char*                               pFileNameBuffer = nullptr;
+            Util::Span<Util::StringView<char>>  fileNames;
+            Util::Span <char>                   fileNameBuffer;
 
-        if (result == Util::Result::Success)
-        {
-            // Allocate space for ppFileNames and pFileNameBuffer
-            ppFileNames = (const char**)AllocMem(sizeof(const char*) * fileCount);
-            pFileNameBuffer = AllocMem(fileNameBufferSize);
+            // Allocate space for pFileNames and pFileNameBuffer
+            Util::StringView<char>* pFileNames = static_cast<Util::StringView<char>*>(
+                AllocMem(sizeof(Util::StringView<char>) * fileCount));
 
-            // Populate ppFileNames and pFileNameBuffer
-            result = Util::ListDir(
-                settings.devModeElfReplacementDirectory,
-                &fileCount,
-                ppFileNames,
-                &fileNameBufferSize,
-                pFileNameBuffer);
-
-            if (result != Util::Result::Success)
+            if (pFileNames == nullptr)
             {
-                FreeMem(pFileNameBuffer);
-                FreeMem(ppFileNames);
+                result = Util::Result::ErrorOutOfMemory;
             }
-        }
 
-        if (result == Util::Result::Success)
-        {
-            // Store each file into cache
-            Util::Strncpy(filePath, settings.devModeElfReplacementDirectory, sizeof(filePath));
-            Util::Strncat(filePath, sizeof(filePath), "\\");
-            for (uint32_t fileIndex = 0; fileIndex < fileCount; fileIndex++)
+            if (result == Util::Result::Success)
             {
-                filePath[dirLength] = '\0';
-                Util::Strncat(filePath, sizeof(filePath), ppFileNames[fileIndex]);
+                pFileNameBuffer = static_cast<char*>(AllocMem(fileNameBufferSize));
 
-                ppFileNames[fileIndex] = strstr(ppFileNames[fileIndex], "_0x");
-
-                if ((ppFileNames[fileIndex] != nullptr) &&
-                    (strlen(ppFileNames[fileIndex]) >= 32))
+                if (pFileNameBuffer == nullptr)
                 {
-                    ppFileNames[fileIndex] += 3u;
-                    pipelineHash = ParseHash128(ppFileNames[fileIndex]);
+                    FreeMem(pFileNames);
+                    result = Util::Result::ErrorOutOfMemory;
+                }
+            }
 
-                    if (Util::File::Exists(filePath))
+            if (result == Util::Result::Success)
+            {
+                fileNames = Util::Span<Util::StringView<char>>(pFileNames, fileCount);
+                fileNameBuffer = Util::Span<char>(pFileNameBuffer, fileNameBufferSize);
+
+                // Populate fileNames and fileNameBuffer.
+                result = Util::GetFileNamesInDir(settings.devModeElfReplacementDirectory, fileNames, fileNameBuffer);
+
+                if (result != Util::Result::Success)
+                {
+                    FreeMem(pFileNameBuffer);
+                    FreeMem(pFileNames);
+                }
+            }
+
+            if (result == Util::Result::Success)
+            {
+                Util::File      file;
+                char            filePath[Util::PathBufferLen] = {};
+                Util::Hash128   pipelineHash                  = {};
+                size_t          pipelineBinarySize            = 0u;
+                void*           pPipelineBinary               = nullptr;
+
+                // Store each file into cache
+                Util::Strncpy(filePath, settings.devModeElfReplacementDirectory, sizeof(filePath));
+                Util::Strncat(filePath, sizeof(filePath), "\\");
+                for (uint32_t fileIndex = 0; fileIndex < fileCount; fileIndex++)
+                {
+                    const char* pFileName = fileNames[fileIndex].Data();
+
+                    filePath[strlen(settings.devModeElfReplacementDirectory)] = '\0';
+
+                    Util::Strncat(filePath, fileNames[fileIndex].Length(), pFileName);
+
+                    pFileName = strstr(pFileName, "_0x");
+
+                    if ((pFileName != nullptr) &&
+                        (strlen(pFileName) >= 32))
                     {
-                        pipelineBinarySize = Util::File::GetFileSize(filePath);
-                        pPipelineBinary = AllocMem(pipelineBinarySize);
+                        pFileName += 3u;
+                        pipelineHash = ParseHash128(pFileName);
 
-                        if (pPipelineBinary != nullptr)
+                        if (Util::File::Exists(filePath))
                         {
-                            if (file.Open(
-                                filePath,
-                                Util::FileAccessRead | Util::FileAccessBinary) == Util::Result::Success)
+                            pipelineBinarySize = Util::File::GetFileSize(filePath);
+                            pPipelineBinary = AllocMem(pipelineBinarySize);
+
+                            if (pPipelineBinary != nullptr)
                             {
-                                if (file.Read(pPipelineBinary, pipelineBinarySize, nullptr) == Util::Result::Success)
+                                if (file.Open(
+                                    filePath,
+                                    Util::FileAccessRead | Util::FileAccessBinary) == Util::Result::Success)
                                 {
-                                    StoreReinjectionBinary(&pipelineHash, pipelineBinarySize, pPipelineBinary);
+                                    if (file.Read(pPipelineBinary, pipelineBinarySize, nullptr) == Util::Result::Success)
+                                    {
+                                        StoreReinjectionBinary(&pipelineHash, pipelineBinarySize, pPipelineBinary);
+                                    }
+                                    else
+                                    {
+                                        VK_NEVER_CALLED();
+                                    }
+
+                                    file.Close();
                                 }
                                 else
                                 {
                                     VK_NEVER_CALLED();
                                 }
+                            }
 
-                                file.Close();
-                            }
-                            else
-                            {
-                                VK_NEVER_CALLED();
-                            }
+                            FreeMem(pPipelineBinary);
                         }
-
-                        FreeMem(pPipelineBinary);
-                    }
-                    else
-                    {
-                        VK_NEVER_CALLED();
+                        else
+                        {
+                            VK_NEVER_CALLED();
+                        }
                     }
                 }
-            }
 
-            FreeMem(pFileNameBuffer);
-            FreeMem(ppFileNames);
+                FreeMem(pFileNameBuffer);
+                FreeMem(pFileNames);
+            }
         }
     }
 

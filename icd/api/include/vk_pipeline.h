@@ -221,6 +221,14 @@ public:
         return m_pFormatStrings;
     }
 
+    static void GenerateHashFromSpecializationInfo(
+        const VkSpecializationInfo& desc,
+        Util::MetroHash128*         pHasher);
+
+    static void GenerateHashFromShaderStageCreateInfo(
+        const ShaderStageInfo& stageInfo,
+        Util::MetroHash128*    pHasher);
+
     static void ElfHashToCacheId(
         const Device*                pDevice,
         uint32_t                     deviceIdx,
@@ -248,16 +256,8 @@ protected:
         const Util::MetroHash::Hash& cacheHash,
         uint64_t                     apiHash);
 
-    static PipelineCreateFlags GetCacheIdControlFlags(
-        PipelineCreateFlags in);
-
-    static void GenerateHashFromSpecializationInfo(
-        const VkSpecializationInfo& desc,
-        Util::MetroHash128*         pHasher);
-
-    static void GenerateHashFromShaderStageCreateInfo(
-        const ShaderStageInfo& stageInfo,
-        Util::MetroHash128*    pHasher);
+    static VkPipelineCreateFlags2KHR GetCacheIdControlFlags(
+        VkPipelineCreateFlags2KHR in);
 
     static void GenerateHashFromShaderStageCreateInfo(
         const VkPipelineShaderStageCreateInfo& desc,

@@ -1553,7 +1553,7 @@ VkResult Queue::Submit(
                 }
             }
 
-            DebugPrintf::PostQueueSubmit(m_pDevice, pCmdBuffers, cmdBufferCount);
+            DebugPrintf::PostQueueSubmit(m_pDevice, this, pCmdBuffers, cmdBufferCount);
 
 #if VKI_RAY_TRACING
 #endif

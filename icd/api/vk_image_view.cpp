@@ -559,15 +559,9 @@ VkResult ImageView::Create(
     {
         // Image views having both DEPTH_BIT and STENCIL_BIT specified in the aspectMask cannot be used as a sampled
         // image view, only as attachment, so check the condition before trying to generate any SRDs for the view.
-        //
-        // Also note that, for 2D array compatible 3D images, SRDs should only be created for 3D image views. Trying
-        // to use atomic/load/store ops against 2D and 2D array image views created from such images is illegal from the API
-        // PoV, and triggers an assertion failure in PAL.
         const VkImageAspectFlags combinedDsView = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 
-        if ((pCreateInfo->subresourceRange.aspectMask & combinedDsView) != combinedDsView        &&
-            ( !pImage->Is2dArrayCompatible() ||
-              (pImage->Is2dArrayCompatible() && pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_3D)) )
+        if ((pCreateInfo->subresourceRange.aspectMask & combinedDsView) != combinedDsView)
         {
             srdSegmentOffset = totalSize;
             srdSegmentSize   = srdSize * SrdCount;

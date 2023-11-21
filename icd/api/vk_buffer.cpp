@@ -547,7 +547,7 @@ void Buffer::CalculateBufferFlags(
 {
     pBufferFlags->u32All = 0;
 
-    BufferUsageFlagBits usage = Device::GetBufferUsageFlagBits(pCreateInfo);
+    VkBufferUsageFlagBits2KHR usage = Device::GetBufferUsageFlagBits(pCreateInfo);
 
     pBufferFlags->usageUniformBuffer    = (usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)    ? 1 : 0;
 #if VKI_RAY_TRACING

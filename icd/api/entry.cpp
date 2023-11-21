@@ -107,6 +107,21 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer(
 }
 
 // =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer2KHR(
+    VkCommandBuffer                             cmdBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    VkDeviceSize                                size,
+    VkIndexType                                 indexType)
+{
+    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BindIndexBuffer(
+        buffer,
+        offset,
+        size,
+        indexType);
+}
+
+// =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(
     VkCommandBuffer                             cmdBuffer,
     uint32_t                                    firstBinding,

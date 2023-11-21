@@ -182,8 +182,25 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->enableMortonCode30                = settings.rtEnableMortonCode30;
     pDeviceSettings->enableVariableBitsMortonCodes     = settings.enableVariableBitsMortonCodes;
     pDeviceSettings->enablePrefixScanDLB               = settings.rtEnablePrefixScanDLB;
-    pDeviceSettings->triangleCompressionAutoMode       =
-        ConvertGpuRtTriCompressionAutoMode(settings.rtTriangleCompressionAutoMode);
+
+    switch (settings.rtTriangleCompressionMode)
+    {
+    case NoTriangleCompression:
+        pDeviceSettings->triangleCompressionAutoMode   = GpuRt::TriangleCompressionAutoMode::Disabled;
+        break;
+    case PairTriangleCompression:
+        pDeviceSettings->triangleCompressionAutoMode   = GpuRt::TriangleCompressionAutoMode::AlwaysEnabled;
+        break;
+    case AutoTriangleCompression:
+        pDeviceSettings->triangleCompressionAutoMode   =
+            ConvertGpuRtTriCompressionAutoMode(settings.rtTriangleCompressionAutoMode);
+        break;
+    default:
+        VK_NEVER_CALLED();
+        pDeviceSettings->triangleCompressionAutoMode   = GpuRt::TriangleCompressionAutoMode::Disabled;
+        break;
+    }
+
     pDeviceSettings->bvhBuildModeDefault               = ConvertGpuRtBvhBuildMode(settings.rtBvhBuildModeDefault);
     pDeviceSettings->bvhBuildModeFastTrace             = ConvertGpuRtBvhBuildMode(settings.rtBvhBuildModeFastTrace);
     pDeviceSettings->bvhBuildModeFastBuild             = ConvertGpuRtBvhBuildMode(settings.rtBvhBuildModeFastBuild);
@@ -675,7 +692,7 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
     const GpuRt::DeviceInitInfo&        initInfo,              ///< [in]  Information about the host device
     const GpuRt::PipelineBuildInfo&     buildInfo,             ///< [in]  Information about the pipeline to be built
     const GpuRt::CompileTimeConstants&  compileConstants,      ///< [in]  Compile time constant buffer description
-    Pal::IPipeline**                    ppResultPipeline,      ///< [out] Result PAL pipeline object pointer
+    ClientPipelineHandle*               pResultPipeline,       ///< [out] Result PAL pipeline object pointer
     void**                              ppResultMemory)        ///< [out] (Optional) Result PAL pipeline memory,
                                                                ///< if different from obj
 {
@@ -818,7 +835,7 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
                                                         &specializationInfo,
                                                         &pDevice->GetInternalRayTracingPipeline());
 
-        *ppResultPipeline = pDevice->GetInternalRayTracingPipeline().pPipeline[0];
+        *pResultPipeline = pDevice->GetInternalRayTracingPipeline().pPipeline[0];
 
         return result == VK_SUCCESS ? Pal::Result::Success : Pal::Result::ErrorUnknown;
     }
@@ -828,10 +845,11 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
 // Destroy one of gpurt's internal pipelines.
 void RayTracingDevice::ClientDestroyInternalComputePipeline(
     const GpuRt::DeviceInitInfo&    initInfo,
-    Pal::IPipeline*                 pPipeline,
+    ClientPipelineHandle            pipeline,
     void*                           pMemory)
 {
-    vk::Device* pDevice = reinterpret_cast<vk::Device*>(initInfo.pClientUserData);
+    vk::Device* pDevice = static_cast<vk::Device*>(initInfo.pClientUserData);
+    Pal::IPipeline* pPipeline = static_cast<Pal::IPipeline*>(pipeline);
 
     if (pMemory == nullptr)
     {
@@ -845,11 +863,12 @@ void RayTracingDevice::ClientDestroyInternalComputePipeline(
 
 // =====================================================================================================================
 void RayTracingDevice::ClientInsertRGPMarker(
-    Pal::ICmdBuffer* pCmdBuffer,
-    const char*      pMarker,
-    bool             isPush)
+    ClientCmdBufferHandle   cmdBuffer,
+    const char*             pMarker,
+    bool                    isPush)
 {
-    vk::CmdBuffer* pCmdbuf = reinterpret_cast<vk::CmdBuffer*>(pCmdBuffer->GetClientData());
+    Pal::ICmdBuffer* pPalCmdbuf = static_cast<Pal::ICmdBuffer*>(cmdBuffer);
+    vk::CmdBuffer* pCmdbuf = static_cast<vk::CmdBuffer*>(pPalCmdbuf->GetClientData());
 
     if ((pCmdbuf != nullptr) && (pCmdbuf->GetSqttState() != nullptr))
     {
@@ -864,7 +883,7 @@ void RayTracingDevice::ClientInsertRGPMarker(
 //
 // We keep this memory around for later and write it out to files.
 Pal::Result RayTracingDevice::ClientAccelStructBuildDumpEvent(
-    Pal::ICmdBuffer*                    pPalCmdbuf,
+    ClientCmdBufferHandle               cmdbuf,
     const GpuRt::AccelStructInfo&       info,
     const GpuRt::AccelStructBuildInfo&  buildInfo,
     Pal::gpusize*                       pDumpGpuVirtAddr)
@@ -879,7 +898,7 @@ Pal::Result RayTracingDevice::ClientAccelStructBuildDumpEvent(
 //
 // We keep this memory around for later and write it out to files.
 Pal::Result RayTracingDevice::ClientAccelStatsBuildDumpEvent(
-    Pal::ICmdBuffer*                  pPalCmdbuf,
+    ClientCmdBufferHandle             cmdbuf,
     GpuRt::AccelStructInfo*           pInfo)
 {
     Pal::Result result = Pal::Result::ErrorOutOfGpuMemory;
@@ -893,10 +912,10 @@ Pal::Result RayTracingDevice::ClientAccelStatsBuildDumpEvent(
 Pal::Result RayTracingDevice::ClientAcquireCmdContext(
     const GpuRt::DeviceInitInfo&    initInfo,     // GpuRt device info
     ClientCmdContextHandle*         pContext,     // (out) Opaque command context handle
-    Pal::ICmdBuffer**               ppCmdBuffer)  // (out) Command buffer for GPURT to fill
+    ClientCmdBufferHandle*          pCmdBuffer)   // (out) Command buffer for GPURT to fill
 {
     VK_ASSERT(initInfo.pClientUserData != nullptr);
-    VK_ASSERT(ppCmdBuffer              != nullptr);
+    VK_ASSERT(pCmdBuffer               != nullptr);
     VK_ASSERT(pContext                 != nullptr);
 
     Pal::Result                       result      = Pal::Result::Success;
@@ -930,8 +949,8 @@ Pal::Result RayTracingDevice::ClientAcquireCmdContext(
 
     if (result == Pal::Result::Success)
     {
-        *ppCmdBuffer = pCmdContext->pCmdBuffer;
-        *pContext    = reinterpret_cast<ClientCmdContextHandle*>(pCmdContext);
+        *pCmdBuffer = pCmdContext->pCmdBuffer;
+        *pContext   = reinterpret_cast<ClientCmdContextHandle*>(pCmdContext);
     }
 
     return result;
@@ -1076,8 +1095,8 @@ void RayTracingDevice::ClientFreeGpuMem(
     const GpuRt::DeviceInitInfo&    initInfo,
     ClientGpuMemHandle              gpuMem)
 {
-    vk::Device*         pDevice         = reinterpret_cast<vk::Device*>(initInfo.pClientUserData);
-    vk::InternalMemory* pInternalMemory = reinterpret_cast<vk::InternalMemory*>(gpuMem);
+    vk::Device*         pDevice         = static_cast<vk::Device*>(initInfo.pClientUserData);
+    vk::InternalMemory* pInternalMemory = static_cast<vk::InternalMemory*>(gpuMem);
 
     VK_ASSERT(pInternalMemory != nullptr);
 

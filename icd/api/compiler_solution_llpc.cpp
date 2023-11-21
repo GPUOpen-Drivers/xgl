@@ -609,11 +609,14 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
                 m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(finalBinary.pCode));
             }
 
-            if (pPipelineDumpHandle != nullptr)
+            if ((pPipelineDumpHandle != nullptr) && (pCreateInfo->earlyElfPackage[gplType].pCode != nullptr))
             {
-                Vkgc::BinaryData elfBinary = ExtractPalElfBinary(pCreateInfo->earlyElfPackage[gplType]);
-                Vkgc::IPipelineDumper::DumpPipelineBinary(
-                    pPipelineDumpHandle, m_gfxIp, &elfBinary);
+                if (pCreateInfo->earlyElfPackage[gplType].pCode != nullptr)
+                {
+                    Vkgc::BinaryData elfBinary = ExtractPalElfBinary(pCreateInfo->earlyElfPackage[gplType]);
+                    Vkgc::IPipelineDumper::DumpPipelineBinary(
+                        pPipelineDumpHandle, m_gfxIp, &elfBinary);
+                }
             }
         }
         m_gplCacheMatrix.totalBinaries++;

@@ -748,6 +748,10 @@ template <typename ModifierPropertiesList_T>
         uint32*                                 pFragmentShadingRateCount,
         VkPhysicalDeviceFragmentShadingRateKHR* pFragmentShadingRates);
 
+    VkResult GetPhysicalDeviceCooperativeMatrixPropertiesKHR(
+        uint32_t*                         pPropertyCount,
+        VkCooperativeMatrixPropertiesKHR* pProperties);
+
 #if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
     VkResult AcquireXlibDisplay(
@@ -1199,6 +1203,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceFragmentShadingRatesKHR(
     VkPhysicalDevice                        physicalDevice,
     uint32*                                 pFragmentShadingRateCount,
     VkPhysicalDeviceFragmentShadingRateKHR* pFragmentShadingRates);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkCooperativeMatrixPropertiesKHR*           pProperties);
 
 } // namespace entry
 
