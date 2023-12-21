@@ -78,7 +78,6 @@ macro(xgl_options)
 #endif
 
         option(ICD_BUILD_LLPC "Build LLPC?" ON)
-    option(ICD_BUILD_LLPCONLY "Build LLPC Only?" OFF)
 
     option(XGL_LLVM_UPSTREAM "Build with upstreamed LLVM?" OFF)
 

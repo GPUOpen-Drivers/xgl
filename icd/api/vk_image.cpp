@@ -271,7 +271,12 @@ void Image::ConvertImageCreateInfo(
         pPalCreateInfo->tilingPreference = settings.imageTilingPreference;
     }
 
-    pPalCreateInfo->flags.u32All     = VkToPalImageCreateFlags(pCreateInfo->flags, createInfoFormat, imageUsage);
+    pPalCreateInfo->flags.u32All     = VkToPalImageCreateFlags(
+                                         pCreateInfo->flags,
+                                         createInfoFormat,
+                                         imageUsage,
+                                         pCreateInfo->imageType,
+                                         pCreateInfo->mipLevels);
     pPalCreateInfo->usageFlags       = VkToPalImageUsageFlags(
                                          imageUsage,
                                          pCreateInfo->samples,
@@ -294,15 +299,6 @@ void Image::ConvertImageCreateInfo(
     {
         pPalCreateInfo->flags.invariant        = 1;
         pPalCreateInfo->flags.optimalShareable = 1;
-    }
-
-    if (((pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT) == 0) &&
-        ((pCreateInfo->flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) != 0) &&
-        (pCreateInfo->mipLevels > 1) &&
-        Pal::Formats::IsBlockCompressed(pPalCreateInfo->swizzledFormat.format) &&
-        (pCreateInfo->imageType == VK_IMAGE_TYPE_3D))
-    {
-        pPalCreateInfo->flags.view3dAs2dArray = 1;
     }
 
     ExternalMemoryFlags externalFlags;
@@ -608,7 +604,7 @@ static VkResult InitSparseVirtualMemory(
     sparseMemCreateInfo.heapCount          = 0;
     sparseMemCreateInfo.heapAccess         = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
 
-#if defined(__unix__)
+#if PAL_AMDGPU_BUILD
     sparseMemCreateInfo.flags.initializeToZero = pDevice->GetRuntimeSettings().initializeVramToZero;
 #endif
 

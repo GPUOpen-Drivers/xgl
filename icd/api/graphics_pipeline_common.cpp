@@ -329,9 +329,9 @@ void GraphicsPipelineCommon::GetSubpassSampleCount(
 
 // =====================================================================================================================
 static VkFormat GetDepthFormat(
-    const RenderPass*                       pRenderPass,
-    const uint32_t                          subpassIndex,
-    const VkPipelineRenderingCreateInfoKHR* pPipelineRenderingCreateInfoKHR
+    const RenderPass*                    pRenderPass,
+    const uint32_t                       subpassIndex,
+    const VkPipelineRenderingCreateInfo* pPipelineRenderingCreateInfo
     )
 {
     VkFormat format = VK_FORMAT_UNDEFINED;
@@ -340,11 +340,11 @@ static VkFormat GetDepthFormat(
     {
         format = pRenderPass->GetDepthStencilAttachmentFormat(subpassIndex);
     }
-    else if (pPipelineRenderingCreateInfoKHR != nullptr)
+    else if (pPipelineRenderingCreateInfo != nullptr)
     {
-        format = (pPipelineRenderingCreateInfoKHR->depthAttachmentFormat != VK_FORMAT_UNDEFINED) ?
-                   pPipelineRenderingCreateInfoKHR->depthAttachmentFormat :
-                   pPipelineRenderingCreateInfoKHR->stencilAttachmentFormat;
+        format = (pPipelineRenderingCreateInfo->depthAttachmentFormat != VK_FORMAT_UNDEFINED) ?
+                   pPipelineRenderingCreateInfo->depthAttachmentFormat :
+                   pPipelineRenderingCreateInfo->stencilAttachmentFormat;
     }
 
     return format;
@@ -352,13 +352,13 @@ static VkFormat GetDepthFormat(
 
 // =====================================================================================================================
 static uint32_t GetColorAttachmentCount(
-    const RenderPass*                       pRenderPass,
-    const uint32_t                          subpassIndex,
-    const VkPipelineRenderingCreateInfoKHR* pPipelineRenderingCreateInfoKHR
+    const RenderPass*                    pRenderPass,
+    const uint32_t                       subpassIndex,
+    const VkPipelineRenderingCreateInfo* pPipelineRenderingCreateInfo
 )
 {
     return (pRenderPass != nullptr) ? pRenderPass->GetSubpassColorReferenceCount(subpassIndex) :
-           (pPipelineRenderingCreateInfoKHR != nullptr) ? pPipelineRenderingCreateInfoKHR->colorAttachmentCount :
+           (pPipelineRenderingCreateInfo != nullptr) ? pPipelineRenderingCreateInfo->colorAttachmentCount :
            0u;
 }
 
@@ -1537,7 +1537,7 @@ static void BuildDepthStencilState(
 // =====================================================================================================================
 static void BuildColorBlendState(
     const Device*                              pDevice,
-    const VkPipelineRenderingCreateInfoKHR*    pRendering,
+    const VkPipelineRenderingCreateInfo*       pRendering,
     const VkPipelineColorBlendStateCreateInfo* pCb,
     const RenderPass*                          pRenderPass,
     const uint32_t                             subpass,
@@ -1705,7 +1705,7 @@ static void BuildColorBlendState(
 // =====================================================================================================================
 static void BuildRenderingState(
     const Device*                                 pDevice,
-    const VkPipelineRenderingCreateInfoKHR*       pRendering,
+    const VkPipelineRenderingCreateInfo*          pRendering,
     const VkPipelineColorBlendStateCreateInfo*    pCb,
     const RenderPass*                             pRenderPass,
     GraphicsPipelineObjectCreateInfo*             pInfo)
@@ -1750,7 +1750,7 @@ static void BuildVertexInputInterfaceState(
 
     pInfo->immedInfo.inputAssemblyState.topology = Pal::PrimitiveTopology::TriangleList;
     pInfo->pipeline.iaState.topologyInfo.primitiveType = Pal::PrimitiveType::Triangle;
-    if (pIa != nullptr)
+    if ((pIa != nullptr) && (hasMesh == false))
     {
         pInfo->immedInfo.inputAssemblyState.topology       = VkToPalPrimitiveTopology(pIa->topology);
         pInfo->pipeline.iaState.topologyInfo.primitiveType = VkToPalPrimitiveType(pIa->topology);
@@ -1923,7 +1923,7 @@ static void BuildFragmentOutputInterfaceState(
     EXTRACT_VK_STRUCTURES_0(
         renderingCreateInfo,
         PipelineRenderingCreateInfoKHR,
-        static_cast<const VkPipelineRenderingCreateInfoKHR*>(pIn->pNext),
+        static_cast<const VkPipelineRenderingCreateInfo*>(pIn->pNext),
         PIPELINE_RENDERING_CREATE_INFO_KHR);
 
     pInfo->dbFormat = GetDepthFormat(pRenderPass, subpass, pPipelineRenderingCreateInfoKHR);
@@ -2806,7 +2806,7 @@ void GraphicsPipelineCommon::GenerateHashForFragmentShaderState(
     EXTRACT_VK_STRUCTURES_0(
         renderingCreateInfo,
         PipelineRenderingCreateInfoKHR,
-        static_cast<const VkPipelineRenderingCreateInfoKHR*>(pCreateInfo->pNext),
+        static_cast<const VkPipelineRenderingCreateInfo*>(pCreateInfo->pNext),
         PIPELINE_RENDERING_CREATE_INFO_KHR);
 
     if ((pCreateInfo->pDepthStencilState != nullptr) &&
@@ -2839,7 +2839,7 @@ void GraphicsPipelineCommon::GenerateHashForFragmentOutputInterfaceState(
     EXTRACT_VK_STRUCTURES_0(
         renderingCreateInfo,
         PipelineRenderingCreateInfoKHR,
-        static_cast<const VkPipelineRenderingCreateInfoKHR*>(pCreateInfo->pNext),
+        static_cast<const VkPipelineRenderingCreateInfo*>(pCreateInfo->pNext),
         PIPELINE_RENDERING_CREATE_INFO_KHR);
 
     uint32 colorAttachmentCount = 0;

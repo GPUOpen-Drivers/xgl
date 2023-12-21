@@ -145,7 +145,7 @@ VkResult SwapChain::Create(
     properties.imageCreateInfo.swizzledFormat     = VkToPalFormat(pCreateInfo->imageFormat, settings);
     properties.imageCreateInfo.flags.stereo       = properties.flags.stereo;
     properties.imageCreateInfo.flags.peerWritable = (pDevice->NumPalDevices() > 1) ? 1 : 0;
-#if defined(__unix__)
+#if PAL_AMDGPU_BUILD
     properties.imageCreateInfo.flags.initializeToZero = settings.initializeVramToZero;
 #endif
 
@@ -1064,7 +1064,7 @@ Pal::IQueue* SwapChain::PrePresent(
 bool SwapChain::IsSuboptimal(uint32_t deviceIdx)
 {
     bool                     suboptimal          = false;
-    VkSurfaceCapabilitiesKHR surfaceCapabilities = { };
+    VkExtent2D               currentExtent       = { };
     Pal::OsDisplayHandle     displayHandle       = 0;
     VkResult                 result              = VK_SUCCESS;
 
@@ -1074,21 +1074,24 @@ bool SwapChain::IsSuboptimal(uint32_t deviceIdx)
 
         if (m_pPalSwapChain->NeedWindowSizeChangedCheck())
         {
+            VkSurfaceCapabilitiesKHR surfaceCapabilities = { };
+
             result = m_pDevice->VkPhysicalDevice(deviceIdx)->GetSurfaceCapabilities(
                 Surface::HandleFromObject(m_properties.pSurface),
                 displayHandle,
                 &surfaceCapabilities);
+
+            currentExtent = surfaceCapabilities.currentExtent;
 
             if (result == VK_SUCCESS)
             {
                 // Magic width/height value meaning that the surface is resized to match the swapchain's extent.
                 constexpr uint32_t SwapchainBasedSize = 0xFFFFFFFF;
 
-                if ((surfaceCapabilities.currentExtent.width  != SwapchainBasedSize) ||
-                        (surfaceCapabilities.currentExtent.height != SwapchainBasedSize))
+                if ((currentExtent.width  != SwapchainBasedSize) || (currentExtent.height != SwapchainBasedSize))
                 {
-                    suboptimal = ((surfaceCapabilities.currentExtent.width != m_properties.imageCreateInfo.extent.width)
-                        || (surfaceCapabilities.currentExtent.height != m_properties.imageCreateInfo.extent.height));
+                    suboptimal = ((currentExtent.width != m_properties.imageCreateInfo.extent.width)
+                        || (currentExtent.height != m_properties.imageCreateInfo.extent.height));
                 }
             }
         }
@@ -1529,11 +1532,8 @@ void FullscreenMgr::UpdatePresentInfo(
     // Present mode does not matter in DXGI as it is completely OS handled. This is for our internal tracking only
     if (pSwapChain->IsDxgiEnabled())
     {
-        // If KMD reported we're in Indpendent Flip and our window is fullscreen compatible, it is safe to assume
-        // that DXGI acquired FSE.
-        bool isFullscreen = (IsFullscreenOwnershipSafe() == Pal::Result::Success) && flipFlags.iFlip;
-
-        pPresentInfo->presentMode = isFullscreen ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
+        // If KMD reported we're in Indpendent Flip we can assume that DXGI acquired FSE.
+        pPresentInfo->presentMode = flipFlags.iFlip ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
     }
     // Try to enter (or remain in) exclusive access mode on this swap chain's screen for this present
     else

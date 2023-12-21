@@ -158,7 +158,7 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     *pDeviceSettings                = {};
     const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
-    pDeviceSettings->bvhCollapse                  = settings.rtEnableBVHCollapse;
+    pDeviceSettings->bvhCollapse                  = settings.rtEnableBvhCollapse;
     pDeviceSettings->topDownBuild                 = settings.rtEnableTopDownBuild;
 
     pDeviceSettings->rebraidType                  = ConvertGpuRtRebraidType(settings.rtEnableTreeRebraid);
@@ -181,7 +181,7 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->fp16BoxModeMixedSaThresh = Util::Clamp(fp16BoxMixedThreshold, 1.0f, 8.0f);
     pDeviceSettings->enableMortonCode30                = settings.rtEnableMortonCode30;
     pDeviceSettings->enableVariableBitsMortonCodes     = settings.enableVariableBitsMortonCodes;
-    pDeviceSettings->enablePrefixScanDLB               = settings.rtEnablePrefixScanDLB;
+    pDeviceSettings->enablePrefixScanDLB               = settings.rtEnablePrefixScanDlb;
 
     switch (settings.rtTriangleCompressionMode)
     {
@@ -204,8 +204,8 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->bvhBuildModeDefault               = ConvertGpuRtBvhBuildMode(settings.rtBvhBuildModeDefault);
     pDeviceSettings->bvhBuildModeFastTrace             = ConvertGpuRtBvhBuildMode(settings.rtBvhBuildModeFastTrace);
     pDeviceSettings->bvhBuildModeFastBuild             = ConvertGpuRtBvhBuildMode(settings.rtBvhBuildModeFastBuild);
-    pDeviceSettings->bvhBuildModeOverrideBLAS          = ConvertGpuRtBvhBuildMode(settings.bvhBuildModeOverrideBLAS);
-    pDeviceSettings->bvhBuildModeOverrideTLAS          = ConvertGpuRtBvhBuildMode(settings.bvhBuildModeOverrideTLAS);
+    pDeviceSettings->bvhBuildModeOverrideBLAS          = ConvertGpuRtBvhBuildMode(settings.bvhBuildModeOverrideBlas);
+    pDeviceSettings->bvhBuildModeOverrideTLAS          = ConvertGpuRtBvhBuildMode(settings.bvhBuildModeOverrideTlas);
     pDeviceSettings->enableParallelUpdate              = settings.rtEnableUpdateParallel;
     pDeviceSettings->enableParallelBuild               = settings.rtEnableBuildParallel;
     pDeviceSettings->parallelBuildWavesPerSimd         = settings.buildParallelWavesPerSimd;
@@ -226,10 +226,10 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->enableMergeSort                   = settings.enableMergeSort;
     pDeviceSettings->fastBuildThreshold                = settings.fastBuildThreshold;
     pDeviceSettings->lbvhBuildThreshold                = settings.lbvhBuildThreshold;
-    pDeviceSettings->enableBVHBuildDebugCounters       = settings.enableBVHBuildDebugCounters;
-    pDeviceSettings->enableInsertBarriersInBuildAS     = settings.enableInsertBarriersInBuildAS;
+    pDeviceSettings->enableBVHBuildDebugCounters       = settings.enableBvhBuildDebugCounters;
+    pDeviceSettings->enableInsertBarriersInBuildAS     = settings.enableInsertBarriersInBuildAs;
     pDeviceSettings->numMortonSizeBits                 = settings.numMortonSizeBits;
-    pDeviceSettings->allowFp16BoxNodesInUpdatableBvh   = settings.rtAllowFp16BoxNodesInUpdatableBVH;
+    pDeviceSettings->allowFp16BoxNodesInUpdatableBvh   = settings.rtAllowFp16BoxNodesInUpdatableBvh;
 
     pDeviceSettings->enableBuildAccelStructScratchDumping = pDeviceSettings->enableBuildAccelStructDumping &&
                                                             settings.rtEnableAccelerationStructureScratchMemoryDump;

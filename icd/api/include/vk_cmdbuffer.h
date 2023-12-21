@@ -814,7 +814,7 @@ public:
         const VkDependencyInfoKHR*                  pDependencyInfo);
 
     void BeginRendering(
-        const VkRenderingInfoKHR*                   pRenderingInfo);
+        const VkRenderingInfo*                      pRenderingInfo);
 
     void EndRendering();
 
@@ -1358,7 +1358,7 @@ public:
     }
 #endif
 
-    const uint32_t GetPipelineScratchSize(uint32_t deviceIdx) const;
+    uint32_t GetPipelineScratchSize(uint32_t deviceIdx) const;
 
     void BindDescriptorBuffers(
         uint32_t                                    bufferCount,
@@ -1527,7 +1527,7 @@ private:
     void RPSyncPostLoadOpColorClear();
 
     void BindTargets(
-        const VkRenderingInfoKHR*                              pRenderingInfo,
+        const VkRenderingInfo*                                 pRenderingInfo,
         const VkRenderingFragmentShadingRateAttachmentInfoKHR* pRenderingFragmentShadingRateAttachmentInfoKHR);
 
     void ResolveImage(
@@ -1536,11 +1536,11 @@ private:
 
     void LoadOpClearColor(
         const Pal::Rect*          pDeviceGroupRenderArea,
-        const VkRenderingInfoKHR* pRenderingInfo);
+        const VkRenderingInfo*    pRenderingInfo);
 
     void LoadOpClearDepthStencil(
         const Pal::Rect*          pDeviceGroupRenderArea,
-        const VkRenderingInfoKHR* pRenderingInfo);
+        const VkRenderingInfo*    pRenderingInfo);
 
     void GetImageLayout(
         VkImageView        imageView,
@@ -1550,7 +1550,7 @@ private:
         Pal::ImageLayout*  palImageLayout);
 
     void StoreAttachmentInfo(
-        const VkRenderingAttachmentInfoKHR& renderingAttachmentInfo,
+        const VkRenderingAttachmentInfo&    renderingAttachmentInfo,
         DynamicRenderingAttachments*        pDynamicRenderingAttachement);
 
     Pal::ImageLayout RPGetAttachmentLayout(
@@ -2523,11 +2523,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarker2AMD(
     uint32_t                                    marker);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginRendering(
-    VkCommandBuffer           commandBuffer,
-    const VkRenderingInfoKHR* pRenderingInfo);
+    VkCommandBuffer                             commandBuffer,
+    const VkRenderingInfo*                      pRenderingInfo);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdEndRendering(
-    VkCommandBuffer           commandBuffer);
+    VkCommandBuffer                             commandBuffer);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetCullMode(
     VkCommandBuffer                             commandBuffer,

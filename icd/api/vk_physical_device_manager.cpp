@@ -273,7 +273,8 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
 
             if (pLoader != nullptr)
             {
-                settingsArray[i] = VK_PLACEMENT_NEW(pLoader) VulkanSettingsLoader(pPalDeviceList[i], m_pInstance->PalPlatform(), i);
+                settingsArray[i] = VK_PLACEMENT_NEW(pLoader) VulkanSettingsLoader(pPalDeviceList[i],
+                                                                                  m_pInstance->PalPlatform());
             }
             else
             {

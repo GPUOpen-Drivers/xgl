@@ -102,6 +102,7 @@ public:
 
     VkResult GetShareHandle(
         Device*                                     device,
+        const void*                                 pNext,
         VkExternalSemaphoreHandleTypeFlagBits       handleType,
         Pal::OsExternalHandle*                      pHandle);
 

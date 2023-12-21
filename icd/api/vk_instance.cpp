@@ -458,7 +458,7 @@ VkResult Instance::Init(
         PhysicalDevice* pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(devices[DefaultDeviceIndex]);
         Pal::DeviceProperties info;
         pPhysicalDevice->PalDevice()->GetProperties(&info);
-        if (pPhysicalDevice->GetRuntimeSettings().enableSPP && info.gfxipProperties.flags.supportSpp)
+        if (pPhysicalDevice->GetRuntimeSettings().enableSpp && info.gfxipProperties.flags.supportSpp)
         {
             wchar_t executableName[PATH_MAX];
             wchar_t executablePath[PATH_MAX];
@@ -658,7 +658,7 @@ void Instance::UpdateSettingsWithAppProfile(
     ReloadAppProfileSettings(nullptr,
                             this,
                             &profileSettings,
-                            pSettings->appGpuID);
+                            pSettings->appGpuId);
 
     pSettings->vulkanTexFilterQuality =
         static_cast<TextureFilterOptimizationSettings>(profileSettings.texFilterQuality);

@@ -293,7 +293,7 @@ VkResult PipelineCompiler::Initialize()
                 0,
                 0,
                 nullptr,
-                settings.enableOnDiskInternalPipelineCaches);
+                settings.enableInternalPipelineCachingToDisk);
 
         // This isn't a terminal failure, the device can continue without the pipeline cache if need be.
         VK_ALERT(m_pBinaryCache == nullptr);
@@ -641,12 +641,10 @@ VkResult PipelineCompiler::BuildShaderModule(
 
         StoreShaderModuleToCache(flags, internalShaderFlags, compilerMask, uniqueHash, pBinaryCache, pShaderModule);
     }
-    else
+    else if ((pSettings->enablePipelineDump)
+        )
     {
-        if (pSettings->enablePipelineDump)
-        {
-            Vkgc::IPipelineDumper::DumpSpirvBinary(pSettings->pipelineDumpDir, &finalData);
-        }
+        Vkgc::IPipelineDumper::DumpSpirvBinary(pSettings->pipelineDumpDir, &finalData);
     }
 
     if (findReplaceShader)
@@ -2343,7 +2341,7 @@ static void BuildPipelineShadersInfo(
 static void BuildColorBlendState(
     const Device*                              pDevice,
     const VkPipelineColorBlendStateCreateInfo* pCb,
-    const VkPipelineRenderingCreateInfoKHR*    pRendering,
+    const VkPipelineRenderingCreateInfo*       pRendering,
     uint64_t                                   dynamicStateFlags,
     const RenderPass*                          pRenderPass,
     const uint32_t                             subpass,
@@ -2495,7 +2493,7 @@ static void BuildVertexInputInterfaceState(
     GraphicsPipelineBinaryCreateInfo*   pCreateInfo)
 {
     pCreateInfo->pipelineInfo.iaState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    if (pIn->pInputAssemblyState)
+    if ((pIn->pInputAssemblyState) && (Util::TestAnyFlagSet(activeStages, VK_SHADER_STAGE_MESH_BIT_EXT) == false))
     {
         pCreateInfo->pipelineInfo.iaState.topology           = pIn->pInputAssemblyState->topology;
         pCreateInfo->pipelineInfo.iaState.disableVertexReuse = false;
@@ -2629,7 +2627,7 @@ static void BuildFragmentOutputInterfaceState(
     EXTRACT_VK_STRUCTURES_0(
         dynamicRendering,
         PipelineRenderingCreateInfoKHR,
-        reinterpret_cast<const VkPipelineRenderingCreateInfoKHR*>(pIn->pNext),
+        reinterpret_cast<const VkPipelineRenderingCreateInfo*>(pIn->pNext),
         PIPELINE_RENDERING_CREATE_INFO_KHR)
 
     BuildMultisampleStateInFoi(pIn->pMultisampleState, dynamicStateFlags, pCreateInfo);
@@ -3488,6 +3486,9 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
 #endif
         static_assert(RaytracingContinuations == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Continuations));
         pCreateInfo->pipelineInfo.mode = static_cast<Vkgc::LlpcRaytracingMode>(settings.llpcRaytracingMode);
+
+        static_assert(CpsFlagStackInGlobalMem == Vkgc::CpsFlagStackInGlobalMem);
+        pCreateInfo->pipelineInfo.cpsFlags = settings.cpsFlags;
 
         pCreateInfo->pipelineInfo.isReplay = isReplay;
 
@@ -4861,31 +4862,28 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalDataImp(
 
     uint32_t maxLocation = 0;
     void* pAttribInternalBase = pUberFetchShaderInternalData;
-    if (settings.enableRobustUberFetchShader)
+    uint64_t locationMask = 0;
+    for (uint32_t i = 0; i < vertexAttributeDescriptionCount; i++)
     {
-        uint64_t locationMask = 0;
-        for (uint32_t i = 0; i < vertexAttributeDescriptionCount; i++)
+        Vkgc::UberFetchShaderAttribInfo attribInfo = {};
+        auto pAttrib = &pVertexAttributeDescriptions[i];
+        bool hasDualLocation = Formats::IsDvec3Or4(pAttrib->format);
+        if (pAttrib->location >= maxLocation)
         {
-            Vkgc::UberFetchShaderAttribInfo attribInfo = {};
-            auto pAttrib = &pVertexAttributeDescriptions[i];
-            bool hasDualLocation = Formats::IsDvec3Or4(pAttrib->format);
-            if (pAttrib->location >= maxLocation)
-            {
-                maxLocation = hasDualLocation ? (pAttrib->location + 1) : pAttrib->location;
-            }
-            locationMask |= (1ull << pAttrib->location);
-            if (hasDualLocation)
-            {
-                locationMask |= (1ull << (pAttrib->location + 1));
-            }
+            maxLocation = hasDualLocation ? (pAttrib->location + 1) : pAttrib->location;
         }
+        locationMask |= (1ull << pAttrib->location);
+        if (hasDualLocation)
+        {
+            locationMask |= (1ull << (pAttrib->location + 1));
+        }
+    }
 
-        pAttribInternalBase = Util::VoidPtrInc(pUberFetchShaderInternalData, sizeof(uint64_t));
-        if (vertexAttributeDescriptionCount > 0)
-        {
-            memcpy(pUberFetchShaderInternalData, &locationMask, sizeof(uint64_t));
-            memset(pAttribInternalBase, 0, (maxLocation + 1) * sizeof(Vkgc::UberFetchShaderAttribInfo));
-        }
+    pAttribInternalBase = Util::VoidPtrInc(pUberFetchShaderInternalData, sizeof(uint64_t));
+    if (vertexAttributeDescriptionCount > 0)
+    {
+        memcpy(pUberFetchShaderInternalData, &locationMask, sizeof(uint64_t));
+        memset(pAttribInternalBase, 0, (maxLocation + 1) * sizeof(Vkgc::UberFetchShaderAttribInfo));
     }
 
     for (uint32_t i = 0; i < vertexAttributeDescriptionCount; i++)

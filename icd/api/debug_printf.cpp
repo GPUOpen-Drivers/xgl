@@ -98,7 +98,10 @@ void DebugPrintf::BindPipeline(
         allocInfo.pal.size = Util::Pow2Align(settings.debugPrintfBufferSize, PAL_PAGE_BYTES);
         allocInfo.pal.alignment = PAL_PAGE_BYTES;
         allocInfo.pal.priority = Pal::GpuMemPriority::Normal;
-        pDevice->MemMgr()->GetCommonPool(InternalPoolCpuCacheableGpuUncached, &allocInfo);
+        InternalSubAllocPool bufferType = settings.enableHangOutput ?
+            InternalPoolCpuCacheableGpuUncached : InternalPoolDebugCpuRead;
+
+        pDevice->MemMgr()->GetCommonPool(bufferType, &allocInfo);
         VkResult result = pDevice->MemMgr()->AllocGpuMem(allocInfo,
                                                          &m_printfMemory,
                                                          pDevice->GetPalDeviceMask(),

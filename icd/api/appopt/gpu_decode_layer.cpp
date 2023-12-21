@@ -545,7 +545,7 @@ static VkResult gpuBlitImage(
     uint32_t maxObj                 = pCmdBuffer->EstimateMaxObjectsOnVirtualStack(sizeof(Pal::ImageCopyRegion));
     VkFormat dstFormat              = pDstImage->GetFormat();
 
-    if(settings.enableBC3Encoder)
+    if(settings.enableBc3Encoder)
     {
         if (type == GpuTexDecoder::InternalTexConvertCsType::ConvertRGBA8ToBc3)
         {
@@ -661,7 +661,7 @@ static VkResult gpuBlitBuffer(
     GpuTexDecoder::CompileTimeConstants constInfo = {};
     Pal::SwizzledFormat sourceViewFormat          = {};
 
-    if(settings.enableBC3Encoder)
+    if(settings.enableBc3Encoder)
     {
         if (type != GpuTexDecoder::InternalTexConvertCsType::ConvertETC2ToBc3)
         {
@@ -722,8 +722,8 @@ static VkResult gpuBlitBuffer(
             pPalRegions[i] = VkToPalMemoryImageCopyRegion(
                 pRegions[regionIdx + i],
                 dstSwzFormat.format,
-                pDstImage->GetArraySize(),
                 plane,
+                pDstImage->GetArraySize(),
                 pSrcBuffer->MemOffset());
         }
 
@@ -765,7 +765,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(
 
     if (Formats::IsASTCFormat(pDstImage->GetFormat()))
     {
-        if (settings.enableBC3Encoder != 0)
+        if (settings.enableBc3Encoder != 0)
         {
             // ASTC one step convert to BC3 haven't implemented, so force two steps if Bc3 encoder is enabled
             twoStepsOp = true;
@@ -774,7 +774,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(
     }
     else if (Formats::IsEtc2Format(pDstImage->GetFormat()))
     {
-        switch (settings.enableBC3Encoder)
+        switch (settings.enableBc3Encoder)
         {
             case 0:
                 convType   = GpuTexDecoder::InternalTexConvertCsType::ConvertETC2ToRGBA8;
@@ -896,7 +896,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(
 
     if (Formats::IsASTCFormat(pDstImage->GetFormat()))
     {
-        if (settings.enableBC3Encoder != 0)
+        if (settings.enableBc3Encoder != 0)
         {
             // ASTC one step convert to BC3 haven't implemented, so force two steps if Bc3 encoder is enabled
             twoStepsOp = true;
@@ -905,7 +905,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(
     }
     else if (Formats::IsEtc2Format(pDstImage->GetFormat()))
     {
-        switch (settings.enableBC3Encoder)
+        switch (settings.enableBc3Encoder)
         {
             case 0:
                 convType   = GpuTexDecoder::InternalTexConvertCsType::ConvertETC2ToRGBA8;
@@ -1101,7 +1101,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyImage(
     GpuDecoderLayer* pDecodeWrapper = pDevice->GetGpuDecoderLayer();
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
-    if (settings.enableBC3Encoder)
+    if (settings.enableBc3Encoder)
     {
         pDevice->GetGpuDecoderLayer()->ClearStagingResources(image);
     }

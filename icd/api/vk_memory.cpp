@@ -95,7 +95,7 @@ VkResult Memory::Create(
     VK_ASSERT(pAllocInfo->sType == VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
 
     createInfo.size = pAllocInfo->allocationSize;
-#if defined(__unix__)
+#if PAL_AMDGPU_BUILD
     createInfo.flags.initializeToZero = settings.initializeVramToZero;
 #endif
 
@@ -167,6 +167,7 @@ VkResult Memory::Create(
         pDevice->GetEnabledFeatures().deviceCoherentMemory)
     {
         createInfo.flags.gl2Uncached = 1;
+        createInfo.mallPolicy        = Pal::GpuMemMallPolicy::Never;
     }
 
     if ((propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0)

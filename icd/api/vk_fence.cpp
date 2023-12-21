@@ -66,6 +66,9 @@ VkResult Fence::Create(
         {
         case VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO:
         {
+            // Mark this fence as shareable.
+            palFenceCreateInfo.flags.shareable = 1;
+
             break;
         }
         default:
@@ -246,7 +249,8 @@ VkResult Fence::ImportFenceFd(
                 (static_cast<int32_t>(pImportFenceFdInfo->fd) == InvalidFd))
             {
                 Pal::FenceCreateInfo palFenceCreateInfo = {};
-                palFenceCreateInfo.flags.signaled = 1;
+                palFenceCreateInfo.flags.signaled       = 1;
+                palFenceCreateInfo.flags.shareable      = 1;
 
                 result = PalToVkResult(pDevice->PalDevice(DefaultDeviceIndex)->CreateFence(
                     palFenceCreateInfo,

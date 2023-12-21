@@ -903,10 +903,10 @@ void ShaderOptimizer::BuildTuningProfile()
             pPattern->codeHash.lower = m_settings.overrideShaderHashLower;
             pPattern->codeHash.upper = m_settings.overrideShaderHashUpper;
 
-            if (m_settings.overrideNumVGPRsAvailable != 0)
+            if (m_settings.overrideNumVgprsAvailable != 0)
             {
                 pAction->shaderCreate.apply.vgprLimit         = true;
-                pAction->shaderCreate.tuningOptions.vgprLimit = m_settings.overrideNumVGPRsAvailable;
+                pAction->shaderCreate.tuningOptions.vgprLimit = m_settings.overrideNumVgprsAvailable;
             }
 
             if (m_settings.overrideMaxLdsSpillDwords != 0)
@@ -1178,15 +1178,6 @@ void ShaderOptimizer::BuildAppProfileLlpc()
         pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.tuningOptions.disableFMA = true;
         pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.apply.disableFastMathFlags = true;
         pEntry->action.shaders[ShaderStage::ShaderStageVertex].shaderCreate.tuningOptions.disableFastMathFlags = 8u | 32u;
-    }
-
-    if (appProfile == AppProfile::CSGO)
-    {
-        i = m_appProfile.entryCount++;
-        PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
-        pEntry->pattern.match.always = true;
-        pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.disableFastMathFlags = true;
-        pEntry->action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.tuningOptions.disableFastMathFlags = 32u;
     }
 
     if (appProfile == AppProfile::WarHammerIII)

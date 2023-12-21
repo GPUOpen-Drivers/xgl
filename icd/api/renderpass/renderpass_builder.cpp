@@ -324,15 +324,15 @@ VkResult RenderPassBuilder::Build(
         result = BuildSubpass(subpass);
     }
 
-    if (m_pInfo->doClearsUpfront                                 &&
-        (m_pSubpasses[0].syncTop.barrier.flags.preColorClearSync ||
-         m_pSubpasses[0].syncTop.barrier.flags.preDsClearSync))
-    {
-        PostProcessSyncPoint(&m_pSubpasses[0].syncTop);
-    }
-
     if (result == Pal::Result::Success)
     {
+        if (m_pInfo->doClearsUpfront                                 &&
+            (m_pSubpasses[0].syncTop.barrier.flags.preColorClearSync ||
+             m_pSubpasses[0].syncTop.barrier.flags.preDsClearSync))
+        {
+            PostProcessSyncPoint(&m_pSubpasses[0].syncTop);
+        }
+
         result = BuildEndState();
     }
 

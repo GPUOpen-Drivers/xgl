@@ -1181,7 +1181,6 @@ void CmdBuffer::PalCmdDrawMeshTasksIndirect(
     // The indirect argument should be in the range of the given buffer size
     VK_ASSERT((stride + offset) <= pBuffer->PalMemory(DefaultDeviceIndex)->Desc().size);
 
-    const Pal::gpusize paramOffset = pBuffer->MemOffset() + offset;
     Pal::gpusize countVirtAddr = 0;
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
@@ -1196,10 +1195,14 @@ void CmdBuffer::PalCmdDrawMeshTasksIndirect(
             countVirtAddr = pCountBuffer->GpuVirtAddr(deviceIdx) + countOffset;
         }
 
+        Pal::GpuVirtAddrAndStride gpuVirtAddrAndStride =
+        {
+            pBuffer->GpuVirtAddr(deviceIdx) + static_cast<Pal::gpusize>(offset),
+            stride
+        };
+
         PalCmdBuffer(deviceIdx)->CmdDispatchMeshIndirectMulti(
-            *pBuffer->PalMemory(deviceIdx),
-            paramOffset,
-            stride,
+            gpuVirtAddrAndStride,
             count,
             countVirtAddr);
     }
@@ -1252,9 +1255,7 @@ void CmdBuffer::PalCmdDispatchIndirect(
         // TODO use device group dispatch offsets here.
         // Note: check spec to see if offset setting is applications' responsibility.
 
-        PalCmdBuffer(deviceIdx)->CmdDispatchIndirect(
-            *pBuffer->PalMemory(deviceIdx),
-            pBuffer->MemOffset() + offset);
+        PalCmdBuffer(deviceIdx)->CmdDispatchIndirect(pBuffer->GpuVirtAddr(deviceIdx) + offset);
     }
     while (deviceGroup.IterateNext());
 }
@@ -1291,7 +1292,7 @@ VkResult CmdBuffer::Begin(
     RenderPass*  pRenderPass  = nullptr;
     Framebuffer* pFramebuffer = nullptr;
 
-    const VkCommandBufferInheritanceRenderingInfoKHR* pInheritanceRenderingInfoKHR = nullptr;
+    const VkCommandBufferInheritanceRenderingInfo* pInheritanceRenderingInfo = nullptr;
 
     m_cbBeginDeviceMask = m_pDevice->GetPalDeviceMask();
 
@@ -1360,21 +1361,21 @@ VkResult CmdBuffer::Begin(
                 inheritedStateParams.stateFlags.predication = pExtInfo->conditionalRenderingEnable;
                 m_flags.hasConditionalRendering             = pExtInfo->conditionalRenderingEnable;
             }
-            else if (pHeader->sType == VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO_KHR)
+            else if (pHeader->sType == VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO)
             {
                 VK_ASSERT(m_flags.is2ndLvl);
 
-                pInheritanceRenderingInfoKHR = static_cast<const VkCommandBufferInheritanceRenderingInfoKHR*>(pNext);
+                pInheritanceRenderingInfo = static_cast<const VkCommandBufferInheritanceRenderingInfo*>(pNext);
 
-                inheritedStateParams.colorTargetCount = pInheritanceRenderingInfoKHR->colorAttachmentCount;
+                inheritedStateParams.colorTargetCount = pInheritanceRenderingInfo->colorAttachmentCount;
                 inheritedStateParams.stateFlags.targetViewState = 1;
 
                 for (uint32_t i = 0; i < inheritedStateParams.colorTargetCount; i++)
                 {
                     inheritedStateParams.colorTargetSwizzledFormats[i] =
-                        VkToPalFormat(pInheritanceRenderingInfoKHR->pColorAttachmentFormats[i], settings);
+                        VkToPalFormat(pInheritanceRenderingInfo->pColorAttachmentFormats[i], settings);
 
-                    inheritedStateParams.sampleCount[i] = pInheritanceRenderingInfoKHR->rasterizationSamples;
+                    inheritedStateParams.sampleCount[i] = pInheritanceRenderingInfo->rasterizationSamples;
                 }
             }
 
@@ -1461,13 +1462,13 @@ VkResult CmdBuffer::Begin(
             m_renderPassInstance.subpass = currentSubPass;
         }
 
-        if (pInheritanceRenderingInfoKHR != nullptr)
+        if (pInheritanceRenderingInfo != nullptr)
         {
             m_allGpuState.dynamicRenderingInstance.viewMask =
-                pInheritanceRenderingInfoKHR->viewMask;
+                pInheritanceRenderingInfo->viewMask;
 
             m_allGpuState.dynamicRenderingInstance.colorAttachmentCount =
-                pInheritanceRenderingInfoKHR->colorAttachmentCount;
+                pInheritanceRenderingInfo->colorAttachmentCount;
 
             for (uint32_t i = 0; i < m_allGpuState.dynamicRenderingInstance.colorAttachmentCount; ++i)
             {
@@ -1475,17 +1476,17 @@ VkResult CmdBuffer::Begin(
                     &m_allGpuState.dynamicRenderingInstance.colorAttachments[i];
 
                 pDynamicAttachment->pImageView           = nullptr;
-                pDynamicAttachment->attachmentFormat     = pInheritanceRenderingInfoKHR->pColorAttachmentFormats[i];
-                pDynamicAttachment->rasterizationSamples = pInheritanceRenderingInfoKHR->rasterizationSamples;
+                pDynamicAttachment->attachmentFormat     = pInheritanceRenderingInfo->pColorAttachmentFormats[i];
+                pDynamicAttachment->rasterizationSamples = pInheritanceRenderingInfo->rasterizationSamples;
             }
 
             m_allGpuState.dynamicRenderingInstance.depthAttachment.attachmentFormat     =
-                (pInheritanceRenderingInfoKHR->depthAttachmentFormat != VK_FORMAT_UNDEFINED) ?
-                pInheritanceRenderingInfoKHR->depthAttachmentFormat :
-                pInheritanceRenderingInfoKHR->stencilAttachmentFormat;
+                (pInheritanceRenderingInfo->depthAttachmentFormat != VK_FORMAT_UNDEFINED) ?
+                pInheritanceRenderingInfo->depthAttachmentFormat :
+                pInheritanceRenderingInfo->stencilAttachmentFormat;
 
             m_allGpuState.dynamicRenderingInstance.depthAttachment.rasterizationSamples =
-                pInheritanceRenderingInfoKHR->rasterizationSamples;
+                pInheritanceRenderingInfo->rasterizationSamples;
         }
 
         // if input frame buffer object pointer is NULL, it means
@@ -1500,7 +1501,7 @@ VkResult CmdBuffer::Begin(
 
     m_flags.isRecording = true;
 
-    if ((pRenderPass != nullptr) || (pInheritanceRenderingInfoKHR != nullptr))
+    if ((pRenderPass != nullptr) || (pInheritanceRenderingInfo != nullptr))
     // secondary VkCommandBuffer will be used inside VkRenderPass
     {
         VK_ASSERT(m_flags.is2ndLvl);
@@ -3116,7 +3117,6 @@ void CmdBuffer::DrawIndirect(
 
     if ((stride + offset) <= pBuffer->PalMemory(DefaultDeviceIndex)->Desc().size)
     {
-        const Pal::gpusize paramOffset = pBuffer->MemOffset() + offset;
         Pal::gpusize countVirtAddr = 0;
 
         utils::IterateMask deviceGroup(m_curDeviceMask);
@@ -3124,6 +3124,12 @@ void CmdBuffer::DrawIndirect(
         do
         {
             const uint32_t deviceIdx = deviceGroup.Index();
+
+            Pal::GpuVirtAddrAndStride gpuVirtAddrAndStride =
+            {
+                pBuffer->GpuVirtAddr(deviceIdx) + static_cast<Pal::gpusize>(offset),
+                stride
+            };
 
             if (useBufferCount)
             {
@@ -3134,18 +3140,14 @@ void CmdBuffer::DrawIndirect(
             if (indexed == false)
             {
                 PalCmdBuffer(deviceIdx)->CmdDrawIndirectMulti(
-                    *pBuffer->PalMemory(deviceIdx),
-                    paramOffset,
-                    stride,
+                    gpuVirtAddrAndStride,
                     count,
                     countVirtAddr);
             }
             else
             {
                 PalCmdBuffer(deviceIdx)->CmdDrawIndexedIndirectMulti(
-                    *pBuffer->PalMemory(deviceIdx),
-                    paramOffset,
-                    stride,
+                    gpuVirtAddrAndStride,
                     count,
                     countVirtAddr);
             }
@@ -4351,11 +4353,11 @@ LoadOpClearSubresRanges(
 // Clear Color for VK_KHR_dynamic_rendering
 void CmdBuffer::LoadOpClearColor(
     const Pal::Rect*          pDeviceGroupRenderArea,
-    const VkRenderingInfoKHR* pRenderingInfo)
+    const VkRenderingInfo*    pRenderingInfo)
 {
     for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; ++i)
     {
-        const VkRenderingAttachmentInfoKHR& attachmentInfo = pRenderingInfo->pColorAttachments[i];
+        const VkRenderingAttachmentInfo& attachmentInfo = pRenderingInfo->pColorAttachments[i];
 
         if (attachmentInfo.loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
         {
@@ -4424,7 +4426,7 @@ void CmdBuffer::LoadOpClearColor(
 // Clear Depth Stencil for VK_KHR_dynamic_rendering
 void CmdBuffer::LoadOpClearDepthStencil(
     const Pal::Rect*          pDeviceGroupRenderArea,
-    const VkRenderingInfoKHR* pRenderingInfo)
+    const VkRenderingInfo*    pRenderingInfo)
 {
     // Note that no allocation will be performed, so Util::Vector allocator is nullptr.
     Util::Vector<Pal::SubresRange, MaxPalAspectsPerMask * Pal::MaxViewInstanceCount, Util::GenericAllocator> clearSubresRanges{ nullptr };
@@ -4438,8 +4440,8 @@ void CmdBuffer::LoadOpClearDepthStencil(
     float clearDepth   = 0.0f;
     uint8 clearStencil = 0;
 
-    const VkRenderingAttachmentInfoKHR* pDepthAttachmentInfo   = pRenderingInfo->pDepthAttachment;
-    const VkRenderingAttachmentInfoKHR* pStencilAttachmentInfo = pRenderingInfo->pStencilAttachment;
+    const VkRenderingAttachmentInfo* pDepthAttachmentInfo   = pRenderingInfo->pDepthAttachment;
+    const VkRenderingAttachmentInfo* pStencilAttachmentInfo = pRenderingInfo->pStencilAttachment;
 
     if ((pStencilAttachmentInfo != nullptr) &&
         (pStencilAttachmentInfo->imageView != VK_NULL_HANDLE))
@@ -4519,7 +4521,7 @@ void CmdBuffer::LoadOpClearDepthStencil(
 // =====================================================================================================================
 // StoreAttachment for VK_KHR_dynamic_rendering
 void CmdBuffer::StoreAttachmentInfo(
-    const VkRenderingAttachmentInfoKHR& renderingAttachmentInfo,
+    const VkRenderingAttachmentInfo&    renderingAttachmentInfo,
     DynamicRenderingAttachments*        pDynamicRenderingAttachement)
 {
     const ImageView* const pImageView = ImageView::ObjectFromHandle(renderingAttachmentInfo.imageView);
@@ -4533,7 +4535,7 @@ void CmdBuffer::StoreAttachmentInfo(
             0,
             this);
 
-        pDynamicRenderingAttachement->attachmentFormat   = pColorImage->GetFormat();
+        pDynamicRenderingAttachement->attachmentFormat   = pImageView->GetViewFormat();
         pDynamicRenderingAttachement->resolveMode        = renderingAttachmentInfo.resolveMode;
         pDynamicRenderingAttachement->pImageView         = pImageView;
         pDynamicRenderingAttachement->imageLayout        = colorImageLayout;
@@ -4557,14 +4559,14 @@ void CmdBuffer::StoreAttachmentInfo(
 // =====================================================================================================================
 // vkCmdBeginRendering for VK_KHR_dynamic_rendering
 void CmdBuffer::BeginRendering(
-    const VkRenderingInfoKHR* pRenderingInfo)
+    const VkRenderingInfo* pRenderingInfo)
 {
     VK_ASSERT(pRenderingInfo != nullptr);
 
     DbgBarrierPreCmd(DbgBarrierBeginRendering);
 
-    bool isResuming  = (pRenderingInfo->flags & VK_RENDERING_RESUMING_BIT_KHR);
-    bool isSuspended = (pRenderingInfo->flags & VK_RENDERING_SUSPENDING_BIT_KHR);
+    bool isResuming  = (pRenderingInfo->flags & VK_RENDERING_RESUMING_BIT);
+    bool isSuspended = (pRenderingInfo->flags & VK_RENDERING_SUSPENDING_BIT);
 
     bool skipEverything = isResuming && m_flags.isRenderingSuspended;
     bool skipClears     = isResuming && (m_flags.isRenderingSuspended == false);
@@ -4670,7 +4672,7 @@ void CmdBuffer::BeginRendering(
 
     for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; ++i)
     {
-        const VkRenderingAttachmentInfoKHR& colorAttachmentInfo = pRenderingInfo->pColorAttachments[i];
+        const VkRenderingAttachmentInfo& colorAttachmentInfo = pRenderingInfo->pColorAttachments[i];
 
         m_allGpuState.dynamicRenderingInstance.enableResolveTarget |=
             (colorAttachmentInfo.resolveImageView != VK_NULL_HANDLE);
@@ -4682,7 +4684,7 @@ void CmdBuffer::BeginRendering(
 
     if (pRenderingInfo->pDepthAttachment != nullptr)
     {
-        const VkRenderingAttachmentInfoKHR& depthAttachmentInfo = *pRenderingInfo->pDepthAttachment;
+        const VkRenderingAttachmentInfo& depthAttachmentInfo = *pRenderingInfo->pDepthAttachment;
 
         m_allGpuState.dynamicRenderingInstance.enableResolveTarget |=
             (depthAttachmentInfo.resolveImageView != VK_NULL_HANDLE);
@@ -4694,7 +4696,7 @@ void CmdBuffer::BeginRendering(
 
     if (pRenderingInfo->pStencilAttachment != nullptr)
     {
-        const VkRenderingAttachmentInfoKHR& stencilAttachmentInfo = *pRenderingInfo->pStencilAttachment;
+        const VkRenderingAttachmentInfo& stencilAttachmentInfo = *pRenderingInfo->pStencilAttachment;
 
         m_allGpuState.dynamicRenderingInstance.enableResolveTarget |=
             (stencilAttachmentInfo.resolveImageView != VK_NULL_HANDLE);
@@ -8504,7 +8506,7 @@ void CmdBuffer::GetImageLayout(
 // =====================================================================================================================
 // Binds color/depth targets for VK_KHR_dynamic_rendering
 void CmdBuffer::BindTargets(
-    const VkRenderingInfoKHR*                              pRenderingInfo,
+    const VkRenderingInfo*                                 pRenderingInfo,
     const VkRenderingFragmentShadingRateAttachmentInfoKHR* pRenderingFragmentShadingRateAttachmentInfoKHR)
 {
     Pal::BindTargetParams params = {};
@@ -8520,7 +8522,7 @@ void CmdBuffer::BindTargets(
 
         for (uint32_t i = 0; i < params.colorTargetCount; ++i)
         {
-            const VkRenderingAttachmentInfoKHR& renderingAttachmentInfo = pRenderingInfo->pColorAttachments[i];
+            const VkRenderingAttachmentInfo& renderingAttachmentInfo = pRenderingInfo->pColorAttachments[i];
 
             if (renderingAttachmentInfo.imageView != VK_NULL_HANDLE)
             {
@@ -8553,7 +8555,7 @@ void CmdBuffer::BindTargets(
             }
         }
 
-        const VkRenderingAttachmentInfoKHR* pStencilAttachmentInfo = pRenderingInfo->pStencilAttachment;
+        const VkRenderingAttachmentInfo* pStencilAttachmentInfo = pRenderingInfo->pStencilAttachment;
 
         if ((pStencilAttachmentInfo != nullptr) &&
             (pStencilAttachmentInfo->imageView != VK_NULL_HANDLE))
@@ -8575,7 +8577,7 @@ void CmdBuffer::BindTargets(
             params.depthTarget.stencilLayout = stencilLayout;
         }
 
-        const VkRenderingAttachmentInfoKHR* pDepthAttachmentInfo = pRenderingInfo->pDepthAttachment;
+        const VkRenderingAttachmentInfo* pDepthAttachmentInfo = pRenderingInfo->pDepthAttachment;
 
         if ((pDepthAttachmentInfo != nullptr) &&
             (pDepthAttachmentInfo->imageView != VK_NULL_HANDLE))
@@ -10717,8 +10719,8 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
 
     initUserData.constantsVa            = initConstantsVa;
     initUserData.inputBufferVa          = indirectDeviceAddress;
-    initUserData.outputBufferVa         = pScratchMemory->GpuVirtAddr(deviceIdx);
-    initUserData.outputConstantsVa      = constGpuAddr + offsetof(GpuRt::DispatchRaysConstants, constData);;
+    initUserData.outputBufferVa         = static_cast<uint64>(pScratchMemory->GpuVirtAddr(deviceIdx));
+    initUserData.outputConstantsVa      = constGpuAddr + offsetof(GpuRt::DispatchRaysConstants, constData);
     initUserData.outputCounterMetaVa    = 0uLL;
 
     m_pDevice->RayTrace()->TraceIndirectDispatch(deviceIdx,
@@ -10770,7 +10772,7 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
                                             1,
                                             &constGpuAddrLow);
 
-    PalCmdBuffer(deviceIdx)->CmdDispatchIndirect(*pScratchMemory->PalMemory(deviceIdx), pScratchMemory->Offset());
+    PalCmdBuffer(deviceIdx)->CmdDispatchIndirect(pScratchMemory->GpuVirtAddr(deviceIdx));
 
     DbgBarrierPostCmd(DbgTraceRays);
 }
@@ -11032,7 +11034,7 @@ void CmdBuffer::InsertDebugMarker(
 }
 
 // =====================================================================================================================
-const uint32_t CmdBuffer::GetPipelineScratchSize(
+uint32_t CmdBuffer::GetPipelineScratchSize(
     uint32_t deviceIdx) const
 {
     uint32_t scratchSize = 0;

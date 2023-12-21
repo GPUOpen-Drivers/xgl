@@ -138,6 +138,7 @@ enum class AppProfile : uint32_t
     TheSurge2,               // The Surge 2
     AsyncPostProcessLVr,     // AsyncPostProcessing sample app for AMD Liquid VR SDK
     Enscape,                 // Enscape by Chaos
+    Vkd3dEngine,             // vkd3d-proton for steam games
 };
 
 struct ProfileSettings

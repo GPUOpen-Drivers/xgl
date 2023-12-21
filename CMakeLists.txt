@@ -103,13 +103,6 @@ endif()
 # for intellisense used by VScode, YouCompleteMe, etc
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 
-# Strip the symbols for release build
-if(UNIX)
-    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-        string(APPEND CMAKE_SHARED_LINKER_FLAGS_RELEASE " -s")
-    endif()
-endif()
-
 ### Set Compiler ######################################################################################################
 xgl_set_compiler()
 
@@ -309,9 +302,7 @@ else()
 endif()
 
 # icd
-if(NOT ICD_BUILD_LLPCONLY)
 add_subdirectory(icd)
-endif()
 
 # VKGC compiler
 add_subdirectory(${XGL_VKGC_PATH} ${CMAKE_BINARY_DIR}/compiler)

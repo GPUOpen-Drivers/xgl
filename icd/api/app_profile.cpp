@@ -406,18 +406,13 @@ constexpr AppProfilePatternEntry AppNameSpidermanRemastered =
     "spider-man.exe"
 };
 
-#if VKI_RAY_TRACING
 constexpr AppProfilePatternEntry AppEngineVKD3D =
 {
     PatternEngineNameLower,
-    Util::MetroHash::Hash{{{
-        0x32778d0a,
-        0x05b56a84,
-        0x8f0c25bc,
-        0x1d75f3eb
-    }}}
+    "vkd3d"
 };
 
+#if VKI_RAY_TRACING
 constexpr AppProfilePatternEntry AppNameControlDX12 =
 {
     PatternAppNameLower,
@@ -1433,6 +1428,14 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::Enscape,
         {
             AppNameEnscape,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Vkd3dEngine,
+        {
+            AppEngineVKD3D,
             PatternEnd
         }
     }

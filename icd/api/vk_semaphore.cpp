@@ -242,6 +242,7 @@ VkResult Semaphore::Create(
 // Get external handle from the semaphore object.
 VkResult Semaphore::GetShareHandle(
     Device*                                     device,
+    const void*                                 pNext,
     VkExternalSemaphoreHandleTypeFlagBits       handleType,
     Pal::OsExternalHandle*                      pHandle)
 {
@@ -251,6 +252,7 @@ VkResult Semaphore::GetShareHandle(
 
     Pal::QueueSemaphoreExportInfo palExportInfo = {};
     palExportInfo.flags.isReference = (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
+
     *pHandle = m_pPalSemaphores[0]->ExportExternalHandle(palExportInfo);
 #endif
 
@@ -277,6 +279,7 @@ VkResult Semaphore::ImportSemaphore(
     PAL_ASSERT((handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT) ||
                (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT));
     palOpenInfo.flags.isReference  = (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
+
 #endif
 
     //Todo: Check whether pDevice is the same as the one created the semaphore.
@@ -296,7 +299,7 @@ VkResult Semaphore::ImportSemaphore(
         if (pMemory)
         {
             Pal::IQueueSemaphore* pPalSemaphores[MaxPalDevices] = { nullptr };
-#if defined(__unix__)
+#if PAL_AMDGPU_BUILD
             // According to the spec, If handleType is VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT, the special value -1
             // for fd is treated like a valid sync file descriptor referring to an object that has already signaled.
 
@@ -526,6 +529,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetSemaphoreFdKHR(
 
     VkResult result = Semaphore::ObjectFromHandle(pGetFdInfo->semaphore)->GetShareHandle(
         ApiDevice::ObjectFromHandle(device),
+        pGetFdInfo->pNext,
         pGetFdInfo->handleType,
         &handle);
 

@@ -1219,8 +1219,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarker2AMD(
 
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginRendering(
-    VkCommandBuffer           commandBuffer,
-    const VkRenderingInfoKHR* pRenderingInfo)
+    VkCommandBuffer        commandBuffer,
+    const VkRenderingInfo* pRenderingInfo)
 {
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BeginRendering(pRenderingInfo);
 }

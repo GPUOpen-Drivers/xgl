@@ -34,7 +34,8 @@
 #ifndef __SETTINGS_SETTINGS_H__
 #define __SETTINGS_SETTINGS_H__
 
-#include "palSettingsLoader.h"
+#include "palMetroHash.h"
+#include <dd_settings_base.h>
 
 // g_settings.h is generated in the same dir on Linux and Windows.
 // However, if g_settings.h is generated out of source tree,
@@ -54,13 +55,13 @@ namespace vk
 // =====================================================================================================================
 // This class is responsible for loading and processing the Vulkan runtime settings structure encapsulated in the Vulkan
 // Settings Loader object.
-class VulkanSettingsLoader : public Pal::ISettingsLoader
+class VulkanSettingsLoader : public DevDriver::SettingsBase
 {
 public:
-    explicit VulkanSettingsLoader(Pal::IDevice* pDevice, Pal::IPlatform* pPlatform, uint32_t deviceId);
+    explicit VulkanSettingsLoader(Pal::IDevice* pDevice, Pal::IPlatform* pPlatform);
     virtual ~VulkanSettingsLoader();
 
-    virtual Util::Result Init() override;
+    Pal::Result Init();
 
     VkResult ProcessSettings(
         const VkAllocationCallbacks* pAllocCb,
@@ -74,8 +75,16 @@ public:
     void FinalizeSettings(
         const DeviceExtensions::Enabled& enabledExtensions);
 
+    Util::MetroHash::Hash GetSettingsHash() const { return m_settingsHash; }
+
     const RuntimeSettings& GetSettings() const { return m_settings; };
     RuntimeSettings* GetSettingsPtr() { return &m_settings; }
+
+    // auto-generated functions
+    virtual const char* GetComponentName() const override;
+    virtual DD_RESULT SetupDefaultsAndPopulateMap() override;
+    virtual void ReadSettings() override;
+    virtual uint64_t GetSettingsBlobHash() const override;
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(VulkanSettingsLoader);
@@ -83,6 +92,12 @@ private:
 
     // Generate the settings hash
     void GenerateSettingHash();
+
+    bool ReadSetting(
+        const char*     pSettingName,
+        Util::ValueType valueType,
+        void*           pValue,
+        size_t          bufferSize = 0);
 
     VkResult OverrideProfiledSettings(
         const VkAllocationCallbacks* pAllocCb,
@@ -96,17 +111,10 @@ private:
 
     void ReadPublicSettings();
 
-    Pal::IDevice*   m_pDevice;
-    Pal::IPlatform* m_pPlatform;
-    RuntimeSettings m_settings;
-
-    // auto-generated functions
-    virtual void SetupDefaults() override;
-    virtual void ReadSettings() override;
-    virtual void InitSettingsInfo() override;
-    virtual void DevDriverRegister() override;
-
-    char m_pComponentName[10];
+    Pal::IDevice*         m_pDevice;
+    Pal::IPlatform*       m_pPlatform;
+    RuntimeSettings       m_settings;
+    Util::MetroHash::Hash m_settingsHash;
 };
 
 } //vk

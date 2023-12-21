@@ -118,8 +118,8 @@ void CmdBuffer::PalCmdCopyImage(
     uint32_t              regionCount,
     Pal::ImageCopyRegion* pRegions)
 {
-    if ((pSrcImage->GetImageSamples() == pDstImage->GetImageSamples()) &&
-        (pSrcImage->GetImageSamples() > 1) &&
+    if ((((pSrcImage->GetImageSamples() == pDstImage->GetImageSamples()) && (pSrcImage->GetImageSamples() > 1)) ||
+         (pSrcImage->GetImageType() != pDstImage->GetImageType())) &&
         (m_palQueueType == Pal::QueueType::QueueTypeDma))
     {
         SwitchToBackupCmdBuffer();

@@ -1,8 +1,5 @@
 {
   "ComponentName": "Vulkan",
-  "DriverState": [
-    "HaltedOnDeviceInit"
-  ],
   "Tags": [
     "Render Passes",
     "Command Buffer Options",
@@ -467,7 +464,9 @@
             "Value": 3
           }
         ],
-        "Name": "Pal::GpuHeap"
+        "Name": "Pal::GpuHeap",
+        "IsEnum": true,
+        "SkipGen": true
       },
       "Description": "The primary heap for the internal CmdAllocator for command data.",
       "Tags": [
@@ -525,7 +524,9 @@
             "Value": 3
           }
         ],
-        "Name": "Pal::GpuHeap"
+        "Name": "Pal::GpuHeap",
+        "IsEnum": true,
+        "SkipGen": true
       },
       "Description": "The primary heap for the internal CmdAllocator for embedded data.",
       "Tags": [
@@ -626,7 +627,9 @@
             "Value": 3
           }
         ],
-        "Name": "Pal::GpuHeap"
+        "Name": "Pal::GpuHeap",
+        "IsEnum": true,
+        "SkipGen": true
       },
       "Scope": "Driver",
       "Type": "enum"
@@ -926,12 +929,11 @@
       },
       "Defaults": {
         "Default": "vkDump/appShaderProfile",
-        "WinDefault": "vkDump\\appShaderProfile.json",
-        "LnxDefault": "vkDump/appShaderProfile.json"
+        "Windows": "vkDump\\appShaderProfile.json",
+        "Linux": "vkDump/appShaderProfile.json"
       },
       "Name": "PipelineProfileDumpFile",
       "Type": "string",
-      "Size": 260,
       "Scope": "Driver"
     },
     {
@@ -941,14 +943,13 @@
         "Pipeline Options"
       ],
       "Flags": {
-        "IsPath": true
+        "IsDir": true
       },
       "Defaults": {
         "Default": ""
       },
       "Scope": "Driver",
-      "Type": "string",
-      "Size": 512
+      "Type": "string"
     },
     {
       "Name": "PipelineProfileDbgPrintProfileMatch",
@@ -1071,8 +1072,8 @@
       "Scope": "Driver"
     },
     {
-      "Name": "FullscreenFrameMetadataSupport",
-      "Description": "Support Fullscreen Frame Metadata.",
+      "Name": "FullScreenFrameMetadataSupport",
+      "Description": "Support FullScreen Frame Metadata.",
       "Tags": [
         "Present"
       ],
@@ -1080,8 +1081,7 @@
         "Default": true
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "fullScreenFrameMetadataSupport"
+      "Type": "bool"
     },
     {
       "Name": "UseSdmaCompositingBlt",
@@ -1134,11 +1134,6 @@
     {
       "Name": "DxgiPresent",
       "Description": "Enable Presentation via DXGI",
-      "DependsOn": {
-        "OS": [
-          "Windows"
-        ]
-      },
       "BuildTypes": [
         "defined(_WIN32)"
       ],
@@ -1175,11 +1170,6 @@
     {
       "Name": "DxgiSettings",
       "Description": "Bitmask of various DXGI presentation settings.",
-      "DependsOn": {
-        "OS": [
-          "Windows"
-        ]
-      },
       "BuildTypes": [
         "defined(_WIN32)"
       ],
@@ -1267,18 +1257,6 @@
       ],
       "Defaults": {
         "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool"
-    },
-    {
-      "Name": "EnableRobustUberFetchShader",
-      "Description": "Enable robust access in uber fetch shder.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": true
       },
       "Scope": "Driver",
       "Type": "bool"
@@ -1400,17 +1378,16 @@
         "SPIRV Options"
       ],
       "Flags": {
-        "IsPath": true
+        "IsDir": true
       },
       "Defaults": {
         "Default": "spvPipeline",
-        "WinDefault": "SpvPipeline",
-        "LnxDefault": "spvPipeline"
+        "Windows": "SpvPipeline",
+        "Linux": "spvPipeline"
       },
       "Scope": "Driver",
       "Name": "PipelineDumpDir",
-      "Type": "string",
-      "Size": 256
+      "Type": "string"
     },
     {
       "Description": "Append Executable Name in PipelineDumpDir",
@@ -1473,8 +1450,7 @@
       },
       "Scope": "Driver",
       "Name": "LogFileName",
-      "Type": "string",
-      "Size": 256
+      "Type": "string"
     },
     {
       "Description": "Enable output diagnostic info. This info may added to AMD IL or external debug log files.",
@@ -1501,8 +1477,7 @@
       },
       "Scope": "Driver",
       "Name": "DebugLogFileName",
-      "Type": "string",
-      "Size": 256
+      "Type": "string"
     },
     {
       "ValidValues": {
@@ -1558,17 +1533,16 @@
         "SPIRV Options"
       ],
       "Flags": {
-        "IsPath": true
+        "IsDir": true
       },
       "Defaults": {
         "Default": "ShaderReplace",
-        "WinDefault": "ShaderReplace",
-        "LnxDefault": "ShaderReplace"
+        "Windows": "ShaderReplace",
+        "Linux": "ShaderReplace"
       },
       "Scope": "Driver",
       "Name": "ShaderReplaceDir",
-      "Type": "string",
-      "Size": 256
+      "Type": "string"
     },
     {
       "Description": "Only valid if shaderReplaceMode is set to 2 and 4. This is a comma separated pipeline hash list. Hash number is in big case, example hash list looks like: 0xAD033E031BF7CB6C,0x1B707F37B7DA34E3",
@@ -1580,8 +1554,7 @@
       },
       "Scope": "Driver",
       "Name": "ShaderReplacePipelineHashes",
-      "Type": "string",
-      "Size": 512
+      "Type": "string"
     },
     {
       "Description": "Drop specified instruction in pipeline binary for quick debugging shader. It replaces all matching instruction opcodes with NOPs and needs to work with DropPipelineBinaryInstToken and DropPipelineBinaryInstSize together.",
@@ -2107,16 +2080,6 @@
       "Defaults": {
         "Default": 0
       },
-      "DependsOn": {
-        "Settings": [
-          {
-            "Values": [
-              true
-            ],
-            "Name": "EnableDropPipelineBinaryInst"
-          }
-        ]
-      },
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "DropPipelineBinaryInstToken"
@@ -2128,16 +2091,6 @@
       ],
       "Defaults": {
         "Default": 1
-      },
-      "DependsOn": {
-        "Settings": [
-          {
-            "Values": [
-              true
-            ],
-            "Name": "EnableDropPipelineBinaryInst"
-          }
-        ]
       },
       "Scope": "Driver",
       "Type": "uint32",
@@ -2168,7 +2121,7 @@
       "Name": "EnableSpvValidation"
     },
     {
-      "Description": "GFX11 plus-specific tessellation factor optimization.",
+      "Description": "Tessellation factor optimization.",
       "Tags": [
         "SPIRV Options"
       ],
@@ -2177,10 +2130,7 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "Name": "OptimizeTessFactor",
-      "BuildTypes": [
-        "VKI_BUILD_GFX11"
-      ]
+      "Name": "OptimizeTessFactor"
     },
     {
       "Description": "[BIL ONLY] Zero initialize AMD IL registers. ",
@@ -2192,8 +2142,7 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "zeroInitIlRegs",
-      "Name": "ZeroInitILRegs"
+      "Name": "ZeroInitIlRegs"
     },
     {
       "Description": "[BIL ONLY] Skip unsupported SPIR-V instructions. ",
@@ -2269,8 +2218,7 @@
       },
       "Scope": "Driver",
       "Name": "LlpcOptions",
-      "Type": "string",
-      "Size": 256
+      "Type": "string"
     },
     {
       "ValidValues": {
@@ -2349,7 +2297,6 @@
         "AndroidDefault": false
       },
       "Type": "bool",
-      "VariableName": "enableOnDiskInternalPipelineCaches",
       "Scope": "Driver"
     },
     {
@@ -2386,8 +2333,7 @@
         "Default": "AMD_VK_USE_PIPELINE_CACHE"
       },
       "Scope": "Driver",
-      "Type": "string",
-      "Size": 256
+      "Type": "string"
     },
     {
       "Name": "UsePipelineCachingDefaultLocation",
@@ -2409,12 +2355,11 @@
       ],
       "Defaults": {
         "Default": "/AMD/VkCache/",
-        "WinDefault": "\\AMD\\VkCache\\",
-        "LnxDefault": "/AMD/VkCache/"
+        "Windows": "\\AMD\\VkCache\\",
+        "Linux": "/AMD/VkCache/"
       },
       "Scope": "Driver",
-      "Type": "string",
-      "Size": 256
+      "Type": "string"
     },
     {
       "Name": "PipelineCacheDefaultLocationLimitation",
@@ -2439,8 +2384,8 @@
       ],
       "Defaults": {
         "Default": false,
-        "WinDefault": false,
-        "LnxDefault": true
+        "Windows": false,
+        "Linux": true
       },
       "Type": "bool",
       "Scope": "Driver"
@@ -2704,8 +2649,7 @@
       "Name": "RtInternalPipelineSpvPassMask"
     },
     {
-      "Name": "TraceRayCounterMode",
-      "VariableName": "rtTraceRayCounterMode",
+      "Name": "RtTraceRayCounterMode",
       "Type": "enum",
       "Description": "Enable ray tracing counters. Written to the directory specified by RayTracingCapturePath. Press the RayTracingCaptureHotKey to dump when enabled.",
       "Scope": "Driver",
@@ -2756,7 +2700,7 @@
       }
     },
     {
-      "Name": "RaytracingThreadGroupSizeX",
+      "Name": "RtThreadGroupSizeX",
       "Description": "Thread group size in x-dimension for ray tracing. This value is ignored if RaytracingFlattenThreadGroupSize is not 0.",
       "Tags": [
         "Ray Tracing"
@@ -2768,11 +2712,10 @@
         "Default": 8
       },
       "Type": "uint32",
-      "Scope": "Driver",
-      "VariableName": "rtThreadGroupSizeX"
+      "Scope": "Driver"
     },
     {
-      "Name": "RaytracingThreadGroupSizeY",
+      "Name": "RtThreadGroupSizeY",
       "Description": "Thread group size in y-dimension for ray tracing. This value is ignored if RaytracingFlattenThreadGroupSize is not 0.",
       "Tags": [
         "Ray Tracing"
@@ -2784,11 +2727,10 @@
         "Default": 4
       },
       "Type": "uint32",
-      "Scope": "Driver",
-      "VariableName": "rtThreadGroupSizeY"
+      "Scope": "Driver"
     },
     {
-      "Name": "RaytracingThreadGroupSizeZ",
+      "Name": "RtThreadGroupSizeZ",
       "Description": "Thread group size in z-dimension for ray tracing. This value is ignored if RaytracingFlattenThreadGroupSize is not 0.",
       "Tags": [
         "Ray Tracing"
@@ -2800,11 +2742,10 @@
         "Default": 1
       },
       "Type": "uint32",
-      "Scope": "Driver",
-      "VariableName": "rtThreadGroupSizeZ"
+      "Scope": "Driver"
     },
     {
-      "Name": "RaytracingFlattenThreadGroupSize",
+      "Name": "RtFlattenThreadGroupSize",
       "Description": "Ray tracing ThreadGroup Size in mode which flatten width and height. 0 indicates this mode is off. Otherwise, it is on and indicates the size in x-dimension of thread group size. If the mode is on, RaytracingThreadGroupSizeX/Y/Z are ignored.",
       "Tags": [
         "Ray Tracing"
@@ -2816,11 +2757,10 @@
         "Default": 0
       },
       "Type": "uint32",
-      "Scope": "Driver",
-      "VariableName": "rtFlattenThreadGroupSize"
+      "Scope": "Driver"
     },
     {
-      "Name": "TraceRayProfileMaxIteration",
+      "Name": "RtProfileMaxIteration",
       "Description": "Maximum trace ray loop iteration count when TraceRayProfileForceMaxIteration is set.",
       "Tags": [
         "Ray Tracing"
@@ -2832,11 +2772,10 @@
         "Default": 4294967295
       },
       "Type": "uint32",
-      "Scope": "Driver",
-      "VariableName": "rtProfileMaxIteration"
+      "Scope": "Driver"
     },
     {
-      "Name": "TraceRayProfileFlags",
+      "Name": "RtTraceRayProfileFlags",
       "Description": "Trace ray profile flags",
       "Tags": [
         "Ray Tracing"
@@ -2886,8 +2825,7 @@
         "Default": "TraceRayProfileDisable"
       },
       "Type": "enum",
-      "Scope": "Driver",
-      "VariableName": "rtTraceRayProfileFlags"
+      "Scope": "Driver"
     },
     {
       "Name": "RtMaxRayRecursionDepth",
@@ -2905,7 +2843,7 @@
       "Scope": "Driver"
     },
     {
-      "Name": "IndirectStageMask",
+      "Name": "RtIndirectStageMask",
       "Description": "Indicate which stages should use indirect call for recursive ray-tracing pipeline or inlining is disabled. This flag is a hint to compiler, final indirect call stages may different with initial setting.",
       "Tags": [
         "Ray Tracing"
@@ -2917,8 +2855,7 @@
         "Default": "0xffffffff"
       },
       "Type": "uint32",
-      "Scope": "Driver",
-      "VariableName": "rtIndirectStageMask"
+      "Scope": "Driver"
     },
     {
       "Name": "IndirectCallTargetOccupancyPerSimd",
@@ -2951,8 +2888,8 @@
       "Scope": "Driver"
     },
     {
-      "Name": "EnableHwIntersectRay",
-      "Description": "Enables use of the BVH intersect ray instructions if they are supported by the HW.",
+      "Name": "RtEnableNodePointerFlags",
+      "Description": "Encode flags into pointer bits",
       "Tags": [
         "Ray Tracing"
       ],
@@ -2963,25 +2900,7 @@
         "Default": true
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableHwIntersectRay"
-    },
-    {
-      "Name": "EnableNodePointerFlags",
-      "Description": "Encode flags into pointer bits",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING",
-        "VKI_BUILD_GFX11"
-      ],
-      "Defaults": {
-        "Default": true
-      },
-      "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableNodePointerFlags"
+      "Scope": "Driver"
     },
     {
       "Description": "Box sorting heuristic",
@@ -3040,7 +2959,7 @@
       "Scope": "Driver"
     },
     {
-      "Name": "EnableBVHCollapse",
+      "Name": "RtEnableBVHCollapse",
       "Description": "Enable BVH Collapse",
       "Tags": [
         "Ray Tracing"
@@ -3052,8 +2971,7 @@
         "Default": false
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableBVHCollapse"
+      "Scope": "Driver"
     },
     {
       "Description": "Mode for which interior box nodes in BLAS use fp16 bounding boxes",
@@ -3093,8 +3011,7 @@
         ]
       },
       "Type": "enum",
-      "VariableName": "rtFp16BoxNodesInBlasMode",
-      "Name": "Fp16BoxNodesInBlasMode",
+      "Name": "RtFp16BoxNodesInBlasMode",
       "Scope": "Driver"
     },
     {
@@ -3113,7 +3030,7 @@
       "Scope": "Driver"
     },
     {
-      "Name": "AllowFp16BoxNodesInUpdatableBVH",
+      "Name": "RtAllowFp16BoxNodesInUpdatableBVH",
       "Description": "Allow fp16BoxNodesInBlasMode to take effect in updatable BVHs",
       "Tags": [
         "Ray Tracing"
@@ -3125,8 +3042,7 @@
         "Default": false
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtAllowFp16BoxNodesInUpdatableBVH"
+      "Scope": "Driver"
     },
     {
       "Description": "Surface area (sa) threshold used by Fp16BoxNodesInBlasMode mode DxcFp16BoxNodesInBlasModeMixed. An interior BLAS node is converted from fp32 to fp16 when (saAsFp16 < (threshold * saAsFp32)). A value of 0 means use the default 1.5. Value is clamped from 1.0f - 8.0f",
@@ -3140,8 +3056,7 @@
         "Default": 0.0
       },
       "Type": "float",
-      "VariableName": "rtFp16BoxNodesInBlasModeMixedThreshold",
-      "Name": "Fp16BoxNodesInBlasModeMixedThreshold",
+      "Name": "RtFp16BoxNodesInBlasModeMixedThreshold",
       "Scope": "Driver"
     },
     {
@@ -3156,8 +3071,7 @@
         "Default": true
       },
       "Type": "bool",
-      "VariableName": "rtEnableTopDownBuild",
-      "Name": "EnableTopDownBuild",
+      "Name": "RtEnableTopDownBuild",
       "Scope": "Driver"
     },
     {
@@ -3193,8 +3107,7 @@
         ]
       },
       "Type": "enum",
-      "VariableName": "rtEnableTreeRebraid",
-      "Name": "EnableTreeRebraid",
+      "Name": "RtEnableTreeRebraid",
       "Scope": "Driver"
     },
     {
@@ -3224,8 +3137,7 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "rtEnableTriangleSplitting",
-      "Name": "EnableTriangleSplitting",
+      "Name": "RtEnableTriangleSplitting",
       "Scope": "Driver"
     },
     {
@@ -3237,15 +3149,14 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": "1.3f"
+        "Default": 1.3
       },
       "Type": "float",
-      "VariableName": "rtTriangleSplittingFactor",
-      "Name": "TriangleSplittingFactor",
+      "Name": "RtTriangleSplittingFactor",
       "Scope": "Driver"
     },
     {
-      "Name": "EnableMortonCode30",
+      "Name": "RtEnableMortonCode30",
       "Description": "Enable Morton Code 30 bits",
       "Tags": [
         "Ray Tracing"
@@ -3257,8 +3168,7 @@
         "Default": true
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableMortonCode30"
+      "Scope": "Driver"
     },
     {
       "Description": "Enable Variable Bits Morton Codes - Selects the largest axis per bit rather than rotating xyzxyz",
@@ -3276,7 +3186,7 @@
       "Scope": "Driver"
     },
     {
-      "Name": "EnablePrefixScanDLB",
+      "Name": "RtEnablePrefixScanDLB",
       "Description": "Enable Prefix Scan with Decoupled Look-back",
       "Tags": [
         "Ray Tracing"
@@ -3288,11 +3198,10 @@
         "Default": false
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnablePrefixScanDLB"
+      "Scope": "Driver"
     },
     {
-      "Name": "TriangleCompressionAutoMode",
+      "Name": "RtTriangleCompressionAutoMode",
       "Description": "Set which BVH build flags are required to enable triangle compression when TriangleCompressionMode is Auto.",
       "Tags": [
         "Ray Tracing"
@@ -3355,7 +3264,6 @@
         ]
       },
       "Type": "enum",
-      "VariableName": "rtTriangleCompressionAutoMode",
       "Scope": "Driver"
     },
     {
@@ -3572,7 +3480,7 @@
       "Scope": "Driver"
     },
     {
-      "Name": "TriangleCompressionMode",
+      "Name": "RtTriangleCompressionMode",
       "Description": "Modifies triangle compression algorithm if AccelerationStructureType is set to the HW-supported format DxcAccelTypeBVH4.",
       "Tags": [
         "Ray Tracing"
@@ -3605,8 +3513,7 @@
         ]
       },
       "Type": "enum",
-      "Scope": "Driver",
-      "VariableName": "rtTriangleCompressionMode"
+      "Scope": "Driver"
     },
     {
       "Description": "Use a cost calculation when batching triangles for pair compression.",
@@ -3656,8 +3563,7 @@
         ]
       },
       "Type": "enum",
-      "VariableName": "rtBvhBuildModeOverride",
-      "Name": "BvhBuildModeOverride",
+      "Name": "RtBvhBuildModeOverride",
       "Scope": "Driver"
     },
     {
@@ -3697,7 +3603,7 @@
       "Scope": "Driver"
     },
     {
-      "Name": "BvhBuildModeDefault",
+      "Name": "RtBvhBuildModeDefault",
       "Description": "BVH build mode for default acceleration structure builds",
       "Tags": [
         "Ray Tracing"
@@ -3712,11 +3618,10 @@
         "Name": "BvhBuildMode"
       },
       "Type": "enum",
-      "Scope": "Driver",
-      "VariableName": "rtBvhBuildModeDefault"
+      "Scope": "Driver"
     },
     {
-      "Name": "BvhBuildModeFastTrace",
+      "Name": "RtBvhBuildModeFastTrace",
       "Description": "BVH build mode for acceleration structure builds for fast trace",
       "Tags": [
         "Ray Tracing"
@@ -3731,11 +3636,10 @@
         "Name": "BvhBuildMode"
       },
       "Type": "enum",
-      "Scope": "Driver",
-      "VariableName": "rtBvhBuildModeFastTrace"
+      "Scope": "Driver"
     },
     {
-      "Name": "BvhBuildModeFastBuild",
+      "Name": "RtBvhBuildModeFastBuild",
       "Description": "BVH build mode for fast acceleration structure builds",
       "Tags": [
         "Ray Tracing"
@@ -3750,8 +3654,7 @@
         "Name": "BvhBuildMode"
       },
       "Type": "enum",
-      "Scope": "Driver",
-      "VariableName": "rtBvhBuildModeFastBuild"
+      "Scope": "Driver"
     },
     {
       "Description": "Disable validating image SRD type in shader code. Only in ray tracing shader code. Image resource type checking is neccessary depending on the HW.",
@@ -3891,7 +3794,7 @@
       "Scope": "Driver"
     },
     {
-      "Name": "BvhCpuBuildMode",
+      "Name": "RtBvhCpuBuildMode",
       "Description": "BVH build mode for default acceleration structure host builds",
       "Tags": [
         "Ray Tracing"
@@ -3919,11 +3822,10 @@
         ]
       },
       "Type": "enum",
-      "Scope": "Driver",
-      "VariableName": "rtBvhCpuBuildMode"
+      "Scope": "Driver"
     },
     {
-      "Name": "EnableUpdateParallel",
+      "Name": "RtEnableUpdateParallel",
       "Description": "Enable update parallel optimization during acceleration structure builds",
       "Tags": [
         "Ray Tracing"
@@ -3935,8 +3837,7 @@
         "Default": true
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableUpdateParallel"
+      "Scope": "Driver"
     },
     {
       "Description": "Enable parallel BVH build (no barriers)",
@@ -3950,8 +3851,7 @@
         "Default": true
       },
       "Type": "bool",
-      "VariableName": "rtEnableBuildParallel",
-      "Name": "EnableBuildParallel",
+      "Name": "RtEnableBuildParallel",
       "Scope": "Driver"
     },
     {
@@ -3970,7 +3870,7 @@
       "Scope": "Driver"
     },
     {
-      "Name": "EnableAcquireReleaseInterface",
+      "Name": "RtEnableAcquireReleaseInterface",
       "Description": "Enable Acquire/release-based barrier interface if PAL reports the ASIC supports it.",
       "Tags": [
         "Ray Tracing"
@@ -3982,8 +3882,7 @@
         "Default": false
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableAcquireReleaseInterface"
+      "Scope": "Driver"
     },
     {
       "Name": "EnableFusedInstanceNode",
@@ -4013,7 +3912,7 @@
       }
     },
     {
-      "Name": "EnableAccelerationStructureScratchMemoryDump",
+      "Name": "RtEnableAccelerationStructureScratchMemoryDump",
       "Description": "Dumps scratch memory from acceleration structures. Written to the directory specified by BaseLogDirPath.",
       "Tags": [
         "Ray Tracing"
@@ -4025,11 +3924,10 @@
         "Default": false
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableAccelerationStructureScratchMemoryDump"
+      "Scope": "Driver"
     },
     {
-      "Name": "EnableBuildAccelStructStats",
+      "Name": "RtEnableBuildAccelStructStats",
       "Description": "Dump built acceleration stats. (Pending implementation)",
       "Tags": [
         "Ray Tracing"
@@ -4041,8 +3939,7 @@
         "Default": false
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableBuildAccelStructStats"
+      "Scope": "Driver"
     },
     {
       "Name": "IndirectCallConvention",
@@ -4196,7 +4093,7 @@
       "Scope": "Driver"
     },
     {
-      "Name": "EnableCompilePipelineLibrary",
+      "Name": "RtEnableCompilePipelineLibrary",
       "Description": "Compile pipeline library as a ShaderLibrary.",
       "Tags": [
         "Ray Tracing"
@@ -4208,11 +4105,10 @@
         "Default": true
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableCompilePipelineLibrary"
+      "Scope": "Driver"
     },
     {
-      "Name": "EnableRayTracingAccelerationStructureIndirectBuild",
+      "Name": "RtEnableAccelStructIndirectBuild",
       "Description": "Enable ray tracing acceleration structure indirect build",
       "Tags": [
         "Ray Tracing"
@@ -4224,11 +4120,10 @@
         "Default": true
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableAccelStructIndirectBuild"
+      "Scope": "Driver"
     },
     {
-      "Name": "EnableRayQueryCsSwizzle",
+      "Name": "RtEnableRayQueryCsSwizzle",
       "Description": "Determines if the driver performs swizzling logic on the thread + group indices for compute shaders that use the ray query feature.",
       "Tags": [
         "Ray Tracing"
@@ -4240,8 +4135,7 @@
         "Default": false
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableRayQueryCsSwizzle"
+      "Scope": "Driver"
     },
     {
       "Description": "Swizzling mode on the thread + group indices for compute shaders that use the ray query feature.",
@@ -4258,12 +4152,11 @@
         "Name": "ThreadGroupSwizzleMode"
       },
       "Type": "enum",
-      "VariableName": "rayQueryCsSwizzle",
       "Name": "RayQueryCsSwizzle",
       "Scope": "Driver"
     },
     {
-      "Name": "EnableDispatchRaysOuterSwizzle",
+      "Name": "RtEnableDispatchRaysOuterSwizzle",
       "Description": "Determines if the driver performs swizzling logic on the thread group indices used for ray tracing shaders. When this is false, a standard row major pattern is used.",
       "Tags": [
         "Ray Tracing"
@@ -4275,11 +4168,10 @@
         "Default": true
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableDispatchRaysOuterSwizzle"
+      "Scope": "Driver"
     },
     {
-      "Name": "EnableDispatchRaysInnerSwizzle",
+      "Name": "RtEnableDispatchRaysInnerSwizzle",
       "Description": "Determines if the driver performs swizzling logic on the thread indices inside ray tracing thread groups. When this is false, a standard row major pattern is used.",
       "Tags": [
         "Ray Tracing"
@@ -4291,11 +4183,10 @@
         "Default": true
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEnableDispatchRaysInnerSwizzle"
+      "Scope": "Driver"
     },
     {
-      "Name": "OuterTileSize",
+      "Name": "RtOuterTileSize",
       "Description": "The size of outer tile for ray tracing shader thread swizzling.",
       "Tags": [
         "Ray Tracing"
@@ -4307,8 +4198,7 @@
         "Default": 4
       },
       "Type": "uint32",
-      "Scope": "Driver",
-      "VariableName": "rtOuterTileSize"
+      "Scope": "Driver"
     },
     {
       "Description": "Enable ray tracing support",
@@ -4379,10 +4269,7 @@
           {
             "Name": "EmulatedRtIpLevel2_0",
             "Value": 3,
-            "Description": "Emulate ray tracing IP level 2.0 feature set.",
-            "BuildTypes": [
-              "VKI_BUILD_GFX11"
-            ]
+            "Description": "Emulate ray tracing IP level 2.0 feature set."
           }
         ]
       },
@@ -4400,7 +4287,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": "0.1f"
+        "Default": 0.1
       },
       "Type": "float",
       "Scope": "Driver"
@@ -4429,7 +4316,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": "6"
+        "Default": 6
       },
       "Type": "uint32",
       "Name": "NumMortonSizeBits",
@@ -4444,10 +4331,9 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": "10"
+        "Default": 10
       },
       "Type": "uint32",
-      "VariableName": "plocRadius",
       "Name": "PlocRadius",
       "Scope": "Driver"
     },
@@ -4463,12 +4349,11 @@
         "Default": true
       },
       "Type": "bool",
-      "VariableName": "rtAutoSkipAabbIntersections",
-      "Name": "AutoSkipAabbIntersections",
+      "Name": "RtAutoSkipAabbIntersections",
       "Scope": "Driver"
     },
     {
-      "Name": "EmitRayTracingShaderDataToken",
+      "Name": "RtEmitRayTracingShaderDataToken",
       "Description": "Emit Ray Tracing Shader Data Token",
       "Tags": [
         "Ray Tracing"
@@ -4480,8 +4365,7 @@
         "Default": false
       },
       "Type": "bool",
-      "Scope": "Driver",
-      "VariableName": "rtEmitRayTracingShaderDataToken"
+      "Scope": "Driver"
     },
     {
       "Description": "Enable using LDS for function arguments. This is enabled for non-recursive indirect pipelines only",
@@ -4528,6 +4412,7 @@
       },
       "ValidValues": {
         "IsEnum": true,
+        "Is64Bit": true,
         "Values": [
           {
             "Name": "DbgBarrierDrawNonIndexed",
@@ -5171,7 +5056,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": "0"
+        "Default": 0
       },
       "Type": "uint32",
       "Name": "FastBuildThreshold",
@@ -5186,7 +5071,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": "0"
+        "Default": 0
       },
       "Type": "uint32",
       "Name": "lbvhBuildThreshold",
@@ -5278,14 +5163,13 @@
         "Optimization"
       ],
       "Flags": {
-        "IsPath": true
+        "IsDir": true
       },
       "Defaults": {
         "Default": ""
       },
       "Name": "AppProfileDumpDir",
       "Type": "string",
-      "Size": 512,
       "Scope": "Driver"
     },
     {
@@ -5731,7 +5615,7 @@
         "Memory"
       ],
       "Defaults": {
-        "Default": "0.1f"
+        "Default": 0.1
       },
       "Scope": "Driver",
       "Type": "float",
@@ -6093,16 +5977,6 @@
       "Defaults": {
         "Default": 0
       },
-      "DependsOn": {
-        "Settings": [
-          {
-            "Values": [
-              true
-            ],
-            "Name": "ForceAppProfileEnable"
-          }
-        ]
-      },
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "ForceAppProfileValue"
@@ -6208,11 +6082,6 @@
       "Defaults": {
         "Default": true
       },
-      "DependsOn": {
-        "OS": [
-          "Linux"
-        ]
-      },
       "Scope": "Driver",
       "Type": "bool",
       "Name": "UseFlipHint"
@@ -6224,11 +6093,6 @@
       ],
       "Defaults": {
         "Default": false
-      },
-      "DependsOn": {
-        "OS": [
-          "Linux"
-        ]
       },
       "Scope": "Driver",
       "Type": "bool",
@@ -6361,7 +6225,9 @@
             "Description": "Optimize tiling mode for rendering performance."
           }
         ],
-        "Name": "Pal::TilingOptMode"
+        "Name": "Pal::TilingOptMode",
+        "SkipGen": true,
+        "IsEnum": true
       },
       "Description": "Hints to PAL to select the appropriate tiling mode for an optimization target. 0: Balanced 1: OptForSpace 2: OptForSpeed",
       "Tags": [
@@ -6405,7 +6271,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "strictImageSizeRequirements",
       "Name": "StrictImageSizeRequirements"
     },
     {
@@ -6437,7 +6302,9 @@
             "Description": "Prefer interleaved coordinate swizzle modes."
           }
         ],
-        "Name": "Pal::ImageTilingPattern"
+        "Name": "Pal::ImageTilingPattern",
+        "IsEnum": true,
+        "SkipGen": true
       },
       "Description": "Hints to pal to identify a preference for how this image is organized. 0: Default 1: Standard 2: XMajor 3: YMajor 4: Interleaved",
       "Tags": [
@@ -6479,7 +6346,9 @@
             "Description": "Prefer interleaved coordinate swizzle modes."
           }
         ],
-        "Name": "Pal::ImageTilingPattern"
+        "Name": "Pal::ImageTilingPattern",
+        "IsEnum": true,
+        "SkipGen": true
       },
       "Description": "Override the ImageTilingPreference setting value for 3D images used as color attachments or shader storage.",
       "Tags": [
@@ -6574,8 +6443,7 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "optImgMaskToApplyShaderReadUsageForTransferSrc",
-      "Name": "TransferSrcUsageAsShaderReadMask"
+      "Name": "OptImgMaskToApplyShaderReadUsageForTransferSrc"
     },
     {
       "Description": "For image created with usage of transfer dst, add shader_write in PAL usage if VkImageUsageFlagBits in this mask is set.",
@@ -6587,8 +6455,7 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "optImgMaskToApplyShaderWriteUsageForTransferDst",
-      "Name": "TransferDstUsageAsShaderWriteMask"
+      "Name": "OptImgMaskToApplyShaderWriteUsageForTransferDst"
     },
     {
       "Description": "If set, an image with color target usage bit does not implicitly allow to be in resolve_src or resolve_dst layout.",
@@ -6599,8 +6466,7 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "optColorTargetUsageDoesNotContainResolveLayout",
-      "Name": "ColorTargetUsageDoesNotContainResolveLayout",
+      "Name": "OptColorTargetUsageDoesNotContainResolveLayout",
       "Scope": "Driver"
     },
     {
@@ -6616,7 +6482,7 @@
       "Scope": "Driver"
     },
     {
-      "Name": "RenderStateCacheEnable",
+      "Name": "OptRenderStateCacheEnable",
       "Description": "This bitmask denotes which subset of pipeline render state is cached at the device-level. Caching render state enables more efficient redundancy checking when recording command buffers.  This redundancy checking is mainly limited to pipeline state that is either invisible to the API (e.g. certain PAL objects) or state that the application has marked in the pipeline as non-dynamic, meaning its values are programmed during pipeline bind.",
       "Tags": [
         "Optimization"
@@ -6688,8 +6554,7 @@
         ]
       },
       "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "optRenderStateCacheEnable"
+      "Type": "uint32"
     },
     {
       "Description": "If set, the MUTABLE flag on image is ignored.",
@@ -7023,7 +6888,7 @@
         "Optimization"
       ],
       "Defaults": {
-        "Default": "false"
+        "Default": false
       },
       "Scope": "Driver",
       "Type": "bool",
@@ -7035,7 +6900,7 @@
         "Optimization"
       ],
       "Defaults": {
-        "Default": "false"
+        "Default": false
       },
       "Scope": "Driver",
       "Type": "bool",
@@ -7333,8 +7198,7 @@
       },
       "Scope": "Driver",
       "Type": "string",
-      "Name": "DevModeStartFrameDebugUtilsLabel",
-      "Size": 512
+      "Name": "DevModeStartFrameDebugUtilsLabel"
     },
     {
       "Description": "Determines the string that's used to trigger an end-frame delimiter via vkQueueInsertDebugUtilsLabelEXT. This string is \"AmdFrameEnd\" by default",
@@ -7346,8 +7210,7 @@
       },
       "Scope": "Driver",
       "Type": "string",
-      "Name": "DevModeEndFrameDebugUtilsLabel",
-      "Size": 512
+      "Name": "DevModeEndFrameDebugUtilsLabel"
     },
     {
       "Description": "Injects a queue WaitIdle() at the end of a debug utils end-frame delimiter to avoid overlapping frames.",
@@ -7391,17 +7254,16 @@
         "Developer Mode"
       ],
       "Flags": {
-        "IsPath": true
+        "IsDir": true
       },
       "Defaults": {
         "Default": "PipelineReplace",
-        "WinDefault": "PipelineReplace",
-        "LnxDefault": "PipelineReplace"
+        "Windows": "PipelineReplace",
+        "Linux": "PipelineReplace"
       },
       "Scope": "Driver",
       "Name": "DevModeElfReplacementDirectory",
-      "Type": "string",
-      "Size": 512
+      "Type": "string"
     },
     {
       "Description": "This controls whether RGP traces will include shader code of created pipelines.",
@@ -7592,16 +7454,6 @@
       "Defaults": {
         "Default": 0
       },
-      "DependsOn": {
-        "Settings": [
-          {
-            "Values": [
-              true
-            ],
-            "Name": "DevModeSqttTraceBeginEndTagEnable"
-          }
-        ]
-      },
       "Scope": "Driver",
       "Type": "uint64",
       "Name": "DevModeSqttTraceBeginTagValue"
@@ -7613,16 +7465,6 @@
       ],
       "Defaults": {
         "Default": 0
-      },
-      "DependsOn": {
-        "Settings": [
-          {
-            "Values": [
-              true
-            ],
-            "Name": "DevModeSqttTraceBeginEndTagEnable"
-          }
-        ]
       },
       "Flags": {
         "IsHex": true
@@ -7701,13 +7543,12 @@
       },
       "Defaults": {
         "Default": "trace.rgp",
-        "WinDefault": "trace.rgp",
-        "LnxDefault": "trace.rgp"
+        "Windows": "trace.rgp",
+        "Linux": "trace.rgp"
       },
       "Scope": "Driver",
       "Name": "DevModeRgpTraceDumpFile",
-      "Type": "string",
-      "Size": 256
+      "Type": "string"
     },
     {
       "Name": "RgpInstTraceBarrierEnabled",
@@ -7772,7 +7613,7 @@
         "Shader Tuning"
       ],
       "Defaults": {
-        "Default": "FragmentShader"
+        "Default": 6
       },
       "ValidValues": {
         "IsEnum": true,
@@ -7832,7 +7673,7 @@
         "Default": 0
       },
       "Type": "uint32",
-      "Name": "OverrideNumVGPRsAvailable",
+      "Name": "OverrideNumVgprsAvailable",
       "Scope": "Driver"
     },
     {
@@ -8547,11 +8388,10 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "forceInvalidAccelStruct",
       "Scope": "Driver"
     },
     {
-      "Name": "MaxRayLength",
+      "Name": "RtMaxRayLength",
       "Description": "Override the maximum extent of the ray, this value overrides the application specified rayDesc.tMax value.",
       "Tags": [
         "Ray Tracing"
@@ -8563,7 +8403,6 @@
         "Default": 0.0
       },
       "Type": "float",
-      "VariableName": "rtMaxRayLength",
       "Scope": "Driver"
     },
     {
@@ -8594,8 +8433,7 @@
       },
       "Scope": "Driver",
       "Name": "WaitForDebuggerExecutableName",
-      "Type": "string",
-      "Size": 256
+      "Type": "string"
     },
     {
       "Description": "Timeout the driver in millisecond to give debuggers a chance to load all of the symbols",
@@ -8637,18 +8475,29 @@
       "Name": "DebugPrintfBufferSize"
     },
     {
+      "Description": "Enable print output for GPU hang",
+      "Tags": [
+        "Debug Printf"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "EnableHangOutput"
+    },
+    {
       "Description": "Relative directory where printf is dumped. Root directory is determined by AMD_DEBUG_DIR environment variable. ",
       "Tags": [
         "Debug Printf"
       ],
       "Flags": {
-        "IsPath": true
+        "IsDir": true
       },
       "Defaults": {
         "Default": "DebugPrintfDump"
       },
       "Type": "string",
-      "Size": 256,
       "Scope": "Driver",
       "Name": "DebugPrintfDumpFolder"
     },
@@ -8683,11 +8532,6 @@
       ],
       "Defaults": {
         "Default": true
-      },
-      "DependsOn": {
-        "OS": [
-          "Linux"
-        ]
       },
       "Type": "bool",
       "Scope": "Driver",
@@ -8754,6 +8598,72 @@
       "Type": "bool",
       "Scope": "Driver",
       "Name": "ReportSuboptimalPresentAsOutOfDate"
+    },
+    {
+      "Name": "ExportNVComputeShaderDerivatives",
+      "Description": "Export extension NV_compute_shader_derivatives",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[GFX10+ only] MALL RPM Views policy.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": "RpmViewBypassMallOff"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "RpmViewBypassMall",
+        "Values": [
+          {
+            "Name": "RpmViewBypassMallOff",
+            "Value": 0,
+            "Description": "Disable MALL bypass"
+          },
+          {
+            "Name": "RpmViewBypassMallOnRead",
+            "Value": 1,
+            "Description": "Skip MALL for read access of views created in RPM"
+          },
+          {
+            "Name": "RpmViewBypassMallOnWrite",
+            "Value": 2,
+            "Description": "Skip MALL for write access of views created in RPM"
+          },
+          {
+            "Name": "RpmViewBypassMallOnCbDbWrite",
+            "Value": 4,
+            "Description": "Skipp MALL for CB and DB writes."
+          }
+        ]
+      },
+      "Type": "uint32",
+      "Name": "RpmViewsBypassMall",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Disable exposing image format support if image type is 3D and tiling is linear",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "Disable3dLinearImageFormatSupport"
     }
   ]
 }

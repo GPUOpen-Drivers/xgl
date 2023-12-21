@@ -1408,6 +1408,13 @@ VkResult Device::Initialize(
         result = AllocBorderColorPalette();
     }
 
+    if (IsExtensionEnabled(DeviceExtensions::KHR_COOPERATIVE_MATRIX))
+    {
+        VkResult powerRes = PalToVkResult(PalDevice(DefaultDeviceIndex)->SetMlPowerOptimization(true));
+
+        VK_ALERT(powerRes != VK_SUCCESS);
+    }
+
     return result;
 }
 
@@ -1648,6 +1655,13 @@ uint32_t Device::GetDefaultSamplePatternIndex(
 // Destroy Vulkan device. Destroy underlying PAL device, call destructor and free memory.
 VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 {
+    if (IsExtensionEnabled(DeviceExtensions::KHR_COOPERATIVE_MATRIX))
+    {
+        VkResult powerRes = PalToVkResult(PalDevice(DefaultDeviceIndex)->SetMlPowerOptimization(false));
+
+        VK_ALERT(powerRes != VK_SUCCESS);
+    }
+
 #if ICD_GPUOPEN_DEVMODE_BUILD
     if (VkInstance()->GetDevModeMgr() != nullptr)
     {
@@ -1866,7 +1880,8 @@ VkResult Device::CreateInternalComputePipeline(
 
         if (forceWave64)
         {
-            pShaderInfo->options.waveSize = 64;
+            pShaderInfo->options.waveSize     = 64;
+            pShaderInfo->options.subgroupSize = 64;
         }
 
         Pal::ShaderHash codeHash = ShaderModule::GetCodeHash(
@@ -3743,7 +3758,7 @@ void Device::GetDeviceAccelerationStructureCompatibility(
     const uint8_t*                              pData,
     VkAccelerationStructureCompatibilityKHR*    pCompatibility)
 {
-    if (m_settings.disableASCompatibilityCheck)
+    if (m_settings.disableAsCompatibilityCheck)
     {
         *pCompatibility = VkAccelerationStructureCompatibilityKHR::VK_ACCELERATION_STRUCTURE_COMPATIBILITY_COMPATIBLE_KHR;
     }
@@ -4685,6 +4700,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkImportSemaphoreFdKHR(
     const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo)
 {
     ImportSemaphoreInfo importInfo = {};
+    importInfo.pNext            = pImportSemaphoreFdInfo->pNext;
     importInfo.handleType       = pImportSemaphoreFdInfo->handleType;
     importInfo.handle           = pImportSemaphoreFdInfo->fd;
     importInfo.importFlags      = pImportSemaphoreFdInfo->flags;

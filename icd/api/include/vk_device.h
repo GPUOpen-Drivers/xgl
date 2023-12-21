@@ -114,6 +114,7 @@ class RayTracingDevice;
 // VkImportSemaphoreWin32HandleInfoKHR. Please refer to the vkspec for the defination of members.
 struct ImportSemaphoreInfo
 {
+    const void*                           pNext;
     VkExternalSemaphoreHandleTypeFlagBits handleType;
     Pal::OsExternalHandle                 handle;
     VkSemaphoreImportFlags                importFlags;

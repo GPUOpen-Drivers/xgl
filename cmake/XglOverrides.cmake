@@ -206,11 +206,6 @@ macro(xgl_overrides)
         set(XGL_BUILD_TOOLS ON CACHE BOOL "XGL_BUILD_TOOLS override by XGL_BUILD_TESTS." FORCE)
     endif()
 
-    if(ICD_BUILD_LLPCONLY)
-        set(ICD_BUILD_LLPC ON CACHE BOOL "ICD_BUILD_LLPC override." FORCE)
-        set(XGL_BUILD_TOOLS ON CACHE BOOL "XGL_BUILD_TOOLS override by ICD_BUILD_LLPCONLY." FORCE)
-    endif()
-
     if(NOT ICD_BUILD_LLPC)
         set(XGL_LLVM_UPSTREAM OFF CACHE BOOL "XGL_LLVM_UPSTREAM is overrided to false." FORCE)
     endif()

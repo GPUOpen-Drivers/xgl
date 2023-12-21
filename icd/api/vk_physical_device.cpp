@@ -840,7 +840,7 @@ VkResult PhysicalDevice::Initialize()
             Util::Max(heapProperties[Pal::GpuHeapInvisible].physicalSize,
                       heapProperties[Pal::GpuHeapInvisible].logicalSize);
 
-        if (settings.forceUMA)
+        if (settings.forceUma)
         {
             heapProperties[Pal::GpuHeapInvisible].physicalSize = 0;
             heapProperties[Pal::GpuHeapLocal].physicalSize     = 0;
@@ -1958,6 +1958,7 @@ VkResult PhysicalDevice::GetImageFormatProperties(
     //       increase our exposed limits for compressed formats even though PAL/HW operating in terms of
     //       blocks makes that possible.
     const uint64_t bytesPerPixel = Pal::Formats::BytesPerPixel(palFormat.format);
+    const uint64_t bitsPerPixel = Pal::Formats::BitsPerPixel(palFormat.format);
 
     // Block-compressed formats are not supported for 1D textures (PAL image creation will fail).
     if (Pal::Formats::IsBlockCompressed(palFormat.format) && (type == VK_IMAGE_TYPE_1D))
@@ -1971,8 +1972,12 @@ VkResult PhysicalDevice::GetImageFormatProperties(
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     }
 
-    // Currently we just disable the support of linear 3d surfaces, since they aren't required by spec.
-    if (type == VK_IMAGE_TYPE_3D && tiling == VK_IMAGE_TILING_LINEAR)
+    // 3D images have a different, interleaved memory layout which requires special handling
+    // to be able to access each mipLevel and slice. Furthermore, PAL code handles 3D images with 96bpp differently
+    // by scaling the original image to use X32Y32Z32_Uint/X32Y32Z32_Sint/X32Y32Z32_Float image as X32_Uint formatted view,
+    // which is somehow broken and needs debugging.
+    if ((type == VK_IMAGE_TYPE_3D) && (tiling == VK_IMAGE_TILING_LINEAR) &&
+        (settings.disable3dLinearImageFormatSupport || (bitsPerPixel == 96)))
     {
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     }
@@ -2005,6 +2010,14 @@ VkResult PhysicalDevice::GetImageFormatProperties(
                 {
                     return VK_ERROR_FORMAT_NOT_SUPPORTED;
                 }
+            }
+
+            // We are setting `view3dAs2dArray=1` in vk_conv.cpp::VkToPalImageCreateFlags() for uncompressed views
+            // of compressed 3d images. view3dAs2dArray is not going to work in combination with sparse images.
+            // So we disable block texel views of sparse 3d images upfront.
+            if ((flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) && (type == VK_IMAGE_TYPE_3D))
+            {
+                return VK_ERROR_FORMAT_NOT_SUPPORTED;
             }
 
             const bool supported =
@@ -4349,6 +4362,18 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COOPERATIVE_MATRIX));
     }
 
+    bool exposeNvComputeShaderDerivatives  = false;
+
+    if ((pPhysicalDevice == nullptr) || (pPhysicalDevice->GetRuntimeSettings().exportNvComputeShaderDerivatives))
+    {
+        exposeNvComputeShaderDerivatives = true;
+    }
+
+    if (exposeNvComputeShaderDerivatives)
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(NV_COMPUTE_SHADER_DERIVATIVES));
+    }
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE5));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PUSH_DESCRIPTOR));
@@ -4383,7 +4408,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     if (pPhysicalDevice != nullptr)
     {
         const RuntimeSettings& settings = pPhysicalDevice->GetRuntimeSettings();
-        disableAMDVendorExtensions = settings.disableAMDVendorExtensions;
+        disableAMDVendorExtensions = settings.disableAmdVendorExtensions;
     }
 
     // AMD Extensions
@@ -4806,9 +4831,13 @@ VkResult PhysicalDevice::GetRandROutputDisplay(
 VkResult PhysicalDevice::ReleaseDisplay(
     VkDisplayKHR display)
 {
+#if PAL_AMDGPU_BUILD
     Pal::IScreen* pScreen = reinterpret_cast<Pal::IScreen*>(display);
 
     return PalToVkResult(pScreen->ReleaseScreenAccess());
+#else
+    return VK_ERROR_UNKNOWN;
+#endif
 }
 
 #endif
@@ -4845,7 +4874,7 @@ void  PhysicalDevice::GetPhysicalDeviceIDProperties(
     uint32_t* pDeviceNumber = nullptr;
     uint32_t* pFunctionNumber = nullptr;
 
-    if (GetRuntimeSettings().useOldDeviceUUIDCalculation == false)
+    if (GetRuntimeSettings().useOldDeviceUuidCalculation == false)
     {
         pDomainNumber     = reinterpret_cast<uint32_t *>(pDeviceUUID);
         pBusNumber        = reinterpret_cast<uint32_t *>(pDeviceUUID + 4);
@@ -4863,7 +4892,7 @@ void  PhysicalDevice::GetPhysicalDeviceIDProperties(
     memset(pDeviceUUID, 0, VK_UUID_SIZE);
     memset(pDriverUUID, 0, VK_UUID_SIZE);
 
-    if (GetRuntimeSettings().useOldDeviceUUIDCalculation == false)
+    if (GetRuntimeSettings().useOldDeviceUuidCalculation == false)
     {
         *pDomainNumber   = props.pciProperties.domainNumber;
     }
@@ -6650,9 +6679,9 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
-            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR:
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES:
             {
-                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDynamicRenderingFeaturesKHR*>(pHeader);
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDynamicRenderingFeatures*>(pHeader);
 
                 if (updateFeatures)
                 {
@@ -6712,6 +6741,20 @@ size_t PhysicalDevice::GetFeatures2(
                 {
                     pExtInfo->cooperativeMatrix = VK_TRUE;
                     pExtInfo->cooperativeMatrixRobustBufferAccess = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_NV:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceComputeShaderDerivativesFeaturesNV*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->computeDerivativeGroupQuads = VK_TRUE;
+                    pExtInfo->computeDerivativeGroupLinear = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -8345,8 +8388,8 @@ void PhysicalDevice::GetExternalSemaphoreProperties(
                                                                       VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;
         }
         else if ((pExternalSemaphoreInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT) &&
-                 isTimeline == false &&
-                 (props.osProperties.supportSyncFileSemaphore))
+                 props.osProperties.supportSyncFileSemaphore &&
+                 (isTimeline == false))
         {
             pExternalSemaphoreProperties->externalSemaphoreFeatures = VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT |
                                                                       VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;

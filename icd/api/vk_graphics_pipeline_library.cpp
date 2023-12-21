@@ -630,6 +630,7 @@ VkResult GraphicsPipelineLibrary::Destroy(
 {
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
+    uint32_t libraryMask = 0;
     for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
     {
         if (m_tempModuleStates[i].stage != ShaderStage::ShaderStageInvalid)
@@ -642,12 +643,14 @@ VkResult GraphicsPipelineLibrary::Destroy(
             {
                 pCompiler->FreeShaderModule(m_tempModules + i);
             }
+            libraryMask |= (1 << GetGraphicsLibraryType(m_tempModuleStates[i].stage));
         }
     }
 
-    for (Pal::IShaderLibrary* pShaderLib : m_pBinaryCreateInfo->pShaderLibraries)
+    for (uint32_t i = 0; i < ArrayLen(m_pBinaryCreateInfo->pShaderLibraries); ++i)
     {
-        if (pShaderLib != nullptr)
+        Pal::IShaderLibrary* pShaderLib = m_pBinaryCreateInfo->pShaderLibraries[i];
+        if (Util::TestAnyFlagSet(libraryMask, 1 << i) && (pShaderLib != nullptr))
         {
             pShaderLib->Destroy();
             pAllocator->pfnFree(pAllocator->pUserData, pShaderLib);

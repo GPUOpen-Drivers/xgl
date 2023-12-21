@@ -90,7 +90,7 @@ public:
 
     void SetImageViews(const VkRenderPassAttachmentBeginInfo* pRenderPassAttachmentBeginInfo);
 
-    void SetImageViews(const VkRenderingInfoKHR* pRenderingInfo);
+    void SetImageViews(const VkRenderingInfo* pRenderingInfo);
 
     const Pal::GlobalScissorParams& GetGlobalScissorParams() const
     {

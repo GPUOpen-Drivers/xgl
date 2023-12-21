@@ -212,7 +212,7 @@ void Framebuffer::SetImageViews(
 // =====================================================================================================================
 // Set ImageViews for a Framebuffer attachment
 void Framebuffer::SetImageViews(
-    const VkRenderingInfoKHR* pRenderingInfo)
+    const VkRenderingInfo* pRenderingInfo)
 {
     Attachment* pAttachments = static_cast<Attachment*>(Util::VoidPtrInc(this, GetAttachmentsOffset()));
 

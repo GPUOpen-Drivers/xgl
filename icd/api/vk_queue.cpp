@@ -430,7 +430,7 @@ void Queue::ConstructQueueCreateInfo(
     pQueueCreateInfo->queueType                 = palQueueType;
     pQueueCreateInfo->priority                  = VkToPalGlobalPriority(queuePriority,
         palProperties.engineProperties[pQueueCreateInfo->engineType].capabilities[pQueueCreateInfo->engineIndex]);
-#if defined(__unix__)
+#if PAL_AMDGPU_BUILD
     pQueueCreateInfo->enableGpuMemoryPriorities = 1;
 #endif
 }
@@ -478,6 +478,7 @@ Pal::Result Queue::CreatePalQueue(
 
         if ((palResult == Pal::Result::Unsupported) ||
             (palResult == Pal::Result::ErrorInvalidValue) ||
+            (palResult == Pal::Result::ErrorUnknown) ||
             (palResult == Pal::Result::ErrorUnavailable))
         {
             palResult = Pal::Result::Success;
@@ -2592,6 +2593,14 @@ bool Queue::BuildPostProcessCommands(
             frameInfo.pSrcImage                = pImage;
             frameInfo.debugOverlay.presentMode = Pal::PresentMode::Unknown;
         }
+
+        frameInfo.srcImageLayout =
+        {
+            .usages  = Pal::LayoutPresentWindowed | Pal::LayoutPresentFullscreen,
+            .engines = ((PalQueue(DefaultDeviceIndex)->GetEngineType() == Pal::EngineTypeCompute) ?
+                            Pal::LayoutComputeEngine :
+                            Pal::LayoutUniversalEngine)
+        };
 
         frameInfo.fullScreenFrameMetadataControlFlags.u32All = m_palFrameMetadataControl.flags.u32All;
 

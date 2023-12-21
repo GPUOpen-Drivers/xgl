@@ -261,19 +261,26 @@ target_sources(xgl PRIVATE api/strings/strings.cpp)
 
 ### ICD Auto-generated Settings Files #########################################
 # ICD settings code generation main script
-set(ICD_GEN_SETTINGS ${ICD_GENDIR}/genSettingsCode.py)
 
-set(ICD_GEN_SETTINGS_FILES ${ICD_GEN_SETTINGS} ${ICD_GENDIR}/vulkanSettingsCodeTemplates.py)
+set(XGL_DEVDRIVER_PATH ${XGL_PAL_PATH}/shared/devdriver)
+set(ICD_DD_GENDIR ${XGL_DEVDRIVER_PATH}/apis/settings/codegen)
+
+set(ICD_GEN_SETTINGS ${ICD_DD_GENDIR}/settings_codegen.py)
+
+set(ICD_GEN_SETTINGS_FILES ${ICD_GEN_SETTINGS})
 
 set(ICD_SETTINGS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/settings)
 
-set(PAL_GENDIR ${XGL_PAL_PATH}/tools/generate)
-
-set(COMPONENT_NAME vulkan)
-
 add_custom_command(
     OUTPUT ${ICD_SETTINGS_DIR}/g_settings.cpp ${ICD_SETTINGS_DIR}/g_settings.h
-    COMMAND ${PYTHON_CMD} ${ICD_GEN_SETTINGS} ${XGL_PAL_PATH} ${COMPONENT_NAME}
+    COMMAND ${PYTHON_CMD} ${ICD_GEN_SETTINGS}
+        -i ${ICD_SETTINGS_DIR}/settings_xgl.json
+        -o ${ICD_SETTINGS_DIR}
+        -g settings
+        -s settings/settings.h
+        --namespaces vk
+        --settings-struct-name RuntimeSettings
+        --include-headers pal.h palImage.h
     DEPENDS ${ICD_GEN_SETTINGS_FILES} ${ICD_SETTINGS_DIR}/settings_xgl.json
     COMMENT "Generating Vulkan settings code from settings_xgl.json"
 )
@@ -380,6 +387,18 @@ target_include_directories(xgl_cache_support INTERFACE
 target_link_libraries(xgl_cache_support INTERFACE pal)
 
 target_link_libraries(xgl PRIVATE xgl_cache_support)
+
+# Strip the symbols for release build, generate debug file
+if(UNIX)
+        if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
+            add_custom_command(
+                TARGET xgl POST_BUILD
+                COMMAND objcopy --only-keep-debug ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so.debug
+                COMMAND strip  ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so
+                COMMAND objcopy --add-gnu-debuglink=${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so.debug ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so
+            )
+        endif()
+endif()
 
 ### ICD loader configuration ###########################################################################################
 if(UNIX)

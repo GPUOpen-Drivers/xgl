@@ -38,9 +38,11 @@
 #include "palAssert.h"
 #include "palInlineFuncs.h"
 #include "palSysMemory.h"
+#include "palPlatform.h"
 
 #include "devDriverServer.h"
 #include "protocols/ddSettingsService.h"
+#include "dd_settings_service.h"
 
 #include "../layers/include/query_dlist.h"
 
@@ -59,47 +61,22 @@ namespace vk
 // Constructor for the SettingsLoader object.
 VulkanSettingsLoader::VulkanSettingsLoader(
     Pal::IDevice*   pDevice,
-    Pal::IPlatform* pPlatform,
-    uint32_t        deviceId)
+    Pal::IPlatform* pPlatform)
     :
-    ISettingsLoader(pPlatform, static_cast<Pal::DriverSettings*>(&m_settings), g_vulkanNumSettings),
+    DevDriver::SettingsBase(&m_settings, sizeof(m_settings)),
     m_pDevice(pDevice),
     m_pPlatform(pPlatform)
 {
-    Util::Snprintf(m_pComponentName, sizeof(m_pComponentName), "Vulkan%d", deviceId);
-    memset(&m_settings, 0, sizeof(RuntimeSettings));
 }
 
 // =====================================================================================================================
 VulkanSettingsLoader::~VulkanSettingsLoader()
 {
-    auto* pDevDriverServer = m_pPlatform->GetDevDriverServer();
-    if (pDevDriverServer != nullptr)
-    {
-        auto* pSettingsService = pDevDriverServer->GetSettingsService();
-        if (pSettingsService != nullptr)
-        {
-            pSettingsService->UnregisterComponent(m_pComponentName);
-        }
-    }
 }
 
 Result VulkanSettingsLoader::Init()
 {
-    Result ret = m_settingsInfoMap.Init();
-
-    if (ret == Result::Success)
-    {
-        // Init Settings Info HashMap
-        InitSettingsInfo();
-
-        // Setup default values for the settings
-        SetupDefaults();
-
-        m_state = Pal::SettingsLoaderState::EarlyInit;
-    }
-
-    return ret;
+    return (SetupDefaultsAndPopulateMap() == DD_RESULT_SUCCESS) ? Result::Success : Result::ErrorUnknown;
 }
 // =====================================================================================================================
 // Append sub path to root path to generate an absolute path.
@@ -205,6 +182,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                         ForceDccFor3DShaderStorage |
                                         ForceDccFor32BppShaderStorage |
                                         ForceDccFor64BppShaderStorage);
+
         m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
 #if VKI_RAY_TRACING
@@ -520,6 +498,73 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::CSGO)
         {
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+
+                if (pInfo->revision == Pal::AsicRevision::Navi21)
+                {
+                    m_settings.csWaveSize = 32;
+                    m_settings.fsWaveSize = 32;
+
+                    m_settings.mallNoAllocCtPolicy  = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
+                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
+                }
+
+                if (pInfo->revision == Pal::AsicRevision::Navi22)
+                {
+                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsPolicy::MallNoAllocDsAsSnsr;
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
+                }
+
+                if (pInfo->revision == Pal::AsicRevision::Navi23)
+                {
+                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrPolicy::MallNoAllocCtSsrAsSnsr;
+                    m_settings.mallNoAllocSsrPolicy   = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
+                }
+
+                if (pInfo->revision == Pal::AsicRevision::Navi24)
+                {
+                    m_settings.csWaveSize           = 64;
+                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
+                }
+            }
+
+#if VKI_BUILD_GFX11
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            {
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
+                m_settings.ac01WaNotNeeded = true;
+
+                if (pInfo->gpuType == Pal::GpuType::Discrete)
+                {
+                    m_settings.rpmViewsBypassMall   = RpmViewBypassMall::RpmViewBypassMallOnCbDbWrite |
+                                                      RpmViewBypassMall::RpmViewBypassMallOnRead;
+                }
+
+#if VKI_BUILD_NAVI31
+                if (pInfo->revision == Pal::AsicRevision::Navi31)
+                {
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
+                }
+#endif
+
+#if VKI_BUILD_NAVI32
+                if (pInfo->revision == Pal::AsicRevision::Navi32)
+                {
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
+                }
+#endif
+
+#if VKI_BUILD_NAVI33
+                if (pInfo->revision == Pal::AsicRevision::Navi33)
+                {
+                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrPolicy::MallNoAllocCtSsrAsSnsr;
+                }
+#endif
+            }
+#endif
+
+            m_settings.enableUberFetchShader  = true;
         }
 
         if (appProfile == AppProfile::Source2Engine)
@@ -816,6 +861,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
 
             m_settings.ac01WaNotNeeded = true;
+
+            m_settings.disable3dLinearImageFormatSupport = false;
         }
 
         if (appProfile == AppProfile::GhostReconBreakpoint)
@@ -855,12 +902,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                     m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
                     m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
                 }
-
-                if (pInfo->revision == Pal::AsicRevision::Navi22)
+                else if (pInfo->revision == Pal::AsicRevision::Navi22)
                 {
                     m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
-                        ForceDccFor3DShaderStorage |
-                        ForceDccForColorAttachments);
+                                                 ForceDccFor3DShaderStorage |
+                                                 ForceDccForColorAttachments);
 
                     m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
                     m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
@@ -875,6 +921,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 {
                     m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
                     m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+
+                    m_settings.memoryDeviceOverallocationAllowed = true;
                 }
             }
 
@@ -1054,7 +1102,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::IdTechLauncher)
         {
-            m_settings.enableOnDiskInternalPipelineCaches = false;
+            m_settings.enableInternalPipelineCachingToDisk = false;
         }
 
         if (appProfile == AppProfile::SaschaWillemsExamples)
@@ -1293,6 +1341,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 #endif
         }
 
+        if (appProfile == AppProfile::Vkd3dEngine)
+        {
+            m_settings.exportNvComputeShaderDerivatives = true;
+        }
+
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
     }
 
@@ -1339,11 +1392,11 @@ VkResult VulkanSettingsLoader::ProcessSettings(
     VkResult result = VkResult::VK_SUCCESS;
 
     // The following lines to load profile settings have been copied from g_settings.cpp
-    static_cast<Pal::IDevice*>(m_pDevice)->ReadSetting(pForceAppProfileEnableStr,
+    static_cast<Pal::IDevice*>(m_pDevice)->ReadSetting(pForceAppProfileEnableHashStr,
                                                        Pal::SettingScope::Driver,
                                                        Util::ValueType::Boolean,
                                                        &m_settings.forceAppProfileEnable);
-    static_cast<Pal::IDevice*>(m_pDevice)->ReadSetting(pForceAppProfileValueStr,
+    static_cast<Pal::IDevice*>(m_pDevice)->ReadSetting(pForceAppProfileValueHashStr,
                                                        Pal::SettingScope::Driver,
                                                        Util::ValueType::Uint,
                                                        &m_settings.forceAppProfileValue);
@@ -1383,17 +1436,14 @@ VkResult VulkanSettingsLoader::ProcessSettings(
             m_settings.pipelineLayoutMode = PipelineLayoutMode::PipelineLayoutAngle;
         }
 
-        if (m_settings.ac01WaNotNeeded)
-        {
-            Pal::PalPublicSettings* pPalSettings = m_pDevice->GetPublicSettings();
-            pPalSettings->ac01WaNotNeeded = true;
-        }
-
         DumpAppProfileChanges(*pAppProfile);
 
-        // Register with the DevDriver settings service
-        DevDriverRegister();
-        m_state = Pal::SettingsLoaderState::LateInit;
+        auto pSettingsRpcService = m_pPlatform->GetSettingsRpcService();
+
+        if (pSettingsRpcService != nullptr)
+        {
+            pSettingsRpcService->RegisterSettingsComponent(this);
+        }
     }
 
     return result;
@@ -1412,7 +1462,7 @@ void VulkanSettingsLoader::ReadPublicSettings()
         &appGpuID,
         sizeof(appGpuID)))
     {
-        m_settings.appGpuID = appGpuID;
+        m_settings.appGpuId = appGpuID;
     }
 
     // Read TFQ global key
@@ -1493,12 +1543,12 @@ void VulkanSettingsLoader::ValidateSettings()
             buildMode = BvhBuildModePLOC;
         }
 
-        m_settings.bvhBuildModeOverrideBLAS = buildMode;
-        m_settings.bvhBuildModeOverrideTLAS = buildMode;
+        m_settings.bvhBuildModeOverrideBlas = buildMode;
+        m_settings.bvhBuildModeOverrideTlas = buildMode;
     }
 
     // Compression is not compatible with collapse or triangle splitting.
-    if (m_settings.rtEnableBVHCollapse || m_settings.rtEnableTriangleSplitting)
+    if (m_settings.rtEnableBvhCollapse || m_settings.rtEnableTriangleSplitting)
     {
         m_settings.rtTriangleCompressionMode = NoTriangleCompression;
     }
@@ -1576,6 +1626,8 @@ void VulkanSettingsLoader::UpdatePalSettings()
     // The color cache fetch size is limited to 256Bytes MAX regardless of other register settings.
     pPalSettings->limitCbFetch256B = m_settings.limitCbFetch256B;
 
+    pPalSettings->rpmViewsBypassMall = static_cast<Pal::RpmViewsBypassMall>(m_settings.rpmViewsBypassMall);
+
     // Controls PWS enable mode: disabled, fully enabled or partially enabled. Only takes effect if HW supports PWS and
     // Acq-rel barriers
     if (m_settings.useAcquireReleaseInterface)
@@ -1588,6 +1640,11 @@ void VulkanSettingsLoader::UpdatePalSettings()
         pPalSettings->pwsMode = static_cast<Pal::PwsMode>(m_settings.forcePwsMode);
     }
 
+    if (m_settings.ac01WaNotNeeded)
+    {
+        pPalSettings->ac01WaNotNeeded = true;
+    }
+
 }
 
 // =====================================================================================================================
@@ -1598,17 +1655,17 @@ void VulkanSettingsLoader::UpdatePalSettings()
 void VulkanSettingsLoader::GenerateSettingHash()
 {
     // Temporarily ignore these CCC settings when computing a settings hash as described in the function header.
-    uint32 appGpuID = m_settings.appGpuID;
-    m_settings.appGpuID = 0;
+    uint32 appGpuID = m_settings.appGpuId;
+    m_settings.appGpuId = 0;
     TextureFilterOptimizationSettings vulkanTexFilterQuality = m_settings.vulkanTexFilterQuality;
     m_settings.vulkanTexFilterQuality = TextureFilterOptimizationsDisabled;
 
     MetroHash128::Hash(
         reinterpret_cast<const uint8*>(&m_settings),
         sizeof(RuntimeSettings),
-        m_settingHash.bytes);
+        m_settingsHash.bytes);
 
-    m_settings.appGpuID = appGpuID;
+    m_settings.appGpuId = appGpuID;
     m_settings.vulkanTexFilterQuality = vulkanTexFilterQuality;
 }
 
@@ -1624,9 +1681,22 @@ void VulkanSettingsLoader::FinalizeSettings(
         m_settings.enableFmaskBasedMsaaRead = false;
     }
 
-    m_state = Pal::SettingsLoaderState::Final;
-
     GenerateSettingHash();
+}
+
+// =====================================================================================================================
+bool VulkanSettingsLoader::ReadSetting(
+    const char*          pSettingName,
+    Util::ValueType      valueType,
+    void*                pValue,
+    size_t               bufferSize)
+{
+    return m_pDevice->ReadSetting(
+        pSettingName,
+        Pal::SettingScope::Driver,
+        valueType,
+        pValue,
+        bufferSize);
 }
 
 };

@@ -1817,7 +1817,7 @@ inline Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings&
 #if VKI_GPU_DECOMPRESS
         if (settings.enableShaderDecode)
         {
-            format = convertCompressedFormat(format, settings.enableBC3Encoder);
+            format = convertCompressedFormat(format, settings.enableBc3Encoder);
         }
 #endif
         return convert::VkToPalSwizzledFormatLookupTableStorage[format];
@@ -2484,7 +2484,7 @@ inline uint32_t VkToPalPipelineStageFlags(
     if (stageMask & VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT_KHR)
     {
         palPipelineStageMask |= Pal::PipelineStageFetchIndices |
-                                Pal::PipelineStageVs;
+                                Pal::PipelineStagePostPrefetch;
     }
 
     if (stageMask & VK_PIPELINE_STAGE_2_TRANSFORM_FEEDBACK_BIT_EXT)
@@ -2492,8 +2492,12 @@ inline uint32_t VkToPalPipelineStageFlags(
         palPipelineStageMask |= Pal::PipelineStageStreamOut;
     }
 
-    if (stageMask & (VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR          |
-                     VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT_KHR))
+    if (stageMask & VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStagePostPrefetch;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR)
     {
         palPipelineStageMask |= Pal::PipelineStageVs;
     }
@@ -2514,13 +2518,17 @@ inline uint32_t VkToPalPipelineStageFlags(
         palPipelineStageMask |= Pal::PipelineStageGs;
     }
 
-    if (stageMask & (VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR |
-                     VK_PIPELINE_STAGE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR))
+    if (stageMask & VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR)
     {
         palPipelineStageMask |= Pal::PipelineStageVs |
                                 Pal::PipelineStageHs |
                                 Pal::PipelineStageDs |
                                 Pal::PipelineStageGs;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageSampleRate;
     }
 
     if (stageMask & VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR)
@@ -2547,12 +2555,14 @@ inline uint32_t VkToPalPipelineStageFlags(
     {
         palPipelineStageMask |= Pal::PipelineStageTopOfPipe         |
                                 Pal::PipelineStageFetchIndirectArgs |
+                                Pal::PipelineStagePostPrefetch      |
                                 Pal::PipelineStageFetchIndices      |
                                 Pal::PipelineStageVs                |
                                 Pal::PipelineStageHs                |
                                 Pal::PipelineStageDs                |
                                 Pal::PipelineStageGs                |
                                 Pal::PipelineStagePs                |
+                                Pal::PipelineStageSampleRate        |
                                 Pal::PipelineStageEarlyDsTarget     |
                                 Pal::PipelineStageLateDsTarget      |
                                 Pal::PipelineStageColorTarget;
@@ -2727,7 +2737,9 @@ inline VkCompositeAlphaFlagsKHR PalToVkSupportedCompositeAlphaMode(uint32 compos
 // for the image creation flags so we have to return the constructed flag set as a uint32_t)
 inline uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
                                         VkFormat           format,
-                                        VkImageUsageFlags  imageUsage)
+                                        VkImageUsageFlags  imageUsage,
+                                        VkImageType        type,
+                                        uint32_t           mipLevels)
 {
     Pal::ImageCreateFlags flags = {};
 
@@ -2735,8 +2747,20 @@ inline uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
     flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)       ? 1 : 0;
     flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)                  ? 1 : 0;
     flags.tmzProtected       = (imageCreateFlags & VK_IMAGE_CREATE_PROTECTED_BIT)              ? 1 : 0;
-    flags.view3dAs2dArray    = (imageCreateFlags &
-        (VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT | VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT)) ? 1 : 0;
+
+    {
+        const bool is2dCompatible             = imageCreateFlags &
+            (VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT | VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT);
+        const bool isBlockTexelViewCompatible = imageCreateFlags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT;
+        const bool is3dImage                  = type == VK_IMAGE_TYPE_3D;
+        // Originally, VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT was not permitted by 3D images, but the
+        // restriction was later removed from the spec. Our solution to HW degrading mip levels differently for
+        // uncompressed texels vs compressed blocks only works for 2D block sizes, and view3dAs2dArray will make sure
+        // to use them even for 3D images.
+        const bool hasMipMaps                 = mipLevels > 1;
+
+        flags.view3dAs2dArray = (is2dCompatible || (isBlockTexelViewCompatible && is3dImage && hasMipMaps)) ? 1 : 0;
+    }
 
     // Always provide pQuadSamplePattern to PalCmdResolveImage for depth formats to allow optimizations
     flags.sampleLocsAlwaysKnown = Formats::HasDepth(format) ? 1 : 0;

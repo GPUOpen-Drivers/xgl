@@ -192,6 +192,7 @@ void CompilerSolutionLlpc::FreeShaderModule(ShaderModuleHandle* pShaderModule)
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
     pInstance->FreeMem(pShaderModule->pLlpcShaderModule);
+    pShaderModule->pLlpcShaderModule = nullptr;
 }
 
 // =====================================================================================================================

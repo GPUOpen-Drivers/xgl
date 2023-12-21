@@ -150,7 +150,7 @@ VkResult Buffer::Create(
         VK_ASSERT(palResult == Pal::Result::Success);
     }
 
-#if defined(__unix__)
+#if PAL_AMDGPU_BUILD
     gpuMemoryCreateInfo.flags.initializeToZero = pDevice->GetRuntimeSettings().initializeVramToZero;
 #endif
 
