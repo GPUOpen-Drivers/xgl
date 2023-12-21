@@ -62,10 +62,11 @@ public:
         Fmt_16bpc_sfloat = 0x0400,
         Fmt_32bpc        = 0x0800,
 
-        Fmt_8bpc     = Fmt_8bpc_srgb   | Fmt_8bpc_unorm,
-        Fmt_16bpc    = Fmt_16bpc_unorm | Fmt_16bpc_sfloat,
-        Fmt_KnownHDR = Fmt_10bpc | Fmt_11bpc | Fmt_12bpc | Fmt_16bpc,
-        Fmt_All      = Fmt_4bpc  | Fmt_5bpc  | Fmt_6bpc  | Fmt_8bpc  | Fmt_KnownHDR | Fmt_32bpc,
+        Fmt_8bpc      = Fmt_8bpc_srgb   | Fmt_8bpc_unorm,
+        Fmt_16bpc     = Fmt_16bpc_unorm | Fmt_16bpc_sfloat,
+        Fmt_KnownHDR  = Fmt_10bpc | Fmt_11bpc | Fmt_12bpc | Fmt_16bpc,
+        Fmt_KnownSRGB = Fmt_8bpc | Fmt_10bpc,
+        Fmt_All       = Fmt_4bpc  | Fmt_5bpc  | Fmt_6bpc  | Fmt_8bpc  | Fmt_KnownHDR | Fmt_32bpc,
 
         Fmt_FreeSync2 = Fmt_10bpc | Fmt_16bpc,
     };

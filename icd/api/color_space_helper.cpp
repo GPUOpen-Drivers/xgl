@@ -51,7 +51,7 @@ struct LookupDefines
 
 const LookupDefines colorspaceLookup[] =
 {
-    { Pal::ScreenColorSpace::CsSrgb,         VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,       FmtSupport::Fmt_8bpc         },
+    { Pal::ScreenColorSpace::CsSrgb,         VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,       FmtSupport::Fmt_KnownSRGB    },
     { Pal::ScreenColorSpace::CsBt709,        VK_COLOR_SPACE_BT709_NONLINEAR_EXT,      FmtSupport::Fmt_All          },
     { Pal::ScreenColorSpace::TfHlg,          VK_COLOR_SPACE_HDR10_HLG_EXT,            FmtSupport::Fmt_KnownHDR     },
     { Pal::ScreenColorSpace::TfPq2084,       VK_COLOR_SPACE_HDR10_ST2084_EXT,         FmtSupport::Fmt_10bpc        },
