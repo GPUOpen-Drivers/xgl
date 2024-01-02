@@ -36,7 +36,7 @@ include(LLVMConfig)
 # Find all the LLVM libraries necessary to use the LLVM components that we use.
 # See https://llvm.org/docs/CMake.html#embedding-llvm-in-your-project.
 llvm_map_components_to_libnames(llvm_libs Object Support)
-target_link_libraries(cache_creator_lib INTERFACE pal xgl_cache_support ${llvm_libs})
+target_link_libraries(cache_creator_lib INTERFACE pal xgl_cache_support ${llvm_libs} llpc_version)
 
 target_include_directories(cache_creator_lib INTERFACE
     ${XGL_LLVM_SRC_PATH}/include
@@ -62,6 +62,20 @@ if(NOT LLVM_ENABLE_RTTI)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(cache_creator_lib INTERFACE  $<$<COMPILE_LANGUAGE:CXX>: -fno-rtti>)
     endif()
+endif()
+
+if(CMAKE_BUILD_TYPE_RELEASE AND XGL_ENABLE_LTO)
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    #target_link_options(xgl PRIVATE -Wno-stringop-overflow)
+    execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
+    if (GCC_VERSION VERSION_GREATER 5.3 OR GCC_VERSION VERSION_EQUAL 5.3)
+        target_link_libraries(cache_creator_lib INTERFACE -flto=4  -fuse-linker-plugin -Wno-odr)
+        message(WARNING "LTO enabled for Linking")
+    endif()
+elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    # LTO enabled for final Linking (clang)
+    target_link_libraries(cache_creator_lib INTERFACE -flto=thin)
+endif()
 endif()
 
 target_sources(cache_creator_lib INTERFACE cache_creator.cpp cache_info.cpp)
