@@ -54,9 +54,9 @@ const LookupDefines colorspaceLookup[] =
     { Pal::ScreenColorSpace::CsSrgb,         VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,       FmtSupport::Fmt_KnownSRGB    },
     { Pal::ScreenColorSpace::CsBt709,        VK_COLOR_SPACE_BT709_NONLINEAR_EXT,      FmtSupport::Fmt_All          },
     { Pal::ScreenColorSpace::TfHlg,          VK_COLOR_SPACE_HDR10_HLG_EXT,            FmtSupport::Fmt_KnownHDR     },
-    { Pal::ScreenColorSpace::TfPq2084,       VK_COLOR_SPACE_HDR10_ST2084_EXT,         FmtSupport::Fmt_10bpc        },
+    { Pal::ScreenColorSpace::TfPq2084,       VK_COLOR_SPACE_HDR10_ST2084_EXT,         FmtSupport::Fmt_10bpc_unorm  },
     { Pal::ScreenColorSpace::TfDolbyVision,  VK_COLOR_SPACE_DOLBYVISION_EXT,          FmtSupport::Fmt_8bpc_unorm   },
-    { Pal::ScreenColorSpace::CsBt2020,       VK_COLOR_SPACE_BT2020_LINEAR_EXT,        FmtSupport::Fmt_10bpc        },
+    { Pal::ScreenColorSpace::CsBt2020,       VK_COLOR_SPACE_BT2020_LINEAR_EXT,        FmtSupport::Fmt_10bpc_unorm  },
     { Pal::ScreenColorSpace::CsAdobe,        VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT,      FmtSupport::Fmt_All          },
     { Pal::ScreenColorSpace::CsDciP3,        VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT,     FmtSupport::Fmt_All          },
     { Pal::ScreenColorSpace::CsScrgb,        VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT, FmtSupport::Fmt_16bpc_sfloat },
@@ -140,10 +140,16 @@ ColorSpaceHelper::FmtSupport ColorSpaceHelper::GetBitFormat(Pal::ChNumFormat pal
             fmt = Fmt_9bpc;
             break;
         case 10:
-            fmt = Fmt_10bpc;
-            break;
         case 11:
-            fmt = Fmt_10bpc;
+            if (Pal::Formats::IsSrgb(palFormat))
+            {
+                fmt = Fmt_10bpc_srgb;
+            }
+            else
+            {
+                VK_ASSERT(Pal::Formats::IsUnorm(palFormat));
+                fmt = Fmt_10bpc_unorm;
+            }
             break;
         case 12:
             fmt = Fmt_12bpc;
