@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -169,6 +169,9 @@ public:
     const Pal::IPipeline* GetPalPipeline(uint32_t deviceIdx) const
         { return  UseOptimizedPipeline() ? m_pOptimizedPipeline[deviceIdx] : m_pPalPipeline[deviceIdx]; }
 
+    const Pal::IShaderLibrary* GetPalShaderLibrary(GraphicsLibraryType type) const
+        { return m_pPalShaderLibrary[type]; }
+
     const Pal::DynamicGraphicsShaderInfos& GetBindInfo() const { return m_info.graphicsShaderInfos; }
 
     const Pal::IMsaaState* const* GetMsaaStates() const { return m_pPalMsaa; }
@@ -210,6 +213,8 @@ protected:
         Pal::IMsaaState**                      pPalMsaa,
         Pal::IColorBlendState**                pPalColorBlend,
         Pal::IDepthStencilState**              pPalDepthStencil,
+        const Pal::IShaderLibrary**            pPalShaderLibrary,
+        const InternalMemory*                  pInternalMem,
         uint32_t                               coverageSamples,
         const Util::MetroHash::Hash&           cacheHash,
         uint64_t                               apiHash,
@@ -225,7 +230,7 @@ protected:
         const GraphicsPipelineShaderStageInfo*         pShaderInfo,
         const PipelineLayout*                          pPipelineLayout,
         const Util::MetroHash::Hash*                   pElfHash,
-        PipelineOptimizerKey*                          pPipelineOptimizerKey,
+        const PipelineOptimizerKey*                    pPipelineOptimizerKey,
         GraphicsPipelineBinaryCreateInfo*              pBinaryCreateInfo,
         PipelineCache*                                 pPipelineCache,
         const VkPipelineCreationFeedbackCreateInfoEXT* pCreationFeedbackInfo,
@@ -241,6 +246,7 @@ protected:
         const PipelineLayout*               pPipelineLayout,
         const VbBindingInfo*                pVbInfo,
         const PipelineInternalBufferInfo*   pInternalBuffer,
+        const InternalMemory*               pInternalMem,
         const Vkgc::BinaryData*             pPipelineBinaries,
         PipelineCache*                      pPipelineCache,
         const Util::MetroHash::Hash*        pCacheIds,
@@ -294,6 +300,8 @@ private:
     Pal::IMsaaState*                m_pPalMsaa[MaxPalDevices];         // PAL MSAA state object
     Pal::IColorBlendState*          m_pPalColorBlend[MaxPalDevices];   // PAL color blend state object
     Pal::IDepthStencilState*        m_pPalDepthStencil[MaxPalDevices]; // PAL depth stencil state object
+    const Pal::IShaderLibrary*      m_pPalShaderLibrary[GraphicsLibraryCount]; // Pal shader library object
+    const InternalMemory*           m_pInternalMem;                    // Memory object of internal buffer
     VbBindingInfo                   m_vbInfo;                          // Information about vertex buffer bindings
     PipelineInternalBufferInfo      m_internalBufferInfo;              // Information about internal buffer
     Pal::IPipeline*                 m_pOptimizedPipeline[MaxPalDevices]; // Optimized PAL pipelines

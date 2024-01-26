@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1811,6 +1811,20 @@ namespace convert
 // Converts Vulkan format to PAL equivalent.
 inline Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings& settings)
 {
+    if (settings.enableD24S8)
+    {
+        if (format == VK_FORMAT_D24_UNORM_S8_UINT)
+        {
+            return PalFmt(Pal::ChNumFormat::D32_Float_S8_Uint,
+                  Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Zero, Pal::ChannelSwizzle::Zero, Pal::ChannelSwizzle::One);
+        }
+        if (format == VK_FORMAT_X8_D24_UNORM_PACK32)
+        {
+            return PalFmt(Pal::ChNumFormat::X32_Float,
+                  Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Zero, Pal::ChannelSwizzle::Zero, Pal::ChannelSwizzle::One);
+        }
+    }
+
     if (VK_ENUM_IN_RANGE(format, VK_FORMAT))
     {
 

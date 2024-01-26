@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -31,6 +31,7 @@
 
 from generate_shader_util import generate_spv_header_file
 
+generate_spv_header_file("null_fragment.frag", "null_fragment", " ")
 generate_spv_header_file("copy_query_pool.comp", "copy_timestamp_query_pool", " ")
 generate_spv_header_file("copy_query_pool.comp", "copy_timestamp_query_pool_strided", "-DSTRIDED_COPY")
 generate_spv_header_file("copy_query_pool.comp", "copy_acceleration_structure_query_pool",\

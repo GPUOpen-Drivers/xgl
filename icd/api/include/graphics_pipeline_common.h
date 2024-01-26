@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -70,6 +70,7 @@ struct GraphicsPipelineObjectImmedInfo
     Pal::StencilRefMaskParams             stencilRefMasks;
     SamplePattern                         samplePattern;
     Pal::DynamicGraphicsShaderInfos       graphicsShaderInfos;
+    Pal::DynamicGraphicsState             dynamicGraphicsState;
     Pal::VrsRateParams                    vrsRateParams;
     Pal::DepthStencilStateCreateInfo      depthStencilCreateInfo;
     Pal::MsaaStateCreateInfo              msaaCreateInfo;

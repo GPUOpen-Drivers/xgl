@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -62,7 +62,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
     const GraphicsPipelineShaderStageInfo*         pShaderInfo,
     const PipelineLayout*                          pPipelineLayout,
     const Util::MetroHash::Hash*                   pElfHash,
-    PipelineOptimizerKey*                          pPipelineOptimizerKey,
+    const PipelineOptimizerKey*                    pPipelineOptimizerKey,
     GraphicsPipelineBinaryCreateInfo*              pBinaryCreateInfo,
     PipelineCache*                                 pPipelineCache,
     const VkPipelineCreationFeedbackCreateInfoEXT* pCreationFeedbackInfo,
@@ -191,13 +191,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                         binaryCreateInfoMGPU.stageFeedback);
                 }
 
-                if (binaryMetadataMGPU.internalBufferInfo.pData != nullptr)
-                {
-                    pDevice->VkInstance()->FreeMem(binaryMetadataMGPU.internalBufferInfo.pData);
-                    binaryMetadataMGPU.internalBufferInfo.pData = nullptr;
-                }
-
-                pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfoMGPU, false);
+                pDefaultCompiler->FreeGraphicsPipelineCreateInfo(pDevice, &binaryCreateInfoMGPU, false, false);
             }
         }
         else if (deviceIdx == DefaultDeviceIndex)
@@ -206,6 +200,8 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                 pDevice,
                 pPipelineBinaries[DefaultDeviceIndex],
                 pBinaryMetadata);
+            pBinaryCreateInfo->pBinaryMetadata = pBinaryMetadata;
+            pDevice->GetCompiler(DefaultDeviceIndex)->UploadInternalBufferData(pDevice, pBinaryCreateInfo);
         }
 
         // Add to any cache layer where missing
@@ -325,6 +321,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
     const PipelineLayout*               pPipelineLayout,
     const VbBindingInfo*                pVbInfo,
     const PipelineInternalBufferInfo*   pInternalBuffer,
+    const InternalMemory*               pInternalMem,
     const Vkgc::BinaryData*             pPipelineBinaries,
     PipelineCache*                      pPipelineCache,
     const Util::MetroHash::Hash*        pCacheIds,
@@ -355,7 +352,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
 
     pSystemMem = pDevice->AllocApiObject(
         pAllocator,
-        sizeof(GraphicsPipeline) + (palSize * numPalDevices) + pInternalBuffer->dataSize);
+        sizeof(GraphicsPipeline) + (palSize * numPalDevices));
 
     if (pSystemMem == nullptr)
     {
@@ -463,13 +460,6 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
     // On success, wrap it up in a Vulkan object.
     if (result == VK_SUCCESS)
     {
-        PipelineInternalBufferInfo internalBuffer = *pInternalBuffer;
-        if (pInternalBuffer->dataSize > 0)
-        {
-            internalBuffer.pData = Util::VoidPtrInc(pSystemMem, sizeof(GraphicsPipeline) + (palSize * numPalDevices));
-            memcpy(internalBuffer.pData, pInternalBuffer->pData, pInternalBuffer->dataSize);
-        }
-
         VK_PLACEMENT_NEW(pSystemMem) GraphicsPipeline(
             pDevice,
             pPalPipeline,
@@ -481,10 +471,12 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
             pObjectCreateInfo->dispatchRaysUserDataOffset,
 #endif
             *pVbInfo,
-            &internalBuffer,
+            pInternalBuffer,
             pPalMsaa,
             pPalColorBlend,
             pPalDepthStencil,
+            pObjectCreateInfo->pipeline.ppShaderLibraries,
+            pInternalMem,
             pObjectCreateInfo->sampleCoverage,
             pCacheIds[DefaultDeviceIndex],
             apiPsoHash,
@@ -634,6 +626,9 @@ void DumpGplFastLinkInfo(
                 }
             }
         }
+
+        PipelineCompiler::DumpPipelineMetadata(pPipelineDumpHandle, pCreateInfo->pBinaryMetadata);
+
         Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
     }
 }
@@ -650,6 +645,7 @@ VkResult GraphicsPipeline::Create(
 {
     VkResult result = VK_SUCCESS;
     uint64 startTimeTicks = Util::GetPerfCpuTime();
+    uint64_t colorExportDuration = 0;
 
     PipelineCompiler* pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
@@ -677,11 +673,34 @@ VkResult GraphicsPipeline::Create(
     VK_ASSERT(pCreateInfo->layout != VK_NULL_HANDLE);
     pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
 
+    GraphicsPipelineLibraryInfo libInfo = {};
+    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, flags, &libInfo);
+
     // 1. Check whether GPL fast link is possible
     if (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink)
     {
-        GraphicsPipelineLibraryInfo libInfo;
-        GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, flags, &libInfo);
+
+        // If pipeline only contains PreRasterizationShaderLib and no fragment shader is in the create info,
+        // we add a null fragement library in order to use fast link.
+        if ((libInfo.flags.isLibrary == false) &&
+            ((libInfo.pPreRasterizationShaderLib != nullptr) && (libInfo.pFragmentShaderLib == nullptr)))
+        {
+            bool hasFragShader = false;
+            for (uint32_t i = 0; i < pCreateInfo->stageCount; ++i)
+            {
+                if (ShaderFlagBitToStage(pCreateInfo->pStages[i].stage) == ShaderStageFragment)
+                {
+                    hasFragShader = true;
+                    break;
+                }
+            }
+
+            if (hasFragShader == false)
+            {
+                libInfo.pFragmentShaderLib = pDevice->GetNullFragmentLib();
+            }
+        }
+
         if (IsGplFastLinkPossible(libInfo))
         {
             result = pDevice->GetCompiler(DefaultDeviceIndex)->BuildGplFastLinkCreateInfo(
@@ -698,6 +717,7 @@ VkResult GraphicsPipeline::Create(
                 shaderLibraries[numShaderLibraries++] = fragmentCreateInfo.pShaderLibraries[GraphicsLibraryFragment];
                 if (binaryCreateInfo.pipelineInfo.enableColorExportShader)
                 {
+                    uint64_t colorExportTicks = Util::GetPerfCpuTime();
                     Pal::IShaderLibrary* pColorExportLib = nullptr;
                     result = pDevice->GetCompiler(DefaultDeviceIndex)->CreateColorExportShaderLibrary(pDevice,
                         &binaryCreateInfo,
@@ -708,11 +728,13 @@ VkResult GraphicsPipeline::Create(
                         shaderLibraries[numShaderLibraries++] = pColorExportLib;
                         binaryCreateInfo.pShaderLibraries[GraphicsLibraryColorExport] = pColorExportLib;
                     }
+                    uint64_t durationTicks = Util::GetPerfCpuTime() - colorExportTicks;
+                    colorExportDuration = vk::utils::TicksToNano(durationTicks);
                 }
             }
             else if (result == VK_ERROR_PIPELINE_COMPILE_REQUIRED_EXT)
             {
-                flags |= VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT;
+                flags |= VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT;
             }
 
             if (result == VK_SUCCESS)
@@ -720,7 +742,8 @@ VkResult GraphicsPipeline::Create(
                 objectCreateInfo.pipeline.ppShaderLibraries = shaderLibraries;
                 objectCreateInfo.pipeline.numShaderLibraries = numShaderLibraries;
                 if ((pDevice->VkInstance()->GetDevModeMgr() != nullptr) ||
-                    pDevice->GetRuntimeSettings().enablePipelineDump)
+                    pDevice->GetRuntimeSettings().enablePipelineDump ||
+                    pDevice->GetRuntimeSettings().logTagIdMask)
                 {
                     BuildApiHash(pCreateInfo, flags, &apiPsoHash, &elfHash);
                     binaryCreateInfo.apiPsoHash = apiPsoHash;
@@ -816,6 +839,7 @@ VkResult GraphicsPipeline::Create(
                 pPipelineLayout,
                 &binaryMetadata.vbInfo,
                 &binaryMetadata.internalBufferInfo,
+                binaryCreateInfo.pInternalMem,
                 pipelineBinaries,
                 pPipelineCache,
                 cacheId,
@@ -828,11 +852,6 @@ VkResult GraphicsPipeline::Create(
     // Free the temporary newly-built shader modules
     FreeTempModules(pDevice, ShaderStage::ShaderStageGfxCount, tempModules);
 
-    if (binaryMetadata.internalBufferInfo.pData != nullptr)
-    {
-        pDevice->VkInstance()->FreeMem(binaryMetadata.internalBufferInfo.pData);
-        binaryMetadata.internalBufferInfo.pData = nullptr;
-    }
     // Free the created pipeline binaries now that the PAL Pipelines/PipelineBinaryInfo have read them.
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
@@ -844,11 +863,6 @@ VkResult GraphicsPipeline::Create(
                 pipelineBinaries[deviceIdx]);
         }
     }
-
-    // Deferred compile will reuse all object generated in PipelineCompiler::ConvertGraphicsPipelineInfo.
-    // i.e. we need keep temp buffer in binaryCreateInfo
-    pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfo,
-                                                     objectCreateInfo.immedInfo.checkDeferCompilePipeline);
 
     if (objectCreateInfo.immedInfo.checkDeferCompilePipeline)
     {
@@ -904,17 +918,29 @@ VkResult GraphicsPipeline::Create(
             }
         }
 
-        // The hash is same as pipline dump file name, we can easily analyze further.
+        // The hash is same as pipeline dump file name, we can easily analyze further.
         AmdvlkLog(pDevice->GetRuntimeSettings().logTagIdMask,
                   PipelineCompileTime,
-                  "0x%016llX-%llu",
-                  apiPsoHash, duration);
+                  "0x%016llX-IsLib: %u-Opt: %u-LibFlag: %u-Duration: %llu-ColorExportDuration: %llu",
+                  apiPsoHash,
+                  libInfo.flags.isLibrary,
+                  libInfo.flags.optimize,
+                  libInfo.libFlags,
+                  duration,
+                  colorExportDuration);
 
         if (enableFastLink && pDevice->GetRuntimeSettings().enablePipelineDump)
         {
             DumpGplFastLinkInfo(pDevice, *pPipeline, &binaryCreateInfo);
         }
     }
+
+    // Deferred compile will reuse all object generated in PipelineCompiler::ConvertGraphicsPipelineInfo.
+    // i.e. we need keep temp buffer in binaryCreateInfo
+    pDefaultCompiler->FreeGraphicsPipelineCreateInfo(pDevice,
+        &binaryCreateInfo,
+        objectCreateInfo.immedInfo.checkDeferCompilePipeline,
+        true);
 
     return result;
 }
@@ -1230,7 +1256,7 @@ VkResult GraphicsPipeline::DeferCreateOptimizedPipeline(
         SetOptimizedPipeline(pPalPipeline);
     }
 
-    pDevice->GetCompiler(DefaultDeviceIndex)->FreeGraphicsPipelineCreateInfo(pBinaryCreateInfo, false);
+    pDevice->GetCompiler(DefaultDeviceIndex)->FreeGraphicsPipelineCreateInfo(pDevice, pBinaryCreateInfo, false, true);
 
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
@@ -1277,6 +1303,8 @@ GraphicsPipeline::GraphicsPipeline(
     Pal::IMsaaState**                      pPalMsaa,
     Pal::IColorBlendState**                pPalColorBlend,
     Pal::IDepthStencilState**              pPalDepthStencil,
+    const Pal::IShaderLibrary**            pPalShaderLibrary,
+    const InternalMemory*                  pInternalMem,
     uint32_t                               coverageSamples,
     const Util::MetroHash::Hash&           cacheHash,
     uint64_t                               apiHash,
@@ -1288,6 +1316,8 @@ GraphicsPipeline::GraphicsPipeline(
 #endif
         pDevice),
     m_info(immedInfo),
+    m_pPalShaderLibrary{},
+    m_pInternalMem(pInternalMem),
     m_vbInfo(vbInfo),
     m_internalBufferInfo(*pInternalBuffer),
     m_pOptimizedPipeline{},
@@ -1308,64 +1338,68 @@ GraphicsPipeline::GraphicsPipeline(
     memcpy(m_pPalMsaa,         pPalMsaa,         sizeof(pPalMsaa[0])         * pDevice->NumPalDevices());
     memcpy(m_pPalColorBlend,   pPalColorBlend,   sizeof(pPalColorBlend[0])   * pDevice->NumPalDevices());
     memcpy(m_pPalDepthStencil, pPalDepthStencil, sizeof(pPalDepthStencil[0]) * pDevice->NumPalDevices());
+    if (pPalShaderLibrary != nullptr)
+    {
+        memcpy(m_pPalShaderLibrary, pPalShaderLibrary, sizeof(m_pPalShaderLibrary));
+    }
 
     CreateStaticState();
 
     if (ContainsDynamicState(DynamicStatesInternal::RasterizerDiscardEnable))
     {
-        m_info.graphicsShaderInfos.dynamicState.enable.rasterizerDiscardEnable = 1;
+        m_info.dynamicGraphicsState.enable.rasterizerDiscardEnable = 1;
     }
 
     if (ContainsDynamicState(DynamicStatesInternal::ColorWriteEnable) ||
         ContainsDynamicState(DynamicStatesInternal::ColorWriteMask))
     {
-        m_info.graphicsShaderInfos.dynamicState.enable.colorWriteMask = 1;
+        m_info.dynamicGraphicsState.enable.colorWriteMask = 1;
     }
 
     if (ContainsDynamicState(DynamicStatesInternal::LogicOp) ||
         ContainsDynamicState(DynamicStatesInternal::LogicOpEnable))
     {
-        m_info.graphicsShaderInfos.dynamicState.enable.logicOp = 1;
+        m_info.dynamicGraphicsState.enable.logicOp = 1;
     }
 
     if (ContainsDynamicState(DynamicStatesInternal::LineRasterizationMode))
     {
-        m_info.graphicsShaderInfos.dynamicState.enable.perpLineEndCapsEnable = 1;
+        m_info.dynamicGraphicsState.enable.perpLineEndCapsEnable = 1;
     }
 
     if (ContainsDynamicState(DynamicStatesInternal::TessellationDomainOrigin))
     {
-        m_info.graphicsShaderInfos.dynamicState.enable.switchWinding = 1;
+        m_info.dynamicGraphicsState.enable.switchWinding = 1;
     }
 
     if (ContainsDynamicState(DynamicStatesInternal::AlphaToCoverageEnable))
     {
-        m_info.graphicsShaderInfos.dynamicState.enable.alphaToCoverageEnable = 1;
+        m_info.dynamicGraphicsState.enable.alphaToCoverageEnable = 1;
     }
 
     if (ContainsDynamicState(DynamicStatesInternal::DepthClipNegativeOneToOne))
     {
-        m_info.graphicsShaderInfos.dynamicState.enable.depthRange = 1;
+        m_info.dynamicGraphicsState.enable.depthRange = 1;
     }
 
     if (ContainsDynamicState(DynamicStatesInternal::DepthClipEnable))
     {
-        m_info.graphicsShaderInfos.dynamicState.enable.depthClipMode = 1;
+        m_info.dynamicGraphicsState.enable.depthClipMode = 1;
     }
 
     if (ContainsDynamicState(DynamicStatesInternal::DepthClampEnable))
     {
-        m_info.graphicsShaderInfos.dynamicState.enable.depthClampMode = 1;
+        m_info.dynamicGraphicsState.enable.depthClampMode = 1;
     }
 
     if (ContainsDynamicState(DynamicStatesInternal::ColorBlendEquation))
     {
-        m_info.graphicsShaderInfos.dynamicState.enable.dualSourceBlendEnable = 1;
+        m_info.dynamicGraphicsState.enable.dualSourceBlendEnable = 1;
     }
 
     if (ContainsDynamicState(DynamicStatesInternal::VertexInput))
     {
-        m_info.graphicsShaderInfos.dynamicState.enable.vertexBufferCount = 1;
+        m_info.dynamicGraphicsState.enable.vertexBufferCount = 1;
     }
 
     pPalPipelineHasher->Update(m_palPipelineHash);
@@ -1530,6 +1564,13 @@ VkResult GraphicsPipeline::Destroy(
         pDevice->VkInstance()->FreeMem(pBaseMem);
     }
 
+    if (m_pInternalMem != nullptr)
+    {
+        pDevice->MemMgr()->FreeGpuMem(m_pInternalMem);
+        Util::Destructor(m_pInternalMem);
+        pDevice->VkInstance()->FreeMem(const_cast<InternalMemory*>(m_pInternalMem));
+    }
+
     return Pipeline::Destroy(pDevice, pAllocator);
 }
 
@@ -1539,11 +1580,10 @@ void GraphicsPipeline::BindToCmdBuffer(
     CmdBuffer*                             pCmdBuffer
     ) const
 {
-    AllGpuRenderState* pRenderState = pCmdBuffer->RenderState();
-
-    const Pal::DynamicGraphicsShaderInfos& graphicsShaderInfos = m_info.graphicsShaderInfos;
-    Pal::DynamicGraphicsShaderInfos*       pGfxDynamicBindInfo =
-        &pRenderState->pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx;
+    AllGpuRenderState*               pRenderState         = pCmdBuffer->RenderState();
+    const Pal::DynamicGraphicsState& dynamicGraphicsState = m_info.dynamicGraphicsState;
+    Pal::DynamicGraphicsState*       pGfxDynamicBindInfo  =
+        &pRenderState->pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
 
     // Get this pipeline's static tokens
     const auto& newTokens = m_info.staticTokens;
@@ -1602,7 +1642,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             } while (deviceGroup.IterateNext());
         }
 
-        Pal::DepthRange depthRange = pGfxDynamicBindInfo->dynamicState.depthRange;
+        Pal::DepthRange depthRange = pGfxDynamicBindInfo->depthRange;
         if (ContainsStaticState(DynamicStatesInternal::DepthClipNegativeOneToOne))
         {
             depthRange = m_info.viewportParams.depthRange;
@@ -1944,10 +1984,10 @@ void GraphicsPipeline::BindToCmdBuffer(
     const uint64_t oldHash = pRenderState->boundGraphicsPipelineHash;
     const uint64_t newHash = useOptimizedPipeline ? m_optimizedPipelineHash : PalPipelineHash();
     const bool dynamicStateDirty =
-        pGfxDynamicBindInfo->dynamicState.enable.u32All != graphicsShaderInfos.dynamicState.enable.u32All;
+        pGfxDynamicBindInfo->enable.u32All != dynamicGraphicsState.enable.u32All;
 
     // Update pipleine dynamic state
-    pGfxDynamicBindInfo->dynamicState.enable.u32All = graphicsShaderInfos.dynamicState.enable.u32All;
+    pGfxDynamicBindInfo->enable.u32All = dynamicGraphicsState.enable.u32All;
 
     if (ContainsStaticState(DynamicStatesInternal::ColorWriteMask) ^
         ContainsStaticState(DynamicStatesInternal::ColorWriteEnable))
@@ -1962,24 +2002,24 @@ void GraphicsPipeline::BindToCmdBuffer(
             pRenderState->colorWriteEnable = m_info.colorWriteEnable;
         }
 
-        pGfxDynamicBindInfo->dynamicState.colorWriteMask =
+        pGfxDynamicBindInfo->colorWriteMask =
             pRenderState->colorWriteMask & pRenderState->colorWriteEnable;
     }
 
     // Overwrite state with dynamic state in current render state
-    if (graphicsShaderInfos.dynamicState.enable.logicOp)
+    if (dynamicGraphicsState.enable.logicOp)
     {
         if (ContainsStaticState(DynamicStatesInternal::LogicOp))
         {
             pRenderState->logicOp = m_info.logicOp;
-            pGfxDynamicBindInfo->dynamicState.logicOp =
+            pGfxDynamicBindInfo->logicOp =
                 pRenderState->logicOpEnable ? VkToPalLogicOp(pRenderState->logicOp) : Pal::LogicOp::Copy;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::LogicOpEnable))
         {
             pRenderState->logicOpEnable = m_info.logicOpEnable;
-            pGfxDynamicBindInfo->dynamicState.logicOp =
+            pGfxDynamicBindInfo->logicOp =
                 pRenderState->logicOpEnable ? VkToPalLogicOp(pRenderState->logicOp) : Pal::LogicOp::Copy;
         }
     }
@@ -2146,20 +2186,15 @@ void GraphicsPipeline::BindToCmdBuffer(
             }
         }
 
-        if ((useOptimizedPipeline == false) && (m_internalBufferInfo.dataSize > 0))
+        if ((useOptimizedPipeline == false) && (m_internalBufferInfo.internalBufferCount > 0))
         {
-            VK_ASSERT(m_internalBufferInfo.internalBufferCount > 0);
-            Pal::gpusize gpuAddress = {};
-            uint32_t* pCpuAddr = pPalCmdBuf->CmdAllocateEmbeddedData(m_internalBufferInfo.dataSize, 1, &gpuAddress);
-            memcpy(pCpuAddr, m_internalBufferInfo.pData, m_internalBufferInfo.dataSize);
             for (uint32_t i = 0; i < m_internalBufferInfo.internalBufferCount; i++)
             {
-                Pal::gpusize bufferAddress = gpuAddress;
-                bufferAddress += m_internalBufferInfo.internalBufferEntries[i].bufferOffset;
+                const InternalBufferEntry& buffEntry = m_internalBufferInfo.internalBufferEntries[i];
                 pPalCmdBuf->CmdSetUserData(Pal::PipelineBindPoint::Graphics,
-                    m_internalBufferInfo.internalBufferEntries[i].userDataOffset,
+                    buffEntry.userDataOffset,
                     2,
-                    reinterpret_cast<uint32_t*>(&bufferAddress));
+                    reinterpret_cast<const uint32_t*>(&buffEntry.bufferAddress[deviceIdx]));
             }
         }
     }

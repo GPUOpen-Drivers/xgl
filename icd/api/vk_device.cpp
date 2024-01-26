@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -66,6 +66,7 @@
 #include "include/vk_conv.h"
 #include "include/cmd_buffer_ring.h"
 #include "include/graphics_pipeline_common.h"
+#include "include/vk_graphics_pipeline_library.h"
 #include "include/internal_layer_hooks.h"
 
 #if VKI_RAY_TRACING
@@ -288,7 +289,9 @@ Device::Device(
 #endif
     m_pBorderColorUsedIndexes(nullptr),
     m_retrievedFaultData(false),
-    m_pNullPipelineLayout(nullptr)
+    m_pNullPipelineLayout(nullptr),
+    m_pNullFragmentLib(nullptr),
+    m_nullFragmentModule(VK_NULL_HANDLE)
 {
     memset(m_pQueues, 0, sizeof(m_pQueues));
 
@@ -1201,7 +1204,8 @@ VkResult Device::Initialize(
         result = PalToVkResult(PalDevice(DefaultDeviceIndex)->SetSamplePatternPalette(palette));
     }
 
-    if ((result == VK_SUCCESS) && VkInstance()->IsTracingSupportEnabled())
+    if ((result == VK_SUCCESS) &&
+	(VkInstance()->IsTracingSupportEnabled() || VkInstance()->IsCrashAnalysisSupportEnabled()))
     {
         uint32_t queueFamilyIndex;
         uint32_t queueIndex;
@@ -1856,8 +1860,6 @@ VkResult Device::CreateInternalComputePipeline(
         spvBin,
         false,
         true,
-        nullptr,
-        nullptr,
         &shaderModule);
 
     if (result == VK_SUCCESS)
@@ -1877,6 +1879,11 @@ VkResult Device::CreateInternalComputePipeline(
         pipelineBuildInfo.pipelineInfo.resourceMapping.userDataNodeCount = numUserDataNodes;
 
         pCompiler->ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute, 0, &pShaderInfo->options);
+
+        // forceWave64 is currently true for only GpuRT shaders and shouldForceWave32 should not affect GpuRT shaders
+        bool shouldForceWave32 = (((GetRuntimeSettings().deprecateWave64 & DeprecateWave64::DeprecateWave64Cs)   ||
+                                   (GetRuntimeSettings().deprecateWave64 & DeprecateWave64::DeprecateWave64All)) &&
+                                  (forceWave64 == false));
 
         if (forceWave64)
         {
@@ -1906,6 +1913,8 @@ VkResult Device::CreateInternalComputePipeline(
             pipelineOptimizerKey,
             0,
             options);
+
+        options.pOptions->waveSize = (shouldForceWave32) ? 32 : options.pOptions->waveSize;
 
         // PAL Pipeline caching
         Util::Result          cacheResult = Util::Result::NotFound;
@@ -2126,6 +2135,50 @@ VkResult Device::CreateInternalPipelines()
     }
 #endif
 
+    if ((result == VK_SUCCESS) &&
+        GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink &&
+        GetEnabledFeatures().graphicsPipelineLibrary)
+    {
+        static constexpr uint8_t NullFragment[] =
+        {
+        #include "shaders/null_fragment_spv.h"
+        };
+
+        // ShaderModule
+        const VkAllocationCallbacks* pAllocator = VkInstance()->GetAllocCallbacks();
+        VkShaderModuleCreateInfo shaderModuleInfo = {};
+        shaderModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        shaderModuleInfo.pCode = reinterpret_cast<const uint32_t*>(NullFragment);
+        shaderModuleInfo.codeSize = sizeof(NullFragment);
+        CreateShaderModule(&shaderModuleInfo, pAllocator, &m_nullFragmentModule);
+
+        // Graphics pipeline info
+        VkGraphicsPipelineCreateInfo createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+
+        VkGraphicsPipelineLibraryCreateInfoEXT library = {};
+        library.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT;
+        library.flags = VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT;
+        createInfo.pNext = &library;
+
+        VkPipelineShaderStageCreateInfo stages = {};
+        stages.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages.pName = "main";
+        stages.module = m_nullFragmentModule;
+        createInfo.stageCount = 1;
+        createInfo.pStages = &stages;
+        createInfo.flags = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
+
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        result = GraphicsPipelineCommon::Create(this, nullptr, &createInfo, VK_PIPELINE_CREATE_LIBRARY_BIT_KHR,
+            pAllocator, &pipeline);
+        if (result == VK_SUCCESS)
+        {
+            m_pNullFragmentLib = GraphicsPipelineLibrary::ObjectFromHandle(pipeline);
+        }
+    }
+
     return result;
 }
 
@@ -2154,6 +2207,15 @@ void Device::DestroyInternalPipelines()
 #if VKI_RAY_TRACING
     DestroyInternalPipeline(&m_accelerationStructureQueryCopyPipeline);
 #endif
+    if (m_pNullFragmentLib != nullptr)
+    {
+        m_pNullFragmentLib->Destroy(this, VkInstance()->GetAllocCallbacks());
+    }
+
+    if (m_nullFragmentModule != VK_NULL_HANDLE)
+    {
+        ShaderModule::ObjectFromHandle(m_nullFragmentModule)->Destroy(this, VkInstance()->GetAllocCallbacks());
+    }
 }
 
 // =====================================================================================================================

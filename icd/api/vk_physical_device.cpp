@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -2835,12 +2835,8 @@ void PhysicalDevice::PopulateLimits()
     m_limits.maxPushConstantsSize = MaxPushConstants;
 
     // Maximum number of device memory allocations, as created by vkAllocMemory, that can exist simultaneously.
-#if defined(__unix__)
-    // relax the limitation on Linux since there is no real limitation from OS's perspective.
     m_limits.maxMemoryAllocationCount = UINT_MAX;
-#else
-    m_limits.maxMemoryAllocationCount = 4096;
-#endif
+
     if (settings.memoryCustomDeviceAllocationCountLimit > 0)
     {
         m_limits.maxMemoryAllocationCount = settings.memoryCustomDeviceAllocationCountLimit;
@@ -4509,6 +4505,12 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SPIRV_1_4));
     }
 
+    if ((pPhysicalDevice == nullptr) || pPhysicalDevice->GetRuntimeSettings().exportImageCompressionControl)
+    {
+        // exporting for vkd3d/ vkd3d-proton
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_COMPRESSION_CONTROL));
+    }
+
     return availableExtensions;
 }
 
@@ -5010,7 +5012,7 @@ void PhysicalDevice::GetPhysicalDeviceSubgroupSizeControlProperties(
 ) const
 {
     *pMinSubgroupSize  = m_properties.gfxipProperties.shaderCore.minWavefrontSize;
-    *pMaxSubgroupSize  = m_properties.gfxipProperties.shaderCore.maxWavefrontSize;
+    *pMaxSubgroupSize  = GetDeviceSupportedSubgroupSize();
 
     // No limits on the maximum number of subgroups allowed within a workgroup.
     *pMaxComputeWorkgroupSubgroups = UINT32_MAX;
@@ -7267,6 +7269,7 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
     VkStructHeaderNonConst*                                 pHeader2;
     VkExternalImageFormatProperties*                        pExternalImageProperties                     = nullptr;
     VkTextureLODGatherFormatPropertiesAMD*                  pTextureLODGatherFormatProperties            = nullptr;
+    VkImageCompressionPropertiesEXT*                        pImageCompressionProps                       = nullptr;
     VkSamplerYcbcrConversionImageFormatProperties*          pSamplerYcbcrConversionImageFormatProperties = nullptr;
 
     for (pHeader = reinterpret_cast<const VkStructHeader*>(pImageFormatInfo->pNext);
@@ -7326,6 +7329,11 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
                 Formats::GetYuvPlaneCounts(createInfoFormat);
             break;
         }
+        case VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT:
+        {
+            pImageCompressionProps = reinterpret_cast<VkImageCompressionPropertiesEXT*>(pHeader2);
+            break;
+        }
         default:
             break;
         }
@@ -7366,6 +7374,22 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
     if ((pTextureLODGatherFormatProperties != nullptr) && (result == VK_SUCCESS))
     {
         pTextureLODGatherFormatProperties->supportsTextureGatherLODBiasAMD = VK_TRUE;
+    }
+
+    if (pImageCompressionProps != nullptr)
+    {
+        pImageCompressionProps->imageCompressionFixedRateFlags = VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
+
+        if (Formats::IsDepthStencilFormat(createInfoFormat))
+        {
+            pImageCompressionProps->imageCompressionFlags = VK_IMAGE_COMPRESSION_DEFAULT_EXT;
+        }
+        else
+        {
+            pImageCompressionProps->imageCompressionFlags = (GetRuntimeSettings().forceEnableDcc == ForceDisableDcc)
+                                                                ? VK_IMAGE_COMPRESSION_DISABLED_EXT
+                                                                : VK_IMAGE_COMPRESSION_DEFAULT_EXT;
+        }
     }
 
     return result;
@@ -7505,7 +7529,7 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->computeUnitsPerShaderArray = palProps.gfxipProperties.shaderCore.numCusPerShaderArray;
             pProps->simdPerComputeUnit         = palProps.gfxipProperties.shaderCore.numSimdsPerCu;
             pProps->wavefrontsPerSimd          = palProps.gfxipProperties.shaderCore.numWavefrontsPerSimd;
-            pProps->wavefrontSize              = palProps.gfxipProperties.shaderCore.maxWavefrontSize;
+            pProps->wavefrontSize              = GetDeviceSupportedSubgroupSize();
 
             // Scalar General Purpose Registers (SGPR)
             pProps->sgprsPerSimd               = palProps.gfxipProperties.shaderCore.sgprsPerSimd;
@@ -8175,6 +8199,14 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_KHR:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR*>(pNext);
+
+            pProps->maxVertexAttribDivisor       = UINT32_MAX;
+            pProps->supportsNonZeroFirstInstance = VK_TRUE;
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT:
         {
             auto* pProps = static_cast<VkPhysicalDeviceExtendedDynamicState3PropertiesEXT*>(pNext);

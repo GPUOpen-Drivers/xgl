@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -207,6 +207,9 @@ public:
     const Pal::IShaderLibrary*const* GetShaderLibraries() const
         { return m_ppShaderLibraries; }
 
+    const Vkgc::BinaryData& GetLibrarySummary(uint32_t deviceIdx) const
+        { return m_librarySummary[deviceIdx]; }
+
     bool CheckHasTraceRay() const
         { return m_hasTraceRay; }
 
@@ -257,6 +260,7 @@ protected:
         Vkgc::RayTracingShaderIdentifier*    pShaderGroupHandles[MaxPalDevices],
         ShaderGroupStackSizes*               pShaderGroupStackSizes[MaxPalDevices],
         ShaderGroupInfo*                     pShaderGroupInfos,
+        const Vkgc::BinaryData*              pLibrarySummary,
         uint32_t                             attributeSize,
         Pal::gpusize                         traceRayGpuVas[MaxPalDevices],
         uint32_t                             dispatchRaysUserDataOffset,
@@ -335,6 +339,7 @@ private:
     Vkgc::RayTracingShaderIdentifier* m_pShaderGroupHandles[MaxPalDevices];
     ShaderGroupStackSizes*            m_pShaderGroupStackSizes[MaxPalDevices];
     ShaderGroupInfo*                  m_pShaderGroupInfos;
+    Vkgc::BinaryData                  m_librarySummary[MaxPalDevices];
 
     uint32_t                          m_nativeShaderCount;  // number of non-library shaders
     uint32_t                          m_totalShaderCount;   // all shaders, including libraries

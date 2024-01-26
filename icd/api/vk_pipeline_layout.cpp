@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -118,6 +118,24 @@ constexpr size_t PipelineLayout::GetMaxStaticDescValueSize()
     return
                 sizeof(Vkgc::StaticDescriptorValue)
         ;
+}
+
+// =====================================================================================================================
+// Calculates the pushConstantSize in dwords
+uint32_t PipelineLayout::GetPushConstantSizeInDword(
+    const uint32_t pushConstantsSizeInBytes)
+{
+    uint32_t lengthInDwords = 0;
+    if ((pushConstantsSizeInBytes != 0) && (pushConstantsSizeInBytes < sizeof(uint32_t)))
+    {
+        // For the data size is less than uint32_t, eg: uint8/uint16
+        lengthInDwords = 1;
+    }
+    else
+    {
+        lengthInDwords = pushConstantsSizeInBytes / sizeof(uint32_t);
+    }
+    return lengthInDwords;
 }
 
 // =====================================================================================================================
@@ -306,9 +324,7 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
 
     // Total number of dynamic descriptors across all descriptor sets
     uint32_t totalDynDescCount = 0;
-
-    const uint32_t pushConstRegCount = pushConstantsSizeInBytes / sizeof(uint32_t);
-
+    uint32_t pushConstRegCount = GetPushConstantSizeInDword(pushConstantsSizeInBytes);
     uint32_t gfxReservedCount = 0;
     // Reserve an user-data to store the VA of buffer for transform feedback.
     if (ReserveXfbNode(pDevice))
@@ -612,7 +628,7 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
 
     // Allocate user data for push constant buffer pointer
     pUserDataLayout->pushConstPtrRegBase  = pInfo->userDataRegCount;
-    pUserDataLayout->pushConstSizeInDword = pushConstantsSizeInBytes / sizeof(uint32_t);
+    pUserDataLayout->pushConstSizeInDword = GetPushConstantSizeInDword(pushConstantsSizeInBytes);
     pPipelineInfo->numUserDataNodes      += 1;
     pPipelineInfo->numRsrcMapNodes       += 1;
     pInfo->userDataRegCount              += 1;

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -320,6 +320,7 @@ RayTracingPipeline::RayTracingPipeline(
     memset(m_pShaderGroupStackSizes, 0, sizeof(ShaderGroupStackSizes*) * MaxPalDevices);
     memset(m_traceRayGpuVas, 0, sizeof(gpusize) * MaxPalDevices);
     memset(m_defaultPipelineStackSizes, 0, sizeof(Pal::CompilerStackSizes) * MaxPalDevices);
+    memset(m_librarySummary, 0, sizeof(BinaryData) * MaxPalDevices);
 }
 
 // =====================================================================================================================
@@ -337,6 +338,7 @@ void RayTracingPipeline::Init(
     Vkgc::RayTracingShaderIdentifier*    pShaderGroupHandles[MaxPalDevices],
     ShaderGroupStackSizes*               pShaderGroupStackSizes[MaxPalDevices],
     ShaderGroupInfo*                     pShaderGroupInfos,
+    const BinaryData*                    pLibrarySummary,
     uint32_t                             attributeSize,
     gpusize                              traceRayGpuVas[MaxPalDevices],
     uint32_t                             dispatchRaysUserDataOffset,
@@ -366,6 +368,7 @@ void RayTracingPipeline::Init(
     memcpy(m_pShaderGroupHandles, pShaderGroupHandles, sizeof(Vkgc::RayTracingShaderIdentifier*) * MaxPalDevices);
     memcpy(m_pShaderGroupStackSizes, pShaderGroupStackSizes, sizeof(ShaderGroupStackSizes*) * MaxPalDevices);
     memcpy(m_traceRayGpuVas, traceRayGpuVas, sizeof(gpusize) * MaxPalDevices);
+    memcpy(m_librarySummary, pLibrarySummary, sizeof(BinaryData) * MaxPalDevices);
 }
 
 // =====================================================================================================================
@@ -385,6 +388,11 @@ VkResult RayTracingPipeline::Destroy(
         {
             pAllocator->pfnFree(pAllocator->pUserData, m_pShaderGroupHandles[0]);
         }
+    }
+
+    if (m_librarySummary[0].pCode != nullptr)
+    {
+        pAllocator->pfnFree(pAllocator->pUserData, const_cast<void*>(m_librarySummary[0].pCode));
     }
 
     if (m_captureReplayVaMappingBufferInfo.pData != nullptr)
@@ -606,6 +614,7 @@ VkResult RayTracingPipeline::CreateImpl(
 
         RayTracingPipelineBinary          pipelineBinary[MaxPalDevices] = {};
         Vkgc::RayTracingShaderIdentifier* pShaderGroups [MaxPalDevices] = {};
+        BinaryData                        librarySummaries[MaxPalDevices] = {};
 
         if (totalGroupCount > 0)
         {
@@ -831,6 +840,43 @@ VkResult RayTracingPipeline::CreateImpl(
             m_pDevice->GetShaderOptimizer()->OverrideComputePipelineCreateInfo(
                 optimizerKey,
                 &localPipelineInfo.immedInfo.computeShaderInfo);
+        }
+
+        if (result == VK_SUCCESS)
+        {
+            size_t totalLibrarySummariesSize = 0;
+
+            for (uint32_t deviceIdx = 0; deviceIdx != MaxPalDevices; ++deviceIdx)
+            {
+                const auto& librarySummary = pipelineBinary[deviceIdx].librarySummary;
+                totalLibrarySummariesSize += Pow2Align(librarySummary.codeSize, 8);
+            }
+
+            if (totalLibrarySummariesSize != 0)
+            {
+                void* pBuffer = pAllocator->pfnAllocation(pAllocator->pUserData,
+                                                          totalLibrarySummariesSize,
+                                                          VK_DEFAULT_MEM_ALIGN,
+                                                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+                if (pBuffer == nullptr)
+                {
+                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
+                else
+                {
+                    size_t offset = 0;
+
+                    for (uint32_t deviceIdx = 0; deviceIdx != MaxPalDevices; ++deviceIdx)
+                    {
+                        const auto& librarySummary = pipelineBinary[deviceIdx].librarySummary;
+                        librarySummaries[deviceIdx].pCode = VoidPtrInc(pBuffer, offset);
+                        librarySummaries[deviceIdx].codeSize = librarySummary.codeSize;
+                        memcpy(VoidPtrInc(pBuffer, offset), librarySummary.pCode, librarySummary.codeSize);
+                        offset += Pow2Align(librarySummary.codeSize, 8);
+                    }
+                }
+            }
         }
 
         size_t pipelineSize      = 0;
@@ -1391,6 +1437,7 @@ VkResult RayTracingPipeline::CreateImpl(
                  pShaderGroups,
                  pShaderGroupStackSizes,
                  pShaderGroupInfos,
+                 librarySummaries,
                  binaryCreateInfo.maxAttributeSize,
                  traceRayGpuVas,
                  dispatchRaysUserDataOffset,
@@ -1419,6 +1466,16 @@ VkResult RayTracingPipeline::CreateImpl(
                 {
                     pPalPipeline[deviceIdx]->Destroy();
                 }
+            }
+
+            if (pShaderGroups[0] != nullptr)
+            {
+                pAllocator->pfnFree(pAllocator->pUserData, pShaderGroups[0]);
+            }
+
+            if (librarySummaries[0].pCode != nullptr)
+            {
+                pAllocator->pfnFree(pAllocator->pUserData, const_cast<void*>(librarySummaries[0].pCode));
             }
         }
 

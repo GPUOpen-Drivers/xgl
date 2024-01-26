@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -335,6 +335,7 @@ void SqttCmdBufferState::Begin(
     }
 
     WriteCbStartMarker();
+    RgdAnnotateCmdBuf();
 }
 
 // =====================================================================================================================
@@ -546,6 +547,125 @@ void SqttCmdBufferState::WriteUserEventMarker(
     }
 }
 
+// ====================================================================================================================
+void SqttCmdBufferState::RgdAnnotateCmdBuf()
+{
+    if (m_pDevModeMgr->IsCrashAnalysisEnabled())
+    {
+        Pal::RgdMarkerInfoCmdBufData info = {};
+        info.header.infoType = Pal::RgdMarkerInfoTypeCmdBufStart;
+        info.queue           = m_queueFamilyIndex;
+        info.deviceId        = m_deviceId;
+        info.queueFlags      = m_queueFamilyFlags;
+
+        constexpr bool Ignored = true;
+        GetParent()->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertExecutionMarker(
+            Ignored, Pal::RgdMarkerSourceCmdBufInfo, reinterpret_cast<const char*>(&info), sizeof(info));
+    }
+}
+
+// ====================================================================================================================
+void SqttCmdBufferState::RgdAnnotateDispatch(
+    RgpSqttMarkerEventType type,      // Type of rgp command marker
+    uint32                 threadX,   // Number of thread groups in X dimension
+    uint32                 threadY,   // Number of thread groups in Y dimension
+    uint32                 threadZ)   // Number of thread groups in Z dimension
+{
+    // CrashAnalysis already insert marker for all dispatches on PAL side. Here, we just provide additional context for
+    // the described dispatch.
+    if (m_pDevModeMgr->IsCrashAnalysisEnabled())
+    {
+        if ((type == RgpSqttMarkerEventType::CmdDispatch)
+         || (type == RgpSqttMarkerEventType::CmdDispatchIndirect)
+#if VKI_RAY_TRACING
+         || (type == RgpSqttMarkerEventType::CmdTraceRaysKHR)
+         || (type == RgpSqttMarkerEventType::CmdTraceRaysIndirectKHR)
+#endif
+        )
+        {
+            Pal::RgdMarkerInfoDispatchData info = {};
+            info.header.infoType = Pal::RgdMarkerInfoTypeDispatch;
+            info.type            = static_cast<uint32>(type);
+            info.threadX         = threadX;
+            info.threadY         = threadY;
+            info.threadZ         = threadZ;
+
+            constexpr bool Ignored = true;
+            GetParent()->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertExecutionMarker(
+                Ignored, Pal::RgdMarkerSourceOpInfo, reinterpret_cast<const char*>(&info), sizeof(info));
+        }
+    }
+}
+
+// ====================================================================================================================
+void SqttCmdBufferState::RgdAnnotateDraw(
+    RgpSqttMarkerEventType type,              // Type of rgp command marker
+    uint32                 vertexOffset,      // Vertex offset (first vertex) user data register index
+    uint32                 instanceOffset,    // Instance offset (start instance) user data register index
+    uint32                 drawId)            // Draw ID SPI user data register index
+{
+    // CrashAnalysis already insert marker for all draws that comes from application on PAL side. Here, we just provide
+    // additional context for the described draw.
+    if (m_pDevModeMgr->IsCrashAnalysisEnabled())
+    {
+        if ((type == RgpSqttMarkerEventType::CmdDraw) || (type == RgpSqttMarkerEventType::CmdDrawIndexed))
+        {
+            constexpr bool Ignored = true;
+            GetParent()->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertExecutionMarker(
+                Ignored, Pal::RgdMarkerSourceSqttEventInfo, reinterpret_cast<const char*>(&type), sizeof(type));
+
+            // Set UserData
+            Pal::RgdMarkerInfoDrawUserData info = {};
+            info.header.infoType = Pal::RgdMarkerInfoTypeDrawUserData;
+            info.vertexOffset    = vertexOffset;
+            info.instanceOffset  = instanceOffset;
+            info.drawId          = drawId;
+
+            GetParent()->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertExecutionMarker(
+                Ignored, Pal::RgdMarkerSourceOpInfo, reinterpret_cast<const char*>(&info), sizeof(info));
+        }
+    }
+}
+
+// ====================================================================================================================
+void SqttCmdBufferState::RgdInsertBarrierBeginMarker(
+    Pal::Developer::BarrierType type,       // Barrier type
+    uint32                      reason)     // Reason for the barrier
+{
+    if (m_pDevModeMgr->IsCrashAnalysisEnabled() &&
+        (m_currentEventType == RgpSqttMarkerEventType::CmdPipelineBarrier))
+    {
+        Pal::RgdMarkerInfoBarrierBeginData info = {};
+        info.header.infoType = Pal::RgdMarkerInfoTypeBarrierBegin;
+        info.type            = type;
+        info.reason          = reason;
+
+        constexpr bool Ignored = true;
+        GetParent()->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertExecutionMarker(
+            Ignored, Pal::RgdMarkerSourceOpInfo, reinterpret_cast<const char*>(&info), sizeof(info));
+    }
+}
+
+// ====================================================================================================================
+void SqttCmdBufferState::RgdInsertBarrierEndMarker(
+    Pal::Developer::BarrierOperations operations)   // What the barrier does
+{
+    // CrashAnalysisCmdBuffer does not insert marker for Barrier. We insert as MarkerSource::Pal here.
+    if (m_pDevModeMgr->IsCrashAnalysisEnabled() &&
+        (m_currentEventType == RgpSqttMarkerEventType::CmdPipelineBarrier))
+    {
+        Pal::RgdMarkerInfoBarrierEndData info = {};
+        info.header.infoType   = Pal::RgdMarkerInfoTypeBarrierEnd;
+        info.pipelineStalls    = operations.pipelineStalls.u16All;
+        info.layoutTransitions = operations.layoutTransitions.u16All;
+        info.caches            = operations.caches.u16All;
+
+        constexpr bool Ignored = true;
+        GetParent()->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertExecutionMarker(
+            Ignored, Pal::RgdMarkerSourceOpInfo, reinterpret_cast<const char*>(&info), sizeof(info));
+    }
+}
+
 // =====================================================================================================================
 void SqttCmdBufferState::ResetBarrierState()
 {
@@ -575,10 +695,12 @@ void SqttCmdBufferState::PalBarrierCallback(
         m_currentBarrier.inside = true;
 
         WriteBarrierStartMarker(barrier);
+        RgdInsertBarrierBeginMarker(barrier.type, barrier.reason);
         break;
 
     case Pal::Developer::CallbackType::BarrierEnd:
         WriteBarrierEndMarker(barrier);
+        RgdInsertBarrierEndMarker(barrier.operations);
         ResetBarrierState();
         break;
 
@@ -609,6 +731,12 @@ void SqttCmdBufferState::PalDrawDispatchCallback(
             drawDispatch.draw.userDataRegs.instanceOffset,
             drawDispatch.draw.userDataRegs.drawIndex,
             drawDispatch.subQueueFlags);
+
+        RgdAnnotateDraw(
+            m_currentEventType,
+            drawDispatch.draw.userDataRegs.firstVertex,
+            drawDispatch.draw.userDataRegs.instanceOffset,
+            drawDispatch.draw.userDataRegs.drawIndex);
     }
     // Dispatch call
     else
@@ -626,6 +754,12 @@ void SqttCmdBufferState::PalDrawDispatchCallback(
                 drawDispatch.dispatch.groupDims.y,
                 drawDispatch.dispatch.groupDims.z,
                 drawDispatch.subQueueFlags);
+
+            RgdAnnotateDispatch(
+                m_currentEventType,
+                drawDispatch.dispatch.groupDims.x,
+                drawDispatch.dispatch.groupDims.y,
+                drawDispatch.dispatch.groupDims.z);
         }
         else
         {

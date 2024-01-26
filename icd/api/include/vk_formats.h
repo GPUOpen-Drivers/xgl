@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -178,6 +178,8 @@ bool Formats::HasDepth(VkFormat format)
     case VK_FORMAT_D16_UNORM:
     case VK_FORMAT_D32_SFLOAT:
     case VK_FORMAT_D16_UNORM_S8_UINT:
+    case VK_FORMAT_D24_UNORM_S8_UINT:
+    case VK_FORMAT_X8_D24_UNORM_PACK32:
     case VK_FORMAT_D32_SFLOAT_S8_UINT:
         hasDepth = true;
         break;
@@ -201,6 +203,7 @@ bool Formats::HasStencil(VkFormat format)
     {
     case VK_FORMAT_S8_UINT:
     case VK_FORMAT_D16_UNORM_S8_UINT:
+    case VK_FORMAT_D24_UNORM_S8_UINT:
     case VK_FORMAT_D32_SFLOAT_S8_UINT:
         hasStencil = true;
         break;
@@ -449,6 +452,8 @@ VkFormat Formats::GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask
             subFormat = VK_FORMAT_D16_UNORM;
             break;
         case VK_FORMAT_D32_SFLOAT:
+        case VK_FORMAT_D24_UNORM_S8_UINT:
+        case VK_FORMAT_X8_D24_UNORM_PACK32:
         case VK_FORMAT_D32_SFLOAT_S8_UINT:
             subFormat = VK_FORMAT_D32_SFLOAT;
             break;
@@ -464,6 +469,7 @@ VkFormat Formats::GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask
         {
         case VK_FORMAT_S8_UINT:
         case VK_FORMAT_D16_UNORM_S8_UINT:
+        case VK_FORMAT_D24_UNORM_S8_UINT:
         case VK_FORMAT_D32_SFLOAT_S8_UINT:
             subFormat = VK_FORMAT_S8_UINT;
             break;

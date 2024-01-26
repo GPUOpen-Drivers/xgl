@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -217,9 +217,13 @@ public:
         { return m_dispatchTable; }
 
     void EnableTracingSupport();
+    void EnableCrashAnalysisSupport();
 
     bool IsTracingSupportEnabled() const
         { return m_flags.sqttSupport; }
+
+    bool IsCrashAnalysisSupportEnabled() const
+        { return m_flags.rgdSupport; }
 
     bool IsNullGpuModeEnabled() const
         { return m_flags.nullGpuMode; }
@@ -328,9 +332,10 @@ private:
         struct
         {
             uint32_t sqttSupport           : 1;  // True if SQTT thread trace annotation markers are enabled
+            uint32_t rgdSupport            : 1;  // True if RGD execution marker annotation are enabled
             uint32_t nullGpuMode           : 1;  // True if the instance is running in null gpu mode (fake gpus for
                                                  // shader compilation
-            uint32_t reserved              : 30;
+            uint32_t reserved              : 29;
         };
         uint32_t u32All;
     } m_flags;

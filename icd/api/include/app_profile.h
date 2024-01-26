@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -120,8 +120,10 @@ enum class AppProfile : uint32_t
     AngleEngine,             // Angle Engine
     CSGO,                    // Counter-Strike: Global Offensive
     DxvkGodOfWar,            // DXVK God of War
+    ELEX2,                   // ELEX II
     X4Foundations,           // X4: Foundations by Egosoft
     MetalGearSolid5,         // Metal Gear Solid5 : The Phantom Pain
+    MetalGearSolid5Online,   // Metal Gear Solid5 : The Phantom Pain Online
     YamagiQuakeII,           // Yamagi Quake II
     Battlefield1,            // Battlefield 1
     GpuCapsViewer32Bit,      // GPU Caps Viewer demos by GeeXLab
@@ -139,6 +141,7 @@ enum class AppProfile : uint32_t
     AsyncPostProcessLVr,     // AsyncPostProcessing sample app for AMD Liquid VR SDK
     Enscape,                 // Enscape by Chaos
     Vkd3dEngine,             // vkd3d-proton for steam games
+    DXVK,                    // DXVK
 };
 
 struct ProfileSettings

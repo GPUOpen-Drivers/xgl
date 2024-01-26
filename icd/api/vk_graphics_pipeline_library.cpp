@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -281,12 +281,13 @@ static GraphicsPipelineBinaryCreateInfo* DumpGraphicsPipelineBinaryCreateInfo(
                 }
             }
 
-            pCreateInfo->pPipelineProfileKey = static_cast<PipelineOptimizerKey*>(pSystemMem);
+            PipelineOptimizerKey* pPipelineProfileKey = static_cast<PipelineOptimizerKey*>(pSystemMem);
+            pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
 
             pSystemMem = Util::VoidPtrInc(pSystemMem, sizeof(PipelineOptimizerKey));
 
-            pCreateInfo->pPipelineProfileKey->shaderCount = shaderKeyCount;
-            pCreateInfo->pPipelineProfileKey->pShaders    = static_cast<ShaderOptimizerKey*>(pSystemMem);
+            pPipelineProfileKey->shaderCount = shaderKeyCount;
+            pPipelineProfileKey->pShaders    = static_cast<ShaderOptimizerKey*>(pSystemMem);
             memcpy(pSystemMem, pBinInfo->pPipelineProfileKey->pShaders, shaderKeyBytes);
 
             pSystemMem = Util::VoidPtrInc(pSystemMem, shaderKeyBytes);
@@ -432,6 +433,18 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
         }
     }
 
+    if (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink)
+    {
+        // If there is no fragment shader when create fragment library, we use a null pal graphics library.
+        if ((pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) &&
+            (pBinaryCreateInfo->pipelineInfo.fs.pModuleData == nullptr))
+        {
+            const auto& fragmentCreateInfo = pDevice->GetNullFragmentLib()->GetPipelineBinaryCreateInfo();
+            pBinaryCreateInfo->pShaderLibraries[GraphicsLibraryFragment] =
+                fragmentCreateInfo.pShaderLibraries[GraphicsLibraryFragment];
+        }
+    }
+
     return result;
 }
 
@@ -541,7 +554,7 @@ VkResult GraphicsPipelineLibrary::Create(
     }
 
     // Cleanup temp memory in binaryCreateInfo.
-    pDevice->GetCompiler(DefaultDeviceIndex)->FreeGraphicsPipelineCreateInfo(&binaryCreateInfo, false);
+    pDevice->GetCompiler(DefaultDeviceIndex)->FreeGraphicsPipelineCreateInfo(pDevice, &binaryCreateInfo, false, true);
 
     if (result == VK_SUCCESS)
     {
@@ -657,6 +670,13 @@ VkResult GraphicsPipelineLibrary::Destroy(
         }
     }
 
+    if (m_pBinaryCreateInfo->pInternalMem != nullptr)
+    {
+        pDevice->MemMgr()->FreeGpuMem(m_pBinaryCreateInfo->pInternalMem);
+        Util::Destructor(m_pBinaryCreateInfo->pInternalMem);
+        pDevice->VkInstance()->FreeMem(const_cast<InternalMemory*>(m_pBinaryCreateInfo->pInternalMem));
+    }
+
     return Pipeline::Destroy(pDevice, pAllocator);
 }
 
@@ -752,6 +772,34 @@ const ShaderModuleHandle* GraphicsPipelineLibrary::GetShaderModuleHandle(
     }
 
     return pHandle;
+}
+
+// =====================================================================================================================
+void GraphicsPipelineLibrary::GetOwnedPalShaderLibraries(
+    const Pal::IShaderLibrary* pLibraries[GraphicsLibraryCount]
+    ) const
+{
+    uint32_t libraryMask = 0;
+    for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
+    {
+        if (m_tempModuleStates[i].stage != ShaderStage::ShaderStageInvalid)
+        {
+            libraryMask |= (1 << GetGraphicsLibraryType(m_tempModuleStates[i].stage));
+        }
+    }
+
+    for (uint32_t i = 0; i < ArrayLen(m_pBinaryCreateInfo->pShaderLibraries); ++i)
+    {
+        Pal::IShaderLibrary* pShaderLib = m_pBinaryCreateInfo->pShaderLibraries[i];
+        if (Util::TestAnyFlagSet(libraryMask, 1 << i) && (pShaderLib != nullptr))
+        {
+            pLibraries[i] = pShaderLib;
+        }
+        else
+        {
+            pLibraries[i] = nullptr;
+        }
+    }
 }
 
 }

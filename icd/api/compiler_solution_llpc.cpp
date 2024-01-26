@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -224,21 +224,6 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     pPipelineBuildInfo->pInstance      = pInstance;
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
     pPipelineBuildInfo->iaState.deviceIndex = deviceIdx;
-
-    // By default the client hash provided to PAL is more accurate than the one used by pipeline
-    // profiles.
-    //
-    // Optionally (based on panel setting), these can be set to temporarily match by devs.  This
-    // can be useful when other tools (such as PAL's profiling layer) are used to measure shaders
-    // while building a pipeline profile which uses the profile hash.
-    if (settings.pipelineUseProfileHashAsClientHash)
-    {
-        for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
-        {
-            ppShadersInfo[stage]->options.clientHash.lower = pipelineProfileKey.pShaders[stage].codeHash.lower;
-            ppShadersInfo[stage]->options.clientHash.upper = pipelineProfileKey.pShaders[stage].codeHash.upper;
-        }
-    }
 
     for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
     {
@@ -505,6 +490,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
             }
         }
 
+        ShaderLibraryBlobHeader blobHeader = {};
         if ((hitCache == false) || elfReplace)
         {
             // Build the LLPC pipeline
@@ -533,9 +519,24 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
 
             if (llpcResult == Vkgc::Result::Success)
             {
-                ShaderLibraryBlobHeader blobHeader = {};
                 blobHeader.binaryLength   = finalBinary.codeSize;
                 blobHeader.fragMetaLength = pipelineOut.fsOutputMetaDataSize;
+            }
+            else if (llpcResult != Vkgc::Result::RequireFullPipeline)
+            {
+                result = (llpcResult == Vkgc::Result::ErrorOutOfMemory) ? VK_ERROR_OUT_OF_HOST_MEMORY :
+                                                                          VK_ERROR_INITIALIZATION_FAILED;
+            }
+
+        }
+
+        if (result == VK_SUCCESS)
+        {
+            // Always call StoreShaderBinaryToCache to sync data between app cache and binary cache except
+            // RequireFullPipeline. When cache is hit, blobHeader is zero, StoreShaderBinaryToCache will ignore
+            // finalBinary, and reuse shaderLibraryBinary.
+            if ((finalBinary.pCode != nullptr) || (shaderLibraryBinary.pCode != nullptr))
+            {
                 StoreShaderBinaryToCache(
                     pPipelineCache,
                     &cacheId,
@@ -546,21 +547,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
                     hitAppCache,
                     &shaderLibraryBinary);
             }
-            else if (llpcResult != Vkgc::Result::RequireFullPipeline)
-            {
-                result = (llpcResult == Vkgc::Result::ErrorOutOfMemory) ? VK_ERROR_OUT_OF_HOST_MEMORY :
-                                                                          VK_ERROR_INITIALIZATION_FAILED;
-            }
 
-            // PipelineBin has been translated to blob start with ShaderLibraryBlobHeader in StoreShaderBinaryToCache
-            if (pipelineOut.pipelineBin.pCode != nullptr)
-            {
-                FreeGraphicsPipelineBinary(pipelineOut.pipelineBin);
-            }
-        }
-
-        if (result == VK_SUCCESS)
-        {
             pShaderModule->elfPackage = shaderLibraryBinary;
             pCreateInfo->earlyElfPackage[gplType] = pShaderModule->elfPackage;
             pCreateInfo->earlyElfPackageHash[gplType] = cacheId;
@@ -620,6 +607,13 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
                 }
             }
         }
+
+        // PipelineBin has been translated to blob start with ShaderLibraryBlobHeader in StoreShaderBinaryToCache
+        if (pipelineOut.pipelineBin.pCode != nullptr)
+        {
+            FreeGraphicsPipelineBinary(pipelineOut.pipelineBin);
+        }
+
         m_gplCacheMatrix.totalBinaries++;
         m_gplCacheMatrix.totalTimeSpent += (Util::GetPerfCpuTime() - startTime);
 
@@ -646,7 +640,6 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
 {
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
-    AppProfile             appProfile = m_pPhysicalDevice->GetAppProfile();
 
     Vkgc::ComputePipelineBuildInfo* pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
 
@@ -663,82 +656,6 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     pPipelineBuildInfo->pInstance      = pInstance;
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
 
-    // Force enable automatic workgroup reconfigure.
-    if (appProfile == AppProfile::DawnOfWarIII)
-    {
-        pPipelineBuildInfo->options.reconfigWorkgroupLayout = true;
-    }
-
-    const auto threadGroupSwizzleMode =
-        pDevice->GetShaderOptimizer()->OverrideThreadGroupSwizzleMode(
-            ShaderStageCompute,
-            pipelineProfileKey);
-
-    const bool threadIdSwizzleMode =
-        pDevice->GetShaderOptimizer()->OverrideThreadIdSwizzleMode(
-            ShaderStageCompute,
-            pipelineProfileKey);
-
-    uint32_t overrideShaderThreadGroupSizeX = 0;
-    uint32_t overrideShaderThreadGroupSizeY = 0;
-    uint32_t overrideShaderThreadGroupSizeZ = 0;
-
-    pDevice->GetShaderOptimizer()->OverrideShaderThreadGroupSize(
-            ShaderStageCompute,
-            pipelineProfileKey,
-            &overrideShaderThreadGroupSizeX,
-            &overrideShaderThreadGroupSizeY,
-            &overrideShaderThreadGroupSizeZ);
-
-    if (threadGroupSwizzleMode != Vkgc::ThreadGroupSwizzleMode::Default)
-    {
-        pPipelineBuildInfo->options.threadGroupSwizzleMode = threadGroupSwizzleMode;
-    }
-
-    if ((overrideShaderThreadGroupSizeX == NotOverrideThreadGroupSizeX) &&
-        (overrideShaderThreadGroupSizeY == NotOverrideThreadGroupSizeX) &&
-        (overrideShaderThreadGroupSizeZ == NotOverrideShaderThreadGroupSizeZ) &&
-        (settings.overrideThreadGroupSizeX == NotOverrideThreadGroupSizeX) &&
-        (settings.overrideThreadGroupSizeY == NotOverrideThreadGroupSizeY) &&
-        (settings.overrideThreadGroupSizeZ == NotOverrideThreadGroupSizeZ))
-    {
-        if (threadIdSwizzleMode)
-        {
-            pPipelineBuildInfo->options.forceCsThreadIdSwizzling = threadIdSwizzleMode;
-        }
-    }
-    else
-    {
-        pPipelineBuildInfo->options.forceCsThreadIdSwizzling = settings.forceCsThreadIdSwizzling;
-    }
-
-    if(overrideShaderThreadGroupSizeX != NotOverrideThreadGroupSizeX)
-    {
-        pPipelineBuildInfo->options.overrideThreadGroupSizeX = overrideShaderThreadGroupSizeX;
-    }
-    else
-    {
-        pPipelineBuildInfo->options.overrideThreadGroupSizeX = settings.overrideThreadGroupSizeX;
-    }
-
-    if(overrideShaderThreadGroupSizeY != NotOverrideThreadGroupSizeY)
-    {
-        pPipelineBuildInfo->options.overrideThreadGroupSizeY = overrideShaderThreadGroupSizeY;
-    }
-    else
-    {
-        pPipelineBuildInfo->options.overrideThreadGroupSizeY = settings.overrideThreadGroupSizeY;
-    }
-
-    if(overrideShaderThreadGroupSizeZ != NotOverrideThreadGroupSizeZ)
-    {
-        pPipelineBuildInfo->options.overrideThreadGroupSizeZ = overrideShaderThreadGroupSizeZ;
-    }
-    else
-    {
-        pPipelineBuildInfo->options.overrideThreadGroupSizeZ = settings.overrideThreadGroupSizeZ;
-    }
-
 #if VKI_RAY_TRACING
     const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>(pPipelineBuildInfo->cs.pModuleData);
     if (pModuleData != nullptr)
@@ -748,21 +665,6 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
         pCreateInfo->pBinaryMetadata->rayQueryUsed    = pModuleData->usage.enableRayQuery;
     }
 #endif
-
-    // By default the client hash provided to PAL is more accurate than the one used by pipeline
-    // profiles.
-    //
-    // Optionally (based on panel setting), these can be set to temporarily match by devs.  This
-    // can be useful when other tools (such as PAL's profiling layer) are used to measure shaders
-    // while building a pipeline profile which uses the profile hash.
-    if (settings.pipelineUseProfileHashAsClientHash)
-    {
-        VK_ASSERT(pipelineProfileKey.shaderCount == 1);
-        VK_ASSERT(pipelineProfileKey.pShaders[0].stage == ShaderStage::ShaderStageCompute);
-
-        pPipelineBuildInfo->cs.options.clientHash.lower = pipelineProfileKey.pShaders[0].codeHash.lower;
-        pPipelineBuildInfo->cs.options.clientHash.upper = pipelineProfileKey.pShaders[0].codeHash.upper;
-    }
 
     // Build pipline binary
     auto llpcResult = m_pLlpc->BuildComputePipeline(pPipelineBuildInfo, &pipelineOut, pPipelineDumpHandle);
@@ -950,6 +852,8 @@ VkResult CompilerSolutionLlpc::CreateRayTracingPipelineBinary(
         memcpy(pPipelineBinary->shaderGroupHandle.shaderHandles, pipelineOut.shaderGroupHandle.shaderHandles, shaderGroupHandleSize);
         pPipelineBinary->shaderGroupHandle.shaderHandleCount = pipelineOut.shaderGroupHandle.shaderHandleCount;
         void* pOutShaderGroup = static_cast<void*>(pipelineOut.shaderGroupHandle.shaderHandles);
+
+        pPipelineBinary->librarySummary = pipelineOut.librarySummary;
     }
     *pCompileTime = Util::GetPerfCpuTime() - startTime;
 
@@ -1174,55 +1078,70 @@ void CompilerSolutionLlpc::BuildPipelineInternalBufferData(
     const uint32_t                    uberFetchConstBufRegBase,
     const uint32_t                    specConstBufVertexRegBase,
     const uint32_t                    specConstBufFragmentRegBase,
+    bool                              needCache,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo)
 {
-    auto                  pInstance = m_pPhysicalDevice->VkInstance();
-    uint32_t internalBufferSize = 0;
+    auto                  pInstance           = m_pPhysicalDevice->VkInstance();
+    auto                  pInternalBufferInfo = &(pCreateInfo->pBinaryMetadata->internalBufferInfo);
 
+    pInternalBufferInfo->dataSize = 0;
     // NOTE: Using instance divisor may get an incorrect result, disabled it on LLPC.
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     VK_ASSERT(settings.disableInstanceDivisorOpt);
 
     const VkPipelineVertexInputStateCreateInfo* pVertexInput = nullptr;
+    bool needUberFetchShaderBuffer = false;
+
     if (pCreateInfo->pipelineInfo.enableUberFetchShader || pCreateInfo->pipelineInfo.enableEarlyCompile)
     {
         pVertexInput = pCreateInfo->pipelineInfo.pVertexInput;
-        internalBufferSize += pCompiler->GetUberFetchShaderInternalDataSize(pVertexInput);
+        // For monolithic pipeline (needCache = true), we need save internal buffer data to cache, so we always need
+        // build full internal buffer. But in GPL fast link mode or vertex input library, we needn't add it to cache,
+        // so if we have copied uber-fetch shader buffer from input library.i.e internalBufferCount is not zero, we
+        // needn't build internal buffer for uber-fetch shader again.
+        if (needCache || (pInternalBufferInfo->internalBufferCount == 0))
+        {
+            uint32_t uberFetchShaderInternalDataSize = pCompiler->GetUberFetchShaderInternalDataSize(pVertexInput);
+            if (uberFetchShaderInternalDataSize > 0)
+            {
+                needUberFetchShaderBuffer = true;
+                pInternalBufferInfo->dataSize += uberFetchShaderInternalDataSize;
+            }
+        }
     }
-    auto pInternalBufferInfo = &(pCreateInfo->pBinaryMetadata->internalBufferInfo);
-    pInternalBufferInfo->dataSize = internalBufferSize;
 
-    if (internalBufferSize > 0)
+    if (pInternalBufferInfo->dataSize > 0)
     {
-        pInternalBufferInfo->pData = pInstance->AllocMem(internalBufferSize,
+        pInternalBufferInfo->pData = pInstance->AllocMem(pInternalBufferInfo->dataSize,
             VK_DEFAULT_MEM_ALIGN,
             VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
         if (pInternalBufferInfo->pData == nullptr)
         {
             pCreateInfo->pipelineInfo.enableEarlyCompile = false;
             pCreateInfo->pipelineInfo.enableUberFetchShader = false;
+            pInternalBufferInfo->dataSize = 0;
+            needUberFetchShaderBuffer = false;
         }
     }
 
     uint32_t internalBufferOffset = 0;
-    if ((pInternalBufferInfo->pData) &&
-        (pVertexInput != nullptr) &&
-        (pVertexInput->vertexAttributeDescriptionCount > 0))
+    if (needUberFetchShaderBuffer)
     {
         uint32_t uberFetchShaderInternalDataSize = pCompiler->BuildUberFetchShaderInternalData(
             pVertexInput, pCreateInfo->pipelineInfo.dynamicVertexStride, pInternalBufferInfo->pData);
 
-        if (uberFetchShaderInternalDataSize == 0)
-        {
-            pCreateInfo->pipelineInfo.enableUberFetchShader = false;
-        }
-        else
-        {
-            auto pBufferEntry = &pInternalBufferInfo->internalBufferEntries[pInternalBufferInfo->internalBufferCount++];
-            pBufferEntry->userDataOffset = uberFetchConstBufRegBase;
-            pBufferEntry->bufferOffset = internalBufferOffset;
-            internalBufferOffset += uberFetchShaderInternalDataSize;
-        }
+        auto pBufferEntry = &pInternalBufferInfo->internalBufferEntries[0];
+        pBufferEntry->userDataOffset = uberFetchConstBufRegBase;
+        pBufferEntry->bufferOffset = internalBufferOffset;
+        internalBufferOffset += uberFetchShaderInternalDataSize;
+        pInternalBufferInfo->internalBufferCount = 1;
+
+    }
+    else if (pInternalBufferInfo->internalBufferCount > 0)
+    {
+        auto pBufferEntry = &pInternalBufferInfo->internalBufferEntries[0];
+        VK_ASSERT(pBufferEntry->bufferAddress[DefaultDeviceIndex] != 0);
+        pBufferEntry->userDataOffset = uberFetchConstBufRegBase;
     }
 }
 

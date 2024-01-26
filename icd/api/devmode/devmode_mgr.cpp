@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2016-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2016-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -35,6 +35,8 @@
 #include "include/vk_cmdbuffer.h"
 #include "include/vk_instance.h"
 #include "include/vk_pipeline.h"
+#include "include/vk_graphics_pipeline.h"
+#include "include/vk_graphics_pipeline_library.h"
 #include "include/vk_physical_device.h"
 #include "include/vk_utils.h"
 #include "include/vk_conv.h"
@@ -2471,7 +2473,31 @@ void DevModeMgr::PipelineCreated(
         pipelineInfo.apiPsoHash = pPipeline->GetApiHash();
         if (pPipeline->PalPipeline(DefaultDeviceIndex) != nullptr)
         {
-            m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex), pipelineInfo);
+            bool isGplPipeline = false;
+            GraphicsPipeline* pGraphicsPipeline = nullptr;
+            if (pPipeline->GetType() == VK_PIPELINE_BIND_POINT_GRAPHICS)
+            {
+                pGraphicsPipeline = reinterpret_cast<GraphicsPipeline*>(pPipeline);
+                isGplPipeline = pGraphicsPipeline->GetPalShaderLibrary(GraphicsLibraryPreRaster) != nullptr;
+            }
+
+            if (isGplPipeline)
+            {
+                GpuUtil::RegisterLibraryInfo libInfo = { pipelineInfo.apiPsoHash };
+                for (uint32_t i = 0; i < GraphicsLibraryCount; i++)
+                {
+                    const Pal::IShaderLibrary* pLib =
+                        pGraphicsPipeline->GetPalShaderLibrary(static_cast<GraphicsLibraryType>(i));
+                    if (pLib != nullptr)
+                    {
+                        m_trace.pGpaSession->RegisterLibrary(pLib, libInfo);
+                    }
+                }
+            }
+            else
+            {
+                m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex), pipelineInfo);
+            }
         }
     }
 }
@@ -2486,7 +2512,36 @@ void DevModeMgr::PipelineDestroyed(
         m_trace.pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable &&
         (m_trace.pGpaSession != nullptr))
     {
-        m_trace.pGpaSession->UnregisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex));
+        if (pPipeline->PalPipeline(DefaultDeviceIndex) != nullptr)
+        {
+            bool isGplPipeline = false;
+            if (pPipeline->GetType() == VK_PIPELINE_BIND_POINT_GRAPHICS)
+            {
+                GraphicsPipeline*  pGraphicsPipeline = reinterpret_cast<GraphicsPipeline*>(pPipeline);
+                isGplPipeline = pGraphicsPipeline->GetPalShaderLibrary(GraphicsLibraryPreRaster) != nullptr;
+            }
+
+            if (isGplPipeline == false)
+            {
+                m_trace.pGpaSession->UnregisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex));
+            }
+        }
+        else
+        {
+            if (pPipeline->GetType() == VK_PIPELINE_BIND_POINT_GRAPHICS)
+            {
+                GraphicsPipelineLibrary* pGraphicsLibrary = reinterpret_cast<GraphicsPipelineLibrary*>(pPipeline);
+                const Pal::IShaderLibrary* pPalLibraries[GraphicsLibraryCount] = {};
+                pGraphicsLibrary->GetOwnedPalShaderLibraries(pPalLibraries);
+                for (uint32_t i = 0; i < GraphicsLibraryCount; i++)
+                {
+                    if (pPalLibraries[i] != nullptr)
+                    {
+                        m_trace.pGpaSession->UnregisterLibrary(pPalLibraries[i]);
+                    }
+                }
+            }
+        }
     }
 }
 

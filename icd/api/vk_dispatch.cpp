@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -628,6 +628,11 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetDeviceFaultInfoEXT                         );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT  );
     INIT_DISPATCH_ENTRY(vkGetCalibratedTimestampsEXT                    );
+
+    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceCalibrateableTimeDomainsKHR,
+                        vkGetPhysicalDeviceCalibrateableTimeDomainsEXT  );
+    INIT_DISPATCH_ALIAS(vkGetCalibratedTimestampsKHR,
+                        vkGetCalibratedTimestampsEXT                    );
 
     INIT_DISPATCH_ENTRY(vkCmdBeginConditionalRenderingEXT               );
     INIT_DISPATCH_ENTRY(vkCmdEndConditionalRenderingEXT                 );

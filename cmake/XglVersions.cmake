@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2022-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +28,7 @@ include_guard()
 # This will become the value of PAL_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the PAL interface
 # that the ICD supports.  PAL uses this value to enable backwards-compatibility for older interface versions.
 # It must be updated on each PAL promotion after handling all of the interface changes described in palLib.h.
-set(ICD_PAL_CLIENT_MAJOR_VERSION "841")
+set(ICD_PAL_CLIENT_MAJOR_VERSION "844")
 
 # This will become the value of GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION if ICD_GPUOPEN_DEVMODE_BUILD=1.
 # It describes the interface version of the gpuopen shared module (part of PAL) that the ICD supports.

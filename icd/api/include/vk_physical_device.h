@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -680,13 +680,36 @@ template <typename ModifierPropertiesList_T>
         return m_tunnelPriorities;
     }
 
+    uint32_t GetDeviceSupportedSubgroupSize() const
+    {
+        uint32_t supportedWavefrontSize = m_properties.gfxipProperties.shaderCore.maxWavefrontSize;
+        uint32_t allowedWavefrontSize   = GetRuntimeSettings().deprecateWave64;
+
+        if (supportedWavefrontSize > 32)
+        {
+            if ((allowedWavefrontSize & DeprecateWave64::DeprecateWave64Reporting) ||
+                (allowedWavefrontSize & DeprecateWave64::DeprecateWave64All))
+            {
+                supportedWavefrontSize = 32;
+            }
+        }
+
+        return supportedWavefrontSize;
+    }
+
     uint32_t GetSubgroupSize() const
     {
-        uint32_t subgroupSize = m_properties.gfxipProperties.shaderCore.maxWavefrontSize;
+        uint32_t subgroupSize = GetDeviceSupportedSubgroupSize();
 
+        // Even if subgroupSize > 32 is forced via settings, we want to honor it
         const RuntimeSettings& settings = GetRuntimeSettings();
         if (settings.subgroupSize != 0)
         {
+            if (settings.subgroupSize > subgroupSize)
+            {
+                VK_ALERT_ALWAYS_MSG("Forced subgroupSize is greater than device supported or allowed subgroupSize");
+            }
+
             subgroupSize = settings.subgroupSize;
         }
         return subgroupSize;

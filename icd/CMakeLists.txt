@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -101,7 +101,6 @@ target_sources(xgl PRIVATE
     api/pipeline_binary_cache.cpp
     api/graphics_pipeline_common.cpp
     api/cache_adapter.cpp
-    api/shader_cache.cpp
     api/virtual_stack_mgr.cpp
     api/vk_alloccb.cpp
     api/vk_buffer.cpp
@@ -296,6 +295,7 @@ add_dependencies(xgl RunVKSettingsGenerator)
 target_sources(xgl PRIVATE
     settings/g_settings.cpp
     settings/settings.cpp
+    settings/settings_xgl.json
 )
 
 ### ICD api/sqtt ##############################################################
@@ -319,7 +319,11 @@ endif()
 
 ### Link Libraries #####################################################################################################
 if (UNIX)
-    target_link_libraries(xgl PRIVATE dl c stdc++ ${CMAKE_DL_LIBS} pthread)
+    target_link_libraries(xgl PRIVATE ${CMAKE_DL_LIBS})
+    # Link pthread
+    set(THREADS_PREFER_PTHREAD_FLAG ON)
+    find_package(Threads REQUIRED)
+    target_link_libraries(xgl PRIVATE Threads::Threads)
 
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
         message(WARNING "Intel ICC untested in CMake.")
@@ -347,6 +351,11 @@ if (UNIX)
         -Wl,-Map=$<TARGET_FILE_DIR:xgl>/${ICD_TARGET}.map
         -Wl,-soname=${ICD_TARGET}.so.1
     )
+
+    if(NOT BUILD_SHARED_LIBS)
+        # Link libstdc++ statically, so that symbols from libstdc++ do not cause conflicts
+        target_link_options(xgl PRIVATE -static-libgcc -static-libstdc++)
+    endif()
 
     if(NOT XGL_USE_SANITIZER)
         # -Wl,--no-undefined is incompatible with asan
@@ -391,11 +400,16 @@ target_link_libraries(xgl PRIVATE xgl_cache_support)
 # Strip the symbols for release build, generate debug file
 if(UNIX)
         if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
+            if (DEFINED TOOLCHAIN_TARGET)
+                set(TOOLCHAIN_TARGET_PREFIX "${TOOLCHAIN_TARGET}-")
+            else()
+                set(TOOLCHAIN_TARGET_PREFIX "")
+            endif()
             add_custom_command(
                 TARGET xgl POST_BUILD
-                COMMAND objcopy --only-keep-debug ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so.debug
-                COMMAND strip  ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so
-                COMMAND objcopy --add-gnu-debuglink=${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so.debug ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so
+                COMMAND ${TOOLCHAIN_TARGET_PREFIX}objcopy --only-keep-debug ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so.debug
+                COMMAND ${TOOLCHAIN_TARGET_PREFIX}strip  ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so
+                COMMAND ${TOOLCHAIN_TARGET_PREFIX}objcopy --add-gnu-debuglink=${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so.debug ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so
             )
         endif()
 endif()

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -33,7 +33,6 @@
 
 #include "include/khronos/vulkan.h"
 #include "include/compiler_solution.h"
-#include "include/shader_cache.h"
 
 #if VKI_RAY_TRACING
 #include "gpurt/gpurt.h"
@@ -146,8 +145,6 @@ public:
         const Vkgc::BinaryData&         shaderBinary,
         const bool                      adaptForFastLink,
         bool                            isInternal,
-        PipelineBinaryCache*            pBinaryCache,
-        PipelineCreationFeedback*       pFeedback,
         ShaderModuleHandle*             pShaderModule);
 
     void TryEarlyCompileShaderModule(
@@ -215,17 +212,17 @@ public:
         const PipelineCreationFeedback*                pStageFeedback);
 
     VkResult ConvertGraphicsPipelineInfo(
-        const Device*                                   pDevice,
+        Device*                                         pDevice,
         const VkGraphicsPipelineCreateInfo*             pIn,
         VkPipelineCreateFlags2KHR                       flags,
         const GraphicsPipelineShaderStageInfo*          pShaderInfo,
         const PipelineLayout*                           pPipelineLayout,
-        PipelineOptimizerKey*                           pPipelineProfileKey,
+        const PipelineOptimizerKey*                     pPipelineProfileKey,
         PipelineMetadata*                               pBinaryMetadata,
         GraphicsPipelineBinaryCreateInfo*               pCreateInfo);
 
     VkResult BuildGplFastLinkCreateInfo(
-        const Device*                                   pDevice,
+        Device*                                         pDevice,
         const VkGraphicsPipelineCreateInfo*             pIn,
         VkPipelineCreateFlags2KHR                       flags,
         const GraphicsPipelineLibraryInfo&              libInfo,
@@ -253,7 +250,11 @@ public:
 
     void FreeComputePipelineCreateInfo(ComputePipelineBinaryCreateInfo* pCreateInfo);
 
-    void FreeGraphicsPipelineCreateInfo(GraphicsPipelineBinaryCreateInfo* pCreateInfo, bool keepConvertTempMem);
+    void FreeGraphicsPipelineCreateInfo(
+        Device*                           pDevice,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        bool                              keepConvertTempMem,
+        bool                              keepInternalMem);
 
 #if VKI_RAY_TRACING
 
@@ -326,6 +327,7 @@ public:
 
     void BuildPipelineInternalBufferData(
         const PipelineLayout*             pPipelineLayout,
+        bool                              needCache,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo);
 
     void GetComputePipelineCacheId(
@@ -442,6 +444,13 @@ public:
     {
         GetElfCacheMetricString(&m_pipelineCacheMatrix, "", pOutStr, outStrSize);
     }
+    static VkResult UploadInternalBufferData(
+        Device*                           pDevice,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo);
+
+    static void DumpPipelineMetadata(
+        void*                   pPipelineDumpHandle,
+        const PipelineMetadata* pBinaryMetadata);
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
 
@@ -483,8 +492,6 @@ private:
         const VkShaderModuleCreateFlags internalShaderFlags,
         const uint32_t                  compilerMask,
         const Util::MetroHash::Hash&    uniqueHash,
-        PipelineBinaryCache*            pBinaryCache,
-        PipelineCreationFeedback*       pFeedback,
         ShaderModuleHandle*             pShaderModule);
 
     void StoreShaderModuleToCache(
@@ -492,7 +499,6 @@ private:
         const VkShaderModuleCreateFlags internalShaderFlags,
         const uint32_t                  compilerMask,
         const Util::MetroHash::Hash&    uniqueHash,
-        PipelineBinaryCache*            pBinaryCache,
         ShaderModuleHandle*             pShaderModule);
 
     Util::MetroHash::Hash GetShaderModuleCacheHash(

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -701,7 +701,7 @@ void GraphicsPipelineCommon::ExtractLibraryInfo(
 
     pLibInfo->flags.isLibrary = (flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) ? 1 : 0;
 
-    pLibInfo->flags.optimize  = (flags & VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT) ? 1 : 0;
+    pLibInfo->flags.optimize  = (flags & VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT) ? 1 : 0;
 
     pLibInfo->libFlags =
         (pLibInfo->flags.isLibrary == false) ? GraphicsPipelineLibraryAll :
@@ -806,6 +806,15 @@ VkResult GraphicsPipelineCommon::Create(
 
     const bool isLibrary = Util::TestAnyFlagSet(flags, VK_PIPELINE_CREATE_LIBRARY_BIT_KHR);
 
+    if (pDevice->GetRuntimeSettings().pipelineLinkOptimizationMode == PipelineLinkOptimizationNeverOptimized)
+    {
+        flags &= ~VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT;
+    }
+    else if (pDevice->GetRuntimeSettings().pipelineLinkOptimizationMode == PipelineLinkOptimizationAlwaysOptimized)
+    {
+        flags |= ~VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT;
+    }
+
     if (isLibrary)
     {
         result =  GraphicsPipelineLibrary::Create(
@@ -863,7 +872,7 @@ static void CopyPreRasterizationShaderState(
     pInfo->immedInfo.graphicsShaderInfos.gs    = libInfo.immedInfo.graphicsShaderInfos.gs;
     pInfo->immedInfo.graphicsShaderInfos.ts    = libInfo.immedInfo.graphicsShaderInfos.ts;
     pInfo->immedInfo.graphicsShaderInfos.ms    = libInfo.immedInfo.graphicsShaderInfos.ms;
-    pInfo->immedInfo.graphicsShaderInfos.flags = libInfo.immedInfo.graphicsShaderInfos.flags;
+    pInfo->immedInfo.dynamicGraphicsState      = libInfo.immedInfo.dynamicGraphicsState;
     pInfo->immedInfo.viewportParams            = libInfo.immedInfo.viewportParams;
     pInfo->immedInfo.scissorRectParams         = libInfo.immedInfo.scissorRectParams;
     pInfo->immedInfo.rasterizerDiscardEnable   = libInfo.immedInfo.rasterizerDiscardEnable;
@@ -2141,8 +2150,6 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     bool hasRayTracing = pBinMeta->rayQueryUsed;
 #endif
 
-    uint32_t libFlags = libInfo.libFlags;
-
     pInfo->activeStages = GetActiveShaderStages(pIn, &libInfo);
 
     VkShaderStageFlagBits preRasterStages = {};
@@ -2156,15 +2163,12 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
         hasMesh = true;
     }
 
-    uint64_t dynamicStateFlags = GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
-
-    libInfo.libFlags = libFlags;
-    pInfo->dynamicStates = dynamicStateFlags;
+    pInfo->dynamicStates = GetDynamicStateFlags(pIn->pDynamicState, &libInfo);;
 
     if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)
     {
         BuildVertexInputInterfaceState(
-            pDevice, pIn, &pBinMeta->vbInfo, dynamicStateFlags, libInfo.flags.isLibrary, hasMesh, pInfo);
+            pDevice, pIn, &pBinMeta->vbInfo, pInfo->dynamicStates, libInfo.flags.isLibrary, hasMesh, pInfo);
     }
     else if (libInfo.pVertexInputInterfaceLib != nullptr)
     {
@@ -2175,7 +2179,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     {
         BuildPreRasterizationShaderState(pDevice,
                                          pIn,
-                                         dynamicStateFlags,
+                                         pInfo->dynamicStates,
 #if VKI_RAY_TRACING
                                          hasRayTracing,
 #endif
@@ -2189,7 +2193,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     const bool enableRasterization =
         (~libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) ||
         (pInfo->immedInfo.rasterizerDiscardEnable == false) ||
-        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizerDiscardEnable);
+        IsDynamicStateEnabled(pInfo->dynamicStates, DynamicStatesInternal::RasterizerDiscardEnable);
 
     if (enableRasterization)
     {
@@ -2197,7 +2201,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
         {
             BuildFragmentShaderState(pDevice,
                                      pIn,
-                                     dynamicStateFlags,
+                                     pInfo->dynamicStates,
 #if VKI_RAY_TRACING
                                      hasRayTracing,
 #endif
@@ -2206,12 +2210,11 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
         else if (libInfo.pFragmentShaderLib != nullptr)
         {
             CopyFragmentShaderState(libInfo.pFragmentShaderLib, pInfo);
-
         }
 
         if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)
         {
-            BuildFragmentOutputInterfaceState(pDevice, pIn, dynamicStateFlags, pInfo);
+            BuildFragmentOutputInterfaceState(pDevice, pIn, pInfo->dynamicStates, pInfo);
         }
         else if (libInfo.pFragmentOutputInterfaceLib != nullptr)
         {
@@ -2221,7 +2224,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
 
     if (libInfo.flags.isLibrary == false)
     {
-        BuildExecutablePipelineState(hasMesh, dynamicStateFlags, pBinMeta, pInfo);
+        BuildExecutablePipelineState(hasMesh, pInfo->dynamicStates, pBinMeta, pInfo);
 
         if (pOptimizerKey != nullptr)
         {

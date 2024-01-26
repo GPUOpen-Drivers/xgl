@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -101,6 +101,7 @@ class SqttMgr;
 class SwapChain;
 class ChillMgr;
 class AsyncLayer;
+class GraphicsPipelineLibrary;
 #if VKI_GPU_DECOMPRESS
 class GpuDecoderLayer;
 #endif
@@ -813,6 +814,8 @@ public:
 
     const PipelineLayout* GetNullPipelineLayout() const { return m_pNullPipelineLayout; }
 
+    const GraphicsPipelineLibrary* GetNullFragmentLib() const { return m_pNullFragmentLib; }
+
     template<typename CreateInfo>
     static VkPipelineCreateFlags2KHR GetPipelineCreateFlags(
         const CreateInfo* pCreateInfo);
@@ -962,6 +965,10 @@ protected:
     // Null pipeline layout for pipeline Library. We can use this if the pipeline library create info doesn't have
     // a pipeline layout specified.
     PipelineLayout* m_pNullPipelineLayout;
+
+    // Null fragment library
+    GraphicsPipelineLibrary* m_pNullFragmentLib;
+    VkShaderModule m_nullFragmentModule;
 
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.

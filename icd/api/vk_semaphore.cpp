@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -35,9 +35,10 @@ namespace vk
 
 // =====================================================================================================================
 VkResult Semaphore::PopulateInDeviceGroup(
-    Device*                         pDevice,
-    Pal::IQueueSemaphore*           pPalSemaphores[MaxPalDevices],
-    uint32_t*                       pSemaphoreCount)
+    Device*                              pDevice,
+    const Pal::QueueSemaphoreCreateInfo& palCreateInfo,
+    Pal::IQueueSemaphore*                pPalSemaphores[MaxPalDevices],
+    uint32_t*                            pSemaphoreCount)
 {
     Pal::Result palResult = Pal::Result::Success;
     uint32_t count = 1;
@@ -59,6 +60,7 @@ VkResult Semaphore::PopulateInDeviceGroup(
         palOpenInfo.externalSemaphore  = handle;
         palOpenInfo.flags.crossProcess = false;
         palOpenInfo.flags.isReference  = true;
+        palOpenInfo.flags.timeline     = palCreateInfo.flags.timeline;
 
         for (uint32_t deviceIdx = 1; deviceIdx < pDevice->NumPalDevices(); deviceIdx ++)
         {
@@ -205,7 +207,7 @@ VkResult Semaphore::Create(
         {
             uint32_t   semaphoreCount = 1;
 
-            vkResult = PopulateInDeviceGroup(pDevice, pPalSemaphores, &semaphoreCount);
+            vkResult = PopulateInDeviceGroup(pDevice, palCreateInfo, pPalSemaphores, &semaphoreCount);
 
             if (vkResult == VK_SUCCESS)
             {
@@ -334,7 +336,7 @@ VkResult Semaphore::ImportSemaphore(
             {
                 uint32_t semaphoreCount = 1;
 
-                vkResult = PopulateInDeviceGroup(pDevice, pPalSemaphores, &semaphoreCount);
+                vkResult = PopulateInDeviceGroup(pDevice, m_palCreateInfo, pPalSemaphores, &semaphoreCount);
 
                 if (vkResult == VK_SUCCESS)
                 {

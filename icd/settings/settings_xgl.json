@@ -759,7 +759,7 @@
     },
     {
       "Name": "PipelineFastCompileMode",
-      "Description": "Controls how SC 'fast compile mode' (disable optimizations) is enabled",
+      "Description": "Controls how pipeline compile 'fast compile mode' (disable optimizations) is enabled",
       "Tags": [
         "Pipeline Options"
       ],
@@ -772,20 +772,58 @@
           {
             "Name": "PipelineFastCompileApiControlled",
             "Value": 0,
-            "Description": "'Fast compile' disabled (SC fast optimizations enabled) if VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT is set."
+            "Description": "Full optimzimization is disabled (optLevel = C1 or C0 dependent on compiler) if VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT is set. and optLevel = C2 if VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT is not set"
           },
           {
             "Name": "PipelineFastCompileNeverOptimized",
             "Value": 1,
-            "Description": "'Fast compile' always enabled (disables SC shader optimization)."
+            "Description": "Disable all optimizization to enable fast compile. i.e. Force optLevel = C0."
           },
           {
-            "Name": "PipelineFastCompileAlwaysOptimized",
+            "Name": "PipelineFastCompileFastOptimized",
             "Value": 2,
-            "Description": "'Fast compile' always disabled (SC fast optimizations enabled)."
+            "Description": "Disable most optimziation to optimize compile. i.e. Force optLevel = C1."
+          },
+          {
+            "Name": "PipelineFastCompileFullOptimized",
+            "Value": 3,
+            "Description": "Force to do full optimziation. i.e. Force optLevel = C2."
           }
         ],
         "Name": "PipelineFastCompileMode"
+      },
+      "Scope": "Driver",
+      "Type": "enum"
+    },
+    {
+      "Name": "PipelineLinkOptimizationMode",
+      "Description": "Controls link optimization flag in pipeline creatation",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": "PipelineLinkOptimizationApiControlled"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "PipelineLinkOptimizationApiControlled",
+            "Value": 0,
+            "Description": "Use VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT set by API"
+          },
+          {
+            "Name": "PipelineLinkOptimizationNeverOptimized",
+            "Value": 1,
+            "Description": "Force flag VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT = 0"
+          },
+          {
+            "Name": "PipelineLinkOptimizationAlwaysOptimized",
+            "Value": 2,
+            "Description": "Force flag VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT = 1."
+          }
+        ],
+        "Name": "PipelineLinkOptimizationMode"
       },
       "Scope": "Driver",
       "Type": "enum"
@@ -1054,7 +1092,7 @@
         "Pipeline Options"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Type": "bool",
       "Scope": "Driver"
@@ -1536,9 +1574,7 @@
         "IsDir": true
       },
       "Defaults": {
-        "Default": "ShaderReplace",
-        "Windows": "ShaderReplace",
-        "Linux": "ShaderReplace"
+        "Default": "ShaderReplace"
       },
       "Scope": "Driver",
       "Name": "ShaderReplaceDir",
@@ -2126,10 +2162,31 @@
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": false
+        "Default": "OptimizeTessFactorAuto"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "OptimizeTessFactorAuto",
+            "Value": 0,
+            "Description": "Determine the tessellation fator optimization by compiler."
+          },
+          {
+            "Name": "OptimizeTessFactorDisable",
+            "Value": 1,
+            "Description": "Force disable tessellation factor optimization."
+          },
+          {
+            "Name": "OptimizeTessFactorEnable",
+            "Value": 2,
+            "Description": "Force enable tessellation fator optimziation."
+          }
+        ],
+        "Name": "OptimizeTessFactorMode"
       },
       "Scope": "Driver",
-      "Type": "bool",
+      "Type": "enum",
       "Name": "OptimizeTessFactor"
     },
     {
@@ -2288,7 +2345,7 @@
     },
     {
       "Name": "EnableInternalPipelineCachingToDisk",
-      "Description": "Controls whether the pipeline compiler enables Pal's archive-file based caching for internal pipelines. (Default: TRUE) Related environment variables AMD_ARCHIVE_DISK_CACHE_PATH: Path to where archive file is to be stored (optional) AMD_ARCHIVE_APP_PREFIX     : Fixed prefix string for generated archive file name (optional)",
+      "Description": "Controls whether the pipeline compiler enables Pal's archive-file based caching for internal pipelines. This value can be overwritten by environment variable AMD_VK_ENABLE_INTERNAL_PIPELINECACHING_TO_DISK. Related environment variables AMD_ARCHIVE_DISK_CACHE_PATH: Path to where archive file is to be stored (optional) AMD_ARCHIVE_APP_PREFIX     : Fixed prefix string for generated archive file name (optional)",
       "Tags": [
         "SPIRV Options"
       ],
@@ -3327,6 +3384,21 @@
       },
       "Type": "uint32",
       "Name": "MaxUnifiedNonRayGenShaders",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Max total size in bytes of shaders to inline in Unified pipeline before falling back to indirect",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 307200
+      },
+      "Type": "uint32",
+      "Name": "MaxTotalSizeOfUnifiedShaders",
       "Scope": "Driver"
     },
     {
@@ -5031,6 +5103,58 @@
       "Type": "enum",
       "Name": "RobustBufferAccess",
       "Scope": "Driver"
+    },
+    {
+      "Description": "Disables wave64 support. Selected waves default to wave32 and wave size tuning is disabled.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "DeprecateWave64",
+        "Values": [
+          {
+            "Name": "DeprecateWave64Disabled",
+            "Value": 0,
+            "Description": "Default case. Wave64 is both reported and enabled."
+          },
+          {
+            "Name": "DeprecateWave64Cs",
+            "Value": 1,
+            "Description": "Wave64 can be reported but wave32 will be forced for compute shaders internally. If app uses subgroup operations then this setting still might not force desired wavesize since subgroupsize will take precedence. To avoid that DeprecateWave64Reporting MUST be set along with this setting."
+          },
+          {
+            "Name": "DeprecateWave64NonCs",
+            "Value": 2,
+            "Description": "Wave64 can be reported but wave32 will be forced for all non-compute shaders. If app uses subgroup operations then this setting still might not force desired wavesize since subgroupsize will take precedence. To avoid that DeprecateWave64Reporting MUST be set along with this setting."
+          },
+          {
+            "Name": "DeprecateWave64Reporting",
+            "Value": 4,
+            "Description": "Only wave32 is reported."
+          },
+          {
+            "Name": "DeprecateWave64WaveIntrinsics",
+            "Value": 8,
+            "Description": "This flag must be set together with DeprecateWave64Reporting. When set, shader specified subgroupSize will be overriden to wave32."
+          },
+          {
+            "Name": "DeprecateWave64All",
+            "Value": 4294967295,
+            "Description": "Wave32 is reported and forced for all shaders."
+          }
+        ]
+      },
+      "Type": "uint32",
+      "Scope": "Driver",
+      "Name": "DeprecateWave64"
     },
     {
       "Description": "Enable Merge Sort for Morton Code sorting - If False, the default Radix Sort is used.",
@@ -6802,6 +6926,18 @@
       "Scope": "Driver"
     },
     {
+      "Name": "EnableD24S8",
+      "Description": "Enable support for format D24_UNORM_S8_UINT and X8_D24_UNORM_PACK32.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "ValidValues": {
         "IsEnum": true,
         "Values": [
@@ -7257,9 +7393,7 @@
         "IsDir": true
       },
       "Defaults": {
-        "Default": "PipelineReplace",
-        "Windows": "PipelineReplace",
-        "Linux": "PipelineReplace"
+        "Default": "PipelineReplace"
       },
       "Scope": "Driver",
       "Name": "DevModeElfReplacementDirectory",
@@ -7542,9 +7676,7 @@
         "IsFile": true
       },
       "Defaults": {
-        "Default": "trace.rgp",
-        "Windows": "trace.rgp",
-        "Linux": "trace.rgp"
+        "Default": "trace.rgp"
       },
       "Scope": "Driver",
       "Name": "DevModeRgpTraceDumpFile",
@@ -8612,6 +8744,18 @@
       "Scope": "Driver"
     },
     {
+      "Name": "ExportImageCompressionControl",
+      "Description": "Export extension VK_EXT_image_compression_control",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Description": "[GFX10+ only] MALL RPM Views policy.",
       "Tags": [
         "Memory"
@@ -8659,11 +8803,23 @@
         "General"
       ],
       "Defaults": {
-        "Default": true
+        "Default": false
       },
       "Type": "bool",
       "Scope": "Driver",
       "Name": "Disable3dLinearImageFormatSupport"
+    },
+    {
+      "Description": "Enable Graphics Pipeline Libraries",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "EnableGraphicsPipelineLibraries"
     }
   ]
 }

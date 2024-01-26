@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -38,12 +38,15 @@
 #include "palVectorImpl.h"
 #include "palHashMapImpl.h"
 #include "palFile.h"
+#include "palLiterals.h"
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
 #include "palPipelineAbiReader.h"
 #include "devmode/devmode_mgr.h"
 #endif
 #include <string.h>
+
+using namespace Util::Literals;
 
 namespace vk
 {
@@ -825,9 +828,9 @@ VkResult PipelineBinaryCache::InitMemoryCacheLayer(
     // Reason: CTS generates a large number of cache applications and cause insufficient memory in 32-bit system.
     // Purpose: To limit the maximun value of MemorySize in 32-bit system.
 #ifdef ICD_X86_BUILD
-    createInfo.maxMemorySize       = 192 * 1024 * 1024;
+    createInfo.maxMemorySize       = 192_MiB;
 #else
-    createInfo.maxMemorySize       = SIZE_MAX;
+    createInfo.maxMemorySize       = 4_GiB;
 #endif
 
     createInfo.expectedEntries     = m_expectedEntries;
@@ -1097,8 +1100,8 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
     if (result == VK_SUCCESS)
     {
         // Assume that the first layer we open should be the "primary" source and optimize its memory access
-        constexpr size_t PrimaryLayerBufferSize   = 64 * 1024 * 1024;
-        constexpr size_t SecondaryLayerBufferSize = 8 * 1024 * 1024;
+        constexpr size_t PrimaryLayerBufferSize   = 64_MiB;
+        constexpr size_t SecondaryLayerBufferSize = 8_MiB;
 
         // Open the optional read only cache file. This may fail gracefully
         const char* const  pThirdPartyFileName = getenv(EnvVarReadOnlyFileName);

@@ -119,6 +119,7 @@ VK_EXT_shader_demote_to_helper_invocation
 VK_EXT_subgroup_size_control
 VK_EXT_calibrated_timestamps
 VK_EXT_fragment_shader_interlock
+VK_KHR_calibrated_timestamps
 VK_KHR_pipeline_executable_properties
 VK_EXT_line_rasterization
 VK_EXT_shader_atomic_float
@@ -201,4 +202,6 @@ VK_EXT_physical_device_drm
 VK_KHR_cooperative_matrix
 VK_EXT_texture_compression_astc_hdr
 VK_EXT_image_drm_format_modifier
+VK_KHR_vertex_attribute_divisor
 VK_EXT_frame_boundary
+VK_EXT_image_compression_control

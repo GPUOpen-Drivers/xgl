@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -273,6 +273,7 @@ public:
 #endif
         KHR_BIND_MEMORY2,
         KHR_BUFFER_DEVICE_ADDRESS,
+        KHR_CALIBRATED_TIMESTAMPS,
         KHR_COOPERATIVE_MATRIX,
         KHR_COPY_COMMANDS2,
         KHR_CREATE_RENDERPASS2,
@@ -341,6 +342,7 @@ public:
         KHR_TIMELINE_SEMAPHORE,
         KHR_UNIFORM_BUFFER_STANDARD_LAYOUT,
         KHR_VARIABLE_POINTERS,
+        KHR_VERTEX_ATTRIBUTE_DIVISOR,
         KHR_VULKAN_MEMORY_MODEL,
         KHR_WIN32_KEYED_MUTEX,
         KHR_WORKGROUP_MEMORY_EXPLICIT_LAYOUT,
@@ -379,6 +381,7 @@ public:
         EXT_HDR_METADATA,
         EXT_HOST_QUERY_RESET,
         EXT_IMAGE_2D_VIEW_OF_3D,
+        EXT_IMAGE_COMPRESSION_CONTROL,
         EXT_IMAGE_DRM_FORMAT_MODIFIER,
         EXT_IMAGE_ROBUSTNESS,
         EXT_IMAGE_SLICED_VIEW_OF_3D,

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2015-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2015-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -586,7 +586,7 @@ void Instance::InitDispatchTable()
     }
 
     // Install SQTT marker annotation layer if needed
-    if (IsTracingSupportEnabled())
+    if (IsTracingSupportEnabled() || IsCrashAnalysisSupportEnabled())
     {
         SqttOverrideDispatchTable(&m_dispatchTable, nullptr);
     }
@@ -1030,6 +1030,19 @@ void Instance::EnableTracingSupport()
 }
 
 // =====================================================================================================================
+// This function notifies the instance that it should return versions of Vulkan entry points that support Execution
+// Marker annotations for RGD.
+//
+// IMPORTANT: This function should only be called by physical devices during Instance initialization when those
+// devices are first initialized and they read the PAL settings.
+void Instance::EnableCrashAnalysisSupport()
+{
+    // This function should not be called after the loader/application has queried this ICD's per-instance dispatch
+    // table.
+    m_flags.rgdSupport = 1;
+}
+
+// =====================================================================================================================
 // Early-initializes the GPU Open Developer Mode manager if that mode is enabled.  This is called prior to enumerating
 // PAL devices (before physical device manager is created).
 void Instance::DevModeEarlyInitialize()
@@ -1062,6 +1075,11 @@ void Instance::DevModeLateInitialize()
     if (m_pDevModeMgr->IsTracingEnabled())
     {
         EnableTracingSupport();
+    }
+
+    if (m_pDevModeMgr->IsCrashAnalysisEnabled())
+    {
+        EnableCrashAnalysisSupport();
     }
 #endif
 }
@@ -1142,7 +1160,7 @@ void PAL_STDCALL Instance::PalDeveloperCallback(
 {
     Instance* pInstance = static_cast<Instance*>(pPrivateData);
 
-    if (pInstance->IsTracingSupportEnabled())
+    if (pInstance->IsTracingSupportEnabled() || pInstance->IsCrashAnalysisSupportEnabled())
     {
         // This is required to trap internal barriers and dispatches performed by PAL so that they can be correctly
         // annotated to RGP.

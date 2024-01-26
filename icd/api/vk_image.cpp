@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -484,6 +484,13 @@ void Image::ConvertImageCreateInfo(
         pPalCreateInfo->metadataMode = Pal::MetadataMode::Disabled;
     }
 
+    if (settings.enableD24S8                                  &&
+        ((pCreateInfo->format == VK_FORMAT_D24_UNORM_S8_UINT) ||
+         (pCreateInfo->format == VK_FORMAT_X8_D24_UNORM_PACK32)))
+    {
+        pPalCreateInfo->usageFlags.depthAsZ24 = 1;
+    }
+
     // If DCC was disabled above, still attempt to use Fmask.
     if ((pPalCreateInfo->samples > 1) && pPalCreateInfo->usageFlags.colorTarget &&
         (pPalCreateInfo->metadataMode == Pal::MetadataMode::Disabled))
@@ -524,6 +531,17 @@ void Image::ConvertImageCreateInfo(
 
     // Apply per application (or run-time) options
     pDevice->GetResourceOptimizer()->OverrideImageCreateInfo(resourceKey, pPalCreateInfo);
+
+    if (extStructs.pImageCompressionControl != nullptr)
+    {
+        // Disable compression when requested by application calling VK_EXT_image_compression_control
+        if ((extStructs.pImageCompressionControl->sType == VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT) &&
+            (extStructs.pImageCompressionControl->flags == VK_IMAGE_COMPRESSION_DISABLED_EXT))
+        {
+            pPalCreateInfo->metadataMode = Pal::MetadataMode::Disabled;
+            pPalCreateInfo->metadataTcCompatMode = Pal::MetadataTcCompatMode::Disabled;
+        }
+    }
 
 #if defined(__unix__)
     pPalCreateInfo->modifier = DRM_FORMAT_MOD_INVALID;
@@ -782,6 +800,12 @@ void Image::HandleExtensionStructs(
             break;
         }
 #endif
+        case VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT:
+        {
+            pExtStructs->pImageCompressionControl =
+                static_cast<const VkImageCompressionControlEXT*>(pNext);
+            break;
+        }
         default:
             // Skip any unknown extension structures
             break;

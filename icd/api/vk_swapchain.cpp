@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -413,7 +413,7 @@ VkResult SwapChain::Create(
 
     offset += palSwapChainSize;
 
-    result = PalToVkResult(palResult);
+    result = (palResult == Pal::Result::AlreadyExists) ? VK_ERROR_NATIVE_WINDOW_IN_USE_KHR : PalToVkResult(palResult);
 
     if (result == VK_SUCCESS)
     {

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -323,6 +323,7 @@ Pal::Result CreateClearRegions(
 template<typename PalSubresRangeVector>
 Pal::Result CreateClearSubresRanges(
     const vk::ImageView*            pImageView,
+    const bool                      is3dImage,
     const VkClearAttachment&        clearInfo,
     const uint32_t                  rectCount,
     const VkClearRect* const        pRects,
@@ -354,6 +355,10 @@ Pal::Result CreateClearSubresRanges(
         }
     }
 
+    // For 3D color images, we set up the expected subres range during ImageView::Create() call
+    // and 3D depth/stencil images are NOT supported.
+    // PAL expects that for all 3D images arraySlice = 0 and numSlices = 1.
+
     if (viewMask > 0)
     {
         const auto layerRanges = RangesOfOnesInBitMask(viewMask);
@@ -365,15 +370,18 @@ Pal::Result CreateClearSubresRanges(
             for (auto layerRangeIt = layerRanges.Begin(); layerRangeIt.IsValid(); layerRangeIt.Next())
             {
                 pOutClearSubresRanges->PushBack(subresRange);
-                pOutClearSubresRanges->Back().startSubres.arraySlice += layerRangeIt.Get().offset;
-                pOutClearSubresRanges->Back().numSlices = layerRangeIt.Get().extent;
-
-                if (hasPlaneDepthAndStencil)
+                if (is3dImage == false)
                 {
-                    subresRange.startSubres.plane = 1;
-                    pOutClearSubresRanges->PushBack(subresRange);
                     pOutClearSubresRanges->Back().startSubres.arraySlice += layerRangeIt.Get().offset;
                     pOutClearSubresRanges->Back().numSlices = layerRangeIt.Get().extent;
+
+                    if (hasPlaneDepthAndStencil)
+                    {
+                        subresRange.startSubres.plane = 1;
+                        pOutClearSubresRanges->PushBack(subresRange);
+                        pOutClearSubresRanges->Back().startSubres.arraySlice += layerRangeIt.Get().offset;
+                        pOutClearSubresRanges->Back().numSlices = layerRangeIt.Get().extent;
+                    }
                 }
             }
         }
@@ -387,15 +395,18 @@ Pal::Result CreateClearSubresRanges(
             for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
             {
                 pOutClearSubresRanges->PushBack(subresRange);
-                pOutClearSubresRanges->Back().startSubres.arraySlice += pRects[rectIndex].baseArrayLayer;
-                pOutClearSubresRanges->Back().numSlices = pRects[rectIndex].layerCount;
-
-                if (hasPlaneDepthAndStencil)
+                if (is3dImage == false)
                 {
-                    subresRange.startSubres.plane = 1;
-                    pOutClearSubresRanges->PushBack(subresRange);
                     pOutClearSubresRanges->Back().startSubres.arraySlice += pRects[rectIndex].baseArrayLayer;
                     pOutClearSubresRanges->Back().numSlices = pRects[rectIndex].layerCount;
+
+                    if (hasPlaneDepthAndStencil)
+                    {
+                        subresRange.startSubres.plane = 1;
+                        pOutClearSubresRanges->PushBack(subresRange);
+                        pOutClearSubresRanges->Back().startSubres.arraySlice += pRects[rectIndex].baseArrayLayer;
+                        pOutClearSubresRanges->Back().numSlices = pRects[rectIndex].layerCount;
+                    }
                 }
             }
          }
@@ -411,6 +422,7 @@ Pal::Result CreateClearSubresRanges(
 template<typename PalSubresRangeVector>
 Pal::Result CreateClearSubresRanges(
     const Framebuffer::Attachment&  attachment,
+    const bool                      is3dImage,
     const VkClearAttachment&        clearInfo,
     const uint32_t                  rectCount,
     const VkClearRect* const        pRects,
@@ -426,6 +438,10 @@ Pal::Result CreateClearSubresRanges(
 
     pOutClearSubresRanges->Clear();
 
+    // For 3D color images, we set up the expected subres range during ImageView::Create() call
+    // and 3D depth/stencil images are NOT supported.
+    // PAL expects that for all 3D images arraySlice = 0 and numSlices = 1.
+
     if (renderPass.IsMultiviewEnabled())
     {
         const auto viewMask    = renderPass.GetViewMask(subpass);
@@ -440,8 +456,11 @@ Pal::Result CreateClearSubresRanges(
                 for (auto layerRangeIt = layerRanges.Begin(); layerRangeIt.IsValid(); layerRangeIt.Next())
                 {
                     pOutClearSubresRanges->PushBack(attachmentSubresRanges.At(rangeIndex));
-                    pOutClearSubresRanges->Back().startSubres.arraySlice += layerRangeIt.Get().offset;
-                    pOutClearSubresRanges->Back().numSlices               = layerRangeIt.Get().extent;
+                    if (is3dImage == false)
+                    {
+                        pOutClearSubresRanges->Back().startSubres.arraySlice += layerRangeIt.Get().offset;
+                        pOutClearSubresRanges->Back().numSlices = layerRangeIt.Get().extent;
+                    }
                 }
             }
         }
@@ -457,8 +476,11 @@ Pal::Result CreateClearSubresRanges(
                 for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
                 {
                     pOutClearSubresRanges->PushBack(attachmentSubresRanges.At(rangeIndex));
-                    pOutClearSubresRanges->Back().startSubres.arraySlice += pRects[rectIndex].baseArrayLayer;
-                    pOutClearSubresRanges->Back().numSlices               = pRects[rectIndex].layerCount;
+                    if (is3dImage == false)
+                    {
+                        pOutClearSubresRanges->Back().startSubres.arraySlice += pRects[rectIndex].baseArrayLayer;
+                        pOutClearSubresRanges->Back().numSlices = pRects[rectIndex].layerCount;
+                    }
                 }
             }
         }
@@ -1693,7 +1715,7 @@ void CmdBuffer::ResetPipelineState()
     }
     while (bindIdx < PipelineBindCount);
 
-    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
+    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
     pDynamicState->colorWriteMask = UINT32_MAX;
     pDynamicState->logicOp = Pal::LogicOp::Copy;
 
@@ -3526,8 +3548,9 @@ void CmdBuffer::ClearDynamicRenderingImages(
 
                         CreateClearSubresRanges(
                             attachment.pImageView,
+                            pImage->GetImageType() == VK_IMAGE_TYPE_3D,
                             clearInfo,
-                            rectCount,
+                            rectBatch,
                             pRects + rectIdx,
                             m_allGpuState.dynamicRenderingInstance.viewMask,
                             &clearSubresRanges);
@@ -3603,8 +3626,9 @@ void CmdBuffer::ClearDynamicRenderingImages(
 
                         CreateClearSubresRanges(
                             pDepthStencilView,
+                            false, // is3dImage
                             clearInfo,
-                            rectCount,
+                            rectBatch,
                             pRects + rectIdx,
                             m_allGpuState.dynamicRenderingInstance.viewMask,
                             &clearSubresRanges);
@@ -4093,8 +4117,10 @@ void CmdBuffer::ClearImageAttachments(
                             &clearBoxes);
 
                         CreateClearSubresRanges(
-                            attachment, clearInfo,
-                            rectCount, pRects + rectIdx,
+                            attachment,
+                            attachment.pImage->GetImageType() == VK_IMAGE_TYPE_3D,
+                            clearInfo,
+                            rectBatch, pRects + rectIdx,
                             *pRenderPass, subpass,
                             &clearSubresRanges);
 
@@ -4155,8 +4181,10 @@ void CmdBuffer::ClearImageAttachments(
                             &clearRects);
 
                         CreateClearSubresRanges(
-                            attachment, clearInfo,
-                            rectCount, pRects + rectIdx,
+                            attachment,
+                            false, // is3dImage
+                            clearInfo,
+                            rectBatch, pRects + rectIdx,
                             *pRenderPass, subpass,
                             &clearSubresRanges);
 
@@ -6436,10 +6464,10 @@ void CmdBuffer::ResetAccelerationStructureQueryPool(
         Pal::CoherShaderRead  |     // vkCmdCopyQueryPoolResults
         Pal::CoherCopyDst;          // vkCmdResetQueryPool (CmdFillMemory)
 
-    static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
-
     // Wait for any accelerationStructure query pool events to complete prior to filling memory
     {
+        static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
+
         static const Pal::BarrierTransition Transition =
         {
             AccelerationStructureCoher,   // srcCacheMask
@@ -6481,11 +6509,13 @@ void CmdBuffer::ResetAccelerationStructureQueryPool(
 
     // Wait for memory fill to complete
     {
+        static const Pal::HwPipePoint pipePoint = Pal::HwPipePostBlt;
+
         static const Pal::BarrierTransition Transition =
         {
-            Pal::CoherMemory,             // srcCacheMask
-            AccelerationStructureCoher,   // dstCacheMask
-            { }                           // imageInfo
+            Pal::CoherMemory | Pal::CoherCopyDst,  // srcCacheMask
+            AccelerationStructureCoher,            // dstCacheMask
+            { }                                    // imageInfo
         };
 
         static const Pal::BarrierInfo Barrier =
@@ -6523,10 +6553,10 @@ void CmdBuffer::FillTimestampQueryPool(
         Pal::CoherCopyDst     | // vkCmdResetQueryPool (CmdFillMemory)
         Pal::CoherTimestamp;    // vkCmdWriteTimestamp (CmdWriteTimestamp)
 
-    static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
-
     // Wait for any timestamp query pool events to complete prior to filling memory
     {
+        static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
+
         static const Pal::BarrierTransition Transition =
         {
             TimestampCoher,   // srcCacheMask
@@ -6579,11 +6609,13 @@ void CmdBuffer::FillTimestampQueryPool(
 
     // Wait for memory fill to complete
     {
+        static const Pal::HwPipePoint pipePoint = Pal::HwPipePostBlt;
+
         static const Pal::BarrierTransition Transition =
         {
-            Pal::CoherMemory, // srcCacheMask
-            TimestampCoher,   // dstCacheMask
-            { }               // imageInfo
+            Pal::CoherMemory | Pal::CoherCopyDst, // srcCacheMask
+            TimestampCoher,                       // dstCacheMask
+            { }                                   // imageInfo
         };
 
         static const Pal::BarrierInfo Barrier =
@@ -8800,7 +8832,8 @@ void CmdBuffer::PushConstants(
     DbgBarrierPreCmd(DbgBarrierBindSetsPushConstants);
 
     uint32_t startInDwords  = start / sizeof(uint32_t);
-    uint32_t lengthInDwords = length / sizeof(uint32_t);
+
+    uint32_t lengthInDwords = PipelineLayout::GetPushConstantSizeInDword(length);
 
     const uint32_t* const pInputValues = reinterpret_cast<const uint32_t*>(values);
 
@@ -9695,9 +9728,9 @@ void CmdBuffer::SetVertexInput(
                     &PerGpuState(deviceIdx)->vbBindings[firstChanged]);
             }
 
-            if (vertexBufferCount != pBindState->dynamicBindInfo.gfx.dynamicState.vertexBufferCount)
+            if (vertexBufferCount != pBindState->dynamicBindInfo.gfxDynState.vertexBufferCount)
             {
-                pBindState->dynamicBindInfo.gfx.dynamicState.vertexBufferCount = vertexBufferCount;
+                pBindState->dynamicBindInfo.gfxDynState.vertexBufferCount = vertexBufferCount;
                 m_allGpuState.dirtyGraphics.pipeline = 1;
             }
 
@@ -11246,7 +11279,7 @@ void CmdBuffer::ValidateGraphicsStates()
                     m_allGpuState.colorBlendCreateInfo);
 
                 auto pDynamicState =
-                    &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
+                    &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
                 if (dualSourceBlendEnable != pDynamicState->dualSourceBlendEnable)
                 {
                     pDynamicState->dualSourceBlendEnable = dualSourceBlendEnable;
@@ -11263,18 +11296,17 @@ void CmdBuffer::ValidateGraphicsStates()
                 {
                     Pal::PipelineBindParams params = {};
 
-                    params.pipelineBindPoint     = Pal::PipelineBindPoint::Graphics;
-                    params.pPipeline             = pGraphicsPipeline->GetPalPipeline(deviceIdx);
-                    params.graphics              = pGraphicsPipeline->GetBindInfo();
-                    params.graphics.dynamicState =
-                        m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
-                    if (params.graphics.dynamicState.enable.depthClampMode &&
-                        (params.graphics.dynamicState.enable.depthClipMode == false))
+                    params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
+                    params.pPipeline         = pGraphicsPipeline->GetPalPipeline(deviceIdx);
+                    params.gfxDynState       =
+                        m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
+                    if (params.gfxDynState.enable.depthClampMode &&
+                        (params.gfxDynState.enable.depthClipMode == false))
                     {
-                        bool clipEnable = params.graphics.dynamicState.depthClampMode == Pal::DepthClampMode::_None;
-                        params.graphics.dynamicState.enable.depthClipMode = true;
-                        params.graphics.dynamicState.depthClipFarEnable = clipEnable;
-                        params.graphics.dynamicState.depthClipNearEnable = clipEnable;
+                        bool clipEnable = params.gfxDynState.depthClampMode == Pal::DepthClampMode::_None;
+                        params.gfxDynState.enable.depthClipMode = true;
+                        params.gfxDynState.depthClipFarEnable   = clipEnable;
+                        params.gfxDynState.depthClipNearEnable  = clipEnable;
                     }
 
                     params.apiPsoHash            = pGraphicsPipeline->GetApiHash();
@@ -11717,7 +11749,7 @@ void CmdBuffer::SetColorWriteEnableEXT(
         if (colorWriteEnable != m_allGpuState.colorWriteEnable)
         {
             m_allGpuState.colorWriteEnable = colorWriteEnable;
-            auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
+            auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
             pDynamicState->colorWriteMask = m_allGpuState.colorWriteMask & colorWriteEnable;
             if (pDynamicState->enable.colorWriteMask)
             {
@@ -11731,7 +11763,7 @@ void CmdBuffer::SetColorWriteEnableEXT(
 void CmdBuffer::SetRasterizerDiscardEnableEXT(
     VkBool32                                   rasterizerDiscardEnable)
 {
-    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
+    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
     if (pDynamicState->rasterizerDiscardEnable != static_cast<bool>(rasterizerDiscardEnable))
     {
         pDynamicState->rasterizerDiscardEnable = rasterizerDiscardEnable;
@@ -11976,7 +12008,7 @@ void CmdBuffer::SetColorWriteMask(
     if (colorWriteMask != m_allGpuState.colorWriteMask)
     {
         m_allGpuState.colorWriteMask = colorWriteMask;
-        auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
+        auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
         pDynamicState->colorWriteMask = colorWriteMask & m_allGpuState.colorWriteEnable;
         if (pDynamicState->enable.colorWriteMask)
         {
@@ -11999,7 +12031,7 @@ void CmdBuffer::SetSampleLocationsEnable(
 void CmdBuffer::SetLineRasterizationMode(
     VkLineRasterizationModeEXT          lineRasterizationMode)
 {
-    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
+    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
     bool perpLineEndCapsEnable = lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT;
     if (perpLineEndCapsEnable != pDynamicState->perpLineEndCapsEnable)
     {
@@ -12021,7 +12053,7 @@ void CmdBuffer::SetLogicOp(
         m_allGpuState.logicOp = logicOp;
         if (m_allGpuState.logicOpEnable)
         {
-            auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
+            auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
             pDynamicState->logicOp = VkToPalLogicOp(logicOp);
             if (pDynamicState->enable.logicOp)
             {
@@ -12038,7 +12070,7 @@ void CmdBuffer::SetLogicOpEnable(
     if (m_allGpuState.logicOpEnable != logicOpEnable)
     {
         m_allGpuState.logicOpEnable = logicOpEnable;
-        auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
+        auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
         pDynamicState->logicOp =
             m_allGpuState.logicOpEnable ? VkToPalLogicOp(m_allGpuState.logicOp) : Pal::LogicOp::Copy;
         if (pDynamicState->enable.logicOp)
@@ -12052,7 +12084,7 @@ void CmdBuffer::SetLogicOpEnable(
 void CmdBuffer::SetTessellationDomainOrigin(
     VkTessellationDomainOrigin          domainOrigin)
 {
-    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
+    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
     bool switchWinding = domainOrigin == VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT;
     if (switchWinding != pDynamicState->switchWinding)
     {
@@ -12069,7 +12101,7 @@ void CmdBuffer::SetTessellationDomainOrigin(
 void CmdBuffer::SetDepthClampEnable(
     VkBool32                            depthClampEnable)
 {
-    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
+    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
     Pal::DepthClampMode clampMode = depthClampEnable ? Pal::DepthClampMode::Viewport : Pal::DepthClampMode::_None;
     if (clampMode != pDynamicState->depthClampMode)
     {
@@ -12085,7 +12117,7 @@ void CmdBuffer::SetDepthClampEnable(
 void CmdBuffer::SetAlphaToCoverageEnable(
     VkBool32                            alphaToCoverageEnable)
 {
-    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
+    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
 
     if (static_cast<bool>(alphaToCoverageEnable) != pDynamicState->alphaToCoverageEnable)
     {
@@ -12102,7 +12134,7 @@ void CmdBuffer::SetAlphaToCoverageEnable(
 void CmdBuffer::SetDepthClipEnable(
     VkBool32                            depthClipEnable)
 {
-    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
+    auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
     if (static_cast<bool>(depthClipEnable) != pDynamicState->depthClipNearEnable)
     {
         pDynamicState->depthClipNearEnable = depthClipEnable;
@@ -12119,7 +12151,7 @@ void CmdBuffer::SetDepthClipEnable(
 void CmdBuffer::SetDepthClipNegativeOneToOne(
     VkBool32                            negativeOneToOne)
 {
-    auto         pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfx.dynamicState;
+    auto         pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
     Pal::DepthRange depthRange = negativeOneToOne ? Pal::DepthRange::NegativeOneToOne : Pal::DepthRange::ZeroToOne;
     if (depthRange != pDynamicState->depthRange)
     {

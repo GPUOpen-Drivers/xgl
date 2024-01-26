@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -50,6 +50,7 @@ class PipelineBinaryCache;
 class ShaderCache;
 class DeferredHostOperation;
 class PipelineCompiler;
+class InternalMemory;
 
 #if VKI_RAY_TRACING
 struct DeferredWorkload;
@@ -108,11 +109,13 @@ struct VbBindingInfo
     } bindings[Pal::MaxVertexBuffers];
 };
 
-constexpr uint32_t MaxPipelineInternalBufferCount = 4;
+constexpr uint32_t MaxPipelineInternalBufferCount = 3;
+
 struct InternalBufferEntry
 {
     uint32_t userDataOffset;
     uint32_t bufferOffset;
+    Pal::gpusize bufferAddress[MaxPalDevices];
 };
 
 struct PipelineInternalBufferInfo
@@ -170,13 +173,15 @@ struct GraphicsPipelineBinaryCreateInfo
     size_t                                 mappingBufferSize;
     VkPipelineCreateFlags2KHR              flags;
     VkFormat                               dbFormat;
-    PipelineOptimizerKey*                  pPipelineProfileKey;
+    const PipelineOptimizerKey*            pPipelineProfileKey;
     PipelineCompilerType                   compilerType;
     bool                                   linkTimeOptimization;
     Vkgc::BinaryData                       earlyElfPackage[GraphicsLibraryCount];
     Util::MetroHash::Hash                  earlyElfPackageHash[GraphicsLibraryCount];
     Pal::IShaderLibrary*                   pShaderLibraries[GraphicsLibraryCount];
+    InternalMemory*                        pInternalMem;
     uint64_t                               apiPsoHash;
+    uint64_t                               cbStateHash;
     uint64_t                               libraryHash[GraphicsLibraryCount];
     FreeCompilerBinary                     freeCompilerBinary;
     PipelineCreationFeedback               pipelineFeedback;
@@ -233,6 +238,7 @@ struct RayTracingPipelineBinary
     Vkgc::BinaryData*                   pPipelineBins;
     Vkgc::RayTracingShaderGroupHandle   shaderGroupHandle;
     Vkgc::RayTracingShaderPropertySet   shaderPropSet;
+    Vkgc::BinaryData                    librarySummary;
     void*                               pElfCache;
 };
 #endif
@@ -322,6 +328,7 @@ public:
         const uint32_t                    uberFetchConstBufRegBase,
         const uint32_t                    specConstBufVertexRegBase,
         const uint32_t                    specConstBufFragmentRegBase,
+        bool                              needCache,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo) = 0;
 
     virtual VkResult CreateColorExportBinary(

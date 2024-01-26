@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -569,6 +569,12 @@ constexpr AppProfilePatternEntry AppNameCSGO =
     "csgo"
 };
 
+constexpr AppProfilePatternEntry AppNameELEX2 =
+{
+    PatternAppNameLower,
+    "elex2.exe"
+};
+
 constexpr AppProfilePatternEntry AppNameCSGOLinux32Bit =
 {
     PatternAppNameLower,
@@ -615,6 +621,12 @@ constexpr AppProfilePatternEntry AppNameMetalGearSolid5 =
 {
     PatternAppNameLower,
     "mgsvtpp.exe"
+};
+
+constexpr AppProfilePatternEntry AppNameMetalGearSolid5Online =
+{
+    PatternAppNameLower,
+    "mgsvmgo.exe"
 };
 
 constexpr AppProfilePatternEntry AppEngineIdTech2 =
@@ -705,6 +717,18 @@ constexpr AppProfilePatternEntry AppEngineDivinity =
 {
     PatternEngineNameLower,
     "the divinity engine"
+};
+
+constexpr AppProfilePatternEntry AppNameDetroit =
+{
+    PatternAppNameLower,
+    "detroitbecomehuman"
+};
+
+constexpr AppProfilePatternEntry AppEngineQuanticDream =
+{
+    PatternEngineNameLower,
+    "quantic dream engine"
 };
 
 constexpr AppProfilePatternEntry PatternEnd = {};
@@ -1240,6 +1264,15 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::DetroitBecomeHuman,
+        {
+            AppNameDetroit,
+            AppEngineQuanticDream,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::SOTTR,
         {
             AppNameSOTTR,
@@ -1350,6 +1383,14 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::MetalGearSolid5Online,
+        {
+            AppNameMetalGearSolid5Online,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::YamagiQuakeII,
         {
             AppNameYamagiQuake2,
@@ -1379,6 +1420,14 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::DDraceNetwork,
         {
             AppNameDDraceNetwork,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::ELEX2,
+        {
+            AppNameELEX2,
             PatternEnd
         }
     },
@@ -1436,6 +1485,14 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::Vkd3dEngine,
         {
             AppEngineVKD3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::DXVK,
+        {
+            AppEngineDXVK,
             PatternEnd
         }
     }

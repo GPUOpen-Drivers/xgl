@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -174,6 +174,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) != 0);
         }
 
+        const char* pEnableInternalCacheToDisk = getenv("AMD_VK_ENABLE_INTERNAL_PIPELINECACHING_TO_DISK");
+        if (pEnableInternalCacheToDisk != nullptr)
+        {
+            m_settings.enableInternalPipelineCachingToDisk = (atoi(pEnableInternalCacheToDisk) != 0);
+        }
+
         // In general, DCC is very beneficial for color attachments, 2D, 3D shader storage resources that have BPP>=32.
         // If this is completely offset, maybe by increased shader read latency or partial writes of DCC blocks, it should
         // be debugged on a case by case basis.
@@ -219,10 +225,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         {
             m_settings.disableImplicitInvariantExports = false;
-
-#if VKI_BUILD_GFX11
-            m_settings.optimizeTessFactor = true;
-#endif
         }
 
 #if VKI_BUILD_GFX11
@@ -494,10 +496,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // Disable image type checking on Navi10 to avoid 2% loss.
             m_settings.disableImageResourceTypeCheck = true;
 
+            m_settings.enableGraphicsPipelineLibraries = true;
         }
 
         if (appProfile == AppProfile::CSGO)
         {
+            m_settings.enableGraphicsPipelineLibraries = true;
+
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
 
@@ -861,8 +866,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
 
             m_settings.ac01WaNotNeeded = true;
-
-            m_settings.disable3dLinearImageFormatSupport = false;
         }
 
         if (appProfile == AppProfile::GhostReconBreakpoint)
@@ -1131,8 +1134,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::AvoidCpuMemoryCoher;
             }
-            const char *option = "-use-register-field-format=0";
-            Util::Strncpy(&m_settings.llpcOptions[0], option, strlen(option) + 1);
         }
 
         if (appProfile == AppProfile::WarThunder)
@@ -1259,6 +1260,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.padVertexBuffers = true;
         }
 
+        if (appProfile == AppProfile::MetalGearSolid5Online)
+        {
+            m_settings.padVertexBuffers = true;
+        }
+
         if (appProfile == AppProfile::YamagiQuakeII)
         {
             m_settings.forceImageSharingMode =
@@ -1289,6 +1295,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (appProfile == AppProfile::SaintsRowV)
         {
             m_settings.barrierFilterOptions = BarrierFilterOptions::FlushOnHostMask;
+
         }
 
         if ((appProfile == AppProfile::HalfLifeAlyx) ||
@@ -1344,6 +1351,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (appProfile == AppProfile::Vkd3dEngine)
         {
             m_settings.exportNvComputeShaderDerivatives = true;
+            m_settings.exportImageCompressionControl    = true;
+        }
+
+        if ((appProfile == AppProfile::DXVK) ||
+            (appProfile == AppProfile::Vkd3dEngine))
+        {
+            m_settings.disableSingleMipAnisoOverride = false;
         }
 
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);

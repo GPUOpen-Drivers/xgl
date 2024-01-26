@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -140,6 +140,13 @@ public:
     void EndRenderPassResolve();
 
     void PipelineBound(VkPipelineBindPoint bindPoint, VkPipeline pipeline);
+
+    // Functions for handling rgd event annotation.
+    void RgdAnnotateCmdBuf();
+    void RgdAnnotateDispatch(RgpSqttMarkerEventType type, uint32 threadX, uint32 threadY, uint32 threadZ);
+    void RgdAnnotateDraw(RgpSqttMarkerEventType type, uint32 vertexOffset, uint32 instanceOffset, uint32 drawId);
+    void RgdInsertBarrierBeginMarker(Pal::Developer::BarrierType type, uint32 reason);
+    void RgdInsertBarrierEndMarker(Pal::Developer::BarrierOperations operations);
 
     const DispatchTable* GetNextLayer() const
         { return m_pNextLayer; }

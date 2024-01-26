@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -37,6 +37,8 @@ namespace Pal { enum class ResourceMappingNodeType : Pal::uint32; }
 #if VKI_RAY_TRACING
 #define VK_INTERNAL_SHADER_FLAGS_RAY_TRACING_INTERNAL_SHADER_BIT 0x80000000u
 #endif
+
+#define VK_INTERNAL_SHADER_FLAGS_FORCE_UNCACHED_BIT 0x20000000u
 
 namespace vk
 {
