@@ -287,8 +287,9 @@ void CompilerSolution::SetRayTracingFunctionName(
 // =====================================================================================================================
 // Parse and update RayTracingFunctionName of all funcTypes
 void CompilerSolution::UpdateRayTracingFunctionNames(
-    const Device*   pDevice,
-    Vkgc::RtState*  pRtState)
+    const Device*          pDevice,
+    Pal::RayTracingIpLevel rayTracingIp,
+    Vkgc::RtState*         pRtState)
 {
     VkResult result              = VK_ERROR_UNKNOWN;
     GpuRt::IDevice* pGpurtDevice = pDevice->RayTrace()->GpuRt(DefaultDeviceIndex);
@@ -297,28 +298,6 @@ void CompilerSolution::UpdateRayTracingFunctionNames(
     {
         const RuntimeSettings& settings = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings();
         auto pTable                     = &pRtState->gpurtFuncTable;
-
-        Pal::RayTracingIpLevel rayTracingIp =
-            pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.rayTracingIp;
-
-        // Optionally, override RTIP level based on software emulation setting
-        switch (settings.emulatedRtIpLevel)
-        {
-        case EmulatedRtIpLevelNone:
-            break;
-        case HardwareRtIpLevel1_1:
-        case EmulatedRtIpLevel1_1:
-            rayTracingIp = Pal::RayTracingIpLevel::RtIp1_1;
-            break;
-#if VKI_BUILD_GFX11
-        case EmulatedRtIpLevel2_0:
-            rayTracingIp = Pal::RayTracingIpLevel::RtIp2_0;
-            break;
-#endif
-        default:
-            VK_ASSERT(false);
-            break;
-        }
 
         GpuRt::EntryFunctionTable entryFuncTable = {};
         result = PalToVkResult(pGpurtDevice->QueryRayTracingEntryFunctionTable(rayTracingIp, &entryFuncTable));

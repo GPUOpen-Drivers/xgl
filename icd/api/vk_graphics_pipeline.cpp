@@ -58,6 +58,7 @@ namespace vk
 VkResult GraphicsPipeline::CreatePipelineBinaries(
     Device*                                        pDevice,
     const VkGraphicsPipelineCreateInfo*            pCreateInfo,
+    const GraphicsPipelineExtStructs&              extStructs,
     VkPipelineCreateFlags2KHR                      flags,
     const GraphicsPipelineShaderStageInfo*         pShaderInfo,
     const PipelineLayout*                          pPipelineLayout,
@@ -125,6 +126,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                     result = pDefaultCompiler->ConvertGraphicsPipelineInfo(
                         pDevice,
                         pCreateInfo,
+                        extStructs,
                         flags,
                         pShaderInfo,
                         pPipelineLayout,
@@ -162,6 +164,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                 result = pDefaultCompiler->ConvertGraphicsPipelineInfo(
                     pDevice,
                     pCreateInfo,
+                    extStructs,
                     flags,
                     pShaderInfo,
                     pPipelineLayout,
@@ -639,6 +642,7 @@ VkResult GraphicsPipeline::Create(
     Device*                                 pDevice,
     PipelineCache*                          pPipelineCache,
     const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+    const GraphicsPipelineExtStructs&       extStructs,
     VkPipelineCreateFlags2KHR               flags,
     const VkAllocationCallbacks*            pAllocator,
     VkPipeline*                             pPipeline)
@@ -681,7 +685,7 @@ VkResult GraphicsPipeline::Create(
     {
 
         // If pipeline only contains PreRasterizationShaderLib and no fragment shader is in the create info,
-        // we add a null fragement library in order to use fast link.
+        // we add a null fragment library in order to use fast link.
         if ((libInfo.flags.isLibrary == false) &&
             ((libInfo.pPreRasterizationShaderLib != nullptr) && (libInfo.pFragmentShaderLib == nullptr)))
         {
@@ -704,7 +708,7 @@ VkResult GraphicsPipeline::Create(
         if (IsGplFastLinkPossible(libInfo))
         {
             result = pDevice->GetCompiler(DefaultDeviceIndex)->BuildGplFastLinkCreateInfo(
-                pDevice, pCreateInfo, flags, libInfo, pPipelineLayout, &binaryMetadata, &binaryCreateInfo);
+                pDevice, pCreateInfo, extStructs, flags, libInfo, pPipelineLayout, &binaryMetadata, &binaryCreateInfo);
 
             if (result == VK_SUCCESS)
             {
@@ -745,7 +749,11 @@ VkResult GraphicsPipeline::Create(
                     pDevice->GetRuntimeSettings().enablePipelineDump ||
                     pDevice->GetRuntimeSettings().logTagIdMask)
                 {
-                    BuildApiHash(pCreateInfo, flags, &apiPsoHash, &elfHash);
+                    BuildApiHash(pCreateInfo,
+                                flags,
+                                binaryCreateInfo,
+                                &apiPsoHash,
+                                &elfHash);
                     binaryCreateInfo.apiPsoHash = apiPsoHash;
                 }
                 enableFastLink = true;
@@ -759,7 +767,6 @@ VkResult GraphicsPipeline::Create(
         result = BuildShaderStageInfo(pDevice,
             pCreateInfo->stageCount,
             pCreateInfo->pStages,
-            Util::TestAnyFlagSet(flags, VK_PIPELINE_CREATE_LIBRARY_BIT_KHR),
             [](const uint32_t inputIdx, const uint32_t stageIdx)
             {
                 return stageIdx;
@@ -777,7 +784,11 @@ VkResult GraphicsPipeline::Create(
         }
 
         // 4. Build API and ELF hashes
-        BuildApiHash(pCreateInfo, flags, &apiPsoHash, &elfHash);
+        BuildApiHash(pCreateInfo,
+                     flags,
+                     binaryCreateInfo,
+                    &apiPsoHash,
+                    &elfHash);
 
         binaryCreateInfo.apiPsoHash = apiPsoHash;
 
@@ -787,6 +798,7 @@ VkResult GraphicsPipeline::Create(
             result = CreatePipelineBinaries(
                 pDevice,
                 pCreateInfo,
+                extStructs,
                 flags,
                 &shaderStageInfo,
                 pPipelineLayout,
@@ -807,6 +819,7 @@ VkResult GraphicsPipeline::Create(
         BuildPipelineObjectCreateInfo(
             pDevice,
             pCreateInfo,
+            extStructs,
             flags,
             &pipelineOptimizerKey,
             &binaryMetadata,
@@ -872,6 +885,7 @@ VkResult GraphicsPipeline::Create(
                                                   &binaryCreateInfo,
                                                   &shaderStageInfo,
                                                   &objectCreateInfo,
+                                                  extStructs,
                                                   &elfHash);
         if (result == VK_SUCCESS)
         {
@@ -1040,6 +1054,7 @@ VkResult GraphicsPipeline::BuildDeferCompileWorkload(
     GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
     GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
     GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
+    const GraphicsPipelineExtStructs& extStructs,
     Util::MetroHash::Hash*            pElfHash)
 {
     VkResult result = VK_SUCCESS;
@@ -1092,6 +1107,8 @@ VkResult GraphicsPipeline::BuildDeferCompileWorkload(
         pCreateInfo->shaderStageInfo  = *pShaderStageInfo;
         pCreateInfo->binaryCreateInfo = *pBinaryCreateInfo;
         pCreateInfo->objectCreateInfo = *pObjectCreateInfo;
+
+        pCreateInfo->extStructs       = extStructs;
         pCreateInfo->elfHash          = *pElfHash;
 
         pCreateInfo->binaryCreateInfo.pipelineInfo.enableEarlyCompile = false;
@@ -1192,6 +1209,7 @@ void GraphicsPipeline::ExecuteDeferCreateOptimizedPipeline(
                                                          &pCreateInfo->binaryCreateInfo,
                                                          &pCreateInfo->shaderStageInfo,
                                                          &pCreateInfo->objectCreateInfo,
+                                                         pCreateInfo->extStructs,
                                                          &pCreateInfo->elfHash);
 }
 
@@ -1202,6 +1220,7 @@ VkResult GraphicsPipeline::DeferCreateOptimizedPipeline(
     GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
     GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
     GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
+    const GraphicsPipelineExtStructs& extStructs,
     Util::MetroHash::Hash*            pElfHash)
 {
     VkResult              result = VK_SUCCESS;
@@ -1226,6 +1245,7 @@ VkResult GraphicsPipeline::DeferCreateOptimizedPipeline(
     {
         result = CreatePipelineBinaries(pDevice,
                                         nullptr,
+                                        extStructs,
                                         0,
                                         pShaderStageInfo,
                                         nullptr,

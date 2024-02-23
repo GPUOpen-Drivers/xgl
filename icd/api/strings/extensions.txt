@@ -36,6 +36,7 @@ VK_KHR_external_semaphore
 VK_KHR_external_semaphore_fd
 VK_KHR_external_fence
 VK_KHR_external_fence_fd
+VK_KHR_line_rasterization
 VK_KHR_maintenance1
 VK_KHR_maintenance2
 VK_KHR_push_descriptor
@@ -43,6 +44,7 @@ VK_KHR_relaxed_block_layout
 VK_KHR_sampler_mirror_clamp_to_edge
 VK_KHR_shader_draw_parameters
 VK_KHR_shader_float_controls
+VK_KHR_shader_float_controls2
 VK_KHR_swapchain
 VK_KHR_image_format_list
 VK_KHR_swapchain_mutable_format
@@ -151,6 +153,8 @@ VK_KHR_pipeline_library
 VK_KHR_shader_non_semantic_info
 VK_GOOGLE_user_type
 VK_KHR_incremental_present
+VK_KHR_index_type_uint8
+VK_KHR_load_store_op_none
 VK_EXT_device_memory_report
 VK_EXT_robustness2
 VK_EXT_extended_dynamic_state
@@ -176,6 +180,7 @@ VK_KHR_zero_initialize_workgroup_memory
 VK_EXT_load_store_op_none
 VK_KHR_maintenance4
 VK_KHR_maintenance5
+VK_KHR_maintenance6
 VK_AMD_shader_early_and_late_fragment_tests
 VK_EXT_mesh_shader
 VK_EXT_image_view_min_lod
@@ -191,6 +196,7 @@ VK_EXT_depth_clamp_zero_one
 VK_EXT_primitives_generated_query
 VK_EXT_non_seamless_cube_map
 VK_EXT_image_sliced_view_of_3d
+VK_KHR_shader_maximal_reconvergence
 VK_EXT_shader_module_identifier
 VK_EXT_extended_dynamic_state3
 VK_KHR_map_memory2
@@ -202,6 +208,9 @@ VK_EXT_physical_device_drm
 VK_KHR_cooperative_matrix
 VK_EXT_texture_compression_astc_hdr
 VK_EXT_image_drm_format_modifier
+VK_KHR_shader_expect_assume
+VK_KHR_shader_subgroup_rotate
+VK_KHR_shader_quad_control
 VK_KHR_vertex_attribute_divisor
 VK_EXT_frame_boundary
 VK_EXT_image_compression_control

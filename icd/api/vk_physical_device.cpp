@@ -4153,6 +4153,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_FLOAT_CONTROLS));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_CREATE_RENDERPASS2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CALIBRATED_TIMESTAMPS));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_CALIBRATED_TIMESTAMPS));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_HDR_METADATA));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SAMPLE_LOCATIONS));
 
@@ -4353,6 +4354,13 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_BORDER_COLOR_SWIZZLE));
     }
 
+#if VKI_BUILD_GFX11
+    if ((pPhysicalDevice == nullptr) || (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp11_0))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PRIMITIVES_GENERATED_QUERY));
+    }
+#endif
+
     if (IsKhrCooperativeMatrixSupported(pPhysicalDevice))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COOPERATIVE_MATRIX));
@@ -4370,7 +4378,13 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(NV_COMPUTE_SHADER_DERIVATIVES));
     }
 
+    if ((pPhysicalDevice == nullptr) || (pPhysicalDevice->GetRuntimeSettings().enableGraphicsPipelineLibraries))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_GRAPHICS_PIPELINE_LIBRARY));
+    }
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE5));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE6));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PUSH_DESCRIPTOR));
 
@@ -4399,6 +4413,19 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE3));
 
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_INPUT_DYNAMIC_STATE));
+
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_EXPECT_ASSUME));
+
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_ROTATE));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_FLOAT_CONTROLS2));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_QUAD_CONTROL));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VERTEX_ATTRIBUTE_DIVISOR));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_INDEX_TYPE_UINT8));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_LINE_RASTERIZATION));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_LOAD_STORE_OP_NONE));
 
     bool disableAMDVendorExtensions = false;
     if (pPhysicalDevice != nullptr)
@@ -4998,7 +5025,9 @@ void PhysicalDevice::GetPhysicalDeviceSubgroupProperties(
                             VK_SUBGROUP_FEATURE_CLUSTERED_BIT |
                             VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
                             VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
-                            VK_SUBGROUP_FEATURE_QUAD_BIT;
+                            VK_SUBGROUP_FEATURE_QUAD_BIT |
+                            VK_SUBGROUP_FEATURE_ROTATE_BIT_KHR |
+                            VK_SUBGROUP_FEATURE_ROTATE_CLUSTERED_BIT_KHR;
 
     *pQuadOperationsInAllStages = VK_TRUE;
 }
@@ -6930,6 +6959,19 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceMaintenance6FeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->maintenance6 = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT*>(pHeader);
@@ -7127,6 +7169,32 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MAXIMAL_RECONVERGENCE_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderMaximalReconvergence = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT_CONTROLS_2_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderFloatControls2FeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderFloatControls2 = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT*>(pHeader);
@@ -7218,6 +7286,43 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     pExtInfo->shaderModuleIdentifier = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EXPECT_ASSUME_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderExpectAssumeFeaturesKHR*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderExpectAssume = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_ROTATE_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderSubgroupRotateFeaturesKHR*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderSubgroupRotate = VK_TRUE;
+                    pExtInfo->shaderSubgroupRotateClustered = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_QUAD_CONTROL_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderQuadControlFeaturesKHR*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderQuadControl = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -7653,7 +7758,7 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->transformFeedbackDraw                      = VK_TRUE;
             pProps->transformFeedbackQueries                   = VK_TRUE;
             pProps->transformFeedbackStreamsLinesTriangles     = VK_TRUE;
-            pProps->transformFeedbackRasterizationStreamSelect = VK_FALSE;
+            pProps->transformFeedbackRasterizationStreamSelect = VK_TRUE;
             break;
         }
 
@@ -8096,6 +8201,16 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_PROPERTIES_KHR:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceMaintenance6PropertiesKHR*>(pNext);
+
+            pProps->blockTexelViewCompatibleMultipleLayers = VK_TRUE;
+            pProps->maxCombinedImageSamplerDescriptorCount = MaxCombinedImageSamplerDescriptorCount;
+            pProps->fragmentShadingRateClampCombinerInputs = VK_TRUE;
+            break;
+        }
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_PROPERTIES_EXT:
         {
             auto* pProps = static_cast<VkPhysicalDeviceProvokingVertexPropertiesEXT*>(pNext);
@@ -8228,6 +8343,7 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 #endif
+
         default:
             break;
         }

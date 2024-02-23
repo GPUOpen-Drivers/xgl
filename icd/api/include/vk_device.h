@@ -165,7 +165,9 @@ public:
             uint32                assumeDynamicTopologyInLibs          : 1;
             // True if EXT_PRIMITIVES_GENERATED_QUERY is enabled.
             uint32                primitivesGeneratedQuery             : 1;
-            uint32                reserved                             : 14;
+            uint32                reserved1                            : 1;
+
+            uint32                reserved                             : 13;
         };
 
         uint32 u32All;

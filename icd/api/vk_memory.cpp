@@ -939,7 +939,8 @@ Memory::Memory(
     m_sharedGpuMemoryHandle(sharedGpuMemoryHandle),
     m_priority(info.priority, info.priorityOffset),
     m_sizeAccountedForDeviceMask(0),
-    m_primaryDeviceIndex(primaryIndex)
+    m_primaryDeviceIndex(primaryIndex),
+    m_mappedPointer(nullptr)
 {
     m_size = info.size;
     m_heap0 = info.heaps[0];
@@ -962,7 +963,8 @@ Memory::Memory(
     m_pExternalPalImage(nullptr),
     m_sharedGpuMemoryHandle(0),
     m_sizeAccountedForDeviceMask(0),
-    m_primaryDeviceIndex(primaryIndex)
+    m_primaryDeviceIndex(primaryIndex),
+    m_mappedPointer(nullptr)
 {
     // PAL info is not available for memory objects allocated for presentable images
     m_size = 0;
@@ -1006,6 +1008,12 @@ void Memory::Free(
                 {
                     Pal::IDevice* pPalDevice = pDevice->PalDevice(i);
                     pDevice->RemoveMemReference(pPalDevice, pGpuMemory);
+
+                    if (m_mappedPointer != nullptr)
+                    {
+                        pGpuMemory->Unmap();
+                        m_mappedPointer = nullptr;
+                    }
 
                     // Destroy PAL memory object
                     pGpuMemory->Destroy();
@@ -1156,12 +1164,15 @@ Pal::OsExternalHandle Memory::GetShareHandle(
 // =====================================================================================================================
 // Map GPU memory into client address space. Simply calls through to PAL.
 VkResult Memory::Map(
+    Device*      pDevice,
     VkFlags      flags,
     VkDeviceSize offset,
     VkDeviceSize size,
     void**       ppData)
 {
     VkResult result = VK_SUCCESS;
+
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
     // According to spec, "memory must not have been allocated with multiple instances"
     // if it is multi-instance allocation, we should just return VK_ERROR_MEMORY_MAP_FAILED
@@ -1172,13 +1183,24 @@ VkResult Memory::Map(
         {
             void* pData;
 
-            palResult = PalMemory(m_primaryDeviceIndex)->Map(&pData);
-
-            if (palResult == Pal::Result::Success)
+            if (m_mappedPointer != nullptr)
             {
-                *ppData = Util::VoidPtrInc(pData, static_cast<size_t>(offset));
-
+                pData = m_mappedPointer;
             }
+            else
+            {
+                palResult = PalMemory(m_primaryDeviceIndex)->Map(&pData);
+
+                if (palResult == Pal::Result::Success)
+                {
+                    if (settings.skipUnMapMemory)
+                    {
+                        m_mappedPointer = pData;
+                    }
+                }
+            }
+
+            *ppData = Util::VoidPtrInc(pData, static_cast<size_t>(offset));
             result = (palResult == Pal::Result::Success) ? VK_SUCCESS : VK_ERROR_MEMORY_MAP_FAILED;
         }
         else
@@ -1202,8 +1224,11 @@ void Memory::Unmap(void)
 
     VK_ASSERT(m_flags.multiInstance == 0);
 
-    palResult = PalMemory(m_primaryDeviceIndex)->Unmap();
-    VK_ASSERT(palResult == Pal::Result::Success);
+    if (m_mappedPointer == nullptr)
+    {
+        palResult = PalMemory(m_primaryDeviceIndex)->Unmap();
+        VK_ASSERT(palResult == Pal::Result::Success);
+    }
 }
 
 // =====================================================================================================================
@@ -1438,7 +1463,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkMapMemory(
     VkMemoryMapFlags                            flags,
     void**                                      ppData)
 {
-    return Memory::ObjectFromHandle(memory)->Map(flags, offset, size, ppData);
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return Memory::ObjectFromHandle(memory)->Map(pDevice, flags, offset, size, ppData);
 }
 
 // =====================================================================================================================
@@ -1455,7 +1482,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkMapMemory2KHR(
     const                                       VkMemoryMapInfoKHR* pMemoryMapInfo,
     void**                                      ppData)
 {
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
     return Memory::ObjectFromHandle(pMemoryMapInfo->memory)->Map(
+            pDevice,
             pMemoryMapInfo->flags,
             pMemoryMapInfo->offset,
             pMemoryMapInfo->size,

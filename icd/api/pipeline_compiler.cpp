@@ -623,8 +623,6 @@ VkResult PipelineCompiler::BuildShaderModule(
     const VkShaderModuleCreateFlags flags,
     const VkShaderModuleCreateFlags internalShaderFlags,
     const Vkgc::BinaryData&         shaderBinary,
-    const bool                      adaptForFastLink,
-    bool                            isInternal,
     ShaderModuleHandle*             pShaderModule)
 {
     const RuntimeSettings* pSettings = &m_pPhysicalDevice->GetRuntimeSettings();
@@ -637,8 +635,6 @@ VkResult PipelineCompiler::BuildShaderModule(
     Util::MetroHash64 hasher;
     hasher.Update(reinterpret_cast<const uint8_t*>(shaderBinary.pCode), shaderBinary.codeSize);
     hasher.Finalize(stableHash.bytes);
-
-    hasher.Update(adaptForFastLink);
     hasher.Finalize(uniqueHash.bytes);
 
     bool findReplaceShader = false;
@@ -670,8 +666,6 @@ VkResult PipelineCompiler::BuildShaderModule(
                 flags,
                 internalShaderFlags,
                 finalData,
-                adaptForFastLink,
-                isInternal,
                 pShaderModule,
                 PipelineOptimizerKey{});
 
@@ -713,9 +707,10 @@ bool PipelineCompiler::IsValidShaderModule(
     const ShaderModuleHandle* pShaderModule) const
 {
     bool isValid = false;
-
-    isValid |= (pShaderModule->pLlpcShaderModule != nullptr);
-
+    if (pShaderModule != nullptr)
+    {
+        isValid |= (pShaderModule->pLlpcShaderModule != nullptr);
+    }
     return isValid;
 }
 
@@ -735,21 +730,12 @@ void PipelineCompiler::FreeShaderModule(
         {
             m_compilerSolutionLlpc.FreeShaderModule(pShaderModule);
             auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
-            if (pShaderModule->elfPackage.codeSize > 0)
-            {
-                pInstance->FreeMem(const_cast<void*>(pShaderModule->elfPackage.pCode));
-            }
             pInstance->FreeMem(pShaderModule->pRefCount);
         }
     }
     else
     {
         m_compilerSolutionLlpc.FreeShaderModule(pShaderModule);
-        auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
-        if (pShaderModule->elfPackage.codeSize > 0)
-        {
-            pInstance->FreeMem(const_cast<void*>(pShaderModule->elfPackage.pCode));
-        }
     }
 }
 
@@ -816,7 +802,7 @@ bool PipelineCompiler::ReplacePipelineShaderModule(
         if (LoadReplaceShaderBinary(hash64, &shaderBinary))
         {
             VkResult result =
-                BuildShaderModule(pDevice, 0, 0, shaderBinary, false, false, pShaderModule);
+                BuildShaderModule(pDevice, 0, 0, shaderBinary, pShaderModule);
 
             if (result == VK_SUCCESS)
             {
@@ -1217,15 +1203,16 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 VkResult PipelineCompiler::CreateGraphicsShaderBinary(
     const Device*                     pDevice,
     PipelineCache*                    pPipelineCache,
-    const ShaderStage                 stage,
+    GraphicsLibraryType               gplType,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-    ShaderModuleHandle*               pModule)
+    GplModuleState*                  pModuleState)
 {
     VkResult result = VK_SUCCESS;
 
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
-    GraphicsLibraryType gplType = GetGraphicsLibraryType(stage);
-    uint64_t libraryHash = Vkgc::IPipelineDumper::GetGraphicsShaderBinaryHash(&pCreateInfo->pipelineInfo, stage);
+    uint64_t libraryHash = Vkgc::IPipelineDumper::GetGraphicsShaderBinaryHash(
+        &pCreateInfo->pipelineInfo,
+        (gplType == GraphicsLibraryPreRaster) ? ShaderStageVertex : ShaderStageFragment);
     VK_ASSERT(pCreateInfo->libraryHash[gplType] == libraryHash || pCreateInfo->libraryHash[gplType] == 0);
     pCreateInfo->libraryHash[gplType] = libraryHash;
 
@@ -1250,10 +1237,10 @@ VkResult PipelineCompiler::CreateGraphicsShaderBinary(
     result = GetSolution(pCreateInfo->compilerType)->CreateGraphicsShaderBinary(
                 pDevice,
                 pPipelineCache,
-                stage,
+                gplType,
                 pCreateInfo,
                 pPipelineDumpHandle,
-                pModule);
+                pModuleState);
 
     if (pPipelineDumpHandle != nullptr)
     {
@@ -1278,6 +1265,7 @@ VkResult PipelineCompiler::CreateColorExportShaderLibrary(
     bool cacheHit                   = false;
     Util::MetroHash::Hash cacheId   = {};
     GetColorExportShaderCacheId(pCreateInfo, &cacheId);
+    pCreateInfo->libraryHash[GraphicsLibraryColorExport] = MetroHash::Compact64(&cacheId);
 
     // Look up cache with respect to the hash
     {
@@ -1419,10 +1407,25 @@ VkResult PipelineCompiler::CreateGraphicsShaderLibrary(
 }
 
 // =====================================================================================================================
-// Free and only free early compiled shader in ShaderModuleHandle
-void PipelineCompiler::FreeGraphicsShaderBinary(
-    ShaderModuleHandle* pShaderModule)
+// Free variables in GplModuleState
+void PipelineCompiler::FreeGplModuleState(
+    GplModuleState* pModuleState)
 {
+    if (IsValidShaderModule(&pModuleState->moduleHandle))
+    {
+        FreeShaderModule(&pModuleState->moduleHandle);
+    }
+
+    if (pModuleState->elfPackage.pCode != nullptr)
+    {
+        m_pPhysicalDevice->VkInstance()->FreeMem(const_cast<void*>(pModuleState->elfPackage.pCode));
+    }
+
+    if (pModuleState->pFsOutputMetaData != nullptr)
+    {
+        m_pPhysicalDevice->VkInstance()->FreeMem(pModuleState->pFsOutputMetaData);
+    }
+
 }
 
 // =====================================================================================================================
@@ -1841,7 +1844,6 @@ static void MergePipelineOptions(
     pDst->robustBufferAccess                    |= src.robustBufferAccess;
     pDst->enableRelocatableShaderElf            |= src.enableRelocatableShaderElf;
     pDst->disableImageResourceCheck             |= src.disableImageResourceCheck;
-    pDst->enableScratchAccessBoundsChecks       |= src.enableScratchAccessBoundsChecks;
     pDst->extendedRobustness.nullDescriptor     |= src.extendedRobustness.nullDescriptor;
     pDst->extendedRobustness.robustBufferAccess |= src.extendedRobustness.robustBufferAccess;
     pDst->extendedRobustness.robustImageAccess  |= src.extendedRobustness.robustImageAccess;
@@ -2383,9 +2385,6 @@ static void BuildPipelineShadersInfo(
 
     // Uber fetch shader is actually used in the following scenes:
     // * enableUberFetchShader or enableEarlyCompile is set as TRUE in panel.
-    // * When creating shader module, adaptForFastLink parameter of PipelineCompiler::BuildShaderModule() is set as
-    //   TRUE.  This may happen when shader is created during pipeline creation, and that pipeline is a library, not
-    //   executable.  More details can be found in Pipeline::BuildShaderStageInfo().
     // * When creating pipeline, GraphicsPipelineBuildInfo::enableUberFetchShader controls the actual enablement. It is
     //   only set when Vertex Input Interface section (VII) is not available and Pre-Rasterization Shader (PRS) is
     //   available, or inherits from its PRS parent (referenced library). However, enableUberFetchShader would also be
@@ -2410,6 +2409,7 @@ static void BuildPipelineShadersInfo(
 static void BuildColorBlendState(
     const Device*                              pDevice,
     const VkPipelineColorBlendStateCreateInfo* pCb,
+    const GraphicsPipelineExtStructs&          extStructs,
     const VkPipelineRenderingCreateInfo*       pRendering,
     uint64_t                                   dynamicStateFlags,
     const RenderPass*                          pRenderPass,
@@ -2433,13 +2433,13 @@ static void BuildColorBlendState(
         else if (pCb != nullptr)
         {
             pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable =
-                GraphicsPipelineCommon::GetDualSourceBlendEnableState(pDevice, pCb);
+                GraphicsPipelineCommon::GetDualSourceBlendEnableState(pDevice, pCb, extStructs);
         }
 
         for (uint32_t i = 0; i < numColorTargets; ++i)
         {
-
-            auto pLlpcCbDst = &pCreateInfo->pipelineInfo.cbState.target[i];
+            uint32_t location = i;
+            auto pLlpcCbDst = &pCreateInfo->pipelineInfo.cbState.target[location];
 
             VkFormat cbFormat = VK_FORMAT_UNDEFINED;
 
@@ -2688,6 +2688,7 @@ static void BuildFragmentShaderState(
 static void BuildFragmentOutputInterfaceState(
     const Device*                       pDevice,
     const VkGraphicsPipelineCreateInfo* pIn,
+    const GraphicsPipelineExtStructs&   extStructs,
     uint64_t                            dynamicStateFlags,
     GraphicsPipelineBinaryCreateInfo*   pCreateInfo)
 {
@@ -2706,6 +2707,7 @@ static void BuildFragmentOutputInterfaceState(
 
     BuildColorBlendState(pDevice,
                          pIn->pColorBlendState,
+                         extStructs,
                          pPipelineRenderingCreateInfoKHR,
                          dynamicStateFlags,
                          pRenderPass, pIn->subpass, pCreateInfo
@@ -2910,6 +2912,7 @@ VkResult PipelineCompiler::UploadInternalBufferData(
 VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     Device*                                         pDevice,
     const VkGraphicsPipelineCreateInfo*             pIn,
+    const GraphicsPipelineExtStructs&               extStructs,
     VkPipelineCreateFlags2KHR                       flags,
     const GraphicsPipelineShaderStageInfo*          pShaderInfo,
     const PipelineLayout*                           pPipelineLayout,
@@ -2997,7 +3000,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
             if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)
             {
-                BuildFragmentOutputInterfaceState(pDevice, pIn, dynamicStateFlags, pCreateInfo);
+                BuildFragmentOutputInterfaceState(pDevice, pIn, extStructs, dynamicStateFlags, pCreateInfo);
             }
             else if (libInfo.pFragmentOutputInterfaceLib != nullptr)
             {
@@ -3085,6 +3088,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 VkResult PipelineCompiler::BuildGplFastLinkCreateInfo(
     Device*                                         pDevice,
     const VkGraphicsPipelineCreateInfo*             pIn,
+    const GraphicsPipelineExtStructs&               extStructs,
     VkPipelineCreateFlags2KHR                       flags,
     const GraphicsPipelineLibraryInfo&              libInfo,
     const PipelineLayout*                           pPipelineLayout,
@@ -3092,6 +3096,9 @@ VkResult PipelineCompiler::BuildGplFastLinkCreateInfo(
     GraphicsPipelineBinaryCreateInfo*               pCreateInfo)
 {
     VK_ASSERT(pIn != nullptr);
+    VK_ASSERT(libInfo.pPreRasterizationShaderLib != nullptr);
+    VK_ASSERT(libInfo.pFragmentShaderLib != nullptr);
+
     VkResult result = VK_SUCCESS;
 
     pCreateInfo->pBinaryMetadata = pBinaryMetadata;
@@ -3100,10 +3107,8 @@ VkResult PipelineCompiler::BuildGplFastLinkCreateInfo(
                              0 : VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT;
     pCreateInfo->libFlags |= (libInfo.pPreRasterizationShaderLib == nullptr) ?
                              0 : VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT;
-    pCreateInfo->libFlags |= (libInfo.pFragmentShaderLib == nullptr) ?
-                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT;
-    pCreateInfo->libFlags |= (libInfo.pFragmentOutputInterfaceLib == nullptr) ?
-                             0 : VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
+    pCreateInfo->libFlags |= VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT;
+    pCreateInfo->libFlags |= VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
 
     VkShaderStageFlagBits activeStages = GraphicsPipelineCommon::GetActiveShaderStages(pIn, &libInfo);
     uint64_t dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
@@ -3139,7 +3144,7 @@ VkResult PipelineCompiler::BuildGplFastLinkCreateInfo(
         {
             if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)
             {
-                BuildFragmentOutputInterfaceState(pDevice, pIn, dynamicStateFlags, pCreateInfo);
+                BuildFragmentOutputInterfaceState(pDevice, pIn, extStructs, dynamicStateFlags, pCreateInfo);
             }
             else if (libInfo.pFragmentOutputInterfaceLib != nullptr)
             {
@@ -3160,7 +3165,7 @@ VkResult PipelineCompiler::BuildGplFastLinkCreateInfo(
         for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
         {
             shouldCompile |= (GetSolution(pCreateInfo->compilerType)->
-                IsGplFastLinkCompatible(pDevice, deviceIdx, pCreateInfo) == false);
+                IsGplFastLinkCompatible(pDevice, deviceIdx, pCreateInfo, libInfo) == false);
         }
 
         if (shouldCompile)
@@ -4400,7 +4405,30 @@ void PipelineCompiler::SetRayTracingState(
     }
 #endif
 
-    switch (deviceProp.gfxipProperties.rayTracingIp)
+    Pal::RayTracingIpLevel rayTracingIp =
+        pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.rayTracingIp;
+
+    // Optionally, override RTIP level based on software emulation setting
+    switch (settings.emulatedRtIpLevel)
+    {
+    case EmulatedRtIpLevelNone:
+        break;
+    case HardwareRtIpLevel1_1:
+    case EmulatedRtIpLevel1_1:
+        rayTracingIp = Pal::RayTracingIpLevel::RtIp1_1;
+        break;
+#if VKI_BUILD_GFX11
+    case EmulatedRtIpLevel2_0:
+        rayTracingIp = Pal::RayTracingIpLevel::RtIp2_0;
+        break;
+#endif
+    default:
+        VK_ASSERT(false);
+        break;
+    }
+
+    // Set frontend compiler version from rayTracingIp
+    switch (rayTracingIp)
     {
     case Pal::RayTracingIpLevel::RtIp1_0:
         pRtState->rtIpVersion = Vkgc::RtIpVersion({ 1, 0 });
@@ -4426,7 +4454,7 @@ void PipelineCompiler::SetRayTracingState(
     pRtState->gpurtShaderLibrary.pCode = codePatch.pSpvCode;
     pRtState->gpurtShaderLibrary.codeSize = codePatch.spvSize;
 
-    CompilerSolution::UpdateRayTracingFunctionNames(pDevice, pRtState);
+    CompilerSolution::UpdateRayTracingFunctionNames(pDevice, rayTracingIp, pRtState);
 
     pRtState->rtIpOverride = settings.emulatedRtIpLevel != EmulatedRtIpLevelNone;
 

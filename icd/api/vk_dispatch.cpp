@@ -623,6 +623,8 @@ void DispatchTable::Init()
     INIT_DISPATCH_ALIAS(vkResetQueryPoolEXT                             ,
                         vkResetQueryPool                                );
     INIT_DISPATCH_ENTRY(vkCmdSetLineStippleEXT                          );
+    INIT_DISPATCH_ALIAS(vkCmdSetLineStippleKHR                          ,
+                        vkCmdSetLineStippleEXT                          );
 
     INIT_DISPATCH_ENTRY(vkSetDeviceMemoryPriorityEXT                    );
     INIT_DISPATCH_ENTRY(vkGetDeviceFaultInfoEXT                         );
@@ -822,6 +824,13 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetDeviceImageSubresourceLayoutKHR            );
     INIT_DISPATCH_ENTRY(vkGetImageSubresourceLayout2KHR                 );
     INIT_DISPATCH_ENTRY(vkCmdBindIndexBuffer2KHR                        );
+
+    INIT_DISPATCH_ENTRY(vkCmdBindDescriptorSets2KHR                     );
+    INIT_DISPATCH_ENTRY(vkCmdPushConstants2KHR                          );
+    INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSet2KHR                      );
+    INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSetWithTemplate2KHR          );
+    INIT_DISPATCH_ENTRY(vkCmdSetDescriptorBufferOffsets2EXT             );
+    INIT_DISPATCH_ENTRY(vkCmdBindDescriptorBufferEmbeddedSamplers2EXT   );
 
 }
 

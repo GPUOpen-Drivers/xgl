@@ -121,6 +121,7 @@ public:
         Pal::IGpuMemory**   pPalMemory);
 
     VkResult Map(
+        Device*         pDevice,
         VkFlags         flags,
         VkDeviceSize    offset,
         VkDeviceSize    size,
@@ -223,6 +224,8 @@ private:
     MemoryPriority        m_priority;
     uint32_t              m_sizeAccountedForDeviceMask;
     uint32_t              m_primaryDeviceIndex;
+    // This will be non-null only when we are skipping the unmap
+    void*                 m_mappedPointer;
 
     union
     {

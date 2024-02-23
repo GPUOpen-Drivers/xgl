@@ -4165,6 +4165,44 @@
       "Scope": "Driver"
     },
     {
+      "Name": "RtGpuDebugFlags",
+      "Description": "Gpu Debug flags for GPU RT Debug feature (asserts/printf)",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "Defaults": {
+        "Default": "NoFlag"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "RtGpuDebugFlags",
+        "Values": [
+          {
+            "Name": "NoFlag",
+            "Value": 0,
+            "Description": "Disable all gpu debug flags"
+          },
+          {
+            "Name": "HostAssert",
+            "Value": 1,
+            "Description": "Enable Asserts"
+          },
+          {
+            "Name": "HostPrint",
+            "Value": 2,
+            "Description": "Enable Prints"
+          },
+          {
+            "Name": "ShaderHalt",
+            "Value": 4,
+            "Description": "Enable Halt shader"
+          }
+        ]
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
       "Name": "RtEnableCompilePipelineLibrary",
       "Description": "Compile pipeline library as a ShaderLibrary.",
       "Tags": [
@@ -5172,6 +5210,52 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Number of Rebraid Iterations",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 1
+      },
+      "Type": "uint32",
+      "Name": "NumRebraidIterations",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Rebraid Quality Heuristic Type",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "RebraidQualityHeuristicInstanceEmptyArea"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "RebraidQualityHeuristicType",
+        "Values": [
+          {
+            "Name": "RebraidQualityHeuristicInstanceEmptyArea",
+            "Value": 0,
+            "Description": "Uses SA of empty space due to opening"
+          },
+          {
+            "Name": "RebraidQualityHeuristicInstanceSurfaceArea",
+            "Value": 1,
+            "Description": "Uses SA of Instance"
+          }
+        ]
+      },
+      "Type": "enum",
+      "Name": "RebraidQualityHeuristicType",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Fast BVH Build with no Morton Code sorting. Applies to BVHs with up to a wave size number of primitives.",
       "Tags": [
         "Ray Tracing"
@@ -5184,6 +5268,36 @@
       },
       "Type": "uint32",
       "Name": "FastBuildThreshold",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable pair compression in early build stage, i.e., During Encode phase.",
+      "Tags": [
+        "RayTracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "EnableEarlyPairCompression",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Triangle pair search radius during EarlyPairCompression.",
+      "Tags": [
+        "RayTracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "8"
+      },
+      "Type": "uint32",
+      "Name": "TrianglePairingSearchRadius",
       "Scope": "Driver"
     },
     {
@@ -8803,11 +8917,23 @@
         "General"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Type": "bool",
       "Scope": "Driver",
       "Name": "Disable3dLinearImageFormatSupport"
+    },
+    {
+      "Name": "SkipUnMapMemory",
+      "Description": "skip UnMap when application repeately calling map/unmap on the same memory object to avoid extra paging traffic in kernel.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
     },
     {
       "Description": "Enable Graphics Pipeline Libraries",
@@ -8815,11 +8941,23 @@
         "Pipeline Options"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Type": "bool",
       "Scope": "Driver",
       "Name": "EnableGraphicsPipelineLibraries"
+    },
+    {
+      "Description": "Enable ColorClearAutoSync that tells PAL to automatically insert any required barriers between color image clears",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "EnableColorClearAutoSync"
     }
   ]
 }

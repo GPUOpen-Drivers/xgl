@@ -78,6 +78,15 @@ namespace vk
 {
 namespace
 {
+    constexpr Pal::BufferViewInfo EmptyVertexBufferBinding =
+    {
+        0,  // gpuAddr;
+        0,  // range;
+        0,  // stride;
+        Pal::UndefinedSwizzledFormat,
+        0,  // flags
+    };
+
 // =====================================================================================================================
 // Creates a compatible PAL "clear box" structure from attachment + render area for a renderpass clear.
 Pal::Box BuildClearBox(
@@ -589,7 +598,7 @@ CmdBuffer::CmdBuffer(
     m_debugPrintf(pDevice->VkInstance()->Allocator()),
     m_reverseThreadGroupState(false)
 #if VKI_RAY_TRACING
-    , m_rayTracingIndirectList(pDevice->VkInstance()->Allocator())
+    , m_scratchVidMemList(pDevice->VkInstance()->Allocator())
 #endif
 {
     m_flags.wasBegun = false;
@@ -792,6 +801,7 @@ VkResult CmdBuffer::Initialize(
             VK_ASSERT(palSize == pPalDevice->GetCmdBufferSize(groupCreateInfo, &result));
             VK_ASSERT(result == Pal::Result::Success);
         }
+
     }
 
     if (result == Pal::Result::Success)
@@ -1299,7 +1309,7 @@ VkResult CmdBuffer::Begin(
     ResetState();
 
 #if VKI_RAY_TRACING
-    FreeRayTracingIndirectMemory();
+    FreeRayTracingScratchVidMemory();
 #endif
 
     const PhysicalDevice*        pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
@@ -1828,7 +1838,7 @@ VkResult CmdBuffer::Reset(VkCommandBufferResetFlags flags)
         }
 
 #if VKI_RAY_TRACING
-        FreeRayTracingIndirectMemory();
+        FreeRayTracingScratchVidMemory();
 #endif
 
         result = PalToVkResult(PalCmdBufferReset(releaseResources));
@@ -2069,16 +2079,13 @@ void CmdBuffer::BindPipeline(
         {
         case VK_PIPELINE_BIND_POINT_COMPUTE:
         {
-            if (m_allGpuState.pComputePipeline != pPipeline)
-            {
-                m_allGpuState.pComputePipeline = static_cast<const ComputePipeline*>(pPipeline);
+            m_allGpuState.pComputePipeline = static_cast<const ComputePipeline*>(pPipeline);
 
-                if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute))
-                {
-                    // Defer the binding by invalidating the current PAL compute binding point.  This is because we
-                    // don't know what compute-based binding will be utilized until we see the work command.
-                    m_allGpuState.palToApiPipeline[size_t(Pal::PipelineBindPoint::Compute)] = PipelineBindCount;
-                }
+            if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute))
+            {
+                // Defer the binding by invalidating the current PAL compute binding point.  This is because we
+                // don't know what compute-based binding will be utilized until we see the work command.
+                m_allGpuState.palToApiPipeline[size_t(Pal::PipelineBindPoint::Compute)] = PipelineBindCount;
             }
 
             break;
@@ -2086,16 +2093,13 @@ void CmdBuffer::BindPipeline(
 
         case VK_PIPELINE_BIND_POINT_GRAPHICS:
         {
-            if (m_allGpuState.pGraphicsPipeline != pPipeline)
-            {
-                m_allGpuState.pGraphicsPipeline = static_cast<const GraphicsPipeline*>(pPipeline);
+            m_allGpuState.pGraphicsPipeline = static_cast<const GraphicsPipeline*>(pPipeline);
 
-                // Can bind the graphics pipeline immediately since only API graphics pipelines use the PAL
-                // graphics pipeline.  Note that wave limits may still defer the bind inside RebindPipeline().
-                VK_ASSERT(PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Graphics, PipelineBindGraphics));
+            // Can bind the graphics pipeline immediately since only API graphics pipelines use the PAL
+            // graphics pipeline.  Note that wave limits may still defer the bind inside RebindPipeline().
+            VK_ASSERT(PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Graphics, PipelineBindGraphics));
 
-                RebindPipeline<PipelineBindGraphics, true>();
-            }
+            RebindPipeline<PipelineBindGraphics, true>();
 
             break;
         }
@@ -2103,16 +2107,13 @@ void CmdBuffer::BindPipeline(
 #if VKI_RAY_TRACING
         case VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR:
         {
-            if (m_allGpuState.pRayTracingPipeline != pPipeline)
-            {
-                m_allGpuState.pRayTracingPipeline = static_cast<const RayTracingPipeline*>(pPipeline);
+            m_allGpuState.pRayTracingPipeline = static_cast<const RayTracingPipeline*>(pPipeline);
 
-                if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindRayTracing))
-                {
-                    // Defer the binding by invalidating the current PAL compute binding point.  This is because we
-                    // don't know what compute-based binding will be utilized until we see the work command.
-                    m_allGpuState.palToApiPipeline[size_t(Pal::PipelineBindPoint::Compute)] = PipelineBindCount;
-                }
+            if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindRayTracing))
+            {
+                // Defer the binding by invalidating the current PAL compute binding point.  This is because we
+                // don't know what compute-based binding will be utilized until we see the work command.
+                m_allGpuState.palToApiPipeline[size_t(Pal::PipelineBindPoint::Compute)] = PipelineBindCount;
             }
 
             break;
@@ -2320,7 +2321,7 @@ VkResult CmdBuffer::Destroy(void)
     ReleaseResources();
 
 #if VKI_RAY_TRACING
-    FreeRayTracingIndirectMemory();
+    FreeRayTracingScratchVidMemory();
 
 #endif
 
@@ -2384,6 +2385,7 @@ void CmdBuffer::ReleaseResources()
 
         m_pStackAllocator = nullptr;
     }
+
 }
 
 // =====================================================================================================================
@@ -2887,25 +2889,26 @@ void CmdBuffer::BindIndexBuffer(
 
     DbgBarrierPostCmd(DbgBarrierBindIndexVertexBuffer);
 }
+// =====================================================================================================================
+// A helper to set the per-device vertex buffer binding table to an empty descriptor.
+void CmdBuffer::ClearVertexBufferBindings(
+    uint32_t watermark)
+{
+    for (uint32_t deviceIdx = 0; deviceIdx < m_numPalDevices; deviceIdx++)
+    {
+        std::fill_n(
+            &PerGpuState(deviceIdx)->vbBindings[0],
+            watermark,
+            EmptyVertexBufferBinding);
+
+    }
+}
 
 // =====================================================================================================================
 // Initializes VB binding manager state.  Should be called when the command buffer is being initialized.
 void CmdBuffer::InitializeVertexBuffer()
 {
-    for (uint32 deviceIdx = 0; deviceIdx < m_numPalDevices; deviceIdx++)
-    {
-        Pal::BufferViewInfo* pBindings = &PerGpuState(deviceIdx)->vbBindings[0];
-
-        for (uint32 i = 0; i < Pal::MaxVertexBuffers; ++i)
-        {
-            // Format needs to be set to invalid for struct srv SRDs
-            pBindings[i].swizzledFormat  = Pal::UndefinedSwizzledFormat;
-            pBindings[i].gpuAddr         = 0;
-            pBindings[i].range           = 0;
-            pBindings[i].stride          = 0;
-            pBindings[i].flags.u32All    = 0;
-        }
-    }
+    ClearVertexBufferBindings(Pal::MaxVertexBuffers);
 
     m_vbWatermark = 0;
 }
@@ -2914,21 +2917,63 @@ void CmdBuffer::InitializeVertexBuffer()
 // Called to reset the state of the VB manager because the parent command buffer is being reset.
 void CmdBuffer::ResetVertexBuffer()
 {
-    for (uint32 deviceIdx = 0; deviceIdx < m_numPalDevices; deviceIdx++)
-    {
-        Pal::BufferViewInfo* pBindings = &PerGpuState(deviceIdx)->vbBindings[0];
-
-        for (uint32 i = 0; i < m_vbWatermark; ++i)
-        {
-            pBindings[i].gpuAddr = 0;
-            pBindings[i].range   = 0;
-            pBindings[i].stride  = 0;
-        }
-    }
+    ClearVertexBufferBindings(m_vbWatermark);
 
     m_vbWatermark = 0;
 
     m_uberFetchShaderInternalDataMap.Reset();
+}
+
+// =====================================================================================================================
+// A part of vkCmdBindVertexBuffers implementation.
+void CmdBuffer::BindVertexBuffersUpdateBindingRange(
+    uint32_t                deviceIdx,
+    Pal::BufferViewInfo*    pBinding,
+    Pal::BufferViewInfo*    pEndBinding,
+    uint32_t                inputIdx,
+    const VkBuffer*         pBuffers,
+    const VkDeviceSize*     pOffsets,
+    const VkDeviceSize*     pSizes,
+    const VkDeviceSize*     pStrides)
+{
+    while (pBinding != pEndBinding)
+    {
+        const VkBuffer     buffer = pBuffers[inputIdx];
+        const VkDeviceSize offset = pOffsets[inputIdx];
+
+        if (buffer != VK_NULL_HANDLE)
+        {
+            const Buffer* pBuffer = Buffer::ObjectFromHandle(buffer);
+
+            pBinding->gpuAddr = pBuffer->GpuVirtAddr(deviceIdx) + offset;
+            if ((pSizes != nullptr) && (pSizes[inputIdx] != VK_WHOLE_SIZE))
+            {
+                pBinding->range = pSizes[inputIdx];
+            }
+            else
+            {
+                pBinding->range = pBuffer->GetSize() - offset;
+            }
+        }
+        else
+        {
+            pBinding->gpuAddr = 0;
+            pBinding->range = 0;
+        }
+
+        if (pStrides != nullptr)
+        {
+            pBinding->stride = pStrides[inputIdx];
+        }
+
+        if (m_flags.padVertexBuffers && (pBinding->stride != 0))
+        {
+            pBinding->range = Util::RoundUpToMultiple(pBinding->range, pBinding->stride);
+        }
+
+        inputIdx++;
+        pBinding++;
+    }
 }
 
 // =====================================================================================================================
@@ -2945,62 +2990,39 @@ void CmdBuffer::BindVertexBuffers(
     {
         DbgBarrierPreCmd(DbgBarrierBindIndexVertexBuffer);
 
-        const bool padVertexBuffers = m_flags.padVertexBuffers;
+        constexpr uint32_t MaxLowBindings = VK_ARRAY_SIZE(PerGpuRenderState::vbBindings);
+
+        const uint32_t lowBindingCount =
+            (firstBinding < MaxLowBindings) ? Util::Min(bindingCount, MaxLowBindings - firstBinding) : 0u;
 
         utils::IterateMask deviceGroup(GetDeviceMask());
         do
         {
             const uint32_t deviceIdx = deviceGroup.Index();
 
-            Pal::BufferViewInfo* pBinding = &PerGpuState(deviceIdx)->vbBindings[firstBinding];
-            Pal::BufferViewInfo* pEndBinding = pBinding + bindingCount;
-            uint32_t             inputIdx = 0;
-
-            while (pBinding != pEndBinding)
+            if (lowBindingCount > 0)
             {
-                const VkBuffer     buffer = pBuffers[inputIdx];
-                const VkDeviceSize offset = pOffsets[inputIdx];
+                Pal::BufferViewInfo* const pBinding = &PerGpuState(deviceIdx)->vbBindings[firstBinding];
 
-                if (buffer != VK_NULL_HANDLE)
-                {
-                    const Buffer* pBuffer = Buffer::ObjectFromHandle(buffer);
+                BindVertexBuffersUpdateBindingRange(
+                    deviceIdx,
+                    pBinding,
+                    pBinding + lowBindingCount,
+                    0,
+                    pBuffers,
+                    pOffsets,
+                    pSizes,
+                    pStrides);
 
-                    pBinding->gpuAddr = pBuffer->GpuVirtAddr(deviceIdx) + offset;
-                    if ((pSizes != nullptr) && (pSizes[inputIdx] != VK_WHOLE_SIZE))
-                    {
-                        pBinding->range = pSizes[inputIdx];
-                    }
-                    else
-                    {
-                        pBinding->range = pBuffer->GetSize() - offset;
-                    }
-                }
-                else
-                {
-                    pBinding->gpuAddr = 0;
-                    pBinding->range = 0;
-                }
-
-                if (pStrides != nullptr)
-                {
-                    pBinding->stride = pStrides[inputIdx];
-                }
-
-                if (padVertexBuffers && (pBinding->stride != 0))
-                {
-                    pBinding->range = Util::RoundUpToMultiple(pBinding->range, pBinding->stride);
-                }
-
-                inputIdx++;
-                pBinding++;
+                PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(firstBinding, lowBindingCount, pBinding);
             }
 
-            PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(
-                firstBinding, bindingCount, &PerGpuState(deviceIdx)->vbBindings[firstBinding]);
         }
         while (deviceGroup.IterateNext());
 
-        m_vbWatermark = Util::Max(m_vbWatermark, firstBinding + bindingCount);
+        m_vbWatermark = Util::Max(
+            m_vbWatermark,
+            Util::Min(firstBinding + bindingCount, MaxLowBindings));
 
         DbgBarrierPostCmd(DbgBarrierBindIndexVertexBuffer);
     }
@@ -3318,11 +3340,12 @@ void CmdBuffer::ClearColorImage(
 {
     PalCmdSuspendPredication(true);
 
-    const Image* pImage = Image::ObjectFromHandle(image);
+    const Image* pImage             = Image::ObjectFromHandle(image);
+    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
     VkFormat format = pImage->TreatAsSrgb() ? pImage->GetSrgbFormat() : pImage->GetFormat();
 
-    const Pal::SwizzledFormat palFormat = VkToPalFormat(format, m_pDevice->GetRuntimeSettings());
+    const Pal::SwizzledFormat palFormat = VkToPalFormat(format, settings);
 
     if (Pal::Formats::IsBlockCompressed(palFormat.format))
     {
@@ -3358,7 +3381,7 @@ void CmdBuffer::ClearColorImage(
                                    pImage->GetArraySize(),
                                    pPalRanges,
                                    &palRangeCount,
-                                   m_pDevice->GetRuntimeSettings());
+                                   settings);
 
                 ++rangeIdx;
             }
@@ -3372,7 +3395,7 @@ void CmdBuffer::ClearColorImage(
                 pPalRanges,
                 0,
                 nullptr,
-                0);
+                settings.enableColorClearAutoSync ? Pal::ColorClearAutoSync : 0);
         }
 
         virtStackFrame.FreeArray(pPalRanges);
@@ -3984,10 +4007,9 @@ void CmdBuffer::PalCmdClearDepthStencil(
 }
 
 // =====================================================================================================================
-template <typename EventContainer_T>
 void CmdBuffer::PalCmdResetEvent(
-    EventContainer_T*       pEvent,
-    Pal::HwPipePoint        resetPoint)
+    Event*           pEvent,
+    Pal::HwPipePoint resetPoint)
 {
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
@@ -4000,10 +4022,9 @@ void CmdBuffer::PalCmdResetEvent(
 }
 
 // =====================================================================================================================
-template <typename EventContainer_T>
 void CmdBuffer::PalCmdSetEvent(
-    EventContainer_T*       pEvent,
-    Pal::HwPipePoint        setPoint)
+    Event*           pEvent,
+    Pal::HwPipePoint setPoint)
 {
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
@@ -4599,6 +4620,50 @@ void CmdBuffer::BeginRendering(
     bool skipEverything = isResuming && m_flags.isRenderingSuspended;
     bool skipClears     = isResuming && (m_flags.isRenderingSuspended == false);
 
+    m_allGpuState.dynamicRenderingInstance.viewMask = pRenderingInfo->viewMask;
+    m_allGpuState.dynamicRenderingInstance.colorAttachmentCount = pRenderingInfo->colorAttachmentCount;
+    m_allGpuState.dynamicRenderingInstance.enableResolveTarget = false;
+
+    for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; ++i)
+    {
+        const VkRenderingAttachmentInfo& colorAttachmentInfo = pRenderingInfo->pColorAttachments[i];
+
+        m_allGpuState.dynamicRenderingInstance.enableResolveTarget |=
+            (colorAttachmentInfo.resolveImageView != VK_NULL_HANDLE);
+
+        StoreAttachmentInfo(
+            colorAttachmentInfo,
+            &m_allGpuState.dynamicRenderingInstance.colorAttachments[i]);
+
+        m_allGpuState.dynamicRenderingInstance.colorAttachmentLocations[i] = i;
+    }
+
+    if (pRenderingInfo->pDepthAttachment != nullptr)
+    {
+        const VkRenderingAttachmentInfo& depthAttachmentInfo = *pRenderingInfo->pDepthAttachment;
+
+        m_allGpuState.dynamicRenderingInstance.enableResolveTarget |=
+            (depthAttachmentInfo.resolveImageView != VK_NULL_HANDLE);
+
+        StoreAttachmentInfo(
+            depthAttachmentInfo,
+            &m_allGpuState.dynamicRenderingInstance.depthAttachment);
+    }
+
+    if (pRenderingInfo->pStencilAttachment != nullptr)
+    {
+        const VkRenderingAttachmentInfo& stencilAttachmentInfo = *pRenderingInfo->pStencilAttachment;
+
+        m_allGpuState.dynamicRenderingInstance.enableResolveTarget |=
+            (stencilAttachmentInfo.resolveImageView != VK_NULL_HANDLE);
+
+        StoreAttachmentInfo(
+            stencilAttachmentInfo,
+            &m_allGpuState.dynamicRenderingInstance.stencilAttachment);
+    }
+
+    m_flags.isRenderingSuspended = isSuspended;
+
     if (!skipEverything)
     {
         EXTRACT_VK_STRUCTURES_2(
@@ -4685,56 +4750,31 @@ void CmdBuffer::BeginRendering(
             PalCmdSuspendPredication(false);
         }
 
-        BindTargets(
-            pRenderingInfo,
-            pRenderingFragmentShadingRateAttachmentInfoKHR);
+        BindTargets();
+
+        if ((pRenderingFragmentShadingRateAttachmentInfoKHR != nullptr) &&
+            (pRenderingFragmentShadingRateAttachmentInfoKHR->imageView != VK_NULL_HANDLE))
+        {
+            // Get the image view from the attachment info
+            const ImageView* const pImageView =
+                ImageView::ObjectFromHandle(pRenderingFragmentShadingRateAttachmentInfoKHR->imageView);
+
+            // Get the attachment image
+            const Image* pImage = pImageView->GetImage();
+
+            utils::IterateMask deviceGroup(GetDeviceMask());
+            do
+            {
+                const uint32_t deviceIdx = deviceGroup.Index();
+                PalCmdBuffer(deviceIdx)->CmdBindSampleRateImage(pImage->PalImage(deviceIdx));
+            }
+            while (deviceGroup.IterateNext());
+        }
 
         uint32_t numMultiViews = Util::CountSetBits(pRenderingInfo->viewMask);
         uint32_t viewInstanceMask = (numMultiViews > 0) ? pRenderingInfo->viewMask : GetDeviceMask();
         PalCmdBuffer(DefaultDeviceIndex)->CmdSetViewInstanceMask(viewInstanceMask);
     }
-
-    m_allGpuState.dynamicRenderingInstance.viewMask             = pRenderingInfo->viewMask;
-    m_allGpuState.dynamicRenderingInstance.colorAttachmentCount = pRenderingInfo->colorAttachmentCount;
-    m_allGpuState.dynamicRenderingInstance.enableResolveTarget  = false;
-
-    for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; ++i)
-    {
-        const VkRenderingAttachmentInfo& colorAttachmentInfo = pRenderingInfo->pColorAttachments[i];
-
-        m_allGpuState.dynamicRenderingInstance.enableResolveTarget |=
-            (colorAttachmentInfo.resolveImageView != VK_NULL_HANDLE);
-
-        StoreAttachmentInfo(
-            colorAttachmentInfo,
-            &m_allGpuState.dynamicRenderingInstance.colorAttachments[i]);
-    }
-
-    if (pRenderingInfo->pDepthAttachment != nullptr)
-    {
-        const VkRenderingAttachmentInfo& depthAttachmentInfo = *pRenderingInfo->pDepthAttachment;
-
-        m_allGpuState.dynamicRenderingInstance.enableResolveTarget |=
-            (depthAttachmentInfo.resolveImageView != VK_NULL_HANDLE);
-
-        StoreAttachmentInfo(
-            depthAttachmentInfo,
-            &m_allGpuState.dynamicRenderingInstance.depthAttachment);
-    }
-
-    if (pRenderingInfo->pStencilAttachment != nullptr)
-    {
-        const VkRenderingAttachmentInfo& stencilAttachmentInfo = *pRenderingInfo->pStencilAttachment;
-
-        m_allGpuState.dynamicRenderingInstance.enableResolveTarget |=
-            (stencilAttachmentInfo.resolveImageView != VK_NULL_HANDLE);
-
-        StoreAttachmentInfo(
-            stencilAttachmentInfo,
-            &m_allGpuState.dynamicRenderingInstance.stencilAttachment);
-    }
-
-    m_flags.isRenderingSuspended = isSuspended;
 
     DbgBarrierPostCmd(DbgBarrierBeginRendering);
 }
@@ -4899,16 +4939,7 @@ void CmdBuffer::ResetEvent(
     }
     else
     {
-        const Pal::HwPipePoint pipePoint = VkToPalSrcPipePoint(stageMask);
-
-        utils::IterateMask deviceGroup(m_curDeviceMask);
-        do
-        {
-            const uint32_t deviceIdx = deviceGroup.Index();
-
-            PalCmdBuffer(deviceIdx)->CmdResetEvent(*pEvent->PalEvent(deviceIdx), pipePoint);
-        }
-        while (deviceGroup.IterateNext());
+        PalCmdResetEvent(pEvent, VkToPalSrcPipePoint(stageMask));
     }
 
     DbgBarrierPostCmd(DbgBarrierSetResetEvent);
@@ -8537,15 +8568,11 @@ void CmdBuffer::GetImageLayout(
 
 // =====================================================================================================================
 // Binds color/depth targets for VK_KHR_dynamic_rendering
-void CmdBuffer::BindTargets(
-    const VkRenderingInfo*                                 pRenderingInfo,
-    const VkRenderingFragmentShadingRateAttachmentInfoKHR* pRenderingFragmentShadingRateAttachmentInfoKHR)
+void CmdBuffer::BindTargets()
 {
     Pal::BindTargetParams params = {};
 
-    params.colorTargetCount = pRenderingInfo->colorAttachmentCount;
-
-    static constexpr Pal::ImageLayout NullLayout = {};
+    params.colorTargetCount = m_allGpuState.dynamicRenderingInstance.colorAttachmentCount;
 
     utils::IterateMask deviceGroup(GetDeviceMask());
     do
@@ -8554,97 +8581,43 @@ void CmdBuffer::BindTargets(
 
         for (uint32_t i = 0; i < params.colorTargetCount; ++i)
         {
-            const VkRenderingAttachmentInfo& renderingAttachmentInfo = pRenderingInfo->pColorAttachments[i];
+            const uint32_t location = m_allGpuState.dynamicRenderingInstance.colorAttachmentLocations[i];
 
-            if (renderingAttachmentInfo.imageView != VK_NULL_HANDLE)
+            if (location != VK_ATTACHMENT_UNUSED)
             {
-                // Get the image view from the attachment info
-                const ImageView* const pImageView = ImageView::ObjectFromHandle(renderingAttachmentInfo.imageView);
+                const DynamicRenderingAttachments& renderingAttachmentInfo =
+                    m_allGpuState.dynamicRenderingInstance.colorAttachments[i];
 
-                // Get the attachment image
-                const Image* pImage = pImageView->GetImage();
-
-                params.colorTargets[i].pColorTargetView = pImageView->PalColorTargetView(deviceIdx);
-
-                RPImageLayout imageLayout =
+                if (renderingAttachmentInfo.pImageView != VK_NULL_HANDLE)
                 {
-                    renderingAttachmentInfo.imageLayout,
-                    0
-                };
+                    params.colorTargets[location].pColorTargetView =
+                        renderingAttachmentInfo.pImageView->PalColorTargetView(deviceIdx);
 
-                params.colorTargets[i].imageLayout =
-                    pImage->GetAttachmentLayout(
-                        imageLayout,
-                        0,
-                        this);
+                    params.colorTargets[location].imageLayout = renderingAttachmentInfo.imageLayout;
 
-            }
-            else
-            {
-                params.colorTargets[i].pColorTargetView = nullptr;
-                params.colorTargets[i].imageLayout = NullLayout;
-
+                }
             }
         }
 
-        const VkRenderingAttachmentInfo* pStencilAttachmentInfo = pRenderingInfo->pStencilAttachment;
+        const DynamicRenderingAttachments& stencilAttachmentInfo =
+            m_allGpuState.dynamicRenderingInstance.stencilAttachment;
 
-        if ((pStencilAttachmentInfo != nullptr) &&
-            (pStencilAttachmentInfo->imageView != VK_NULL_HANDLE))
+        if (stencilAttachmentInfo.pImageView != VK_NULL_HANDLE)
         {
-            const ImageView* const pStencilImageView =
-                ImageView::ObjectFromHandle(pStencilAttachmentInfo->imageView);
-
-            Pal::SubresRange subresRange = {};
-            Pal::ImageLayout stencilLayout = {};
-
-            GetImageLayout(
-                pStencilAttachmentInfo->imageView,
-                pStencilAttachmentInfo->imageLayout,
-                VK_IMAGE_ASPECT_STENCIL_BIT,
-                &subresRange,
-                &stencilLayout);
-
-            params.depthTarget.pDepthStencilView = pStencilImageView->PalDepthStencilView(deviceIdx);
-            params.depthTarget.stencilLayout = stencilLayout;
+            params.depthTarget.pDepthStencilView = stencilAttachmentInfo.pImageView->PalDepthStencilView(deviceIdx);
+            params.depthTarget.stencilLayout =     stencilAttachmentInfo.imageLayout;
         }
 
-        const VkRenderingAttachmentInfo* pDepthAttachmentInfo = pRenderingInfo->pDepthAttachment;
+        const DynamicRenderingAttachments& depthAttachmentInfo =
+            m_allGpuState.dynamicRenderingInstance.depthAttachment;
 
-        if ((pDepthAttachmentInfo != nullptr) &&
-            (pDepthAttachmentInfo->imageView != VK_NULL_HANDLE))
+        if (depthAttachmentInfo.pImageView != VK_NULL_HANDLE)
         {
-            const ImageView* const pDepthImageView =
-                ImageView::ObjectFromHandle(pDepthAttachmentInfo->imageView);
-
-            Pal::SubresRange subresRange = {};
-            Pal::ImageLayout depthLayout = {};
-
-            GetImageLayout(
-                pDepthAttachmentInfo->imageView,
-                pDepthAttachmentInfo->imageLayout,
-                VK_IMAGE_ASPECT_DEPTH_BIT,
-                &subresRange,
-                &depthLayout);
-
-            params.depthTarget.pDepthStencilView = pDepthImageView->PalDepthStencilView(deviceIdx);
-            params.depthTarget.depthLayout       = depthLayout;
+            params.depthTarget.pDepthStencilView = depthAttachmentInfo.pImageView->PalDepthStencilView(deviceIdx);
+            params.depthTarget.depthLayout =       depthAttachmentInfo.imageLayout;
         }
 
         PalCmdBuffer(deviceIdx)->CmdBindTargets(params);
-
-        if ((pRenderingFragmentShadingRateAttachmentInfoKHR != nullptr) &&
-            (pRenderingFragmentShadingRateAttachmentInfoKHR->imageView != VK_NULL_HANDLE))
-        {
-            // Get the image view from the attachment info
-            const ImageView* const pImageView =
-                ImageView::ObjectFromHandle(pRenderingFragmentShadingRateAttachmentInfoKHR->imageView);
-
-            // Get the attachment image
-            const Image* pImage = pImageView->GetImage();
-
-            PalCmdBuffer(deviceIdx)->CmdBindSampleRateImage(pImage->PalImage(deviceIdx));
-        }
 
     }
     while (deviceGroup.IterateNext());
@@ -9739,6 +9712,30 @@ void CmdBuffer::SetVertexInput(
     }
 }
 
+// =====================================================================================================================
+void CmdBuffer::SetRenderingAttachmentLocations(
+    const VkRenderingAttachmentLocationInfoKHR* pLocationInfo)
+{
+    if ((pLocationInfo                            != nullptr) &&
+        (pLocationInfo->pColorAttachmentLocations != nullptr))
+    {
+        for (uint32_t i = 0; i < pLocationInfo->colorAttachmentCount; ++i)
+        {
+            m_allGpuState.dynamicRenderingInstance.colorAttachmentLocations[i] =
+                pLocationInfo->pColorAttachmentLocations[i];
+        }
+
+        BindTargets();
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetRenderingInputAttachmentIndices(
+    const VkRenderingInputAttachmentIndexInfoKHR* pLocationInfo)
+{
+
+}
+
 #if VK_ENABLE_DEBUG_BARRIERS
 // =====================================================================================================================
 // This function inserts a command before or after a particular Vulkan command if the given runtime settings are asking
@@ -10507,9 +10504,8 @@ void CmdBuffer::GetRayTracingDispatchArgs(
 
     if (width > 0)
     {
-        // Populate internalUavBufferSrd only for direct dispatches (where width, height, and depth are known)
         m_pDevice->RayTrace()->TraceDispatch(deviceIdx,
-                                             PalCmdBuffer(deviceIdx),
+                                             this,
                                              GpuRt::RtPipelineType::RayTracing,
                                              width,
                                              height,
@@ -10521,7 +10517,6 @@ void CmdBuffer::GetRayTracingDispatchArgs(
                                              &hitSbt,
                                              pConstants);
     }
-
 }
 
 // =====================================================================================================================
@@ -10716,8 +10711,6 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
 
     VK_ASSERT(result == VK_SUCCESS);
 
-    m_rayTracingIndirectList.PushBack(pScratchMemory);
-
     auto* pInitConstants = reinterpret_cast<GpuRt::InitExecuteIndirectConstants*>(
         PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(GpuRt::InitExecuteIndirectConstantsDw,
                                                          2,
@@ -10811,12 +10804,13 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
 }
 
 // =====================================================================================================================
-// Alloacates GPU video memory according for TraceRaysIndirect
-VkResult CmdBuffer::GetRayTracingIndirectMemory(
-    gpusize          size,
-    InternalMemory** ppInternalMemory)
+// Allocates gpu video memory.
+VkResult CmdBuffer::GetScratchVidMem(
+    gpusize                 sizeInBytes,
+    InternalSubAllocPool    poolId,
+    InternalMemory**        ppInternalMemory)
 {
-    VkResult result = VK_SUCCESS;
+    VkResult result = VK_ERROR_OUT_OF_HOST_MEMORY;
 
     *ppInternalMemory = nullptr;
 
@@ -10837,11 +10831,11 @@ VkResult CmdBuffer::GetRayTracingIndirectMemory(
     {
         InternalMemCreateInfo allocInfo = {};
 
-        allocInfo.pal.size      = size;
+        allocInfo.pal.size      = sizeInBytes;
         allocInfo.pal.alignment = 16;
         allocInfo.pal.priority  = Pal::GpuMemPriority::Normal;
 
-        m_pDevice->MemMgr()->GetCommonPool(InternalPoolGpuAccess, &allocInfo);
+        m_pDevice->MemMgr()->GetCommonPool(poolId, &allocInfo);
 
         result = m_pDevice->MemMgr()->AllocGpuMem(
             allocInfo,
@@ -10855,6 +10849,7 @@ VkResult CmdBuffer::GetRayTracingIndirectMemory(
         if (result == VK_SUCCESS)
         {
             *ppInternalMemory = pInternalMemory;
+            m_scratchVidMemList.PushBack(pInternalMemory);
         }
     }
 
@@ -10873,27 +10868,36 @@ VkResult CmdBuffer::GetRayTracingIndirectMemory(
 }
 
 // =====================================================================================================================
+// Alloacates GPU video memory according for TraceRaysIndirect
+VkResult CmdBuffer::GetRayTracingIndirectMemory(
+    gpusize          size,
+    InternalMemory** ppInternalMemory)
+{
+    return GetScratchVidMem(size, InternalPoolGpuAccess, ppInternalMemory);
+}
+
+// =====================================================================================================================
 // Free GPU video memory according for TraceRaysIndirect
-void CmdBuffer::FreeRayTracingIndirectMemory()
+void CmdBuffer::FreeRayTracingScratchVidMemory()
 {
     // This data could be farily large and consumes framebuffer memory.
     //
     // This should always be done when vkResetCommandBuffer() is called to handle the case
     // where an app resets a command buffer but doesn't call vkBeginCommandBuffer right away.
-    for (uint32_t i = 0; i < m_rayTracingIndirectList.NumElements(); ++i)
+    for (uint32_t i = 0; i < m_scratchVidMemList.NumElements(); ++i)
     {
         // Dump entry data
-        InternalMemory* indirectMemory = m_rayTracingIndirectList.At(i);
+        InternalMemory* pVidMemory = m_scratchVidMemList.At(i);
 
         // Free memory
-        m_pDevice->MemMgr()->FreeGpuMem(indirectMemory);
+        m_pDevice->MemMgr()->FreeGpuMem(pVidMemory);
 
-        Util::Destructor(indirectMemory);
-        m_pDevice->VkInstance()->FreeMem(indirectMemory);
+        Util::Destructor(pVidMemory);
+        m_pDevice->VkInstance()->FreeMem(pVidMemory);
     }
 
     // Clear list
-    m_rayTracingIndirectList.Clear();
+    m_scratchVidMemList.Clear();
 }
 
 // =====================================================================================================================
@@ -10986,7 +10990,7 @@ void CmdBuffer::BindRayQueryConstants(
                             constants.constData.rayDispatchDepth  = depth  * pOrigThreadgroupDims[2];
 
                             m_pDevice->RayTrace()->TraceDispatch(deviceIdx,
-                                                                 PalCmdBuffer(deviceIdx),
+                                                                 this,
                                                                  GpuRt::RtPipelineType::Compute,
                                                                  width  * pOrigThreadgroupDims[0],
                                                                  height * pOrigThreadgroupDims[1],
@@ -11238,7 +11242,19 @@ void CmdBuffer::ValidateGraphicsStates()
                 {
                     DynamicColorBlend colorBlend = {};
 
-                    pRSCache->CreateColorBlendState(m_allGpuState.colorBlendCreateInfo,
+                    Pal::ColorBlendStateCreateInfo colorBlendCreateInfo = m_allGpuState.colorBlendCreateInfo;
+
+                    for (uint32_t i = 0; i < m_allGpuState.dynamicRenderingInstance.colorAttachmentCount; ++i)
+                    {
+                        const uint32_t location = m_allGpuState.dynamicRenderingInstance.colorAttachmentLocations[i];
+
+                        if (location != VK_ATTACHMENT_UNUSED)
+                        {
+                            colorBlendCreateInfo.targets[location] = m_allGpuState.colorBlendCreateInfo.targets[i];
+                        }
+                    }
+
+                    pRSCache->CreateColorBlendState(colorBlendCreateInfo,
                         m_pDevice->VkInstance()->GetAllocCallbacks(),
                         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
                         colorBlend.pPalColorBlend);
@@ -12187,6 +12203,369 @@ RenderPassInstanceState::RenderPassInstanceState(
     pSamplePatterns(nullptr)
 {
     memset(&renderArea[0], 0, sizeof(renderArea));
+}
+
+// =====================================================================================================================
+template<uint32_t numPalDevices, bool useCompactDescriptor>
+VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdBindDescriptorSets2KHR(
+    VkCommandBuffer                             cmdBuffer,
+    const VkBindDescriptorSetsInfoKHR* pBindDescriptorSetsInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BindDescriptorSets2KHR<numPalDevices, useCompactDescriptor>(
+        pBindDescriptorSetsInfo);
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices, bool useCompactDescriptor>
+void CmdBuffer::BindDescriptorSets2KHR(
+    const VkBindDescriptorSetsInfoKHR* pBindDescriptorSetsInfo)
+{
+    if ((pBindDescriptorSetsInfo->stageFlags & ShaderStageAllGraphics) != 0)
+    {
+        BindDescriptorSets<numPalDevices, useCompactDescriptor>(
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pBindDescriptorSetsInfo->layout,
+            pBindDescriptorSetsInfo->firstSet,
+            pBindDescriptorSetsInfo->descriptorSetCount,
+            pBindDescriptorSetsInfo->pDescriptorSets,
+            pBindDescriptorSetsInfo->dynamicOffsetCount,
+            pBindDescriptorSetsInfo->pDynamicOffsets);
+    }
+    if ((pBindDescriptorSetsInfo->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) != 0)
+    {
+        BindDescriptorSets<numPalDevices, useCompactDescriptor>(
+            VK_PIPELINE_BIND_POINT_COMPUTE,
+            pBindDescriptorSetsInfo->layout,
+            pBindDescriptorSetsInfo->firstSet,
+            pBindDescriptorSetsInfo->descriptorSetCount,
+            pBindDescriptorSetsInfo->pDescriptorSets,
+            pBindDescriptorSetsInfo->dynamicOffsetCount,
+            pBindDescriptorSetsInfo->pDynamicOffsets);
+
+    }
+#if VKI_RAY_TRACING
+    if ((pBindDescriptorSetsInfo->stageFlags & ShaderStageAllRayTracing) != 0)
+    {
+        BindDescriptorSets<numPalDevices, useCompactDescriptor>(
+            VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+            pBindDescriptorSetsInfo->layout,
+            pBindDescriptorSetsInfo->firstSet,
+            pBindDescriptorSetsInfo->descriptorSetCount,
+            pBindDescriptorSetsInfo->pDescriptorSets,
+            pBindDescriptorSetsInfo->dynamicOffsetCount,
+            pBindDescriptorSetsInfo->pDynamicOffsets);
+    }
+#endif
+}
+
+// =====================================================================================================================
+void CmdBuffer::PushConstants2KHR(
+    const VkPushConstantsInfoKHR* pPushConstantsInfo)
+{
+    PushConstants(pPushConstantsInfo->layout,
+        pPushConstantsInfo->stageFlags,
+        pPushConstantsInfo->offset,
+        pPushConstantsInfo->size,
+        pPushConstantsInfo->pValues);
+}
+
+// =====================================================================================================================
+template <size_t imageDescSize,
+          size_t samplerDescSize,
+          size_t bufferDescSize,
+          uint32_t numPalDevices>
+VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSet2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkPushDescriptorSetInfoKHR* pPushDescriptorSetInfo)
+{
+    CmdBuffer* pCmdBuffer = ApiCmdBuffer::ObjectFromHandle(commandBuffer);
+
+    pCmdBuffer->PushDescriptorSet2KHR<imageDescSize, samplerDescSize, bufferDescSize, numPalDevices>(
+        pPushDescriptorSetInfo);
+}
+
+// =====================================================================================================================
+template <size_t imageDescSize,
+      size_t samplerDescSize,
+      size_t bufferDescSize,
+      uint32_t numPalDevices>
+void CmdBuffer::PushDescriptorSet2KHR(
+    const VkPushDescriptorSetInfoKHR* pPushDescriptorSetInfo)
+{
+    if ((pPushDescriptorSetInfo->stageFlags & ShaderStageAllGraphics) != 0)
+    {
+        PushDescriptorSetKHR<imageDescSize, samplerDescSize, bufferDescSize, numPalDevices>(
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pPushDescriptorSetInfo->layout,
+            pPushDescriptorSetInfo->set,
+            pPushDescriptorSetInfo->descriptorWriteCount,
+            pPushDescriptorSetInfo->pDescriptorWrites);
+    }
+
+    if ((pPushDescriptorSetInfo->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) != 0)
+    {
+        PushDescriptorSetKHR<imageDescSize, samplerDescSize, bufferDescSize, numPalDevices>(
+            VK_PIPELINE_BIND_POINT_COMPUTE,
+            pPushDescriptorSetInfo->layout,
+            pPushDescriptorSetInfo->set,
+            pPushDescriptorSetInfo->descriptorWriteCount,
+            pPushDescriptorSetInfo->pDescriptorWrites);
+    }
+#if VKI_RAY_TRACING
+    if ((pPushDescriptorSetInfo->stageFlags & ShaderStageAllRayTracing) != 0)
+    {
+        PushDescriptorSetKHR<imageDescSize, samplerDescSize, bufferDescSize, numPalDevices>(
+            VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+            pPushDescriptorSetInfo->layout,
+            pPushDescriptorSetInfo->set,
+            pPushDescriptorSetInfo->descriptorWriteCount,
+            pPushDescriptorSetInfo->pDescriptorWrites);
+    }
+#endif
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSetWithTemplate2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkPushDescriptorSetWithTemplateInfoKHR* pPushDescriptorSetWithTemplateInfo)
+{
+    CmdBuffer* pCmdBuffer = ApiCmdBuffer::ObjectFromHandle(commandBuffer);
+
+    pCmdBuffer->PushDescriptorSetWithTemplate2KHR<numPalDevices>(
+        pPushDescriptorSetWithTemplateInfo);
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+void CmdBuffer::PushDescriptorSetWithTemplate2KHR(
+    const VkPushDescriptorSetWithTemplateInfoKHR* pPushDescriptorSetWithTemplateInfo)
+{
+    PushDescriptorSetWithTemplateKHR<numPalDevices>(
+        pPushDescriptorSetWithTemplateInfo->descriptorUpdateTemplate,
+        pPushDescriptorSetWithTemplateInfo->layout,
+        pPushDescriptorSetWithTemplateInfo->set,
+        pPushDescriptorSetWithTemplateInfo->pData);
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetDescriptorBufferOffsets2EXT(
+    const VkSetDescriptorBufferOffsetsInfoEXT* pSetDescriptorBufferOffsetsInfo)
+{
+    if ((pSetDescriptorBufferOffsetsInfo->stageFlags & ShaderStageAllGraphics) != 0)
+    {
+        SetDescriptorBufferOffsets(
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pSetDescriptorBufferOffsetsInfo->layout,
+            pSetDescriptorBufferOffsetsInfo->firstSet,
+            pSetDescriptorBufferOffsetsInfo->setCount,
+            pSetDescriptorBufferOffsetsInfo->pBufferIndices,
+            pSetDescriptorBufferOffsetsInfo->pOffsets);
+    }
+
+    if ((pSetDescriptorBufferOffsetsInfo->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) != 0)
+    {
+        SetDescriptorBufferOffsets(
+            VK_PIPELINE_BIND_POINT_COMPUTE,
+            pSetDescriptorBufferOffsetsInfo->layout,
+            pSetDescriptorBufferOffsetsInfo->firstSet,
+            pSetDescriptorBufferOffsetsInfo->setCount,
+            pSetDescriptorBufferOffsetsInfo->pBufferIndices,
+            pSetDescriptorBufferOffsetsInfo->pOffsets);
+    }
+#if VKI_RAY_TRACING
+    if ((pSetDescriptorBufferOffsetsInfo->stageFlags & ShaderStageAllRayTracing) != 0)
+    {
+        SetDescriptorBufferOffsets(
+            VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+            pSetDescriptorBufferOffsetsInfo->layout,
+            pSetDescriptorBufferOffsetsInfo->firstSet,
+            pSetDescriptorBufferOffsetsInfo->setCount,
+            pSetDescriptorBufferOffsetsInfo->pBufferIndices,
+            pSetDescriptorBufferOffsetsInfo->pOffsets);
+    }
+#endif
+}
+
+// =====================================================================================================================
+void CmdBuffer::BindDescriptorBufferEmbeddedSamplers2EXT(
+    const VkBindDescriptorBufferEmbeddedSamplersInfoEXT* pBindDescriptorBufferEmbeddedSamplersInfo)
+{
+    if ((pBindDescriptorBufferEmbeddedSamplersInfo->stageFlags & ShaderStageAllGraphics) != 0)
+    {
+        BindDescriptorBufferEmbeddedSamplers(
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pBindDescriptorBufferEmbeddedSamplersInfo->layout,
+            pBindDescriptorBufferEmbeddedSamplersInfo->set);
+    }
+
+    if ((pBindDescriptorBufferEmbeddedSamplersInfo->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) != 0)
+    {
+        BindDescriptorBufferEmbeddedSamplers(
+            VK_PIPELINE_BIND_POINT_COMPUTE,
+            pBindDescriptorBufferEmbeddedSamplersInfo->layout,
+            pBindDescriptorBufferEmbeddedSamplersInfo->set);
+    }
+#if VKI_RAY_TRACING
+    if ((pBindDescriptorBufferEmbeddedSamplersInfo->stageFlags & ShaderStageAllRayTracing) != 0)
+    {
+        BindDescriptorBufferEmbeddedSamplers(
+            VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+            pBindDescriptorBufferEmbeddedSamplersInfo->layout,
+            pBindDescriptorBufferEmbeddedSamplersInfo->set);
+    }
+#endif
+}
+
+// =====================================================================================================================
+PFN_vkCmdBindDescriptorSets2KHR CmdBuffer::GetCmdBindDescriptorSets2KHRFunc(
+    const Device* pDevice)
+{
+    PFN_vkCmdBindDescriptorSets2KHR pFunc = nullptr;
+
+    switch (pDevice->NumPalDevices())
+    {
+        case 1:
+            pFunc = GetCmdBindDescriptorSets2KHRFunc<1>(pDevice);
+            break;
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
+        case 2:
+            pFunc = GetCmdBindDescriptorSets2KHRFunc<2>(pDevice);
+            break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 2)
+        case 3:
+            pFunc = GetCmdBindDescriptorSets2KHRFunc<3>(pDevice);
+            break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 3)
+        case 4:
+            pFunc = GetCmdBindDescriptorSets2KHRFunc<4>(pDevice);
+            break;
+#endif
+        default:
+            pFunc = nullptr;
+            VK_NEVER_CALLED();
+            break;
+    }
+
+    return pFunc;
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+PFN_vkCmdBindDescriptorSets2KHR CmdBuffer::GetCmdBindDescriptorSets2KHRFunc(
+    const Device* pDevice)
+{
+    PFN_vkCmdBindDescriptorSets2KHR pFunc = nullptr;
+
+    if (pDevice->UseCompactDynamicDescriptors())
+    {
+        pFunc = CmdBindDescriptorSets2KHR<numPalDevices, true>;
+    }
+    else
+    {
+        pFunc = CmdBindDescriptorSets2KHR<numPalDevices, false>;
+    }
+
+    return pFunc;
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+PFN_vkCmdPushDescriptorSet2KHR CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(
+    const Device* pDevice)
+{
+    const size_t imageDescSize   = pDevice->GetProperties().descriptorSizes.imageView;
+    const size_t samplerDescSize = pDevice->GetProperties().descriptorSizes.sampler;
+    const size_t bufferDescSize  = pDevice->GetProperties().descriptorSizes.bufferView;
+
+    PFN_vkCmdPushDescriptorSet2KHR pFunc = nullptr;
+
+    if ((imageDescSize   == 32) &&
+        (samplerDescSize == 16) &&
+        (bufferDescSize  == 16))
+    {
+        pFunc = &CmdPushDescriptorSet2KHR<
+            32,
+            16,
+            16,
+            numPalDevices>;
+    }
+    else
+    {
+        VK_NEVER_CALLED();
+    }
+
+    return pFunc;
+}
+
+// =====================================================================================================================
+PFN_vkCmdPushDescriptorSet2KHR CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(
+    const Device* pDevice)
+{
+    PFN_vkCmdPushDescriptorSet2KHR pFunc = nullptr;
+
+    switch (pDevice->NumPalDevices())
+    {
+        case 1:
+            pFunc = GetCmdPushDescriptorSet2KHRFunc<1>(pDevice);
+            break;
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
+        case 2:
+            pFunc = GetCmdPushDescriptorSet2KHRFunc<2>(pDevice);
+            break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 2)
+        case 3:
+            pFunc = GetCmdPushDescriptorSet2KHRFunc<3>(pDevice);
+            break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 3)
+        case 4:
+            pFunc = GetCmdPushDescriptorSet2KHRFunc<4>(pDevice);
+            break;
+#endif
+        default:
+            VK_NEVER_CALLED();
+            break;
+    }
+
+    return pFunc;
+}
+
+// =====================================================================================================================
+PFN_vkCmdPushDescriptorSetWithTemplate2KHR CmdBuffer::GetCmdPushDescriptorSetWithTemplate2KHRFunc(
+    const Device* pDevice)
+{
+    PFN_vkCmdPushDescriptorSetWithTemplate2KHR pFunc = nullptr;
+
+    switch (pDevice->NumPalDevices())
+    {
+        case 1:
+            pFunc = CmdPushDescriptorSetWithTemplate2KHR<1>;
+            break;
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
+        case 2:
+            pFunc = CmdPushDescriptorSetWithTemplate2KHR<2>;
+            break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 2)
+        case 3:
+            pFunc = CmdPushDescriptorSetWithTemplate2KHR<3>;
+            break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 3)
+        case 4:
+            pFunc = CmdPushDescriptorSetWithTemplate2KHR<4>;
+            break;
+#endif
+        default:
+            VK_NEVER_CALLED();
+            break;
+    }
+
+    return pFunc;
 }
 
 // =====================================================================================================================

@@ -99,6 +99,7 @@ VkResult RayTracingDevice::Init()
             initInfo.pAccelStructTracker       = GetAccelStructTracker(deviceIdx);
             initInfo.accelStructTrackerGpuAddr = GetAccelStructTrackerGpuVa(deviceIdx);
 
+            initInfo.deviceSettings.gpuDebugFlags = m_pDevice->GetRuntimeSettings().rtGpuDebugFlags;
             initInfo.deviceSettings.emulatedRtIpLevel = Pal::RayTracingIpLevel::None;
             switch (m_pDevice->GetRuntimeSettings().emulatedRtIpLevel)
             {
@@ -236,10 +237,18 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
 
     // Enable AS stats based on panel setting
     pDeviceSettings->enableBuildAccelStructStats        = settings.rtEnableBuildAccelStructStats;
+    // Number of Rebraid Iterations and rebraid Quality Heuristics
+    pDeviceSettings->numRebraidIterations               = settings.numRebraidIterations;
+    pDeviceSettings->rebraidQualityHeuristic            = settings.rebraidQualityHeuristicType;
+
+    pDeviceSettings->enableEarlyPairCompression         = false;
 
     pDeviceSettings->rgpBarrierReason   = RgpBarrierInternalRayTracingSync;
     m_profileRayFlags                   = TraceRayProfileFlagsToRayFlag(settings);
     m_profileMaxIterations              = TraceRayProfileMaxIterationsToMaxIterations(settings);
+
+    pDeviceSettings->enableEarlyPairCompression  = settings.enableEarlyPairCompression;
+    pDeviceSettings->trianglePairingSearchRadius = settings.trianglePairingSearchRadius;
 }
 
 // =====================================================================================================================
@@ -291,7 +300,8 @@ void RayTracingDevice::Destroy()
 
 // =====================================================================================================================
 bool RayTracingDevice::AccelStructTrackerEnabled(
-    uint32_t deviceIdx) const
+    uint32_t deviceIdx
+    ) const
 {
     return (GetAccelStructTracker(deviceIdx) != nullptr) &&
             (m_pDevice->GetRuntimeSettings().enableTraceRayAccelStructTracking ||
@@ -299,8 +309,18 @@ bool RayTracingDevice::AccelStructTrackerEnabled(
 }
 
 // =====================================================================================================================
+bool RayTracingDevice::RayHistoryTraceActive(
+    uint32_t deviceIdx
+    ) const
+{
+    return (m_pGpuRtDevice[deviceIdx]->RayHistoryTraceActive() ||
+            (m_pDevice->GetRuntimeSettings().rtTraceRayCounterMode != TraceRayCounterDisable));
+}
+
+// =====================================================================================================================
 GpuRt::TraceRayCounterMode RayTracingDevice::TraceRayCounterMode(
-    uint32_t deviceIdx) const
+    uint32_t deviceIdx
+    ) const
 {
     // If the PAL trace path is enabled, then force RayHistoryLight
     return m_pGpuRtDevice[deviceIdx]->RayHistoryTraceAvailable() ?
@@ -310,7 +330,8 @@ GpuRt::TraceRayCounterMode RayTracingDevice::TraceRayCounterMode(
 
 // =====================================================================================================================
 GpuRt::AccelStructTracker* RayTracingDevice::GetAccelStructTracker(
-    uint32_t deviceIdx) const
+    uint32_t deviceIdx
+    ) const
 {
     GpuRt::AccelStructTracker* pTracker   = nullptr;
     auto*                      pResources = &m_accelStructTrackerResources[deviceIdx];
@@ -325,7 +346,8 @@ GpuRt::AccelStructTracker* RayTracingDevice::GetAccelStructTracker(
 
 // =====================================================================================================================
 Pal::gpusize RayTracingDevice::GetAccelStructTrackerGpuVa(
-    uint32_t deviceIdx) const
+    uint32_t deviceIdx
+    ) const
 {
     Pal::gpusize gpuAddr    = 0;
     auto*        pResources = &m_accelStructTrackerResources[deviceIdx];
@@ -612,7 +634,7 @@ void RayTracingDevice::SetDispatchInfo(
 // =====================================================================================================================
 void RayTracingDevice::TraceDispatch(
     uint32_t                               deviceIdx,
-    Pal::ICmdBuffer*                       pPalCmdBuffer,
+    CmdBuffer*                             pCmdBuffer,
     GpuRt::RtPipelineType                  pipelineType,
     uint32_t                               width,
     uint32_t                               height,
@@ -638,11 +660,12 @@ void RayTracingDevice::TraceDispatch(
                         pHitSbt,
                         &dispatchInfo);
 
-        m_pGpuRtDevice[deviceIdx]->TraceRtDispatch(pPalCmdBuffer,
+        m_pGpuRtDevice[deviceIdx]->TraceRtDispatch(pCmdBuffer->PalCmdBuffer(deviceIdx),
                                                    pipelineType,
                                                    dispatchInfo,
                                                    pConstants);
     }
+
 }
 
 // =====================================================================================================================

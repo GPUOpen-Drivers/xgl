@@ -89,8 +89,6 @@ public:
         VkShaderModuleCreateFlags    flags,
         VkShaderModuleCreateFlags    internalShaderFlags,
         const Vkgc::BinaryData&      shaderBinary,
-        const bool                   adaptForFastLink,
-        bool                         isInternal,
         ShaderModuleHandle*          pShaderModule,
         const PipelineOptimizerKey&  profileKey) override;
 
@@ -115,10 +113,10 @@ public:
     virtual VkResult CreateGraphicsShaderBinary(
         const Device*                     pDevice,
         PipelineCache*                    pPipelineCache,
-        const ShaderStage                 stage,
+        GraphicsLibraryType               gplType,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         void*                             pPipelineDumpHandle,
-        ShaderModuleHandle*               pShaderModule) override;
+        GplModuleState*                   pModuleState) override;
 
     virtual VkResult CreateColorExportBinary(
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
@@ -169,7 +167,8 @@ public:
     virtual bool IsGplFastLinkCompatible(
         const Device*                           pDevice,
         uint32_t                                deviceIdx,
-        const GraphicsPipelineBinaryCreateInfo* pCreateInfo) override;
+        const GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        const GraphicsPipelineLibraryInfo&      libInfo) override;
 
     virtual Vkgc::BinaryData ExtractPalElfBinary(const Vkgc::BinaryData& shaderBinary) override;
 

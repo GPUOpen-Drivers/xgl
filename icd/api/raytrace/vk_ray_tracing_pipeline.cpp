@@ -527,7 +527,6 @@ VkResult RayTracingPipeline::CreateImpl(
                 result = BuildShaderStageInfo(m_pDevice,
                                               nativeShaderCount,
                                               pCreateInfo->pStages,
-                                              false,
                                               [](const uint32_t inputIdx, const uint32_t stageIdx)
                                               {
                                                   return inputIdx;
@@ -631,20 +630,22 @@ VkResult RayTracingPipeline::CreateImpl(
             {
                 result = VK_ERROR_OUT_OF_HOST_MEMORY;
             }
-
-            if (pipelineCreateInfo.groupCount > 0)
+            else
             {
-                pipelineBinary[0].shaderGroupHandle.shaderHandles     = pShaderGroups[0];
-                pipelineBinary[0].shaderGroupHandle.shaderHandleCount = pipelineCreateInfo.groupCount;
-            }
-
-            for (uint32_t deviceIdx = 1; deviceIdx < m_pDevice->NumPalDevices(); ++deviceIdx)
-            {
-                pShaderGroups[deviceIdx] = pShaderGroups[deviceIdx - 1] + totalGroupCount;
                 if (pipelineCreateInfo.groupCount > 0)
                 {
-                    pipelineBinary[deviceIdx].shaderGroupHandle.shaderHandles     = pShaderGroups[deviceIdx];
-                    pipelineBinary[deviceIdx].shaderGroupHandle.shaderHandleCount = pipelineCreateInfo.groupCount;
+                    pipelineBinary[0].shaderGroupHandle.shaderHandles     = pShaderGroups[0];
+                    pipelineBinary[0].shaderGroupHandle.shaderHandleCount = pipelineCreateInfo.groupCount;
+                }
+
+                for (uint32_t deviceIdx = 1; deviceIdx < m_pDevice->NumPalDevices(); ++deviceIdx)
+                {
+                    pShaderGroups[deviceIdx] = pShaderGroups[deviceIdx - 1] + totalGroupCount;
+                    if (pipelineCreateInfo.groupCount > 0)
+                    {
+                        pipelineBinary[deviceIdx].shaderGroupHandle.shaderHandles     = pShaderGroups[deviceIdx];
+                        pipelineBinary[deviceIdx].shaderGroupHandle.shaderHandleCount = pipelineCreateInfo.groupCount;
+                    }
                 }
             }
         }
@@ -656,6 +657,7 @@ VkResult RayTracingPipeline::CreateImpl(
         bool*                           pTraceRayUsage    = nullptr;
         void*                           pTempBuffer       = nullptr;
 
+        if (result == VK_SUCCESS)
         {
             // Allocate temp buffer for shader name and indirect functions
             const uint32_t maxPipelineBinaryCount = maxFunctionCount + 1;
@@ -808,14 +810,17 @@ VkResult RayTracingPipeline::CreateImpl(
                 }
             }
 
-            // Copy shader groups if compiler doesn't use pre-allocated buffer.
-            const auto& groupHandle = pipelineBinary[deviceIdx].shaderGroupHandle;
-            if (groupHandle.shaderHandles != pShaderGroups[deviceIdx])
+            if (totalGroupCount > 0)
             {
-                memcpy(
-                    pShaderGroups[deviceIdx],
-                    groupHandle.shaderHandles,
-                    sizeof(Vkgc::RayTracingShaderIdentifier) * groupHandle.shaderHandleCount);
+                // Copy shader groups if compiler doesn't use pre-allocated buffer.
+                const auto& groupHandle = pipelineBinary[deviceIdx].shaderGroupHandle;
+                if (groupHandle.shaderHandles != pShaderGroups[deviceIdx])
+                {
+                    memcpy(
+                        pShaderGroups[deviceIdx],
+                        groupHandle.shaderHandles,
+                        sizeof(Vkgc::RayTracingShaderIdentifier) * groupHandle.shaderHandleCount);
+                }
             }
         }
 

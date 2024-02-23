@@ -638,6 +638,11 @@ Pal::Result DevModeMgr::TraceEndingToIdleStep(TraceState* pState)
 
                 if (settings.devModeEnableRgpTraceDump)
                 {
+                    // The min length of both win and linux is 260, so we use this number.
+                    char pathBuffer[260];
+                    Util::SplitFilePath(settings.devModeRgpTraceDumpFile, pathBuffer, 260, nullptr, 0);
+                    Util::MkDirRecursively(pathBuffer);
+
                     Util::File dumpFile;
                     if (dumpFile.Open(settings.devModeRgpTraceDumpFile, Util::FileAccessMode::FileAccessWrite | Util::FileAccessMode::FileAccessBinary) == Util::Result::Success)
                     {

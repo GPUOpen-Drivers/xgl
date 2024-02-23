@@ -189,6 +189,13 @@ struct GraphicsPipelineLibraryInfo
 };
 
 // =====================================================================================================================
+// Extension structures for pipeline creation
+struct GraphicsPipelineExtStructs
+{
+    const VkPipelineRenderingCreateInfo*        pPipelineRenderingCreateInfo;
+};
+
+// =====================================================================================================================
 // The common part used by both executable graphics pipelines and graphics pipeline libraries
 class GraphicsPipelineCommon : public Pipeline
 {
@@ -211,6 +218,7 @@ public:
     static bool GetDualSourceBlendEnableState(
         const Device*                              pDevice,
         const VkPipelineColorBlendStateCreateInfo* pColorBlendState,
+        const GraphicsPipelineExtStructs&          extStructs,
         const Pal::ColorBlendStateCreateInfo*      pPalInfo = nullptr);
 
     // Returns true if src alpha is used in blending
@@ -252,6 +260,7 @@ protected:
     static void BuildPipelineObjectCreateInfo(
         const Device*                          pDevice,
         const VkGraphicsPipelineCreateInfo*    pIn,
+        const GraphicsPipelineExtStructs&      extStructs,
         VkPipelineCreateFlags2KHR              flags,
         const PipelineOptimizerKey*            pOptimizerKey,
         const PipelineMetadata*                pBinMeta,
@@ -268,10 +277,11 @@ protected:
 
     // Generates the API PSO hash using the contents of the VkGraphicsPipelineCreateInfo struct
     static void BuildApiHash(
-        const VkGraphicsPipelineCreateInfo* pCreateInfo,
-        VkPipelineCreateFlags2KHR           flags,
-        uint64_t*                           pApiHash,
-        Util::MetroHash::Hash*              elfHash);
+        const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+        VkPipelineCreateFlags2KHR               flags,
+        const GraphicsPipelineBinaryCreateInfo& pBinaryCreateInfo,
+        uint64_t*                               pApiHash,
+        Util::MetroHash::Hash*                  elfHash);
 
     // Generate API PSO hash for state of vertex input interface section
     static void GenerateHashForVertexInputInterfaceState(
@@ -304,6 +314,11 @@ protected:
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
         const GraphicsPipelineLibraryInfo*  pLibInfo,
         uint64_t                            dynamicStateFlags);
+
+    // Extracts extension structs from VkGraphicsPipelineCreateInfo
+    static void HandleExtensionStructs(
+        const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        GraphicsPipelineExtStructs*         pExtStructs);
 
     // Constructor of GraphicsPipelineCommon
     GraphicsPipelineCommon(

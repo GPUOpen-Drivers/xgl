@@ -2470,7 +2470,7 @@ ShaderTuningStructsAndVars = {
                 "shaders": {
                     "entity": "array",
                     "varName": "shaders",
-                    "arraySize": "ShaderStage::ShaderStageNativeStageCount",
+                    "arraySize": "ShaderStage::ShaderStageCount",
                     "arrayValue": "",
                     "dataType": "ShaderProfilePattern",
                     "buildTypes": {},
@@ -2625,7 +2625,7 @@ ShaderTuningStructsAndVars = {
                 "entity": "array",
                 "description": "Applied to ShaderCreateInfo/PipelineShaderInfo/DynamicXShaderInfo:",
                 "varName": "shaders",
-                "arraySize": "ShaderStage::ShaderStageNativeStageCount",
+                "arraySize": "ShaderStage::ShaderStageCount",
                 "arrayValue": "",
                 "dataType": "ShaderProfileAction",
                 "buildTypes": {},

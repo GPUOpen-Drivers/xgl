@@ -68,6 +68,10 @@ endif()
 # PAL
 add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
 
+# Add LLPC version before gpurt
+include("${XGL_VKGC_PATH}/cmake/llpc_version.cmake")
+add_llpc_version_projects()
+
 #if VKI_RAY_TRACING
 # GPURT
 if (VKI_RAY_TRACING)

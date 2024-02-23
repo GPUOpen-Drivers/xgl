@@ -54,6 +54,7 @@ class PipelineCompiler;
 struct PipelineInternalBufferInfo;
 struct ShaderModuleHandle;
 struct GraphicsPipelineLibraryInfo;
+struct GraphicsPipelineExtStructs;
 
 class PipelineBinaryCache;
 
@@ -143,8 +144,6 @@ public:
         const VkShaderModuleCreateFlags flags,
         const VkShaderModuleCreateFlags internalShaderFlags,
         const Vkgc::BinaryData&         shaderBinary,
-        const bool                      adaptForFastLink,
-        bool                            isInternal,
         ShaderModuleHandle*             pShaderModule);
 
     void TryEarlyCompileShaderModule(
@@ -169,9 +168,9 @@ public:
     VkResult CreateGraphicsShaderBinary(
         const Device*                     pDevice,
         PipelineCache*                    pPipelineCache,
-        const ShaderStage                 stage,
+        GraphicsLibraryType               gplType,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-        ShaderModuleHandle*               pModule);
+        GplModuleState*                   pModuleState);
 
     VkResult CreateColorExportShaderLibrary(
         const Device*                     pDevice,
@@ -185,8 +184,8 @@ public:
         const VkAllocationCallbacks*      pAllocator,
         Pal::IShaderLibrary**             ppShaderLibrary);
 
-    static void FreeGraphicsShaderBinary(
-        ShaderModuleHandle*               pShaderModule);
+    void FreeGplModuleState(
+        GplModuleState* pModuleState);
 
     VkResult CreateComputePipelineBinary(
         Device*                           pDevice,
@@ -214,6 +213,7 @@ public:
     VkResult ConvertGraphicsPipelineInfo(
         Device*                                         pDevice,
         const VkGraphicsPipelineCreateInfo*             pIn,
+        const GraphicsPipelineExtStructs&               extStructs,
         VkPipelineCreateFlags2KHR                       flags,
         const GraphicsPipelineShaderStageInfo*          pShaderInfo,
         const PipelineLayout*                           pPipelineLayout,
@@ -224,6 +224,7 @@ public:
     VkResult BuildGplFastLinkCreateInfo(
         Device*                                         pDevice,
         const VkGraphicsPipelineCreateInfo*             pIn,
+        const GraphicsPipelineExtStructs&               extStructs,
         VkPipelineCreateFlags2KHR                       flags,
         const GraphicsPipelineLibraryInfo&              libInfo,
         const PipelineLayout*                           pPipelineLayout,

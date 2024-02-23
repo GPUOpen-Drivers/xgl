@@ -132,8 +132,6 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     VkShaderModuleCreateFlags    flags,
     VkShaderModuleCreateFlags    internalShaderFlags,
     const Vkgc::BinaryData&      shaderBinary,
-    const bool                   adaptForFastLink,
-    bool                         isInternal,
     ShaderModuleHandle*          pShaderModule,
     const PipelineOptimizerKey&  profileKey)
 {
@@ -409,6 +407,7 @@ VkResult CompilerSolutionLlpc::CreateColorExportBinary(
     auto pPipelineBuildInfo                 = &pCreateInfo->pipelineInfo;
     pPipelineBuildInfo->pInstance           = pInstance;
     pPipelineBuildInfo->pfnOutputAlloc      = AllocateShaderOutput;
+    pPipelineBuildInfo->pipelineApiHash     = pCreateInfo->libraryHash[GraphicsLibraryColorExport];
 
     VK_ASSERT(pCreateInfo->pBinaryMetadata->pFsOutputMetaData != nullptr);
     Vkgc::Result llpcResult = m_pLlpc->BuildColorExportShader(pPipelineBuildInfo,
@@ -439,15 +438,14 @@ VkResult CompilerSolutionLlpc::CreateColorExportBinary(
 VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
     const Device*                     pDevice,
     PipelineCache*                    pPipelineCache,
-    const ShaderStage                 stage,
+    GraphicsLibraryType               gplType,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
     void*                             pPipelineDumpHandle,
-    ShaderModuleHandle*               pShaderModule)
+    GplModuleState*                   pModuleState)
 {
     VkResult result = VK_SUCCESS;
     Util::MetroHash::Hash cacheId = {};
     Vkgc::BinaryData shaderLibraryBinary = {};
-    GraphicsLibraryType gplType = GetGraphicsLibraryType(stage);
 
     bool hitCache = false;
     bool hitAppCache = false;
@@ -484,7 +482,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
             if (pPipelineCache != nullptr)
             {
                 // Update the shader feedback
-                PipelineCreationFeedback* pStageFeedBack = &pCreateInfo->stageFeedback[stage];
+                PipelineCreationFeedback* pStageFeedBack = &pCreateInfo->stageFeedback[pModuleState->stage];
                 pStageFeedBack->feedbackValid = true;
                 pStageFeedBack->hitApplicationCache = hitAppCache;
             }
@@ -497,11 +495,11 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
             Vkgc::UnlinkedShaderStage unlinkedStage = UnlinkedStageCount;
 
             // Belong to vertexProcess stage before fragment
-            if (stage < ShaderStage::ShaderStageFragment)
+            if (gplType == GraphicsLibraryPreRaster)
             {
                 unlinkedStage = UnlinkedShaderStage::UnlinkedStageVertexProcess;
             }
-            else if (stage == ShaderStage::ShaderStageFragment)
+            else if (gplType == GraphicsLibraryFragment)
             {
                 unlinkedStage = UnlinkedShaderStage::UnlinkedStageFragment;
             }
@@ -548,21 +546,41 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
                     &shaderLibraryBinary);
             }
 
-            pShaderModule->elfPackage = shaderLibraryBinary;
-            pCreateInfo->earlyElfPackage[gplType] = pShaderModule->elfPackage;
+            pModuleState->elfPackage                  = shaderLibraryBinary;
+            pModuleState->pFsOutputMetaData           = nullptr;
+            pCreateInfo->earlyElfPackage[gplType]     = pModuleState->elfPackage;
             pCreateInfo->earlyElfPackageHash[gplType] = cacheId;
 
-            if (stage == ShaderStage::ShaderStageFragment)
+            if (gplType == GraphicsLibraryFragment)
             {
                 if (shaderLibraryBinary.pCode != nullptr)
                 {
                     const auto* pShaderLibraryHeader =
                         reinterpret_cast<const ShaderLibraryBlobHeader*>(shaderLibraryBinary.pCode);
 
-                    pCreateInfo->pBinaryMetadata->fsOutputMetaDataSize = pShaderLibraryHeader->fragMetaLength;
-                    pCreateInfo->pBinaryMetadata->pFsOutputMetaData    = (pShaderLibraryHeader->fragMetaLength > 0) ?
-                        const_cast<void*>(VoidPtrInc(pShaderLibraryHeader + 1, pShaderLibraryHeader->binaryLength)) :
-                        nullptr;
+                    pCreateInfo->pBinaryMetadata->fsOutputMetaDataSize = 0;
+                    pCreateInfo->pBinaryMetadata->pFsOutputMetaData    = nullptr;
+                    if (pShaderLibraryHeader->fragMetaLength > 0)
+                    {
+                        void* pFsOutputMetaData = m_pPhysicalDevice->Manager()->VkInstance()->AllocMem(
+                            pShaderLibraryHeader->fragMetaLength,
+                            VK_DEFAULT_MEM_ALIGN,
+                            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+                        if (pFsOutputMetaData != nullptr)
+                        {
+                            memcpy(pFsOutputMetaData,
+                                VoidPtrInc(pShaderLibraryHeader + 1, pShaderLibraryHeader->binaryLength),
+                                pShaderLibraryHeader->fragMetaLength);
+                            pCreateInfo->pBinaryMetadata->fsOutputMetaDataSize = pShaderLibraryHeader->fragMetaLength;
+                            pCreateInfo->pBinaryMetadata->pFsOutputMetaData    = pFsOutputMetaData;
+                            pModuleState->pFsOutputMetaData                    = pFsOutputMetaData;
+                        }
+                        else
+                        {
+                            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                        }
+                    }
                 }
             }
 
@@ -1164,7 +1182,8 @@ void CompilerSolutionLlpc::UpdateStageCreationFeedback(
 bool CompilerSolutionLlpc::IsGplFastLinkCompatible(
     const Device*                           pDevice,
     uint32_t                                deviceIdx,
-    const GraphicsPipelineBinaryCreateInfo* pCreateInfo)
+    const GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    const GraphicsPipelineLibraryInfo&      libInfo)
 {
     return (pCreateInfo->pipelineInfo.iaState.enableMultiView == false) &&
            ((pCreateInfo->flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) == 0);

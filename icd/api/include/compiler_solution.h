@@ -51,6 +51,7 @@ class ShaderCache;
 class DeferredHostOperation;
 class PipelineCompiler;
 class InternalMemory;
+struct GraphicsPipelineLibraryInfo;
 
 #if VKI_RAY_TRACING
 struct DeferredWorkload;
@@ -67,8 +68,17 @@ enum FreeCompilerBinary : uint32_t
 struct ShaderModuleHandle
 {
     uint32_t* pRefCount;
-    Vkgc::BinaryData elfPackage;        // Generated ElfPackage from LLPC
+
     void*            pLlpcShaderModule; // Shader module handle from LLPC
+};
+
+struct GplModuleState
+{
+    ShaderStage        stage;
+    ShaderModuleHandle moduleHandle;
+    Vkgc::BinaryData   elfPackage;
+    void*              pFsOutputMetaData;
+
 };
 
 struct LlpcShaderLibraryBlobHeader
@@ -260,8 +270,6 @@ public:
         VkShaderModuleCreateFlags    flags,
         VkShaderModuleCreateFlags    internalShaderFlags,
         const Vkgc::BinaryData&      shaderBinary,
-        const bool                   adaptForFastLink,
-        bool                         isInternal,
         ShaderModuleHandle*          pShaderModule,
         const PipelineOptimizerKey&  profileKey) = 0;
 
@@ -286,10 +294,10 @@ public:
     virtual VkResult CreateGraphicsShaderBinary(
         const Device*                     pDevice,
         PipelineCache*                    pPipelineCache,
-        const ShaderStage                 stage,
+        GraphicsLibraryType               gplType,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         void*                             pPipelineDumpHandle,
-        ShaderModuleHandle*               pShaderModule) = 0;
+        GplModuleState*                   pModuleState) = 0;
 
     virtual VkResult CreateComputePipelineBinary(
         Device*                     pDevice,
@@ -339,14 +347,19 @@ public:
     virtual bool IsGplFastLinkCompatible(
         const Device*                           pDevice,
         uint32_t                                deviceIdx,
-        const GraphicsPipelineBinaryCreateInfo* pCreateInfo) = 0;
+        const GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        const GraphicsPipelineLibraryInfo&      libInfo) = 0;
 
     virtual Vkgc::BinaryData ExtractPalElfBinary(const Vkgc::BinaryData& shaderBinary) = 0;
 
     static void DisableNggCulling(Vkgc::NggState* pNggState);
 
 #if VKI_RAY_TRACING
-    static void UpdateRayTracingFunctionNames(const Device* pDevice, Vkgc::RtState* pRtState);
+    static void UpdateRayTracingFunctionNames(
+        const Device*          pDevice,
+        Pal::RayTracingIpLevel rayTracingIp,
+        Vkgc::RtState*         pRtState);
+
     uint32_t GetRayTracingVgprLimit(bool isIndirect);
 #endif
 
