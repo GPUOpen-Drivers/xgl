@@ -44,6 +44,7 @@
 #include "include/vk_fence.h"
 #include "include/vk_formats.h"
 #include "include/vk_framebuffer.h"
+
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_physical_device.h"
 #include "include/vk_image.h"
@@ -669,7 +670,6 @@ VkResult Device::Create(
                 }
                 break;
             }
-
             default:
                 break;
             }
@@ -1449,6 +1449,13 @@ void Device::InitDispatchTable()
         ep->vkCmdPushDescriptorSetWithTemplateKHR = CmdBuffer::GetCmdPushDescriptorSetWithTemplateKHRFunc(this);
     }
 
+    if (m_enabledExtensions.IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE6))
+    {
+        ep->vkCmdBindDescriptorSets2KHR            = CmdBuffer::GetCmdBindDescriptorSets2KHRFunc(this);
+        ep->vkCmdPushDescriptorSet2KHR             = CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(this);
+        ep->vkCmdPushDescriptorSetWithTemplate2KHR = CmdBuffer::GetCmdPushDescriptorSetWithTemplate2KHRFunc(this);
+    }
+
     // =================================================================================================================
     // After generic overrides, apply any internal layer specific dispatch table override.
 
@@ -1853,13 +1860,12 @@ VkResult Device::CreateInternalComputePipeline(
 
     // Build shader module
     Vkgc::BinaryData spvBin = { codeByteSize, pCode };
+    internalShaderFlags |= VK_INTERNAL_SHADER_FLAGS_INTERNAL_SHADER_BIT;
     result = pCompiler->BuildShaderModule(
         this,
         0,
         internalShaderFlags,
         spvBin,
-        false,
-        true,
         &shaderModule);
 
     if (result == VK_SUCCESS)
@@ -2910,6 +2916,14 @@ VkResult Device::BindBufferMemory(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_BIND_MEMORY_STATUS_KHR:
+            {
+                const auto* pExtInfo = static_cast<const VkBindMemoryStatusKHR*>(pNext);
+
+                pPerBindResult = pExtInfo->pResult;
+                break;
+            }
+
             default:
                 VK_NOT_IMPLEMENTED;
                 break;
@@ -2987,6 +3001,14 @@ VkResult Device::BindImageMemory(
 
                 pSwapchain = SwapChain::ObjectFromHandle(pExtInfo->swapchain);
                 swapChainImageIndex = pExtInfo->imageIndex;
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_BIND_MEMORY_STATUS_KHR:
+            {
+                const auto* pExtInfo = static_cast<const VkBindMemoryStatusKHR*>(pNext);
+
+                pPerBindResult = pExtInfo->pResult;
                 break;
             }
 

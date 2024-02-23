@@ -238,6 +238,25 @@ inline void GetExecutableNameAndPath(char* pExecutableName, char* pExecutablePat
 }
 
 // =====================================================================================================================
+inline Util::Result MkDirRecursively(const char* pPathName)
+{
+    char pathBuffer[PATH_MAX];
+
+    // The PAL function expects / on Linux and \ on Windows for identifying directories
+    size_t i = 0;
+    while ((pPathName[i] != '\0') && (i < (PATH_MAX - 1)))
+    {
+        constexpr char FindChar = '\\';
+        constexpr char ReplaceChar = '/';
+        pathBuffer[i] = (pPathName[i] == FindChar) ? ReplaceChar : pPathName[i];
+        i++;
+    }
+    pathBuffer[i] = '\0';
+
+    return Util::MkDirRecursively(pathBuffer);
+}
+
+// =====================================================================================================================
 inline int StrCmpCaseInsensitive(
     const char* a,
     const char* b)

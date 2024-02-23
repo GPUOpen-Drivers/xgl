@@ -725,10 +725,22 @@ constexpr AppProfilePatternEntry AppNameDetroit =
     "detroitbecomehuman"
 };
 
-constexpr AppProfilePatternEntry AppEngineQuanticDream =
+constexpr AppProfilePatternEntry AppEngineQuanticDream
 {
     PatternEngineNameLower,
     "quantic dream engine"
+};
+
+constexpr AppProfilePatternEntry AppNameEnshrouded =
+{
+    PatternAppNameLower,
+    "enshrouded"
+};
+
+constexpr AppProfilePatternEntry AppEngineHolistic =
+{
+    PatternEngineNameLower,
+    "holistic"
 };
 
 constexpr AppProfilePatternEntry PatternEnd = {};
@@ -1461,6 +1473,23 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::TheSurge2,
         {
             AppNameTheSurge2,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Enshrouded,
+        {
+            AppNameEnshrouded,
+            AppEngineHolistic,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::HolisticEngine,
+        {
+            AppEngineHolistic,
             PatternEnd
         }
     },

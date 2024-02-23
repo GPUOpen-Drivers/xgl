@@ -58,6 +58,7 @@ struct DeferGraphicsPipelineCreateInfo
     GraphicsPipelineBinaryCreateInfo binaryCreateInfo;
     GraphicsPipelineShaderStageInfo  shaderStageInfo;
     GraphicsPipelineObjectCreateInfo objectCreateInfo;
+    GraphicsPipelineExtStructs       extStructs;
     Util::MetroHash::Hash            elfHash;
     ShaderOptimizerKey               shaderOptimizerKeys[ShaderStage::ShaderStageGfxCount];
     PipelineOptimizerKey             pipelineOptimizerKey;
@@ -152,6 +153,7 @@ public:
         Device*                                 pDevice,
         PipelineCache*                          pPipelineCache,
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+        const GraphicsPipelineExtStructs&       extStructs,
         VkPipelineCreateFlags2KHR               flags,
         const VkAllocationCallbacks*            pAllocator,
         VkPipeline*                             pPipeline);
@@ -166,6 +168,15 @@ public:
     void BindToCmdBuffer(
         CmdBuffer* pCmdBuffer) const;
 
+   const Pal::IDepthStencilState* GetDynamicDepthStencil(uint32_t deviceIdx) const
+        { return m_pPalDepthStencil[deviceIdx]; }
+
+    const Pal::IMsaaState* GetMsaa(uint32_t deviceIdx) const
+        { return m_pPalMsaa[deviceIdx]; }
+
+    const Pal::IColorBlendState* GetColorBlendState(uint32_t deviceIdx) const
+        { return m_pPalColorBlend[deviceIdx]; }
+
     const Pal::IPipeline* GetPalPipeline(uint32_t deviceIdx) const
         { return  UseOptimizedPipeline() ? m_pOptimizedPipeline[deviceIdx] : m_pPalPipeline[deviceIdx]; }
 
@@ -173,6 +184,8 @@ public:
         { return m_pPalShaderLibrary[type]; }
 
     const Pal::DynamicGraphicsShaderInfos& GetBindInfo() const { return m_info.graphicsShaderInfos; }
+
+    const GraphicsPipelineObjectImmedInfo& GetGraphicsPipelineImmedInfo() const { return m_info; }
 
     const Pal::IMsaaState* const* GetMsaaStates() const { return m_pPalMsaa; }
 
@@ -226,6 +239,7 @@ protected:
     static VkResult CreatePipelineBinaries(
         Device*                                        pDevice,
         const VkGraphicsPipelineCreateInfo*            pCreateInfo,
+        const GraphicsPipelineExtStructs&              extStructs,
         VkPipelineCreateFlags2KHR                      flags,
         const GraphicsPipelineShaderStageInfo*         pShaderInfo,
         const PipelineLayout*                          pPipelineLayout,
@@ -263,6 +277,7 @@ private:
         GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
         GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
         GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
+        const GraphicsPipelineExtStructs& extStructs,
         Util::MetroHash::Hash*            pElfHash);
 
     static VkResult CreatePalPipelineObjects(
@@ -292,6 +307,7 @@ private:
         GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
         GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
         GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
+        const GraphicsPipelineExtStructs& extStructs,
         Util::MetroHash::Hash*            pElfHash);
 
     static void ExecuteDeferCreateOptimizedPipeline(void* pPayload);

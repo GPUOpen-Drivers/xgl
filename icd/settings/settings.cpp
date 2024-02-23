@@ -496,13 +496,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // Disable image type checking on Navi10 to avoid 2% loss.
             m_settings.disableImageResourceTypeCheck = true;
 
-            m_settings.enableGraphicsPipelineLibraries = true;
         }
 
         if (appProfile == AppProfile::CSGO)
         {
-            m_settings.enableGraphicsPipelineLibraries = true;
-
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
 
@@ -866,6 +863,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
 
             m_settings.ac01WaNotNeeded = true;
+
+            m_settings.disable3dLinearImageFormatSupport = false;
         }
 
         if (appProfile == AppProfile::GhostReconBreakpoint)
@@ -945,8 +944,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
             {
                 m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
-
-                m_settings.rtEnableTriangleSplitting = true;
 
                 m_settings.rtTriangleCompressionMode = NoTriangleCompression;
 
@@ -1134,6 +1131,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::AvoidCpuMemoryCoher;
             }
+            m_settings.skipUnMapMemory = true;
         }
 
         if (appProfile == AppProfile::WarThunder)
@@ -1358,6 +1356,20 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             (appProfile == AppProfile::Vkd3dEngine))
         {
             m_settings.disableSingleMipAnisoOverride = false;
+        }
+
+        if (appProfile == AppProfile::DXVK)
+        {
+            m_settings.enableGraphicsPipelineLibraries = false;
+        }
+
+        if (appProfile == AppProfile::Enshrouded)
+        {
+#if VKI_BUILD_GFX11
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
+            {
+            }
+#endif
         }
 
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
@@ -1587,6 +1599,12 @@ void VulkanSettingsLoader::ValidateSettings()
         (rayTracingIpLevel == Pal::RayTracingIpLevel::None))
     {
         m_settings.enableRaytracingSupport = RaytracingNotSupported;
+    }
+
+    // When using continuations, always set thread group size to 32 x 1 x 1, that's what we only support.
+    if (m_settings.llpcRaytracingMode == RaytracingContinuations)
+    {
+        m_settings.rtFlattenThreadGroupSize = 32;
     }
 
 #if VKI_BUILD_GFX11

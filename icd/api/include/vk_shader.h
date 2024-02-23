@@ -38,7 +38,12 @@ namespace Pal { enum class ResourceMappingNodeType : Pal::uint32; }
 #define VK_INTERNAL_SHADER_FLAGS_RAY_TRACING_INTERNAL_SHADER_BIT 0x80000000u
 #endif
 
-#define VK_INTERNAL_SHADER_FLAGS_FORCE_UNCACHED_BIT 0x20000000u
+// To support delayed conversion using this flag, DelayedBuildShaderModule must be called for each shader module
+// after pipeline cache lookup and if missed, before pipeline creation.
+#define VK_INTERNAL_SHADER_FLAGS_ALLOW_DELAY_CONVERSION_BIT       0x40000000u
+
+#define VK_INTERNAL_SHADER_FLAGS_INTERNAL_SHADER_BIT              0x20000000u
+#define VK_INTERNAL_SHADER_FLAGS_FORCE_UNCACHED_BIT               0x10000000u
 
 namespace vk
 {

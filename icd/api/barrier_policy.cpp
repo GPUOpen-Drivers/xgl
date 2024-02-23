@@ -112,6 +112,7 @@ public:
 
         InitEntry(VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT,
                   Pal::LayoutShaderRead | Pal::LayoutShaderWrite);
+
     }
 
     // Return layout usage index corresponding to the specified layout.

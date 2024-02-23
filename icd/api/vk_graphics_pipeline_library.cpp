@@ -315,8 +315,7 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
     const GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
     GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
     const VkAllocationCallbacks*            pAllocator,
-    ShaderModuleHandle*                     pTempModules,
-    TempModuleState*                        pTempModuleStages)
+    GplModuleState*                         pTempModuleStages)
 {
     VkResult          result            = VK_SUCCESS;
     PipelineCompiler* pCompiler         = pDevice->GetCompiler(DefaultDeviceIndex);
@@ -335,27 +334,29 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
         &pBinaryCreateInfo->pipelineInfo.fs,
     };
 
+    uint32_t gplMask = 0;
     for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
     {
         if ((pShaderInfos[i]->pModuleData != nullptr) &&
             (pShaderStageInfo->stages[i].pModuleHandle != nullptr) &&
             pCompiler->IsValidShaderModule(pShaderStageInfo->stages[i].pModuleHandle))
         {
-            VK_ASSERT(pShaderStageInfo->stages[i].pModuleHandle == &pTempModules[i]);
+            bool canBuildShader = (pShaderStageInfo->stages[i].stage != ShaderStage::ShaderStageFragment) ||
+                                  (IsRasterizationDisabled(pCreateInfo, pLibInfo, dynamicStateFlags) == false);
 
-            bool canBuildShader = (((pShaderStageInfo->stages[i].stage == ShaderStage::ShaderStageFragment) &&
-                                    IsRasterizationDisabled(pCreateInfo, pLibInfo, dynamicStateFlags))
-                                   == false);
-
-            if (canBuildShader && (result == VK_SUCCESS))
+            GraphicsLibraryType gplType = GetGraphicsLibraryType(pShaderStageInfo->stages[i].stage);
+            if (Util::TestAnyFlagSet(gplMask, 1 << gplType))
             {
-                // We don't take care of the result. Early compile failure in some cases is expected
-                result = pCompiler->CreateGraphicsShaderBinary(
-                    pDevice, pPipelineCache, pShaderStageInfo->stages[i].stage, pBinaryCreateInfo, &pTempModules[i]);
+                continue;
             }
 
-            pTempModuleStages[i].stage          = pShaderStageInfo->stages[i].stage;
-            pTempModuleStages[i].freeBinaryOnly = false;
+            if (canBuildShader)
+            {
+                // We don't take care of the result. Early compile failure in some cases is expected
+                pCompiler->CreateGraphicsShaderBinary(
+                    pDevice, pPipelineCache, gplType, pBinaryCreateInfo, &pTempModuleStages[i]);
+                gplMask |= (1 << gplType);
+            }
         }
     }
 
@@ -365,60 +366,37 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
         if ((pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) &&
             (pLibInfo->pPreRasterizationShaderLib != nullptr))
         {
-            const ShaderModuleHandle* pParentHandle =
-                pLibInfo->pPreRasterizationShaderLib->GetShaderModuleHandle(ShaderStage::ShaderStageVertex);
-
             // Parent library may not have vertex shader if it uses mesh shader.
-            if ((pParentHandle != nullptr) && (result == VK_SUCCESS))
-            {
-                constexpr uint32_t TempIdx = ShaderStage::ShaderStageVertex;
+            constexpr uint32_t TempIdx = ShaderStage::ShaderStageVertex;
 
-                pBinaryCreateInfo->pipelineInfo.enableUberFetchShader = false;
+            pBinaryCreateInfo->pipelineInfo.enableUberFetchShader = false;
+            pBinaryCreateInfo->pShaderLibraries[GraphicsLibraryPreRaster] = nullptr;
 
-                pTempModules[TempIdx] = *pParentHandle;
-
-                result = pCompiler->CreateGraphicsShaderBinary(
-                    pDevice, pPipelineCache, ShaderStage::ShaderStageVertex, pBinaryCreateInfo, &pTempModules[TempIdx]);
-
-                pTempModuleStages[TempIdx].stage          = ShaderStage::ShaderStageVertex;
-                pTempModuleStages[TempIdx].freeBinaryOnly = true;
-            }
+            VK_ASSERT(pTempModuleStages[TempIdx].elfPackage.codeSize == 0);
+            result = pCompiler->CreateGraphicsShaderBinary(
+                pDevice, pPipelineCache, GraphicsLibraryPreRaster, pBinaryCreateInfo, &pTempModuleStages[TempIdx]);
         }
 
         if ((pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT) &&
-            (pLibInfo->pFragmentShaderLib != nullptr))
+            (pLibInfo->pFragmentShaderLib != nullptr) &&
+            (result == VK_SUCCESS))
         {
-            const ShaderModuleHandle* pParentHandle =
-                pLibInfo->pFragmentShaderLib->GetShaderModuleHandle(ShaderStage::ShaderStageFragment);
+            constexpr uint32_t TempIdx = ShaderStage::ShaderStageFragment;
 
-            VK_ASSERT(pParentHandle != nullptr);
+            VK_ASSERT(pTempModuleStages[TempIdx].elfPackage.codeSize == 0);
 
-            if ((pParentHandle != nullptr) && (result == VK_SUCCESS))
-            {
-                constexpr uint32_t TempIdx = ShaderStage::ShaderStageFragment;
-
-                pTempModules[TempIdx] = *pParentHandle;
-
-                result = pCompiler->CreateGraphicsShaderBinary(pDevice, pPipelineCache,
-                    ShaderStage::ShaderStageFragment, pBinaryCreateInfo, &pTempModules[TempIdx]);
-
-                pTempModuleStages[TempIdx].stage          = ShaderStage::ShaderStageFragment;
-                pTempModuleStages[TempIdx].freeBinaryOnly = true;
-            }
+            result = pCompiler->CreateGraphicsShaderBinary(pDevice, pPipelineCache,
+                GraphicsLibraryFragment, pBinaryCreateInfo, &pTempModuleStages[TempIdx]);
         }
     }
 
-    for (uint32_t stage = 0; (result == VK_SUCCESS) && (stage < ShaderStage::ShaderStageGfxCount); ++stage)
+    // Create shader libraries for fast-link
+    if (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink)
     {
-        if (pCompiler->IsValidShaderModule(&pTempModules[stage]) == false)
+        for (uint32_t stage = 0; (result == VK_SUCCESS) && (stage < ShaderStage::ShaderStageGfxCount); ++stage)
         {
-            pTempModuleStages[stage].stage = ShaderStage::ShaderStageInvalid;
-        }
-        else if (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink)
-        {
-            // Create shader libraries for fast-link
             GraphicsLibraryType gplType = GetGraphicsLibraryType(static_cast<ShaderStage>(stage));
-            if ((pBinaryCreateInfo->earlyElfPackage[gplType].codeSize != 0) &&
+            if ((pBinaryCreateInfo->earlyElfPackage[gplType].pCode != nullptr) &&
                 (pBinaryCreateInfo->pShaderLibraries[gplType] == nullptr))
             {
                 Vkgc::BinaryData  palElfBinary = {};
@@ -429,12 +407,16 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
                                                                 palElfBinary,
                                                                 pAllocator,
                                                                 &pBinaryCreateInfo->pShaderLibraries[gplType]);
+                pBinaryCreateInfo->earlyElfPackage[gplType].pCode = nullptr;
+            }
+
+            if (pTempModuleStages[stage].elfPackage.codeSize > 0)
+            {
+                pDevice->VkInstance()->FreeMem(const_cast<void*>(pTempModuleStages[stage].elfPackage.pCode));
+                pTempModuleStages[stage].elfPackage = {};
             }
         }
-    }
 
-    if (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink)
-    {
         // If there is no fragment shader when create fragment library, we use a null pal graphics library.
         if ((pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) &&
             (pBinaryCreateInfo->pipelineInfo.fs.pModuleData == nullptr))
@@ -453,6 +435,7 @@ VkResult GraphicsPipelineLibrary::Create(
     Device*                             pDevice,
     PipelineCache*                      pPipelineCache,
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    const GraphicsPipelineExtStructs&   extStructs,
     VkPipelineCreateFlags2KHR           flags,
     const VkAllocationCallbacks*        pAllocator,
     VkPipeline*                         pPipeline)
@@ -468,18 +451,17 @@ VkResult GraphicsPipelineLibrary::Create(
 
     GraphicsPipelineBinaryCreateInfo binaryCreateInfo = {};
     GraphicsPipelineShaderStageInfo  shaderStageInfo = {};
-    ShaderModuleHandle               tempModules[ShaderStage::ShaderStageGfxCount] = {};
-    TempModuleState                  tempModuleStates[ShaderStage::ShaderStageGfxCount] = {};
+    GplModuleState                   tempModuleStates[ShaderStage::ShaderStageGfxCount] = {};
 
     binaryCreateInfo.pipelineInfo.iaState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
     // 1. Build shader stage infos
     if (result == VK_SUCCESS)
     {
+        ShaderModuleHandle               tempModules[ShaderStage::ShaderStageGfxCount] = {};
         result = BuildShaderStageInfo(pDevice,
                                       pCreateInfo->stageCount,
                                       pCreateInfo->pStages,
-                                      Util::TestAnyFlagSet(flags, VK_PIPELINE_CREATE_LIBRARY_BIT_KHR),
                                       [](const uint32_t inputIdx, const uint32_t stageIdx)
                                       {
                                           return stageIdx;
@@ -488,6 +470,24 @@ VkResult GraphicsPipelineLibrary::Create(
                                       tempModules,
                                       pPipelineCache,
                                       binaryCreateInfo.stageFeedback);
+
+        // Initialize tempModuleStates
+        for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; stage++)
+        {
+            if (shaderStageInfo.stages[stage].pModuleHandle != nullptr)
+            {
+                tempModuleStates[stage].stage = static_cast<ShaderStage>(stage);
+            }
+            else
+            {
+                tempModuleStates[stage].stage = ShaderStageInvalid;
+            }
+
+            if (pDevice->GetCompiler(DefaultDeviceIndex)->IsValidShaderModule(&tempModules[stage]))
+            {
+                tempModuleStates[stage].moduleHandle = tempModules[stage];
+            }
+        }
     }
 
     // 2. Build ShaderOptimizer pipeline key
@@ -511,7 +511,11 @@ VkResult GraphicsPipelineLibrary::Create(
     // 3. Build API and ELF hashes
     uint64_t              apiPsoHash = {};
     Util::MetroHash::Hash elfHash    = {};
-    BuildApiHash(pCreateInfo, flags, &apiPsoHash, &elfHash);
+    BuildApiHash(pCreateInfo,
+                 flags,
+                 binaryCreateInfo,
+                 &apiPsoHash,
+                 &elfHash);
     binaryCreateInfo.apiPsoHash = apiPsoHash;
 
     // 4. Get pipeline layout
@@ -529,6 +533,7 @@ VkResult GraphicsPipelineLibrary::Create(
         result = pDevice->GetCompiler(DefaultDeviceIndex)->ConvertGraphicsPipelineInfo(
             pDevice,
             pCreateInfo,
+            extStructs,
             flags,
             &shaderStageInfo,
             pPipelineLayout,
@@ -549,7 +554,6 @@ VkResult GraphicsPipelineLibrary::Create(
             &shaderStageInfo,
             &binaryCreateInfo,
             pAllocator,
-            tempModules,
             tempModuleStates);
     }
 
@@ -562,6 +566,7 @@ VkResult GraphicsPipelineLibrary::Create(
         BuildPipelineObjectCreateInfo(
             pDevice,
             pCreateInfo,
+            extStructs,
             flags,
             &pipelineOptimizerKey,
             &binaryMetadata,
@@ -595,7 +600,6 @@ VkResult GraphicsPipelineLibrary::Create(
             libInfo,
             elfHash,
             apiPsoHash,
-            tempModules,
             tempModuleStates,
             pPipelineLayout);
 
@@ -646,18 +650,12 @@ VkResult GraphicsPipelineLibrary::Destroy(
     uint32_t libraryMask = 0;
     for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
     {
-        if (m_tempModuleStates[i].stage != ShaderStage::ShaderStageInvalid)
+        if (m_gplModuleStates[i].stage != ShaderStage::ShaderStageInvalid)
         {
-            if (m_tempModuleStates[i].freeBinaryOnly)
-            {
-                PipelineCompiler::FreeGraphicsShaderBinary(m_tempModules + i);
-            }
-            else
-            {
-                pCompiler->FreeShaderModule(m_tempModules + i);
-            }
-            libraryMask |= (1 << GetGraphicsLibraryType(m_tempModuleStates[i].stage));
+            libraryMask |= (1 << GetGraphicsLibraryType(m_gplModuleStates[i].stage));
         }
+
+        pCompiler->FreeGplModuleState(&m_gplModuleStates[i]);
     }
 
     for (uint32_t i = 0; i < ArrayLen(m_pBinaryCreateInfo->pShaderLibraries); ++i)
@@ -688,8 +686,7 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
     const GraphicsPipelineLibraryInfo&      libInfo,
     const Util::MetroHash::Hash&            elfHash,
     const uint64_t                          apiHash,
-    const ShaderModuleHandle*               pTempModules,
-    const TempModuleState*                  pTempModuleStates,
+    const GplModuleState*                   pGplModuleStates,
     const PipelineLayout*                   pPipelineLayout)
 #if VKI_RAY_TRACING
     : GraphicsPipelineCommon(false, pDevice),
@@ -712,66 +709,7 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
         dummyCacheHash,
         apiHash);
 
-    memcpy(m_tempModules,      pTempModules,      ShaderStage::ShaderStageGfxCount * sizeof(ShaderModuleHandle));
-    memcpy(m_tempModuleStates, pTempModuleStates, ShaderStage::ShaderStageGfxCount * sizeof(TempModuleState));
-}
-
-// =====================================================================================================================
-const ShaderModuleHandle* GraphicsPipelineLibrary::GetShaderModuleHandle(
-    const ShaderStage stage
-    ) const
-{
-    const ShaderModuleHandle*         pHandle = nullptr;
-    VkGraphicsPipelineLibraryFlagsEXT libFlag = 0;
-
-    switch (stage)
-    {
-    case ShaderStage::ShaderStageTask:
-    case ShaderStage::ShaderStageVertex:
-    case ShaderStage::ShaderStageTessControl:
-    case ShaderStage::ShaderStageTessEval:
-    case ShaderStage::ShaderStageGeometry:
-    case ShaderStage::ShaderStageMesh:
-        libFlag = VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT;
-        break;
-    case ShaderStage::ShaderStageFragment:
-        libFlag = VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT;
-        break;
-    default:
-        VK_NEVER_CALLED();
-        break;
-    }
-
-    // Find shader module handle from temp modules in current library
-    if (libFlag & m_libInfo.libFlags)
-    {
-        for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
-        {
-            if (stage == m_tempModuleStates[i].stage)
-            {
-                pHandle = m_tempModules + i;
-                break;
-            }
-            else if (ShaderStageInvalid == m_tempModuleStates[i].stage)
-            {
-                break;
-            }
-        }
-    }
-    // Find the shader module handle from parent library
-    else if (libFlag & (m_pBinaryCreateInfo->libFlags & ~m_libInfo.libFlags))
-    {
-        if (libFlag == VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT)
-        {
-            pHandle = m_libInfo.pPreRasterizationShaderLib->GetShaderModuleHandle(stage);
-        }
-        else if (libFlag == VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
-        {
-            pHandle = m_libInfo.pFragmentShaderLib->GetShaderModuleHandle(stage);
-        }
-    }
-
-    return pHandle;
+    memcpy(m_gplModuleStates, pGplModuleStates, ShaderStage::ShaderStageGfxCount * sizeof(GplModuleState));
 }
 
 // =====================================================================================================================
@@ -782,9 +720,9 @@ void GraphicsPipelineLibrary::GetOwnedPalShaderLibraries(
     uint32_t libraryMask = 0;
     for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
     {
-        if (m_tempModuleStates[i].stage != ShaderStage::ShaderStageInvalid)
+        if (m_gplModuleStates[i].stage != ShaderStage::ShaderStageInvalid)
         {
-            libraryMask |= (1 << GetGraphicsLibraryType(m_tempModuleStates[i].stage));
+            libraryMask |= (1 << GetGraphicsLibraryType(m_gplModuleStates[i].stage));
         }
     }
 
@@ -801,5 +739,4 @@ void GraphicsPipelineLibrary::GetOwnedPalShaderLibraries(
         }
     }
 }
-
 }

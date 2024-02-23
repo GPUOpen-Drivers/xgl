@@ -414,6 +414,7 @@ vkGetPipelineExecutableStatisticsKHR                @device       @dext(KHR_pipe
 vkGetPipelineExecutableInternalRepresentationsKHR   @device       @dext(KHR_pipeline_executable_properties)
 
 vkCmdSetLineStippleEXT                              @device       @dext(EXT_line_rasterization)
+vkCmdSetLineStippleKHR                              @device       @dext(KHR_line_rasterization)
 
 vkSetDeviceMemoryPriorityEXT                        @device       @dext(EXT_pageable_device_local_memory)
 
@@ -560,4 +561,11 @@ vkGetDeviceImageSubresourceLayoutKHR                @device       @dext(KHR_main
 vkGetImageSubresourceLayout2KHR                     @device       @dext(KHR_maintenance5)
 vkGetRenderingAreaGranularityKHR                    @device       @dext(KHR_maintenance5)
 vkCmdBindIndexBuffer2KHR                            @device       @dext(KHR_maintenance5)
+
+vkCmdBindDescriptorSets2KHR                         @device       @dext(KHR_maintenance6)
+vkCmdPushConstants2KHR                              @device       @dext(KHR_maintenance6)
+vkCmdPushDescriptorSet2KHR                          @device       @dext(KHR_maintenance6)
+vkCmdPushDescriptorSetWithTemplate2KHR              @device       @dext(KHR_maintenance6)
+vkCmdSetDescriptorBufferOffsets2EXT                 @device       @dext(KHR_maintenance6)
+vkCmdBindDescriptorBufferEmbeddedSamplers2EXT       @device       @dext(KHR_maintenance6)
 

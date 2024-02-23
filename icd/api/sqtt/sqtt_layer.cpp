@@ -580,6 +580,8 @@ void SqttCmdBufferState::RgdAnnotateDispatch(
 #if VKI_RAY_TRACING
          || (type == RgpSqttMarkerEventType::CmdTraceRaysKHR)
          || (type == RgpSqttMarkerEventType::CmdTraceRaysIndirectKHR)
+         || (type == RgpSqttMarkerEventType::CmdBuildAccelerationStructuresKHR)
+         || (type == RgpSqttMarkerEventType::CmdBuildAccelerationStructuresIndirectKHR)
 #endif
         )
         {
@@ -637,6 +639,7 @@ void SqttCmdBufferState::RgdInsertBarrierBeginMarker(
     {
         Pal::RgdMarkerInfoBarrierBeginData info = {};
         info.header.infoType = Pal::RgdMarkerInfoTypeBarrierBegin;
+        info.isInternal      = false;
         info.type            = type;
         info.reason          = reason;
 

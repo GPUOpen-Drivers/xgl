@@ -189,6 +189,7 @@ static bool IsDualSourceBlend(VkBlendFactor blend)
 // =====================================================================================================================
 static void BuildPalColorBlendStateCreateInfo(
     const VkPipelineColorBlendStateCreateInfo* pColorBlendState,
+    const GraphicsPipelineExtStructs&          extStructs,
     const uint64_t                             dynamicStateFlags,
     Pal::ColorBlendStateCreateInfo*            pInfo)
 {
@@ -196,8 +197,9 @@ static void BuildPalColorBlendStateCreateInfo(
 
     for (uint32_t i = 0; i < numColorTargets; ++i)
     {
+        uint32_t location = i;
         const VkPipelineColorBlendAttachmentState& attachmentState = pColorBlendState->pAttachments[i];
-        auto pBlendDst = &pInfo->targets[i];
+        auto pBlendDst = &pInfo->targets[location];
 
         if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable) == false)
         {
@@ -220,6 +222,7 @@ static void BuildPalColorBlendStateCreateInfo(
 bool GraphicsPipelineCommon::GetDualSourceBlendEnableState(
     const Device*                              pDevice,
     const VkPipelineColorBlendStateCreateInfo* pColorBlendState,
+    const GraphicsPipelineExtStructs&          extStructs,
     const Pal::ColorBlendStateCreateInfo*      pPalInfo)
 {
     bool dualSourceBlend = false;
@@ -232,7 +235,7 @@ bool GraphicsPipelineCommon::GetDualSourceBlendEnableState(
     else
     {
         Pal::ColorBlendStateCreateInfo palInfo = {};
-        BuildPalColorBlendStateCreateInfo(pColorBlendState, 0, &palInfo);
+        BuildPalColorBlendStateCreateInfo(pColorBlendState, extStructs, 0, &palInfo);
         canEnableDualSourceBlend = pDevice->PalDevice(DefaultDeviceIndex)->CanEnableDualSourceBlend(palInfo);
     }
 
@@ -804,7 +807,9 @@ VkResult GraphicsPipelineCommon::Create(
 {
     VkResult result;
 
-    const bool isLibrary = Util::TestAnyFlagSet(flags, VK_PIPELINE_CREATE_LIBRARY_BIT_KHR);
+    GraphicsPipelineExtStructs extStructs = {};
+
+    HandleExtensionStructs(pCreateInfo, &extStructs);
 
     if (pDevice->GetRuntimeSettings().pipelineLinkOptimizationMode == PipelineLinkOptimizationNeverOptimized)
     {
@@ -815,15 +820,15 @@ VkResult GraphicsPipelineCommon::Create(
         flags |= ~VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT;
     }
 
-    if (isLibrary)
+    if ((flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) != 0)
     {
         result =  GraphicsPipelineLibrary::Create(
-            pDevice, pPipelineCache, pCreateInfo, flags, pAllocator, pPipeline);
+            pDevice, pPipelineCache, pCreateInfo, extStructs, flags, pAllocator, pPipeline);
     }
     else
     {
         result =  GraphicsPipeline::Create(
-            pDevice, pPipelineCache, pCreateInfo, flags, pAllocator, pPipeline);
+            pDevice, pPipelineCache, pCreateInfo, extStructs, flags, pAllocator, pPipeline);
     }
 
     return result;
@@ -1548,6 +1553,7 @@ static void BuildColorBlendState(
     const Device*                              pDevice,
     const VkPipelineRenderingCreateInfo*       pRendering,
     const VkPipelineColorBlendStateCreateInfo* pCb,
+    const GraphicsPipelineExtStructs&          extStructs,
     const RenderPass*                          pRenderPass,
     const uint32_t                             subpass,
     const uint64_t                             dynamicStateFlags,
@@ -1629,7 +1635,8 @@ static void BuildColorBlendState(
         {
             for (uint32_t i = 0; i < numColorTargets; ++i)
             {
-                auto pCbDst     = &pInfo->pipeline.cbState.target[i];
+                uint32_t location = i;
+                auto pCbDst     = &pInfo->pipeline.cbState.target[location];
 
                 if (pRenderPass != nullptr)
                 {
@@ -1688,9 +1695,9 @@ static void BuildColorBlendState(
                 ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable) == false) ||
                  (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation) == false)))
             {
-                BuildPalColorBlendStateCreateInfo(pCb, dynamicStateFlags, &pInfo->immedInfo.blendCreateInfo);
+                BuildPalColorBlendStateCreateInfo(pCb, extStructs, dynamicStateFlags, &pInfo->immedInfo.blendCreateInfo);
                 dualSourceBlend = GraphicsPipelineCommon::GetDualSourceBlendEnableState(
-                    pDevice, pCb, &pInfo->immedInfo.blendCreateInfo);
+                    pDevice, pCb, extStructs , &pInfo->immedInfo.blendCreateInfo);
             }
         }
 
@@ -1919,6 +1926,7 @@ static void BuildFragmentShaderState(
 static void BuildFragmentOutputInterfaceState(
     const Device*                       pDevice,
     const VkGraphicsPipelineCreateInfo* pIn,
+    const GraphicsPipelineExtStructs&   extStructs,
     const uint64_t                      dynamicStateFlags,
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
@@ -1942,6 +1950,7 @@ static void BuildFragmentOutputInterfaceState(
         pDevice,
         pPipelineRenderingCreateInfoKHR,
         pIn->pColorBlendState,
+        extStructs,
         pRenderPass,
         subpass,
         dynamicStateFlags,
@@ -2135,6 +2144,7 @@ static void BuildExecutablePipelineState(
 void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
+    const GraphicsPipelineExtStructs&      extStructs,
     VkPipelineCreateFlags2KHR              flags,
     const PipelineOptimizerKey*            pOptimizerKey,
     const PipelineMetadata*                pBinMeta,
@@ -2214,7 +2224,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
 
         if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)
         {
-            BuildFragmentOutputInterfaceState(pDevice, pIn, pInfo->dynamicStates, pInfo);
+            BuildFragmentOutputInterfaceState(pDevice, pIn, extStructs, pInfo->dynamicStates, pInfo);
         }
         else if (libInfo.pFragmentOutputInterfaceLib != nullptr)
         {
@@ -2918,10 +2928,11 @@ bool GraphicsPipelineCommon::IsRasterizationDisabled(
 //     - pCreateInfo->renderPass
 //     - pCreateInfo->subpass
 void GraphicsPipelineCommon::BuildApiHash(
-    const VkGraphicsPipelineCreateInfo* pCreateInfo,
-    VkPipelineCreateFlags2KHR           flags,
-    uint64_t*                           pApiHash,
-    Util::MetroHash::Hash*              pElfHash)
+    const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+    VkPipelineCreateFlags2KHR               flags,
+    const GraphicsPipelineBinaryCreateInfo& binaryCreateInfo,
+    uint64_t*                               pApiHash,
+    Util::MetroHash::Hash*                  pElfHash)
 {
     Util::MetroHash128 elfHasher;
     Util::MetroHash128 apiHasher;
@@ -3011,6 +3022,32 @@ void GraphicsPipelineCommon::BuildApiHash(
     apiHasher.Finalize(reinterpret_cast<uint8_t*>(&apiHashFull));
 
     *pApiHash = Util::MetroHash::Compact64(&apiHashFull);
+}
+
+// =====================================================================================================================
+void GraphicsPipelineCommon::HandleExtensionStructs(
+    const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    GraphicsPipelineExtStructs*         pExtStructs)
+{
+    const void* pNext = pCreateInfo->pNext;
+
+    while (pNext != nullptr)
+    {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<int32>(pHeader->sType))
+        {
+        // Handle extension specific structures
+        case VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO:
+        {
+            pExtStructs->pPipelineRenderingCreateInfo = static_cast<const VkPipelineRenderingCreateInfo*>(pNext);
+            break;
+        }
+        default:
+            break;
+        }
+        pNext = pHeader->pNext;
+    }
 }
 
 }

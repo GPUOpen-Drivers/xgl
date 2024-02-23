@@ -38,6 +38,7 @@ namespace vk
 class Device;
 class Queue;
 class InternalMemory;
+class CmdBuffer;
 
 // Device-level structure for managing state related to ray-tracing.  Instantiated as part of a VkDevice.
 class RayTracingDevice
@@ -75,6 +76,7 @@ public:
 
     VkResult                   InitAccelStructTracker();
     bool                       AccelStructTrackerEnabled(uint32_t deviceIdx) const;
+    bool                       RayHistoryTraceActive(uint32_t deviceIdx) const;
     GpuRt::AccelStructTracker* GetAccelStructTracker(uint32_t deviceIdx) const;
     Pal::gpusize               GetAccelStructTrackerGpuVa(uint32_t deviceIdx) const;
     const uint32_t*            GetAccelStructTrackerSrd(uint32_t deviceIdx) const
@@ -87,12 +89,9 @@ public:
 
     GpuRt::TraceRayCounterMode TraceRayCounterMode(uint32_t deviceIdx) const;
 
-    bool RayHistoryTraceActive(uint32_t deviceIdx) const
-        { return m_pGpuRtDevice[deviceIdx]->RayHistoryTraceActive(); }
-
     void TraceDispatch(
         uint32_t                               deviceIdx,
-        Pal::ICmdBuffer*                       pPalCmdBuffer,
+        CmdBuffer*                             pCmdBuffer,
         GpuRt::RtPipelineType                  pipelineType,
         uint32_t                               width,
         uint32_t                               height,

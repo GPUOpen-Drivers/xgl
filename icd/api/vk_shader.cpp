@@ -213,8 +213,6 @@ VkResult ShaderModule::Init(
         m_flags,
         0,
         shaderBinary,
-        false,
-        false,
         &m_handle);
 
     if (result == VK_SUCCESS)

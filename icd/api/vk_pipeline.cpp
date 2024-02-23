@@ -254,7 +254,6 @@ VkResult Pipeline::BuildShaderStageInfo(
     const Device*                          pDevice,
     const uint32_t                         stageCount,
     const VkPipelineShaderStageCreateInfo* pStages,
-    const bool                             isLibrary,
     uint32_t                               (*pfnGetOutputIdx)(const uint32_t inputIdx,
                                                               const uint32_t stageIdx),
     ShaderStageInfo*                       pShaderStageInfo,
@@ -267,9 +266,6 @@ VkResult Pipeline::BuildShaderStageInfo(
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
     uint32_t maxOutIdx = 0;
-
-    const bool duplicateExistingModules = isLibrary;
-    const bool adaptForFastLink         = isLibrary;
 
     for (uint32_t i = 0; i < stageCount; ++i)
     {
@@ -291,7 +287,7 @@ VkResult Pipeline::BuildShaderStageInfo(
                 pPipelineShaderStageRequiredSubgroupSizeCreateInfo->requiredSubgroupSize;
         }
 
-        if ((stageInfo.module != VK_NULL_HANDLE) && (duplicateExistingModules == false))
+        if (stageInfo.module != VK_NULL_HANDLE)
         {
             const ShaderModule* pModule = ShaderModule::ObjectFromHandle(stageInfo.module);
 
@@ -321,28 +317,18 @@ VkResult Pipeline::BuildShaderStageInfo(
                 SHADER_MODULE_CREATE_INFO,
                 PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT);
 
-            if (stageInfo.module != VK_NULL_HANDLE)
-            {
-                // Shader needs to be recompiled with additional options for compatibility with fast-link mode
-                const ShaderModule* pModule = ShaderModule::ObjectFromHandle(stageInfo.module);
-                shaderBinary.codeSize = pModule->GetCodeSize();
-                shaderBinary.pCode    = pModule->GetCode();
-            }
-            else
-            {
-                VK_ASSERT((pShaderModuleCreateInfo != nullptr)||
-                          (pPipelineShaderStageModuleIdentifierCreateInfoEXT != nullptr));
+            VK_ASSERT((pShaderModuleCreateInfo != nullptr) ||
+                      (pPipelineShaderStageModuleIdentifierCreateInfoEXT != nullptr));
 
-                if (pShaderModuleCreateInfo != nullptr)
-                {
-                    flags    = pShaderModuleCreateInfo->flags;
-                    shaderBinary.codeSize = pShaderModuleCreateInfo->codeSize;
-                    shaderBinary.pCode    = pShaderModuleCreateInfo->pCode;
+            if (pShaderModuleCreateInfo != nullptr)
+            {
+                flags    = pShaderModuleCreateInfo->flags;
+                shaderBinary.codeSize = pShaderModuleCreateInfo->codeSize;
+                shaderBinary.pCode    = pShaderModuleCreateInfo->pCode;
 
-                    codeHash = ShaderModule::BuildCodeHash(
-                        shaderBinary.pCode,
-                        shaderBinary.codeSize);
-                }
+                codeHash = ShaderModule::BuildCodeHash(
+                    shaderBinary.pCode,
+                    shaderBinary.codeSize);
             }
 
             if (shaderBinary.pCode != nullptr)
@@ -352,8 +338,6 @@ VkResult Pipeline::BuildShaderStageInfo(
                     flags,
                     VK_INTERNAL_SHADER_FLAGS_FORCE_UNCACHED_BIT,
                     shaderBinary,
-                    adaptForFastLink,
-                    false,
                     &pTempModules[outIdx]);
 
                 pShaderStageInfo[outIdx].pModuleHandle = &pTempModules[outIdx];
@@ -521,9 +505,10 @@ bool Pipeline::GetBinary(
     bool result = false;
     if (PalPipeline(DefaultDeviceIndex) != nullptr)
     {
-        pBinaryInfo->binaryHash = m_cacheHash;
-        pBinaryInfo->pBinary =
-            PalPipeline(DefaultDeviceIndex)->GetCodeObjectWithShaderType(shaderType, &pBinaryInfo->binaryByteSize);
+        pBinaryInfo->binaryHash           = m_cacheHash;
+        pBinaryInfo->pipelineBinary.pCode =
+            PalPipeline(DefaultDeviceIndex)->GetCodeObjectWithShaderType(shaderType,
+                                                                         &pBinaryInfo->pipelineBinary.codeSize);
         result = true;
     }
     return result;
@@ -538,13 +523,13 @@ VkResult Pipeline::GetShaderDisassembly(
     size_t*                       pBufferSize,
     void*                         pBuffer) const
 {
-    PipelineBinaryInfo pipelineBinary = {};
+    PipelineBinaryInfo binaryInfo = {};
 
-    bool hasPipelineBinary = GetBinary(shaderType, &pipelineBinary);
+    bool hasPipelineBinary = GetBinary(shaderType, &binaryInfo);
 
     if (hasPipelineBinary == false)
     {
-        // The pipelineBinary will be null if the pipeline wasn't created with
+        // The pipeline binary will be null if the pipeline wasn't created with
         // VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR or for shader
         // module identifier
         return VK_ERROR_UNKNOWN;
@@ -552,7 +537,7 @@ VkResult Pipeline::GetShaderDisassembly(
 
     // To extract the shader code, we can re-parse the saved ELF binary and lookup the shader's program
     // instructions by examining the symbol table entry for that shader's entrypoint.
-    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(), pipelineBinary.pBinary);
+    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(), binaryInfo.pipelineBinary.pCode);
 
     VkResult    result    = VK_SUCCESS;
     Pal::Result palResult = abiReader.Init();
@@ -768,11 +753,11 @@ uint32_t Pipeline::GetAvailableAmdIlSymbol(
     Util::BitMaskScanForward(&firstShaderStage, shaderStageMask);
     Pal::ShaderType shaderType = static_cast<Pal::ShaderType>(firstShaderStage);
 
-    PipelineBinaryInfo pipelineBinary = {};
-    bool hasBinary = GetBinary(shaderType, &pipelineBinary);
+    PipelineBinaryInfo binaryInfo = {};
+    bool hasBinary = GetBinary(shaderType, &binaryInfo);
     if (hasBinary)
     {
-        Util::Abi::PipelineAbiReader abiReader(m_pDevice->VkInstance()->Allocator(), pipelineBinary.pBinary);
+        Util::Abi::PipelineAbiReader abiReader(m_pDevice->VkInstance()->Allocator(), binaryInfo.pipelineBinary.pCode);
         Pal::Result result = abiReader.Init();
 
         if (result == Pal::Result::Success)
@@ -941,19 +926,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetShaderInfoAMD(
             PipelineBinaryInfo binaryInfo = {};
             bool hasBinary = pPipeline->GetBinary(shaderType, &binaryInfo);
 
-            if (hasBinary && (binaryInfo.pBinary != nullptr))
+            if (hasBinary && (binaryInfo.pipelineBinary.pCode != nullptr))
             {
                 if (pBuffer != nullptr)
                 {
-                    const size_t copySize = Util::Min(*pBufferSize, binaryInfo.binaryByteSize);
+                    const size_t copySize = Util::Min(*pBufferSize, binaryInfo.pipelineBinary.codeSize);
 
-                    memcpy(pBuffer, binaryInfo.pBinary, copySize);
+                    memcpy(pBuffer, binaryInfo.pipelineBinary.pCode, copySize);
 
-                    result = (copySize == binaryInfo.binaryByteSize) ? VK_SUCCESS : VK_INCOMPLETE;
+                    result = (copySize == binaryInfo.pipelineBinary.codeSize) ? VK_SUCCESS : VK_INCOMPLETE;
                 }
                 else
                 {
-                    *pBufferSize = binaryInfo.binaryByteSize;
+                    *pBufferSize = binaryInfo.pipelineBinary.codeSize;
 
                     result = VK_SUCCESS;
                 }

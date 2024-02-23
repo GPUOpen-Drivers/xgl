@@ -68,8 +68,7 @@ struct ShaderModuleHandle;
 // Structure containing information about a retrievable pipeline binary.
 struct PipelineBinaryInfo
 {
-    size_t                binaryByteSize;
-    const void*           pBinary;
+    Vkgc::BinaryData      pipelineBinary;
     Util::MetroHash::Hash binaryHash;
 };
 
@@ -271,7 +270,6 @@ protected:
         const Device*                          pDevice,
         const uint32_t                         stageCount,
         const VkPipelineShaderStageCreateInfo* pStages,
-        const bool                             isLibrary,
         uint32_t                               (*pfnGetOutputIdx)(const uint32_t inputIdx,
                                                                   const uint32_t stageIdx),
         ShaderStageInfo*                       pShaderStageInfo,

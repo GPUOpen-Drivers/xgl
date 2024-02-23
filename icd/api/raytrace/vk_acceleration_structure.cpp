@@ -207,7 +207,8 @@ VkResult AccelerationStructure::ConvertBuildInputsKHR(
                                            GpuRt::InputElementLayout::ArrayOfPointers :
                                            GpuRt::InputElementLayout::Array;
 
-                pInputs->instances.gpu   = pInstanceGeom->geometry.instances.data.deviceAddress;
+                pInputs->instances.gpu   = pInstanceGeom->geometry.instances.data.deviceAddress +
+                                           ((pBuildRangeInfos != nullptr) ? pBuildRangeInfos->primitiveOffset : 0);
 
                 if (info.ppGeometries != nullptr)
                 {

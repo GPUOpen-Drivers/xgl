@@ -122,6 +122,61 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer2KHR(
 }
 
 // =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkBindDescriptorSetsInfoKHR*          pBindDescriptorSetsInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdBindDescriptorSets2KHR(
+        commandBuffer,
+        pBindDescriptorSetsInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdPushConstants2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkPushConstantsInfoKHR*               pPushConstantsInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->PushConstants2KHR(pPushConstantsInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSet2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkPushDescriptorSetInfoKHR*           pPushDescriptorSetInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSet2KHR(
+        commandBuffer,
+        pPushDescriptorSetInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplate2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkPushDescriptorSetWithTemplateInfoKHR* pPushDescriptorSetWithTemplateInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSetWithTemplate2KHR(
+        commandBuffer,
+        pPushDescriptorSetWithTemplateInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDescriptorBufferOffsets2EXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkSetDescriptorBufferOffsetsInfoEXT*  pSetDescriptorBufferOffsetsInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDescriptorBufferOffsets2EXT(pSetDescriptorBufferOffsetsInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorBufferEmbeddedSamplers2EXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkBindDescriptorBufferEmbeddedSamplersInfoEXT* pBindDescriptorBufferEmbeddedSamplersInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BindDescriptorBufferEmbeddedSamplers2EXT(
+        pBindDescriptorBufferEmbeddedSamplersInfo);
+}
+
+// =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(
     VkCommandBuffer                             cmdBuffer,
     uint32_t                                    firstBinding,

@@ -41,6 +41,7 @@ public:
         Device*                             pDevice,
         PipelineCache*                      pPipelineCache,
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        const GraphicsPipelineExtStructs&   extStructs,
         VkPipelineCreateFlags2KHR           flags,
         const VkAllocationCallbacks*        pAllocator,
         VkPipeline*                         pPipeline);
@@ -61,20 +62,12 @@ public:
     uint64_t GetDynamicStates() const
         { return m_objectCreateInfo.dynamicStates; }
 
-    const ShaderModuleHandle* GetShaderModuleHandle(const ShaderStage stage) const;
-
     const Util::MetroHash::Hash* GetElfHash() const
         { return &m_elfHash; }
 
     void GetOwnedPalShaderLibraries(const Pal::IShaderLibrary* pLibraries[GraphicsLibraryCount]) const;
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(GraphicsPipelineLibrary);
-
-    struct TempModuleState
-    {
-        ShaderStage stage;
-        bool        freeBinaryOnly;
-    };
 
     GraphicsPipelineLibrary(
         Device*                                 pDevice,
@@ -83,8 +76,7 @@ private:
         const GraphicsPipelineLibraryInfo&      libInfo,
         const Util::MetroHash::Hash&            elfHash,
         const uint64_t                          apiHash,
-        const ShaderModuleHandle*               pTempModules,
-        const TempModuleState*                  pTempModuleStates,
+        const GplModuleState*                   pGplModuleStates,
         const PipelineLayout*                   pPipelineLayout);
 
     static VkResult CreatePartialPipelineBinary(
@@ -95,14 +87,12 @@ private:
         const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
         GraphicsPipelineBinaryCreateInfo*      pBinaryCreateInfo,
         const VkAllocationCallbacks*           pAllocator,
-        ShaderModuleHandle*                    pTempModules,
-        TempModuleState*                       pTempModuleStages);
+        GplModuleState*                        pTempModuleStages);
 
     const GraphicsPipelineObjectCreateInfo  m_objectCreateInfo;
     const GraphicsPipelineBinaryCreateInfo* m_pBinaryCreateInfo;
     const GraphicsPipelineLibraryInfo       m_libInfo;
-    ShaderModuleHandle                      m_tempModules[ShaderStage::ShaderStageGfxCount];
-    TempModuleState                         m_tempModuleStates[ShaderStage::ShaderStageGfxCount];
+    GplModuleState                          m_gplModuleStates[ShaderStage::ShaderStageGfxCount];
     const Util::MetroHash::Hash             m_elfHash;
 };
 

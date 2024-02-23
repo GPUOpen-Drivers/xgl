@@ -112,6 +112,8 @@ enum class AppProfile : uint32_t
     SniperElite5,            // Sniper Elite 5 by Rebellion
     SeriousSamVrTheLastHope, // Serious Sam VR The Last Hope by Croteam
     BaldursGate3,            // Baldur's Gate by Larian Studios
+    Enshrouded,              // Enshrouded by Keen Games
+    HolisticEngine,          // Holistic Engine by Keen Games
 #if VKI_RAY_TRACING
     ControlDX12,             // VKD3D Control Ultimate Edition
     RayTracingWeekends,      // RayTracingInVulkan demo
