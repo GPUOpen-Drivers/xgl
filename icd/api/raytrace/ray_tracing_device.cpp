@@ -134,6 +134,7 @@ VkResult RayTracingDevice::Init()
             callbacks.pfnFlushCmdContext                 = &RayTracingDevice::ClientFlushCmdContext;
             callbacks.pfnAllocateGpuMemory               = &RayTracingDevice::ClientAllocateGpuMemory;
             callbacks.pfnFreeGpuMem                      = &RayTracingDevice::ClientFreeGpuMem;
+            callbacks.pfnClientGetTemporaryGpuMemory     = &RayTracingDevice::ClientGetTemporaryGpuMemory;
 
             Pal::Result palResult = GpuRt::CreateDevice(initInfo, callbacks, pMemory, &m_pGpuRtDevice[deviceIdx]);
 
@@ -159,7 +160,6 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     *pDeviceSettings                = {};
     const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
-    pDeviceSettings->bvhCollapse                  = settings.rtEnableBvhCollapse;
     pDeviceSettings->topDownBuild                 = settings.rtEnableTopDownBuild;
 
     pDeviceSettings->rebraidType                  = ConvertGpuRtRebraidType(settings.rtEnableTreeRebraid);
@@ -247,6 +247,8 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     m_profileRayFlags                   = TraceRayProfileFlagsToRayFlag(settings);
     m_profileMaxIterations              = TraceRayProfileMaxIterationsToMaxIterations(settings);
 
+    pDeviceSettings->gpuDebugFlags               = settings.gpuRtGpuDebugFlags;
+    pDeviceSettings->enableRemapScratchBuffer    = settings.enableRemapScratchBuffer;
     pDeviceSettings->enableEarlyPairCompression  = settings.enableEarlyPairCompression;
     pDeviceSettings->trianglePairingSearchRadius = settings.trianglePairingSearchRadius;
 }
@@ -1107,6 +1109,48 @@ Pal::Result RayTracingDevice::ClientAllocateGpuMemory(
         }
 
         pDevice->VkInstance()->FreeMem(pSystemMemory);
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Client-provided function to get temporary mapped GPU memory
+Pal::Result RayTracingDevice::ClientGetTemporaryGpuMemory(
+    ClientCmdBufferHandle cmdbuf,       // PAL command buffer that will handle the allocation
+    uint64                sizeInBytes,  // Buffer size in bytes
+    Pal::gpusize*         pDestGpuVa,   // (out) Buffer GPU VA
+    void**                ppMappedData) // (out) Map data
+{
+    Pal::Result         result      = Pal::Result::ErrorOutOfGpuMemory;
+    Pal::ICmdBuffer*    pPalCmdbuf  = static_cast<Pal::ICmdBuffer*>(cmdbuf);
+    vk::CmdBuffer*      pCmdbuf     = static_cast<CmdBuffer*>(pPalCmdbuf->GetClientData());
+    VK_ASSERT(pCmdbuf != nullptr);
+    vk::Device*         pDevice     = pCmdbuf->VkDevice();
+
+    for (uint32_t deviceIdx = 0;
+         pDevice->NumPalDevices();
+       ++deviceIdx)
+    {
+        if (pCmdbuf->PalCmdBuffer(deviceIdx) != pPalCmdbuf)
+            continue;
+
+        InternalMemory* pVidMem = nullptr;
+        if (pCmdbuf->GetScratchVidMem(sizeInBytes, InternalPoolGpuReadOnlyCpuVisible, &pVidMem) == VK_SUCCESS)
+        {
+            if (pVidMem != nullptr)
+            {
+                if (pVidMem->Map(deviceIdx, ppMappedData) == Pal::Result::Success)
+                {
+                    *pDestGpuVa = pVidMem->GpuVirtAddr(deviceIdx);
+                    result = Pal::Result::Success;
+                }
+                else
+                {
+                    result = Pal::Result::ErrorNotMappable;
+                }
+            }
+        }
     }
 
     return result;

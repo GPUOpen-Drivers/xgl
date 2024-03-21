@@ -478,18 +478,53 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
 
         if (elfReplace == false)
         {
+            const uint32_t gplStageMask = (gplType == GraphicsLibraryPreRaster) ?
+                    PrsShaderMask : FgsShaderMask;
+            const Vkgc::PipelineShaderInfo* pShadersInfo[ShaderStage::ShaderStageGfxCount] =
+            {
+                &pCreateInfo->pipelineInfo.task,
+                &pCreateInfo->pipelineInfo.vs,
+                &pCreateInfo->pipelineInfo.tcs,
+                &pCreateInfo->pipelineInfo.tes,
+                &pCreateInfo->pipelineInfo.gs,
+                &pCreateInfo->pipelineInfo.mesh,
+                &pCreateInfo->pipelineInfo.fs
+            };
             LoadShaderBinaryFromCache(pPipelineCache, &cacheId, &shaderLibraryBinary, &hitCache, &hitAppCache);
             if (pPipelineCache != nullptr)
             {
                 // Update the shader feedback
-                PipelineCreationFeedback* pStageFeedBack = &pCreateInfo->stageFeedback[pModuleState->stage];
-                pStageFeedBack->feedbackValid = true;
-                pStageFeedBack->hitApplicationCache = hitAppCache;
+                for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; stage++)
+                {
+                    if (Util::TestAnyFlagSet(gplStageMask, 1 << stage) &&
+                        ((pShadersInfo[stage]->options.clientHash.lower != 0) ||
+                         (pShadersInfo[stage]->options.clientHash.upper != 0)))
+                    {
+                        PipelineCreationFeedback* pStageFeedBack = &pCreateInfo->stageFeedback[stage];
+                        pStageFeedBack->feedbackValid = true;
+                        pStageFeedBack->hitApplicationCache = hitAppCache;
+                    }
+                }
+            }
+
+            if (hitCache == false)
+            {
+                for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; stage++)
+                {
+                    if (Util::TestAnyFlagSet(gplStageMask, 1 << stage) &&
+                        (pShadersInfo[stage]->pModuleData == nullptr) &&
+                        ((pShadersInfo[stage]->options.clientHash.lower != 0) ||
+                         (pShadersInfo[stage]->options.clientHash.upper != 0)))
+                    {
+                        result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
+                        break;
+                    }
+                }
             }
         }
 
         ShaderLibraryBlobHeader blobHeader = {};
-        if ((hitCache == false) || elfReplace)
+        if ((result == VK_SUCCESS) && ((hitCache == false) || elfReplace))
         {
             // Build the LLPC pipeline
             Vkgc::UnlinkedShaderStage unlinkedStage = UnlinkedStageCount;
@@ -525,7 +560,6 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
                 result = (llpcResult == Vkgc::Result::ErrorOutOfMemory) ? VK_ERROR_OUT_OF_HOST_MEMORY :
                                                                           VK_ERROR_INITIALIZATION_FAILED;
             }
-
         }
 
         if (result == VK_SUCCESS)

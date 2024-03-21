@@ -348,7 +348,7 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
     if (IsUberFetchShaderEnabled<PipelineLayoutScheme::Compact>(pDevice) &&
         (settings.enableEarlyCompile == false))
     {
-        gfxReservedCount += InternalConstBufferRegCount;
+        gfxReservedCount += SetPtrRegCount;
     }
 
     // Reseve PAL internal user data node for base vertex, base instance, draw id and lds_esgs_size.
@@ -373,8 +373,9 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
         VK_ASSERT(pUserDataLayout->uberFetchConstBufRegBase == InvalidReg);
 
         pUserDataLayout->uberFetchConstBufRegBase = pInfo->userDataRegCount;
-        pInfo->userDataRegCount += 2;
+        pInfo->userDataRegCount += 1;
         pPipelineInfo->numUserDataNodes += 1;
+        pPipelineInfo->numRsrcMapNodes += 1;
     }
 
     // Reserve an user-data to store the VA of buffer for transform feedback.
@@ -623,7 +624,8 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
     {
         pUserDataLayout->uberFetchConstBufRegBase = pInfo->userDataRegCount;
         pPipelineInfo->numUserDataNodes          += 1;
-        pInfo->userDataRegCount                  += InternalConstBufferRegCount;
+        pPipelineInfo->numRsrcMapNodes           += 1;
+        pInfo->userDataRegCount                  += 1;
     }
 
     // Allocate user data for push constant buffer pointer
@@ -647,6 +649,10 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
         pUserDataLayout->debugPrintfRegBase = pInfo->userDataRegCount;
         pInfo->userDataRegCount            += 1;
         pPipelineInfo->numRsrcMapNodes     += 1;
+    }
+    else
+    {
+        pUserDataLayout->debugPrintfRegBase = InvalidReg;
     }
 
     // Allocate user data for the thread group reversal state
@@ -1108,6 +1114,35 @@ void PipelineLayout::BuildLlpcInternalConstantBufferMapping(
     }
 }
 
+// =====================================================================================================================
+void PipelineLayout::BuildLlpcInternalInlineBufferMapping(
+    const uint32_t                 stageMask,
+    const uint32_t                 offsetInDwords,
+    const uint32_t                 maxSizeInDwords,
+    const uint32_t                 binding,
+    Vkgc::ResourceMappingRootNode* pRootNode,
+    uint32_t*                      pRootNodeCount,
+    Vkgc::ResourceMappingNode*     pStaNode,
+    uint32_t*                      pStaNodeCount)
+{
+    const Vkgc::ResourceMappingNode InlineBufferLayout[] =
+    {
+        { Vkgc::ResourceMappingNodeType::InlineBuffer, maxSizeInDwords, 0, {{Vkgc::InternalDescriptorSetId, binding}}},
+    };
+
+    Util::FastMemCpy(pStaNode, InlineBufferLayout, sizeof(InlineBufferLayout));
+    *pStaNodeCount += static_cast<uint32_t>(Util::ArrayLen(InlineBufferLayout));
+
+    pRootNode->node.type           = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
+    pRootNode->node.offsetInDwords = offsetInDwords;
+    pRootNode->node.sizeInDwords   = 1;
+    pRootNode->node.tablePtr.pNext = pStaNode;
+    pRootNode->node.tablePtr.nodeCount = 1;
+    pRootNode->visibility = stageMask;
+
+    ++(*pRootNodeCount);
+}
+
 #if VKI_RAY_TRACING
 // =====================================================================================================================
 // Calculates the offset for the GpuRT user data constants
@@ -1239,24 +1274,31 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
         VK_ASSERT(userDataLayout.specConstBufVertexRegBase   == SpecConstBufferVertexOffset);
         VK_ASSERT(userDataLayout.specConstBufFragmentRegBase == SpecConstBufferFragmentOffset);
 
+        constexpr uint32_t MaxInternalSpecConstBuffSize = UINT16_MAX;
         if (stageMask & Vkgc::ShaderStageVertexBit)
         {
-            BuildLlpcInternalConstantBufferMapping(
+            BuildLlpcInternalInlineBufferMapping(
                 Vkgc::ShaderStageVertexBit,
                 userDataLayout.specConstBufVertexRegBase,
+                MaxInternalSpecConstBuffSize,
                 Vkgc::SpecConstInternalBufferBindingId + ShaderStage::ShaderStageVertex,
                 &pUserDataNodes[userDataNodeCount],
-                &userDataNodeCount);
+                &userDataNodeCount,
+                &pResourceNodes[mappingNodeCount],
+                &mappingNodeCount);
         }
 
         if (stageMask & Vkgc::ShaderStageFragmentBit)
         {
-            BuildLlpcInternalConstantBufferMapping(
+            BuildLlpcInternalInlineBufferMapping(
                 Vkgc::ShaderStageFragmentBit,
                 userDataLayout.specConstBufFragmentRegBase,
+                MaxInternalSpecConstBuffSize,
                 Vkgc::SpecConstInternalBufferBindingId + ShaderStage::ShaderStageFragment,
                 &pUserDataNodes[userDataNodeCount],
-                &userDataNodeCount);
+                &userDataNodeCount,
+                &pResourceNodes[mappingNodeCount],
+                &mappingNodeCount);
         }
     }
     if (pVbInfo != nullptr)
@@ -1280,14 +1322,17 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
             {
                 VK_ASSERT((enableEarlyCompile == false) ||
                     (userDataLayout.uberFetchConstBufRegBase == FetchShaderInternalBufferOffset));
-
+                const uint32_t MaxUberFetchConstBufSize = PipelineCompiler::GetMaxUberFetchShaderInternalDataSize();
                 // Append node for uber fetch shader constant buffer
-                BuildLlpcInternalConstantBufferMapping(
+                BuildLlpcInternalInlineBufferMapping(
                     Vkgc::ShaderStageVertexBit,
                     userDataLayout.uberFetchConstBufRegBase,
+                    MaxUberFetchConstBufSize,
                     Vkgc::FetchShaderInternalBufferBinding,
                     &pUserDataNodes[userDataNodeCount],
-                    &userDataNodeCount);
+                    &userDataNodeCount,
+                    &pResourceNodes[mappingNodeCount],
+                    &mappingNodeCount);
             }
         }
         else
@@ -1482,6 +1527,7 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
     constexpr uint32_t PushConstPtrRegCount       = 1;
     constexpr uint32_t TransformFeedbackRegCount  = 1;
     constexpr uint32_t ReverseThreadGroupRegCount = 1;
+    constexpr uint32_t DebugPrintfRegCount        = 1;
 #if VKI_RAY_TRACING
     constexpr uint32_t DispatchRayArgsPtrRegCount = MaxTraceRayUserDataRegCount;
 #endif
@@ -1505,7 +1551,7 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
     const uint32_t uberFetchCbRegBase = uberFetchShaderEnabled ? regBaseOffset : InvalidReg;
     if (uberFetchCbRegBase != InvalidReg)
     {
-        regBaseOffset += InternalConstBufferRegCount;
+        regBaseOffset += SetPtrRegCount;
     }
 
     const uint32_t pushConstPtrRegBase = regBaseOffset;
@@ -1515,6 +1561,11 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
     if (transformFeedbackRegBase != InvalidReg)
     {
         regBaseOffset += TransformFeedbackRegCount;
+    }
+
+    if (userDataLayout.debugPrintfRegBase != InvalidReg)
+    {
+        regBaseOffset += DebugPrintfRegCount;
     }
 
     const uint32_t threadGroupReversalRegBase = threadGroupReversalEnabled ? regBaseOffset : InvalidReg;
@@ -1559,13 +1610,16 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
     if ((pVbInfo != nullptr) && appendFetchShaderCb)
     {
         VK_ASSERT(uberFetchCbRegBase == userDataLayout.uberFetchConstBufRegBase);
-
-        BuildLlpcInternalConstantBufferMapping(
+        const uint32_t MaxUberFetchConstBufSize = PipelineCompiler::GetMaxUberFetchShaderInternalDataSize();
+        BuildLlpcInternalInlineBufferMapping(
             Vkgc::ShaderStageVertexBit,
             uberFetchCbRegBase,
+            MaxUberFetchConstBufSize,
             Vkgc::FetchShaderInternalBufferBinding,
             &pUserDataNodes[userDataNodeCount],
-            &userDataNodeCount);
+            &userDataNodeCount,
+            &pResourceNodes[mappingNodeCount],
+            &mappingNodeCount);
     }
 
     // Build push constants mapping

@@ -75,6 +75,13 @@ constexpr uint32_t PrsShaderMask =
 constexpr uint32_t FgsShaderMask = (1 << ShaderStage::ShaderStageFragment);
 
 // =====================================================================================================================
+constexpr uint32_t VsFsStageMask     = (1 << ShaderStage::ShaderStageVertex) | (1 << ShaderStage::ShaderStageFragment);
+constexpr uint32_t VsGsFsStageMask   = VsFsStageMask | (1 << ShaderStage::ShaderStageGeometry);
+constexpr uint32_t VsTessFsStageMask = VsFsStageMask |
+    (1 << ShaderStage::ShaderStageTessControl) | (1 << ShaderStage::ShaderStageTessEval);
+constexpr uint32_t VsTessGsFsStageMask = VsTessFsStageMask | (1 << ShaderStage::ShaderStageGeometry);
+
+// =====================================================================================================================
 struct ShaderStageInfo
 {
     ShaderStage                                        stage;
@@ -195,16 +202,15 @@ public:
         Vkgc::BinaryData*                 pPipelineBinary,
         Util::MetroHash::Hash*            pCacheId);
 
-    static void GetPipelineCreationFeedback(
-        const VkStructHeader*                           pHeader,
-        const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo);
+    static void InitPipelineCreationFeedback(
+        const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfo);
 
     static void UpdatePipelineCreationFeedback(
         VkPipelineCreationFeedbackEXT*  pPipelineCreationFeedback,
         const PipelineCreationFeedback* pFeedbackFromCompiler);
 
     static VkResult SetPipelineCreationFeedbackInfo(
-        const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo,
+        const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfo,
         uint32_t                                       stageCount,
         const VkPipelineShaderStageCreateInfo*         pStages,
         const PipelineCreationFeedback*                pPipelineFeedback,

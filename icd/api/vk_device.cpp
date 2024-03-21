@@ -1205,7 +1205,7 @@ VkResult Device::Initialize(
     }
 
     if ((result == VK_SUCCESS) &&
-	(VkInstance()->IsTracingSupportEnabled() || VkInstance()->IsCrashAnalysisSupportEnabled()))
+        (VkInstance()->IsTracingSupportEnabled() || VkInstance()->IsCrashAnalysisSupportEnabled()))
     {
         uint32_t queueFamilyIndex;
         uint32_t queueIndex;
@@ -1951,7 +1951,6 @@ VkResult Device::CreateInternalComputePipeline(
                 this,
                 DefaultDeviceIndex,
                 elfHash,
-                VkPhysicalDevice(DefaultDeviceIndex)->GetSettingsLoader()->GetSettingsHash(),
                 pipelineOptimizerKey,
                 &cacheId
                 );
@@ -3712,7 +3711,7 @@ Pal::IQueue* Device::PerformSwCompositing(
             }
 
             VK_ASSERT(cmdBufferQueueType == pCompositingQueue->Type());
-            pCompositingQueue->Submit(submitInfo);
+            Queue::PalQueueSubmit(this, pCompositingQueue, submitInfo);
         }
 
         pCompositingQueue->SignalQueueSemaphore(m_perGpu[deviceIdx].pSwCompositingSemaphore);
@@ -3744,7 +3743,7 @@ VkResult Device::SwCompositingNotifyFlipMetadata(
             submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
             submitInfo.perSubQueueInfoCount = 1;
 
-            palResult = pPresentQueue->Submit(submitInfo);
+            palResult = Queue::PalQueueSubmit(this, pPresentQueue, submitInfo);
             break;
         }
     }
@@ -3918,6 +3917,11 @@ void Device::GetAccelerationStructureBuildSizesKHR(
                               ((inputs.type == GpuRt::AccelStructType::BottomLevel) && forceRebuildBottomLevel);
 
     const bool allowUpdate = inputs.flags & GpuRt::AccelStructBuildFlagAllowUpdate;
+
+    if (m_settings.ifhRayTracing)
+    {
+        inputs.inputElemCount = 0;
+    }
 
     if (forceRebuild)
     {
@@ -4950,6 +4954,8 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupport(
 {
     // Validate mutable descriptor support and variable descriptor count limits
     const VkMutableDescriptorTypeCreateInfoEXT* pMutableDescriptorTypeCreateInfoEXT = nullptr;
+    const VkDescriptorSetLayoutBindingFlagsCreateInfo* pDescriptorSetLayoutBindingFlagsCreateInfo = nullptr;
+    bool usesVariableDescriptors = false;
     {
         const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
 
@@ -4962,6 +4968,22 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupport(
                     pMutableDescriptorTypeCreateInfoEXT =
                         reinterpret_cast<const VkMutableDescriptorTypeCreateInfoEXT*>(pHeader);
 
+                    break;
+                }
+
+                case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO:
+                {
+                    pDescriptorSetLayoutBindingFlagsCreateInfo =
+                        reinterpret_cast<const VkDescriptorSetLayoutBindingFlagsCreateInfo*>(pHeader);
+
+                    for (uint32_t i = 0; i < pDescriptorSetLayoutBindingFlagsCreateInfo->bindingCount; ++i)
+                    {
+                        if ((pDescriptorSetLayoutBindingFlagsCreateInfo->pBindingFlags[i] &
+                            VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT) != 0)
+                        {
+                            usesVariableDescriptors = true;
+                        }
+                    }
                     break;
                 }
 
@@ -4985,7 +5007,14 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupport(
                     VkDescriptorSetVariableDescriptorCountLayoutSupportEXT * pDescCountLayoutSupport =
                         reinterpret_cast<VkDescriptorSetVariableDescriptorCountLayoutSupportEXT*>(pHeader);
 
-                    pDescCountLayoutSupport->maxVariableDescriptorCount = UINT_MAX;
+                    if (usesVariableDescriptors == true)
+                    {
+                        pDescCountLayoutSupport->maxVariableDescriptorCount = UINT_MAX;
+                    }
+                    else
+                    {
+                        pDescCountLayoutSupport->maxVariableDescriptorCount = 0;
+                    }
 
                     break;
                 }

@@ -176,6 +176,20 @@ void Pipeline::GenerateHashFromShaderStageCreateInfo(
 
                 break;
             }
+            case VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO:
+            {
+                const auto* pShaderModuleCreateInfo = static_cast<const VkShaderModuleCreateInfo*>(pNext);
+                {
+                    Vkgc::BinaryData shaderBinary = {};
+                    shaderBinary.codeSize = pShaderModuleCreateInfo->codeSize;
+                    shaderBinary.pCode = pShaderModuleCreateInfo->pCode;
+
+                    shaderModuleIdCodeHash = ShaderModule::BuildCodeHash(
+                        shaderBinary.pCode,
+                        shaderBinary.codeSize);
+                }
+                break;
+            }
             case VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT:
             {
                 const auto* pPipelineShaderStageModuleIdentifierCreateInfoEXT =
@@ -258,7 +272,6 @@ VkResult Pipeline::BuildShaderStageInfo(
                                                               const uint32_t stageIdx),
     ShaderStageInfo*                       pShaderStageInfo,
     ShaderModuleHandle*                    pTempModules,
-    PipelineCache*                         pCache,
     PipelineCreationFeedback*              pFeedbacks)
 {
     VkResult result = VK_SUCCESS;
@@ -365,6 +378,10 @@ VkResult Pipeline::BuildShaderStageInfo(
             }
 
             pShaderStageInfo[outIdx].codeHash      = ShaderModule::GetCodeHash(codeHash, stageInfo.pName);
+            if (pShaderStageInfo[outIdx].pModuleHandle == &pTempModules[outIdx])
+            {
+                pTempModules[outIdx].codeHash = pShaderStageInfo[outIdx].codeHash;
+            }
         }
 
         pShaderStageInfo[outIdx].stage               = stage;
@@ -398,6 +415,32 @@ void Pipeline::FreeTempModules(
                 pCompiler->FreeShaderModule(&pTempModules[i]);
             }
         }
+    }
+}
+
+// =====================================================================================================================
+void Pipeline::HandleExtensionStructs(
+    const void*                         pNext,
+    PipelineExtStructs*                 pExtStructs)
+{
+    while (pNext != nullptr)
+    {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<int32>(pHeader->sType))
+        {
+        // Handle extension specific structures
+
+        case VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO:
+        {
+            pExtStructs->pPipelineCreationFeedbackCreateInfoEXT =
+                static_cast<const VkPipelineCreationFeedbackCreateInfoEXT*>(pNext);
+            break;
+        }
+        default:
+            break;
+        }
+        pNext = pHeader->pNext;
     }
 }
 
@@ -803,11 +846,12 @@ void Pipeline::ElfHashToCacheId(
     const Device*                pDevice,
     uint32_t                     deviceIdx,
     const Util::MetroHash::Hash& elfHash,
-    const Util::MetroHash::Hash& settingsHash,
     const PipelineOptimizerKey&  pipelineOptimizerKey,
     Util::MetroHash::Hash*       pCacheId
 )
 {
+    Util::MetroHash::Hash settingsHash = pDevice->VkPhysicalDevice(deviceIdx)->GetSettingsLoader()->GetSettingsHash();
+
     Util::MetroHash128 hasher = {};
     hasher.Update(elfHash);
     hasher.Update(deviceIdx);

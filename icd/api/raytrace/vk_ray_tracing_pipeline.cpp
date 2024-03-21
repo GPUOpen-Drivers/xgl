@@ -430,6 +430,9 @@ VkResult RayTracingPipeline::CreateImpl(
     RayTracingPipelineBinaryCreateInfo binaryCreateInfo       = {};
     VkResult                           result                 = VkResult::VK_SUCCESS;
     const RuntimeSettings&             settings               = m_pDevice->GetRuntimeSettings();
+    RayTracingPipelineExtStructs       extStructs             = {};
+
+    HandleExtensionStructs(pCreateInfo, &extStructs);
 
     UpdatePipelineImplCreateInfo(pCreateInfo);
 
@@ -478,9 +481,9 @@ VkResult RayTracingPipeline::CreateImpl(
         binaryCreateInfo.pDeferredWorkload = pDeferredWorkload;
         binaryCreateInfo.apiPsoHash        = apiPsoHash;
 
-        const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfo = nullptr;
-        pDefaultCompiler->GetPipelineCreationFeedback(static_cast<const VkStructHeader*>(pCreateInfo->pNext),
-                                                      &pPipelineCreationFeedbackCreateInfo);
+        auto pPipelineCreationFeedbackCreateInfo = extStructs.pPipelineCreationFeedbackCreateInfoEXT;
+
+        PipelineCompiler::InitPipelineCreationFeedback(pPipelineCreationFeedbackCreateInfo);
 
         RayTracingPipelineShaderStageInfo shaderInfo        = {};
         PipelineOptimizerKey              optimizerKey      = {};
@@ -533,7 +536,6 @@ VkResult RayTracingPipeline::CreateImpl(
                                               },
                                               shaderInfo.pStages,
                                               pTempModules,
-                                              pPipelineCache,
                                               nullptr);
             }
             else
@@ -727,7 +729,6 @@ VkResult RayTracingPipeline::CreateImpl(
                 m_pDevice,
                 deviceIdx,
                 elfHash,
-                m_pDevice->VkPhysicalDevice(deviceIdx)->GetSettingsLoader()->GetSettingsHash(),
                 optimizerKey,
                 &cacheId[deviceIdx]
             );
@@ -1523,7 +1524,7 @@ VkResult RayTracingPipeline::CreateImpl(
             binaryCreateInfo.pipelineFeedback.feedbackValid = true;
             binaryCreateInfo.pipelineFeedback.duration      = duration;
 
-            pDefaultCompiler->SetPipelineCreationFeedbackInfo(
+            PipelineCompiler::SetPipelineCreationFeedbackInfo(
                 pPipelineCreationFeedbackCreateInfo,
                 0,
                 NULL,
@@ -2230,6 +2231,31 @@ VkResult RayTracingPipeline::ProcessCaptureReplayHandles(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+void RayTracingPipeline::HandleExtensionStructs(
+    const VkRayTracingPipelineCreateInfoKHR* pCreateInfo,
+    RayTracingPipelineExtStructs*            pExtStructs)
+{
+    // Handle common extension structs
+    Pipeline::HandleExtensionStructs(pCreateInfo->pNext, pExtStructs);
+
+    const void* pNext = pCreateInfo->pNext;
+
+    while (pNext != nullptr)
+    {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<int32>(pHeader->sType))
+        {
+        // Handle extension specific structures
+
+        default:
+            break;
+        }
+        pNext = pHeader->pNext;
+    }
 }
 
 namespace entry

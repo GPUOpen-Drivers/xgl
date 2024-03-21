@@ -171,6 +171,12 @@ private:
     static Pal::Result ClientFlushCmdContext(
         ClientCmdContextHandle          context);
 
+    static Pal::Result  ClientGetTemporaryGpuMemory(
+        ClientCmdBufferHandle cmdbuf,
+        uint64_t              sizeInBytes,
+        Pal::gpusize*         pDestGpuVa,
+        void**                ppMappedData);
+
     static void ClientFreeGpuMem(
         const GpuRt::DeviceInitInfo&    initInfo,
         ClientGpuMemHandle              gpuMem);

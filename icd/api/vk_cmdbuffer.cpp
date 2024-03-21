@@ -1324,7 +1324,8 @@ VkResult CmdBuffer::Begin(
     RenderPass*  pRenderPass  = nullptr;
     Framebuffer* pFramebuffer = nullptr;
 
-    const VkCommandBufferInheritanceRenderingInfo* pInheritanceRenderingInfo = nullptr;
+    const VkCommandBufferInheritanceRenderingInfo* pInheritanceRenderingInfo                      = nullptr;
+    const VkRenderingAttachmentLocationInfoKHR*    pInheritanceRenderingAttachmentLocationInfoKHR = nullptr;
 
     m_cbBeginDeviceMask = m_pDevice->GetPalDeviceMask();
 
@@ -1409,6 +1410,11 @@ VkResult CmdBuffer::Begin(
 
                     inheritedStateParams.sampleCount[i] = pInheritanceRenderingInfo->rasterizationSamples;
                 }
+            }
+            else if (pHeader->sType == VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_LOCATION_INFO_KHR)
+            {
+                pInheritanceRenderingAttachmentLocationInfoKHR =
+                    static_cast<const VkRenderingAttachmentLocationInfoKHR*>(pNext);
             }
 
             pNext = pHeader->pNext;
@@ -1510,6 +1516,16 @@ VkResult CmdBuffer::Begin(
                 pDynamicAttachment->pImageView           = nullptr;
                 pDynamicAttachment->attachmentFormat     = pInheritanceRenderingInfo->pColorAttachmentFormats[i];
                 pDynamicAttachment->rasterizationSamples = pInheritanceRenderingInfo->rasterizationSamples;
+
+                if (pInheritanceRenderingAttachmentLocationInfoKHR != nullptr)
+                {
+                    m_allGpuState.dynamicRenderingInstance.colorAttachmentLocations[i] =
+                        pInheritanceRenderingAttachmentLocationInfoKHR->pColorAttachmentLocations[i];
+                }
+                else
+                {
+                    m_allGpuState.dynamicRenderingInstance.colorAttachmentLocations[i] = i;
+                }
             }
 
             m_allGpuState.dynamicRenderingInstance.depthAttachment.attachmentFormat     =
@@ -1749,7 +1765,6 @@ void CmdBuffer::ResetPipelineState()
 
     m_allGpuState.palToApiPipeline[uint32_t(Pal::PipelineBindPoint::Compute)]   = PipelineBindCompute;
     m_allGpuState.palToApiPipeline[uint32_t(Pal::PipelineBindPoint::Graphics)]  = PipelineBindGraphics;
-    static_assert(VK_ARRAY_SIZE(m_allGpuState.palToApiPipeline) == 2, "PAL PipelineBindPoint not handled");
 
     const uint32_t numPalDevices = m_numPalDevices;
     uint32_t deviceIdx           = 0;
@@ -3489,7 +3504,7 @@ void CmdBuffer::ClearAttachments(
     const VkClearRect*       pRects)
 {
     // if pRenderPass is null, than dynamic rendering is being used
-    if (m_allGpuState.pRenderPass == nullptr)
+    if (UsingDynamicRendering())
     {
         if (m_flags.is2ndLvl == false)
         {
@@ -3719,9 +3734,12 @@ void CmdBuffer::ClearDynamicRenderingBoundAttachments(
 
                     if (attachment.attachmentFormat != VK_FORMAT_UNDEFINED)
                     {
+                        const uint32_t remappedIdx =
+                            m_allGpuState.dynamicRenderingInstance.colorAttachmentLocations[tgtIdx];
+
                         Pal::BoundColorTarget target = {};
 
-                        target.targetIndex    = tgtIdx;
+                        target.targetIndex    = remappedIdx;
                         target.swizzledFormat =
                             VkToPalFormat(attachment.attachmentFormat, m_pDevice->GetRuntimeSettings());
                         target.samples        = attachment.rasterizationSamples;
@@ -4762,13 +4780,13 @@ void CmdBuffer::BeginRendering(
             // Get the attachment image
             const Image* pImage = pImageView->GetImage();
 
-            utils::IterateMask deviceGroup(GetDeviceMask());
+            utils::IterateMask deviceIndices(GetDeviceMask());
             do
             {
-                const uint32_t deviceIdx = deviceGroup.Index();
+                const uint32_t deviceIdx = deviceIndices.Index();
                 PalCmdBuffer(deviceIdx)->CmdBindSampleRateImage(pImage->PalImage(deviceIdx));
             }
-            while (deviceGroup.IterateNext());
+            while (deviceIndices.IterateNext());
         }
 
         uint32_t numMultiViews = Util::CountSetBits(pRenderingInfo->viewMask);
@@ -6415,7 +6433,7 @@ void CmdBuffer::BeginQueryIndexed(
     //
     // Implementations may write the total result to the first query and
     // write zero to the other queries.
-    if (((pRenderPass != nullptr) && pRenderPass->IsMultiviewEnabled()) ||
+    if (((UsingDynamicRendering() == false) && pRenderPass->IsMultiviewEnabled()) ||
         (m_allGpuState.dynamicRenderingInstance.viewMask != 0))
     {
         const auto viewMask  = (pRenderPass != nullptr) ? pRenderPass->GetViewMask(m_renderPassInstance.subpass) :
@@ -7174,7 +7192,7 @@ void CmdBuffer::WriteTimestamp(
         //
         // The first query is a timestamp value and (if more than one bit is set in the view mask)
         // zero is written to the remaining queries.
-        if (((pRenderPass != nullptr) && pRenderPass->IsMultiviewEnabled()) ||
+        if (((UsingDynamicRendering() == false) && pRenderPass->IsMultiviewEnabled()) ||
             (m_allGpuState.dynamicRenderingInstance.viewMask != 0))
         {
             const auto viewMask = (pRenderPass != nullptr) ? pRenderPass->GetViewMask(m_renderPassInstance.subpass) :
@@ -8630,7 +8648,7 @@ void CmdBuffer::SetViewInstanceMask(
 {
     uint32_t subpassViewMask = 0;
 
-    if (m_allGpuState.pRenderPass != nullptr)
+    if (UsingDynamicRendering() == false)
     {
         subpassViewMask = m_allGpuState.pRenderPass->GetViewMask(m_renderPassInstance.subpass);
     }
@@ -9391,7 +9409,9 @@ void CmdBuffer::SetLineWidth(
     const VkPhysicalDeviceLimits& limits = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetLimits();
 
     const Pal::PointLineRasterStateParams params = { DefaultPointSize,
-                                                     lineWidth,
+                                                     Util::Clamp(lineWidth,
+                                                                 limits.lineWidthRange[0],
+                                                                 limits.lineWidthRange[1]),
                                                      limits.pointSizeRange[0],
                                                      limits.pointSizeRange[1] };
 
@@ -9655,12 +9675,12 @@ void CmdBuffer::SetVertexInput(
             if (pBindState->hasDynamicVertexInput && (m_allGpuState.pGraphicsPipeline != nullptr))
             {
                 VK_ASSERT(GetUberFetchShaderUserData(&pBindState->userDataLayout) != PipelineLayout::InvalidReg);
-
+                uint32_t internalBufferLow = pBindState->pVertexInputInternalData->gpuAddress[deviceIdx] & UINT32_MAX;
                 PalCmdBuffer(deviceIdx)->CmdSetUserData(
                     Pal::PipelineBindPoint::Graphics,
                     GetUberFetchShaderUserData(&pBindState->userDataLayout),
-                    2,
-                    reinterpret_cast<uint32_t*>(&pBindState->pVertexInputInternalData->gpuAddress[deviceIdx]));
+                    1,
+                    &internalBufferLow);
             }
 
             // Update vertex buffer stride
@@ -10291,6 +10311,11 @@ void CmdBuffer::BuildAccelerationStructuresPerDevice(
         const bool forceRebuildBottomLevel =
             Util::TestAnyFlagSet(settings.forceRebuildForUpdates, ForceRebuildForUpdatesBottomLevel);
 
+        if (settings.ifhRayTracing)
+        {
+            info.inputs.inputElemCount = 0;
+        }
+
         if (((info.inputs.type == GpuRt::AccelStructType::TopLevel) && forceRebuildTopLevel) ||
             ((info.inputs.type == GpuRt::AccelStructType::BottomLevel) && forceRebuildBottomLevel))
         {
@@ -10721,10 +10746,8 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
 
     pInitConstants->maxDispatchCount   = 1;
     pInitConstants->pipelineCount      = 1;
-#if GPURT_INTERFACE_VERSION >= MAKE_GPURT_VERSION(11,3)
     pInitConstants->indirectMode       =
         (indirectArgType == GpuRt::ExecuteIndirectArgType::DispatchDimensions) ? 0 : 1;
-#endif
 
     if (settings.rtFlattenThreadGroupSize == 0)
     {
@@ -11227,6 +11250,8 @@ void CmdBuffer::ValidateGraphicsStates()
             }
         }
 
+        auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
+
         utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
         do
         {
@@ -11294,8 +11319,6 @@ void CmdBuffer::ValidateGraphicsStates()
                 bool dualSourceBlendEnable = m_pDevice->PalDevice(DefaultDeviceIndex)->CanEnableDualSourceBlend(
                     m_allGpuState.colorBlendCreateInfo);
 
-                auto pDynamicState =
-                    &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
                 if (dualSourceBlendEnable != pDynamicState->dualSourceBlendEnable)
                 {
                     pDynamicState->dualSourceBlendEnable = dualSourceBlendEnable;
@@ -11303,6 +11326,41 @@ void CmdBuffer::ValidateGraphicsStates()
                 }
 
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+            }
+
+            // Reorder color mask if dynamic rendering index is used
+            if (m_allGpuState.dirtyGraphics.colorWriteMask)
+            {
+                uint32 newColorWriteMask           = 0;
+                const uint32 orignalColorWriteMask = m_allGpuState.colorWriteMask & m_allGpuState.colorWriteEnable;
+
+                if (UsingDynamicRendering())
+                {
+                    // See if the dynamic locations need remapped
+                    for (uint32_t i = 0; i < m_allGpuState.dynamicRenderingInstance.colorAttachmentCount; ++i)
+                    {
+                        const uint32_t remapLocation =
+                            m_allGpuState.dynamicRenderingInstance.colorAttachmentLocations[i];
+
+                        if (remapLocation != VK_ATTACHMENT_UNUSED)
+                        {
+                            const uint32 idxMaskValue   = ((orignalColorWriteMask >> (4 * i)) & 0xF);
+                            const uint32 remapMaskValue = (idxMaskValue << (4 * remapLocation));
+
+                            newColorWriteMask |= (idxMaskValue > 0) ? remapMaskValue : 0;
+                        }
+                    }
+                }
+                else
+                {
+                    newColorWriteMask = orignalColorWriteMask;
+                }
+
+                if (newColorWriteMask != pDynamicState->colorWriteMask)
+                {
+                    pDynamicState->colorWriteMask = newColorWriteMask;
+                    m_allGpuState.dirtyGraphics.pipeline = 1;
+                }
             }
 
             if (m_allGpuState.dirtyGraphics.pipeline)
@@ -11765,12 +11823,7 @@ void CmdBuffer::SetColorWriteEnableEXT(
         if (colorWriteEnable != m_allGpuState.colorWriteEnable)
         {
             m_allGpuState.colorWriteEnable = colorWriteEnable;
-            auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
-            pDynamicState->colorWriteMask = m_allGpuState.colorWriteMask & colorWriteEnable;
-            if (pDynamicState->enable.colorWriteMask)
-            {
-                m_allGpuState.dirtyGraphics.pipeline = 1;
-            }
+            m_allGpuState.dirtyGraphics.colorWriteMask = 1;
         }
     }
 }
@@ -11879,7 +11932,7 @@ void CmdBuffer::SetColorBlendEquation(
 void CmdBuffer::SetRasterizationSamples(
     VkSampleCountFlagBits               rasterizationSamples)
 {
-    const uint32_t rasterizationSampleCount = rasterizationSamples;
+    const uint8 rasterizationSampleCount = static_cast<uint8>(rasterizationSamples);
 
     if (rasterizationSampleCount != m_allGpuState.msaaCreateInfo.coverageSamples)
     {
@@ -11889,7 +11942,7 @@ void CmdBuffer::SetRasterizationSamples(
         if (m_allGpuState.minSampleShading > 0.0f)
         {
             m_allGpuState.msaaCreateInfo.pixelShaderSamples =
-                Pow2Pad(static_cast<uint32_t>(ceil(rasterizationSampleCount * m_allGpuState.minSampleShading)));
+                Pow2Pad(static_cast<uint8>(ceil(rasterizationSampleCount * m_allGpuState.minSampleShading)));
         }
         else
         {
@@ -11912,9 +11965,9 @@ void CmdBuffer::SetSampleMask(
     VkSampleCountFlagBits               samples,
     const VkSampleMask*                 pSampleMask)
 {
-    if (m_allGpuState.msaaCreateInfo.sampleMask != *pSampleMask)
+    if (m_allGpuState.msaaCreateInfo.sampleMask != static_cast<uint16>(*pSampleMask))
     {
-        m_allGpuState.msaaCreateInfo.sampleMask = *pSampleMask;
+        m_allGpuState.msaaCreateInfo.sampleMask = static_cast<uint16>(*pSampleMask);
         m_allGpuState.dirtyGraphics.msaa = 1;
     }
 }
@@ -12024,12 +12077,7 @@ void CmdBuffer::SetColorWriteMask(
     if (colorWriteMask != m_allGpuState.colorWriteMask)
     {
         m_allGpuState.colorWriteMask = colorWriteMask;
-        auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
-        pDynamicState->colorWriteMask = colorWriteMask & m_allGpuState.colorWriteEnable;
-        if (pDynamicState->enable.colorWriteMask)
-        {
-            m_allGpuState.dirtyGraphics.pipeline = 1;
-        }
+        m_allGpuState.dirtyGraphics.colorWriteMask = 1;
     }
 }
 

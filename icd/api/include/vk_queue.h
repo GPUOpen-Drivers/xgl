@@ -153,6 +153,11 @@ public:
         Pal::IQueueSemaphore**         ppSwitchToPalBackupSemaphore,
         Pal::IQueueSemaphore**         ppSwitchFromPalBackupSemaphore);
 
+    static Pal::Result PalQueueSubmit(
+        const Device*          pDevice,
+        Pal::IQueue*           pPalQueue,
+        const Pal::SubmitInfo& palSubmitInfo);
+
     ~Queue();
 
     void Destroy(

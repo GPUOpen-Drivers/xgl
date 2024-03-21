@@ -1167,7 +1167,7 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
             submitInfo.perSubQueueInfoCount = 1;
             submitInfo.fenceCount           = 0;
 
-            result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
+            result = Queue::PalQueueSubmit(pDevice, pQueue->PalQueue(DefaultDeviceIndex), submitInfo);
         }
     }
 
@@ -1268,7 +1268,7 @@ Pal::Result DevModeMgr::TracePreparingToRunningStep(
                 submitInfo.ppFences             = &pState->pBeginFence;
                 submitInfo.fenceCount           = 1;
 
-                result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
+                result = Queue::PalQueueSubmit(pState->pDevice, pQueue->PalQueue(DefaultDeviceIndex), submitInfo);
             }
 
             // Make the trace active and remember which queue started it
@@ -1312,7 +1312,8 @@ Pal::Result DevModeMgr::TracePreparingToRunningStep(
                             submitInfo.perSubQueueInfoCount = 1;
                             submitInfo.fenceCount           = 0;
 
-                            result = pQueueState->pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
+                            result = Queue::PalQueueSubmit(
+                                pState->pDevice, pQueueState->pQueue->PalQueue(DefaultDeviceIndex), submitInfo);
 
                             break;
                         }
@@ -1423,7 +1424,7 @@ Pal::Result DevModeMgr::TraceRunningToWaitingForSqttStep(
         submitInfo.ppFences             = &pState->pEndSqttFence;
         submitInfo.fenceCount           = 1;
 
-        result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
+        result = Queue::PalQueueSubmit(pState->pDevice, pQueue->PalQueue(DefaultDeviceIndex), submitInfo);
     }
 
     // Optionally execute a device wait idle if panel says so
@@ -1540,7 +1541,7 @@ Pal::Result DevModeMgr::TraceWaitingForSqttToEndingStep(
         submitInfo.ppFences             = &pState->pEndFence;
         submitInfo.fenceCount           = 1;
 
-        result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
+        result = Queue::PalQueueSubmit(pState->pDevice, pQueue->PalQueue(DefaultDeviceIndex), submitInfo);
     }
 
     if (result == Pal::Result::Success)
@@ -2448,7 +2449,7 @@ Pal::Result DevModeMgr::TimedQueueSubmit(
     // Punt to non-timed submit if a timed submit fails (or is not supported)
     if (result != Pal::Result::Success)
     {
-        result = pPalQueue->Submit(submitInfo);
+        result = Queue::PalQueueSubmit(pQueue->VkDevice(), pPalQueue, submitInfo);
     }
 
     if (pApiCmdBufIds != nullptr)

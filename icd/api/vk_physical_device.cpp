@@ -1644,7 +1644,7 @@ size_t PhysicalDevice::GetFeatures(
         pFeatures->shaderInt64                              =
             (PalProperties().gfxipProperties.flags.support64BitInstructions ? VK_TRUE : VK_FALSE);
 
-        if (PalProperties().gfxipProperties.flags.support16BitInstructions)
+        if (Is16BitInstructionsSupported())
         {
             pFeatures->shaderInt16 = VK_TRUE;
         }
@@ -1976,8 +1976,11 @@ VkResult PhysicalDevice::GetImageFormatProperties(
     // to be able to access each mipLevel and slice. Furthermore, PAL code handles 3D images with 96bpp differently
     // by scaling the original image to use X32Y32Z32_Uint/X32Y32Z32_Sint/X32Y32Z32_Float image as X32_Uint formatted view,
     // which is somehow broken and needs debugging.
+    // Also known problems with BCn formats that need further debug.
     if ((type == VK_IMAGE_TYPE_3D) && (tiling == VK_IMAGE_TILING_LINEAR) &&
-        (settings.disable3dLinearImageFormatSupport || (bitsPerPixel == 96)))
+        (settings.disable3dLinearImageFormatSupport ||
+         Pal::Formats::IsBlockCompressed(palFormat.format) ||
+         (bitsPerPixel == 96)))
     {
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     }
@@ -3319,7 +3322,7 @@ void PhysicalDevice::PopulateLimits()
     constexpr uint32_t LineWidthIntBits = 12;
     constexpr uint32_t LineWidthFracBits = 4;
 
-    m_limits.lineWidthRange[0] = 0.0f;
+    m_limits.lineWidthRange[0] = 1.0f;
     m_limits.lineWidthRange[1] = Util::Math::UFixedToFloat(LineWidthMaxRegValue, LineWidthIntBits,
         LineWidthFracBits) * 2.0f;
 
@@ -4074,9 +4077,9 @@ static bool IsSingleChannelMinMaxFilteringSupported(
 
 #if VKI_RAY_TRACING
 // =====================================================================================================================
-bool PhysicalDevice::HwSupportsRayTracing() const
+bool PhysicalDevice::RayTracingSupported() const
 {
-    return (m_properties.gfxipProperties.srdSizes.bvh != 0);
+    return ((m_properties.gfxipProperties.srdSizes.bvh != 0) && (GetRuntimeSettings().enableRaytracingSupport));
 }
 #endif
 
@@ -4279,7 +4282,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     }
 
     if ((pPhysicalDevice == nullptr) ||
-        (pPhysicalDevice->PalProperties().gfxipProperties.supportedVrsRates != 0))
+        ((pPhysicalDevice->PalProperties().gfxipProperties.supportedVrsRates != 0) &&
+         pPhysicalDevice->GetRuntimeSettings().enableVariableRateShading))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_FRAGMENT_SHADING_RATE));
     }
@@ -4300,7 +4304,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 #if VKI_RAY_TRACING
 
     bool exposeRT = sizeof(void*) == 8;
-    if ((pPhysicalDevice == nullptr) || pPhysicalDevice->HwSupportsRayTracing())
+    if ((pPhysicalDevice == nullptr) || pPhysicalDevice->RayTracingSupported())
     {
         if (exposeRT)
         {
@@ -4389,14 +4393,15 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PUSH_DESCRIPTOR));
 
     if ((pPhysicalDevice == nullptr) ||
-         pPhysicalDevice->PalProperties().gfxipProperties.flags.supportImageViewMinLod)
+        pPhysicalDevice->PalProperties().gfxipProperties.flags.supportImageViewMinLod)
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_VIEW_MIN_LOD));
     }
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INDEX_TYPE_UINT8));
 
     if ((pPhysicalDevice == nullptr) ||
-            pPhysicalDevice->PalProperties().gfxipProperties.flags.supportMeshShader)
+        (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportMeshShader &&
+         pPhysicalDevice->GetRuntimeSettings().enableMeshShaders))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MESH_SHADER));
     }
@@ -4476,14 +4481,14 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         }
 
         if ((pPhysicalDevice == nullptr) ||
-            (pPhysicalDevice->PalProperties().gfxipProperties.flags.support16BitInstructions))
+            (pPhysicalDevice->Is16BitInstructionsSupported()))
         {
             // Deprecation by shaderFloat16 from VK_KHR_shader_float16_int8
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPU_SHADER_HALF_FLOAT));
         }
 
         if ((pPhysicalDevice == nullptr) ||
-            (pPhysicalDevice->PalProperties().gfxipProperties.flags.support16BitInstructions))
+            (pPhysicalDevice->Is16BitInstructionsSupported()))
         {
             // Deprecation by shaderFloat16 from VK_KHR_shader_float16_int8 and shaderInt16
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPU_SHADER_INT16));
@@ -5138,7 +5143,7 @@ void PhysicalDevice::GetPhysicalDeviceDotProduct16Properties(
     VkBool32* pIntegerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated
 ) const
 {
-    const VkBool32 int16DotSupport = ((PalProperties().gfxipProperties.flags.support16BitInstructions)
+    const VkBool32 int16DotSupport = (Is16BitInstructionsSupported()
 #if VKI_BUILD_GFX11
         && (PalProperties().gfxLevel < Pal::GfxIpLevel::GfxIp11_0)
 #endif
@@ -5252,7 +5257,7 @@ void PhysicalDevice::GetPhysicalDeviceFloatControlsProperties(
     pFloatControlsProperties->shaderRoundingModeRTEFloat32           = VK_TRUE;
     pFloatControlsProperties->shaderRoundingModeRTZFloat32           = VK_TRUE;
 
-    bool supportFloat16 = PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions;
+    bool supportFloat16 = IsDoubleRate16BitInstructionsSupported();
     if (supportFloat16)
     {
         pFloatControlsProperties->shaderSignedZeroInfNanPreserveFloat16  = VK_TRUE;
@@ -5440,7 +5445,7 @@ void PhysicalDevice::GetPhysicalDevice16BitStorageFeatures(
 
     // Currently we seem to only support 16-bit inputs/outputs on ASICs supporting
     // 16-bit ALU. It's unclear at this point whether we can do any better.
-    if (PalProperties().gfxipProperties.flags.support16BitInstructions)
+    if (Is16BitInstructionsSupported())
     {
         *pStorageInputOutput16           = VK_TRUE;
     }
@@ -5541,7 +5546,7 @@ void PhysicalDevice::GetPhysicalDeviceFloat16Int8Features(
     VkBool32* pShaderInt8
     ) const
 {
-    *pShaderFloat16 = PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions ? VK_TRUE : VK_FALSE;
+    *pShaderFloat16 = IsDoubleRate16BitInstructionsSupported() ? VK_TRUE : VK_FALSE;
     *pShaderInt8    = VK_TRUE;
 }
 
@@ -7323,6 +7328,18 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     pExtInfo->shaderQuadControl = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_LOCAL_READ_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDynamicRenderingLocalReadFeaturesKHR*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->dynamicRenderingLocalRead = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);

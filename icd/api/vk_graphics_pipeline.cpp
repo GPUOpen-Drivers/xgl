@@ -62,7 +62,6 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
     VkPipelineCreateFlags2KHR                      flags,
     const GraphicsPipelineShaderStageInfo*         pShaderInfo,
     const PipelineLayout*                          pPipelineLayout,
-    const Util::MetroHash::Hash*                   pElfHash,
     const PipelineOptimizerKey*                    pPipelineOptimizerKey,
     GraphicsPipelineBinaryCreateInfo*              pBinaryCreateInfo,
     PipelineCache*                                 pPipelineCache,
@@ -83,23 +82,13 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
     {
         bool isUserCacheHit     = false;
         bool isInternalCacheHit = false;
-
-        ElfHashToCacheId(
-            pDevice,
-            deviceIdx,
-            *pElfHash,
-            pDevice->VkPhysicalDevice(deviceIdx)->GetSettingsLoader()->GetSettingsHash(),
-            *pPipelineOptimizerKey,
-            &pCacheIds[deviceIdx]
-        );
-
-        bool shouldCompile = true;
+        bool shouldCompile      = true;
 
         if (shouldCompile)
         {
-            bool skipCaching = pDevice->GetRuntimeSettings().enablePipelineDump;
+            bool skipCacheQuery = pDevice->GetRuntimeSettings().enablePipelineDump;
 
-            if (skipCaching == false)
+            if (skipCacheQuery == false)
             {
                 // Search the pipeline binary cache
                 Util::Result cacheResult = pDevice->GetCompiler(deviceIdx)->GetCachedPipelineBinary(
@@ -186,7 +175,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
 
                 if (result == VK_SUCCESS)
                 {
-                    result = pDefaultCompiler->SetPipelineCreationFeedbackInfo(
+                    result = PipelineCompiler::SetPipelineCreationFeedbackInfo(
                         pCreationFeedbackInfo,
                         pCreateInfo->stageCount,
                         pCreateInfo->pStages,
@@ -653,10 +642,9 @@ VkResult GraphicsPipeline::Create(
 
     PipelineCompiler* pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
-    const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfo = nullptr;
+    auto pPipelineCreationFeedbackCreateInfo = extStructs.pPipelineCreationFeedbackCreateInfoEXT;
 
-    pDefaultCompiler->GetPipelineCreationFeedback(static_cast<const VkStructHeader*>(pCreateInfo->pNext),
-                                                  &pPipelineCreationFeedbackCreateInfo);
+    PipelineCompiler::InitPipelineCreationFeedback(pPipelineCreationFeedbackCreateInfo);
 
     GraphicsPipelineBinaryCreateInfo binaryCreateInfo     = {};
     GraphicsPipelineObjectCreateInfo objectCreateInfo     = {};
@@ -678,7 +666,7 @@ VkResult GraphicsPipeline::Create(
     pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
 
     GraphicsPipelineLibraryInfo libInfo = {};
-    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, flags, &libInfo);
+    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, extStructs, flags, &libInfo);
 
     // 1. Check whether GPL fast link is possible
     if (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink)
@@ -751,6 +739,7 @@ VkResult GraphicsPipeline::Create(
                 {
                     BuildApiHash(pCreateInfo,
                                 flags,
+                                extStructs,
                                 binaryCreateInfo,
                                 &apiPsoHash,
                                 &elfHash);
@@ -763,36 +752,24 @@ VkResult GraphicsPipeline::Create(
 
     if (enableFastLink == false)
     {
-        // 2. Build shader stage infos
-        result = BuildShaderStageInfo(pDevice,
-            pCreateInfo->stageCount,
-            pCreateInfo->pStages,
-            [](const uint32_t inputIdx, const uint32_t stageIdx)
-            {
-                return stageIdx;
-            },
-            shaderStageInfo.stages,
-            tempModules,
-            pPipelineCache,
-            binaryCreateInfo.stageFeedback);
-
-        // 3. Build ShaderOptimizer pipeline key
-        if (result == VK_SUCCESS)
-        {
-            GeneratePipelineOptimizerKey(
-                pDevice, pCreateInfo, flags, &shaderStageInfo, shaderOptimizerKeys, &pipelineOptimizerKey);
-        }
-
-        // 4. Build API and ELF hashes
-        BuildApiHash(pCreateInfo,
-                     flags,
-                     binaryCreateInfo,
-                    &apiPsoHash,
-                    &elfHash);
+        // 2. Create Cache IDs
+        result = GraphicsPipeline::CreateCacheId(
+            pDevice,
+            pCreateInfo,
+            extStructs,
+            flags,
+            &shaderStageInfo,
+            &binaryCreateInfo,
+            &shaderOptimizerKeys[0],
+            &pipelineOptimizerKey,
+            &apiPsoHash,
+            //&elfHash,
+            &tempModules[0],
+            &cacheId[0]);
 
         binaryCreateInfo.apiPsoHash = apiPsoHash;
 
-        // 5. Create pipeline binaries (or load from cache)
+        // 3. Create pipeline binaries (or load from cache)
         if (result == VK_SUCCESS)
         {
             result = CreatePipelineBinaries(
@@ -802,7 +779,6 @@ VkResult GraphicsPipeline::Create(
                 flags,
                 &shaderStageInfo,
                 pPipelineLayout,
-                &elfHash,
                 &pipelineOptimizerKey,
                 &binaryCreateInfo,
                 pPipelineCache,
@@ -815,7 +791,7 @@ VkResult GraphicsPipeline::Create(
 
     if (result == VK_SUCCESS)
     {
-        // 6. Build pipeline object create info
+        // 4. Build pipeline object create info
         BuildPipelineObjectCreateInfo(
             pDevice,
             pCreateInfo,
@@ -843,7 +819,7 @@ VkResult GraphicsPipeline::Create(
             objectCreateInfo.dispatchRaysUserDataOffset = pPipelineLayout->GetDispatchRaysUserData();
 #endif
 
-            // 7. Create pipeline objects
+            // 5. Create pipeline objects
             result = CreatePipelineObjects(
                 pDevice,
                 pCreateInfo,
@@ -886,7 +862,7 @@ VkResult GraphicsPipeline::Create(
                                                   &shaderStageInfo,
                                                   &objectCreateInfo,
                                                   extStructs,
-                                                  &elfHash);
+                                                  &cacheId[0]);
         if (result == VK_SUCCESS)
         {
             pDefaultCompiler->ExecuteDeferCompile(&pThis->m_deferWorkload);
@@ -901,7 +877,7 @@ VkResult GraphicsPipeline::Create(
         uint64_t duration = vk::utils::TicksToNano(durationTicks);
         binaryCreateInfo.pipelineFeedback.feedbackValid = true;
         binaryCreateInfo.pipelineFeedback.duration = duration;
-        pDefaultCompiler->SetPipelineCreationFeedbackInfo(
+        PipelineCompiler::SetPipelineCreationFeedbackInfo(
             pPipelineCreationFeedbackCreateInfo,
             pCreateInfo->stageCount,
             pCreateInfo->pStages,
@@ -994,6 +970,72 @@ static size_t GetVertexInputStructSize(
 }
 
 // =====================================================================================================================
+// Create cacheId for a graphics pipeline.
+VkResult GraphicsPipeline::CreateCacheId(
+    Device*                                 pDevice,
+    const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+    const GraphicsPipelineExtStructs&       extStructs,
+    VkPipelineCreateFlags2KHR               flags,
+    GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
+    GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
+    ShaderOptimizerKey*                     pShaderOptimizerKeys,
+    PipelineOptimizerKey*                   pPipelineOptimizerKey,
+    uint64_t*                               pApiPsoHash,
+    ShaderModuleHandle*                     pTempModules,
+    Util::MetroHash::Hash*                  pCacheIds)
+{
+    VkResult result = VK_SUCCESS;
+
+    // 1. Build shader stage infos
+    result = BuildShaderStageInfo(pDevice,
+        pCreateInfo->stageCount,
+        pCreateInfo->pStages,
+        [](const uint32_t inputIdx, const uint32_t stageIdx)
+        {
+            return stageIdx;
+        },
+        pShaderStageInfo->stages,
+        pTempModules,
+        pBinaryCreateInfo->stageFeedback);
+
+    if (result == VK_SUCCESS)
+    {
+        // 2. Build ShaderOptimizer pipeline key
+        GeneratePipelineOptimizerKey(
+            pDevice,
+            pCreateInfo,
+            extStructs,
+            flags,
+            pShaderStageInfo,
+            pShaderOptimizerKeys,
+            pPipelineOptimizerKey);
+
+        // 3. Build API and ELF hashes
+        Util::MetroHash::Hash elfHash = {};
+        BuildApiHash(pCreateInfo,
+                     flags,
+                     extStructs,
+                     *pBinaryCreateInfo,
+                     pApiPsoHash,
+                     &elfHash);
+
+        // 4. Build Cache IDs
+        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
+        {
+            ElfHashToCacheId(
+                pDevice,
+                deviceIdx,
+                elfHash,
+                *pPipelineOptimizerKey,
+                &pCacheIds[deviceIdx]
+            );
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 static void CopyVertexInputStruct(
     const VkPipelineVertexInputStateCreateInfo* pSrcVertexInput,
     VkPipelineVertexInputStateCreateInfo*       pDestVertexInput)
@@ -1055,7 +1097,7 @@ VkResult GraphicsPipeline::BuildDeferCompileWorkload(
     GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
     GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
     const GraphicsPipelineExtStructs& extStructs,
-    Util::MetroHash::Hash*            pElfHash)
+    Util::MetroHash::Hash*            pCacheIds)
 {
     VkResult result = VK_SUCCESS;
     DeferGraphicsPipelineCreateInfo* pCreateInfo = nullptr;
@@ -1109,7 +1151,7 @@ VkResult GraphicsPipeline::BuildDeferCompileWorkload(
         pCreateInfo->objectCreateInfo = *pObjectCreateInfo;
 
         pCreateInfo->extStructs       = extStructs;
-        pCreateInfo->elfHash          = *pElfHash;
+        memcpy(&pCreateInfo->cacheIds[0], pCacheIds, sizeof(pCreateInfo->cacheIds[0]) * MaxPalDevices);
 
         pCreateInfo->binaryCreateInfo.pipelineInfo.enableEarlyCompile = false;
         pCreateInfo->binaryCreateInfo.pipelineInfo.enableUberFetchShader = false;
@@ -1210,7 +1252,7 @@ void GraphicsPipeline::ExecuteDeferCreateOptimizedPipeline(
                                                          &pCreateInfo->shaderStageInfo,
                                                          &pCreateInfo->objectCreateInfo,
                                                          pCreateInfo->extStructs,
-                                                         &pCreateInfo->elfHash);
+                                                         pCreateInfo->cacheIds);
 }
 
 // =====================================================================================================================
@@ -1221,11 +1263,10 @@ VkResult GraphicsPipeline::DeferCreateOptimizedPipeline(
     GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
     GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
     const GraphicsPipelineExtStructs& extStructs,
-    Util::MetroHash::Hash*            pElfHash)
+    Util::MetroHash::Hash*            pCacheIds)
 {
     VkResult              result = VK_SUCCESS;
     Vkgc::BinaryData      pipelineBinaries[MaxPalDevices]    = {};
-    Util::MetroHash::Hash cacheId[MaxPalDevices]             = {};
     Pal::IPipeline*       pPalPipeline[MaxPalDevices]        = {};
 
     Pal::Result           palResult                          = Pal::Result::Success;
@@ -1249,12 +1290,11 @@ VkResult GraphicsPipeline::DeferCreateOptimizedPipeline(
                                         0,
                                         pShaderStageInfo,
                                         nullptr,
-                                        pElfHash,
                                         pBinaryCreateInfo->pPipelineProfileKey,
                                         pBinaryCreateInfo,
                                         pPipelineCache,
                                         nullptr,
-                                        cacheId,
+                                        pCacheIds,
                                         pipelineBinaries,
                                         pBinaryCreateInfo->pBinaryMetadata);
     }
@@ -1265,7 +1305,7 @@ VkResult GraphicsPipeline::DeferCreateOptimizedPipeline(
                                           pPipelineCache,
                                           pObjectCreateInfo,
                                           pipelineBinaries,
-                                          cacheId,
+                                          pCacheIds,
                                           pSystemMem,
                                           pPalPipeline);
     }
@@ -2022,8 +2062,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             pRenderState->colorWriteEnable = m_info.colorWriteEnable;
         }
 
-        pGfxDynamicBindInfo->colorWriteMask =
-            pRenderState->colorWriteMask & pRenderState->colorWriteEnable;
+        pRenderState->dirtyGraphics.colorWriteMask = 1;
     }
 
     // Overwrite state with dynamic state in current render state
@@ -2211,10 +2250,11 @@ void GraphicsPipeline::BindToCmdBuffer(
             for (uint32_t i = 0; i < m_internalBufferInfo.internalBufferCount; i++)
             {
                 const InternalBufferEntry& buffEntry = m_internalBufferInfo.internalBufferEntries[i];
+                uint32_t internalBufferLow = buffEntry.bufferAddress[deviceIdx] & UINT32_MAX;
                 pPalCmdBuf->CmdSetUserData(Pal::PipelineBindPoint::Graphics,
                     buffEntry.userDataOffset,
-                    2,
-                    reinterpret_cast<const uint32_t*>(&buffEntry.bufferAddress[deviceIdx]));
+                    1,
+                    &internalBufferLow);
             }
         }
     }

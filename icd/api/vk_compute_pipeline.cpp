@@ -91,6 +91,115 @@ void ComputePipeline::BuildApiHash(
 }
 
 // =====================================================================================================================
+// Create pipeline binaries (or load from cache)
+VkResult ComputePipeline::CreatePipelineBinaries(
+    Device*                                        pDevice,
+    const VkComputePipelineCreateInfo*             pCreateInfo,
+    const ComputePipelineExtStructs&               extStructs,
+    VkPipelineCreateFlags2KHR                      flags,
+    const ComputePipelineShaderStageInfo*          pShaderInfo,
+    const PipelineOptimizerKey*                    pPipelineOptimizerKey,
+    ComputePipelineBinaryCreateInfo*               pBinaryCreateInfo,
+    PipelineCache*                                 pPipelineCache,
+    Util::MetroHash::Hash*                         pCacheIds,
+    Vkgc::BinaryData*                              pPipelineBinaries,
+    PipelineMetadata*                              pBinaryMetadata)
+{
+    VkResult               result           = VK_SUCCESS;
+    const RuntimeSettings& settings         = pDevice->GetRuntimeSettings();
+    PipelineCompiler*      pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
+
+    // Load or create the pipeline binary
+    PipelineBinaryCache* pPipelineBinaryCache = (pPipelineCache != nullptr) ? pPipelineCache->GetPipelineCache()
+                                                                            : nullptr;
+
+    for (uint32_t deviceIdx = 0; (deviceIdx < pDevice->NumPalDevices()) && (result == VK_SUCCESS); ++deviceIdx)
+    {
+        bool isUserCacheHit     = false;
+        bool isInternalCacheHit = false;
+        bool shouldCompile      = true;
+
+        if (shouldCompile)
+        {
+            bool skipCacheQuery = settings.enablePipelineDump;
+
+            if (skipCacheQuery == false)
+            {
+                // Search the pipeline binary cache
+                Util::Result cacheResult = pDevice->GetCompiler(deviceIdx)->GetCachedPipelineBinary(
+                    &pCacheIds[deviceIdx],
+                    pPipelineBinaryCache,
+                    &pPipelineBinaries[deviceIdx],
+                    &isUserCacheHit,
+                    &isInternalCacheHit,
+                    &pBinaryCreateInfo->freeCompilerBinary,
+                    &pBinaryCreateInfo->pipelineFeedback);
+
+                // Compile if not found in cache
+                shouldCompile = (cacheResult != Util::Result::Success);
+            }
+        }
+
+        // Compile if unable to retrieve from cache
+        if (shouldCompile)
+        {
+            if (pBinaryCreateInfo->pTempBuffer == nullptr)
+            {
+                result = pDefaultCompiler->ConvertComputePipelineInfo(
+                    pDevice,
+                    pCreateInfo,
+                    pShaderInfo,
+                    pPipelineOptimizerKey,
+                    pBinaryMetadata,
+                    pBinaryCreateInfo,
+                    flags);
+            }
+
+            if (result == VK_SUCCESS)
+            {
+                result = pDevice->GetCompiler(deviceIdx)->CreateComputePipelineBinary(
+                    pDevice,
+                    deviceIdx,
+                    pPipelineCache,
+                    pBinaryCreateInfo,
+                    &pPipelineBinaries[deviceIdx],
+                    &pCacheIds[deviceIdx]);
+            }
+
+            if (result == VK_SUCCESS)
+            {
+                result = pDefaultCompiler->WriteBinaryMetadata(
+                    pDevice,
+                    pBinaryCreateInfo->compilerType,
+                    &pBinaryCreateInfo->freeCompilerBinary,
+                    &pPipelineBinaries[deviceIdx],
+                    pBinaryCreateInfo->pBinaryMetadata);
+            }
+        }
+        else if (deviceIdx == DefaultDeviceIndex)
+        {
+            pDefaultCompiler->ReadBinaryMetadata(
+                pDevice,
+                pPipelineBinaries[DefaultDeviceIndex],
+                pBinaryMetadata);
+        }
+
+        // Add to any cache layer where missing
+        if (result == VK_SUCCESS)
+        {
+            pDevice->GetCompiler(deviceIdx)->CachePipelineBinary(
+                &pCacheIds[deviceIdx],
+                pPipelineBinaryCache,
+                &pPipelineBinaries[deviceIdx],
+                isUserCacheHit,
+                isInternalCacheHit);
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 // Converts Vulkan compute pipeline parameters to an internal structure
 void ComputePipeline::ConvertComputePipelineInfo(
     Device*                               pDevice,
@@ -135,6 +244,31 @@ void ComputePipeline::FetchPalMetadata(
     }
 
     VK_ASSERT(result == Util::Result::Success);
+}
+
+// =====================================================================================================================
+void ComputePipeline::HandleExtensionStructs(
+    const VkComputePipelineCreateInfo* pCreateInfo,
+    ComputePipelineExtStructs*         pExtStructs)
+{
+    // Handle common extension structs
+    Pipeline::HandleExtensionStructs(pCreateInfo->pNext, pExtStructs);
+
+    const void* pNext = pCreateInfo->pNext;
+
+    while (pNext != nullptr)
+    {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<int32>(pHeader->sType))
+        {
+        // Handle extension specific structures
+
+        default:
+            break;
+        }
+        pNext = pHeader->pNext;
+    }
 }
 
 // =====================================================================================================================
@@ -206,134 +340,47 @@ VkResult ComputePipeline::Create(
     ShaderModuleHandle              tempModule                     = {};
     VkResult                        result                         = VK_SUCCESS;
     PipelineMetadata                binaryMetadata                 = {};
+    ComputePipelineExtStructs       extStructs                     = {};
+
+    HandleExtensionStructs(pCreateInfo, &extStructs);
 
     ComputePipelineShaderStageInfo shaderInfo = {};
-    result = BuildShaderStageInfo(pDevice,
-        1,
-        &pCreateInfo->stage,
-        [](const uint32_t inputIdx, const uint32_t stageIdx)
-        {
-            return 0u;
-        },
-        &shaderInfo.stage,
-        &tempModule,
-        pPipelineCache,
-        &binaryCreateInfo.stageFeedback);
+    uint64_t                       apiPsoHash = {};
 
-    Util::MetroHash::Hash elfHash    = {};
-    uint64_t              apiPsoHash = {};
-    BuildApiHash(pCreateInfo, flags, shaderInfo, &elfHash, &apiPsoHash);
+    // 1. Create Cache IDs
+    result = ComputePipeline::CreateCacheId(
+        pDevice,
+        pCreateInfo,
+        flags,
+        &shaderInfo,
+        &binaryCreateInfo,
+        &shaderOptimizerKey,
+        &pipelineOptimizerKey,
+        &apiPsoHash,
+        &tempModule,
+        &cacheId[0]);
 
     binaryCreateInfo.apiPsoHash = apiPsoHash;
 
-    const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfo = nullptr;
-    pDefaultCompiler->GetPipelineCreationFeedback(static_cast<const VkStructHeader*>(pCreateInfo->pNext),
-        &pPipelineCreationFeedbackCreateInfo);
+    // 2. Create pipeline binaries (or load from cache)
+    auto pPipelineCreationFeedbackCreateInfo = extStructs.pPipelineCreationFeedbackCreateInfoEXT;
 
-    const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>(
-        ShaderModule::GetFirstValidShaderData(shaderInfo.stage.pModuleHandle));
+    PipelineCompiler::InitPipelineCreationFeedback(pPipelineCreationFeedbackCreateInfo);
 
-    // Set up the PipelineProfileKey for applying tuning parameters
-    pipelineOptimizerKey.shaderCount = 1;
-    pipelineOptimizerKey.pShaders    = &shaderOptimizerKey;
-
-    pDevice->GetShaderOptimizer()->CreateShaderOptimizerKey(pModuleData,
-                                                            shaderInfo.stage.codeHash,
-                                                            Vkgc::ShaderStage::ShaderStageCompute,
-                                                            shaderInfo.stage.codeSize,
-                                                            &shaderOptimizerKey);
-
-    // Load or create the pipeline binary
-    PipelineBinaryCache* pPipelineBinaryCache = (pPipelineCache != nullptr) ? pPipelineCache->GetPipelineCache()
-                                                                            : nullptr;
-
-    for (uint32_t deviceIdx = 0; (deviceIdx < pDevice->NumPalDevices()) && (result == VK_SUCCESS); ++deviceIdx)
+    if (result == VK_SUCCESS)
     {
-        bool isUserCacheHit     = false;
-        bool isInternalCacheHit = false;
-
-        {
-            Util::Result cacheResult = Util::Result::NotFound;
-
-            ElfHashToCacheId(
+            result = CreatePipelineBinaries(
                 pDevice,
-                deviceIdx,
-                elfHash,
-                pDevice->VkPhysicalDevice(deviceIdx)->GetSettingsLoader()->GetSettingsHash(),
-                pipelineOptimizerKey,
-                &cacheId[deviceIdx]
-            );
-
-            bool forceCompilation = settings.enablePipelineDump;
-
-            if (forceCompilation == false)
-            {
-                // Search the pipeline binary cache
-                cacheResult = pDevice->GetCompiler(deviceIdx)->GetCachedPipelineBinary(
-                    &cacheId[deviceIdx],
-                    pPipelineBinaryCache,
-                    &pipelineBinaries[deviceIdx],
-                    &isUserCacheHit,
-                    &isInternalCacheHit,
-                    &binaryCreateInfo.freeCompilerBinary,
-                    &binaryCreateInfo.pipelineFeedback);
-            }
-
-            // Compile if unable to retrieve from cache
-            if (cacheResult != Util::Result::Success)
-            {
-                if (binaryCreateInfo.pTempBuffer == nullptr)
-                {
-                    result = pDefaultCompiler->ConvertComputePipelineInfo(
-                        pDevice,
-                        pCreateInfo,
-                        &shaderInfo,
-                        &pipelineOptimizerKey,
-                        &binaryMetadata,
-                        &binaryCreateInfo,
-                        flags);
-                }
-
-                if (result == VK_SUCCESS)
-                {
-                    result = pDevice->GetCompiler(deviceIdx)->CreateComputePipelineBinary(
-                        pDevice,
-                        deviceIdx,
-                        pPipelineCache,
-                        &binaryCreateInfo,
-                        &pipelineBinaries[deviceIdx],
-                        &cacheId[deviceIdx]);
-                }
-
-                if (result == VK_SUCCESS)
-                {
-                    result = pDefaultCompiler->WriteBinaryMetadata(
-                        pDevice,
-                        binaryCreateInfo.compilerType,
-                        &binaryCreateInfo.freeCompilerBinary,
-                        &pipelineBinaries[deviceIdx],
-                        binaryCreateInfo.pBinaryMetadata);
-                }
-            }
-            else if (deviceIdx == DefaultDeviceIndex)
-            {
-                pDefaultCompiler->ReadBinaryMetadata(
-                    pDevice,
-                    pipelineBinaries[DefaultDeviceIndex],
-                    &binaryMetadata);
-            }
-        }
-
-        // Add to any cache layer where missing
-        if (result == VK_SUCCESS)
-        {
-            pDevice->GetCompiler(deviceIdx)->CachePipelineBinary(
-                &cacheId[deviceIdx],
-                pPipelineBinaryCache,
-                &pipelineBinaries[deviceIdx],
-                isUserCacheHit,
-                isInternalCacheHit);
-        }
+                pCreateInfo,
+                extStructs,
+                flags,
+                &shaderInfo,
+                &pipelineOptimizerKey,
+                &binaryCreateInfo,
+                pPipelineCache,
+                cacheId,
+                pipelineBinaries,
+                &binaryMetadata);
     }
 
     CreateInfo localPipelineInfo = {};
@@ -441,12 +488,7 @@ VkResult ComputePipeline::Create(
     if (result == VK_SUCCESS)
     {
 #if VKI_RAY_TRACING
-        // If pModuleData is null this means the pipeline is being created with a null shader and
-        // using the shader module identifier.
-        bool hasRayTracing = (pModuleData != nullptr) ?
-            pModuleData->usage.enableRayQuery :
-            binaryMetadata.rayQueryUsed;
-
+        bool     hasRayTracing              = binaryMetadata.rayQueryUsed;
         uint32_t dispatchRaysUserDataOffset = localPipelineInfo.pLayout->GetDispatchRaysUserData();
 #endif
 
@@ -525,7 +567,7 @@ VkResult ComputePipeline::Create(
         binaryCreateInfo.pipelineFeedback.feedbackValid = true;
         binaryCreateInfo.pipelineFeedback.duration      = duration;
 
-        pDefaultCompiler->SetPipelineCreationFeedbackInfo(
+        PipelineCompiler::SetPipelineCreationFeedbackInfo(
             pPipelineCreationFeedbackCreateInfo,
             0,
             nullptr,
@@ -556,8 +598,72 @@ VkResult ComputePipeline::Create(
             }
        }
 
-        // The hash is same as pipline dump file name, we can easily analyze further.
+        // The hash is same as pipeline dump file name, we can easily analyze further.
         AmdvlkLog(settings.logTagIdMask, PipelineCompileTime, "0x%016llX-%llu", apiPsoHash, duration);
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Create cacheId for a compute pipeline.
+VkResult ComputePipeline::CreateCacheId(
+    Device*                                 pDevice,
+    const VkComputePipelineCreateInfo*      pCreateInfo,
+    VkPipelineCreateFlags2KHR               flags,
+    ComputePipelineShaderStageInfo*         pShaderInfo,
+    ComputePipelineBinaryCreateInfo*        pBinaryCreateInfo,
+    ShaderOptimizerKey*                     pShaderOptimizerKey,
+    PipelineOptimizerKey*                   pPipelineOptimizerKey,
+    uint64_t*                               pApiPsoHash,
+    ShaderModuleHandle*                     pTempModule,
+    Util::MetroHash::Hash*                  pCacheIds)
+{
+    VkResult result = VK_SUCCESS;
+
+    // 1. Build shader stage info
+    result = BuildShaderStageInfo(pDevice,
+        1,
+        &pCreateInfo->stage,
+        [](const uint32_t inputIdx, const uint32_t stageIdx)
+        {
+            return 0u;
+        },
+        &pShaderInfo->stage,
+        pTempModule,
+        &pBinaryCreateInfo->stageFeedback);
+
+    if (result == VK_SUCCESS)
+    {
+        // 2. Build ShaderOptimizer pipeline key
+        const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>(
+            ShaderModule::GetFirstValidShaderData(pShaderInfo->stage.pModuleHandle));
+
+        // Set up the PipelineProfileKey for applying tuning parameters
+        pPipelineOptimizerKey->shaderCount = 1;
+        pPipelineOptimizerKey->pShaders    = pShaderOptimizerKey;
+
+        pDevice->GetShaderOptimizer()->CreateShaderOptimizerKey(pModuleData,
+                                                                pShaderInfo->stage.codeHash,
+                                                                Vkgc::ShaderStage::ShaderStageCompute,
+                                                                pShaderInfo->stage.codeSize,
+                                                                pPipelineOptimizerKey->pShaders);
+
+        // 3. Build API and ELF hashes
+        Util::MetroHash::Hash elfHash    = {};
+        BuildApiHash(pCreateInfo, flags, *pShaderInfo, &elfHash, pApiPsoHash);
+
+        // 4. Build Cache IDs
+        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
+        {
+            ElfHashToCacheId(
+                pDevice,
+                deviceIdx,
+                elfHash,
+                *pPipelineOptimizerKey,
+                &pCacheIds[deviceIdx]
+            );
+        }
     }
 
     return result;

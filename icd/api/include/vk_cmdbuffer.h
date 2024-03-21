@@ -170,7 +170,8 @@ union DirtyGraphicsState
         uint32 colorBlend              :  1;
         uint32 msaa                    :  1;
         uint32 pipeline                :  1;
-        uint32 reserved                : 21;
+        uint32 colorWriteMask          :  1;
+        uint32 reserved                : 20;
     };
 
     uint32 u32All;
@@ -1004,6 +1005,11 @@ public:
     bool IsSecondaryLevel() const
     {
         return m_flags.is2ndLvl;
+    }
+
+    bool UsingDynamicRendering() const
+    {
+        return (m_allGpuState.pRenderPass == nullptr) ? true : false;
     }
 
     VkResult Destroy(void);
@@ -2869,6 +2875,14 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetVertexInputEXT(
     const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
     uint32_t                                     vertexAttributeDescriptionCount,
     const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingAttachmentLocationsKHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkRenderingAttachmentLocationInfoKHR* pLocationInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingInputAttachmentIndicesKHR(
+    VkCommandBuffer                                 commandBuffer,
+    const VkRenderingInputAttachmentIndexInfoKHR*   pLocationInfo);
 
 } // namespace entry
 

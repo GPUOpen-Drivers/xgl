@@ -1805,6 +1805,22 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetVertexInputEXT(
 
 }
 
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingAttachmentLocationsKHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkRenderingAttachmentLocationInfoKHR* pLocationInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetRenderingAttachmentLocations(pLocationInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingInputAttachmentIndicesKHR(
+    VkCommandBuffer                                 commandBuffer,
+    const VkRenderingInputAttachmentIndexInfoKHR*   pLocationInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetRenderingInputAttachmentIndices(pLocationInfo);
+}
+
 } // namespace entry
 
 } // namespace vk

@@ -198,6 +198,14 @@ static void BuildPalColorBlendStateCreateInfo(
     for (uint32_t i = 0; i < numColorTargets; ++i)
     {
         uint32_t location = i;
+
+        if ((extStructs.pRenderingAttachmentLocationInfo                                != nullptr) &&
+            (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations     != nullptr) &&
+            (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations[i]  != VK_ATTACHMENT_UNUSED))
+        {
+            location = extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations[i];
+        }
+
         const VkPipelineColorBlendAttachmentState& attachmentState = pColorBlendState->pAttachments[i];
         auto pBlendDst = &pInfo->targets[location];
 
@@ -690,17 +698,12 @@ uint64_t GraphicsPipelineCommon::GetDynamicStateFlags(
 // =====================================================================================================================
 void GraphicsPipelineCommon::ExtractLibraryInfo(
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    const GraphicsPipelineExtStructs&   extStructs,
     VkPipelineCreateFlags2KHR           flags,
     GraphicsPipelineLibraryInfo*        pLibInfo)
 {
-
-    EXTRACT_VK_STRUCTURES_1(
-        gfxPipeline,
-        GraphicsPipelineLibraryCreateInfoEXT,
-        PipelineLibraryCreateInfoKHR,
-        static_cast<const VkGraphicsPipelineLibraryCreateInfoEXT*>(pCreateInfo->pNext),
-        GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT,
-        PIPELINE_LIBRARY_CREATE_INFO_KHR)
+    auto pGraphicsPipelineLibraryCreateInfoEXT = extStructs.pGraphicsPipelineLibraryCreateInfoEXT;
+    auto pPipelineLibraryCreateInfoKHR         = extStructs.pPipelineLibraryCreateInfoKHR;
 
     pLibInfo->flags.isLibrary = (flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) ? 1 : 0;
 
@@ -981,6 +984,27 @@ static void BuildRasterizationState(
     const uint64_t                                dynamicStateFlags,
     GraphicsPipelineObjectCreateInfo*             pInfo)
 {
+    pInfo->pipeline.rsState.dx10DiamondTestDisable = true;
+    pInfo->pipeline.rsState.depthClampMode         = Pal::DepthClampMode::_None;
+    pInfo->pipeline.rsState.pointCoordOrigin       = Pal::PointOrigin::UpperLeft;
+    pInfo->pipeline.rsState.shadeMode              = Pal::ShadeMode::Flat;
+    pInfo->pipeline.rsState.rasterizeLastLinePixel = 0;
+
+    // Pipeline Binning Override
+    switch (pDevice->GetPipelineBinningMode())
+    {
+    case PipelineBinningModeEnable:
+        pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Enable;
+        break;
+    case PipelineBinningModeDisable:
+        pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Disable;
+        break;
+    case PipelineBinningModeDefault:
+    default:
+        pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Default;
+        break;
+    }
+
     if (pRs != nullptr)
     {
         VK_ASSERT(pRs->sType == VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO);
@@ -993,8 +1017,6 @@ static void BuildRasterizationState(
 
         // Enable perpendicular end caps if we report strictLines semantics
         pInfo->pipeline.rsState.perpLineEndCapsEnable  = (limits.strictLines == VK_TRUE);
-
-        pInfo->pipeline.rsState.dx10DiamondTestDisable = true;
 
         pInfo->pipeline.viewportInfo.depthClipNearEnable            = (pRs->depthClampEnable == VK_FALSE);
         pInfo->pipeline.viewportInfo.depthClipFarEnable             = (pRs->depthClampEnable == VK_FALSE);
@@ -1026,7 +1048,9 @@ static void BuildRasterizationState(
             pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthBias);
         }
 
-        pInfo->immedInfo.pointLineRasterParams.lineWidth    = pRs->lineWidth;
+        pInfo->immedInfo.pointLineRasterParams.lineWidth    = Util::Clamp(pRs->lineWidth,
+                                                                          limits.lineWidthRange[0],
+                                                                          limits.lineWidthRange[1]),
         pInfo->immedInfo.pointLineRasterParams.pointSize    = DefaultPointSize;
         pInfo->immedInfo.pointLineRasterParams.pointSizeMin = limits.pointSizeRange[0];
         pInfo->immedInfo.pointLineRasterParams.pointSizeMax = limits.pointSizeRange[1];
@@ -1181,25 +1205,6 @@ static void BuildRasterizationState(
             // When depth clamping is enabled, depth clipping should be disabled, and vice versa.
             // Clipping is updated in pipeline compiler.
             pInfo->pipeline.rsState.depthClampMode = Pal::DepthClampMode::Viewport;
-        }
-
-        pInfo->pipeline.rsState.pointCoordOrigin       = Pal::PointOrigin::UpperLeft;
-        pInfo->pipeline.rsState.shadeMode              = Pal::ShadeMode::Flat;
-        pInfo->pipeline.rsState.rasterizeLastLinePixel = 0;
-
-        // Pipeline Binning Override
-        switch (pDevice->GetPipelineBinningMode())
-        {
-        case PipelineBinningModeEnable:
-            pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Enable;
-            break;
-        case PipelineBinningModeDisable:
-            pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Disable;
-            break;
-        case PipelineBinningModeDefault:
-        default:
-            pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Default;
-            break;
         }
     }
 
@@ -1636,6 +1641,14 @@ static void BuildColorBlendState(
             for (uint32_t i = 0; i < numColorTargets; ++i)
             {
                 uint32_t location = i;
+
+                if ((extStructs.pRenderingAttachmentLocationInfo                                != nullptr) &&
+                    (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations     != nullptr) &&
+                    (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations[i]  != VK_ATTACHMENT_UNUSED))
+                {
+                    location = extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations[i];
+                }
+
                 auto pCbDst     = &pInfo->pipeline.cbState.target[location];
 
                 if (pRenderPass != nullptr)
@@ -1812,7 +1825,8 @@ static void BuildPreRasterizationShaderState(
 {
     if (pIn->pTessellationState != nullptr)
     {
-        pInfo->immedInfo.inputAssemblyState.patchControlPoints = pIn->pTessellationState->patchControlPoints;
+        pInfo->immedInfo.inputAssemblyState.patchControlPoints = static_cast<uint8>(
+                                                                    pIn->pTessellationState->patchControlPoints);
     }
     else
     {
@@ -1899,6 +1913,7 @@ static void BuildPreRasterizationShaderState(
 static void BuildFragmentShaderState(
     const Device*                       pDevice,
     const VkGraphicsPipelineCreateInfo* pIn,
+    const GraphicsPipelineExtStructs&   extStructs,
     const uint64_t                      dynamicStateFlags,
 #if VKI_RAY_TRACING
     const bool                          hasRayTracing,
@@ -1908,14 +1923,7 @@ static void BuildFragmentShaderState(
     // Build states via VkPipelineDepthStencilStateCreateInfo
     BuildDepthStencilState(pIn->pDepthStencilState, dynamicStateFlags, pInfo);
 
-    // Build VRS state
-    EXTRACT_VK_STRUCTURES_0(
-        variableRateShading,
-        PipelineFragmentShadingRateStateCreateInfoKHR,
-        static_cast<const VkPipelineFragmentShadingRateStateCreateInfoKHR*>(pIn->pNext),
-        PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR)
-
-    BuildVrsRateParams(pDevice, pPipelineFragmentShadingRateStateCreateInfoKHR, dynamicStateFlags, pInfo);
+    BuildVrsRateParams(pDevice, extStructs.pPipelineFragmentShadingRateStateCreateInfoKHR, dynamicStateFlags, pInfo);
 
 #if VKI_RAY_TRACING
     pInfo->flags.hasRayTracing |= hasRayTracing;
@@ -1936,12 +1944,7 @@ static void BuildFragmentOutputInterfaceState(
     // Build states via VkPipelineMultisampleStateCreateInfo
     BuildMultisampleState(pIn->pMultisampleState, pRenderPass, subpass, dynamicStateFlags, pInfo);
 
-    // Extract VkPipelineRenderingFormatCreateInfoKHR for VK_KHR_dynamic_rendering extension
-    EXTRACT_VK_STRUCTURES_0(
-        renderingCreateInfo,
-        PipelineRenderingCreateInfoKHR,
-        static_cast<const VkPipelineRenderingCreateInfo*>(pIn->pNext),
-        PIPELINE_RENDERING_CREATE_INFO_KHR);
+    auto pPipelineRenderingCreateInfoKHR = extStructs.pPipelineRenderingCreateInfo;
 
     pInfo->dbFormat = GetDepthFormat(pRenderPass, subpass, pPipelineRenderingCreateInfoKHR);
 
@@ -2153,7 +2156,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
     VK_ASSERT(pBinMeta != nullptr);
 
     GraphicsPipelineLibraryInfo libInfo;
-    ExtractLibraryInfo(pIn, flags, &libInfo);
+    ExtractLibraryInfo(pIn, extStructs, flags, &libInfo);
 
     bool hasMesh = false;
 #if VKI_RAY_TRACING
@@ -2211,6 +2214,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
         {
             BuildFragmentShaderState(pDevice,
                                      pIn,
+                                     extStructs,
                                      pInfo->dynamicStates,
 #if VKI_RAY_TRACING
                                      hasRayTracing,
@@ -2252,13 +2256,14 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
 void GraphicsPipelineCommon::GeneratePipelineOptimizerKey(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pCreateInfo,
+    const GraphicsPipelineExtStructs&      extStructs,
     VkPipelineCreateFlags2KHR              flags,
     const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
     ShaderOptimizerKey*                    pShaderKeys,
     PipelineOptimizerKey*                  pPipelineKey)
 {
     GraphicsPipelineLibraryInfo libInfo;
-    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, flags, &libInfo);
+    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, extStructs, flags, &libInfo);
 
     pPipelineKey->shaderCount = VK_ARRAY_SIZE(pShaderStageInfo->stages);
     pPipelineKey->pShaders    = pShaderKeys;
@@ -2747,6 +2752,7 @@ void GraphicsPipelineCommon::GenerateHashForVertexInputInterfaceState(
 void GraphicsPipelineCommon::GenerateHashForPreRasterizationShadersState(
     const VkGraphicsPipelineCreateInfo*     pCreateInfo,
     const GraphicsPipelineLibraryInfo*      pLibInfo,
+    const GraphicsPipelineExtStructs&       extStructs,
     uint32_t                                dynamicStateFlags,
     Util::MetroHash128*                     pElfHasher,
     Util::MetroHash128*                     pApiHasher)
@@ -2780,11 +2786,7 @@ void GraphicsPipelineCommon::GenerateHashForPreRasterizationShadersState(
         pElfHasher->Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetSubpassHash(pCreateInfo->subpass));
     }
 
-    EXTRACT_VK_STRUCTURES_0(
-        discardRectangle,
-        PipelineDiscardRectangleStateCreateInfoEXT,
-        static_cast<const VkPipelineDiscardRectangleStateCreateInfoEXT*>(pCreateInfo->pNext),
-        PIPELINE_DISCARD_RECTANGLE_STATE_CREATE_INFO_EXT)
+    auto pPipelineDiscardRectangleStateCreateInfoEXT = extStructs.pPipelineDiscardRectangleStateCreateInfoEXT;
 
     if (pPipelineDiscardRectangleStateCreateInfoEXT != nullptr)
     {
@@ -2806,6 +2808,7 @@ void GraphicsPipelineCommon::GenerateHashForPreRasterizationShadersState(
 // =====================================================================================================================
 void GraphicsPipelineCommon::GenerateHashForFragmentShaderState(
     const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+    const GraphicsPipelineExtStructs&       extStructs,
     Util::MetroHash128*                     pElfHasher,
     Util::MetroHash128*                     pApiHasher)
 {
@@ -2816,23 +2819,14 @@ void GraphicsPipelineCommon::GenerateHashForFragmentShaderState(
 
     const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pCreateInfo->renderPass);
 
-    EXTRACT_VK_STRUCTURES_0(
-        renderingCreateInfo,
-        PipelineRenderingCreateInfoKHR,
-        static_cast<const VkPipelineRenderingCreateInfo*>(pCreateInfo->pNext),
-        PIPELINE_RENDERING_CREATE_INFO_KHR);
+    auto pPipelineRenderingCreateInfoKHR                = extStructs.pPipelineRenderingCreateInfo;
+    auto pPipelineFragmentShadingRateStateCreateInfoKHR = extStructs.pPipelineFragmentShadingRateStateCreateInfoKHR;
 
     if ((pCreateInfo->pDepthStencilState != nullptr) &&
         (GetDepthFormat(pRenderPass, pCreateInfo->subpass, pPipelineRenderingCreateInfoKHR) != VK_FORMAT_UNDEFINED))
     {
         GenerateHashFromDepthStencilStateCreateInfo(*pCreateInfo->pDepthStencilState, pElfHasher);
     }
-
-    EXTRACT_VK_STRUCTURES_0(
-        variableRateShading,
-        PipelineFragmentShadingRateStateCreateInfoKHR,
-        static_cast<const VkPipelineFragmentShadingRateStateCreateInfoKHR*>(pCreateInfo->pNext),
-        PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR)
 
     if (pPipelineFragmentShadingRateStateCreateInfoKHR != nullptr)
     {
@@ -2846,14 +2840,12 @@ void GraphicsPipelineCommon::GenerateHashForFragmentShaderState(
 // =====================================================================================================================
 void GraphicsPipelineCommon::GenerateHashForFragmentOutputInterfaceState(
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    const GraphicsPipelineExtStructs&   extStructs,
     Util::MetroHash128*                 pElfHasher,
     Util::MetroHash128*                 pApiHasher)
 {
-    EXTRACT_VK_STRUCTURES_0(
-        renderingCreateInfo,
-        PipelineRenderingCreateInfoKHR,
-        static_cast<const VkPipelineRenderingCreateInfo*>(pCreateInfo->pNext),
-        PIPELINE_RENDERING_CREATE_INFO_KHR);
+    auto pPipelineRenderingCreateInfoKHR  = extStructs.pPipelineRenderingCreateInfo;
+    auto pRenderingAttachmentLocationInfo = extStructs.pRenderingAttachmentLocationInfo;
 
     uint32 colorAttachmentCount = 0;
     if (pPipelineRenderingCreateInfoKHR != nullptr)
@@ -2875,6 +2867,15 @@ void GraphicsPipelineCommon::GenerateHashForFragmentOutputInterfaceState(
         colorAttachmentCount = pRenderPass->GetSubpassColorReferenceCount(pCreateInfo->subpass);
 
         pElfHasher->Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetSubpassHash(pCreateInfo->subpass));
+    }
+
+    if (pRenderingAttachmentLocationInfo != nullptr)
+    {
+        pElfHasher->Update(pRenderingAttachmentLocationInfo->colorAttachmentCount);
+        for (uint32_t i = 0; i < pRenderingAttachmentLocationInfo->colorAttachmentCount; ++i)
+        {
+            pElfHasher->Update(pRenderingAttachmentLocationInfo->pColorAttachmentLocations[i]);
+        }
     }
 
     if ((pCreateInfo->pColorBlendState != nullptr) && (colorAttachmentCount != 0))
@@ -2930,6 +2931,7 @@ bool GraphicsPipelineCommon::IsRasterizationDisabled(
 void GraphicsPipelineCommon::BuildApiHash(
     const VkGraphicsPipelineCreateInfo*     pCreateInfo,
     VkPipelineCreateFlags2KHR               flags,
+    const GraphicsPipelineExtStructs&       extStructs,
     const GraphicsPipelineBinaryCreateInfo& binaryCreateInfo,
     uint64_t*                               pApiHash,
     Util::MetroHash::Hash*                  pElfHash)
@@ -2938,7 +2940,7 @@ void GraphicsPipelineCommon::BuildApiHash(
     Util::MetroHash128 apiHasher;
 
     GraphicsPipelineLibraryInfo libInfo;
-    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, flags, &libInfo);
+    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, extStructs, flags, &libInfo);
 
     uint64_t dynamicStateFlags = GetDynamicStateFlags(pCreateInfo->pDynamicState, &libInfo);
     elfHasher.Update(dynamicStateFlags);
@@ -2972,7 +2974,7 @@ void GraphicsPipelineCommon::BuildApiHash(
     if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT)
     {
         GenerateHashForPreRasterizationShadersState(
-            pCreateInfo, &libInfo, dynamicStateFlags, &elfHasher, &apiHasher);
+            pCreateInfo, &libInfo, extStructs, dynamicStateFlags, &elfHasher, &apiHasher);
     }
     else if (libInfo.pPreRasterizationShaderLib != nullptr)
     {
@@ -2989,7 +2991,7 @@ void GraphicsPipelineCommon::BuildApiHash(
     {
         if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
         {
-            GenerateHashForFragmentShaderState(pCreateInfo, &elfHasher, &apiHasher);
+            GenerateHashForFragmentShaderState(pCreateInfo, extStructs, &elfHasher, &apiHasher);
         }
         else if (libInfo.pFragmentShaderLib != nullptr)
         {
@@ -2999,7 +3001,7 @@ void GraphicsPipelineCommon::BuildApiHash(
 
         if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)
         {
-            GenerateHashForFragmentOutputInterfaceState(pCreateInfo, &elfHasher, &apiHasher);
+            GenerateHashForFragmentOutputInterfaceState(pCreateInfo, extStructs, &elfHasher, &apiHasher);
         }
         else if (libInfo.pFragmentOutputInterfaceLib != nullptr)
         {
@@ -3029,6 +3031,9 @@ void GraphicsPipelineCommon::HandleExtensionStructs(
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
     GraphicsPipelineExtStructs*         pExtStructs)
 {
+    // Handle common extension structs
+    Pipeline::HandleExtensionStructs(pCreateInfo->pNext, pExtStructs);
+
     const void* pNext = pCreateInfo->pNext;
 
     while (pNext != nullptr)
@@ -3038,11 +3043,45 @@ void GraphicsPipelineCommon::HandleExtensionStructs(
         switch (static_cast<int32>(pHeader->sType))
         {
         // Handle extension specific structures
+
         case VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO:
         {
             pExtStructs->pPipelineRenderingCreateInfo = static_cast<const VkPipelineRenderingCreateInfo*>(pNext);
             break;
         }
+        case VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_LOCATION_INFO_KHR:
+        {
+            pExtStructs->pRenderingAttachmentLocationInfo =
+                static_cast<const VkRenderingAttachmentLocationInfoKHR*>(pNext);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PIPELINE_DISCARD_RECTANGLE_STATE_CREATE_INFO_EXT:
+        {
+            pExtStructs->pPipelineDiscardRectangleStateCreateInfoEXT =
+                static_cast<const VkPipelineDiscardRectangleStateCreateInfoEXT*>(pNext);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR:
+        {
+            pExtStructs->pPipelineFragmentShadingRateStateCreateInfoKHR =
+                static_cast<const VkPipelineFragmentShadingRateStateCreateInfoKHR*>(pNext);
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT:
+        {
+            pExtStructs->pGraphicsPipelineLibraryCreateInfoEXT =
+                static_cast<const VkGraphicsPipelineLibraryCreateInfoEXT*>(pNext);
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR:
+        {
+            pExtStructs->pPipelineLibraryCreateInfoKHR =
+                static_cast<const VkPipelineLibraryCreateInfoKHR*>(pNext);
+            break;
+        }
+
         default:
             break;
         }

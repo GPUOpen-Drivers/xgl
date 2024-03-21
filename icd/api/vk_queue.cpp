@@ -999,7 +999,7 @@ VkResult Queue::NotifyFlipMetadata(
                     submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
                     submitInfo.perSubQueueInfoCount = 1;
 
-                    result = PalToVkResult(pPalQueue->Submit(submitInfo));
+                    result = PalToVkResult(PalQueueSubmit(m_pDevice, pPalQueue, submitInfo));
                 }
             }
         }
@@ -1048,6 +1048,23 @@ VkResult Queue::NotifyFlipMetadataAfterPresent(
 }
 
 // =====================================================================================================================
+Pal::Result Queue::PalQueueSubmit(
+    const Device*          pDevice,
+    Pal::IQueue*           pPalQueue,
+    const Pal::SubmitInfo& palSubmitInfo)
+{
+    Pal::Result palResult = pPalQueue->Submit(palSubmitInfo);
+
+    if ((palResult == Pal::Result::Success) &&
+        pDevice->GetRuntimeSettings().waitAfterSubmit)
+    {
+        palResult = pPalQueue->WaitIdle();
+    }
+
+    return palResult;
+}
+
+// =====================================================================================================================
 // Submit an array of command buffers to a queue
 template<typename SubmitInfoType>
 VkResult Queue::Submit(
@@ -1093,7 +1110,7 @@ VkResult Queue::Submit(
         submitInfo.ppFences   = &pPalFence;
         submitInfo.fenceCount = 1;
 
-        palResult = PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
+        palResult = PalQueueSubmit(m_pDevice, PalQueue(DefaultDeviceIndex), submitInfo);
 
         result = PalToVkResult(palResult);
     }
@@ -1332,7 +1349,7 @@ VkResult Queue::Submit(
 
                             if (palResult == Pal::Result::Success)
                             {
-                                palResult = pMainQueue->Submit(palSubmitInfo);
+                                palResult = PalQueueSubmit(m_pDevice, pMainQueue, palSubmitInfo);
                             }
 
                             backupPerSubQueueInfo.cmdBufferCount = 1;
@@ -1352,7 +1369,7 @@ VkResult Queue::Submit(
 
                                 if (palResult == Pal::Result::Success)
                                 {
-                                    palResult = pBackupQueue->Submit(backupPalSubmitInfo);
+                                    palResult = PalQueueSubmit(m_pDevice, pBackupQueue, backupPalSubmitInfo);
                                 }
 
                                 if (palResult == Pal::Result::Success)
@@ -1431,7 +1448,7 @@ VkResult Queue::Submit(
 
                                 if (palResult == Pal::Result::Success)
                                 {
-                                    palResult = PalTmzQueue(deviceIdx)->Submit(palSubmitInfo);
+                                    palResult = PalQueueSubmit(m_pDevice, PalTmzQueue(deviceIdx), palSubmitInfo);
                                 }
 
                                 VK_ASSERT(palResult == Pal::Result::Success);
@@ -1456,7 +1473,7 @@ VkResult Queue::Submit(
 
                                 if (palResult == Pal::Result::Success)
                                 {
-                                    palResult = PalQueue(deviceIdx)->Submit(palSubmitInfo);
+                                    palResult = PalQueueSubmit(m_pDevice, PalQueue(deviceIdx), palSubmitInfo);
                                 }
 
                                 VK_ASSERT(palResult == Pal::Result::Success);
@@ -1466,7 +1483,7 @@ VkResult Queue::Submit(
                         }
                         else
                         {
-                            palResult = PalQueue(deviceIdx)->Submit(palSubmitInfo);
+                            palResult = PalQueueSubmit(m_pDevice, PalQueue(deviceIdx), palSubmitInfo);
                         }
                     }
                     else
@@ -2544,7 +2561,7 @@ VkResult Queue::BindSparse(
             // the active device index would be cleared in the reset.
             pFence->SetActiveDevice(deviceIndex);
 
-            result = PalToVkResult(PalQueue(deviceIndex)->Submit(submitInfo));
+            result = PalToVkResult(PalQueueSubmit(m_pDevice, PalQueue(deviceIndex), submitInfo));
         }
         while ((result == VK_SUCCESS) && deviceGroup.IterateNext());
     }
@@ -2658,7 +2675,7 @@ VkResult Queue::SynchronizeBackBuffer(
         submitInfo.blockIfFlippingCount = 1;
         submitInfo.ppBlockIfFlipping    = &pGpuMem;
 
-        result = PalToVkResult(m_pPalQueues[deviceIdx]->Submit(submitInfo));
+        result = PalToVkResult(PalQueueSubmit(m_pDevice, m_pPalQueues[deviceIdx], submitInfo));
     }
 
     return result;

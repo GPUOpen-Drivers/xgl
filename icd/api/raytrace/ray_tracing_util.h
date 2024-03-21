@@ -34,8 +34,6 @@
 namespace vk
 {
 
-#define MAKE_GPURT_VERSION(MAJOR, MINOR) ((MAJOR << 16) | MINOR)
-
 // =====================================================================================================================
 // Converts a Vulkan triangle compression mode setting to the GpuRT equivalent of TriangleCompressionAutoMode
 inline GpuRt::TriangleCompressionAutoMode ConvertGpuRtTriCompressionAutoMode(

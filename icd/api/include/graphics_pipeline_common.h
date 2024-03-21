@@ -190,9 +190,14 @@ struct GraphicsPipelineLibraryInfo
 
 // =====================================================================================================================
 // Extension structures for pipeline creation
-struct GraphicsPipelineExtStructs
+struct GraphicsPipelineExtStructs : PipelineExtStructs
 {
     const VkPipelineRenderingCreateInfo*        pPipelineRenderingCreateInfo;
+    const VkRenderingAttachmentLocationInfoKHR* pRenderingAttachmentLocationInfo;
+    const VkPipelineDiscardRectangleStateCreateInfoEXT* pPipelineDiscardRectangleStateCreateInfoEXT;
+    const VkPipelineFragmentShadingRateStateCreateInfoKHR* pPipelineFragmentShadingRateStateCreateInfoKHR;
+    const VkGraphicsPipelineLibraryCreateInfoEXT* pGraphicsPipelineLibraryCreateInfoEXT;
+    const VkPipelineLibraryCreateInfoKHR* pPipelineLibraryCreateInfoKHR;
 };
 
 // =====================================================================================================================
@@ -241,6 +246,7 @@ public:
     // Extract graphics pipeline library related info from VkGraphicsPipelineCreateInfo.
     static void ExtractLibraryInfo(
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        const GraphicsPipelineExtStructs&   extStructs,
         VkPipelineCreateFlags2KHR           flags,
         GraphicsPipelineLibraryInfo*        pLibInfo);
 
@@ -270,6 +276,7 @@ protected:
     static void GeneratePipelineOptimizerKey(
         const Device*                          pDevice,
         const VkGraphicsPipelineCreateInfo*    pCreateInfo,
+        const GraphicsPipelineExtStructs&      extStructs,
         VkPipelineCreateFlags2KHR              flags,
         const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
         ShaderOptimizerKey*                    pShaderKeys,
@@ -279,6 +286,7 @@ protected:
     static void BuildApiHash(
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,
         VkPipelineCreateFlags2KHR               flags,
+        const GraphicsPipelineExtStructs&       extStructs,
         const GraphicsPipelineBinaryCreateInfo& pBinaryCreateInfo,
         uint64_t*                               pApiHash,
         Util::MetroHash::Hash*                  elfHash);
@@ -293,6 +301,7 @@ protected:
     static void GenerateHashForPreRasterizationShadersState(
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,
         const GraphicsPipelineLibraryInfo*      pLibInfo,
+        const GraphicsPipelineExtStructs&       extStructs,
         uint32_t                                dynamicStateFlags,
         Util::MetroHash128*                     pBaseHasher,
         Util::MetroHash128*                     pApiHasher);
@@ -300,12 +309,14 @@ protected:
     // Generate API PSO hash for state of fragment shader section
     static void GenerateHashForFragmentShaderState(
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+        const GraphicsPipelineExtStructs&       extStructs,
         Util::MetroHash128*                     pBaseHasher,
         Util::MetroHash128*                     pApiHasher);
 
     // Generate API PSO hash for state of fragment output interface section
     static void GenerateHashForFragmentOutputInterfaceState(
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        const GraphicsPipelineExtStructs&   extStructs,
         Util::MetroHash128*                 pBaseHasher,
         Util::MetroHash128*                 pApiHasher);
 

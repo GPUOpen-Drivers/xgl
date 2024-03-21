@@ -791,7 +791,7 @@ template <typename ModifierPropertiesList_T>
 #endif
 
 #if VKI_RAY_TRACING
-    bool HwSupportsRayTracing() const;
+    bool RayTracingSupported() const;
 #endif
 
     static DeviceExtensions::Supported GetAvailableExtensions(
@@ -872,6 +872,18 @@ protected:
     VK_FORCEINLINE bool IsPerChannelMinMaxFilteringSupported() const
     {
         return m_properties.gfxipProperties.flags.supportPerChannelMinMaxFilter;
+    }
+
+    bool IsDoubleRate16BitInstructionsSupported() const
+    {
+        return (m_properties.gfxipProperties.flags.supportDoubleRate16BitInstructions &&
+                GetRuntimeSettings().enableNative16BitTypes);
+    }
+
+    bool Is16BitInstructionsSupported() const
+    {
+        return (m_properties.gfxipProperties.flags.support16BitInstructions &&
+                GetRuntimeSettings().enableNative16BitTypes);
     }
 
     PhysicalDeviceManager*           m_pPhysicalDeviceManager;

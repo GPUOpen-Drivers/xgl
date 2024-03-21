@@ -261,20 +261,14 @@ Pal::Result RenderStateCache::CreatePalObjects(
     size_t totalSize = 0;
     Pal::IMsaaState* states[MaxPalDevices] = {};
 
-    for (uint32_t deviceIdx = 0;
-        (deviceIdx < m_pDevice->NumPalDevices()) && (result == Pal::Result::Success);
-         ++deviceIdx)
+    for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); ++deviceIdx)
     {
-        stateSizes[deviceIdx] = m_pDevice->PalDevice(deviceIdx)->GetMsaaStateSize(createInfo, &result);
+        stateSizes[deviceIdx] = m_pDevice->PalDevice(deviceIdx)->GetMsaaStateSize();
         totalSize += stateSizes[deviceIdx];
     }
 
     void* pStorage = nullptr;
-
-    if (result == Pal::Result::Success)
-    {
-        result = AllocMem(totalSize, pAllocator, parentScope, &pStorage);
-    }
+    result = AllocMem(totalSize, pAllocator, parentScope, &pStorage);
 
     void* pMemory = pStorage;
 
@@ -346,20 +340,14 @@ Pal::Result RenderStateCache::CreatePalObjects(
     size_t totalSize = 0;
     Pal::IColorBlendState* states[MaxPalDevices] = {};
 
-    for (uint32_t deviceIdx = 0;
-        (deviceIdx < m_pDevice->NumPalDevices()) && (result == Pal::Result::Success);
-        ++deviceIdx)
+    for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); ++deviceIdx)
     {
-        stateSizes[deviceIdx] = m_pDevice->PalDevice(deviceIdx)->GetColorBlendStateSize(createInfo, &result);
+        stateSizes[deviceIdx] = m_pDevice->PalDevice(deviceIdx)->GetColorBlendStateSize();
         totalSize += stateSizes[deviceIdx];
     }
 
     void* pStorage = nullptr;
-
-    if (result == Pal::Result::Success)
-    {
-        result = AllocMem(totalSize, pAllocator, parentScope, &pStorage);
-    }
+    result = AllocMem(totalSize, pAllocator, parentScope, &pStorage);
 
     void* pMemory = pStorage;
 
@@ -431,20 +419,14 @@ Pal::Result RenderStateCache::CreatePalObjects(
     size_t totalSize = 0;
     Pal::IDepthStencilState* states[MaxPalDevices] = {};
 
-    for (uint32_t deviceIdx = 0;
-        (deviceIdx < m_pDevice->NumPalDevices()) && (result == Pal::Result::Success);
-        ++deviceIdx)
+    for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); ++deviceIdx)
     {
-        stateSizes[deviceIdx] = m_pDevice->PalDevice(deviceIdx)->GetDepthStencilStateSize(createInfo, &result);
+        stateSizes[deviceIdx] = m_pDevice->PalDevice(deviceIdx)->GetDepthStencilStateSize();
         totalSize += stateSizes[deviceIdx];
     }
 
     void* pStorage = nullptr;
-
-    if (result == Pal::Result::Success)
-    {
-        result = AllocMem(totalSize, pAllocator, parentScope, &pStorage);
-    }
+    result = AllocMem(totalSize, pAllocator, parentScope, &pStorage);
 
     void* pMemory = pStorage;
 

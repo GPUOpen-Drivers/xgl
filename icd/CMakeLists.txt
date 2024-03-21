@@ -351,10 +351,11 @@ if (UNIX)
     target_link_options(xgl PRIVATE
         -Wl,-Bdynamic
         -Wl,-z,noexecstack
-        -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/make/amdicd.so.def
         -Wl,-Map=$<TARGET_FILE_DIR:xgl>/${ICD_TARGET}.map
         -Wl,-soname=${ICD_TARGET}.so.1
     )
+
+    target_link_options(xgl PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/make/amdicd.so.def)
 
     if(NOT BUILD_SHARED_LIBS)
         # Link libstdc++ statically, so that symbols from libstdc++ do not cause conflicts

@@ -832,6 +832,9 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdSetDescriptorBufferOffsets2EXT             );
     INIT_DISPATCH_ENTRY(vkCmdBindDescriptorBufferEmbeddedSamplers2EXT   );
 
+    INIT_DISPATCH_ENTRY(vkCmdSetRenderingAttachmentLocationsKHR         );
+    INIT_DISPATCH_ENTRY(vkCmdSetRenderingInputAttachmentIndicesKHR      );
+
 }
 
 // =====================================================================================================================

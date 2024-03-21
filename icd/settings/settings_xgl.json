@@ -701,6 +701,18 @@
       "Scope": "Driver"
     },
     {
+      "Name": "ThreadSafeAllocator",
+      "Description": "Enable/Disable command allocator thread safe PAL implementation",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Name": "CacheUuidNamespace",
       "Description": "Defines the namespace the pipeline cache UUID belongs to.",
       "Tags": [
@@ -3016,21 +3028,6 @@
       "Scope": "Driver"
     },
     {
-      "Name": "RtEnableBVHCollapse",
-      "Description": "Enable BVH Collapse",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Scope": "Driver"
-    },
-    {
       "Description": "Mode for which interior box nodes in BLAS use fp16 bounding boxes",
       "Tags": [
         "Ray Tracing"
@@ -4203,6 +4200,21 @@
       "Scope": "Driver"
     },
     {
+      "Name": "EnableRemapScratchBuffer",
+      "Description": "Enable Remapping BVH2 Data from ScratchBuffer to ResultBuffer",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Name": "RtEnableCompilePipelineLibrary",
       "Description": "Compile pipeline library as a ShaderLibrary.",
       "Tags": [
@@ -4319,30 +4331,9 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": "RaytracingNotSupported"
+        "Default": true
       },
-      "ValidValues": {
-        "IsEnum": true,
-        "Name": "EnableRaytracingSupport",
-        "Values": [
-          {
-            "Name": "RaytracingNotSupported",
-            "Value": 0,
-            "Description": "Disable all ray tracing support"
-          },
-          {
-            "Name": "Raytracing1_0",
-            "Value": 1,
-            "Description": "Enable ray tracing 1.0 features"
-          },
-          {
-            "Name": "Raytracing1_1",
-            "Value": 2,
-            "Description": "Enable ray tracing 1.1 features"
-          }
-        ]
-      },
-      "Type": "enum",
+      "Type": "bool",
       "Name": "EnableRaytracingSupport",
       "Scope": "Driver"
     },
@@ -5312,7 +5303,7 @@
         "Default": 0
       },
       "Type": "uint32",
-      "Name": "lbvhBuildThreshold",
+      "Name": "LbvhBuildThreshold",
       "Scope": "Driver"
     },
     {
@@ -5597,6 +5588,30 @@
       },
       "Scope": "Driver",
       "Type": "enum"
+    },
+    {
+      "Name": "EnableMeshShaders",
+      "Description": "Controls whether support for mesh shaders should be enabled",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
+      "Name": "EnableNative16BitTypes",
+      "Description": "Enable true 16-bit float and integer types",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool"
     },
     {
       "Description": "Custom device allocation count limitation, when larger than 0.",
@@ -7392,6 +7407,18 @@
       "Name": "MinSubpassesForOptionalClears"
     },
     {
+      "Description": "Enable variable rate shading on supported hardware.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "EnableVariableRateShading"
+    },
+    {
       "Description": "Enable GPU decompress pass for astc/etc image, it is on the vkCopyBufferToImage, and not safe depending on application.",
       "Tags": [
         "Developer Mode"
@@ -8637,6 +8664,21 @@
       "Scope": "Driver"
     },
     {
+      "Name": "IFHRayTracing",
+      "Description": "Makes the driver effectively skip the BVH build by reducing prim count to 0.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Name": "RtMaxRayLength",
       "Description": "Override the maximum extent of the ray, this value overrides the application specified rayDesc.tMax value.",
       "Tags": [
@@ -8649,6 +8691,51 @@
         "Default": 0.0
       },
       "Type": "float",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "GpuRtGpuDebugFlags",
+      "Description": "GPURT GPU debug flags",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "GpuDebugFlagNone"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "GpuRtGpuDebugFlag",
+        "Values": [
+          {
+            "Name": "GpuDebugFlagNone",
+            "Value": 0,
+            "Description": "Debugging disabled."
+          },
+          {
+            "Name": "GpuDebugFlagHostAssert",
+            "Value": 1,
+            "Description": "Trigger asserts in the host debugger."
+          },
+          {
+            "Name": "GpuDebugFlagHostPrint",
+            "Value": 2,
+            "Description": "Print asserts and debug messages in the host debugger."
+          },
+          {
+            "Name": "GpuDebugFlagShaderHalt",
+            "Value": 4,
+            "Description": "Halt shader when an assert is triggered."
+          }
+        ]
+      },
+      "Type": "uint32",
       "Scope": "Driver"
     },
     {
@@ -8695,6 +8782,18 @@
       "Scope": "Driver",
       "Name": "DebugTimeout",
       "Type": "uint32"
+    },
+    {
+      "Description": "Enable/Disable wait after command buffer submission",
+      "Tags": [
+        "Debugging"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Name": "WaitAfterSubmit",
+      "Type": "bool"
     },
     {
       "Description": "Enable printf debug functionality",
@@ -8917,7 +9016,7 @@
         "General"
       ],
       "Defaults": {
-        "Default": true
+        "Default": false
       },
       "Type": "bool",
       "Scope": "Driver",

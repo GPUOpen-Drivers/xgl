@@ -127,6 +127,12 @@ private:
 };
 
 // =====================================================================================================================
+// Extension structures for pipeline creation
+struct RayTracingPipelineExtStructs : PipelineExtStructs
+{
+};
+
+// =====================================================================================================================
 // Vulkan implementation of ray tracing pipelines created by vkCreateRayTracingPipelinesKHR
 class RayTracingPipeline final : public Pipeline, public NonDispatchable<VkPipeline, RayTracingPipeline>
 {
@@ -327,6 +333,11 @@ protected:
         uint32_t                          shaderPropsCount,
         Vkgc::RayTracingShaderProperty*   pShaderProp,
         uint64_t*                         pShaderId);
+
+    // Extracts extension structs from VkRayTracingPipelineCreateInfoKHR
+    static void HandleExtensionStructs(
+        const VkRayTracingPipelineCreateInfoKHR* pCreateInfo,
+        RayTracingPipelineExtStructs*            pExtStructs);
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(RayTracingPipeline);

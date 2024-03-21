@@ -404,6 +404,16 @@ protected:
         Vkgc::ResourceMappingRootNode* pNode,
         uint32_t*                      pNodeCount) const;
 
+    static void BuildLlpcInternalInlineBufferMapping(
+        const uint32_t                 stageMask,
+        const uint32_t                 offsetInDwords,
+        const uint32_t                 maxSizeInDwords,
+        const uint32_t                 binding,
+        Vkgc::ResourceMappingRootNode* pRootNode,
+        uint32_t*                      pRootNodeCount,
+        Vkgc::ResourceMappingNode*     pStaNode,
+        uint32_t*                      pStaNodeCount);
+
 #if VKI_RAY_TRACING
     void BuildLlpcRayTracingDispatchArgumentsMapping(
         const uint32_t                 stageMask,

@@ -59,7 +59,7 @@ struct DeferGraphicsPipelineCreateInfo
     GraphicsPipelineShaderStageInfo  shaderStageInfo;
     GraphicsPipelineObjectCreateInfo objectCreateInfo;
     GraphicsPipelineExtStructs       extStructs;
-    Util::MetroHash::Hash            elfHash;
+    Util::MetroHash::Hash            cacheIds[MaxPalDevices];
     ShaderOptimizerKey               shaderOptimizerKeys[ShaderStage::ShaderStageGfxCount];
     PipelineOptimizerKey             pipelineOptimizerKey;
     PipelineMetadata                 binaryMetadata;
@@ -70,7 +70,7 @@ struct DeferGraphicsPipelineCreateInfo
 static void ConvertCoordinates(
     const VkSampleLocationEXT* pInSampleLocations,
     uint32_t                   numOfSamples,
-    Pal::Offset2d*             pOutConvertedLocations)
+    Pal::SampleLocation*       pOutConvertedLocations)
 {
     for (uint32_t s = 0; s < numOfSamples; s++)
     {
@@ -88,8 +88,8 @@ static void ConvertCoordinates(
         // Sample locations are encoded in 4 bits ranging from -8 to 7. This basically divides each pixel into a
         // 16x16 grid.
         // This computation maps [-0.5, 0.5] to the range [-8, 7]
-        pOutConvertedLocations[s].x = Util::Clamp<int32_t>(iBiasedPosX, -8, 7);
-        pOutConvertedLocations[s].y = Util::Clamp<int32_t>(iBiasedPosY, -8, 7);
+        pOutConvertedLocations[s].x = Util::Clamp<int8>(iBiasedPosX, -8, 7);
+        pOutConvertedLocations[s].y = Util::Clamp<int8>(iBiasedPosY, -8, 7);
     }
 }
 
@@ -117,7 +117,7 @@ static void ConvertToPalMsaaQuadSamplePattern(
 
             const uint32_t pixelOffset = (yOffset * gridWidth + xOffset) * sampleLocationsPerPixel;
 
-            Pal::Offset2d* pSamplePattern = nullptr;
+            Pal::SampleLocation* pSamplePattern = nullptr;
 
             if ((x == 0) && (y == 0))
             {
@@ -157,6 +157,19 @@ public:
         VkPipelineCreateFlags2KHR               flags,
         const VkAllocationCallbacks*            pAllocator,
         VkPipeline*                             pPipeline);
+
+    static VkResult CreateCacheId(
+        Device*                                 pDevice,
+        const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+        const GraphicsPipelineExtStructs&       extStructs,
+        VkPipelineCreateFlags2KHR               flags,
+        GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
+        GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
+        ShaderOptimizerKey*                     pShaderOptimizerKeys,
+        PipelineOptimizerKey*                   pPipelineOptimizerKey,
+        uint64_t*                               pApiPsoHash,
+        ShaderModuleHandle*                     pTempModules,
+        Util::MetroHash::Hash*                  pCacheIds);
 
     VkResult Destroy(
         Device*                         pDevice,
@@ -243,7 +256,6 @@ protected:
         VkPipelineCreateFlags2KHR                      flags,
         const GraphicsPipelineShaderStageInfo*         pShaderInfo,
         const PipelineLayout*                          pPipelineLayout,
-        const Util::MetroHash::Hash*                   pElfHash,
         const PipelineOptimizerKey*                    pPipelineOptimizerKey,
         GraphicsPipelineBinaryCreateInfo*              pBinaryCreateInfo,
         PipelineCache*                                 pPipelineCache,
@@ -278,7 +290,7 @@ private:
         GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
         GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
         const GraphicsPipelineExtStructs& extStructs,
-        Util::MetroHash::Hash*            pElfHash);
+        Util::MetroHash::Hash*            pCacheIds);
 
     static VkResult CreatePalPipelineObjects(
         Device*                           pDevice,
@@ -308,7 +320,7 @@ private:
         GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
         GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
         const GraphicsPipelineExtStructs& extStructs,
-        Util::MetroHash::Hash*            pElfHash);
+        Util::MetroHash::Hash*            pCacheIds);
 
     static void ExecuteDeferCreateOptimizedPipeline(void* pPayload);
 

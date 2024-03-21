@@ -211,6 +211,7 @@ VK_EXT_image_drm_format_modifier
 VK_KHR_shader_expect_assume
 VK_KHR_shader_subgroup_rotate
 VK_KHR_shader_quad_control
+VK_KHR_dynamic_rendering_local_read
 VK_KHR_vertex_attribute_divisor
 VK_EXT_frame_boundary
 VK_EXT_image_compression_control

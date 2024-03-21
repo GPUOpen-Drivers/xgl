@@ -1555,33 +1555,19 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 }
 
 // =====================================================================================================================
-// If provided, obtains the the pipeline creation feedback create info pointer and clears the feedback flags.
-void PipelineCompiler::GetPipelineCreationFeedback(
-        const VkStructHeader*                             pHeader,
-        const VkPipelineCreationFeedbackCreateInfoEXT**   ppPipelineCreationFeadbackCreateInfo)
+// If provided, initializes the VkPipelineCreationFeedbackCreateInfoEXT struct
+void PipelineCompiler::InitPipelineCreationFeedback(
+    const VkPipelineCreationFeedbackCreateInfoEXT*   pPipelineCreationFeedbackCreateInfo)
 {
-    VK_ASSERT(ppPipelineCreationFeadbackCreateInfo != nullptr);
-    for ( ; pHeader != nullptr; pHeader = pHeader->pNext)
+    if (pPipelineCreationFeedbackCreateInfo != nullptr)
     {
-        switch (static_cast<int>(pHeader->sType))
+        pPipelineCreationFeedbackCreateInfo->pPipelineCreationFeedback->flags    = 0;
+        pPipelineCreationFeedbackCreateInfo->pPipelineCreationFeedback->duration = 0;
+
+        for (uint32_t i = 0; i < pPipelineCreationFeedbackCreateInfo->pipelineStageCreationFeedbackCount; i++)
         {
-        case VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO_EXT:
-            *ppPipelineCreationFeadbackCreateInfo =
-                reinterpret_cast<const VkPipelineCreationFeedbackCreateInfoEXT*>(pHeader);
-            VK_ASSERT((*ppPipelineCreationFeadbackCreateInfo)->pPipelineCreationFeedback != nullptr);
-            (*ppPipelineCreationFeadbackCreateInfo)->pPipelineCreationFeedback->flags = 0;
-            (*ppPipelineCreationFeadbackCreateInfo)->pPipelineCreationFeedback->duration = 0;
-            if ((*ppPipelineCreationFeadbackCreateInfo)->pPipelineStageCreationFeedbacks != nullptr)
-            {
-                for (uint32_t i = 0; i < (*ppPipelineCreationFeadbackCreateInfo)->pipelineStageCreationFeedbackCount; i++)
-                {
-                    (*ppPipelineCreationFeadbackCreateInfo)->pPipelineStageCreationFeedbacks[i].flags = 0;
-                    (*ppPipelineCreationFeadbackCreateInfo)->pPipelineStageCreationFeedbacks[i].duration = 0;
-                }
-            }
-            break;
-        default:
-            break;
+            pPipelineCreationFeedbackCreateInfo->pPipelineStageCreationFeedbacks[i].flags    = 0;
+            pPipelineCreationFeedbackCreateInfo->pPipelineStageCreationFeedbacks[i].duration = 0;
         }
     }
 }
@@ -1607,20 +1593,20 @@ void PipelineCompiler::UpdatePipelineCreationFeedback(
 
 // =====================================================================================================================
 VkResult PipelineCompiler::SetPipelineCreationFeedbackInfo(
-    const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo,
+    const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfo,
     uint32_t                                       stageCount,
     const VkPipelineShaderStageCreateInfo*         pStages,
     const PipelineCreationFeedback*                pPipelineFeedback,
     const PipelineCreationFeedback*                pStageFeedback)
 {
-    if (pPipelineCreationFeadbackCreateInfo != nullptr)
+    if (pPipelineCreationFeedbackCreateInfo != nullptr)
     {
-        UpdatePipelineCreationFeedback(pPipelineCreationFeadbackCreateInfo->pPipelineCreationFeedback,
+        UpdatePipelineCreationFeedback(pPipelineCreationFeedbackCreateInfo->pPipelineCreationFeedback,
                                        pPipelineFeedback);
 
-        if (pPipelineCreationFeadbackCreateInfo->pipelineStageCreationFeedbackCount != 0)
+        if (pPipelineCreationFeedbackCreateInfo->pipelineStageCreationFeedbackCount != 0)
         {
-            auto *stageCreationFeedbacks = pPipelineCreationFeadbackCreateInfo->pPipelineStageCreationFeedbacks;
+            auto *stageCreationFeedbacks = pPipelineCreationFeedbackCreateInfo->pPipelineStageCreationFeedbacks;
             if ((stageCount == 0) && (stageCreationFeedbacks != nullptr))
             {
                 UpdatePipelineCreationFeedback(&stageCreationFeedbacks[0], pStageFeedback);
@@ -2242,7 +2228,18 @@ void PipelineCompiler::BuildPipelineShaderInfo(
         pCompiler->ApplyDefaultShaderOptions(stage,
                                              pShaderInfoIn->flags,
                                              &pShaderInfoOut->options);
-
+        if (pShaderInfoIn->pModuleHandle != nullptr)
+        {
+            Pal::ShaderHash clientHash = ShaderModule::GetCodeHash(
+                pShaderInfoIn->pModuleHandle->codeHash, pShaderInfoIn->pEntryPoint);
+            pShaderInfoOut->options.clientHash.lower = clientHash.lower;
+            pShaderInfoOut->options.clientHash.upper = clientHash.upper;
+        }
+        else
+        {
+            pShaderInfoOut->options.clientHash.lower = pShaderInfoIn->codeHash.lower;
+            pShaderInfoOut->options.clientHash.upper = pShaderInfoIn->codeHash.upper;
+        }
         ApplyProfileOptions(pDevice,
                             static_cast<uint32_t>(stage),
                             pPipelineOptions,
@@ -2369,7 +2366,10 @@ static void BuildPipelineShadersInfo(
 
     for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
     {
-        if (((shaderMask & (1 << stage)) != 0) && (pShaderInfo->stages[stage].pModuleHandle != nullptr))
+        if (((shaderMask & (1 << stage)) != 0) &&
+            ((pShaderInfo->stages[stage].pModuleHandle != nullptr) ||
+             (pShaderInfo->stages[stage].codeHash.lower != 0) ||
+             (pShaderInfo->stages[stage].codeHash.upper != 0)))
         {
             GraphicsLibraryType gplType = GetGraphicsLibraryType(static_cast<const ShaderStage>(stage));
 
@@ -2410,13 +2410,14 @@ static void BuildColorBlendState(
     const Device*                              pDevice,
     const VkPipelineColorBlendStateCreateInfo* pCb,
     const GraphicsPipelineExtStructs&          extStructs,
-    const VkPipelineRenderingCreateInfo*       pRendering,
     uint64_t                                   dynamicStateFlags,
     const RenderPass*                          pRenderPass,
     const uint32_t                             subpass,
     GraphicsPipelineBinaryCreateInfo*          pCreateInfo
 )
 {
+    auto pRendering = extStructs.pPipelineRenderingCreateInfo;
+
     if ((pCb != nullptr) || (pRendering != nullptr))
     {
         const uint32_t numColorTargets = (pRendering != nullptr) ?
@@ -2439,6 +2440,14 @@ static void BuildColorBlendState(
         for (uint32_t i = 0; i < numColorTargets; ++i)
         {
             uint32_t location = i;
+
+            if ((extStructs.pRenderingAttachmentLocationInfo                                != nullptr) &&
+                (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations     != nullptr) &&
+                (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations[i]  != VK_ATTACHMENT_UNUSED))
+            {
+                location = extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations[i];
+            }
+
             auto pLlpcCbDst = &pCreateInfo->pipelineInfo.cbState.target[location];
 
             VkFormat cbFormat = VK_FORMAT_UNDEFINED;
@@ -2694,12 +2703,6 @@ static void BuildFragmentOutputInterfaceState(
 {
     const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
 
-    EXTRACT_VK_STRUCTURES_0(
-        dynamicRendering,
-        PipelineRenderingCreateInfoKHR,
-        reinterpret_cast<const VkPipelineRenderingCreateInfo*>(pIn->pNext),
-        PIPELINE_RENDERING_CREATE_INFO_KHR)
-
     BuildMultisampleStateInFoi(pIn->pMultisampleState, dynamicStateFlags, pCreateInfo);
 
     BuildMultisampleState(pDevice, pIn->pMultisampleState, pRenderPass, pIn->subpass, pCreateInfo,
@@ -2708,15 +2711,15 @@ static void BuildFragmentOutputInterfaceState(
     BuildColorBlendState(pDevice,
                          pIn->pColorBlendState,
                          extStructs,
-                         pPipelineRenderingCreateInfoKHR,
                          dynamicStateFlags,
                          pRenderPass, pIn->subpass, pCreateInfo
     );
 
+    auto pPipelineRenderingCreateInfo = extStructs.pPipelineRenderingCreateInfo;
     pCreateInfo->pipelineInfo.iaState.enableMultiView =
         (pRenderPass != nullptr) ? pRenderPass->IsMultiviewEnabled() :
-                                   ((pPipelineRenderingCreateInfoKHR != nullptr) &&
-                                    (Util::CountSetBits(pPipelineRenderingCreateInfoKHR->viewMask) != 0));
+                                   ((pPipelineRenderingCreateInfo != nullptr) &&
+                                    (Util::CountSetBits(pPipelineRenderingCreateInfo->viewMask) != 0));
 
     // Build color export shader partial hash
     Util::MetroHash64 hasher = {};
@@ -2825,10 +2828,15 @@ static void BuildExecutablePipelineState(
     if (enableRayQuery)
     {
         pDefaultCompiler->SetRayTracingState(pDevice, &(pCreateInfo->pipelineInfo.rtState), 0);
+
     }
 #endif
 
     pCreateInfo->linkTimeOptimization = (flags & VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT);
+    if (pCreateInfo->linkTimeOptimization)
+    {
+        pCreateInfo->pipelineInfo.enableColorExportShader = false;
+    }
 }
 
 // =====================================================================================================================
@@ -2931,7 +2939,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->pBinaryMetadata = pBinaryMetadata;
         pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
 
-        GraphicsPipelineCommon::ExtractLibraryInfo(pIn, flags, &libInfo);
+        GraphicsPipelineCommon::ExtractLibraryInfo(pIn, extStructs, flags, &libInfo);
 
         pCreateInfo->libFlags = libInfo.libFlags;
 
@@ -2991,7 +2999,9 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 BuildFragmentShaderState(pDevice, pIn, pShaderInfo, pCreateInfo, dynamicStateFlags);
                 pCreateInfo->pipelineInfo.enableColorExportShader =
                     (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink &&
-                     (pShaderInfo->stages[ShaderStageFragment].pModuleHandle != nullptr));
+                     ((pShaderInfo->stages[ShaderStageFragment].pModuleHandle != nullptr) ||
+                      (pShaderInfo->stages[ShaderStageFragment].codeHash.lower != 0) ||
+                      (pShaderInfo->stages[ShaderStageFragment].codeHash.upper != 0)));
             }
             else if (libInfo.pFragmentShaderLib != nullptr)
             {
@@ -3031,7 +3041,9 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
             for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
             {
-                if (shaderInfos[stage]->pModuleData != nullptr)
+                if ((shaderInfos[stage]->pModuleData != nullptr) ||
+                    (pShaderInfo->stages[stage].codeHash.lower != 0) ||
+                    (pShaderInfo->stages[stage].codeHash.upper != 0))
                 {
                     availableStageMask |= (1 << stage);
                 }
@@ -3430,6 +3442,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
              pModuleData->usage.enableRayQuery)
         {
             SetRayTracingState(pDevice, &(pCreateInfo->pipelineInfo.rtState), 0);
+
         }
 #endif
 
@@ -3873,9 +3886,7 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
                 result = pLayout->BuildLlpcPipelineMapping(RayTracingStageMask,
                                                            nullptr,
                                                            false,
-#if VKI_RAY_TRACING
                                                            isReplay,
-#endif
                                                            Util::VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferOffset),
                                                            &pCreateInfo->pipelineInfo.resourceMapping,
                                                            &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
@@ -3897,6 +3908,7 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
             bool shaderCanInline = (settings.rtCompileMode != RtCompileMode::RtCompileModeIndirect);
             size_t shaderTotalSize = 0;
 
+            bool hasRayQuery = false;
             for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
             {
                 pCreateInfo->pipelineInfo.pShaders[i].pModuleData =
@@ -3906,6 +3918,10 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
                 pCreateInfo->pipelineInfo.pShaders[i].pEntryTarget = pShaderInfo->pStages[i].pEntryPoint;
                 pCreateInfo->pipelineInfo.pShaders[i].entryStage = pShaderInfo->pStages[i].stage;
                 shaderTotalSize += pShaderInfo->pStages[i].codeSize;
+
+                const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>
+                    (pCreateInfo->pipelineInfo.pShaders[i].pModuleData);
+                hasRayQuery |= ((pModuleData != nullptr) && (pModuleData->usage.enableRayQuery));
 
                 if (pShaderInfo->pStages[i].stage != ShaderStage::ShaderStageRayTracingRayGen)
                 {

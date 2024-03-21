@@ -53,6 +53,12 @@ class Device;
 class PipelineCache;
 
 // =====================================================================================================================
+// Extension structures for pipeline creation
+struct ComputePipelineExtStructs : PipelineExtStructs
+{
+};
+
+// =====================================================================================================================
 // Vulkan implementation of compute pipelines created by vkCreateComputePipeline
 class ComputePipeline final : public Pipeline, public NonDispatchable<VkPipeline, ComputePipeline>
 {
@@ -64,6 +70,18 @@ public:
         VkPipelineCreateFlags2KHR              flags,
         const VkAllocationCallbacks*           pAllocator,
         VkPipeline*                            pPipeline);
+
+    static VkResult CreateCacheId(
+        Device*                                 pDevice,
+        const VkComputePipelineCreateInfo*      pCreateInfo,
+        VkPipelineCreateFlags2KHR               flags,
+        ComputePipelineShaderStageInfo*         pShaderInfo,
+        ComputePipelineBinaryCreateInfo*        pBinaryCreateInfo,
+        ShaderOptimizerKey*                     pShaderOptimizerKey,
+        PipelineOptimizerKey*                   pPipelineOptimizerKey,
+        uint64_t*                               pApiPsoHash,
+        ShaderModuleHandle*                     pTempModule,
+        Util::MetroHash::Hash*                  pCacheIds);
 
     VkResult Destroy(
         Device*                         pDevice,
@@ -128,10 +146,28 @@ protected:
         Util::MetroHash::Hash*                pElfHash,
         uint64_t*                             pApiHash);
 
+    static VkResult CreatePipelineBinaries(
+        Device*                                        pDevice,
+        const VkComputePipelineCreateInfo*             pCreateInfo,
+        const ComputePipelineExtStructs&               extStructs,
+        VkPipelineCreateFlags2KHR                      flags,
+        const ComputePipelineShaderStageInfo*          pShaderInfo,
+        const PipelineOptimizerKey*                    pPipelineOptimizerKey,
+        ComputePipelineBinaryCreateInfo*               pBinaryCreateInfo,
+        PipelineCache*                                 pPipelineCache,
+        Util::MetroHash::Hash*                         pCacheIds,
+        Vkgc::BinaryData*                              pPipelineBinaries,
+        PipelineMetadata*                              pBinaryMetadata);
+
     static void FetchPalMetadata(
         PalAllocator* pAllocator,
         const void*   pBinary,
         uint32_t*     pOrigThreadgroupDims);
+
+    // Extracts extension structs from VkComputePipelineCreateInfo
+    static void HandleExtensionStructs(
+        const VkComputePipelineCreateInfo* pCreateInfo,
+        ComputePipelineExtStructs*         pExtStructs);
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(ComputePipeline);

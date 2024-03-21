@@ -567,6 +567,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 #endif
 
             m_settings.enableUberFetchShader  = true;
+
         }
 
         if (appProfile == AppProfile::Source2Engine)
@@ -580,6 +581,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.anisoThreshold = 1.0f;
 
             m_settings.disableMsaaStencilShaderRead = true;
+
         }
 
         if (appProfile == AppProfile::Talos)
@@ -863,8 +865,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
 
             m_settings.ac01WaNotNeeded = true;
-
-            m_settings.disable3dLinearImageFormatSupport = false;
         }
 
         if (appProfile == AppProfile::GhostReconBreakpoint)
@@ -948,6 +948,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.rtTriangleCompressionMode = NoTriangleCompression;
 
                 m_settings.useFlipHint = false;
+
+                m_settings.maxTotalSizeOfUnifiedShaders = UINT_MAX;
 
                 m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
                                              ForceDccFor3DShaderStorage |
@@ -1358,11 +1360,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.disableSingleMipAnisoOverride = false;
         }
 
-        if (appProfile == AppProfile::DXVK)
-        {
-            m_settings.enableGraphicsPipelineLibraries = false;
-        }
-
         if (appProfile == AppProfile::Enshrouded)
         {
 #if VKI_BUILD_GFX11
@@ -1574,7 +1571,7 @@ void VulkanSettingsLoader::ValidateSettings()
     }
 
     // Compression is not compatible with collapse or triangle splitting.
-    if (m_settings.rtEnableBvhCollapse || m_settings.rtEnableTriangleSplitting)
+    if (m_settings.rtEnableTriangleSplitting)
     {
         m_settings.rtTriangleCompressionMode = NoTriangleCompression;
     }
@@ -1594,11 +1591,10 @@ void VulkanSettingsLoader::ValidateSettings()
     }
 
     // Disable ray tracing if enableRaytracingSupport is requested but no hardware or software emulation is available.
-    if ((m_settings.enableRaytracingSupport != RaytracingNotSupported) &&
-        (m_settings.emulatedRtIpLevel == EmulatedRtIpLevelNone) &&
+    if ((m_settings.emulatedRtIpLevel == EmulatedRtIpLevelNone) &&
         (rayTracingIpLevel == Pal::RayTracingIpLevel::None))
     {
-        m_settings.enableRaytracingSupport = RaytracingNotSupported;
+        m_settings.enableRaytracingSupport = false;
     }
 
     // When using continuations, always set thread group size to 32 x 1 x 1, that's what we only support.

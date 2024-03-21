@@ -113,6 +113,8 @@ public:
         InitEntry(VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT,
                   Pal::LayoutShaderRead | Pal::LayoutShaderWrite);
 
+        InitEntry(VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR,
+            Pal::LayoutShaderRead);
     }
 
     // Return layout usage index corresponding to the specified layout.
@@ -204,6 +206,9 @@ public:
             case VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
                 index = VK_IMAGE_LAYOUT_RANGE_SIZE + 16;
                 break;
+            case VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR:
+                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 17;
+                break;
             default:
                 VK_NEVER_CALLED();
                 break;
@@ -240,7 +245,7 @@ protected:
         m_layoutUsageTable[2][usageIndex] = layoutUsage1;
     }
 
-    enum { LayoutUsageTableSize = VK_IMAGE_LAYOUT_RANGE_SIZE + 17 };
+    enum { LayoutUsageTableSize = VK_IMAGE_LAYOUT_RANGE_SIZE + 18 };
 
     uint32_t m_layoutUsageTable[MaxPalAspectsPerMask][LayoutUsageTableSize];
 };

@@ -1483,12 +1483,6 @@ void FullscreenMgr::PostPresent(
         VK_ASSERT(presentInfo.presentMode != Pal::PresentMode::Fullscreen);
     }
 
-    // If DXGI reports this error, try to force swapchain recreation to fix it.
-    if ((*pPresentResult == Pal::Result::ErrorInvalidValue) && pSwapChain->IsDxgiEnabled())
-    {
-        *pPresentResult = Pal::Result::ErrorIncompatibleDisplayMode;
-    }
-
     // There are cases under extreme alt-tabbing when DWM may return a null shared window handle (the windowed
     // blit destination surface).  This will then subsequently cause PAL to fail that windowed present.
     //

@@ -129,6 +129,7 @@ VkResult CmdPool::Create(
 
         createInfo.flags.autoMemoryReuse          = 1;
         createInfo.flags.disableBusyChunkTracking = 1;
+        createInfo.flags.threadSafe               = pSettings->threadSafeAllocator;
 
         // Initialize command data chunk allocation size
         createInfo.allocInfo[Pal::CommandDataAlloc].allocHeap    = pSettings->cmdAllocatorDataHeap;

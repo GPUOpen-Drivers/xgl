@@ -339,7 +339,9 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
     {
         if ((pShaderInfos[i]->pModuleData != nullptr) &&
             (pShaderStageInfo->stages[i].pModuleHandle != nullptr) &&
-            pCompiler->IsValidShaderModule(pShaderStageInfo->stages[i].pModuleHandle))
+            pCompiler->IsValidShaderModule(pShaderStageInfo->stages[i].pModuleHandle) ||
+            (pShaderStageInfo->stages[i].codeHash.lower != 0) ||
+            (pShaderStageInfo->stages[i].codeHash.upper != 0))
         {
             bool canBuildShader = (pShaderStageInfo->stages[i].stage != ShaderStage::ShaderStageFragment) ||
                                   (IsRasterizationDisabled(pCreateInfo, pLibInfo, dynamicStateFlags) == false);
@@ -419,7 +421,9 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 
         // If there is no fragment shader when create fragment library, we use a null pal graphics library.
         if ((pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) &&
-            (pBinaryCreateInfo->pipelineInfo.fs.pModuleData == nullptr))
+            (pBinaryCreateInfo->pipelineInfo.fs.pModuleData == nullptr) &&
+            (pShaderStageInfo->stages[ShaderStageFragment].codeHash.lower == 0) &&
+            (pShaderStageInfo->stages[ShaderStageFragment].codeHash.upper == 0))
         {
             const auto& fragmentCreateInfo = pDevice->GetNullFragmentLib()->GetPipelineBinaryCreateInfo();
             pBinaryCreateInfo->pShaderLibraries[GraphicsLibraryFragment] =
@@ -447,7 +451,7 @@ VkResult GraphicsPipelineLibrary::Create(
     void*    pSysMem = nullptr;
 
     GraphicsPipelineLibraryInfo libInfo;
-    ExtractLibraryInfo(pCreateInfo, flags, &libInfo);
+    ExtractLibraryInfo(pCreateInfo, extStructs, flags, &libInfo);
 
     GraphicsPipelineBinaryCreateInfo binaryCreateInfo = {};
     GraphicsPipelineShaderStageInfo  shaderStageInfo = {};
@@ -468,7 +472,6 @@ VkResult GraphicsPipelineLibrary::Create(
                                       },
                                       shaderStageInfo.stages,
                                       tempModules,
-                                      pPipelineCache,
                                       binaryCreateInfo.stageFeedback);
 
         // Initialize tempModuleStates
@@ -502,6 +505,7 @@ VkResult GraphicsPipelineLibrary::Create(
         GeneratePipelineOptimizerKey(
             pDevice,
             pCreateInfo,
+            extStructs,
             flags,
             &shaderStageInfo,
             shaderOptimizerKeys,
@@ -513,6 +517,7 @@ VkResult GraphicsPipelineLibrary::Create(
     Util::MetroHash::Hash elfHash    = {};
     BuildApiHash(pCreateInfo,
                  flags,
+                 extStructs,
                  binaryCreateInfo,
                  &apiPsoHash,
                  &elfHash);
@@ -608,9 +613,9 @@ VkResult GraphicsPipelineLibrary::Create(
         // Generate feedback info
         PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
-        const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfo = nullptr;
-        pCompiler->GetPipelineCreationFeedback(static_cast<const VkStructHeader*>(pCreateInfo->pNext),
-                                               &pPipelineCreationFeedbackCreateInfo);
+        auto pPipelineCreationFeedbackCreateInfo = extStructs.pPipelineCreationFeedbackCreateInfoEXT;
+
+        PipelineCompiler::InitPipelineCreationFeedback(pPipelineCreationFeedbackCreateInfo);
 
         uint64_t durationTicks = Util::GetPerfCpuTime() - startTimeTicks;
         uint64_t duration      = vk::utils::TicksToNano(durationTicks);
@@ -629,7 +634,7 @@ VkResult GraphicsPipelineLibrary::Create(
         }
         pBinInfo->pipelineFeedback.hitApplicationCache = (hitPipelineCache && containValidStage);
 
-        pCompiler->SetPipelineCreationFeedbackInfo(
+        PipelineCompiler::SetPipelineCreationFeedbackInfo(
             pPipelineCreationFeedbackCreateInfo,
             pCreateInfo->stageCount,
             pCreateInfo->pStages,

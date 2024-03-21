@@ -569,3 +569,6 @@ vkCmdPushDescriptorSetWithTemplate2KHR              @device       @dext(KHR_main
 vkCmdSetDescriptorBufferOffsets2EXT                 @device       @dext(KHR_maintenance6)
 vkCmdBindDescriptorBufferEmbeddedSamplers2EXT       @device       @dext(KHR_maintenance6)
 
+vkCmdSetRenderingAttachmentLocationsKHR             @device       @dext(KHR_dynamic_rendering_local_read)
+vkCmdSetRenderingInputAttachmentIndicesKHR          @device       @dext(KHR_dynamic_rendering_local_read)
+

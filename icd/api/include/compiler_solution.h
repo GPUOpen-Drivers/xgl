@@ -70,6 +70,7 @@ struct ShaderModuleHandle
     uint32_t* pRefCount;
 
     void*            pLlpcShaderModule; // Shader module handle from LLPC
+    Pal::ShaderHash codeHash;
 };
 
 struct GplModuleState

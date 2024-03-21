@@ -129,6 +129,13 @@ enum class DynamicStatesInternal : uint32_t
 };
 
 // =====================================================================================================================
+// Common extension structures for pipeline creation
+struct PipelineExtStructs
+{
+    const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfoEXT;
+};
+
+// =====================================================================================================================
 // Base class of all pipeline objects.
 class Pipeline
 {
@@ -232,7 +239,6 @@ public:
         const Device*                pDevice,
         uint32_t                     deviceIdx,
         const Util::MetroHash::Hash& elfHash,
-        const Util::MetroHash::Hash& settingsHash,
         const PipelineOptimizerKey&  pipelineOptimizerKey,
         Util::MetroHash::Hash*       pCacheId
     );
@@ -274,13 +280,17 @@ protected:
                                                                   const uint32_t stageIdx),
         ShaderStageInfo*                       pShaderStageInfo,
         ShaderModuleHandle*                    pTempModules,
-        PipelineCache*                         pCache,
         PipelineCreationFeedback*              pFeedbacks);
 
     static void FreeTempModules(
         const Device*       pDevice,
         const uint32_t      maxStageCount,
         ShaderModuleHandle* pTempModules);
+
+    // Extract extension structs that are common between pipeline types from their respective Vk*PipelineCreateInfo
+    static void HandleExtensionStructs(
+        const void*                         pNext,
+        PipelineExtStructs*                 pExtStructs);
 
     Device* const                      m_pDevice;
     UserDataLayout                     m_userDataLayout;

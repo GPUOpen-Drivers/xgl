@@ -295,7 +295,7 @@ VkResult CmdBufferRing::SubmitCmdBuffer(
             palSubmitInfo.ppFences             = &pCmdBufState->pFence;
             palSubmitInfo.fenceCount           = 1;
 
-            result = pPalQueue->Submit(palSubmitInfo);
+            result = Queue::PalQueueSubmit(pDevice, pPalQueue, palSubmitInfo);
         }
     }
 
