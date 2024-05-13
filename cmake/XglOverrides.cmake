@@ -29,9 +29,6 @@ macro(xgl_get_path)
     # icd path
     set(XGL_ICD_PATH ${PROJECT_SOURCE_DIR}/icd CACHE PATH "The path of xgl, it is read-only.")
 
-    # XGL cache creator tool
-    set(XGL_CACHE_CREATOR_PATH ${PROJECT_SOURCE_DIR}/tools/cache_creator CACHE PATH "Path to the cache creator tool")
-
     # PAL path
     if(EXISTS ${PROJECT_SOURCE_DIR}/icd/imported/pal)
         set(XGL_PAL_PATH ${PROJECT_SOURCE_DIR}/icd/imported/pal CACHE PATH "Specify the path to the PAL project.")

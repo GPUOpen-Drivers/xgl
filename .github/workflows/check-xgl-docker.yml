@@ -34,7 +34,7 @@ jobs:
       - name: Fetch the latest prebuilt AMDVLK
         run: docker pull "amdvlkadmin/$IMAGE_TAG"
       - name: Build and Test with Docker
-        run: docker build . --file tools/cache_creator/docker/check_xgl.Dockerfile
+        run: docker build . --file docker/check_xgl.Dockerfile
                             --build-arg AMDVLK_IMAGE="amdvlkadmin/$IMAGE_TAG"
                             --build-arg XGL_REPO_NAME="${GITHUB_REPOSITORY}"
                             --build-arg XGL_REPO_REF="${GITHUB_REF}"
