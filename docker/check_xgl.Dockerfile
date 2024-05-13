@@ -1,7 +1,7 @@
 #
 # Dockerfile for public XGL CI with GitHub Actions.
 # Sample invocation:
-#    docker build . --file tools/cache_creator/docker/check_xgl.Dockerfile                    \
+#    docker build . --file docker/check_xgl.Dockerfile                    \
 #                   --build-arg AMDVLK_IMAGE=gcr.io/stadia-open-source/amdvlk:nightly         \
 #                   --build-arg XGL_REPO_NAME=GPUOpen-Drivers/xgl                             \
 #                   --build-arg XGL_REPO_REF=<GIT_REF>                                        \
@@ -38,8 +38,4 @@ WORKDIR /vulkandriver/builds/ci-build
 RUN source /vulkandriver/env.sh \
     && cmake . \
     && cmake --build . \
-    && cmake --build . --target amdvlk64.so cache-creator
-
-# Run cache-creator tests.
-RUN source /vulkandriver/env.sh \
-    && cmake --build . --target check-cache-creator check-cache-creator-units
+    && cmake --build . --target amdvlk64.so
