@@ -921,7 +921,9 @@ static void IncludeWaitPoint(
 }
 
 // =====================================================================================================================
-static void ConvertImplicitSyncs(RPBarrierInfo* pBarrier)
+static void ConvertImplicitSyncsLegacy(
+    RPBarrierInfo*         pBarrier,
+    const RuntimeSettings& settings)
 {
     pBarrier->implicitSrcCacheMask = 0;
     pBarrier->implicitDstCacheMask = 0;
@@ -933,9 +935,6 @@ static void ConvertImplicitSyncs(RPBarrierInfo* pBarrier)
         // If we're waiting prior a resolve, make sure the wait point waits early enough.
         IncludePipePoint(pBarrier, Pal::HwPipeBottom);
         IncludeWaitPoint(pBarrier, Pal::HwPipePreBlt);
-
-        pBarrier->srcStageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
-        pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR;
 
         pBarrier->implicitSrcCacheMask |= pBarrier->flags.preColorResolveSync ?
                                           Pal::CoherColorTarget :
@@ -950,8 +949,6 @@ static void ConvertImplicitSyncs(RPBarrierInfo* pBarrier)
     {
         IncludeWaitPoint(pBarrier, Pal::HwPipePreBlt);
 
-        pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_CLEAR_BIT_KHR;
-
         pBarrier->implicitDstCacheMask |= Pal::CoherClear;
     }
 
@@ -961,13 +958,74 @@ static void ConvertImplicitSyncs(RPBarrierInfo* pBarrier)
         IncludePipePoint(pBarrier, Pal::HwPipePostBlt);
         IncludeWaitPoint(pBarrier, Pal::HwPipeTop);
 
-        // Just going by the above wait point, the dstStageMask would be converted to TopOfPipe, but it is not optimal.
+        pBarrier->implicitSrcCacheMask |= Pal::CoherResolveSrc;
+    }
+
+    if (pBarrier->flags.implicitExternalOutgoing &&
+        (pBarrier->pipePointCount < (MaxHwPipePoints - 1)) &&
+        settings.implicitExternalSynchronization)
+    {
+        // Since there is no handling of implicitExternalIncoming today, make this visible immediately.
+        IncludeWaitPoint(pBarrier, Pal::HwPipeTop);
+
+        pBarrier->pipePoints[pBarrier->pipePointCount] = Pal::HwPipeBottom;
+        pBarrier->pipePointCount++;
+
+        pBarrier->srcAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    }
+}
+
+// =====================================================================================================================
+static void ConvertImplicitSyncs(
+    RPBarrierInfo* pBarrier,
+    const RuntimeSettings& settings)
+{
+    pBarrier->implicitSrcCacheMask = 0;
+    pBarrier->implicitDstCacheMask = 0;
+
+    // Similarly augment the waiting if we need to wait for prior color rendering to finish
+    if (pBarrier->flags.preColorResolveSync ||
+        pBarrier->flags.preDsResolveSync)
+    {
+        pBarrier->srcStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
+        pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR;
+
+        pBarrier->implicitSrcCacheMask |= pBarrier->flags.preColorResolveSync ? Pal::CoherColorTarget :
+                                                                                Pal::CoherDepthStencilTarget;
+        pBarrier->implicitDstCacheMask |= Pal::CoherResolveDst;
+    }
+
+    // Wait for (non-auto-synced) pre-clear if necessary.  No need to augment the pipe point because the prior work falls
+    // under subpass dependency, but we may need to move the wait point forward to cover blts.
+    if (pBarrier->flags.preColorClearSync ||
+        pBarrier->flags.preDsClearSync)
+    {
+        pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_CLEAR_BIT_KHR;
+
+        pBarrier->implicitDstCacheMask |= Pal::CoherClear;
+    }
+
+    // Augment the active source pipeline stages for resolves if we need to wait for prior resolves to complete
+    if (pBarrier->flags.postResolveSync)
+    {
         // TopOfPipe causes a stall at PFP which is not really needed for images. As an optimization for Acq-Rel
         // barriers we instead set dstStage to Blt here.
         pBarrier->srcStageMask |= VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR;
         pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_BLIT_BIT_KHR;
 
         pBarrier->implicitSrcCacheMask |= Pal::CoherResolveSrc;
+    }
+
+    if (pBarrier->flags.implicitExternalOutgoing &&
+        (pBarrier->pipePointCount < (MaxHwPipePoints - 1)) &&
+        settings.implicitExternalSynchronization)
+    {
+        pBarrier->srcStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
+        pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_BLIT_BIT_KHR;
+
+        pBarrier->srcAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     }
 }
 
@@ -977,35 +1035,14 @@ static void ConvertImplicitSyncs(RPBarrierInfo* pBarrier)
 void RenderPassBuilder::PostProcessSyncPoint(
     SyncPointState* pSyncPoint)
 {
-    // Convert subpass dependency execution scope to PAL pipe/wait point
-    pSyncPoint->barrier.waitPoint = VkToPalWaitPipePoint(pSyncPoint->barrier.dstStageMask);
-
-    pSyncPoint->barrier.pipePointCount = VkToPalSrcPipePoints(pSyncPoint->barrier.srcStageMask,
-                                                              pSyncPoint->barrier.pipePoints);
-
-    // Include implicit waiting and cache access
-    ConvertImplicitSyncs(&pSyncPoint->barrier);
-
-    if (pSyncPoint->barrier.flags.implicitExternalOutgoing           &&
-        (pSyncPoint->barrier.pipePointCount < (MaxHwPipePoints - 1)) &&
-        m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings().implicitExternalSynchronization)
-    {
-        // Since there is no handling of implicitExternalIncoming today, make this visible immediately.
-        IncludeWaitPoint(&pSyncPoint->barrier, Pal::HwPipeTop);
-
-        pSyncPoint->barrier.pipePoints[pSyncPoint->barrier.pipePointCount] = Pal::HwPipeBottom;
-        pSyncPoint->barrier.pipePointCount++;
-
-        pSyncPoint->barrier.srcStageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
-        pSyncPoint->barrier.dstStageMask |= VK_PIPELINE_STAGE_2_BLIT_BIT_KHR;
-
-        pSyncPoint->barrier.srcAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    }
+    const RuntimeSettings& settings = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings();
 
     if (m_pDevice->GetPalProperties().gfxipProperties.flags.supportReleaseAcquireInterface &&
-        m_pDevice->GetRuntimeSettings().useAcquireReleaseInterface)
+        settings.useAcquireReleaseInterface)
     {
+        // Include implicit waiting and cache access
+        ConvertImplicitSyncs(&pSyncPoint->barrier, settings);
+
         // Need a global cache transition if any of the sync flags are set or if there's an app
         // subpass dependency that requires cache synchronization.
         if (((pSyncPoint->barrier.srcAccessMask != 0)         ||
@@ -1074,6 +1111,15 @@ void RenderPassBuilder::PostProcessSyncPoint(
     }
     else
     {
+        // Convert subpass dependency execution scope to PAL pipe/wait point
+        pSyncPoint->barrier.waitPoint = VkToPalWaitPipePoint(pSyncPoint->barrier.dstStageMask);
+
+        pSyncPoint->barrier.pipePointCount = VkToPalSrcPipePoints(pSyncPoint->barrier.srcStageMask,
+                                                                  pSyncPoint->barrier.pipePoints);
+
+        // Include implicit waiting and cache access
+        ConvertImplicitSyncsLegacy(&pSyncPoint->barrier, settings);
+
         // Need a global cache transition if any of the sync flags are set or if there's an app
         // subpass dependency that requires cache synchronization.
         if ((pSyncPoint->barrier.srcAccessMask != 0)        ||

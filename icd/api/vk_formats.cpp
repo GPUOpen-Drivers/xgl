@@ -30,6 +30,7 @@
 */
 #include "include/vk_formats.h"
 #include "include/vk_conv.h"
+#include "include/vk_physical_device.h"
 namespace vk
 {
 #if ( VKI_GPU_DECOMPRESS)
@@ -319,6 +320,346 @@ Pal::Formats::NumericSupportFlags Formats::GetNumberFormat(
     }
 
     return numType;
+}
+
+// =====================================================================================================================
+// Individual planes of multi-planar formats are size-compatible with single-plane color formats if they occupy
+// the same number of bits per texel block, and are compatible with those formats if they have the same block extent.
+// See 34.1.1 Compatible Formats of Planes of Multi-Planar Formats
+VkFormat Formats::GetCompatibleSinglePlaneFormat(VkFormat multiPlaneFormat, uint32_t planeIndex)
+{
+    VK_ASSERT(GetYuvPlaneCounts(multiPlaneFormat) > 1);
+    VkFormat singlePlaneFormat = VK_FORMAT_UNDEFINED;
+
+    if (planeIndex < GetYuvPlaneCounts(multiPlaneFormat))
+    {
+        // The conversion below is based on the table in 34.1.1.
+        // Individual planes of a multi-planar format are in turn format compatible with the listed single plane
+        // format's Format Compatability Classes (See 34.1.7).
+        switch (multiPlaneFormat)
+        {
+        case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
+        case VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM:
+        case VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM:
+            singlePlaneFormat = VK_FORMAT_R8_UNORM;
+            break;
+        case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16:
+            singlePlaneFormat = VK_FORMAT_R10X6_UNORM_PACK16;
+            break;
+        case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16:
+            singlePlaneFormat = VK_FORMAT_R12X4_UNORM_PACK16;
+            break;
+        case VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM:
+        case VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM:
+        case VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM:
+            singlePlaneFormat = VK_FORMAT_R16_UNORM;
+            break;
+        case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+        case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
+        case VK_FORMAT_G8_B8R8_2PLANE_444_UNORM:
+            singlePlaneFormat = (planeIndex == 0) ?
+                                 VK_FORMAT_R8_UNORM :
+                                 VK_FORMAT_R8G8_UNORM;
+            break;
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_444_UNORM_3PACK16:
+            singlePlaneFormat = (planeIndex == 0) ?
+                                 VK_FORMAT_R10X6_UNORM_PACK16 :
+                                 VK_FORMAT_R10X6G10X6_UNORM_2PACK16;
+            break;
+        case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_444_UNORM_3PACK16:
+            singlePlaneFormat = (planeIndex == 0) ?
+                                 VK_FORMAT_R12X4_UNORM_PACK16 :
+                                 VK_FORMAT_R12X4G12X4_UNORM_2PACK16;
+            break;
+        case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
+        case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM:
+        case VK_FORMAT_G16_B16R16_2PLANE_444_UNORM:
+            singlePlaneFormat = (planeIndex == 0) ?
+                                 VK_FORMAT_R16_UNORM :
+                                 VK_FORMAT_R16G16_UNORM;
+            break;
+        default:
+            break;
+        }
+    }
+
+    return singlePlaneFormat;
+}
+
+// =====================================================================================================================
+// Computes the extended feature set of a format when VK_IMAGE_CREATE_EXTENDED_USAGE_BIT is set
+// NOTE: This function assumes the format that is passed in does not have
+//       Pal::Formats::PropertyFlags::BitCountInaccurate set
+VkFormatFeatureFlags Formats::GetExtendedFeatureFlags(
+    const PhysicalDevice*  pPhysicalDevice,
+    VkFormat               format,
+    VkImageTiling          tiling,
+    const RuntimeSettings& settings)
+{
+    VkFormatFeatureFlags extendedFeatures = 0;
+    Pal::SwizzledFormat palFormat = VkToPalFormat(format, settings);
+
+    uint32 bitsPerPixel = Pal::Formats::BitsPerPixel(palFormat.format);
+
+    // The following tables are from the Format Compatibility Classes section of the Vulkan specification.
+    static constexpr VkFormat Bpp8FormatClass[] =
+    {
+        VK_FORMAT_R4G4_UNORM_PACK8,
+        VK_FORMAT_R8_UNORM,
+        VK_FORMAT_R8_SNORM,
+        VK_FORMAT_R8_USCALED,
+        VK_FORMAT_R8_SSCALED,
+        VK_FORMAT_R8_UINT,
+        VK_FORMAT_R8_SINT,
+        VK_FORMAT_R8_SRGB
+    };
+
+    static constexpr VkFormat Bpp16FormatClass[] =
+    {
+        VK_FORMAT_R10X6_UNORM_PACK16,
+        VK_FORMAT_R12X4_UNORM_PACK16,
+        VK_FORMAT_A4R4G4B4_UNORM_PACK16,
+        VK_FORMAT_A4B4G4R4_UNORM_PACK16,
+        VK_FORMAT_R4G4B4A4_UNORM_PACK16,
+        VK_FORMAT_B4G4R4A4_UNORM_PACK16,
+        VK_FORMAT_R5G6B5_UNORM_PACK16,
+        VK_FORMAT_B5G6R5_UNORM_PACK16,
+        VK_FORMAT_R5G5B5A1_UNORM_PACK16,
+        VK_FORMAT_B5G5R5A1_UNORM_PACK16,
+        VK_FORMAT_A1R5G5B5_UNORM_PACK16,
+        VK_FORMAT_R8G8_UNORM,
+        VK_FORMAT_R8G8_SNORM,
+        VK_FORMAT_R8G8_USCALED,
+        VK_FORMAT_R8G8_SSCALED,
+        VK_FORMAT_R8G8_UINT,
+        VK_FORMAT_R8G8_SINT,
+        VK_FORMAT_R8G8_SRGB,
+        VK_FORMAT_R16_UNORM,
+        VK_FORMAT_R16_SNORM,
+        VK_FORMAT_R16_USCALED,
+        VK_FORMAT_R16_SSCALED,
+        VK_FORMAT_R16_UINT,
+        VK_FORMAT_R16_SINT,
+        VK_FORMAT_R16_SFLOAT
+    };
+
+    static constexpr VkFormat Bpp24FormatClass[] =
+    {
+        VK_FORMAT_R8G8B8_UNORM,
+        VK_FORMAT_R8G8B8_SNORM,
+        VK_FORMAT_R8G8B8_USCALED,
+        VK_FORMAT_R8G8B8_SSCALED,
+        VK_FORMAT_R8G8B8_UINT,
+        VK_FORMAT_R8G8B8_SINT,
+        VK_FORMAT_R8G8B8_SRGB,
+        VK_FORMAT_B8G8R8_UNORM,
+        VK_FORMAT_B8G8R8_SNORM,
+        VK_FORMAT_B8G8R8_USCALED,
+        VK_FORMAT_B8G8R8_SSCALED,
+        VK_FORMAT_B8G8R8_UINT,
+        VK_FORMAT_B8G8R8_SINT,
+        VK_FORMAT_B8G8R8_SRGB
+    };
+
+    static constexpr VkFormat Bpp32FormatClass[] =
+    {
+        VK_FORMAT_R10X6G10X6_UNORM_2PACK16,
+        VK_FORMAT_R12X4G12X4_UNORM_2PACK16,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_FORMAT_R8G8B8A8_SNORM,
+        VK_FORMAT_R8G8B8A8_USCALED,
+        VK_FORMAT_R8G8B8A8_SSCALED,
+        VK_FORMAT_R8G8B8A8_UINT,
+        VK_FORMAT_R8G8B8A8_SINT,
+        VK_FORMAT_R8G8B8A8_SRGB,
+        VK_FORMAT_B8G8R8A8_UNORM,
+        VK_FORMAT_B8G8R8A8_SNORM,
+        VK_FORMAT_B8G8R8A8_USCALED,
+        VK_FORMAT_B8G8R8A8_SSCALED,
+        VK_FORMAT_B8G8R8A8_UINT,
+        VK_FORMAT_B8G8R8A8_SINT,
+        VK_FORMAT_B8G8R8A8_SRGB,
+        VK_FORMAT_A8B8G8R8_UNORM_PACK32,
+        VK_FORMAT_A8B8G8R8_SNORM_PACK32,
+        VK_FORMAT_A8B8G8R8_USCALED_PACK32,
+        VK_FORMAT_A8B8G8R8_SSCALED_PACK32,
+        VK_FORMAT_A8B8G8R8_UINT_PACK32,
+        VK_FORMAT_A8B8G8R8_SINT_PACK32,
+        VK_FORMAT_A8B8G8R8_SRGB_PACK32,
+        VK_FORMAT_A2R10G10B10_UNORM_PACK32,
+        VK_FORMAT_A2R10G10B10_SNORM_PACK32,
+        VK_FORMAT_A2R10G10B10_USCALED_PACK32,
+        VK_FORMAT_A2R10G10B10_SSCALED_PACK32,
+        VK_FORMAT_A2R10G10B10_UINT_PACK32,
+        VK_FORMAT_A2R10G10B10_SINT_PACK32,
+        VK_FORMAT_A2B10G10R10_UNORM_PACK32,
+        VK_FORMAT_A2B10G10R10_SNORM_PACK32,
+        VK_FORMAT_A2B10G10R10_USCALED_PACK32,
+        VK_FORMAT_A2B10G10R10_SSCALED_PACK32,
+        VK_FORMAT_A2B10G10R10_UINT_PACK32,
+        VK_FORMAT_A2B10G10R10_SINT_PACK32,
+        VK_FORMAT_R16G16_UNORM,
+        VK_FORMAT_R16G16_SNORM,
+        VK_FORMAT_R16G16_USCALED,
+        VK_FORMAT_R16G16_SSCALED,
+        VK_FORMAT_R16G16_UINT,
+        VK_FORMAT_R16G16_SINT,
+        VK_FORMAT_R16G16_SFLOAT,
+        VK_FORMAT_R32_UINT,
+        VK_FORMAT_R32_SINT,
+        VK_FORMAT_R32_SFLOAT,
+        VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+        VK_FORMAT_E5B9G9R9_UFLOAT_PACK32
+    };
+
+    static constexpr VkFormat Bpp48FormatClass[] =
+    {
+        VK_FORMAT_R16G16B16_UNORM,
+        VK_FORMAT_R16G16B16_SNORM,
+        VK_FORMAT_R16G16B16_USCALED,
+        VK_FORMAT_R16G16B16_SSCALED,
+        VK_FORMAT_R16G16B16_UINT,
+        VK_FORMAT_R16G16B16_SINT,
+        VK_FORMAT_R16G16B16_SFLOAT
+    };
+
+    static constexpr VkFormat Bpp64FormatClass[] =
+    {
+        VK_FORMAT_R16G16B16A16_UNORM,
+        VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R16G16B16A16_USCALED,
+        VK_FORMAT_R16G16B16A16_SSCALED,
+        VK_FORMAT_R16G16B16A16_UINT,
+        VK_FORMAT_R16G16B16A16_SINT,
+        VK_FORMAT_R16G16B16A16_SFLOAT,
+        VK_FORMAT_R32G32_UINT,
+        VK_FORMAT_R32G32_SINT,
+        VK_FORMAT_R32G32_SFLOAT,
+        VK_FORMAT_R64_UINT,
+        VK_FORMAT_R64_SINT,
+        VK_FORMAT_R64_SFLOAT
+    };
+
+    static constexpr VkFormat Bpp96FormatClass[] =
+    {
+        VK_FORMAT_R32G32B32_UINT,
+        VK_FORMAT_R32G32B32_SINT,
+        VK_FORMAT_R32G32B32_SFLOAT
+    };
+
+    static constexpr VkFormat Bpp128FormatClass[] =
+    {
+        VK_FORMAT_R32G32B32A32_UINT,
+        VK_FORMAT_R32G32B32A32_SINT,
+        VK_FORMAT_R32G32B32A32_SFLOAT,
+        VK_FORMAT_R64G64_UINT,
+        VK_FORMAT_R64G64_SINT,
+        VK_FORMAT_R64G64_SFLOAT
+    };
+
+    static constexpr VkFormat Bpp192FormatClass[] =
+    {
+        VK_FORMAT_R64G64B64_UINT,
+        VK_FORMAT_R64G64B64_SINT,
+        VK_FORMAT_R64G64B64_SFLOAT
+    };
+
+    static constexpr VkFormat Bpp256FormatClass[] =
+    {
+        VK_FORMAT_R64G64B64A64_UINT,
+        VK_FORMAT_R64G64B64A64_SINT,
+        VK_FORMAT_R64G64B64A64_SFLOAT
+    };
+
+    // Depth images have no extended usage.
+    // YUV single and multiplanar images by themselves have no extended usage. To compute extended usage
+    // of a single plane of a multiplanar image call GetCompatibleSinglePlaneFormat and pass that format in.
+    // BC images allow conversion between UNORM|SRGB but there shouldn't be any difference in features.
+    bool noCompatibleExtendedUsage = Formats::IsDepthStencilFormat(format) ||
+                                     Formats::IsYuvFormat(format) ||
+                                     Pal::Formats::IsBlockCompressed(palFormat.format) ||
+                                     (format == VK_FORMAT_UNDEFINED);
+
+    if (noCompatibleExtendedUsage == false)
+    {
+        const VkFormat* pExtendedFormats = nullptr;
+        uint32_t        extendedFormatCount = 0;
+
+        switch (bitsPerPixel)
+        {
+        case 8:
+            pExtendedFormats = Bpp8FormatClass;
+            extendedFormatCount = sizeof(Bpp8FormatClass) / sizeof(VkFormat);
+            break;
+        case 16:
+            pExtendedFormats = Bpp16FormatClass;
+            extendedFormatCount = sizeof(Bpp16FormatClass) / sizeof(VkFormat);
+            break;
+        case 24:
+            pExtendedFormats = Bpp24FormatClass;
+            extendedFormatCount = sizeof(Bpp24FormatClass) / sizeof(VkFormat);
+            break;
+        case 32:
+            pExtendedFormats = Bpp32FormatClass;
+            extendedFormatCount = sizeof(Bpp32FormatClass) / sizeof(VkFormat);
+            break;
+        case 48:
+            pExtendedFormats = Bpp48FormatClass;
+            extendedFormatCount = sizeof(Bpp48FormatClass) / sizeof(VkFormat);
+            break;
+        case 64:
+            pExtendedFormats = Bpp64FormatClass;
+            extendedFormatCount = sizeof(Bpp64FormatClass) / sizeof(VkFormat);
+            break;
+        case 96:
+            pExtendedFormats = Bpp96FormatClass;
+            extendedFormatCount = sizeof(Bpp96FormatClass) / sizeof(VkFormat);
+            break;
+        case 128:
+            pExtendedFormats = Bpp128FormatClass;
+            extendedFormatCount = sizeof(Bpp128FormatClass) / sizeof(VkFormat);
+            break;
+        case 192:
+            pExtendedFormats = Bpp192FormatClass;
+            extendedFormatCount = sizeof(Bpp192FormatClass) / sizeof(VkFormat);
+            break;
+        case 256:
+            pExtendedFormats = Bpp256FormatClass;
+            extendedFormatCount = sizeof(Bpp256FormatClass) / sizeof(VkFormat);
+            break;
+        default:
+            VK_ALERT_ALWAYS_MSG("Unknown Format Class");
+        }
+
+        if ((extendedFormatCount > 0 && pExtendedFormats != nullptr))
+        {
+            for (uint32_t i = 0; i < extendedFormatCount; ++i)
+            {
+                VkFormat extendedFormat = pExtendedFormats[i];
+
+                VkFormatProperties extendedFormatProperties = {};
+
+                VkResult result = pPhysicalDevice->GetFormatProperties(extendedFormat, &extendedFormatProperties);
+                if (result != VK_ERROR_FORMAT_NOT_SUPPORTED)
+                {
+                    extendedFeatures |= (tiling == VK_IMAGE_TILING_OPTIMAL) ?
+                                        extendedFormatProperties.optimalTilingFeatures :
+                                        extendedFormatProperties.linearTilingFeatures;
+                }
+
+            }
+        }
+    }
+
+    return extendedFeatures;
 }
 
 }

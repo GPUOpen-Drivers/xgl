@@ -592,14 +592,20 @@ void ShaderOptimizer::ApplyProfileToDynamicComputeShaderInfo(
 }
 
 // =====================================================================================================================
-void ShaderOptimizer::ApplyProfileToDynamicGraphicsShaderInfo(
+bool ShaderOptimizer::ApplyProfileToDynamicGraphicsShaderInfo(
     const ShaderProfileAction&      action,
     Pal::DynamicGraphicsShaderInfo* pGraphicsShaderInfo) const
 {
+    bool hasUpdate = false;
+
     if (action.dynamicShaderInfo.apply.maxWavesPerCu)
     {
         pGraphicsShaderInfo->maxWavesPerCu = static_cast<float>(action.dynamicShaderInfo.maxWavesPerCu);
+
+        hasUpdate = true;
     }
+
+    return hasUpdate;
 }
 
 // =====================================================================================================================
@@ -631,25 +637,32 @@ void ShaderOptimizer::ApplyProfileToGraphicsPipelineCreateInfo(
                     switch (vkgcStage)
                     {
                     case ShaderStage::ShaderStageTask:
-                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ts);
+                        pGraphicsShaderInfos->enable.ts |=
+                            ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ts);
                         break;
                     case ShaderStage::ShaderStageVertex:
-                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->vs);
+                        pGraphicsShaderInfos->enable.vs |=
+                            ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->vs);
                         break;
                     case ShaderStage::ShaderStageTessControl:
-                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->hs);
+                        pGraphicsShaderInfos->enable.hs |=
+                            ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->hs);
                         break;
                     case ShaderStage::ShaderStageTessEval:
-                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ds);
+                        pGraphicsShaderInfos->enable.ds |=
+                            ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ds);
                         break;
                     case ShaderStage::ShaderStageGeometry:
-                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->gs);
+                        pGraphicsShaderInfos->enable.gs |=
+                            ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->gs);
                         break;
                     case ShaderStage::ShaderStageMesh:
-                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ms);
+                        pGraphicsShaderInfos->enable.ms |=
+                            ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ms);
                         break;
                     case ShaderStage::ShaderStageFragment:
-                        ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ps);
+                        pGraphicsShaderInfos->enable.ps |=
+                            ApplyProfileToDynamicGraphicsShaderInfo(shaders[vkgcStage], &pGraphicsShaderInfos->ps);
                         break;
                     default:
                         PAL_ASSERT_ALWAYS();

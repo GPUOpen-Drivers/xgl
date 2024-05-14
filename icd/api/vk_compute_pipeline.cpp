@@ -105,9 +105,10 @@ VkResult ComputePipeline::CreatePipelineBinaries(
     Vkgc::BinaryData*                              pPipelineBinaries,
     PipelineMetadata*                              pBinaryMetadata)
 {
-    VkResult               result           = VK_SUCCESS;
-    const RuntimeSettings& settings         = pDevice->GetRuntimeSettings();
-    PipelineCompiler*      pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
+    VkResult               result             = VK_SUCCESS;
+    const RuntimeSettings& settings           = pDevice->GetRuntimeSettings();
+    PipelineCompiler*      pDefaultCompiler   = pDevice->GetCompiler(DefaultDeviceIndex);
+    bool                   storeBinaryToCache = true;
 
     // Load or create the pipeline binary
     PipelineBinaryCache* pPipelineBinaryCache = (pPipelineCache != nullptr) ? pPipelineCache->GetPipelineCache()
@@ -121,7 +122,7 @@ VkResult ComputePipeline::CreatePipelineBinaries(
 
         if (shouldCompile)
         {
-            bool skipCacheQuery = settings.enablePipelineDump;
+            bool skipCacheQuery = false;
 
             if (skipCacheQuery == false)
             {
@@ -140,21 +141,60 @@ VkResult ComputePipeline::CreatePipelineBinaries(
             }
         }
 
+        if (shouldCompile)
+        {
+            if ((pDevice->GetRuntimeSettings().ignoreFlagFailOnPipelineCompileRequired == false) &&
+                (flags & VK_PIPELINE_CREATE_2_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_KHR))
+            {
+                result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
+            }
+        }
+
+        bool shouldConvert = (pCreateInfo != nullptr) &&
+            (pDevice->GetRuntimeSettings().enablePipelineDump ||
+                (shouldCompile && (pBinaryCreateInfo->pTempBuffer == nullptr)));
+
+        VkResult convertResult = VK_ERROR_UNKNOWN;
+        if (shouldConvert)
+        {
+            convertResult = pDefaultCompiler->ConvertComputePipelineInfo(
+                pDevice,
+                pCreateInfo,
+                pShaderInfo,
+                pPipelineOptimizerKey,
+                pBinaryMetadata,
+                pBinaryCreateInfo,
+                flags);
+            result = (result == VK_SUCCESS) ? convertResult : result;
+        }
+
+        if ((result == VK_SUCCESS) && (convertResult == VK_SUCCESS) && shouldCompile)
+        {
+            if (IsShaderModuleIdentifier(pBinaryCreateInfo->pipelineInfo.cs))
+            {
+                result = VK_ERROR_UNKNOWN;
+            }
+        }
+
+        if (pDevice->GetRuntimeSettings().enablePipelineDump && (convertResult == VK_SUCCESS))
+        {
+            if ((shouldCompile == false) || (result != VK_SUCCESS))
+            {
+                Vkgc::PipelineBuildInfo pipelineInfo = {};
+                pipelineInfo.pComputeInfo = &pBinaryCreateInfo->pipelineInfo;
+                pDefaultCompiler->DumpPipeline(
+                    pDevice->GetRuntimeSettings(),
+                    pipelineInfo,
+                    pBinaryCreateInfo->apiPsoHash,
+                    1,
+                    &pPipelineBinaries[deviceIdx],
+                    result);
+            }
+        }
+
         // Compile if unable to retrieve from cache
         if (shouldCompile)
         {
-            if (pBinaryCreateInfo->pTempBuffer == nullptr)
-            {
-                result = pDefaultCompiler->ConvertComputePipelineInfo(
-                    pDevice,
-                    pCreateInfo,
-                    pShaderInfo,
-                    pPipelineOptimizerKey,
-                    pBinaryMetadata,
-                    pBinaryCreateInfo,
-                    flags);
-            }
-
             if (result == VK_SUCCESS)
             {
                 result = pDevice->GetCompiler(deviceIdx)->CreateComputePipelineBinary(
@@ -185,7 +225,8 @@ VkResult ComputePipeline::CreatePipelineBinaries(
         }
 
         // Add to any cache layer where missing
-        if (result == VK_SUCCESS)
+        if ((result == VK_SUCCESS) && storeBinaryToCache)
+
         {
             pDevice->GetCompiler(deviceIdx)->CachePipelineBinary(
                 &pCacheIds[deviceIdx],
@@ -330,45 +371,48 @@ VkResult ComputePipeline::Create(
     uint64 startTimeTicks = Util::GetPerfCpuTime();
 
     // Setup PAL create info from Vulkan inputs
-    Vkgc::BinaryData                pipelineBinaries[MaxPalDevices] = {};
-    Util::MetroHash::Hash           cacheId[MaxPalDevices]         = {};
-    PipelineCompiler*               pDefaultCompiler               = pDevice->GetCompiler(DefaultDeviceIndex);
-    const RuntimeSettings&          settings                       = pDevice->GetRuntimeSettings();
-    ComputePipelineBinaryCreateInfo binaryCreateInfo               = {};
-    PipelineOptimizerKey            pipelineOptimizerKey           = {};
-    ShaderOptimizerKey              shaderOptimizerKey             = {};
-    ShaderModuleHandle              tempModule                     = {};
-    VkResult                        result                         = VK_SUCCESS;
-    PipelineMetadata                binaryMetadata                 = {};
-    ComputePipelineExtStructs       extStructs                     = {};
+    Vkgc::BinaryData                pipelineBinaries[MaxPalDevices]  = {};
+    Util::MetroHash::Hash           cacheId[MaxPalDevices]           = {};
+    PipelineCompiler*               pDefaultCompiler                 = pDevice->GetCompiler(DefaultDeviceIndex);
+    const RuntimeSettings&          settings                         = pDevice->GetRuntimeSettings();
+    ComputePipelineBinaryCreateInfo binaryCreateInfo                 = {};
+    PipelineOptimizerKey            pipelineOptimizerKey             = {};
+    ShaderOptimizerKey              shaderOptimizerKey               = {};
+    ShaderModuleHandle              tempModule                       = {};
+    VkResult                        result                           = VK_SUCCESS;
+    PipelineMetadata                binaryMetadata                   = {};
+    ComputePipelineExtStructs       extStructs                       = {};
+    bool                            binariesProvided                 = false;
 
     HandleExtensionStructs(pCreateInfo, &extStructs);
 
     ComputePipelineShaderStageInfo shaderInfo = {};
     uint64_t                       apiPsoHash = {};
 
-    // 1. Create Cache IDs
-    result = ComputePipeline::CreateCacheId(
-        pDevice,
-        pCreateInfo,
-        flags,
-        &shaderInfo,
-        &binaryCreateInfo,
-        &shaderOptimizerKey,
-        &pipelineOptimizerKey,
-        &apiPsoHash,
-        &tempModule,
-        &cacheId[0]);
-
-    binaryCreateInfo.apiPsoHash = apiPsoHash;
-
-    // 2. Create pipeline binaries (or load from cache)
     auto pPipelineCreationFeedbackCreateInfo = extStructs.pPipelineCreationFeedbackCreateInfoEXT;
 
     PipelineCompiler::InitPipelineCreationFeedback(pPipelineCreationFeedbackCreateInfo);
 
-    if (result == VK_SUCCESS)
+    if ((result == VK_SUCCESS) && (binariesProvided == false))
     {
+        // 1. Create Cache IDs
+        result = ComputePipeline::CreateCacheId(
+            pDevice,
+            pCreateInfo,
+            flags,
+            &shaderInfo,
+            &binaryCreateInfo,
+            &shaderOptimizerKey,
+            &pipelineOptimizerKey,
+            &apiPsoHash,
+            &tempModule,
+            &cacheId[0]);
+
+        binaryCreateInfo.apiPsoHash = apiPsoHash;
+
+        // 2. Create pipeline binaries (or load from cache)
+        if (result == VK_SUCCESS)
+        {
             result = CreatePipelineBinaries(
                 pDevice,
                 pCreateInfo,
@@ -381,6 +425,8 @@ VkResult ComputePipeline::Create(
                 cacheId,
                 pipelineBinaries,
                 &binaryMetadata);
+        }
+
     }
 
     CreateInfo localPipelineInfo = {};
@@ -411,9 +457,11 @@ VkResult ComputePipeline::Create(
             pDevice->PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(localPipelineInfo.pipeline, &palResult);
         VK_ASSERT(palResult == Pal::Result::Success);
 
+        size_t allocationSize = sizeof(ComputePipeline) + (pipelineSize * pDevice->NumPalDevices());
+
         pSystemMem = pDevice->AllocApiObject(
             pAllocator,
-            sizeof(ComputePipeline) + (pipelineSize * pDevice->NumPalDevices()));
+            allocationSize);
 
         if (pSystemMem == nullptr)
         {
@@ -483,6 +531,7 @@ VkResult ComputePipeline::Create(
         }
 
         result = PalToVkResult(palResult);
+
     }
 
     if (result == VK_SUCCESS)
@@ -525,6 +574,7 @@ VkResult ComputePipeline::Create(
     }
     else
     {
+
         for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
         {
             // Internal memory allocation failed, free PAL event object if it gets created
@@ -541,7 +591,7 @@ VkResult ComputePipeline::Create(
     // Free the created pipeline binaries now that the PAL Pipelines/PipelineBinaryInfo have read them.
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
-        if (pipelineBinaries[deviceIdx].pCode != nullptr)
+        if ((binariesProvided == false) && (pipelineBinaries[deviceIdx].pCode != nullptr))
         {
             pDevice->GetCompiler(deviceIdx)->FreeComputePipelineBinary(
                 &binaryCreateInfo, pipelineBinaries[deviceIdx]);
@@ -608,7 +658,7 @@ VkResult ComputePipeline::Create(
 // =====================================================================================================================
 // Create cacheId for a compute pipeline.
 VkResult ComputePipeline::CreateCacheId(
-    Device*                                 pDevice,
+    const Device*                           pDevice,
     const VkComputePipelineCreateInfo*      pCreateInfo,
     VkPipelineCreateFlags2KHR               flags,
     ComputePipelineShaderStageInfo*         pShaderInfo,

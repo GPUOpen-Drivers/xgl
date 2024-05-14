@@ -531,6 +531,17 @@ vkGetDeviceFaultInfoEXT                             @device       @dext(EXT_devi
 vkGetShaderModuleIdentifierEXT                      @device       @dext(EXT_shader_module_identifier)
 vkGetShaderModuleCreateInfoIdentifierEXT            @device       @dext(EXT_shader_module_identifier)
 
+vkCreateIndirectCommandsLayoutNV                    @device       @dext(NV_device_generated_commands)
+vkDestroyIndirectCommandsLayoutNV                   @device       @dext(NV_device_generated_commands)
+vkGetGeneratedCommandsMemoryRequirementsNV          @device       @dext(NV_device_generated_commands)
+vkCmdPreprocessGeneratedCommandsNV                  @device       @dext(NV_device_generated_commands)
+vkCmdExecuteGeneratedCommandsNV                     @device       @dext(NV_device_generated_commands)
+vkCmdBindPipelineShaderGroupNV                      @device       @dext(NV_device_generated_commands)
+
+vkCmdUpdatePipelineIndirectBufferNV                 @device       @dext(NV_device_generated_commands_compute)
+vkGetPipelineIndirectDeviceAddressNV                @device       @dext(NV_device_generated_commands_compute)
+vkGetPipelineIndirectMemoryRequirementsNV           @device       @dext(NV_device_generated_commands_compute)
+
 vkCmdSetTessellationDomainOriginEXT                 @device       @dext(EXT_extended_dynamic_state3)
 vkCmdSetDepthClampEnableEXT                         @device       @dext(EXT_extended_dynamic_state3)
 vkCmdSetPolygonModeEXT                              @device       @dext(EXT_extended_dynamic_state3)

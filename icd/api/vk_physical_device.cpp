@@ -42,6 +42,7 @@
 #include "include/vk_utils.h"
 #include "include/vk_conv.h"
 #include "include/vk_surface.h"
+#include "include/vk_indirect_commands_layout.h"
 
 #include "include/khronos/vk_icd.h"
 
@@ -2079,6 +2080,27 @@ VkResult PhysicalDevice::GetImageFormatProperties(
                         : formatProperties.linearTilingFeatures;
     }
 
+    // If extended usage was set, compute the extended feature set based on the type
+    // of image and the format compatibility classes.
+    if (Util::TestAnyFlagSet(flags, VK_IMAGE_CREATE_EXTENDED_USAGE_BIT))
+    {
+        if (Formats::IsYuvFormat(format) && (Formats::GetYuvPlaneCounts(format) > 1))
+        {
+            VkFormat singlePlaneFormat = VK_FORMAT_UNDEFINED;
+
+            for (uint32_t i = 0; i < Formats::GetYuvPlaneCounts(format); ++i)
+            {
+                singlePlaneFormat = Formats::GetCompatibleSinglePlaneFormat(format, i);
+
+                supportedFeatures |= Formats::GetExtendedFeatureFlags(this, singlePlaneFormat, tiling, settings);
+            }
+        }
+        else
+        {
+            supportedFeatures |= Formats::GetExtendedFeatureFlags(this, format, tiling, settings);
+        }
+    }
+
     // 3D textures with depth or stencil format are not supported
     if ((type == VK_IMAGE_TYPE_3D) && (Formats::HasDepth(format) || Formats::HasStencil(format)))
     {
@@ -2116,14 +2138,7 @@ VkResult PhysicalDevice::GetImageFormatProperties(
         (((usage & VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) != 0)       &&
          ((supportedFeatures & VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) == 0)))
     {
-        // If extended usage was set ignore the error. We do not know what format or usage is intended.
-        // However for Yuv and Depth images that do not have any compatible formats, report error always.
-        if (((flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT) == 0 )||
-              Formats::IsYuvFormat(format) ||
-              Formats::IsDepthStencilFormat(format))
-        {
-            return VK_ERROR_FORMAT_NOT_SUPPORTED;
-        }
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
     }
 
     // Calculate maxResourceSize
@@ -2582,11 +2597,11 @@ VkResult PhysicalDevice::GetPhysicalDeviceToolPropertiesEXT(
     bool isProfilingEnabled = false;
     VkResult result = VK_SUCCESS;
 
-    DevModeMgr* devModeMgr = VkInstance()->GetDevModeMgr();
+    IDevMode* devMode = VkInstance()->GetDevModeMgr();
 
-    if (devModeMgr != nullptr)
+    if (devMode != nullptr)
     {
-        isProfilingEnabled = devModeMgr->IsTracingEnabled();
+        isProfilingEnabled = devMode->IsTracingEnabled();
     }
 
     if (pToolProperties == nullptr)
@@ -4382,6 +4397,12 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(NV_COMPUTE_SHADER_DERIVATIVES));
     }
 
+    if ((pPhysicalDevice == nullptr) || (pPhysicalDevice->GetRuntimeSettings().exportNvDeviceGeneratedCommands))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(NV_DEVICE_GENERATED_COMMANDS));
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(NV_DEVICE_GENERATED_COMMANDS_COMPUTE));
+    }
+
     if ((pPhysicalDevice == nullptr) || (pPhysicalDevice->GetRuntimeSettings().enableGraphicsPipelineLibraries))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_GRAPHICS_PIPELINE_LIBRARY));
@@ -4415,6 +4436,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
      availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_NON_SEAMLESS_CUBE_MAP));
      availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_MODULE_IDENTIFIER));
 
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_MAXIMAL_RECONVERGENCE));
+
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE3));
 
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_INPUT_DYNAMIC_STATE));
@@ -4423,9 +4446,13 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_ROTATE));
 
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_FLOAT_CONTROLS2));
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_FLOAT_CONTROLS2));
 
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_QUAD_CONTROL));
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_QUAD_CONTROL));
+
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_NESTED_COMMAND_BUFFER));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DYNAMIC_RENDERING_LOCAL_READ));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VERTEX_ATTRIBUTE_DIVISOR));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_INDEX_TYPE_UINT8));
@@ -5086,19 +5113,20 @@ void PhysicalDevice::GetPhysicalDeviceDotProduct8Properties(
 
     *pIntegerDotProduct8BitUnsignedAccelerated                              = int8DotSupport;
     *pIntegerDotProduct8BitSignedAccelerated                                = int8DotSupport;
-    *pIntegerDotProductAccumulatingSaturating8BitUnsignedAccelerated        = VK_FALSE;
-    *pIntegerDotProductAccumulatingSaturating8BitSignedAccelerated          = VK_FALSE;
-    *pIntegerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated = VK_FALSE;
+    *pIntegerDotProductAccumulatingSaturating8BitUnsignedAccelerated        = int8DotSupport;
+    *pIntegerDotProductAccumulatingSaturating8BitSignedAccelerated          = int8DotSupport;
 
 #if VKI_BUILD_GFX11
     if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
     {
         *pIntegerDotProduct8BitMixedSignednessAccelerated = VK_TRUE;
+        *pIntegerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated = VK_TRUE;
     }
     else
 #endif
     {
         *pIntegerDotProduct8BitMixedSignednessAccelerated = VK_FALSE;
+        *pIntegerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated = VK_FALSE;
     }
 }
 
@@ -5117,19 +5145,20 @@ void PhysicalDevice::GetPhysicalDeviceDotProduct4x8Properties(
 
     *pIntegerDotProduct4x8BitPackedUnsignedAccelerated                              = int8DotSupport;
     *pIntegerDotProduct4x8BitPackedSignedAccelerated                                = int8DotSupport;
-    *pIntegerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated        = VK_FALSE;
-    *pIntegerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated          = VK_FALSE;
-    *pIntegerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated = VK_FALSE;
+    *pIntegerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated        = int8DotSupport;
+    *pIntegerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated          = int8DotSupport;
 
 #if VKI_BUILD_GFX11
     if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
     {
         *pIntegerDotProduct4x8BitPackedMixedSignednessAccelerated = VK_TRUE;
+        *pIntegerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated = VK_TRUE;
     }
     else
 #endif
     {
         *pIntegerDotProduct4x8BitPackedMixedSignednessAccelerated = VK_FALSE;
+        *pIntegerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated = VK_FALSE;
     }
 }
 
@@ -7346,6 +7375,46 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_NV:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->deviceGeneratedCommands = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_COMPUTE_FEATURES_NV:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->deviceGeneratedCompute                = VK_TRUE;
+                    pExtInfo->deviceGeneratedComputePipelines       = VK_FALSE;
+                    pExtInfo->deviceGeneratedComputeCaptureReplay   = VK_FALSE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceNestedCommandBufferFeaturesEXT*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->nestedCommandBuffer                = VK_TRUE;
+                    pExtInfo->nestedCommandBufferRendering       = VK_TRUE;
+                    pExtInfo->nestedCommandBufferSimultaneousUse = VK_FALSE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAME_BOUNDARY_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceFrameBoundaryFeaturesEXT*>(pHeader);
@@ -8328,6 +8397,28 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->prefersLocalInvocationPrimitiveOutput = VK_TRUE;
             pProps->prefersCompactVertexOutput            = VK_TRUE;
             pProps->prefersCompactPrimitiveOutput         = VK_TRUE;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_NV:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV*>(pNext);
+            pProps->maxIndirectCommandsStreamCount              = 1;
+            pProps->maxIndirectCommandsStreamStride             = UINT32_MAX;
+            pProps->maxIndirectCommandsTokenCount               = MaxIndirectTokenCount;
+            pProps->maxIndirectCommandsTokenOffset              = MaxIndirectTokenOffset;
+            pProps->minIndirectCommandsBufferOffsetAlignment    = 4;
+            pProps->minSequencesCountBufferOffsetAlignment      = 4;
+            pProps->minSequencesIndexBufferOffsetAlignment      = 4;
+            pProps->maxGraphicsShaderGroupCount                 = 0;
+            pProps->maxIndirectSequenceCount                    = UINT32_MAX >> 1;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_PROPERTIES_EXT:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceNestedCommandBufferPropertiesEXT*>(pNext);
+            pProps->maxCommandBufferNestingLevel = 1;
             break;
         }
 

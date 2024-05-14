@@ -109,8 +109,10 @@ struct RPBindTargetsInfo
 struct RPBarrierInfo
 {
     // The following fields are a composite of all VkSubpassDependencies that affect this particular barrier:
-    PipelineStageFlags   srcStageMask;
-    PipelineStageFlags   dstStageMask;
+    PipelineStageFlags   srcStageMask;                  // VK-srcStageMask. This will be converted to appropriate Pal
+                                                        // source stage mask when passing barrier info to PAL
+    PipelineStageFlags   dstStageMask;                  // VK-dstStageMask. This will be converted to appropriate Pal
+                                                        // dst stage mask when passing barrier info to PAL
     AccessFlags          srcAccessMask;
     AccessFlags          dstAccessMask;
     Pal::HwPipePoint     waitPoint;

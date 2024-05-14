@@ -24,14 +24,14 @@
  **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
- * @file  devmode_mgr.cpp
- * @brief Contains implementation of the GPU Open Developer Mode manager
+ * @file  devmode_rgp.cpp
+ * @brief Contains RGP implementation of the GPU Open Developer Mode manager
  ***********************************************************************************************************************
  */
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
 // Vulkan headers
-#include "devmode/devmode_mgr.h"
+#include "devmode/devmode_rgp.h"
 #include "include/vk_cmdbuffer.h"
 #include "include/vk_instance.h"
 #include "include/vk_pipeline.h"
@@ -68,8 +68,6 @@
 
 namespace vk
 {
-
-constexpr uint64_t InfiniteTimeout = static_cast<uint64_t>(1e10);
 
 // =====================================================================================================================
 // Translates a DevDriver result to a VkResult.
@@ -136,13 +134,13 @@ static DevDriver::Result GetPipelineHashes(
     void*                          pUserData,
     DevDriver::ExclusionFlags      /*flags*/)
 {
-    DevModeMgr* pDevModeMgr = static_cast<DevModeMgr*>(pUserData);
+    DevModeRgp* pDevModeRgp = static_cast<DevModeRgp*>(pUserData);
 
     DevDriver::Result result = DevDriver::Result::NotReady;
 
-    Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> cacheListLock(pDevModeMgr->GetPipelineReinjectionLock());
+    Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> cacheListLock(pDevModeRgp->GetPipelineReinjectionLock());
 
-    auto                 pipelineCacheIter = pDevModeMgr->GetPipelineCacheListIterator();
+    auto                 pipelineCacheIter = pDevModeRgp->GetPipelineCacheListIterator();
 
     while (pipelineCacheIter.Get() != nullptr)
     {
@@ -185,13 +183,13 @@ static DevDriver::Result GetPipelineCodeObjects(
     const DevDriver::PipelineHash* pPipelineHashes,
     size_t                         numHashes)
 {
-    DevModeMgr* pDevModeMgr = static_cast<DevModeMgr*>(pUserData);
+    DevModeRgp* pDevModeRgp = static_cast<DevModeRgp*>(pUserData);
 
     DevDriver::Result result = DevDriver::Result::NotReady;
 
-    Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> cacheListLock(pDevModeMgr->GetPipelineReinjectionLock());
+    Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> cacheListLock(pDevModeRgp->GetPipelineReinjectionLock());
 
-    auto                 pipelineCacheIter = pDevModeMgr->GetPipelineCacheListIterator();
+    auto                 pipelineCacheIter = pDevModeRgp->GetPipelineCacheListIterator();
 
     while (pipelineCacheIter.Get() != nullptr)
     {
@@ -266,16 +264,16 @@ static DevDriver::Result InjectPipelineCodeObjects(
     void*                               pUserData,
     DevDriver::PipelineRecordsIterator& pipelineIter)
 {
-    DevModeMgr* pDevModeMgr = static_cast<DevModeMgr*>(pUserData);
+    DevModeRgp* pDevModeRgp = static_cast<DevModeRgp*>(pUserData);
 
     DevDriver::Result result = DevDriver::Result::NotReady;
 
     uint32_t replacedCount = 0u;
     DevDriver::PipelineRecord record;
 
-    Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> cacheListLock(pDevModeMgr->GetPipelineReinjectionLock());
+    Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> cacheListLock(pDevModeRgp->GetPipelineReinjectionLock());
 
-    auto pipelineCacheIter = pDevModeMgr->GetPipelineCacheListIterator();
+    auto pipelineCacheIter = pDevModeRgp->GetPipelineCacheListIterator();
 
     while (pipelineCacheIter.Get() != nullptr)
     {
@@ -312,7 +310,8 @@ static DevDriver::Result InjectPipelineCodeObjects(
 }
 
 // =====================================================================================================================
-DevModeMgr::DevModeMgr(Instance* pInstance)
+DevModeRgp::DevModeRgp(
+    Instance* pInstance)
     :
     m_pInstance(pInstance),
     m_pDevDriverServer(pInstance->PalPlatform()->GetDevDriverServer()),
@@ -344,24 +343,24 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
 }
 
 // =====================================================================================================================
-DevModeMgr::~DevModeMgr()
+DevModeRgp::~DevModeRgp()
 {
     DestroyRGPTracing(&m_trace);
 }
 
 // =====================================================================================================================
 // Creates the GPU Open Developer Mode manager class.
-VkResult DevModeMgr::Create(
+VkResult DevModeRgp::Create(
     Instance*              pInstance,
-    DevModeMgr**           ppObject)
+    DevModeRgp**           ppObject)
 {
     Pal::Result result = Pal::Result::Success;
 
-    void* pStorage = pInstance->AllocMem(sizeof(DevModeMgr), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+    void* pStorage = pInstance->AllocMem(sizeof(DevModeRgp), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
 
     if (pStorage != nullptr)
     {
-        DevModeMgr* pMgr = VK_PLACEMENT_NEW(pStorage) DevModeMgr(pInstance);
+        DevModeRgp* pMgr = VK_PLACEMENT_NEW(pStorage) DevModeRgp(pInstance);
 
         result = pMgr->Init();
 
@@ -384,7 +383,7 @@ VkResult DevModeMgr::Create(
 
 // =====================================================================================================================
 // Initializes the devmode manager based on the current client flags.
-Pal::Result DevModeMgr::Init()
+Pal::Result DevModeRgp::Init()
 {
     Pal::Result result = Pal::Result::Success;
 
@@ -400,7 +399,7 @@ Pal::Result DevModeMgr::Init()
 // Called during initial device enumeration prior to calling Pal::IDevice::CommitSettingsAndInit().
 //
 // This finalizes the developer driver manager.
-void DevModeMgr::Finalize(
+void DevModeRgp::Finalize(
     uint32_t              deviceCount,
     VulkanSettingsLoader* settingsLoaders[])
 {
@@ -437,7 +436,7 @@ void DevModeMgr::Finalize(
 
 // =====================================================================================================================
 // Destroy the developer mode manager
-void DevModeMgr::Destroy()
+void DevModeRgp::Destroy()
 {
     Util::Destructor(this);
 
@@ -446,7 +445,7 @@ void DevModeMgr::Destroy()
 
 // =====================================================================================================================
 // Waits for the driver to be resumed if it's currently paused.
-void DevModeMgr::WaitForDriverResume()
+void DevModeRgp::WaitForDriverResume()
 {
     auto* pDriverControlServer = m_pDevDriverServer->GetDriverControlServer();
 
@@ -458,7 +457,7 @@ void DevModeMgr::WaitForDriverResume()
 // Called to notify of a frame-end boundary and is used to coordinate RGP trace start/stop.
 //
 // "delimiterType" represents how the transition/notify was triggered.
-void DevModeMgr::NotifyFrameEnd(
+void DevModeRgp::NotifyFrameEnd(
     const Queue*       pQueue,
     FrameDelimiterType delimiterType)
 {
@@ -509,7 +508,7 @@ void DevModeMgr::NotifyFrameEnd(
 }
 
 // =====================================================================================================================
-void DevModeMgr::AdvanceActiveTraceStep(
+void DevModeRgp::AdvanceActiveTraceStep(
     TraceState*        pState,
     const Queue*       pQueue,
     bool               beginFrame,
@@ -588,7 +587,7 @@ void DevModeMgr::AdvanceActiveTraceStep(
 // Checks if all trace results are ready and finalizes the results, transmitting data through gpuopen.
 //
 // Transitions from Ending to Idle step.
-Pal::Result DevModeMgr::TraceEndingToIdleStep(TraceState* pState)
+Pal::Result DevModeRgp::TraceEndingToIdleStep(TraceState* pState)
 {
     VK_ASSERT(pState->status == TraceStatus::Ending);
 
@@ -596,7 +595,8 @@ Pal::Result DevModeMgr::TraceEndingToIdleStep(TraceState* pState)
 
     if (m_blockingTraceEnd)
     {
-        result = pState->pDevice->PalDevice(DefaultDeviceIndex)->WaitForFences(1, &pState->pEndFence, true, InfiniteTimeout);
+        result = pState->pDevice->PalDevice(DefaultDeviceIndex)->WaitForFences(
+                    1, &pState->pEndFence, true, std::chrono::nanoseconds::max());
 
         if (result != Pal::Result::Success)
         {
@@ -677,7 +677,7 @@ Pal::Result DevModeMgr::TraceEndingToIdleStep(TraceState* pState)
 // Notifies of a frame-begin boundary and is used to coordinate RGP trace start/stop.
 //
 // "delimiterType" represents how the transition/notify was triggered.
-void DevModeMgr::NotifyFrameBegin(
+void DevModeRgp::NotifyFrameBegin(
     const Queue*       pQueue,
     FrameDelimiterType delimiterType)
 {
@@ -720,7 +720,7 @@ void DevModeMgr::NotifyFrameBegin(
 
 // =====================================================================================================================
 // Returns the queue state for this aparticular queue.
-DevModeMgr::TraceQueueState* DevModeMgr::FindTraceQueueState(
+DevModeRgp::TraceQueueState* DevModeRgp::FindTraceQueueState(
     TraceState*  pState,
     const Queue* pQueue)
 {
@@ -758,7 +758,7 @@ DevModeMgr::TraceQueueState* DevModeMgr::FindTraceQueueState(
 
 // =====================================================================================================================
 // Called from tracing layer before any queue submits any work.
-void DevModeMgr::NotifyPreSubmit()
+void DevModeRgp::NotifyPreSubmit()
 {
     // Check for pending traces here.
     TraceIdleToPendingStep(&m_trace);
@@ -769,7 +769,7 @@ void DevModeMgr::NotifyPreSubmit()
 // each command buffer submit by the tracing layer and should be very light-weight.
 //
 // This function moves the trace state from Idle to Pending.
-void DevModeMgr::TraceIdleToPendingStep(
+void DevModeRgp::TraceIdleToPendingStep(
     TraceState* pState)
 {
     // Double-checked lock to test if there is a trace pending.  If so, extract its trace parameters.
@@ -910,7 +910,7 @@ void DevModeMgr::TraceIdleToPendingStep(
 // "delimiterType" represents how the transition/notify was triggered.
 //
 // This function transitions from the Pending state to the Preparing state.
-Pal::Result DevModeMgr::TracePendingToPreparingStep(
+Pal::Result DevModeRgp::TracePendingToPreparingStep(
     TraceState*        pState,
     const Queue*       pQueue,
     FrameDelimiterType delimiterType)
@@ -1208,7 +1208,7 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
 // information command buffer which starts SQ thread tracing (SQTT).
 //
 // This function transitions from the Preparing state to the Running state.
-Pal::Result DevModeMgr::TracePreparingToRunningStep(
+Pal::Result DevModeRgp::TracePreparingToRunningStep(
     TraceState*  pState,
     const Queue* pQueue)
 {
@@ -1336,7 +1336,7 @@ Pal::Result DevModeMgr::TracePreparingToRunningStep(
 // This function submits the command buffer to stop SQTT tracing.  Full tracing still continues.
 //
 // This function transitions from the Running state to the WaitingForSqtt state.
-Pal::Result DevModeMgr::TraceRunningToWaitingForSqttStep(
+Pal::Result DevModeRgp::TraceRunningToWaitingForSqttStep(
     TraceState*  pState,
     const Queue* pQueue)
 {
@@ -1446,7 +1446,7 @@ Pal::Result DevModeMgr::TraceRunningToWaitingForSqttStep(
 // This function ends a running RGP trace.
 //
 // This function transitions from the WaitingForSqtt state to WaitingForResults state.
-Pal::Result DevModeMgr::TraceWaitingForSqttToEndingStep(
+Pal::Result DevModeRgp::TraceWaitingForSqttToEndingStep(
     TraceState*  pState,
     const Queue* pQueue)
 {
@@ -1457,7 +1457,8 @@ Pal::Result DevModeMgr::TraceWaitingForSqttToEndingStep(
 
     if (fenceResult == Pal::Result::NotReady && m_blockingTraceEnd)
     {
-        fenceResult = pState->pDevice->PalDevice(DefaultDeviceIndex)->WaitForFences(1, &pState->pEndSqttFence, true, InfiniteTimeout);
+        fenceResult = pState->pDevice->PalDevice(DefaultDeviceIndex)->WaitForFences(
+                        1, &pState->pEndSqttFence, true, std::chrono::nanoseconds::max());
     }
 
     // Return without advancing if not ready yet or submit failed
@@ -1556,7 +1557,7 @@ Pal::Result DevModeMgr::TraceWaitingForSqttToEndingStep(
 // =====================================================================================================================
 // This function resets and possibly cancels a currently active (between begin/end) RGP trace.  It frees any dependent
 // resources.
-void DevModeMgr::FinishOrAbortTrace(
+void DevModeRgp::FinishOrAbortTrace(
     TraceState* pState,
     bool        aborted)
 {
@@ -1600,7 +1601,7 @@ void DevModeMgr::FinishOrAbortTrace(
 // =====================================================================================================================
 // This function will reinitialize RGP tracing resources that are reused between traces if the new trace device
 // has changed since the last trace.
-Pal::Result DevModeMgr::CheckTraceDeviceChanged(
+Pal::Result DevModeRgp::CheckTraceDeviceChanged(
     TraceState* pState,
     Device*     pNewDevice)
 {
@@ -1630,7 +1631,8 @@ Pal::Result DevModeMgr::CheckTraceDeviceChanged(
 
 // =====================================================================================================================
 // Destroys device-persistent RGP resources for a particular queue family
-void DevModeMgr::DestroyTraceQueueFamilyResources(TraceQueueFamilyState* pState)
+void DevModeRgp::DestroyTraceQueueFamilyResources(
+    TraceQueueFamilyState* pState)
 {
     if (pState->pTraceBeginCmdBuf != nullptr)
     {
@@ -1670,7 +1672,8 @@ void DevModeMgr::DestroyTraceQueueFamilyResources(TraceQueueFamilyState* pState)
 
 // =====================================================================================================================
 // Destroys device-persistent RGP resources
-void DevModeMgr::DestroyRGPTracing(TraceState* pState)
+void DevModeRgp::DestroyRGPTracing(
+    TraceState* pState)
 {
     if (pState->status != TraceStatus::Idle)
     {
@@ -1725,7 +1728,7 @@ void DevModeMgr::DestroyRGPTracing(TraceState* pState)
 //
 // If "auxQueue" is true, then the queue provided does not belong to the tracing logical device, but belongs to the
 // same physical device (and thus, the same PAL device)
-Pal::Result DevModeMgr::InitTraceQueueResources(
+Pal::Result DevModeRgp::InitTraceQueueResources(
     TraceState*  pState,
     bool*        pHasDebugVmid,
     const Queue* pQueue,
@@ -1831,7 +1834,7 @@ Pal::Result DevModeMgr::InitTraceQueueResources(
 // =====================================================================================================================
 // This function finds out all the queues in the device that we have to synchronize for RGP-traced frames and
 // initializes resources for them.
-Pal::Result DevModeMgr::InitTraceQueueResourcesForDevice(
+Pal::Result DevModeRgp::InitTraceQueueResourcesForDevice(
     TraceState* pState,
     bool*       pHasDebugVmid)
 {
@@ -1868,7 +1871,7 @@ Pal::Result DevModeMgr::InitTraceQueueResourcesForDevice(
 
 // =====================================================================================================================
 // This function initializes the queue family -specific resources to support RGP tracing for a particular queue family
-Pal::Result DevModeMgr::InitTraceQueueFamilyResources(
+Pal::Result DevModeRgp::InitTraceQueueFamilyResources(
     TraceState*            pTraceState,
     TraceQueueFamilyState* pFamilyState)
 {
@@ -2037,7 +2040,7 @@ Pal::Result DevModeMgr::InitTraceQueueFamilyResources(
 
 // =====================================================================================================================
 // Initializes device-persistent RGP resources
-Pal::Result DevModeMgr::InitRGPTracing(
+Pal::Result DevModeRgp::InitRGPTracing(
     TraceState* pState,
     Device*     pDevice)
 {
@@ -2250,7 +2253,7 @@ Pal::Result DevModeMgr::InitRGPTracing(
 
 // =====================================================================================================================
 // Called when a new device is created.  This will preallocate reusable RGP trace resources for that device.
-void DevModeMgr::PostDeviceCreate(Device* pDevice)
+void DevModeRgp::PostDeviceCreate(Device* pDevice)
 {
     Util::MutexAuto lock(&m_traceMutex);
 
@@ -2273,7 +2276,8 @@ void DevModeMgr::PostDeviceCreate(Device* pDevice)
 
 // =====================================================================================================================
 // Called prior to a device's being destroyed.  This will free persistent RGP trace resources for that device.
-void DevModeMgr::PreDeviceDestroy(Device* pDevice)
+void DevModeRgp::PreDeviceDestroy(
+    Device* pDevice)
 {
     Util::MutexAuto lock(&m_traceMutex);
 
@@ -2285,7 +2289,7 @@ void DevModeMgr::PreDeviceDestroy(Device* pDevice)
 }
 
 // =====================================================================================================================
-bool DevModeMgr::QueueSupportsTiming(
+bool DevModeRgp::QueueSupportsTiming(
     uint32_t     deviceIdx,
     const Queue* pQueue)
 {
@@ -2311,7 +2315,7 @@ bool DevModeMgr::QueueSupportsTiming(
 }
 
 // =====================================================================================================================
-Pal::Result DevModeMgr::TimedSignalQueueSemaphore(
+Pal::Result DevModeRgp::TimedSignalQueueSemaphore(
     uint32_t              deviceIdx,
     Queue*                pQueue,
     VkSemaphore           semaphore,
@@ -2341,7 +2345,7 @@ Pal::Result DevModeMgr::TimedSignalQueueSemaphore(
 }
 
 // =====================================================================================================================
-Pal::Result DevModeMgr::TimedWaitQueueSemaphore(
+Pal::Result DevModeRgp::TimedWaitQueueSemaphore(
     uint32_t              deviceIdx,
     Queue*                pQueue,
     VkSemaphore           semaphore,
@@ -2371,7 +2375,7 @@ Pal::Result DevModeMgr::TimedWaitQueueSemaphore(
 }
 
 // =====================================================================================================================
-bool DevModeMgr::IsTracingEnabled() const
+bool DevModeRgp::IsTracingEnabled() const
 {
     VK_ASSERT(m_finalized);
 
@@ -2386,7 +2390,7 @@ bool DevModeMgr::IsTracingEnabled() const
 }
 
 // =====================================================================================================================
-Pal::Result DevModeMgr::TimedQueueSubmit(
+Pal::Result DevModeRgp::TimedQueueSubmit(
     uint32_t                     deviceIdx,
     Queue*                       pQueue,
     uint32_t                     cmdBufferCount,
@@ -2467,7 +2471,7 @@ Pal::Result DevModeMgr::TimedQueueSubmit(
 
 // =====================================================================================================================
 // Registers this pipeline, storing the code object binary and recording a load event in the RGP trace.
-void DevModeMgr::PipelineCreated(
+void DevModeRgp::PipelineCreated(
     Device*   pDevice,
     Pipeline* pPipeline)
 {
@@ -2510,7 +2514,7 @@ void DevModeMgr::PipelineCreated(
 
 // =====================================================================================================================
 // Unregisters this pipeline, recording an unload event in the RGP trace.
-void DevModeMgr::PipelineDestroyed(
+void DevModeRgp::PipelineDestroyed(
     Device*   pDevice,
     Pipeline* pPipeline)
 {
@@ -2555,7 +2559,7 @@ void DevModeMgr::PipelineDestroyed(
 // =====================================================================================================================
 // Registers the shader libraries under this pipeline so the contents of each library can be written into the RGP
 // trace file.
-void DevModeMgr::ShaderLibrariesCreated(
+void DevModeRgp::ShaderLibrariesCreated(
     Device*             pDevice,
     RayTracingPipeline* pPipeline)
 {
@@ -2573,7 +2577,7 @@ void DevModeMgr::ShaderLibrariesCreated(
 
 // =====================================================================================================================
 // Unregisters the shader libraries under this pipeline, recording an unload event in the RGP trace.
-void DevModeMgr::ShaderLibrariesDestroyed(
+void DevModeRgp::ShaderLibrariesDestroyed(
     Device*             pDevice,
     RayTracingPipeline* pPipeline)
 {
@@ -2591,7 +2595,7 @@ void DevModeMgr::ShaderLibrariesDestroyed(
 
 // =====================================================================================================================
 // Retrieves the target API PSO hash from the RGP Server
-uint64_t DevModeMgr::GetInstructionTraceTargetHash()
+uint64_t DevModeRgp::GetInstructionTraceTargetHash()
 {
     uint64_t targetHash = InvalidTargetPipelineHash;
 
@@ -2610,7 +2614,7 @@ uint64_t DevModeMgr::GetInstructionTraceTargetHash()
 
 // =====================================================================================================================
 // Starts instruction trace
-void DevModeMgr::StartInstructionTrace(
+void DevModeRgp::StartInstructionTrace(
     CmdBuffer* pCmdBuffer)
 {
     if (IsTracingEnabled())
@@ -2624,7 +2628,7 @@ void DevModeMgr::StartInstructionTrace(
 
 // =====================================================================================================================
 // Stops instruction trace
-void DevModeMgr::StopInstructionTrace(
+void DevModeRgp::StopInstructionTrace(
     CmdBuffer* pCmdBuffer)
 {
     if (IsTracingEnabled())
@@ -2639,7 +2643,7 @@ void DevModeMgr::StopInstructionTrace(
 // =====================================================================================================================
 // Registers a pipeline binary cache object with the pipeline URI service and initializes the pipeline URI service
 // the first time a pipeline binary cache object is registered
-Util::Result DevModeMgr::RegisterPipelineCache(
+Util::Result DevModeRgp::RegisterPipelineCache(
     PipelineBinaryCache* pPipelineCache,
     uint32_t             postSizeLimit)
 {
@@ -2693,7 +2697,7 @@ Util::Result DevModeMgr::RegisterPipelineCache(
 
 // =====================================================================================================================
 // Deregisters a pipeline binary cache with the pipeline URI service
-void DevModeMgr::DeregisterPipelineCache(
+void DevModeRgp::DeregisterPipelineCache(
     PipelineBinaryCache* pPipelineCache)
 {
     Util::RWLockAuto<Util::RWLock::LockType::ReadWrite> readWriteLock(&m_pipelineReinjectionLock);
@@ -2716,6 +2720,60 @@ void DevModeMgr::DeregisterPipelineCache(
             it.Next();
         }
     }
+}
+
+// =====================================================================================================================
+bool DevModeRgp::IsQueueTimingActive(
+    const Device* pDevice
+    ) const
+{
+    return (m_trace.queueTimingEnabled &&
+            (m_trace.status == TraceStatus::Running ||
+             m_trace.status == TraceStatus::Preparing ||
+             m_trace.status == TraceStatus::WaitingForSqtt) &&
+            (pDevice->VkPhysicalDevice(DefaultDeviceIndex) == m_trace.pDevice->VkPhysicalDevice(DefaultDeviceIndex)));
+}
+
+// =====================================================================================================================
+bool DevModeRgp::GetTraceFrameBeginTag(
+    uint64_t* pTag
+    ) const
+{
+    bool active;
+
+    if (m_trace.status != TraceStatus::Idle)
+    {
+        *pTag = m_traceFrameBeginTag;
+
+        active = true;
+    }
+    else
+    {
+        active = false;
+    }
+
+    return active;
+}
+
+// =====================================================================================================================
+bool DevModeRgp::GetTraceFrameEndTag(
+    uint64_t*      pTag
+    ) const
+{
+    bool active;
+
+    if (m_trace.status != TraceStatus::Idle)
+    {
+        *pTag = m_traceFrameEndTag;
+
+        active = true;
+    }
+    else
+    {
+        active = false;
+    }
+
+    return active;
 }
 
 }; // namespace vk

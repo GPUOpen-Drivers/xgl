@@ -214,7 +214,7 @@ Pal::Result DebugPrintf::PostQueueProcess(
             while (true)
             {
                 palResult = pDevice->PalDevice(DefaultDeviceIndex)->WaitForSemaphores(
-                    1, palSemaphores, waitValues, 0, 1000000llu);
+                    1, palSemaphores, waitValues, 0, std::chrono::nanoseconds {1000000llu});
 
                 decodeOffset = ProcessDebugPrintfBuffer(pDevice, deviceIdx, decodeOffset, &file);
                 if ((PalToVkResult(palResult) <= 0) || (loopIndex++ > 1000))

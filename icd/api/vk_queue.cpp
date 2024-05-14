@@ -54,6 +54,9 @@
 #include "sqtt/sqtt_layer.h"
 
 #include "palQueue.h"
+#include "palVectorImpl.h"
+#include "palListImpl.h"
+
 namespace vk
 {
 
@@ -79,10 +82,14 @@ Queue::Queue(
     m_queueFamilyIndex(queueFamilyIndex),
     m_queueIndex(queueIndex),
     m_queueFlags(queueFlags),
-    m_pDevModeMgr(pDevice->VkInstance()->GetDevModeMgr()),
+    m_pDevMode(pDevice->VkInstance()->GetDevModeMgr()),
     m_pStackAllocator(pStackAllocator),
     m_pCmdBufferRing(pCmdBufferRing),
     m_isDeviceIndependent(isDeviceIndependent)
+#if VKI_RAY_TRACING
+    , m_pCpsGlobalMem(nullptr)
+    , m_cpsMemDestroyList(pDevice->VkInstance()->Allocator())
+#endif
 {
     if (ppPalQueues != nullptr)
     {
@@ -881,6 +888,16 @@ Queue::~Queue()
         }
     }
 
+#if VKI_RAY_TRACING
+    FreeRetiredCpsStackMem();
+    VK_ASSERT(m_cpsMemDestroyList.NumElements() == 0);
+
+    if (m_pCpsGlobalMem != nullptr)
+    {
+        m_pDevice->MemMgr()->FreeGpuMem(m_pCpsGlobalMem);
+        m_pCpsGlobalMem = nullptr;
+    }
+#endif
 }
 
 // =====================================================================================================================
@@ -1073,9 +1090,9 @@ VkResult Queue::Submit(
     VkFence               fence)
 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    DevModeMgr* pDevModeMgr = m_pDevice->VkInstance()->GetDevModeMgr();
+    IDevMode* pDevMode = m_pDevice->VkInstance()->GetDevModeMgr();
 
-    bool timedQueueEvents = ((pDevModeMgr != nullptr) && pDevModeMgr->IsQueueTimingActive(m_pDevice));
+    bool timedQueueEvents = ((pDevMode != nullptr) && pDevMode->IsQueueTimingActive(m_pDevice));
 #else
     bool timedQueueEvents = false;
 #endif
@@ -1086,6 +1103,10 @@ VkResult Queue::Submit(
     VkResult result = VK_SUCCESS;
 
     const bool isSynchronization2 = std::is_same<SubmitInfoType, VkSubmitInfo2KHR>::value;
+
+#if VKI_RAY_TRACING
+    FreeRetiredCpsStackMem();
+#endif
 
     // The fence should be only used in the last submission to PAL. The implicit ordering guarantees provided by PAL
     // make sure that the fence is only signaled when all submissions complete.
@@ -1168,7 +1189,7 @@ VkResult Queue::Submit(
                 case VK_STRUCTURE_TYPE_FRAME_BOUNDARY_EXT:
                     // Note: VK_EXT_frame_boundary is only intended for tools/debuggers
                     // to be able to associate frame information with queue submissions.
-                    DevModeFrameBoundary(pDevModeMgr, static_cast<const VkFrameBoundaryEXT*>(pNext));
+                    DevModeFrameBoundary(pDevMode, static_cast<const VkFrameBoundaryEXT*>(pNext));
                     break;
 
                 default:
@@ -1296,6 +1317,25 @@ VkResult Queue::Submit(
                 ApiCmdBuffer* const * pCommandBuffers =
                     reinterpret_cast<ApiCmdBuffer*const*>(pCmdBuffers);
 
+#if VKI_RAY_TRACING
+                uint64       maxCpsStackSize = 0;
+                Pal::IFence* pCpsMemFence    = nullptr;
+
+                for (uint32_t i = 0; i < cmdBufferCount; ++i)
+                {
+                    const CmdBuffer& cmdBuf = *(*pCommandBuffers[i]);
+
+                    if (cmdBuf.GetCpsMemSize() > 0)
+                    {
+                        maxCpsStackSize = Util::Max(maxCpsStackSize, cmdBuf.GetCpsMemSize());
+                    }
+                }
+
+                if (maxCpsStackSize > 0)
+                {
+                    pCpsMemFence = GetCpsStackMem(deviceIdx, maxCpsStackSize);
+                }
+#endif
                 perSubQueueInfo.cmdBufferCount = 0;
 
                 palSubmitInfo.stackSizeInDwords = 0;
@@ -1320,6 +1360,11 @@ VkResult Queue::Submit(
                         {
                             pCmdBufInfos[i].isValid = true;
                             pCmdBufInfos[i].rayTracingExecuted = true;
+
+                            if (m_pCpsGlobalMem != nullptr)
+                            {
+                                cmdBuf.ApplyPatchCpsRequests(deviceIdx, *m_pCpsGlobalMem->PalMemory(deviceIdx));
+                            }
                         }
 #endif
 
@@ -1402,11 +1447,23 @@ VkResult Queue::Submit(
                     }
                 }
 
+                Pal::IFence* iFence[2] = {nullptr, nullptr};
+                palSubmitInfo.ppFences = iFence;
+
+#if VKI_RAY_TRACING
+                if (pCpsMemFence != nullptr)
+                {
+                    iFence[0]                = pCpsMemFence;
+                    palSubmitInfo.fenceCount = 1;
+                }
+#endif
+
                 if (lastBatch && (pFence != nullptr))
                 {
                     pPalFence = pFence->PalFence(deviceIdx);
-                    palSubmitInfo.ppFences   = &pPalFence;
-                    palSubmitInfo.fenceCount = 1;
+
+                    iFence[palSubmitInfo.fenceCount] = pPalFence;
+                    palSubmitInfo.fenceCount++;
 
                     pFence->SetActiveDevice(deviceIdx);
                 }
@@ -1483,7 +1540,9 @@ VkResult Queue::Submit(
                         }
                         else
                         {
-                            palResult = PalQueueSubmit(m_pDevice, PalQueue(deviceIdx), palSubmitInfo);
+                            {
+                                palResult = PalQueueSubmit(m_pDevice, PalQueue(deviceIdx), palSubmitInfo);
+                            }
                         }
                     }
                     else
@@ -1492,7 +1551,7 @@ VkResult Queue::Submit(
                         // TMZ is NOT supported for GPUOPEN path.
                         VK_ASSERT((*pCommandBuffers[0])->IsProtected() == false);
 
-                        palResult = m_pDevModeMgr->TimedQueueSubmit(
+                        palResult = m_pDevMode->TimedQueueSubmit(
                             deviceIdx,
                             this,
                             cmdBufferCount,
@@ -1609,10 +1668,10 @@ VkResult Queue::PalSignalSemaphores(
     const uint32_t*     pSemaphoreDeviceIndices)
 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    DevModeMgr* pDevModeMgr = m_pDevice->VkInstance()->GetDevModeMgr();
+    IDevMode* pDevMode = m_pDevice->VkInstance()->GetDevModeMgr();
 
-    bool timedQueueEvents = ((pDevModeMgr != nullptr) &&
-                             pDevModeMgr->IsQueueTimingActive(m_pDevice));
+    bool timedQueueEvents = ((pDevMode != nullptr) &&
+                             pDevMode->IsQueueTimingActive(m_pDevice));
 #else
     bool timedQueueEvents = false;
 #endif
@@ -1657,7 +1716,7 @@ VkResult Queue::PalSignalSemaphores(
             else
             {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-                palResult = pDevModeMgr->TimedSignalQueueSemaphore(deviceIdx, this, pSemaphores[i], pointValue,
+                palResult = pDevMode->TimedSignalQueueSemaphore(deviceIdx, this, pSemaphores[i], pointValue,
                                                                    pPalSemaphore);
 #else
                 VK_NEVER_CALLED();
@@ -1686,10 +1745,10 @@ VkResult Queue::PalWaitSemaphores(
     uint32_t    deviceIdx = DefaultDeviceIndex;
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    DevModeMgr* pDevModeMgr = m_pDevice->VkInstance()->GetDevModeMgr();
+    IDevMode* pDevMode = m_pDevice->VkInstance()->GetDevModeMgr();
 
-    bool timedQueueEvents = ((pDevModeMgr != nullptr) &&
-                             pDevModeMgr->IsQueueTimingActive(m_pDevice));
+    bool timedQueueEvents = ((pDevMode != nullptr) &&
+                             pDevMode->IsQueueTimingActive(m_pDevice));
 #else
     bool timedQueueEvents = false;
 #endif
@@ -1736,7 +1795,7 @@ VkResult Queue::PalWaitSemaphores(
                 else
                 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-                    palResult = pDevModeMgr->TimedWaitQueueSemaphore(deviceIdx, this, pSemaphores[i], pointValue,
+                    palResult = pDevMode->TimedWaitQueueSemaphore(deviceIdx, this, pSemaphores[i], pointValue,
                                                                      pPalSemaphore);
 #else
                     VK_NEVER_CALLED();
@@ -1759,7 +1818,7 @@ VkResult Queue::UpdateFlipStatus(
 {
     bool isOwner = false;
     Pal::IDevice* pPalDevice = m_pDevice->PalDevice(DefaultDeviceIndex);
-    uint32_t vidPnSourceId = pSwapChain->GetFullscreenMgr()->GetVidPnSourceId();
+    uint32_t vidPnSourceId = pSwapChain->GetVidPnSourceId();
 
     Pal::Result palResult = pPalDevice->GetFlipStatus(vidPnSourceId, &m_flipStatus.flipFlags, &isOwner);
     if (palResult == Pal::Result::Success)
@@ -1805,9 +1864,9 @@ VkResult Queue::Present(
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this,
-                                                                     DevModeMgr::FrameDelimiterType::QueuePresent);
+                                                                     IDevMode::FrameDelimiterType::QueuePresent);
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this,
-                                                                       DevModeMgr::FrameDelimiterType::QueuePresent);
+                                                                       IDevMode::FrameDelimiterType::QueuePresent);
         }
 #endif
         return VK_ERROR_INITIALIZATION_FAILED;
@@ -1943,7 +2002,7 @@ VkResult Queue::Present(
         if (pSwapChain->GetFullscreenMgr() != nullptr)
         {
             Pal::Result palResult = m_pDevice->PalDevice(DefaultDeviceIndex)->PollFullScreenFrameMetadataControl(
-                pSwapChain->GetFullscreenMgr()->GetVidPnSourceId(),
+                pSwapChain->GetVidPnSourceId(),
                 &m_palFrameMetadataControl);
 
             VK_ASSERT(palResult == Pal::Result::Success);
@@ -1973,7 +2032,7 @@ VkResult Queue::Present(
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this,
-                                                                     DevModeMgr::FrameDelimiterType::QueuePresent);
+                                                                     IDevMode::FrameDelimiterType::QueuePresent);
         }
 #endif
 
@@ -2017,7 +2076,7 @@ VkResult Queue::Present(
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this,
-                                                                       DevModeMgr::FrameDelimiterType::QueuePresent);
+                                                                       IDevMode::FrameDelimiterType::QueuePresent);
         }
 #endif
 
@@ -2603,9 +2662,7 @@ bool Queue::BuildPostProcessCommands(
             frameInfo.pSrcImage                = pPresentInfo->pSrcImage;
             frameInfo.debugOverlay.presentMode = pPresentInfo->presentMode;
             frameInfo.debugOverlay.wsiPlatform = displayableInfo.palPlatform;
-            frameInfo.debugOverlay.presentKey = pSwapChain->IsDxgiEnabled()
-                ? Pal::PresentKeyFromPointer(pPresentInfo->pSwapChain)
-                : Pal::PresentKeyFromOsWindowHandle(displayableInfo.windowHandle);
+            frameInfo.debugOverlay.presentKey = Pal::PresentKeyFromOsWindowHandle(displayableInfo.windowHandle);
         }
         else
         {
@@ -2645,42 +2702,6 @@ VkResult Queue::SubmitInternalCmdBuf(
     return pRing->SubmitCmdBuffer(m_pDevice, deviceIdx, m_pPalQueues[deviceIdx], cmdBufInfo, pCmdBufState);
 }
 
-// =====================================================================================================================
-// Synchronize back buffer memory by doing a dummy submit with the written primary field set.
-VkResult Queue::SynchronizeBackBuffer(
-    Memory*  pMemory,
-    uint32_t deviceIdx)
-{
-    VkResult result = VK_SUCCESS;
-
-    if (m_pDummyCmdBuffer[deviceIdx] == nullptr)
-    {
-        result = CreateDummyCmdBuffer();
-    }
-
-    if (result == VK_SUCCESS)
-    {
-        Pal::IGpuMemory* pGpuMem = pMemory->PalMemory(deviceIdx);
-
-        Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
-
-        perSubQueueInfo.cmdBufferCount  = 1;
-        perSubQueueInfo.ppCmdBuffers    = &m_pDummyCmdBuffer[deviceIdx];
-        perSubQueueInfo.pCmdBufInfoList = nullptr;
-
-        Pal::SubmitInfo submitInfo = {};
-
-        submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
-        submitInfo.perSubQueueInfoCount = 1;
-        submitInfo.blockIfFlippingCount = 1;
-        submitInfo.ppBlockIfFlipping    = &pGpuMem;
-
-        result = PalToVkResult(PalQueueSubmit(m_pDevice, m_pPalQueues[deviceIdx], submitInfo));
-    }
-
-    return result;
-}
-
 VkResult Queue::CreateSqttState(
     void* pMemory)
 {
@@ -2701,7 +2722,7 @@ void Queue::InsertDebugUtilsLabel(
 #if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
-            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, DevModeMgr::FrameDelimiterType::QueueLabel);
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, IDevMode::FrameDelimiterType::QueueLabel);
 
             if (settings.devModeBlockingEndFrameDebugUtils)
             {
@@ -2720,7 +2741,7 @@ void Queue::InsertDebugUtilsLabel(
 #if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
-            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, DevModeMgr::FrameDelimiterType::QueueLabel);
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, IDevMode::FrameDelimiterType::QueueLabel);
         }
 #endif
     }
@@ -2730,23 +2751,137 @@ void Queue::InsertDebugUtilsLabel(
 // Notifies the trace tool about frame boundary, which is mainly used for unconventional vkQueuePresent-less
 // rendering or compute-only applications.
 void Queue::DevModeFrameBoundary(
-    DevModeMgr*               pDevModeMgr,
+    IDevMode*                 pDevMode,
     const VkFrameBoundaryEXT* pFrameBoundaryInfo)
 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    if ((pDevModeMgr != nullptr) &&
+    if ((pDevMode != nullptr) &&
         (pFrameBoundaryInfo != nullptr))
     {
         if ((pFrameBoundaryInfo->flags & VK_FRAME_BOUNDARY_FRAME_END_BIT_EXT) != 0)
         {
-            pDevModeMgr->NotifyFrameEnd(this,
-                DevModeMgr::FrameDelimiterType::QueuePresent);
-            pDevModeMgr->NotifyFrameBegin(this,
-                DevModeMgr::FrameDelimiterType::QueuePresent);
+            pDevMode->NotifyFrameEnd(this,
+                IDevMode::FrameDelimiterType::QueuePresent);
+            pDevMode->NotifyFrameBegin(this,
+                IDevMode::FrameDelimiterType::QueuePresent);
         }
     }
 #endif
 }
+
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+// Check the allocations in m_cpsMemDestroyList, free the retired ones.
+void Queue::FreeRetiredCpsStackMem()
+{
+    if (m_cpsMemDestroyList.NumElements() > 0)
+    {
+        for (CpsMemDestroyListIterator iter = m_cpsMemDestroyList.Begin(); iter.Get() != nullptr; )
+        {
+            CpsMemTracker* pTracker = iter.Get();
+            if (pTracker->pFence->GetStatus() == Pal::Result::Success)
+            {
+                m_pDevice->MemMgr()->FreeGpuMem(pTracker->pMem);
+                pTracker->pFence->Destroy();
+                m_pDevice->VkInstance()->FreeMem(pTracker->pFence);
+
+                // implicitly preceed the iterator to next node.
+                m_cpsMemDestroyList.Erase(&iter);
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
+// Get Cps global memory.
+// - Allocate if it does not exist.
+// - Reallocate m_pCpsGlobalMem from X To Y if its size is not big enough. X is put into m_cpsMemDestroyList to be freed
+//   later. A fence is generated and passed in the submission to Pal. When it is signaled, X is freed. Note it is
+//   signaled when the first cmdbuf switching to Y is done, so not optimal regarding memory footprint. Ideally it can be
+//   signalled when X is retired, but that means every submission referencing X has to signal an extra IFence even
+//   m_pCpsGlobalMem stays unchanged. The reason is we dont know if the next submission will require a bigger cps stack
+//   memory.
+Pal::IFence* Queue::GetCpsStackMem(
+    uint32_t deviceIdx,
+    uint64_t size)
+{
+    VK_ASSERT(m_pDevice->GetRuntimeSettings().cpsFlags & CpsFlagStackInGlobalMem);
+
+    Pal::IFence*    pFence    = nullptr;
+    GpuRt::IDevice* pRtDevice = m_pDevice->RayTrace()->GpuRt(deviceIdx);
+
+    //TODO: cap the size to a reasonable preset
+    if ((m_pCpsGlobalMem == nullptr) || (m_pCpsGlobalMem->Size() < size))
+    {
+        InternalMemory* pCpsVidMem = nullptr;
+
+        InternalMemCreateInfo allocInfo = {};
+        m_pDevice->MemMgr()->GetCommonPool(InternalPoolGpuAccess, &allocInfo);
+
+        m_pDevice->MemMgr()->AllocGpuMem(allocInfo, pCpsVidMem, 0, VK_OBJECT_TYPE_QUEUE, 0);
+        VK_ASSERT(pCpsVidMem != nullptr);
+
+        Pal::Result palResult = Pal::Result::Success;
+
+        if (m_pCpsGlobalMem == nullptr) // first alloc
+        {
+            m_pCpsGlobalMem = pCpsVidMem;
+        }
+        else if (pCpsVidMem != nullptr)
+        {
+            Pal::IDevice* pPalDevice = m_pDevice->PalDevice(deviceIdx);
+
+            const size_t palFenceSize = pPalDevice->GetFenceSize(&palResult);
+            VK_ASSERT(palResult == Pal::Result::Success);
+
+            void* pPalMemory = m_pDevice->VkInstance()->AllocMem(palFenceSize, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+            Pal::FenceCreateInfo fenceInfo = {};
+            fenceInfo.flags.signaled = 0;
+
+            if (pPalMemory != nullptr)
+            {
+                palResult = pPalDevice->CreateFence(fenceInfo, pPalMemory, &pFence);
+
+                if (palResult == Pal::Result::Success)
+                {
+                    CpsMemTracker tracker = { m_pCpsGlobalMem, pFence };
+                    m_cpsMemDestroyList.PushBack(tracker);
+                    m_pCpsGlobalMem = pCpsVidMem;
+                }
+                else
+                {
+                    VK_ASSERT(pFence == nullptr);
+                    m_pDevice->VkInstance()->FreeMem(pPalMemory);
+                }
+            }
+            else
+            {
+                palResult = Pal::Result::ErrorOutOfMemory;
+            }
+
+            if (palResult != Pal::Result::Success)
+            {
+                // Have to bear with the original allocation, expecting performance hit
+                m_pDevice->MemMgr()->FreeGpuMem(pCpsVidMem);
+            }
+        }
+
+        // Initialize CPS Memory
+        if (palResult == Pal::Result::Success)
+        {
+            palResult = pRtDevice->InitializeCpsMemory(*m_pCpsGlobalMem->PalMemory(deviceIdx), size);
+            VK_ASSERT(palResult == Pal::Result::Success);
+        }
+    }
+
+    return pFence;
+}
+#endif
 
 /**
  ***********************************************************************************************************************

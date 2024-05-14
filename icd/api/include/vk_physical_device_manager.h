@@ -50,6 +50,7 @@ namespace vk
 // Forward declare Vulkan classes used in this file.
 class Instance;
 class PhysicalDevice;
+class ExperimentsLoader;
 
 class PhysicalDeviceManager
 {
@@ -111,6 +112,7 @@ private:
     Util::Mutex                 m_devicesLock; // Mutex used to lock access to the vector of physical devices
 
     VkPhysicalDeviceProperties* m_pAllNullProperties; // Physical device properties exposed when NULL_GPU=ALL
+    ExperimentsLoader*          m_pExperimentsLoader;
 };
 
 }

@@ -44,7 +44,6 @@ uint32_t GetBuildTimeHash()
     return Util::HashLiteralString(__DATE__ __TIME__);
 }
 
-#if DEBUG
 // =====================================================================================================================
 // If turned on and exe name is a match, this function spins idle until we have a debugger hooked.
 void WaitIdleForDebugger(
@@ -81,7 +80,6 @@ void WaitIdleForDebugger(
         }
     }
 }
-#endif
 
 } // namespace utils
 

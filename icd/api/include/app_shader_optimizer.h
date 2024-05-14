@@ -177,7 +177,7 @@ private:
         const PipelineOptimizerKey&      pipelineKey,
         Pal::DynamicComputeShaderInfo*   pDynamicComputeShaderInfo) const;
 
-    void ApplyProfileToDynamicGraphicsShaderInfo(
+    bool ApplyProfileToDynamicGraphicsShaderInfo(
         const ShaderProfileAction&      action,
         Pal::DynamicGraphicsShaderInfo* pGraphicsShaderInfo) const;
 

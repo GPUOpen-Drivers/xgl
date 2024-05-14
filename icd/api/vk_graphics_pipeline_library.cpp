@@ -352,17 +352,26 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
                 continue;
             }
 
+            if ((GetVkGraphicsLibraryFlagBit(pShaderStageInfo->stages[i].stage) ^ pLibInfo->libFlags) != 0)
+            {
+                continue;
+            }
+
             if (canBuildShader)
             {
-                // We don't take care of the result. Early compile failure in some cases is expected
-                pCompiler->CreateGraphicsShaderBinary(
+                result = pCompiler->CreateGraphicsShaderBinary(
                     pDevice, pPipelineCache, gplType, pBinaryCreateInfo, &pTempModuleStages[i]);
                 gplMask |= (1 << gplType);
+            }
+
+            if (result != VK_SUCCESS)
+            {
+                break;
             }
         }
     }
 
-    if (pLibInfo->flags.optimize)
+    if ((result == VK_SUCCESS) && pLibInfo->flags.optimize)
     {
         // We need to re-compile some stage if related new state is available
         if ((pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) &&
@@ -405,17 +414,20 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 
                 palElfBinary = pCompiler->GetSolution(pBinaryCreateInfo->compilerType)->
                     ExtractPalElfBinary(pBinaryCreateInfo->earlyElfPackage[gplType]);
-                result = pCompiler->CreateGraphicsShaderLibrary(pDevice,
-                                                                palElfBinary,
-                                                                pAllocator,
-                                                                &pBinaryCreateInfo->pShaderLibraries[gplType]);
-                pBinaryCreateInfo->earlyElfPackage[gplType].pCode = nullptr;
-            }
+                if (palElfBinary.codeSize > 0)
+                {
+                    result = pCompiler->CreateGraphicsShaderLibrary(pDevice,
+                                                                    palElfBinary,
+                                                                    pAllocator,
+                                                                    &pBinaryCreateInfo->pShaderLibraries[gplType]);
+                    pBinaryCreateInfo->earlyElfPackage[gplType].pCode = nullptr;
 
-            if (pTempModuleStages[stage].elfPackage.codeSize > 0)
-            {
-                pDevice->VkInstance()->FreeMem(const_cast<void*>(pTempModuleStages[stage].elfPackage.pCode));
-                pTempModuleStages[stage].elfPackage = {};
+                    if (pTempModuleStages[stage].elfPackage.codeSize > 0)
+                    {
+                        pDevice->VkInstance()->FreeMem(const_cast<void*>(pTempModuleStages[stage].elfPackage.pCode));
+                        pTempModuleStages[stage].elfPackage = {};
+                    }
+                }
             }
         }
 
@@ -693,11 +705,11 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
     const uint64_t                          apiHash,
     const GplModuleState*                   pGplModuleStates,
     const PipelineLayout*                   pPipelineLayout)
+    : GraphicsPipelineCommon(
 #if VKI_RAY_TRACING
-    : GraphicsPipelineCommon(false, pDevice),
-#else
-    : GraphicsPipelineCommon(pDevice),
+        false,
 #endif
+        pDevice),
       m_objectCreateInfo(objectInfo),
       m_pBinaryCreateInfo(pBinaryInfo),
       m_libInfo(libInfo),

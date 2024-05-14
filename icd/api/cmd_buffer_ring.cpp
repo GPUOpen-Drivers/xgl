@@ -188,7 +188,7 @@ void CmdBufferRing::DestroyCmdBufState(
     // Wait to finish in case still in flight
     if (pCmdBufState->pFence->GetStatus() == Pal::Result::NotReady)
     {
-        pDevice->PalDevice(deviceIdx)->WaitForFences(1, &pCmdBufState->pFence, true, ~0ULL);
+        pDevice->PalDevice(deviceIdx)->WaitForFences(1, &pCmdBufState->pFence, true, std::chrono::nanoseconds::max());
     }
 
     // Destroy Fence

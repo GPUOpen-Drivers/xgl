@@ -375,6 +375,41 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatchIndirect(
 }
 
 // =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdPreprocessGeneratedCommandsNV(
+    VkCommandBuffer                             commandBuffer,
+    const VkGeneratedCommandsInfoNV*            pGeneratedCommandsInfo)
+{
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdExecuteGeneratedCommandsNV(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    isPreprocessed,
+    const VkGeneratedCommandsInfoNV*            pGeneratedCommandsInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->ExecuteIndirect(isPreprocessed, pGeneratedCommandsInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBindPipelineShaderGroupNV(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipeline                                  pipeline,
+    uint32_t                                    groupIndex)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdUpdatePipelineIndirectBufferNV(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipeline                                  pipeline)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer(
     VkCommandBuffer                             cmdBuffer,
     VkBuffer                                    srcBuffer,

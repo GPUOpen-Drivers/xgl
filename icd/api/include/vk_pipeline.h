@@ -245,11 +245,11 @@ public:
 
 protected:
     Pipeline(
-        Device* const         pDevice,
+        Device* const               pDevice,
 #if VKI_RAY_TRACING
-        bool            hasRayTracing,
+        bool                        hasRayTracing,
 #endif
-        VkPipelineBindPoint   type);
+        VkPipelineBindPoint         type);
 
     void Init(
         Pal::IPipeline**            pPalPipeline,
@@ -347,6 +347,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
     uint32_t*                                      pInternalRepresentationCount,
     VkPipelineExecutableInternalRepresentationKHR* pInternalRepresentations);
 
+VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetPipelineIndirectDeviceAddressNV(
+    VkDevice                                        device,
+    const VkPipelineIndirectDeviceAddressInfoNV*    pInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkGetPipelineIndirectMemoryRequirementsNV(
+    VkDevice                                        device,
+    const VkComputePipelineCreateInfo*              pCreateInfo,
+    VkMemoryRequirements2*                          pMemoryRequirements);
 };
 
 } // namespace vk

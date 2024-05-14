@@ -791,6 +791,17 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetShaderModuleIdentifierEXT                  );
     INIT_DISPATCH_ENTRY(vkGetShaderModuleCreateInfoIdentifierEXT        );
 
+    INIT_DISPATCH_ENTRY(vkCreateIndirectCommandsLayoutNV                );
+    INIT_DISPATCH_ENTRY(vkDestroyIndirectCommandsLayoutNV               );
+    INIT_DISPATCH_ENTRY(vkGetGeneratedCommandsMemoryRequirementsNV      );
+    INIT_DISPATCH_ENTRY(vkCmdPreprocessGeneratedCommandsNV              );
+    INIT_DISPATCH_ENTRY(vkCmdExecuteGeneratedCommandsNV                 );
+    INIT_DISPATCH_ENTRY(vkCmdBindPipelineShaderGroupNV                  );
+
+    INIT_DISPATCH_ENTRY(vkGetPipelineIndirectDeviceAddressNV            );
+    INIT_DISPATCH_ENTRY(vkGetPipelineIndirectMemoryRequirementsNV       );
+    INIT_DISPATCH_ENTRY(vkCmdUpdatePipelineIndirectBufferNV             );
+
     INIT_DISPATCH_ENTRY(vkCmdSetTessellationDomainOriginEXT             );
     INIT_DISPATCH_ENTRY(vkCmdSetDepthClampEnableEXT                     );
     INIT_DISPATCH_ENTRY(vkCmdSetPolygonModeEXT                          );

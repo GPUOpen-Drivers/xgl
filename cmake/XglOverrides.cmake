@@ -107,6 +107,8 @@ macro(xgl_overrides_pal)
         set(PAL_BUILD_GFX11 1 CACHE BOOL "${PROJECT_NAME} override." FORCE)
     endif()
 
+    set(PAL_BUILD_PHOENIX2 ${XGL_BUILD_PHOENIX2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
     # Wayland
     set(PAL_BUILD_WAYLAND ${BUILD_WAYLAND_SUPPORT} CACHE BOOL "Build PAL with Wayland support" FORCE)
 
@@ -156,6 +158,8 @@ macro(xgl_overrides_vkgc)
 #endif
 
     set(LLPC_BUILD_PHOENIX1 ${XGL_BUILD_PHOENIX1} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
+    set(LLPC_BUILD_PHOENIX2 ${XGL_BUILD_PHOENIX2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
     set(LLPC_ENABLE_WERROR ${ICD_ANALYSIS_WARNINGS_AS_ERRORS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 

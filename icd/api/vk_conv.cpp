@@ -899,6 +899,62 @@ const char* VkResultName(
     case VkResult::VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT:
         errName = "VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT";
         break;
+
+    case VkResult::VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR:
+        errName = "VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR";
+        break;
+
+    case VkResult::VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR:
+        errName = "VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR";
+        break;
+
+    case VkResult::VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR:
+        errName = "VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR";
+        break;
+
+    case VkResult::VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR:
+        errName = "VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR";
+        break;
+
+    case VkResult::VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR:
+        errName = "VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR";
+        break;
+
+    case VkResult::VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR:
+        errName = "VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR";
+        break;
+
+    case VkResult::VK_THREAD_IDLE_KHR:
+        errName = "VK_THREAD_IDLE_KHR";
+        break;
+
+    case VkResult::VK_THREAD_DONE_KHR:
+        errName = "VK_THREAD_DONE_KHR";
+        break;
+    case VkResult::VK_OPERATION_DEFERRED_KHR:
+        errName = "VK_OPERATION_DEFERRED_KHR";
+        break;
+
+    case VkResult::VK_OPERATION_NOT_DEFERRED_KHR:
+        errName = "VK_OPERATION_NOT_DEFERRED_KHR";
+        break;
+
+    case VkResult::VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR:
+        errName = "VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR";
+        break;
+
+    case VkResult::VK_ERROR_COMPRESSION_EXHAUSTED_EXT:
+        errName = "VK_ERROR_COMPRESSION_EXHAUSTED_EXT";
+        break;
+
+    case VkResult::VK_ERROR_PIPELINE_COMPILE_REQUIRED_EXT:
+        errName = "VK_ERROR_PIPELINE_COMPILE_REQUIRED_EXT";
+        break;
+
+    case VkResult::VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT:
+        errName = "VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT";
+        break;
+
     default:
         VK_NOT_IMPLEMENTED;
         errName = "??";

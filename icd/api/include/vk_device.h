@@ -166,8 +166,9 @@ public:
             // True if EXT_PRIMITIVES_GENERATED_QUERY is enabled.
             uint32                primitivesGeneratedQuery             : 1;
             uint32                reserved1                            : 1;
+            uint32                reserved2                            : 1;
 
-            uint32                reserved                             : 13;
+            uint32                reserved                             : 12;
         };
 
         uint32 u32All;
@@ -381,6 +382,11 @@ public:
         const VkSwapchainCreateInfoKHR*             pCreateInfo,
         const VkAllocationCallbacks*                pAllocator,
         VkSwapchainKHR*                             pSwapChain);
+
+    VkResult CreateIndirectCommandsLayout(
+        const VkIndirectCommandsLayoutCreateInfoNV* pCreateInfo,
+        const VkAllocationCallbacks*                pAllocator,
+        VkIndirectCommandsLayoutNV*                 pIndirectCommandsLayout);
 
     VkResult ImportSemaphore(
         VkSemaphore                semaphore,
@@ -1421,6 +1427,22 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout2KHR(
     VkImage                                     image,
     const VkImageSubresource2KHR*               pSubresource,
     VkSubresourceLayout2KHR*                    pLayout);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateIndirectCommandsLayoutNV(
+    VkDevice                                            device,
+    const VkIndirectCommandsLayoutCreateInfoNV*         pCreateInfo,
+    const VkAllocationCallbacks*                        pAllocator,
+    VkIndirectCommandsLayoutNV*                         pIndirectCommandsLayout);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyIndirectCommandsLayoutNV(
+    VkDevice                                            device,
+    VkIndirectCommandsLayoutNV                          indirectCommandsLayout,
+    const VkAllocationCallbacks*                        pAllocator);
+
+VKAPI_ATTR void VKAPI_CALL vkGetGeneratedCommandsMemoryRequirementsNV(
+    VkDevice                                            device,
+    const VkGeneratedCommandsMemoryRequirementsInfoNV*  pInfo,
+    VkMemoryRequirements2*                              pMemoryRequirements);
 
 } // namespace entry
 

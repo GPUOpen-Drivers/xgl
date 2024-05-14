@@ -1852,6 +1852,8 @@ inline Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings&
             Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::One);
         case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:    return PalFmt(Pal::ChNumFormat::P010,
             Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::One);
+        case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:    return PalFmt(Pal::ChNumFormat::P016,
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::One);
         case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:    return PalFmt(Pal::ChNumFormat::P016,
             Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::One);
         case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:    return PalFmt(Pal::ChNumFormat::P210,
@@ -3961,6 +3963,56 @@ inline VkShaderStageFlags VkgcToVkShaderStageMask(uint32_t vkgcShaderStageFlags)
 }
 
 // =====================================================================================================================
+// Convert Vulkan shader stage flag bits to PAL equivalent
+inline Pal::ShaderStageFlagBits VkToPalShaderStageMask(
+    VkShaderStageFlags vkFlags)
+{
+    uint32_t palShaderStageMask = 0;
+
+    if (vkFlags & VK_SHADER_STAGE_COMPUTE_BIT)
+    {
+        palShaderStageMask |= Pal::ApiShaderStageCompute;
+    }
+
+    if (vkFlags & VK_SHADER_STAGE_VERTEX_BIT)
+    {
+        palShaderStageMask |= Pal::ApiShaderStageVertex;
+    }
+
+    if (vkFlags & VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)
+    {
+        palShaderStageMask |= Pal::ApiShaderStageHull;
+    }
+
+    if (vkFlags & VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)
+    {
+        palShaderStageMask |= Pal::ApiShaderStageDomain;
+    }
+
+    if (vkFlags & VK_SHADER_STAGE_GEOMETRY_BIT)
+    {
+        palShaderStageMask |= Pal::ApiShaderStageGeometry;
+    }
+
+    if (vkFlags & VK_SHADER_STAGE_FRAGMENT_BIT)
+    {
+        palShaderStageMask |= Pal::ApiShaderStagePixel;
+    }
+
+    if (vkFlags & VK_SHADER_STAGE_TASK_BIT_EXT)
+    {
+        palShaderStageMask |= Pal::ApiShaderStageTask;
+    }
+
+    if (vkFlags & VK_SHADER_STAGE_MESH_BIT_EXT)
+    {
+        palShaderStageMask |= Pal::ApiShaderStageMesh;
+    }
+
+    return static_cast<Pal::ShaderStageFlagBits>(palShaderStageMask);
+}
+
+// =====================================================================================================================
 struct UberFetchShaderFormatInfo
 {
     Pal::SwizzledFormat swizzledFormat;
@@ -4020,6 +4072,26 @@ VkFormat GetLowPrecisionDepthFormat(
     VkFormat                  format,
     const VkImageUsageFlags&  imageUsage,
     const RuntimeSettings&    settings);
+
+const char* VkResultName(VkResult result);
+
+inline std::chrono::nanoseconds Uint64ToChronoNano(uint64_t nanoSeconds)
+{
+    const uint64_t maxNano = static_cast<uint64_t>(std::chrono::nanoseconds::max().count());
+    return std::chrono::nanoseconds { Util::Min(nanoSeconds, maxNano) };
+}
+
+inline std::chrono::milliseconds Uint64ToChronoMilli(uint64_t milliSeconds)
+{
+    const uint64_t maxMilli = static_cast<uint64_t>(std::chrono::milliseconds::max().count());
+    return std::chrono::milliseconds { Util::Min(milliSeconds, maxMilli) };
+}
+
+inline std::chrono::seconds Uint64ToChronoSeconds(uint64_t seconds)
+{
+    const uint64_t maxSeconds = static_cast<uint64_t>(std::chrono::seconds::max().count());
+    return std::chrono::seconds { Util::Min(seconds, maxSeconds) };
+}
 
 } // namespace vk
 

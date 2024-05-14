@@ -63,6 +63,8 @@ macro(xgl_options)
 
     option(XGL_BUILD_PHOENIX1 "Build vulkan for PHOENIX1" ON)
 
+    option(XGL_BUILD_PHOENIX2 "Build vulkan for PHOENIX2" ON)
+
     option(XGL_BUILD_TESTS "Build tests?" OFF)
 
     option(XGL_BUILD_TOOLS "Build tools?" OFF)

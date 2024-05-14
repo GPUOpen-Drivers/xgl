@@ -69,6 +69,7 @@
 #include "include/graphics_pipeline_common.h"
 #include "include/vk_graphics_pipeline_library.h"
 #include "include/internal_layer_hooks.h"
+#include "include/vk_indirect_commands_layout.h"
 
 #if VKI_RAY_TRACING
 #include "raytrace/ray_tracing_device.h"
@@ -2394,7 +2395,10 @@ VkResult Device::WaitForFences(
             ppPalFences[i] = Fence::ObjectFromHandle(pFences[i])->PalFence(DefaultDeviceIndex);
         }
 
-        palResult = PalDevice(DefaultDeviceIndex)->WaitForFences(fenceCount, ppPalFences, waitAll != VK_FALSE, timeout);
+        palResult = PalDevice(DefaultDeviceIndex)->WaitForFences(fenceCount,
+                                                                 ppPalFences,
+                                                                 waitAll != VK_FALSE,
+                                                                 Uint64ToChronoNano(timeout));
     }
     else
     {
@@ -2424,7 +2428,7 @@ VkResult Device::WaitForFences(
                 palResult = PalDevice(deviceIdx)->WaitForFences(perDeviceFenceCount,
                                                                 ppPalFences,
                                                                 waitAll != VK_FALSE,
-                                                                timeout);
+                                                                Uint64ToChronoNano(timeout));
             }
         }
     }
@@ -3172,8 +3176,9 @@ VkResult Device::WaitSemaphores(
     {
         flags |= Pal::HostWaitFlags::HostWaitAny;
     }
+
     palResult = PalDevice(DefaultDeviceIndex)->WaitForSemaphores(pWaitInfo->semaphoreCount, ppPalSemaphores,
-            pWaitInfo->pValues, flags, timeout);
+            pWaitInfo->pValues, flags, Uint64ToChronoNano(timeout));
 
     return PalToVkResult(palResult);
 }
@@ -3638,6 +3643,15 @@ VkResult Device::AllocBorderColorPalette()
     }
 
     return result;
+}
+
+// =================================================================================================================
+VkResult Device::CreateIndirectCommandsLayout(
+    const VkIndirectCommandsLayoutCreateInfoNV* pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkIndirectCommandsLayoutNV*                 pIndirectCommandsLayout)
+{
+    return IndirectCommandsLayout::Create(this, pCreateInfo, pAllocator, pIndirectCommandsLayout);
 }
 
 // =====================================================================================================================
@@ -5383,6 +5397,45 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout2KHR(
         &pSubresource->imageSubresource,
         &pLayout->subresourceLayout);
 }
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetGeneratedCommandsMemoryRequirementsNV(
+    VkDevice                                            device,
+    const VkGeneratedCommandsMemoryRequirementsInfoNV*  pInfo,
+    VkMemoryRequirements2*                              pMemoryRequirements)
+{
+    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    const IndirectCommandsLayout* pLayout = IndirectCommandsLayout::ObjectFromHandle(pInfo->indirectCommandsLayout);
+
+    pLayout->CalculateMemoryRequirements(pDevice, pMemoryRequirements);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateIndirectCommandsLayoutNV(
+    VkDevice                                            device,
+    const VkIndirectCommandsLayoutCreateInfoNV*         pCreateInfo,
+    const VkAllocationCallbacks*                        pAllocator,
+    VkIndirectCommandsLayoutNV*                         pIndirectCommandsLayout)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+
+    return pDevice->CreateIndirectCommandsLayout(pCreateInfo, pAllocCB, pIndirectCommandsLayout);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkDestroyIndirectCommandsLayoutNV(
+    VkDevice                                            device,
+    VkIndirectCommandsLayoutNV                          indirectCommandsLayout,
+    const VkAllocationCallbacks*                        pAllocator)
+{
+    if (indirectCommandsLayout != VK_NULL_HANDLE)
+    {
+        Device* pDevice = ApiDevice::ObjectFromHandle(device);
+        const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+
+        IndirectCommandsLayout::ObjectFromHandle(indirectCommandsLayout)->Destroy(pDevice, pAllocCB);
+    }
+}
 
 } // entry
 
@@ -5393,3 +5446,6 @@ template
 VkPipelineCreateFlags2KHR vk::Device::GetPipelineCreateFlags<VkRayTracingPipelineCreateInfoKHR>(
     const VkRayTracingPipelineCreateInfoKHR* pCreateInfo);
 #endif
+template
+VkPipelineCreateFlags2KHR vk::Device::GetPipelineCreateFlags<VkComputePipelineCreateInfo>(
+    const VkComputePipelineCreateInfo* pCreateInfo);

@@ -40,6 +40,7 @@
 #include "include/vk_instance.h"
 #include "include/vk_utils.h"
 #include "include/virtual_stack_mgr.h"
+#include "include/internal_mem_mgr.h"
 
 #include "palQueue.h"
 
@@ -56,7 +57,7 @@ namespace vk
 struct CmdBufState;
 class  CmdBufferRing;
 class  Device;
-class  DevModeMgr;
+class  IDevMode;
 class  ApiQueue;
 class  Instance;
 class  SwapChain;
@@ -65,6 +66,15 @@ class  TurboSync;
 class  SqttQueueState;
 class  PhysicalDevice;
 class  Memory;
+
+#if VKI_RAY_TRACING
+// Memory tracker for CPS stack memory to be freed
+struct CpsMemTracker
+{
+    InternalMemory* pMem;
+    Pal::IFence*    pFence;
+};
+#endif
 
 // =====================================================================================================================
 // A Vulkan queue.
@@ -255,10 +265,6 @@ public:
         const Pal::CmdBufInfo&     cmdBufInfo,
         CmdBufState*               pCmdBufState);
 
-    VkResult SynchronizeBackBuffer(
-        Memory* pMemory,
-        uint32_t deviceIdx);
-
 protected:
     // This is a helper structure during a virtual remap (sparse bind) call to batch remaps into
     // as few calls as possible.
@@ -353,8 +359,16 @@ protected:
         const Pal::PresentSwapChainInfo* pPresentInfo);
 
     void DevModeFrameBoundary(
-        DevModeMgr*               pDevModeMgr,
+        IDevMode*                 pDevMode,
         const VkFrameBoundaryEXT* pFrameBoundaryInfo);
+
+#if VKI_RAY_TRACING
+    void FreeRetiredCpsStackMem();
+
+    Pal::IFence* GetCpsStackMem(
+        uint32_t deviceIdx,
+        uint64_t size);
+#endif
 
     Pal::IQueue*                       m_pPalQueues[MaxPalDevices];
     Pal::IQueue*                       m_pPalBackupQueues[MaxPalDevices];
@@ -369,7 +383,7 @@ protected:
     uint32_t                           m_queueFamilyIndex;   // This queue's family index
     uint32_t                           m_queueIndex;         // This queue's index within the node group
     uint32_t                           m_queueFlags;
-    DevModeMgr*                        m_pDevModeMgr;
+    IDevMode*                          m_pDevMode;
     VirtualStackAllocator*             m_pStackAllocator;
     VidPnSourceFlipStatus              m_flipStatus;
     Pal::PerSourceFrameMetadataControl m_palFrameMetadataControl;
@@ -378,6 +392,15 @@ protected:
     CmdBufferRing*                     m_pCmdBufferRing;
 
     const bool                         m_isDeviceIndependent;
+
+#if VKI_RAY_TRACING
+    InternalMemory*                    m_pCpsGlobalMem;
+
+    typedef Util::List<CpsMemTracker, PalAllocator>         CpsMemDestroyList;
+    typedef Util::ListIterator<CpsMemTracker, PalAllocator> CpsMemDestroyListIterator;
+
+    CpsMemDestroyList                  m_cpsMemDestroyList; // list of cps stack memory to be destroyed
+#endif
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Queue);

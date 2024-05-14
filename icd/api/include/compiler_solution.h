@@ -86,6 +86,7 @@ struct LlpcShaderLibraryBlobHeader
 {
     uint32_t binaryLength;    // Partial ELF binary length
     uint32_t fragMetaLength;  // Fragment shader metadata length
+    bool     requireFullPipeline; // Whether require full pipeline
 };
 // =====================================================================================================================
 // Pipeline Creation feedback info.
@@ -173,6 +174,16 @@ static GraphicsLibraryType GetGraphicsLibraryType(
 {
     VK_ASSERT(stage < ShaderStage::ShaderStageGfxCount);
     return stage == ShaderStage::ShaderStageFragment ? GraphicsLibraryFragment : GraphicsLibraryPreRaster;
+}
+
+// =====================================================================================================================
+static VkGraphicsPipelineLibraryFlagBitsEXT GetVkGraphicsLibraryFlagBit(
+    const ShaderStage stage)
+{
+    VK_ASSERT(stage < ShaderStage::ShaderStageGfxCount);
+    return stage == ShaderStage::ShaderStageFragment ?
+        VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT :
+        VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT;
 }
 
 // =====================================================================================================================

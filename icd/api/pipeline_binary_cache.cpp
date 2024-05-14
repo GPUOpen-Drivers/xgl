@@ -109,7 +109,7 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
     const RuntimeSettings&    settings,
     const char*               pDefaultCacheFilePath,
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    vk::DevModeMgr*           pDevModeMgr,
+    vk::IDevMode*             pDevMode,
 #endif
     uint32_t                  expectedEntries,
     size_t                    initDataSize,
@@ -129,7 +129,7 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
         pObj = VK_PLACEMENT_NEW(pMem) PipelineBinaryCache(pAllocationCallbacks, gfxIp, expectedEntries);
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-        pObj->m_pDevModeMgr = pDevModeMgr;
+        pObj->m_pDevMode = pDevMode;
 #endif
 
         if (pObj->Initialize(settings, createArchiveLayers, pDefaultCacheFilePath, pKey) != VK_SUCCESS)
@@ -193,7 +193,7 @@ PipelineBinaryCache::PipelineBinaryCache(
     m_pPlatformKey         { nullptr },
     m_pTopLayer            { nullptr },
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    m_pDevModeMgr          { nullptr },
+    m_pDevMode             { nullptr },
     m_pReinjectionLayer    { nullptr },
     m_hashMapping          { 32, &m_palAllocator },
 #endif
@@ -530,9 +530,9 @@ void PipelineBinaryCache::FreePipelineBinary(
 void PipelineBinaryCache::Destroy()
 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    if (m_pDevModeMgr != nullptr)
+    if (m_pDevMode != nullptr)
     {
-        m_pDevModeMgr->DeregisterPipelineCache(this);
+        m_pDevMode->DeregisterPipelineCache(this);
     }
 #endif
 
@@ -575,7 +575,7 @@ VkResult PipelineBinaryCache::Initialize(
     if ((result == VK_SUCCESS) &&
         (m_pReinjectionLayer != nullptr))
     {
-        Util::Result palResult = m_pDevModeMgr->RegisterPipelineCache(
+        Util::Result palResult = m_pDevMode->RegisterPipelineCache(
             this,
             settings.devModePipelineUriServicePostSizeLimit);
 
@@ -612,7 +612,7 @@ VkResult PipelineBinaryCache::InitReinjectionLayer(
 {
     VkResult result = VK_ERROR_FEATURE_NOT_PRESENT;
 
-    if (m_pDevModeMgr != nullptr)
+    if (m_pDevMode != nullptr)
     {
         Util::MemoryCacheCreateInfo info = {};
         Util::AllocCallbacks        allocCbs = {
@@ -1080,13 +1080,17 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
 
                     if (settings.allowCleanUpCacheDirectory)
                     {
-                        uint64 totalSize = 0, oldestTime = 0;
+                        uint64                  totalSize  = 0;
+                        Util::SecondsSinceEpoch oldestTime = { };
                         if (Util::GetStatusOfDir(pCachePath, &totalSize, &oldestTime) == Util::Result::Success)
                         {
                             if (totalSize >= settings.pipelineCacheDefaultLocationLimitation)
                             {
-                                Util::RemoveFilesOfDirOlderThan(pCachePath,
-                                                                oldestTime + settings.thresholdOfCleanUpCache);
+                                const uint64 sec = oldestTime.time_since_epoch().count() +
+                                                   settings.thresholdOfCleanUpCache;
+
+                                Util::RemoveFilesOfDirOlderThan(
+                                    pCachePath, Util::SecondsSinceEpoch { Uint64ToChronoSeconds(sec) });
                             }
                         }
                     }

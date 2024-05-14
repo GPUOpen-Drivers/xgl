@@ -72,7 +72,7 @@ public:
         VkPipeline*                            pPipeline);
 
     static VkResult CreateCacheId(
-        Device*                                 pDevice,
+        const Device*                           pDevice,
         const VkComputePipelineCreateInfo*      pCreateInfo,
         VkPipelineCreateFlags2KHR               flags,
         ComputePipelineShaderStageInfo*         pShaderInfo,

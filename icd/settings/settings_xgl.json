@@ -2906,7 +2906,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": 1
+        "Default": 31
       },
       "Type": "uint32",
       "Scope": "Driver"
@@ -3203,10 +3203,40 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": 1.3
+        "Default": 1.15
       },
       "Type": "float",
       "Name": "RtTriangleSplittingFactor",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "If RtEnableTriangleSplitting is enabled, this setting will limit the maximum number of splits per triangle. A value=0 disables the setting.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "RtTriangleSplittingBudgetPerTriangle",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "If RtEnableTriangleSplitting is enabled, this factor will affect the priority in triangle splitting.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 1.0
+      },
+      "Type": "float",
+      "Name": "RtTriangleSplittingPriority",
       "Scope": "Driver"
     },
     {
@@ -3924,6 +3954,21 @@
       "Scope": "Driver"
     },
     {
+      "Description": "When the LBVH builder is selected, enable the Fast LBVH path.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "RtEnableFastLBVH",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Waves per SIMD to launch for parallel build. 0 chooses the default.",
       "Tags": [
         "Ray Tracing"
@@ -3979,21 +4024,6 @@
       "Defaults": {
         "Default": 32
       }
-    },
-    {
-      "Name": "RtEnableAccelerationStructureScratchMemoryDump",
-      "Description": "Dumps scratch memory from acceleration structures. Written to the directory specified by BaseLogDirPath.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Scope": "Driver"
     },
     {
       "Name": "RtEnableBuildAccelStructStats",
@@ -5316,21 +5346,6 @@
       },
       "Type": "uint32",
       "Name": "RtIndirectVgprLimit",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Acceleration structures used in TraceRay are tracked for dumping purposes. Disables tracking during Build calls.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "EnableTraceRayAccelStructTracking",
       "Scope": "Driver"
     },
     {
@@ -8743,9 +8758,6 @@
       "Tags": [
         "Debugging"
       ],
-      "BuildTypes": [
-        "DEBUG"
-      ],
       "Defaults": {
         "Default": false
       },
@@ -8758,9 +8770,6 @@
       "Tags": [
         "Debugging"
       ],
-      "BuildTypes": [
-        "DEBUG"
-      ],
       "Defaults": {
         "Default": ""
       },
@@ -8772,9 +8781,6 @@
       "Description": "Timeout the driver in millisecond to give debuggers a chance to load all of the symbols",
       "Tags": [
         "Debugging"
-      ],
-      "BuildTypes": [
-        "DEBUG"
       ],
       "Defaults": {
         "Default": 0
@@ -8945,8 +8951,20 @@
       "Name": "ReportSuboptimalPresentAsOutOfDate"
     },
     {
-      "Name": "ExportNVComputeShaderDerivatives",
+      "Name": "ExportNvComputeShaderDerivatives",
       "Description": "Export extension NV_compute_shader_derivatives",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "ExportNvDeviceGeneratedCommands",
+      "Description": "Export extension NV_device_generated_commands and NV_device_generated_commands_compute",
       "Tags": [
         "General"
       ],

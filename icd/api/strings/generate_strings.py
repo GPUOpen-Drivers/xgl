@@ -149,7 +149,7 @@ def generate_entry_point_condition(f, name, cond):
 def get_compile_condition(cond):
     """Assemble condition macro name"""
     cond = cond.replace('@none', '')
-    cond = cond.replace('@win32', '_WIN32')
+    cond = cond.replace('@win32', 'defined(_WIN32)')
 
     core = re.compile(r'@core(?:_build_only)?\( ( [^\.]* ) \. ( [^\)]* ) \)', re.VERBOSE)
     cond = core.sub(r'VK_VERSION_\1_\2', cond)

@@ -1110,15 +1110,6 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         }
     }
 
-    if (shouldCompile)
-    {
-        if ((settings.ignoreFlagFailOnPipelineCompileRequired == false) &&
-            (pCreateInfo->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT))
-        {
-            result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
-        }
-    }
-
     if (settings.enablePipelineDump && (result == VK_SUCCESS))
     {
         Vkgc::PipelineDumpOptions dumpOptions = {};
@@ -1181,6 +1172,9 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
             DumpPipelineMetadata(pPipelineDumpHandle, pCreateInfo->pBinaryMetadata);
         }
 
+        char resultMsg[64];
+        Util::Snprintf(resultMsg, sizeof(resultMsg), "\n;CompileResult=%s\n", VkResultName(result));
+        Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, resultMsg);
         Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
     }
 
@@ -1244,6 +1238,9 @@ VkResult PipelineCompiler::CreateGraphicsShaderBinary(
 
     if (pPipelineDumpHandle != nullptr)
     {
+        char resultMsg[64];
+        Util::Snprintf(resultMsg, sizeof(resultMsg), "\n;CompileResult=%s\n", VkResultName(result));
+        Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, resultMsg);
         Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
     }
 
@@ -1299,12 +1296,19 @@ VkResult PipelineCompiler::CreateColorExportShaderLibrary(
             Vkgc::PipelineBuildInfo pipelineInfo = {};
             GraphicsPipelineBuildInfo graphicsInfo = pCreateInfo->pipelineInfo;
             graphicsInfo.task.pModuleData = nullptr;
+            graphicsInfo.task.options.clientHash = {};
             graphicsInfo.vs.pModuleData = nullptr;
+            graphicsInfo.vs.options.clientHash = {};
             graphicsInfo.tcs.pModuleData = nullptr;
+            graphicsInfo.tcs.options.clientHash = {};
             graphicsInfo.tes.pModuleData = nullptr;
+            graphicsInfo.tes.options.clientHash = {};
             graphicsInfo.gs.pModuleData = nullptr;
+            graphicsInfo.gs.options.clientHash = {};
             graphicsInfo.mesh.pModuleData = nullptr;
+            graphicsInfo.mesh.options.clientHash = {};
             graphicsInfo.fs.pModuleData = nullptr;
+            graphicsInfo.fs.options.clientHash = {};
             pipelineInfo.pGraphicsInfo = &graphicsInfo;
 
             pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions,
@@ -1364,6 +1368,9 @@ VkResult PipelineCompiler::CreateColorExportShaderLibrary(
 
         if (pPipelineDumpHandle != nullptr)
         {
+            char resultMsg[64];
+            Util::Snprintf(resultMsg, sizeof(resultMsg), "\n;CompileResult=%s\n", VkResultName(result));
+            Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, resultMsg);
             Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
         }
         pCreateInfo->pipelineInfo.unlinked = false;
@@ -1477,14 +1484,6 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
             }
         }
     }
-    if (shouldCompile)
-    {
-        if ((settings.ignoreFlagFailOnPipelineCompileRequired == false) &&
-            (pCreateInfo->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT))
-        {
-            result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
-        }
-    }
 
     if (settings.enablePipelineDump && (result == VK_SUCCESS))
     {
@@ -1540,6 +1539,9 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         {
             Vkgc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, pPipelineBinary);
         }
+        char resultMsg[64];
+        Util::Snprintf(resultMsg, sizeof(resultMsg), "\n;CompileResult=%s\n", VkResultName(result));
+        Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, resultMsg);
         Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
     }
 
@@ -2091,18 +2093,6 @@ static void BuildMultisampleStateInFoi(
 }
 
 // =====================================================================================================================
-static void BuildViewportState(
-    const Device*                            pDevice,
-    const VkPipelineViewportStateCreateInfo* pVs,
-    const uint64_t                           dynamicStateFlags,
-    GraphicsPipelineBinaryCreateInfo*        pCreateInfo)
-{
-    if (pVs != nullptr)
-    {
-    }
-}
-
-// =====================================================================================================================
 void PipelineCompiler::BuildNggState(
     const Device*                     pDevice,
     const VkShaderStageFlagBits       activeStages,
@@ -2228,18 +2218,10 @@ void PipelineCompiler::BuildPipelineShaderInfo(
         pCompiler->ApplyDefaultShaderOptions(stage,
                                              pShaderInfoIn->flags,
                                              &pShaderInfoOut->options);
-        if (pShaderInfoIn->pModuleHandle != nullptr)
-        {
-            Pal::ShaderHash clientHash = ShaderModule::GetCodeHash(
-                pShaderInfoIn->pModuleHandle->codeHash, pShaderInfoIn->pEntryPoint);
-            pShaderInfoOut->options.clientHash.lower = clientHash.lower;
-            pShaderInfoOut->options.clientHash.upper = clientHash.upper;
-        }
-        else
-        {
-            pShaderInfoOut->options.clientHash.lower = pShaderInfoIn->codeHash.lower;
-            pShaderInfoOut->options.clientHash.upper = pShaderInfoIn->codeHash.upper;
-        }
+
+        pShaderInfoOut->options.clientHash.lower = pShaderInfoIn->codeHash.lower;
+        pShaderInfoOut->options.clientHash.upper = pShaderInfoIn->codeHash.upper;
+
         ApplyProfileOptions(pDevice,
                             static_cast<uint32_t>(stage),
                             pPipelineOptions,
@@ -2441,11 +2423,15 @@ static void BuildColorBlendState(
         {
             uint32_t location = i;
 
-            if ((extStructs.pRenderingAttachmentLocationInfo                                != nullptr) &&
-                (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations     != nullptr) &&
-                (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations[i]  != VK_ATTACHMENT_UNUSED))
+            if ((extStructs.pRenderingAttachmentLocationInfo                            != nullptr) &&
+                (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations != nullptr))
             {
                 location = extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations[i];
+
+                if (location == VK_ATTACHMENT_UNUSED)
+                {
+                    continue;
+                }
             }
 
             auto pLlpcCbDst = &pCreateInfo->pipelineInfo.cbState.target[location];
@@ -2623,11 +2609,6 @@ static void BuildPreRasterizationShaderState(
         (vertexInputAbsent && pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink);
 
     BuildRasterizationState(pIn->pRasterizationState, dynamicStateFlags, &isConservativeOverestimation, pCreateInfo);
-
-    if (pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable == false)
-    {
-        BuildViewportState(pDevice, pIn->pViewportState, dynamicStateFlags, pCreateInfo);
-    }
 
     PipelineCompiler::BuildNggState(
         pDevice, activeStages, isConservativeOverestimation, unrestrictedPrimitiveTopology, pCreateInfo);
@@ -3681,7 +3662,8 @@ void PipelineCompiler::FreeGraphicsPipelineCreateInfo(
         pCreateInfo->pTempBuffer = nullptr;
     }
 
-    if (pCreateInfo->pBinaryMetadata->internalBufferInfo.pData != nullptr)
+    if ((pCreateInfo->pBinaryMetadata != nullptr) &&
+        (pCreateInfo->pBinaryMetadata->internalBufferInfo.pData != nullptr))
     {
         pInstance->FreeMem(pCreateInfo->pBinaryMetadata->internalBufferInfo.pData);
         pCreateInfo->pBinaryMetadata->internalBufferInfo.pData = nullptr;
@@ -4074,15 +4056,6 @@ VkResult PipelineCompiler::CreateRayTracingPipelineBinary(
 
     bool shaderModuleReplaced = false;
 
-    if (shouldCompile)
-    {
-        if ((settings.ignoreFlagFailOnPipelineCompileRequired == false) &&
-            (pCreateInfo->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT))
-        {
-            result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
-        }
-    }
-
     if (settings.enablePipelineDump && (result == VK_SUCCESS))
     {
         Vkgc::PipelineDumpOptions dumpOptions = {};
@@ -4236,6 +4209,9 @@ VkResult PipelineCompiler::CreateRayTracingPipelineBinary(
             }
         }
 
+        char resultMsg[64];
+        Util::Snprintf(resultMsg, sizeof(resultMsg), "\n;CompileResult=%s\n", VkResultName(result));
+        Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, resultMsg);
         Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
     }
 
@@ -5597,6 +5573,48 @@ void PipelineCompiler::DumpPipelineMetadata(
         }
         Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, "\n");
     }
+}
+
+// =====================================================================================================================
+void PipelineCompiler::DumpPipeline(
+    const RuntimeSettings&         settings,
+    const Vkgc::PipelineBuildInfo& pipelineInfo,
+    uint64_t                       apiPsoHash,
+    uint32_t                       binaryCount,
+    const Vkgc::BinaryData*        pElfBinaries,
+    VkResult                       result)
+{
+    Vkgc::PipelineDumpOptions dumpOptions = {};
+    dumpOptions.pDumpDir                 = settings.pipelineDumpDir;
+    dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
+    dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
+    dumpOptions.dumpDuplicatePipelines   = settings.dumpDuplicatePipelines;
+
+    void* pPipelineDumpHandle = nullptr;
+    if (settings.dumpPipelineWithApiHash)
+    {
+        pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(
+            &dumpOptions, pipelineInfo, apiPsoHash);
+    }
+    else
+    {
+        pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(
+            &dumpOptions, pipelineInfo);
+    }
+
+    for (uint32_t i = 0; i < binaryCount; i++)
+    {
+        if (pElfBinaries[i].codeSize > 0 && pElfBinaries[i].pCode != nullptr)
+        {
+            Vkgc::IPipelineDumper::DumpPipelineBinary(
+                pPipelineDumpHandle, m_gfxIp, &pElfBinaries[i]);
+        }
+    }
+
+    char resultMsg[64];
+    Util::Snprintf(resultMsg, sizeof(resultMsg), "\n;CompileResult=%s\n", VkResultName(result));
+    Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, resultMsg);
+    Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
 }
 
 // =====================================================================================================================

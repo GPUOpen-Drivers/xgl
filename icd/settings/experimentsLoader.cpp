@@ -23,33 +23,49 @@
  *
  **********************************************************************************************************************/
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
+#include "experimentsLoader.h"
+#include "dd_settings_service.h"
+#include "palPlatform.h"
 
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
+namespace vk
+{
+// =====================================================================================================================
+ExperimentsLoader::ExperimentsLoader(
+    Pal::IPlatform* pPlatform)
+    :
+    DevDriver::SettingsBase(&m_settings, sizeof(m_settings)),
+    m_pPlatform(pPlatform)
+{
 
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
+}
 
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
+// =====================================================================================================================
+ExperimentsLoader::~ExperimentsLoader()
+{
+}
 
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   304
+// =====================================================================================================================
+void ExperimentsLoader::Destroy()
+{
+}
 
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
+// =====================================================================================================================
+Pal::Result ExperimentsLoader::Init()
+{
+    Pal::Result palResult = Pal::Result::Unsupported;
+    DD_RESULT result = SetupDefaultsAndPopulateMap();
+    if (result == DD_RESULT_SUCCESS)
+    {
+        DevDriver::SettingsRpcService* pSettingsRpcService = m_pPlatform->GetSettingsRpcService();
+        if (pSettingsRpcService)
+        {
+            pSettingsRpcService->RegisterSettingsComponent(this);
+        }
 
-// These values specify the driver ID and driver info string
-#define VULKAN_DRIVER_ID            VK_DRIVER_ID_AMD_OPEN_SOURCE_KHR  // "AMDOPEN"
-#define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
-#define VULKAN_DRIVER_INFO_STR      "2024.Q2.1"
-#define VULKAN_DRIVER_INFO_STR_LLPC "(LLPC)"
+        palResult = Pal::Result::Success;
+    }
 
-// These values tell which version of the conformance test the driver is compliant against
-#define CTS_VERSION_MAJOR           1
-#define CTS_VERSION_MINOR           3
-#define CTS_VERSION_SUBMINOR        5
-#define CTS_VERSION_PATCH           2
+    return palResult;
+}
+
+}

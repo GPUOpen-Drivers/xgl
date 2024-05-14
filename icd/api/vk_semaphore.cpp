@@ -481,7 +481,7 @@ VkResult Semaphore::WaitSemaphoreValue(
         VK_ASSERT(pSemaphore->IsTimelineSemaphore());
         pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
         pSemaphore->RestoreSemaphore();
-        palResult = pPalSemaphore->WaitSemaphoreValue(value, timeout);
+        palResult = pPalSemaphore->WaitSemaphoreValue(value, Uint64ToChronoNano(timeout));
     }
 
     return PalToVkResult(palResult);

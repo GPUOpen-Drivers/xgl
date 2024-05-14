@@ -1,0 +1,287 @@
+{
+  "Version": 1,
+  "ComponentName": "Experiments",
+  "Enums": [
+    {
+      "Name": "ExpShaderWaveSize",
+      "Values": [
+        {
+          "Name": "ExpWaveSizeAuto",
+          "Value": 0,
+          "Description": "Select automatically"
+        },
+        {
+          "Name": "ExpWaveSizeWave64",
+          "Value": 2,
+          "Description": "Force 64 threads per wave"
+        },
+        {
+          "Name": "ExpWaveSizeWave32",
+          "Value": 3,
+          "Description": "Force 32 threads per wave"
+        },
+        {
+          "Name": "ExpWaveSizeInvalid",
+          "Value": 4,
+          "Description": "Invalid Wave Size"
+        }
+      ]
+    }
+  ],
+  "Settings": [
+    {
+      "Description": "Disable mesh shader support as reported by graphics API.",
+      "Tags": [
+        "Feature"
+      ],
+      "Type": "bool",
+      "Name": "ExpMeshShaderSupport",
+      "ExperimentName": "Disable Mesh Shader Support"
+    },
+    {
+      "Description": "Disable support for ray tracing as reported by graphics API.",
+      "Tags": [
+        "Feature"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Type": "bool",
+      "Name": "ExpRayTracingSupport",
+      "ExperimentName": "Disable Ray Tracing Support"
+    },
+    {
+      "Description": "Disable support for variable rate shading as reported by graphics API.",
+      "Tags": [
+        "Feature"
+      ],
+      "Type": "bool",
+      "Name": "ExpVariableRateShadingSupport",
+      "ExperimentName": "Disable Variable Rate Shading"
+    },
+    {
+      "Description": "Disable support for native 16-bit types in shaders.",
+      "Tags": [
+        "Feature"
+      ],
+      "Type": "bool",
+      "Name": "ExpNative16BitTypesSupport",
+      "ExperimentName": "Disable native 16-bit types support"
+    },
+    {
+      "Description": "Disable support for custom AMD extensions, as offered by AMD GPU Services library in DX12 and VK_AMD_* extensions in Vulkan.",
+      "Tags": [
+        "Feature"
+      ],
+      "Type": "bool",
+      "Name": "ExpAmdVendorExtensions",
+      "ExperimentName": "Disable AMD vendor extensions support"
+    },
+    {
+      "Description": "Disable asynchronous compute queues. When disabled, Vulkan doesn't expose additional compute queues.",
+      "Tags": [
+        "Feature"
+      ],
+      "Type": "bool",
+      "Name": "ExpComputeQueueSupport",
+      "ExperimentName": "Disable compute queue support"
+    },
+    {
+      "Description": "Disable barrier optimizations.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Type": "bool",
+      "Name": "ExpBarrierOptimizations",
+      "ExperimentName": "Disable barrier optimizations"
+    },
+    {
+      "Description": "Disable miscellaneous shader compiler optimizations.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Type": "bool",
+      "Name": "ExpShaderCompilerOptimizations",
+      "ExperimentName": "Disable shader compiler optimizations"
+    },
+    {
+      "Description": "Disable optimizations applied when building ray tracing acceleration structures.",
+      "Tags": [
+        "Optimization"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Type": "bool",
+      "Name": "ExpAccelStructureOpt",
+      "ExperimentName": "Disable acceleration structure optimizations"
+    },
+    {
+      "Description": "Force specific wave (subgroup) size in all vertex shaders where possible.",
+      "Tags": [
+        "Optimization"
+      ],
+      "ValidValues": {
+        "Name": "ExpShaderWaveSize"
+      },
+      "Type": "enum",
+      "Name": "ExpVsWaveSize",
+      "ExperimentName": "Vertex shader wave size"
+    },
+    {
+      "Description": "Force specific wave (subgroup) size in all tess control shaders where possible.",
+      "Tags": [
+        "Optimization"
+      ],
+      "ValidValues": {
+        "Name": "ExpShaderWaveSize"
+      },
+      "Type": "enum",
+      "Name": "ExpTcsWaveSize",
+      "ExperimentName": "Tess control shader wave size"
+    },
+    {
+      "Description": "Force specific wave (subgroup) size in all tess eval shaders where possible.",
+      "Tags": [
+        "Optimization"
+      ],
+      "ValidValues": {
+        "Name": "ExpShaderWaveSize"
+      },
+      "Type": "enum",
+      "Name": "ExpTesWaveSize",
+      "ExperimentName": "Tess eval shader wave size"
+    },
+    {
+      "Description": "Force specific wave (subgroup) size in all geometry shaders where possible.",
+      "Tags": [
+        "Optimization"
+      ],
+      "ValidValues": {
+        "Name": "ExpShaderWaveSize"
+      },
+      "Type": "enum",
+      "Name": "ExpGsWaveSize",
+      "ExperimentName": "Geometry shader wave size"
+    },
+    {
+      "Description": "Force specific wave (subgroup) size in all fragment shaders where possible.",
+      "Tags": [
+        "Optimization"
+      ],
+      "ValidValues": {
+        "Name": "ExpShaderWaveSize"
+      },
+      "Type": "enum",
+      "Name": "ExpFsWaveSize",
+      "ExperimentName": "Fragment shader wave size"
+    },
+    {
+      "Description": "Force specific wave (subgroup) size in all compute shaders where possible.",
+      "Tags": [
+        "Optimization"
+      ],
+      "ValidValues": {
+        "Name": "ExpShaderWaveSize"
+      },
+      "Type": "enum",
+      "Name": "ExpCsWaveSize",
+      "ExperimentName": "Compute shader wave size"
+    },
+    {
+      "Description": "Force specific wave (subgroup) size in all mesh shaders where possible.",
+      "Tags": [
+        "Optimization"
+      ],
+      "ValidValues": {
+        "Name": "ExpShaderWaveSize"
+      },
+      "Type": "enum",
+      "Name": "ExpMsWaveSize",
+      "ExperimentName": "Mesh shader wave size"
+    },
+    {
+      "Description": "Disables Ray tracing shader inlining",
+      "Tags": [
+        "Optimization"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Type": "bool",
+      "Name": "ExpRayTracingPipelineCompilationMode",
+      "ExperimentName": "Disable Ray tracing shader inlining"
+    },
+    {
+      "Description": "Disable shader cache.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Type": "bool",
+      "Name": "ExpShaderCache",
+      "ExperimentName": "Disable shader cache"
+    },
+    {
+      "Description": "Disable texture color compression.",
+      "Tags": [
+        "Safety"
+      ],
+      "Type": "bool",
+      "Name": "ExpTextureColorCompression",
+      "ExperimentName": "Disable Texture Color Compression"
+    },
+    {
+      "Description": "Zero unbound descriptors.",
+      "Tags": [
+        "Safety"
+      ],
+      "Type": "bool",
+      "Name": "ExpZeroUnboundDescriptors",
+      "ExperimentName": "Zero unbound descriptors"
+    },
+    {
+      "Description": "Make command allocators thread safe.",
+      "Tags": [
+        "Safety"
+      ],
+      "Type": "bool",
+      "Name": "ExpThreadSafeCommandAllocator",
+      "ExperimentName": "Thread-safe command allocator"
+    },
+    {
+      "Description": "Enable / disable vertical synchronization.",
+      "Tags": [
+        "Safety"
+      ],
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "ExpVSyncControl",
+        "Values": [
+          {
+            "Name": "ExpVSyncControlAlwaysOff",
+            "Value": 0,
+            "Description": "Force Vsync Off."
+          },
+          {
+            "Name": "ExpVSyncControlAlwaysOn",
+            "Value": 1,
+            "Description": "Force Vsync On."
+          },
+          {
+            "Name": "ExpVSyncControlInvalid",
+            "Value": 2,
+            "Description": "Invalid value."
+          }
+        ]
+      },
+      "Type": "enum",
+      "Name": "ExpVerticalSynchronization",
+      "ExperimentName": "Enable / disable vertical synchronization"
+    }
+  ],
+  "Tags": [
+    "Feature",
+    "Optimization",
+    "Safety"
+  ]
+}
