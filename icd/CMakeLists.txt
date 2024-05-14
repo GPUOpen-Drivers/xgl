@@ -150,6 +150,7 @@ target_sources(xgl PRIVATE
     api/vk_gpa_session.cpp
     api/vk_descriptor_update_template.cpp
     api/vk_utils.cpp
+    api/vk_indirect_commands_layout.cpp
     api/appopt/barrier_filter_layer.cpp
     api/appopt/strange_brigade_layer.cpp
     api/appopt/g_shader_profile.cpp
@@ -302,6 +303,34 @@ target_sources(xgl PRIVATE
     settings/settings_xgl.json
 )
 
+add_custom_command(
+    OUTPUT ${ICD_SETTINGS_DIR}/g_experiments.cpp ${ICD_SETTINGS_DIR}/g_experiments.h
+    COMMAND ${PYTHON_CMD} ${ICD_GEN_SETTINGS}
+        -i ${ICD_SETTINGS_DIR}/experiments_settings_xgl.json
+        -o ${ICD_SETTINGS_DIR}
+        -g experiments
+        -s settings/experimentsLoader.h
+        --namespaces vk
+        --settings-struct-name ExpSettings
+        --classname ExperimentsLoader
+    DEPENDS ${ICD_GEN_SETTINGS_FILES} ${ICD_SETTINGS_DIR}/experiments_settings_xgl.json
+    COMMENT "Generating Vulkan settings code from experiments_settings_xgl.json"
+)
+
+add_custom_target(
+    RunVKExperimentsGenerator
+    DEPENDS ${ICD_GEN_SETTINGS_FILES} ${ICD_SETTINGS_DIR}/experiments_settings_xgl.json
+    COMMENT "Checking if re-generation is required for settings"
+)
+
+add_dependencies(xgl RunVKExperimentsGenerator)
+
+target_sources(xgl PRIVATE
+    settings/g_experiments.cpp
+    settings/experimentsLoader.cpp
+    settings/experiments_settings_xgl.json
+)
+
 ### ICD api/sqtt ##############################################################
 target_sources(xgl PRIVATE
     api/sqtt/sqtt_layer.cpp
@@ -311,7 +340,10 @@ target_sources(xgl PRIVATE
 
 ### ICD api/devmode ###########################################################
 if(ICD_GPUOPEN_DEVMODE_BUILD)
-    target_sources(xgl PRIVATE api/devmode/devmode_mgr.cpp)
+    target_sources(xgl PRIVATE
+        api/devmode/devmode_rgp.cpp
+        api/devmode/devmode_ubertrace.cpp
+    )
 endif()
 
 ### ICD layer ##################################################################

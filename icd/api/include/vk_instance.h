@@ -60,7 +60,7 @@ namespace vk
 {
 
 // Forward declare classes used in this file.
-class DevModeMgr;
+class IDevMode;
 class ApiInstance;
 class DisplayManager;
 class GpuMemoryEventHandler;
@@ -231,8 +231,8 @@ public:
     Pal::NullGpuId GetNullGpuId() const
         { return m_nullGpuId; }
 
-    DevModeMgr* GetDevModeMgr()
-        { return m_pDevModeMgr; }
+    IDevMode* GetDevModeMgr()
+        { return m_pDevMode; }
 
     GpuMemoryEventHandler* GetGpuMemoryEventHandler() const
         { return m_pGpuMemoryEventHandler; }
@@ -359,7 +359,7 @@ private:
     ScreenObject    m_screens[Pal::MaxScreens];
     void*           m_pScreenStorage;
 
-    DevModeMgr*     m_pDevModeMgr;      // GPUOpen Developer Mode manager.
+    IDevMode*       m_pDevMode;      // GPUOpen Developer Mode manager.
 
     static const size_t APP_INFO_MAX_CHARS = 256;
     char m_applicationName[APP_INFO_MAX_CHARS];

@@ -143,14 +143,12 @@ inline uint64_t TicksToNano(uint64_t ticks)
 // Get driver build time hash
 uint32_t GetBuildTimeHash();
 
-#if DEBUG
 // =====================================================================================================================
 // If turned on and exe name is a match, this function spins idle until we have a debugger hooked.
 void WaitIdleForDebugger(bool waitIdleToggled, const char* pWaitIdleExeName, uint32_t debugTimeout);
-#endif
 
 // =====================================================================================================================
-// This function can be used to get the right externsion structure of specific type in case there are more than one
+// This function can be used to get the right extension structure of specific type in case there are more than one
 // extension is supported
 inline const VkStructHeader* GetExtensionStructure(const VkStructHeader* pHeader, VkStructureType sType)
 {

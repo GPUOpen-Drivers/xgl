@@ -206,7 +206,7 @@ void CompilerSolution::StoreShaderBinaryToCache(
 
     if (updateBinaryCache || updateAppCache || (pCacheBinary->pCode == nullptr))
     {
-        if ((pHeader->binaryLength > 0) && (pCacheBinary->codeSize == 0))
+        if (((pHeader->binaryLength > 0) || (pHeader->requireFullPipeline)) && (pCacheBinary->codeSize == 0))
         {
             size_t cacheSize = sizeof(ShaderLibraryBlobHeader) + pHeader->binaryLength + pHeader->fragMetaLength;
 
@@ -218,7 +218,10 @@ void CompilerSolution::StoreShaderBinaryToCache(
             if (pBuffer != nullptr)
             {
                 memcpy(pBuffer, pHeader, sizeof(ShaderLibraryBlobHeader));
-                memcpy(Util::VoidPtrInc(pBuffer, sizeof(ShaderLibraryBlobHeader)), pBlob, pHeader->binaryLength);
+                if (pBlob != nullptr)
+                {
+                    memcpy(Util::VoidPtrInc(pBuffer, sizeof(ShaderLibraryBlobHeader)), pBlob, pHeader->binaryLength);
+                }
                 if (pFragmentMeta != nullptr)
                 {
                     memcpy(Util::VoidPtrInc(pBuffer, sizeof(ShaderLibraryBlobHeader) + pHeader->binaryLength),

@@ -566,7 +566,9 @@ VkResult DescriptorGpuMemHeap::Init(
             if (pTypeCount[i].type == VK_DESCRIPTOR_TYPE_MUTABLE_EXT)
             {
                 uint32_t maxSize = 0;
-                if (pMutableDescriptorTypeCreateInfoEXT != nullptr)
+                if ((pMutableDescriptorTypeCreateInfoEXT != nullptr) &&
+                    (pMutableDescriptorTypeCreateInfoEXT->pMutableDescriptorTypeLists != nullptr) &&
+                    (i < pMutableDescriptorTypeCreateInfoEXT->mutableDescriptorTypeListCount))
                 {
                     const VkMutableDescriptorTypeListEXT& list =
                         pMutableDescriptorTypeCreateInfoEXT->pMutableDescriptorTypeLists[i];

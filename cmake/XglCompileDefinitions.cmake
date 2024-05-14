@@ -83,6 +83,10 @@ macro(xgl_set_compile_definitions)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_PHOENIX1=1)
     endif()
 
+    if(XGL_BUILD_PHOENIX2)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_PHOENIX2=1)
+    endif()
+
     if(XGL_BUILD_REMBRANDT)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_REMBRANDT=1)
     endif()

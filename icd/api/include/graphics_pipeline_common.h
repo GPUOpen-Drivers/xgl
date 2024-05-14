@@ -334,9 +334,9 @@ protected:
     // Constructor of GraphicsPipelineCommon
     GraphicsPipelineCommon(
 #if VKI_RAY_TRACING
-        bool          hasRayTracing,
+        bool                        hasRayTracing,
 #endif
-        Device* const pDevice)
+        Device* const               pDevice)
         : Pipeline(
             pDevice,
 #if VKI_RAY_TRACING

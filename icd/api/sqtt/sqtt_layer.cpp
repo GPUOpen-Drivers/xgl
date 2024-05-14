@@ -273,14 +273,14 @@ SqttCmdBufferState::SqttCmdBufferState(
     :
     m_pCmdBuf(pCmdBuf),
     m_pSqttMgr(pCmdBuf->VkDevice()->GetSqttMgr()),
-    m_pDevModeMgr(pCmdBuf->VkDevice()->VkInstance()->GetDevModeMgr()),
+    m_pDevMode(pCmdBuf->VkDevice()->VkInstance()->GetDevModeMgr()),
     m_settings(pCmdBuf->VkDevice()->GetRuntimeSettings()),
     m_pNextLayer(m_pSqttMgr->GetNextLayer()),
     m_currentEntryPoint(RgpSqttMarkerGeneralApiType::Invalid),
     m_currentEventId(0),
     m_currentEventType(RgpSqttMarkerEventType::InternalUnknown),
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    m_instructionTrace({ false, DevModeMgr::InvalidTargetPipelineHash, VK_PIPELINE_BIND_POINT_MAX_ENUM }),
+    m_instructionTrace({ false, IDevMode::InvalidTargetPipelineHash, VK_PIPELINE_BIND_POINT_MAX_ENUM }),
 #endif
     m_debugTags(pCmdBuf->VkInstance()->Allocator())
 {
@@ -319,9 +319,9 @@ void SqttCmdBufferState::Begin(
     m_currentEventId = 0;
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    if (m_pDevModeMgr != nullptr)
+    if (m_pDevMode != nullptr)
     {
-        m_instructionTrace.targetHash = m_pDevModeMgr->GetInstructionTraceTargetHash();
+        m_instructionTrace.targetHash = m_pDevMode->GetInstructionTraceTargetHash();
     }
 #endif
 
@@ -376,10 +376,10 @@ void SqttCmdBufferState::End()
     WriteCbEndMarker();
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    if ((m_pDevModeMgr != nullptr) &&
+    if ((m_pDevMode != nullptr) &&
         (m_instructionTrace.started))
     {
-        m_pDevModeMgr->StopInstructionTrace(m_pCmdBuf);
+        m_pDevMode->StopInstructionTrace(m_pCmdBuf);
         m_instructionTrace.started = false;
     }
 #endif
@@ -550,7 +550,7 @@ void SqttCmdBufferState::WriteUserEventMarker(
 // ====================================================================================================================
 void SqttCmdBufferState::RgdAnnotateCmdBuf()
 {
-    if (m_pDevModeMgr->IsCrashAnalysisEnabled())
+    if (m_pDevMode->IsCrashAnalysisEnabled())
     {
         Pal::RgdMarkerInfoCmdBufData info = {};
         info.header.infoType = Pal::RgdMarkerInfoTypeCmdBufStart;
@@ -573,7 +573,7 @@ void SqttCmdBufferState::RgdAnnotateDispatch(
 {
     // CrashAnalysis already insert marker for all dispatches on PAL side. Here, we just provide additional context for
     // the described dispatch.
-    if (m_pDevModeMgr->IsCrashAnalysisEnabled())
+    if (m_pDevMode->IsCrashAnalysisEnabled())
     {
         if ((type == RgpSqttMarkerEventType::CmdDispatch)
          || (type == RgpSqttMarkerEventType::CmdDispatchIndirect)
@@ -608,7 +608,7 @@ void SqttCmdBufferState::RgdAnnotateDraw(
 {
     // CrashAnalysis already insert marker for all draws that comes from application on PAL side. Here, we just provide
     // additional context for the described draw.
-    if (m_pDevModeMgr->IsCrashAnalysisEnabled())
+    if (m_pDevMode->IsCrashAnalysisEnabled())
     {
         if ((type == RgpSqttMarkerEventType::CmdDraw) || (type == RgpSqttMarkerEventType::CmdDrawIndexed))
         {
@@ -634,7 +634,7 @@ void SqttCmdBufferState::RgdInsertBarrierBeginMarker(
     Pal::Developer::BarrierType type,       // Barrier type
     uint32                      reason)     // Reason for the barrier
 {
-    if (m_pDevModeMgr->IsCrashAnalysisEnabled() &&
+    if (m_pDevMode->IsCrashAnalysisEnabled() &&
         (m_currentEventType == RgpSqttMarkerEventType::CmdPipelineBarrier))
     {
         Pal::RgdMarkerInfoBarrierBeginData info = {};
@@ -654,7 +654,7 @@ void SqttCmdBufferState::RgdInsertBarrierEndMarker(
     Pal::Developer::BarrierOperations operations)   // What the barrier does
 {
     // CrashAnalysisCmdBuffer does not insert marker for Barrier. We insert as MarkerSource::Pal here.
-    if (m_pDevModeMgr->IsCrashAnalysisEnabled() &&
+    if (m_pDevMode->IsCrashAnalysisEnabled() &&
         (m_currentEventType == RgpSqttMarkerEventType::CmdPipelineBarrier))
     {
         Pal::RgdMarkerInfoBarrierEndData info = {};
@@ -1049,12 +1049,12 @@ void SqttCmdBufferState::PipelineBound(
         const Pipeline* pPipeline = Pipeline::BaseObjectFromHandle(pipeline);
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-        if (m_pDevModeMgr != nullptr)
+        if (m_pDevMode != nullptr)
         {
             if ((m_instructionTrace.started == false) &&
                 (pPipeline->GetApiHash() == m_instructionTrace.targetHash))
             {
-                m_pDevModeMgr->StartInstructionTrace(m_pCmdBuf);
+                m_pDevMode->StartInstructionTrace(m_pCmdBuf);
                 m_instructionTrace.bindPoint = bindPoint;
                 m_instructionTrace.started = true;
             }
@@ -2231,14 +2231,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(
 {
     Device* pDevice     = ApiDevice::ObjectFromHandle(device);
     SqttMgr* pSqtt      = pDevice->GetSqttMgr();
-    DevModeMgr* pDevMgr = pDevice->VkInstance()->GetDevModeMgr();
+    IDevMode* pDevMode  = pDevice->VkInstance()->GetDevModeMgr();
 
     VkResult result = SQTT_CALL_NEXT_LAYER(vkCreateGraphicsPipelines)(device, pipelineCache, createInfoCount,
                                                                       pCreateInfos, pAllocator, pPipelines);
 
     if (pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable &&
         (result == VK_SUCCESS) &&
-        (pDevMgr != nullptr))
+        (pDevMode != nullptr))
     {
         for (uint32_t i = 0; i < createInfoCount; ++i)
         {
@@ -2263,7 +2263,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(
                 }
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-                pDevMgr->PipelineCreated(pDevice, pPipeline);
+                pDevMode->PipelineCreated(pDevice, pPipeline);
 #endif
             }
         }
@@ -2283,14 +2283,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(
 {
     Device* pDevice     = ApiDevice::ObjectFromHandle(device);
     SqttMgr* pSqtt      = pDevice->GetSqttMgr();
-    DevModeMgr* pDevMgr = pDevice->VkInstance()->GetDevModeMgr();
+    IDevMode* pDevMode  = pDevice->VkInstance()->GetDevModeMgr();
 
     VkResult result = SQTT_CALL_NEXT_LAYER(vkCreateComputePipelines)(device, pipelineCache, createInfoCount,
         pCreateInfos, pAllocator, pPipelines);
 
     if (pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable &&
         (result == VK_SUCCESS) &&
-        (pDevMgr != nullptr))
+        (pDevMode != nullptr))
     {
         for (uint32_t i = 0; i < createInfoCount; ++i)
         {
@@ -2311,7 +2311,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(
                 }
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-                pDevMgr->PipelineCreated(pDevice, pPipeline);
+                pDevMode->PipelineCreated(pDevice, pPipeline);
 #endif
             }
         }
@@ -2333,14 +2333,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRayTracingPipelinesKHR(
 {
     Device* pDevice     = ApiDevice::ObjectFromHandle(device);
     SqttMgr* pSqtt      = pDevice->GetSqttMgr();
-    DevModeMgr* pDevMgr = pDevice->VkInstance()->GetDevModeMgr();
+    IDevMode* pDevMode  = pDevice->VkInstance()->GetDevModeMgr();
 
     VkResult result = SQTT_CALL_NEXT_LAYER(vkCreateRayTracingPipelinesKHR)(device, deferredOperation, pipelineCache,
         createInfoCount, pCreateInfos, pAllocator, pPipelines);
 
     if (pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable &&
         ((result == VK_SUCCESS) || (result == VK_OPERATION_DEFERRED_KHR)) &&
-        (pDevMgr != nullptr))
+        (pDevMode != nullptr))
     {
         for (uint32_t i = 0; i < createInfoCount; ++i)
         {
@@ -2367,11 +2367,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRayTracingPipelinesKHR(
 #if ICD_GPUOPEN_DEVMODE_BUILD
                 if (result != VK_OPERATION_DEFERRED_KHR)
                 {
-                    pDevMgr->PipelineCreated(pDevice, pPipeline);
+                    pDevMode->PipelineCreated(pDevice, pPipeline);
 
                     if (pPipeline->IsInlinedShaderEnabled() == false)
                     {
-                        pDevMgr->ShaderLibrariesCreated(pDevice, pPipeline);
+                        pDevMode->ShaderLibrariesCreated(pDevice, pPipeline);
                     }
                 }
 #endif
@@ -2534,16 +2534,16 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(
 {
     Device* pDevice     = ApiDevice::ObjectFromHandle(device);
     SqttMgr* pSqtt      = pDevice->GetSqttMgr();
-    DevModeMgr* pDevMgr = pDevice->VkInstance()->GetDevModeMgr();
+    IDevMode* pDevMode  = pDevice->VkInstance()->GetDevModeMgr();
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    if (pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable && (pDevMgr != nullptr))
+    if (pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable && (pDevMode != nullptr))
     {
         if (VK_NULL_HANDLE != pipeline)
         {
             Pipeline* pPipeline = Pipeline::BaseObjectFromHandle(pipeline);
 
-            pDevMgr->PipelineDestroyed(pDevice, pPipeline);
+            pDevMode->PipelineDestroyed(pDevice, pPipeline);
 
 #if VKI_RAY_TRACING
             if (pPipeline->GetType() == VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR)
@@ -2552,7 +2552,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(
 
                 if (pRtPipeline->IsInlinedShaderEnabled() == false)
                 {
-                    pDevMgr->ShaderLibrariesDestroyed(pDevice, pRtPipeline);
+                    pDevMode->ShaderLibrariesDestroyed(pDevice, pRtPipeline);
                 }
             }
 #endif
@@ -2710,7 +2710,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectTagEXT(
 // calls but still want to start/stop RGP tracing.
 static void CheckRGPFrameBegin(
     Queue*              pQueue,
-    DevModeMgr*         pDevMode,
+    IDevMode*           pDevMode,
     uint32_t            submitCount,
     const VkSubmitInfo* pSubmits)
 {
@@ -2732,7 +2732,7 @@ static void CheckRGPFrameBegin(
 
                 if (pCmdBuf->HasDebugTag(frameBeginTag))
                 {
-                    pDevMode->NotifyFrameBegin(pQueue, DevModeMgr::FrameDelimiterType::CmdBufferTag);
+                    pDevMode->NotifyFrameBegin(pQueue, IDevMode::FrameDelimiterType::CmdBufferTag);
 
                     return;
                 }
@@ -2745,7 +2745,7 @@ static void CheckRGPFrameBegin(
 // Looks for markers in a submitted command buffer to identify a forced end to an RGP trace.  See CheckRGPFrameBegin().
 static void CheckRGPFrameEnd(
     Queue*              pQueue,
-    DevModeMgr*         pDevMode,
+    IDevMode*           pDevMode,
     uint32_t            submitCount,
     const VkSubmitInfo* pSubmits)
 {
@@ -2767,7 +2767,7 @@ static void CheckRGPFrameEnd(
 
                 if (pCmdBuf->HasDebugTag(frameEndTag))
                 {
-                    pDevMode->NotifyFrameEnd(pQueue, DevModeMgr::FrameDelimiterType::CmdBufferTag);
+                    pDevMode->NotifyFrameEnd(pQueue, IDevMode::FrameDelimiterType::CmdBufferTag);
 
                     return;
                 }
@@ -2786,7 +2786,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
 {
     Queue* pQueue        = ApiQueue::ObjectFromHandle(queue);
     SqttMgr* pSqtt       = pQueue->VkDevice()->GetSqttMgr();
-    DevModeMgr* pDevMode = pQueue->VkDevice()->VkInstance()->GetDevModeMgr();
+    IDevMode* pDevMode   = pQueue->VkDevice()->VkInstance()->GetDevModeMgr();
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
     pDevMode->NotifyPreSubmit();

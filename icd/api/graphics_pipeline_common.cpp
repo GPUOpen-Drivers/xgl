@@ -199,11 +199,15 @@ static void BuildPalColorBlendStateCreateInfo(
     {
         uint32_t location = i;
 
-        if ((extStructs.pRenderingAttachmentLocationInfo                                != nullptr) &&
-            (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations     != nullptr) &&
-            (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations[i]  != VK_ATTACHMENT_UNUSED))
+        if ((extStructs.pRenderingAttachmentLocationInfo                            != nullptr) &&
+            (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations != nullptr))
         {
             location = extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations[i];
+
+            if (location == VK_ATTACHMENT_UNUSED)
+            {
+                continue;
+            }
         }
 
         const VkPipelineColorBlendAttachmentState& attachmentState = pColorBlendState->pAttachments[i];
@@ -820,7 +824,7 @@ VkResult GraphicsPipelineCommon::Create(
     }
     else if (pDevice->GetRuntimeSettings().pipelineLinkOptimizationMode == PipelineLinkOptimizationAlwaysOptimized)
     {
-        flags |= ~VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT;
+        flags |= VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT;
     }
 
     if ((flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) != 0)
@@ -1642,11 +1646,15 @@ static void BuildColorBlendState(
             {
                 uint32_t location = i;
 
-                if ((extStructs.pRenderingAttachmentLocationInfo                                != nullptr) &&
-                    (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations     != nullptr) &&
-                    (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations[i]  != VK_ATTACHMENT_UNUSED))
+                if ((extStructs.pRenderingAttachmentLocationInfo                            != nullptr) &&
+                    (extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations != nullptr))
                 {
                     location = extStructs.pRenderingAttachmentLocationInfo->pColorAttachmentLocations[i];
+
+                    if (location == VK_ATTACHMENT_UNUSED)
+                    {
+                        continue;
+                    }
                 }
 
                 auto pCbDst     = &pInfo->pipeline.cbState.target[location];

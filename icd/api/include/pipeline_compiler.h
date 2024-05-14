@@ -116,6 +116,15 @@ struct RayTracingPipelineShaderStageInfo
 #endif
 
 // =====================================================================================================================
+/// Determines whether the given stage info is from shader module identifier.
+inline bool IsShaderModuleIdentifier(const Vkgc::PipelineShaderInfo& stageInfo)
+{
+    return (stageInfo.pModuleData == nullptr) &&
+        ((stageInfo.options.clientHash.lower != 0) ||
+        (stageInfo.options.clientHash.upper != 0));
+}
+
+// =====================================================================================================================
 class PipelineCompiler
 {
 public:
@@ -458,6 +467,14 @@ public:
     static void DumpPipelineMetadata(
         void*                   pPipelineDumpHandle,
         const PipelineMetadata* pBinaryMetadata);
+
+    void DumpPipeline(
+        const RuntimeSettings&         settings,
+        const Vkgc::PipelineBuildInfo& pipelineInfo,
+        uint64_t                       apiPsoHash,
+        uint32_t                       binaryCount,
+        const Vkgc::BinaryData*        pElfBinary,
+        VkResult                       result);
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
 

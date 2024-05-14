@@ -507,7 +507,22 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
                 }
             }
 
-            if (hitCache == false)
+            bool checkShaderModuleIdUsage = false;
+            if (hitCache)
+            {
+                const auto* pShaderLibraryHeader =
+                    reinterpret_cast<const ShaderLibraryBlobHeader*>(shaderLibraryBinary.pCode);
+                if (pShaderLibraryHeader->requireFullPipeline)
+                {
+                    checkShaderModuleIdUsage = true;
+                }
+            }
+            else
+            {
+                checkShaderModuleIdUsage = true;
+            }
+
+            if (checkShaderModuleIdUsage)
             {
                 for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; stage++)
                 {
@@ -552,10 +567,14 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
 
             if (llpcResult == Vkgc::Result::Success)
             {
-                blobHeader.binaryLength   = finalBinary.codeSize;
+                blobHeader.binaryLength = finalBinary.codeSize;
                 blobHeader.fragMetaLength = pipelineOut.fsOutputMetaDataSize;
             }
-            else if (llpcResult != Vkgc::Result::RequireFullPipeline)
+            else if (llpcResult == Vkgc::Result::RequireFullPipeline)
+            {
+                blobHeader.requireFullPipeline = true;
+            }
+            else
             {
                 result = (llpcResult == Vkgc::Result::ErrorOutOfMemory) ? VK_ERROR_OUT_OF_HOST_MEMORY :
                                                                           VK_ERROR_INITIALIZATION_FAILED;
@@ -567,18 +586,15 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
             // Always call StoreShaderBinaryToCache to sync data between app cache and binary cache except
             // RequireFullPipeline. When cache is hit, blobHeader is zero, StoreShaderBinaryToCache will ignore
             // finalBinary, and reuse shaderLibraryBinary.
-            if ((finalBinary.pCode != nullptr) || (shaderLibraryBinary.pCode != nullptr))
-            {
-                StoreShaderBinaryToCache(
-                    pPipelineCache,
-                    &cacheId,
-                    &blobHeader,
-                    finalBinary.pCode,
-                    pipelineOut.fsOutputMetaData,
-                    hitCache,
-                    hitAppCache,
-                    &shaderLibraryBinary);
-            }
+            StoreShaderBinaryToCache(
+                pPipelineCache,
+                &cacheId,
+                &blobHeader,
+                finalBinary.pCode,
+                pipelineOut.fsOutputMetaData,
+                hitCache,
+                hitAppCache,
+                &shaderLibraryBinary);
 
             pModuleState->elfPackage                  = shaderLibraryBinary;
             pModuleState->pFsOutputMetaData           = nullptr;
@@ -830,7 +846,7 @@ void LlpcHelperThreadProvider::WaitForTasks()
 {
     while (m_pDeferredWorkload->completedInstances < m_pDeferredWorkload->totalInstances)
     {
-        m_pDeferredWorkload->event.Wait(1.0f);
+        m_pDeferredWorkload->event.Wait(Util::fseconds { 1.0f });
     }
 }
 
@@ -1229,8 +1245,11 @@ Vkgc::BinaryData CompilerSolutionLlpc::ExtractPalElfBinary(
 {
     Vkgc::BinaryData elfBinary = {};
     const ShaderLibraryBlobHeader* pHeader = reinterpret_cast<const ShaderLibraryBlobHeader*>(shaderBinary.pCode);
-    elfBinary.pCode    = pHeader + 1;
-    elfBinary.codeSize = pHeader->binaryLength;
+    if (pHeader->binaryLength > 0)
+    {
+        elfBinary.pCode = pHeader + 1;
+        elfBinary.codeSize = pHeader->binaryLength;
+    }
     return elfBinary;
 }
 

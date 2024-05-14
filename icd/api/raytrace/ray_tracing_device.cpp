@@ -182,6 +182,7 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->fp16BoxModeMixedSaThresh = Util::Clamp(fp16BoxMixedThreshold, 1.0f, 8.0f);
     pDeviceSettings->enableMortonCode30                = settings.rtEnableMortonCode30;
     pDeviceSettings->enableVariableBitsMortonCodes     = settings.enableVariableBitsMortonCodes;
+    pDeviceSettings->enableFastLBVH                    = settings.rtEnableFastLbvh;
     pDeviceSettings->enablePrefixScanDLB               = settings.rtEnablePrefixScanDlb;
 
     switch (settings.rtTriangleCompressionMode)
@@ -214,8 +215,12 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->bvhCpuBuildModeFastTrace          = static_cast<GpuRt::BvhCpuBuildMode>(settings.rtBvhCpuBuildMode);
     pDeviceSettings->bvhCpuBuildModeDefault            = static_cast<GpuRt::BvhCpuBuildMode>(settings.rtBvhCpuBuildMode);
     pDeviceSettings->bvhCpuBuildModeFastBuild          = static_cast<GpuRt::BvhCpuBuildMode>(settings.rtBvhCpuBuildMode);
+
     pDeviceSettings->enableTriangleSplitting           = settings.rtEnableTriangleSplitting;
     pDeviceSettings->triangleSplittingFactor           = settings.rtTriangleSplittingFactor;
+    pDeviceSettings->tsBudgetPerTriangle               = settings.rtTriangleSplittingBudgetPerTriangle;
+    pDeviceSettings->tsPriority                        = settings.rtTriangleSplittingPriority;
+
     pDeviceSettings->enableFusedInstanceNode           = settings.enableFusedInstanceNode;
     pDeviceSettings->rebraidFactor                     = settings.rebraidFactor;
     pDeviceSettings->rebraidLengthPercentage           = settings.rebraidLengthPercentage;
@@ -231,9 +236,6 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->enableInsertBarriersInBuildAS     = settings.enableInsertBarriersInBuildAs;
     pDeviceSettings->numMortonSizeBits                 = settings.numMortonSizeBits;
     pDeviceSettings->allowFp16BoxNodesInUpdatableBvh   = settings.rtAllowFp16BoxNodesInUpdatableBvh;
-
-    pDeviceSettings->enableBuildAccelStructScratchDumping = pDeviceSettings->enableBuildAccelStructDumping &&
-                                                            settings.rtEnableAccelerationStructureScratchMemoryDump;
 
     // Enable AS stats based on panel setting
     pDeviceSettings->enableBuildAccelStructStats        = settings.rtEnableBuildAccelStructStats;
@@ -305,9 +307,10 @@ bool RayTracingDevice::AccelStructTrackerEnabled(
     uint32_t deviceIdx
     ) const
 {
-    return (GetAccelStructTracker(deviceIdx) != nullptr) &&
-            (m_pDevice->GetRuntimeSettings().enableTraceRayAccelStructTracking ||
-             m_pGpuRtDevice[deviceIdx]->AccelStructTraceEnabled());
+
+    // Enable tracking when forced on in the panel or the GPURT trace source is enabled.
+    return ((GetAccelStructTracker(deviceIdx) != nullptr) && (
+            m_pGpuRtDevice[deviceIdx]->AccelStructTraceEnabled()));
 }
 
 // =====================================================================================================================
@@ -1012,7 +1015,7 @@ Pal::Result RayTracingDevice::ClientFlushCmdContext(
 
     if (result == Pal::Result::Success)
     {
-        result = pCmdContext->pDevice->WaitForFences(1, &pCmdContext->pFence, true, UINT64_MAX);
+        result = pCmdContext->pDevice->WaitForFences(1, &pCmdContext->pFence, true, std::chrono::nanoseconds::max());
     }
 
     return result;
@@ -1128,15 +1131,13 @@ Pal::Result RayTracingDevice::ClientGetTemporaryGpuMemory(
     VK_ASSERT(pCmdbuf != nullptr);
     vk::Device*         pDevice     = pCmdbuf->VkDevice();
 
-    for (uint32_t deviceIdx = 0;
-         pDevice->NumPalDevices();
-       ++deviceIdx)
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
     {
         if (pCmdbuf->PalCmdBuffer(deviceIdx) != pPalCmdbuf)
             continue;
 
         InternalMemory* pVidMem = nullptr;
-        if (pCmdbuf->GetScratchVidMem(sizeInBytes, InternalPoolGpuReadOnlyCpuVisible, &pVidMem) == VK_SUCCESS)
+        if (pCmdbuf->GetScratchVidMem(sizeInBytes, InternalPoolDescriptorTable, &pVidMem) == VK_SUCCESS)
         {
             if (pVidMem != nullptr)
             {

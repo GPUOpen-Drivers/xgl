@@ -67,6 +67,7 @@ SwapChain::SwapChain(
     const Properties&          properties,
     VkPresentModeKHR           presentMode,
     FullscreenMgr*             pFullscreenMgr,
+    uint32_t                   vidPnSourceId,
     Pal::WorkstationStereoMode wsStereoMode,
     Pal::ISwapChain*           pPalSwapChain)
     :
@@ -81,7 +82,8 @@ SwapChain::SwapChain(
     m_presentCount(0),
     m_presentMode(presentMode),
     m_deprecated(false)
-    , m_wsStereoMode(wsStereoMode)
+    , m_vidPnSourceId(vidPnSourceId),
+    m_wsStereoMode(wsStereoMode)
 {
     // Initialize the color gamut with the native values.
     if (m_pFullscreenMgr != nullptr)
@@ -443,8 +445,7 @@ VkResult SwapChain::Create(
                 mode,
                 pScreen,
                 screenProperties.hDisplay,
-                swapChainCreateInfo.hWindow,
-                screenProperties.vidPnSourceId);
+                swapChainCreateInfo.hWindow);
         }
     }
 
@@ -529,6 +530,7 @@ VkResult SwapChain::Create(
                                             properties,
                                             pCreateInfo->presentMode,
                                             pFullscreenMgr,
+                                            screenProperties.vidPnSourceId,
                                             wsStereoMode,
                                             pPalSwapChain);
 
@@ -584,6 +586,7 @@ void SwapChain::Init(const VkAllocationCallbacks* pAllocator)
     {
         result = SetupAutoStereo(pAllocator);
     }
+
 }
 
 // =====================================================================================================================
@@ -765,7 +768,7 @@ VkResult SwapChain::AcquireNextImage(
 
         if (result == VK_SUCCESS)
         {
-            acquireInfo.timeout    = timeout;
+            acquireInfo.timeout    = Uint64ToChronoNano(timeout);
             acquireInfo.pSemaphore = (pSemaphore != nullptr) ?
                                       pSemaphore->PalSemaphore(DefaultDeviceIndex) :
                                       nullptr;
@@ -874,6 +877,14 @@ VkResult SwapChain::GetSwapchainImagesKHR(
 }
 
 // =====================================================================================================================
+bool SwapChain::IsFullscreenOrEfsePresent() const
+{
+    return (
+                ((m_pFullscreenMgr != nullptr) && m_pFullscreenMgr->GetExclusiveModeFlags().acquired)
+            );
+}
+
+// =====================================================================================================================
 // Fills in the PAL swap chain present info with the appropriate image to present and returns its GPU memory.
 Pal::IGpuMemory* SwapChain::UpdatePresentInfo(
     uint32_t                    deviceIdx,
@@ -896,10 +907,15 @@ Pal::IGpuMemory* SwapChain::UpdatePresentInfo(
 
     // Let the fullscreen manager perform any fullscreen ownership transitions and override some of this present
     // information in case it has enabled fullscreen.
-    if (m_pFullscreenMgr != nullptr)
+    if ((m_pFullscreenMgr != nullptr)
+        )
     {
-        m_pFullscreenMgr->UpdatePresentInfo(this, pPresentInfo, flipFlags);
+        m_pFullscreenMgr->TryEnterExclusive(this);
     }
+
+    // Always fallback to windowed if FSE is not acquired to avoid missing presents.
+    pPresentInfo->presentMode =
+        IsFullscreenOrEfsePresent() ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
 
     return pSrcImageGpuMemory;
 }
@@ -1177,8 +1193,7 @@ FullscreenMgr::FullscreenMgr(
     FullscreenMgr::Mode             mode,
     Pal::IScreen*                   pScreen,
     Pal::OsDisplayHandle            hDisplay,
-    Pal::OsWindowHandle             hWindow,
-    uint32_t                        vidPnSourceId)
+    Pal::OsWindowHandle             hWindow)
     :
     m_pDevice{pDevice},
     m_exclusiveModeFlags{},
@@ -1187,7 +1202,6 @@ FullscreenMgr::FullscreenMgr(
     m_fullscreenPresentSuccessCount{0},
     m_hDisplay{hDisplay},
     m_hWindow{hWindow},
-    m_vidPnSourceId{vidPnSourceId},
     m_mode{mode}
 {
     VK_ASSERT(m_pScreen != nullptr);
@@ -1199,6 +1213,7 @@ FullscreenMgr::FullscreenMgr(
 bool FullscreenMgr::TryEnterExclusive(
     SwapChain* pSwapChain)
 {
+
     // If we are not perma-disabled
     if (m_exclusiveModeFlags.disabled == 0)
     {
@@ -1270,8 +1285,6 @@ bool FullscreenMgr::TryExitExclusive(
     if (m_pScreen != nullptr)
     {
         Pal::Result palResult = m_pScreen->ReleaseFullscreenOwnership();
-
-        VK_ASSERT((m_exclusiveModeFlags.acquired == 0) || (palResult == Pal::Result::Success));
     }
 
     m_exclusiveModeFlags.acquired = 0;
@@ -1500,7 +1513,7 @@ void FullscreenMgr::PostPresent(
     // DXGI fullscreen is OS controlled and may go in and out of fullscreen mode to deal with user interaction,
     // display toasts etc. Ignore reporting fullscreen errors on this platform.
     if ((m_exclusiveModeFlags.acquired == 0) && (m_exclusiveModeFlags.mismatchedDisplayMode == 0) &&
-        (m_mode == Mode::Explicit) && (pSwapChain->IsDxgiEnabled() == false))
+        (m_mode == Mode::Explicit))
     {
         *pPresentResult = Pal::Result::ErrorFullscreenUnavailable;
     }
@@ -1509,34 +1522,6 @@ void FullscreenMgr::PostPresent(
     if (m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings().backgroundFullscreenIgnorePresentErrors)
     {
         *pPresentResult = Pal::Result::Success;
-    }
-}
-
-// =====================================================================================================================
-// This function potentially overrides normal swap chain present info by replacing a windowed present with a page-
-// flipped fullscreen present.
-//
-// This can only happen if the screen is currently compatible with fullscreen presents and we have successfully
-// acquired exclusive access to the screen.
-void FullscreenMgr::UpdatePresentInfo(
-    SwapChain*                  pSwapChain,
-    Pal::PresentSwapChainInfo*  pPresentInfo,
-    const Pal::FlipStatusFlags& flipFlags)
-{
-    // Present mode does not matter in DXGI as it is completely OS handled. This is for our internal tracking only
-    if (pSwapChain->IsDxgiEnabled())
-    {
-        // If KMD reported we're in Indpendent Flip we can assume that DXGI acquired FSE.
-        pPresentInfo->presentMode = flipFlags.iFlip ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
-    }
-    // Try to enter (or remain in) exclusive access mode on this swap chain's screen for this present
-    else
-    {
-        TryEnterExclusive(pSwapChain);
-
-        // Always fallback to windowed if FSE is not acquired to avoid missing presents.
-        pPresentInfo->presentMode =
-            m_exclusiveModeFlags.acquired ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
     }
 }
 

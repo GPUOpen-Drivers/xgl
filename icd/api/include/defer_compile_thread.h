@@ -114,7 +114,7 @@ protected:
         while (m_stop == false)
         {
             // Waits for new signal.
-            m_event.Wait(1.0f);
+            m_event.Wait(Util::fseconds{ 1.0f });
             m_event.Reset();
 
             DeferredCompileWorkload task;

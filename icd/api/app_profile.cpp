@@ -40,6 +40,7 @@
 
 #if defined(__unix__)
 #include <unistd.h>
+#include <fcntl.h>
 #include <linux/limits.h>
 #endif
 
@@ -729,18 +730,6 @@ constexpr AppProfilePatternEntry AppEngineQuanticDream
 {
     PatternEngineNameLower,
     "quantic dream engine"
-};
-
-constexpr AppProfilePatternEntry AppNameEnshrouded =
-{
-    PatternAppNameLower,
-    "enshrouded"
-};
-
-constexpr AppProfilePatternEntry AppEngineHolistic =
-{
-    PatternEngineNameLower,
-    "holistic"
 };
 
 constexpr AppProfilePatternEntry PatternEnd = {};
@@ -1478,23 +1467,6 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
-        AppProfile::Enshrouded,
-        {
-            AppNameEnshrouded,
-            AppEngineHolistic,
-            PatternEnd
-        }
-    },
-
-    {
-        AppProfile::HolisticEngine,
-        {
-            AppEngineHolistic,
-            PatternEnd
-        }
-    },
-
-    {
         AppProfile::Zink,
         {
             AppEngineZink,
@@ -1702,24 +1674,14 @@ static char* GetExecutableName(
     size_t* pLength,
     bool    includeExtension)  // true if you want the extension on the file name.
 {
-    pid_t pid = getpid();
     char* pExecutable = nullptr;
-    char* pModuleFileName = nullptr;
     char  path[PATH_MAX] = {0};
-    char  commandStringBuffer[PATH_MAX] = {0};
-    sprintf(commandStringBuffer, "cat /proc/%d/cmdline", pid);
-    FILE* pCommand = popen(commandStringBuffer, "r");
-    if (pCommand != nullptr)
+    pExecutable = static_cast<char*>(malloc(PATH_MAX));
+
+    if (pExecutable != nullptr)
     {
-        if (fgets(path, PATH_MAX, pCommand) != nullptr)
-        {
-            pExecutable = static_cast<char*>(malloc(PATH_MAX));
-            pModuleFileName = strrchr(path, '/') ? strrchr(path, '/') + 1 : path;
-            pModuleFileName = strrchr(pModuleFileName, '\\') ? strrchr(pModuleFileName, '\\') + 1 : pModuleFileName;
-            strcpy(pExecutable, pModuleFileName);
-            *pLength = strlen(pExecutable);
-        }
-        pclose(pCommand);
+        utils::GetExecutableNameAndPath(pExecutable, &path[0]);
+        *pLength = strlen(pExecutable);
     }
     return pExecutable;
 }

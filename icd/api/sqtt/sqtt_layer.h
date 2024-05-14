@@ -56,7 +56,7 @@ class ImageView;
 class RenderPass;
 class SqttMgr;
 class Pipeline;
-class DevModeMgr;
+class IDevMode;
 
 // Contains parameters that are happening when renderpass targets are bound in the driver.
 struct SqttBindTargetParams
@@ -207,7 +207,7 @@ private:
 
     CmdBuffer*                  m_pCmdBuf;
     SqttMgr*                    m_pSqttMgr;          // Per-device SQTT state
-    DevModeMgr*                 m_pDevModeMgr;
+    IDevMode*                   m_pDevMode;
     const RuntimeSettings&      m_settings;
     const DispatchTable*        m_pNextLayer;        // Pointer to next layer's dispatch table
     RgpSqttMarkerCbID           m_cbId;              // Command buffer ID associated with this command buffer

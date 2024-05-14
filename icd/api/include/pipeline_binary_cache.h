@@ -42,7 +42,7 @@ namespace Util
 class IPlatformKey;
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-class DevModeMgr;
+class IDevMode;
 #endif
 } // namespace Util
 
@@ -64,7 +64,7 @@ public:
         const vk::RuntimeSettings& settings,
         const char*                pDefaultCacheFilePath,
 #if ICD_GPUOPEN_DEVMODE_BUILD
-        vk::DevModeMgr*            pDevModeMgr,
+        vk::IDevMode*              pDevMode,
 #endif
         uint32_t                   expectedEntries,
         size_t                     initDataSize,
@@ -238,7 +238,7 @@ private:
     Util::ICacheLayer*        m_pTopLayer;                // Top layer of the cache chain where queries are submitted
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    vk::DevModeMgr*           m_pDevModeMgr;
+    vk::IDevMode*             m_pDevMode;
     Util::ICacheLayer*        m_pReinjectionLayer;        // Reinjection interface layer
 
     HashMapping               m_hashMapping;              // Maps the internalPipelineHash to the appropriate CacheId

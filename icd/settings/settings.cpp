@@ -32,6 +32,7 @@
 #include "include/vk_utils.h"
 #include "settings/settings.h"
 #include "vkgcDefs.h"
+#include "settings/g_experiments.h"
 
 #include "palFile.h"
 #include "palHashMapImpl.h"
@@ -43,6 +44,7 @@
 #include "devDriverServer.h"
 #include "protocols/ddSettingsService.h"
 #include "dd_settings_service.h"
+#include "experimentsLoader.h"
 
 #include "../layers/include/query_dlist.h"
 
@@ -54,18 +56,78 @@ using namespace DevDriver::SettingsURIService;
 
 using namespace Util;
 
+#define PAL_SET_VAL_IF_EXPERIMENT_ENABLED(opt, var, val) if (pExpSettings->exp##opt.ValueOr(false))  \
+{                                                                                                    \
+    pPalSettings->var = val;                                                                         \
+}
+
+#define VK_SET_VAL_IF_EXPERIMENT_ENABLED(opt, var, val) if (pExpSettings->exp##opt.ValueOr(false))  \
+{                                                                                                   \
+    m_settings.var = val;                                                                           \
+}
+
 namespace vk
 {
 
 // =====================================================================================================================
+static uint32_t ExpSwsToXglSws(
+    ExpShaderWaveSize wsIn)
+{
+    uint32_t wsOut = WaveSizeAuto;
+    switch (wsIn)
+    {
+    case ExpWaveSizeWave64:
+        wsOut = 64;
+        break;
+    case ExpWaveSizeWave32:
+        wsOut = 32;
+        break;
+    case ExpWaveSizeAuto:
+        wsOut = 0;
+        break;
+    default:
+        wsOut = 0;
+        break;
+    }
+
+    return wsOut;
+}
+
+// =====================================================================================================================
+static ExpShaderWaveSize XglSwsToExpSws(
+    uint32_t wsIn)
+{
+    ExpShaderWaveSize wsOut = ExpWaveSizeInvalid;
+    switch (wsIn)
+    {
+    case 64:
+        wsOut = ExpWaveSizeWave64;
+        break;
+    case 32:
+        wsOut = ExpWaveSizeWave32;
+        break;
+    case 0:
+        wsOut = ExpWaveSizeAuto;
+        break;
+    default:
+        wsOut = ExpWaveSizeInvalid;
+        break;
+    }
+
+    return wsOut;
+}
+
+// =====================================================================================================================
 // Constructor for the SettingsLoader object.
 VulkanSettingsLoader::VulkanSettingsLoader(
-    Pal::IDevice*   pDevice,
-    Pal::IPlatform* pPlatform)
+    Pal::IDevice*      pDevice,
+    Pal::IPlatform*    pPlatform,
+    ExperimentsLoader* pExpLoader)
     :
     DevDriver::SettingsBase(&m_settings, sizeof(m_settings)),
     m_pDevice(pDevice),
-    m_pPlatform(pPlatform)
+    m_pPlatform(pPlatform),
+    m_pExperimentsLoader(pExpLoader)
 {
 }
 
@@ -136,32 +198,212 @@ void VulkanSettingsLoader::OverrideSettingsBySystemInfo()
 }
 
 // =====================================================================================================================
+// Overrides the experiments info
+void VulkanSettingsLoader::OverrideDefaultsExperimentInfo()
+{
+    const ExpSettings*      pExpSettings = m_pExperimentsLoader->GetExpSettings();
+    Pal::PalPublicSettings* pPalSettings = m_pDevice->GetPublicSettings();
+
+    VK_SET_VAL_IF_EXPERIMENT_ENABLED(MeshShaderSupport, enableMeshShaders, false);
+
+#if VKI_RAY_TRACING
+    VK_SET_VAL_IF_EXPERIMENT_ENABLED(RayTracingSupport, enableRaytracingSupport, false);
+#endif
+
+    VK_SET_VAL_IF_EXPERIMENT_ENABLED(Native16BitTypesSupport, enableNative16BitTypes, false);
+
+    VK_SET_VAL_IF_EXPERIMENT_ENABLED(AmdVendorExtensions, disableAmdVendorExtensions, true);
+
+    VK_SET_VAL_IF_EXPERIMENT_ENABLED(ComputeQueueSupport, asyncComputeQueueLimit, 0);
+
+    if (pExpSettings->expBarrierOptimizations.ValueOr(false))
+    {
+        pPalSettings->pwsMode                 = Pal::PwsMode::Disabled;
+        m_settings.useAcquireReleaseInterface = false;
+    }
+
+    if (pExpSettings->expShaderCompilerOptimizations.ValueOr(false))
+    {
+        m_settings.disableLoopUnrolls = true;;
+    }
+
+#if VKI_RAY_TRACING
+    if (pExpSettings->expAccelStructureOpt.ValueOr(false))
+    {
+        m_settings.rtEnableTreeRebraid            = RebraidTypeOff;
+        m_settings.rtEnableTriangleSplitting      = false;
+        m_settings.rtEnableTopDownBuild           = false;
+        m_settings.rtBvhBuildModeFastBuild        = BvhBuildModeLinear;
+        m_settings.enablePairCompressionCostCheck = true;
+    }
+#endif
+
+    if (pExpSettings->expVsWaveSize.HasValue())
+    {
+        m_settings.vsWaveSize = ExpSwsToXglSws(pExpSettings->expVsWaveSize.Value());
+    }
+
+    if (pExpSettings->expTcsWaveSize.HasValue())
+    {
+        m_settings.tcsWaveSize = ExpSwsToXglSws(pExpSettings->expTcsWaveSize.Value());
+    }
+
+    if (pExpSettings->expTesWaveSize.HasValue())
+    {
+        m_settings.tesWaveSize = ExpSwsToXglSws(pExpSettings->expTesWaveSize.Value());
+    }
+
+    if (pExpSettings->expGsWaveSize.HasValue())
+    {
+        m_settings.gsWaveSize = ExpSwsToXglSws(pExpSettings->expGsWaveSize.Value());
+    }
+
+    if (pExpSettings->expFsWaveSize.HasValue())
+    {
+        m_settings.fsWaveSize = ExpSwsToXglSws(pExpSettings->expFsWaveSize.Value());
+    }
+
+    if (pExpSettings->expCsWaveSize.HasValue())
+    {
+        m_settings.csWaveSize = ExpSwsToXglSws(pExpSettings->expCsWaveSize.Value());
+    }
+
+    if (pExpSettings->expMsWaveSize.HasValue())
+    {
+        m_settings.meshWaveSize = ExpSwsToXglSws(pExpSettings->expMsWaveSize.Value());
+    }
+
+#if VKI_RAY_TRACING
+    if (pExpSettings->expRayTracingPipelineCompilationMode.ValueOr(false))
+    {
+        m_settings.rtCompileMode = RtCompileModeIndirect;
+    }
+#endif
+
+    if (pExpSettings->expShaderCache.ValueOr(false))
+    {
+        m_settings.shaderCacheMode                  = ShaderCacheDisable;
+        m_settings.usePalPipelineCaching            = false;
+        m_settings.allowExternalPipelineCacheObject = false;
+    }
+
+    VK_SET_VAL_IF_EXPERIMENT_ENABLED(TextureColorCompression, forceEnableDcc, ForceDisableDcc);
+
+    PAL_SET_VAL_IF_EXPERIMENT_ENABLED(ZeroUnboundDescriptors, zeroUnboundDescDebugSrd, true);
+
+    VK_SET_VAL_IF_EXPERIMENT_ENABLED(ThreadSafeCommandAllocator, threadSafeAllocator, true);
+
+    if (pExpSettings->expVerticalSynchronization.HasValue())
+    {
+        ExpVSyncControl state = pExpSettings->expVerticalSynchronization.Value();
+        if (state == ExpVSyncControlAlwaysOn)
+        {
+            m_settings.vSyncControl = VSyncControlAlwaysOn;
+        }
+        else if (state == ExpVSyncControlAlwaysOff)
+        {
+            m_settings.vSyncControl = VSyncControlAlwaysOff;
+        }
+        else
+        {
+            m_pExperimentsLoader->ReportVsyncState(ExpVSyncControlInvalid);
+            PAL_ASSERT_ALWAYS();
+        }
+    }
+}
+
+// =====================================================================================================================
+// Sets the final values for the experiments
+void VulkanSettingsLoader::FinalizeExperiments()
+{
+    ExpSettings*            pExpSettings = m_pExperimentsLoader->GetMutableExpSettings();
+    Pal::PalPublicSettings* pPalSettings = m_pDevice->GetPublicSettings();
+
+    pExpSettings->expMeshShaderSupport = (m_settings.enableMeshShaders == false);
+
+#if VKI_RAY_TRACING
+    pExpSettings->expRayTracingSupport = (m_settings.enableRaytracingSupport == false);
+#endif
+
+    pExpSettings->expVariableRateShadingSupport = (m_settings.enableVariableRateShading == false);
+
+    pExpSettings->expNative16BitTypesSupport = (m_settings.enableNative16BitTypes == false);
+
+    pExpSettings->expAmdVendorExtensions = m_settings.disableAmdVendorExtensions;
+
+    pExpSettings->expComputeQueueSupport = (m_settings.asyncComputeQueueLimit == 0);
+
+    pExpSettings->expBarrierOptimizations = ((pPalSettings->pwsMode == Pal::PwsMode::Disabled) &&
+                                             (m_settings.useAcquireReleaseInterface == false));
+
+    pExpSettings->expVsWaveSize = XglSwsToExpSws(m_settings.vsWaveSize);
+
+    pExpSettings->expTcsWaveSize = XglSwsToExpSws(m_settings.tcsWaveSize);
+
+    pExpSettings->expTesWaveSize = XglSwsToExpSws(m_settings.tesWaveSize);
+
+    pExpSettings->expGsWaveSize = XglSwsToExpSws(m_settings.gsWaveSize);
+
+    pExpSettings->expFsWaveSize = XglSwsToExpSws(m_settings.fsWaveSize);
+
+    pExpSettings->expCsWaveSize = XglSwsToExpSws(m_settings.csWaveSize);
+
+    pExpSettings->expMsWaveSize = XglSwsToExpSws(m_settings.meshWaveSize);
+
+#if VKI_RAY_TRACING
+    pExpSettings->expRayTracingPipelineCompilationMode = (m_settings.rtCompileMode == RtCompileModeIndirect);
+#endif
+
+    pExpSettings->expTextureColorCompression = m_settings.forceEnableDcc == ForceDisableDcc;
+
+    pExpSettings->expZeroUnboundDescriptors = pPalSettings->zeroUnboundDescDebugSrd;
+
+    pExpSettings->expThreadSafeCommandAllocator = m_settings.threadSafeAllocator;
+}
+
+// =====================================================================================================================
+// Informs tools of unsupported experiments
+void VulkanSettingsLoader::ReportUnsupportedExperiments(
+    Pal::DeviceProperties* pInfo)
+{
+    if (pInfo->gfxipProperties.flags.supportDoubleRate16BitInstructions == 0)
+    {
+        m_pExperimentsLoader->SaveUnsupportedExperiment(expNative16BitTypesSupportHash);
+    }
+
+    if (pInfo->gfxipProperties.srdSizes.bvh == 0)
+    {
+#if VKI_RAY_TRACING
+        m_pExperimentsLoader->SaveUnsupportedExperiment(expAccelStructureOptHash);
+        m_pExperimentsLoader->SaveUnsupportedExperiment(expRayTracingSupportHash);
+#endif
+    }
+
+    if (pInfo->gfxipProperties.flags.supportMeshShader == 0)
+    {
+        m_pExperimentsLoader->SaveUnsupportedExperiment(expMeshShaderSupportHash);
+    }
+
+    if (pInfo->gfxipProperties.supportedVrsRates == 0)
+    {
+        m_pExperimentsLoader->SaveUnsupportedExperiment(expVariableRateShadingSupportHash);
+    }
+}
+
+// =====================================================================================================================
 // Override defaults based on application profile.  This occurs before any CCC settings or private panel settings are
 // applied.
 VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     const VkAllocationCallbacks* pAllocCb,
     uint32_t                     appVersion,
-    AppProfile                   appProfile)
+    AppProfile                   appProfile,
+    Pal::DeviceProperties*       pInfo)
 {
     VkResult result = VkResult::VK_SUCCESS;
 
     Pal::PalPublicSettings* pPalSettings = m_pDevice->GetPublicSettings();
 
-    Pal::DeviceProperties* pInfo = static_cast<Pal::DeviceProperties*>(
-                                        pAllocCb->pfnAllocation(pAllocCb->pUserData,
-                                                                sizeof(Pal::DeviceProperties),
-                                                                VK_DEFAULT_MEM_ALIGN,
-                                                                VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE));
-
-    if (pInfo == nullptr)
     {
-        result = VkResult::VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-
-    if (result == VkResult::VK_SUCCESS)
-    {
-        memset(pInfo, 0, sizeof(Pal::DeviceProperties));
-        m_pDevice->GetProperties(pInfo);
 
         // By allowing the enable/disable to be set by environment variable, any third party platform owners
         // can enable or disable the feature based on their internal feedback and not have to wait for a driver
@@ -972,7 +1214,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
             {
                 m_settings.rtEnableCompilePipelineLibrary = false;
-                m_settings.rtMaxRayRecursionDepth = 2;
             }
 
 #if VKI_BUILD_GFX11
@@ -1111,6 +1352,16 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             m_settings.forceDepthClampBasedOnZExport = true;
         }
+
+#ifndef ICD_X64_BUILD
+        if (appProfile == AppProfile::DXVK)
+        {
+            // DXVK Tropic4/GTA4 page fault when GPL is enabled.
+            // It looks incorrect pipeline layout is used. Force indirect can make optimized pipeline layout compatible
+            // with fast-linked pipeline.
+            m_settings.pipelineLayoutSchemeSelectionStrategy = PipelineLayoutSchemeSelectionStrategy::ForceIndirect;
+        }
+#endif
 
         if (appProfile == AppProfile::AshesOfTheSingularity)
         {
@@ -1359,17 +1610,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             m_settings.disableSingleMipAnisoOverride = false;
         }
-
-        if (appProfile == AppProfile::Enshrouded)
-        {
-#if VKI_BUILD_GFX11
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
-            {
-            }
-#endif
-        }
-
-        pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
     }
 
     return result;
@@ -1412,7 +1652,10 @@ VkResult VulkanSettingsLoader::ProcessSettings(
     uint32_t                     appVersion,
     AppProfile*                  pAppProfile)
 {
-    VkResult result = VkResult::VK_SUCCESS;
+    VkResult              result = VkResult::VK_SUCCESS;
+    Pal::DeviceProperties info   = {};
+
+    m_pDevice->GetProperties(&info);
 
     // The following lines to load profile settings have been copied from g_settings.cpp
     static_cast<Pal::IDevice*>(m_pDevice)->ReadSetting(pForceAppProfileEnableHashStr,
@@ -1439,15 +1682,19 @@ VkResult VulkanSettingsLoader::ProcessSettings(
 #endif
 
     // Override defaults based on application profile
-    result = OverrideProfiledSettings(pAllocCb, appVersion, *pAppProfile);
+    result = OverrideProfiledSettings(pAllocCb, appVersion, *pAppProfile, &info);
 
     if (result == VkResult::VK_SUCCESS)
     {
+        ReportUnsupportedExperiments(&info);
+
         // Read in the public settings from the Catalyst Control Center
         ReadPublicSettings();
 
         // Read the rest of the settings from the registry
         ReadSettings();
+
+        OverrideDefaultsExperimentInfo();
 
         // We need to override debug file paths settings to absolute paths as per system info
         OverrideSettingsBySystemInfo();
@@ -1656,6 +1903,10 @@ void VulkanSettingsLoader::UpdatePalSettings()
 
     pPalSettings->rpmViewsBypassMall = static_cast<Pal::RpmViewsBypassMall>(m_settings.rpmViewsBypassMall);
 
+    // Allow Device Generated Commands to employ state-of-the-art CP Packet path whenever possible for optimal
+    // performance. Only obsolete Compute Shader path can be used otherwise.
+    pPalSettings->enableExecuteIndirectPacket = true;
+
     // Controls PWS enable mode: disabled, fully enabled or partially enabled. Only takes effect if HW supports PWS and
     // Acq-rel barriers
     if (m_settings.useAcquireReleaseInterface)
@@ -1710,6 +1961,9 @@ void VulkanSettingsLoader::FinalizeSettings(
     }
 
     GenerateSettingHash();
+
+    // Note this should be the last thing done when we finalize so we can capture any changes:
+    FinalizeExperiments();
 }
 
 // =====================================================================================================================

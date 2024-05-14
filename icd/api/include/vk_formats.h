@@ -51,6 +51,8 @@ struct AstcMappedInfo
 };
 #endif
 
+class PhysicalDevice;
+
 // =====================================================================================================================
 // Container for storing compile-time meta-information about Vulkan formats.
 //
@@ -82,6 +84,16 @@ struct Formats
 #endif
     static VkExtent3D ElementsToTexels(VkFormat format, const VkExtent3D& extent, const RuntimeSettings& settings);
     static Pal::Formats::NumericSupportFlags GetNumberFormat(VkFormat format, const RuntimeSettings& settings);
+
+    static VkFormat GetCompatibleSinglePlaneFormat(
+        VkFormat multiPlaneFormat,
+        uint32_t planeIndex);
+
+    static VkFormatFeatureFlags GetExtendedFeatureFlags(
+        const PhysicalDevice* pPhysicalDevice,
+        VkFormat format,
+        VkImageTiling tiling,
+        const RuntimeSettings& settings);
 };
 
 #define VK_EXT_4444_FORMAT_START        VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT
@@ -511,7 +523,6 @@ bool Formats::IsDvec3Or4(
 
     return needsTwoLocations;
 }
-
 } // namespace vk
 
 #endif /* __VK_FORMATS_H__ */

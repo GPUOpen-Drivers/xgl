@@ -154,6 +154,8 @@ public:
     const Pal::ScreenColorConfig& GetColorParams() const
         { return m_colorParams; }
 
+    bool IsFullscreenOrEfsePresent() const;
+
     Pal::IGpuMemory* UpdatePresentInfo(
         uint32_t                    deviceIdx,
         uint32_t                    imageIndex,
@@ -187,9 +189,9 @@ public:
     void MarkAsDeprecated(
         const VkAllocationCallbacks* pAllocator);
 
-    bool IsDxgiEnabled() const
+    uint32_t GetVidPnSourceId() const
     {
-        return (m_properties.displayableInfo.palPlatform == Pal::WsiPlatform::Dxgi);
+        return m_vidPnSourceId;
     }
 
     bool IsSuboptimal(uint32_t  deviceIdx);
@@ -200,6 +202,7 @@ protected:
         const Properties&          properties,
         VkPresentModeKHR           presentMode,
         FullscreenMgr*             pFullscreenMgr,
+        uint32_t                   m_vidPnSourceId,
         Pal::WorkstationStereoMode wsStereoMode,
         Pal::ISwapChain*           pPalSwapChain);
 
@@ -224,7 +227,9 @@ protected:
 
     uint32_t                m_queueFamilyIndex;                    // Queue family index of the last present
 
-    Pal::WorkstationStereoMode  m_wsStereoMode; // Workstation Stereo Mode
+    uint32_t                    m_vidPnSourceId;       // Video present source identifier.
+
+    Pal::WorkstationStereoMode  m_wsStereoMode;        // Workstation Stereo Mode
     Device::InternalPipeline    m_pAutoStereoPipeline; // Auto Stereo shader
 
 private:
@@ -263,8 +268,7 @@ public:
         FullscreenMgr::Mode             mode,
         Pal::IScreen*                   pScreen,
         Pal::OsDisplayHandle            hDisplay,
-        Pal::OsWindowHandle             hWindow,
-        uint32_t                        vidPnSourceId);
+        Pal::OsWindowHandle             hWindow);
 
     ~FullscreenMgr();
 
@@ -283,18 +287,10 @@ public:
 
     void Destroy(const VkAllocationCallbacks* pAllocator);
 
-    void UpdatePresentInfo(
-        SwapChain*                  pSwapChain,
-        Pal::PresentSwapChainInfo*  pPresentInfo,
-        const Pal::FlipStatusFlags& flipFlags);
-
     Pal::Result IsFullscreenOwnershipSafe() const;
 
     ExclusiveModeFlags GetExclusiveModeFlags() const
         { return m_exclusiveModeFlags; }
-
-    uint32_t GetVidPnSourceId() const
-        { return m_vidPnSourceId; }
 
     Pal::IScreen* GetPalScreen() const
         { return m_pScreen; }
@@ -323,8 +319,7 @@ private:
     Pal::OsDisplayHandle         m_hDisplay;        // The monitor of the IScreen from swap chain creation
     Pal::OsWindowHandle          m_hWindow;         // The window of the swap chain
 
-    uint32_t            m_vidPnSourceId;            // Video present source identifier
-    Mode                m_mode;                     // Indicates the Presentation mode we are using
+    Mode                         m_mode;            // Indicates the Presentation mode we are using
 };
 
 // =====================================================================================================================

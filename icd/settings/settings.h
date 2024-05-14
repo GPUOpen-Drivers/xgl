@@ -48,17 +48,20 @@ namespace Pal
 {
 class IDevice;
 class IPlatform;
+struct DeviceProperties;
 }
 
 namespace vk
 {
+class ExperimentsLoader;
+
 // =====================================================================================================================
 // This class is responsible for loading and processing the Vulkan runtime settings structure encapsulated in the Vulkan
 // Settings Loader object.
 class VulkanSettingsLoader : public DevDriver::SettingsBase
 {
 public:
-    explicit VulkanSettingsLoader(Pal::IDevice* pDevice, Pal::IPlatform* pPlatform);
+    explicit VulkanSettingsLoader(Pal::IDevice* pDevice, Pal::IPlatform* pPlatform, ExperimentsLoader* pExpLoader);
     virtual ~VulkanSettingsLoader();
 
     Pal::Result Init();
@@ -102,9 +105,16 @@ private:
     VkResult OverrideProfiledSettings(
         const VkAllocationCallbacks* pAllocCb,
         uint32_t                     appVersion,
-        AppProfile                   appProfile);
+        AppProfile                   appProfile,
+        Pal::DeviceProperties*       pInfo);
+
+    void ReportUnsupportedExperiments(Pal::DeviceProperties* pInfo);
 
     void OverrideSettingsBySystemInfo();
+
+    void OverrideDefaultsExperimentInfo();
+
+    void FinalizeExperiments();
 
     void DumpAppProfileChanges(
         AppProfile appProfile);
@@ -113,6 +123,7 @@ private:
 
     Pal::IDevice*         m_pDevice;
     Pal::IPlatform*       m_pPlatform;
+    ExperimentsLoader*    m_pExperimentsLoader;
     RuntimeSettings       m_settings;
     Util::MetroHash::Hash m_settingsHash;
 };

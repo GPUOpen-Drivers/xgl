@@ -613,7 +613,7 @@ VkResult RayTracingPipeline::CreateImpl(
 
         const uint32_t totalGroupCount = pipelineCreateInfo.groupCount + pipelineLibGroupCount;
 
-        RayTracingPipelineBinary          pipelineBinary[MaxPalDevices] = {};
+        RayTracingPipelineBinary          pipelineBinaries[MaxPalDevices] = {};
         Vkgc::RayTracingShaderIdentifier* pShaderGroups [MaxPalDevices] = {};
         BinaryData                        librarySummaries[MaxPalDevices] = {};
 
@@ -636,8 +636,8 @@ VkResult RayTracingPipeline::CreateImpl(
             {
                 if (pipelineCreateInfo.groupCount > 0)
                 {
-                    pipelineBinary[0].shaderGroupHandle.shaderHandles     = pShaderGroups[0];
-                    pipelineBinary[0].shaderGroupHandle.shaderHandleCount = pipelineCreateInfo.groupCount;
+                    pipelineBinaries[0].shaderGroupHandle.shaderHandles     = pShaderGroups[0];
+                    pipelineBinaries[0].shaderGroupHandle.shaderHandleCount = pipelineCreateInfo.groupCount;
                 }
 
                 for (uint32_t deviceIdx = 1; deviceIdx < m_pDevice->NumPalDevices(); ++deviceIdx)
@@ -645,8 +645,8 @@ VkResult RayTracingPipeline::CreateImpl(
                     pShaderGroups[deviceIdx] = pShaderGroups[deviceIdx - 1] + totalGroupCount;
                     if (pipelineCreateInfo.groupCount > 0)
                     {
-                        pipelineBinary[deviceIdx].shaderGroupHandle.shaderHandles     = pShaderGroups[deviceIdx];
-                        pipelineBinary[deviceIdx].shaderGroupHandle.shaderHandleCount = pipelineCreateInfo.groupCount;
+                        pipelineBinaries[deviceIdx].shaderGroupHandle.shaderHandles     = pShaderGroups[deviceIdx];
+                        pipelineBinaries[deviceIdx].shaderGroupHandle.shaderHandleCount = pipelineCreateInfo.groupCount;
                     }
                 }
             }
@@ -668,11 +668,11 @@ VkResult RayTracingPipeline::CreateImpl(
                 nullptr,
 
                 utils::PlacementElement<Vkgc::RayTracingShaderProperty>{
-                    &pipelineBinary[0].shaderPropSet.shaderProps,
+                    &pipelineBinaries[0].shaderPropSet.shaderProps,
                     maxFunctionCount * m_pDevice->NumPalDevices()},
 
                 utils::PlacementElement<Vkgc::BinaryData>{
-                    &pipelineBinary[0].pPipelineBins,
+                    &pipelineBinaries[0].pPipelineBins,
                     maxPipelineBinaryCount * m_pDevice->NumPalDevices()},
 
                 utils::PlacementElement<Pal::ShaderLibraryFunctionInfo>{&pIndirectFuncInfo, maxFunctionCount},
@@ -691,13 +691,13 @@ VkResult RayTracingPipeline::CreateImpl(
                 memset(pTempBuffer, 0, placement.SizeOf());
                 placement.FixupPtrs(pTempBuffer);
 
-                pipelineBinary[0].shaderPropSet.shaderCount = maxFunctionCount;
-                pipelineBinary[0].pipelineBinCount          = maxPipelineBinaryCount;
+                pipelineBinaries[0].shaderPropSet.shaderCount = maxFunctionCount;
+                pipelineBinaries[0].pipelineBinCount          = maxPipelineBinaryCount;
 
                 for (uint32_t deviceIdx = 1; deviceIdx < m_pDevice->NumPalDevices(); ++deviceIdx)
                 {
-                    const auto  pBinary    = &pipelineBinary[deviceIdx];
-                    const auto& prevBinary = pipelineBinary[deviceIdx - 1];
+                    const auto  pBinary    = &pipelineBinaries[deviceIdx];
+                    const auto& prevBinary = pipelineBinaries[deviceIdx - 1];
 
                     pBinary->pipelineBinCount = maxPipelineBinaryCount;
                     pBinary->pPipelineBins    = prevBinary.pPipelineBins + maxPipelineBinaryCount;
@@ -733,7 +733,7 @@ VkResult RayTracingPipeline::CreateImpl(
                 &cacheId[deviceIdx]
             );
 
-            bool forceCompilation = m_pDevice->GetRuntimeSettings().enablePipelineDump;
+            bool forceCompilation = false;
             if (forceCompilation == false)
             {
                 Vkgc::BinaryData cachedBinData = {};
@@ -761,31 +761,75 @@ VkResult RayTracingPipeline::CreateImpl(
                     // Unpack the cached blob into separate binaries.
                     pDefaultCompiler->ExtractRayTracingPipelineBinary(
                         &cachedBinData,
-                        &pipelineBinary[deviceIdx]);
+                        &pipelineBinaries[deviceIdx]);
                 }
             }
 
-            // Compile if unable to retrieve from cache.
             if (cacheResult != Util::Result::Success)
             {
-                result = pDefaultCompiler->ConvertRayTracingPipelineInfo(
+                if ((settings.ignoreFlagFailOnPipelineCompileRequired == false) &&
+                    (flags & VK_PIPELINE_CREATE_2_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_KHR))
+                {
+                    result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
+                }
+            }
+
+            bool shouldConvert = (pCreateInfo != nullptr) &&
+                (settings.enablePipelineDump || (cacheResult != Util::Result::Success));
+
+            VkResult convertResult = VK_ERROR_UNKNOWN;
+            if (shouldConvert)
+            {
+                convertResult = pDefaultCompiler->ConvertRayTracingPipelineInfo(
                     m_pDevice,
                     &pipelineCreateInfo,
                     flags,
                     &shaderInfo,
                     &optimizerKey,
                     &binaryCreateInfo);
+                result = (result == VK_SUCCESS) ? convertResult : result;
+            }
 
-                if (result == VK_SUCCESS)
+            if ((result == VK_SUCCESS) &&
+                (convertResult == VK_SUCCESS) &&
+                (cacheResult != Util::Result::Success))
+            {
+                for (uint32_t i = 0; i < binaryCreateInfo.pipelineInfo.shaderCount; i++)
                 {
-                    result = pDefaultCompiler->CreateRayTracingPipelineBinary(
-                        m_pDevice,
-                        deviceIdx,
-                        pPipelineCache,
-                        &binaryCreateInfo,
-                        &pipelineBinary[deviceIdx],
-                        &cacheId[deviceIdx]);
+                    if (IsShaderModuleIdentifier(binaryCreateInfo.pipelineInfo.pShaders[i]))
+                    {
+                        result = VK_ERROR_UNKNOWN;
+                        break;
+                    }
                 }
+            }
+
+            if (settings.enablePipelineDump && (convertResult == VK_SUCCESS))
+            {
+                if ((cacheResult == Util::Result::Success) || (result != VK_SUCCESS))
+                {
+                    Vkgc::PipelineBuildInfo pipelineInfo = {};
+                    pipelineInfo.pRayTracingInfo = &binaryCreateInfo.pipelineInfo;
+                    pDefaultCompiler->DumpPipeline(
+                        m_pDevice->GetRuntimeSettings(),
+                        pipelineInfo,
+                        binaryCreateInfo.apiPsoHash,
+                        pipelineBinaries[deviceIdx].pipelineBinCount,
+                        pipelineBinaries[deviceIdx].pPipelineBins,
+                        result);
+                }
+            }
+
+            // Compile if unable to retrieve from cache.
+            if ((result == VK_SUCCESS) && (cacheResult != Util::Result::Success))
+            {
+                result = pDefaultCompiler->CreateRayTracingPipelineBinary(
+                    m_pDevice,
+                    deviceIdx,
+                    pPipelineCache,
+                    &binaryCreateInfo,
+                    &pipelineBinaries[deviceIdx],
+                    &cacheId[deviceIdx]);
 
                 // Add the pipeline to any cache layer where it's missing.
                 if (result == VK_SUCCESS)
@@ -794,7 +838,7 @@ VkResult RayTracingPipeline::CreateImpl(
 
                     // Join the binaries into a single blob.
                     pDefaultCompiler->BuildRayTracingPipelineBinary(
-                        &pipelineBinary[deviceIdx],
+                        &pipelineBinaries[deviceIdx],
                         &cachedBinData);
 
                     if (cachedBinData.pCode != nullptr)
@@ -814,7 +858,7 @@ VkResult RayTracingPipeline::CreateImpl(
             if (totalGroupCount > 0)
             {
                 // Copy shader groups if compiler doesn't use pre-allocated buffer.
-                const auto& groupHandle = pipelineBinary[deviceIdx].shaderGroupHandle;
+                const auto& groupHandle = pipelineBinaries[deviceIdx].shaderGroupHandle;
                 if (groupHandle.shaderHandles != pShaderGroups[deviceIdx])
                 {
                     memcpy(
@@ -825,13 +869,13 @@ VkResult RayTracingPipeline::CreateImpl(
             }
         }
 
-        m_hasTraceRay = pipelineBinary[DefaultDeviceIndex].hasTraceRay;
+        m_hasTraceRay = pipelineBinaries[DefaultDeviceIndex].hasTraceRay;
 
         uint32_t funcCount = 0;
         if (result == VK_SUCCESS)
         {
-            const auto pShaderProp = &pipelineBinary[DefaultDeviceIndex].shaderPropSet.shaderProps[0];
-            const uint32_t shaderCount = pipelineBinary[DefaultDeviceIndex].shaderPropSet.shaderCount;
+            const auto pShaderProp = &pipelineBinaries[DefaultDeviceIndex].shaderPropSet.shaderProps[0];
+            const uint32_t shaderCount = pipelineBinaries[DefaultDeviceIndex].shaderPropSet.shaderCount;
             for (uint32_t i = 0; i < shaderCount; i++)
             {
                 if (pShaderProp[i].shaderId != RayTracingInvalidShaderId)
@@ -854,7 +898,7 @@ VkResult RayTracingPipeline::CreateImpl(
 
             for (uint32_t deviceIdx = 0; deviceIdx != MaxPalDevices; ++deviceIdx)
             {
-                const auto& librarySummary = pipelineBinary[deviceIdx].librarySummary;
+                const auto& librarySummary = pipelineBinaries[deviceIdx].librarySummary;
                 totalLibrarySummariesSize += Pow2Align(librarySummary.codeSize, 8);
             }
 
@@ -875,7 +919,7 @@ VkResult RayTracingPipeline::CreateImpl(
 
                     for (uint32_t deviceIdx = 0; deviceIdx != MaxPalDevices; ++deviceIdx)
                     {
-                        const auto& librarySummary = pipelineBinary[deviceIdx].librarySummary;
+                        const auto& librarySummary = pipelineBinaries[deviceIdx].librarySummary;
                         librarySummaries[deviceIdx].pCode = VoidPtrInc(pBuffer, offset);
                         librarySummaries[deviceIdx].codeSize = librarySummary.codeSize;
                         memcpy(VoidPtrInc(pBuffer, offset), librarySummary.pCode, librarySummary.codeSize);
@@ -969,7 +1013,7 @@ VkResult RayTracingPipeline::CreateImpl(
                 ((deviceIdx < m_pDevice->NumPalDevices()) && (palResult == Pal::Result::Success));
                 deviceIdx++)
             {
-                const auto pBinaries               = pipelineBinary[deviceIdx].pPipelineBins;
+                const auto pBinaries               = pipelineBinaries[deviceIdx].pPipelineBins;
                 const auto ppDeviceShaderLibraries = ppShaderLibraries + deviceIdx * funcCount;
                 void*      pDeviceShaderLibraryMem = Util::VoidPtrInc(pPalShaderLibraryMem,
                                                                       deviceIdx * funcCount * shaderLibrarySize);
@@ -984,14 +1028,14 @@ VkResult RayTracingPipeline::CreateImpl(
                     localPipelineInfo.pipeline.flags.clientInternal = false;
                     localPipelineInfo.pipeline.pipelineBinarySize   = pBinaries[0].codeSize;
                     localPipelineInfo.pipeline.pPipelineBinary      = pBinaries[0].pCode;
-                    localPipelineInfo.pipeline.maxFunctionCallDepth = pipelineBinary[deviceIdx].maxFunctionCallDepth;
+                    localPipelineInfo.pipeline.maxFunctionCallDepth = pipelineBinaries[deviceIdx].maxFunctionCallDepth;
                 }
 
                 // Copy indirect function info
                 uint32_t       funcIndex           = 0;
-                const auto     pShaderProp         = &pipelineBinary[deviceIdx].shaderPropSet.shaderProps[0];
-                const uint32_t traceRayShaderIndex = pipelineBinary[deviceIdx].shaderPropSet.traceRayIndex;
-                const uint32_t shaderCount         = pipelineBinary[deviceIdx].shaderPropSet.shaderCount;
+                const auto     pShaderProp         = &pipelineBinaries[deviceIdx].shaderPropSet.shaderProps[0];
+                const uint32_t traceRayShaderIndex = pipelineBinaries[deviceIdx].shaderPropSet.traceRayIndex;
+                const uint32_t shaderCount         = pipelineBinaries[deviceIdx].shaderPropSet.shaderCount;
 
                 for (uint32_t i = 0; i < shaderCount; i++)
                 {
@@ -1251,10 +1295,10 @@ VkResult RayTracingPipeline::CreateImpl(
                                 const auto pPipelineLibShaderGroups = pPipelineLib->GetShaderGroupHandles(deviceIdx);
                                 const auto pLibGroupInfos           = pPipelineLib->GetShaderGroupInfos();
 
-                                // update pipelineLibHasTraceRay and pipelineLibTraceRayVa
-                                pipelineHasTraceRay = pPipelineLib->CheckHasTraceRay();
-                                if (pipelineHasTraceRay)
+                                // update pipelineHasTraceRay and pipelineLibTraceRayVa
+                                if (pPipelineLib->CheckHasTraceRay())
                                 {
+                                    pipelineHasTraceRay   = true;
                                     pipelineLibTraceRayVa = pPipelineLib->GetTraceRayGpuVa(deviceIdx);
                                 }
 
@@ -1370,7 +1414,9 @@ VkResult RayTracingPipeline::CreateImpl(
                     if (funcCount > 0)
                     {
                         const auto traceRayFuncIndex = funcCount - 1;
-                        traceRayGpuVas[deviceIdx]    = pIndirectFuncInfo[traceRayFuncIndex].gpuVirtAddr;
+                        traceRayGpuVas[deviceIdx] =
+                            pIndirectFuncInfo[traceRayFuncIndex].gpuVirtAddr |
+                            pShaderProp[traceRayFuncIndex].shaderIdExtraBits;
                     }
                     else if (pipelineHasTraceRay)
                     {
@@ -1453,12 +1499,12 @@ VkResult RayTracingPipeline::CreateImpl(
             if (settings.enableDebugPrintf)
             {
                 ClearFormatString();
-                for (uint32_t i = 0; i < pipelineBinary[DefaultDeviceIndex].pipelineBinCount; ++i)
+                for (uint32_t i = 0; i < pipelineBinaries[DefaultDeviceIndex].pipelineBinCount; ++i)
                 {
                     DebugPrintf::DecodeFormatStringsFromElf(
                         m_pDevice,
-                        pipelineBinary[DefaultDeviceIndex].pPipelineBins[i].codeSize,
-                        static_cast<const char*>(pipelineBinary[DefaultDeviceIndex].pPipelineBins[i].pCode),
+                        pipelineBinaries[DefaultDeviceIndex].pPipelineBins[i].codeSize,
+                        static_cast<const char*>(pipelineBinaries[DefaultDeviceIndex].pPipelineBins[i].pCode),
                         GetFormatStrings());
                 }
             }
@@ -1502,7 +1548,7 @@ VkResult RayTracingPipeline::CreateImpl(
         {
             m_pDevice->GetCompiler(deviceIdx)->FreeRayTracingPipelineBinary(
                 &binaryCreateInfo,
-                &pipelineBinary[deviceIdx]);
+                &pipelineBinaries[deviceIdx]);
         }
 
         pAllocator->pfnFree(pAllocator->pUserData, pTempBuffer);
@@ -1552,70 +1598,71 @@ static int32_t DeferredCreateRayTracingPipelineCallback(
     {
     case DeferredCallbackType::Join:
     {
-        uint32_t index = Util::AtomicIncrement(&pState->nextPending) - 1;
-
-        const bool firstThread = (index == 0);
-
-        // Run in a loop until we've processed all pipeline create infos. Parallel joins in their own loops can
-        // consume iterations. A single "main" thread per pipeline is sent out here. These threads will not return
-        // untill the pipeline has been fully created (unlike the helper worker threads).
-        while (index < pState->infoCount)
+        if (pState->nextPending < pState->infoCount)
         {
-            VkResult                                 localResult = VK_SUCCESS;
-            const VkRayTracingPipelineCreateInfoKHR* pCreateInfo = &pState->pInfos[index];
-            VkPipelineCreateFlags2KHR                flags       =
-                Device::GetPipelineCreateFlags(pCreateInfo);
+            uint32_t index = Util::AtomicIncrement(&pState->nextPending) - 1;
 
-            if (pState->skipRemaining == VK_FALSE)
+            // Run in a loop until we've processed all pipeline create infos. Parallel joins in their own loops can
+            // consume iterations. A single "main" thread per pipeline is sent out here. These threads will not return
+            // untill the pipeline has been fully created (unlike the helper worker threads).
+            while (index < pState->infoCount)
             {
-                RayTracingPipeline* pPipeline = RayTracingPipeline::ObjectFromHandle(pState->pPipelines[index]);
+                VkResult                                 localResult = VK_SUCCESS;
+                const VkRayTracingPipelineCreateInfoKHR* pCreateInfo = &pState->pInfos[index];
+                VkPipelineCreateFlags2KHR                flags       =
+                    Device::GetPipelineCreateFlags(pCreateInfo);
 
-                localResult = pPipeline->CreateImpl(pState->pPipelineCache,
-                                                    pCreateInfo,
-                                                    flags,
-                                                    pState->pAllocator,
-                                                    pOperation->Workload(index));
+                if (pState->skipRemaining == VK_FALSE)
+                {
+                    RayTracingPipeline* pPipeline = RayTracingPipeline::ObjectFromHandle(pState->pPipelines[index]);
+
+                    localResult = pPipeline->CreateImpl(pState->pPipelineCache,
+                                                        pCreateInfo,
+                                                        flags,
+                                                        pState->pAllocator,
+                                                        pOperation->Workload(index));
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-                if (localResult == VK_SUCCESS)
-                {
-                    DevModeMgr* pDevMgr = pDevice->VkInstance()->GetDevModeMgr();
-
-                    if (pDevMgr != nullptr)
+                    if (localResult == VK_SUCCESS)
                     {
-                        pDevMgr->PipelineCreated(pDevice, pPipeline);
+                        IDevMode* pDevMode = pDevice->VkInstance()->GetDevModeMgr();
 
-                        if (pPipeline->IsInlinedShaderEnabled() == false)
+                        if (pDevMode != nullptr)
                         {
-                            pDevMgr->ShaderLibrariesCreated(pDevice, pPipeline);
+                            pDevMode->PipelineCreated(pDevice, pPipeline);
+
+                            if (pPipeline->IsInlinedShaderEnabled() == false)
+                            {
+                                pDevMode->ShaderLibrariesCreated(pDevice, pPipeline);
+                            }
                         }
                     }
-                }
 #endif
-            }
-
-            if (localResult != VK_SUCCESS)
-            {
-                Util::AtomicCompareAndSwap(&pState->finalResult,
-                                           static_cast<uint32_t>(VK_SUCCESS),
-                                           static_cast<uint32_t>(localResult));
-
-                if (pCreateInfo->flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT)
-                {
-                    Util::AtomicCompareAndSwap(&pState->skipRemaining,
-                                               VK_FALSE,
-                                               VK_TRUE);
                 }
+
+                if (localResult != VK_SUCCESS)
+                {
+                    Util::AtomicCompareAndSwap(&pState->finalResult,
+                                               static_cast<uint32_t>(VK_SUCCESS),
+                                               static_cast<uint32_t>(localResult));
+
+                    if (pCreateInfo->flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT)
+                    {
+                        Util::AtomicCompareAndSwap(&pState->skipRemaining,
+                                                   VK_FALSE,
+                                                   VK_TRUE);
+                    }
+                }
+
+                // If the workloads for this pipeline are still pending (after creation), then no-op them at this point
+                Util::AtomicCompareAndSwap(&pOperation->Workload(index)->totalInstances,
+                                           UINT_MAX,
+                                           0);
+
+                Util::AtomicIncrement(&pState->completed);
+
+                index = Util::AtomicIncrement(&pState->nextPending) - 1;
             }
-
-            // If the workloads for this pipeline are still pending (after creation), then no-op them at this point
-            Util::AtomicCompareAndSwap(&pOperation->Workload(index)->totalInstances,
-                                       UINT_MAX,
-                                       0);
-
-            Util::AtomicIncrement(&pState->completed);
-
-            index = Util::AtomicIncrement(&pState->nextPending) - 1;
         }
 
         // Helper worker threads go through here. They assist the main pipeline threads. Currently, the only workloads

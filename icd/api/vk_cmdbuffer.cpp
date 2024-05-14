@@ -43,6 +43,7 @@
 #include "include/vk_utils.h"
 #include "include/vk_query.h"
 #include "include/vk_queue.h"
+#include "include/vk_indirect_commands_layout.h"
 
 #if VKI_RAY_TRACING
 #include "raytrace/vk_acceleration_structure.h"
@@ -599,6 +600,16 @@ CmdBuffer::CmdBuffer(
     m_reverseThreadGroupState(false)
 #if VKI_RAY_TRACING
     , m_scratchVidMemList(pDevice->VkInstance()->Allocator())
+    , m_maxCpsMemSize(0)
+    , m_patchCpsList
+    {
+        pDevice->VkInstance()->Allocator(),
+#if VKI_BUILD_MAX_NUM_GPUS > 1
+        pDevice->VkInstance()->Allocator(),
+        pDevice->VkInstance()->Allocator(),
+        pDevice->VkInstance()->Allocator()
+#endif
+    }
 #endif
 {
     m_flags.wasBegun = false;
@@ -1310,6 +1321,8 @@ VkResult CmdBuffer::Begin(
 
 #if VKI_RAY_TRACING
     FreeRayTracingScratchVidMemory();
+
+    m_maxCpsMemSize = 0;
 #endif
 
     const PhysicalDevice*        pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
@@ -1854,6 +1867,7 @@ VkResult CmdBuffer::Reset(VkCommandBufferResetFlags flags)
 
 #if VKI_RAY_TRACING
         FreeRayTracingScratchVidMemory();
+        FreePatchCpsList();
 #endif
 
         result = PalToVkResult(PalCmdBufferReset(releaseResources));
@@ -2337,6 +2351,7 @@ VkResult CmdBuffer::Destroy(void)
 
 #if VKI_RAY_TRACING
     FreeRayTracingScratchVidMemory();
+    FreePatchCpsList();
 
 #endif
 
@@ -2956,6 +2971,8 @@ void CmdBuffer::BindVertexBuffersUpdateBindingRange(
         const VkBuffer     buffer = pBuffers[inputIdx];
         const VkDeviceSize offset = pOffsets[inputIdx];
 
+        bool padVertexBuffers = m_flags.padVertexBuffers;
+
         if (buffer != VK_NULL_HANDLE)
         {
             const Buffer* pBuffer = Buffer::ObjectFromHandle(buffer);
@@ -2964,6 +2981,12 @@ void CmdBuffer::BindVertexBuffersUpdateBindingRange(
             if ((pSizes != nullptr) && (pSizes[inputIdx] != VK_WHOLE_SIZE))
             {
                 pBinding->range = pSizes[inputIdx];
+
+                if (offset != 0)
+                {
+                    padVertexBuffers = true;
+                }
+
             }
             else
             {
@@ -2981,7 +3004,7 @@ void CmdBuffer::BindVertexBuffersUpdateBindingRange(
             pBinding->stride = pStrides[inputIdx];
         }
 
-        if (m_flags.padVertexBuffers && (pBinding->stride != 0))
+        if (padVertexBuffers && (pBinding->stride != 0))
         {
             pBinding->range = Util::RoundUpToMultiple(pBinding->range, pBinding->stride);
         }
@@ -3112,7 +3135,7 @@ void CmdBuffer::Draw(
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
+    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0, 0);
 #endif
 
     {
@@ -3139,7 +3162,7 @@ void CmdBuffer::DrawIndexed(
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
+    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0, 0);
 #endif
 
     {
@@ -3155,7 +3178,7 @@ void CmdBuffer::DrawIndexed(
 }
 
 // =====================================================================================================================
-template< bool indexed, bool useBufferCount>
+template<bool indexed, bool useBufferCount>
 void CmdBuffer::DrawIndirect(
     VkBuffer     buffer,
     VkDeviceSize offset,
@@ -3169,7 +3192,7 @@ void CmdBuffer::DrawIndirect(
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
+    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0, 0);
 #endif
 
     Buffer* pBuffer = Buffer::ObjectFromHandle(buffer);
@@ -3218,6 +3241,51 @@ void CmdBuffer::DrawIndirect(
 }
 
 // =====================================================================================================================
+template<bool indexed, bool useBufferCount>
+void CmdBuffer::DrawIndirect(
+    VkDeviceSize indirectBufferVa,
+    VkDeviceSize indirectBufferSize,
+    uint32_t     count,
+    uint32_t     stride,
+    VkDeviceSize countBufferVa)
+{
+    DbgBarrierPreCmd((indexed ? DbgBarrierDrawIndexed : DbgBarrierDrawNonIndexed) | DbgBarrierDrawIndirect);
+
+    ValidateGraphicsStates();
+
+#if VKI_RAY_TRACING
+    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0, 0);
+#endif
+
+    VK_ASSERT(stride <= indirectBufferSize);
+    Pal::GpuVirtAddrAndStride gpuVirtAddrAndStride = { indirectBufferVa, stride };
+
+    utils::IterateMask deviceGroup(m_curDeviceMask);
+    do
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        if (indexed == false)
+        {
+            PalCmdBuffer(deviceIdx)->CmdDrawIndirectMulti(
+                gpuVirtAddrAndStride,
+                count,
+                useBufferCount? countBufferVa : 0);
+        }
+        else
+        {
+            PalCmdBuffer(deviceIdx)->CmdDrawIndexedIndirectMulti(
+                gpuVirtAddrAndStride,
+                count,
+                useBufferCount ? countBufferVa : 0);
+        }
+    }
+    while (deviceGroup.IterateNext());
+
+    DbgBarrierPostCmd((indexed ? DbgBarrierDrawIndexed : DbgBarrierDrawNonIndexed) | DbgBarrierDrawIndirect);
+}
+
+// =====================================================================================================================
 void CmdBuffer::DrawMeshTasks(
     uint32_t x,
     uint32_t y,
@@ -3230,7 +3298,7 @@ void CmdBuffer::DrawMeshTasks(
         ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
-        BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
+        BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0, 0);
 #endif
 
         PalCmdDrawMeshTasks(x, y, z);
@@ -3254,10 +3322,44 @@ void CmdBuffer::DrawMeshTasksIndirect(
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
+    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0, 0);
 #endif
 
     PalCmdDrawMeshTasksIndirect<useBufferCount>(buffer, offset, count, stride, countBuffer, countOffset);
+
+    DbgBarrierPostCmd(DbgBarrierDrawMeshTasksIndirect);
+}
+
+// =====================================================================================================================
+template<bool useBufferCount>
+void CmdBuffer::DrawMeshTasksIndirect(
+    VkDeviceSize indirectBufferVa,
+    VkDeviceSize indirectBufferSize,
+    uint32_t     count,
+    uint32_t     stride,
+    VkDeviceSize countBufferVa)
+{
+    DbgBarrierPreCmd(DbgBarrierDrawMeshTasksIndirect);
+
+    ValidateGraphicsStates();
+
+#if VKI_RAY_TRACING
+    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0, 0);
+#endif
+
+    VK_ASSERT(stride <= indirectBufferSize);
+
+    Pal::GpuVirtAddrAndStride gpuVirtAddrAndStride = { indirectBufferVa, stride };
+
+    utils::IterateMask deviceGroup(m_curDeviceMask);
+    do
+    {
+        PalCmdBuffer(deviceGroup.Index())->CmdDispatchMeshIndirectMulti(
+            gpuVirtAddrAndStride,
+            count,
+            useBufferCount? countBufferVa : 0);
+
+    } while (deviceGroup.IterateNext());
 
     DbgBarrierPostCmd(DbgBarrierDrawMeshTasksIndirect);
 }
@@ -3276,7 +3378,7 @@ void CmdBuffer::Dispatch(
     }
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pComputePipeline, Pal::PipelineBindPoint::Compute, x, y, z, nullptr, 0);
+    BindRayQueryConstants(m_allGpuState.pComputePipeline, Pal::PipelineBindPoint::Compute, x, y, z, nullptr, 0, 0);
 #endif
 
     if (m_pDevice->GetRuntimeSettings().enableAlternatingThreadGroupOrder)
@@ -3307,7 +3409,7 @@ void CmdBuffer::DispatchOffset(
 
 #if VKI_RAY_TRACING
     BindRayQueryConstants(
-        m_allGpuState.pComputePipeline, Pal::PipelineBindPoint::Compute, dim_x, dim_y, dim_z, nullptr, 0);
+        m_allGpuState.pComputePipeline, Pal::PipelineBindPoint::Compute, dim_x, dim_y, dim_z, nullptr, 0, 0);
 #endif
 
     PalCmdDispatchOffset(base_x, base_y, base_z, dim_x, dim_y, dim_z);
@@ -3336,12 +3438,58 @@ void CmdBuffer::DispatchIndirect(
                           0,
                           0,
                           pBuffer,
-                          offset);
+                          offset,
+                          0);
 #endif
 
     PalCmdDispatchIndirect(pBuffer, offset);
 
     DbgBarrierPostCmd(DbgBarrierDispatchIndirect);
+}
+
+// =====================================================================================================================
+void CmdBuffer::DispatchIndirect(
+    VkDeviceSize indirectBufferVa)
+{
+    DbgBarrierPreCmd(DbgBarrierDispatchIndirect);
+
+    if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute) == false)
+    {
+        RebindPipeline<PipelineBindCompute, false>();
+    }
+
+#if VKI_RAY_TRACING
+    BindRayQueryConstants(
+        m_allGpuState.pComputePipeline, Pal::PipelineBindPoint::Compute, 0, 0, 0, nullptr, 0, indirectBufferVa);
+#endif
+
+    utils::IterateMask deviceGroup(m_curDeviceMask);
+    do
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+        PalCmdBuffer(deviceIdx)->CmdDispatchIndirect(indirectBufferVa);
+    }
+    while (deviceGroup.IterateNext());
+
+    DbgBarrierPostCmd(DbgBarrierDispatchIndirect);
+}
+
+// =====================================================================================================================
+void CmdBuffer::ExecuteIndirect(
+    VkBool32                            isPreprocessed,
+    const VkGeneratedCommandsInfoNV*    pInfo)
+{
+    IndirectCommandsLayout* pLayout = IndirectCommandsLayout::ObjectFromHandle(pInfo->indirectCommandsLayout);
+
+    utils::IterateMask deviceGroup(m_curDeviceMask);
+    do
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+        pLayout->BindPreprocessBuffer(pInfo->preprocessBuffer,
+                                      pInfo->preprocessOffset,
+                                      deviceIdx);
+    }
+    while (deviceGroup.IterateNext());
 }
 
 // =====================================================================================================================
@@ -3410,7 +3558,7 @@ void CmdBuffer::ClearColorImage(
                 pPalRanges,
                 0,
                 nullptr,
-                settings.enableColorClearAutoSync ? Pal::ColorClearAutoSync : 0);
+                settings.enableColorClearAutoSync ? static_cast<uint32_t>(Pal::ColorClearAutoSync) : 0);
         }
 
         virtStackFrame.FreeArray(pPalRanges);
@@ -4882,7 +5030,7 @@ void CmdBuffer::PostDrawPreResolveSync()
     barrierInfo.transitionCount = 1;
     barrierInfo.pTransitions = &transition;
 
-    PalCmdBuffer(DefaultDeviceIndex)->CmdBarrier(barrierInfo);
+    PalCmdBarrier(barrierInfo, m_curDeviceMask);
 }
 
 // =====================================================================================================================
@@ -8027,9 +8175,7 @@ void CmdBuffer::RPSyncPoint(
 
         // Execute the barrier if it actually did anything
         if ((acquireReleaseInfo.dstGlobalStageMask != Pal::PipelineStageBottomOfPipe) ||
-            ((acquireReleaseInfo.imageBarrierCount > 0) && isDstStageNotBottomOfPipe) ||
-            ((rpBarrier.pipePointCount > 1)                                           ||
-             ((rpBarrier.pipePointCount == 1) && (rpBarrier.pipePoints[0] != Pal::HwPipeTop))))
+            ((acquireReleaseInfo.imageBarrierCount > 0) && isDstStageNotBottomOfPipe))
         {
             PalCmdReleaseThenAcquire(
                 &acquireReleaseInfo,
@@ -9797,49 +9943,48 @@ void CmdBuffer::DbgCmdBarrier(bool preCmd)
         (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherPresent)            == CoherPresent)),
         "The PAL::CacheCoherencyUsageFlags enum has changed. Vulkan settings might need to be updated.");
 
-    Pal::HwPipePoint waitPoint;
-    Pal::HwPipePoint signalPoint;
+    uint32_t srcStageMask;
+    uint32_t dstStageMask;
+
     uint32_t         srcCacheMask;
     uint32_t         dstCacheMask;
 
     if (preCmd)
     {
-        waitPoint    = static_cast<Pal::HwPipePoint>(settings.dbgBarrierPreWaitPipePoint);
-        signalPoint  = static_cast<Pal::HwPipePoint>(settings.dbgBarrierPreSignalPipePoint);
+        dstStageMask = ConvertWaitPointToPipeStage(
+            static_cast<Pal::HwPipePoint>(settings.dbgBarrierPreWaitPipePoint));
+        srcStageMask = ConvertPipePointToPipeStage(
+            static_cast<Pal::HwPipePoint>(settings.dbgBarrierPreSignalPipePoint));
         srcCacheMask = settings.dbgBarrierPreCacheSrcMask;
         dstCacheMask = settings.dbgBarrierPreCacheDstMask;
     }
     else
     {
-        waitPoint    = static_cast<Pal::HwPipePoint>(settings.dbgBarrierPostWaitPipePoint);
-        signalPoint  = static_cast<Pal::HwPipePoint>(settings.dbgBarrierPostSignalPipePoint);
+        dstStageMask = ConvertWaitPointToPipeStage(
+            static_cast<Pal::HwPipePoint>(settings.dbgBarrierPostWaitPipePoint));
+        srcStageMask = ConvertPipePointToPipeStage(
+            static_cast<Pal::HwPipePoint>(settings.dbgBarrierPostSignalPipePoint));
         srcCacheMask = settings.dbgBarrierPostCacheSrcMask;
         dstCacheMask = settings.dbgBarrierPostCacheDstMask;
     }
 
-    Pal::BarrierInfo barrier = {};
+    Pal::AcquireReleaseInfo barrier = {};
 
-    barrier.reason    = RgpBarrierUnknownReason; // This code is debug-only code.
-    barrier.waitPoint = waitPoint;
+    barrier.reason             = RgpBarrierUnknownReason; // This code is debug-only code.
+    barrier.dstGlobalStageMask = dstStageMask;
 
-    if (waitPoint != Pal::HwPipeTop || signalPoint != Pal::HwPipeTop)
+    if ((dstStageMask != Pal::PipelineStageTopOfPipe) || (srcStageMask != Pal::PipelineStageTopOfPipe))
     {
-        barrier.pipePointWaitCount = 1;
-        barrier.pPipePoints        = &signalPoint;
+        barrier.srcGlobalStageMask = srcStageMask;
     }
-
-    Pal::BarrierTransition transition = {};
 
     if (srcCacheMask != 0 || dstCacheMask != 0)
     {
-        transition.srcCacheMask = srcCacheMask;
-        transition.dstCacheMask = dstCacheMask;
-
-        barrier.transitionCount = 1;
-        barrier.pTransitions    = &transition;
+        barrier.srcGlobalAccessMask = srcCacheMask;
+        barrier.dstGlobalAccessMask = dstCacheMask;
     }
 
-    PalCmdBarrier(barrier, m_curDeviceMask);
+    PalCmdReleaseThenAcquire(barrier, m_curDeviceMask);
 }
 #endif
 
@@ -10055,7 +10200,7 @@ void CmdBuffer::DrawIndirectByteCount(
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
-    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0);
+    BindRayQueryConstants(m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0, 0);
 #endif
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
@@ -10457,11 +10602,54 @@ void CmdBuffer::TraceRays(
 }
 
 // =====================================================================================================================
+void CmdBuffer::AddPatchCpsRequest(
+    uint32_t                      deviceIdx,
+    GpuRt::DispatchRaysConstants* pConstsMem,
+    uint64_t                      bufSize)
+{
+    VK_ASSERT(pConstsMem != nullptr);
+    m_maxCpsMemSize = Util::Max(m_maxCpsMemSize, bufSize);
+    Pal::Result result = m_patchCpsList[deviceIdx].PushBack(pConstsMem);
+    VK_ASSERT(result == Pal::Result::Success);
+}
+
+// =====================================================================================================================
+void CmdBuffer::FreePatchCpsList()
+{
+    utils::IterateMask deviceGroup(m_curDeviceMask);
+
+    do
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+        m_patchCpsList[deviceIdx].Clear();
+    }
+    while (deviceGroup.IterateNext());
+}
+
+// =====================================================================================================================
+// Fill bufVa to each patch request (call this at execute time).
+void CmdBuffer::ApplyPatchCpsRequests(
+    uint32_t               deviceIdx,
+    const Pal::IGpuMemory& cpsMem) const
+{
+    for (PatchCpsVector::Iter iter = m_patchCpsList[deviceIdx].Begin(); iter.Get() != nullptr; iter.Next())
+    {
+        GpuRt::DispatchRaysConstants* pConstsMem = iter.Get();
+
+        m_pDevice->RayTrace()->GpuRt(deviceIdx)->PatchDispatchRaysConstants(
+            pConstsMem,
+            cpsMem.Desc().gpuVirtAddr,
+            m_maxCpsMemSize);
+    }
+}
+
+// =====================================================================================================================
 void CmdBuffer::GetRayTracingDispatchArgs(
     uint32_t                               deviceIdx,
     const RuntimeSettings&                 settings,
     CmdPool*                               pCmdPool,
     const RayTracingPipeline*              pPipeline,
+    uint32*                                pConstMem,
     Pal::gpusize                           constGpuAddr,
     uint32_t                               width,
     uint32_t                               height,
@@ -10509,8 +10697,16 @@ void CmdBuffer::GetRayTracingDispatchArgs(
         pConstants->constData.cpsBackendStackSize = stackSizes.backendSize;
         if (settings.cpsFlags & CpsFlagStackInGlobalMem)
         {
-            // TODO: Record Cps stack requirement, create Cps stack at queue submission, and fill
-            // pConstants->constData.cpsGlobalMemoryAddressLo/Hi
+            const uint32 numRays = width * height * depth;
+
+            const gpusize cpsMemorySize = m_pDevice->RayTrace()->GpuRt(deviceIdx)->GetCpsMemoryBytes(
+                stackSizes.frontendSize,
+                numRays);
+
+            AddPatchCpsRequest(
+                deviceIdx,
+                reinterpret_cast<GpuRt::DispatchRaysConstants*>(pConstMem),
+                cpsMemorySize);
         }
     }
 
@@ -10559,9 +10755,9 @@ void CmdBuffer::TraceRayPreSetup(
     const RuntimeSettings& settings     = m_pDevice->GetRuntimeSettings();
     const RayTracingPipeline* pPipeline = m_allGpuState.pRayTracingPipeline;
 
-    void* pConstData = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(GpuRt::DispatchRaysConstantsDw,
-                                                                        1,
-                                                                        pConstGpuAddr);
+    uint32* pConstMem = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(GpuRt::DispatchRaysConstantsDw,
+                                                                         1,
+                                                                         pConstGpuAddr);
 
     GpuRt::DispatchRaysConstants constants = {};
 
@@ -10569,6 +10765,7 @@ void CmdBuffer::TraceRayPreSetup(
                               settings,
                               m_pCmdPool,
                               pPipeline,
+                              pConstMem,
                               *pConstGpuAddr,
                               width,
                               height,
@@ -10579,7 +10776,7 @@ void CmdBuffer::TraceRayPreSetup(
                               callableShaderBindingTable,
                               &constants);
 
-    memcpy(pConstData, &constants, sizeof(constants));
+    memcpy(pConstMem, &constants, sizeof(constants));
 }
 
 // =====================================================================================================================
@@ -10958,7 +11155,8 @@ void CmdBuffer::BindRayQueryConstants(
     uint32_t               height,
     uint32_t               depth,
     Buffer*                pIndirectBuffer,
-    VkDeviceSize           indirectOffset)
+    VkDeviceSize           indirectOffset,
+    VkDeviceSize           indirectBufferVirtAddr)
 {
     if ((pPipeline != nullptr) && pPipeline->HasRayTracing())
     {
@@ -11004,7 +11202,7 @@ void CmdBuffer::BindRayQueryConstants(
 
                         gpusize indirectBufferVa = (pIndirectBuffer != nullptr) ?
                             pIndirectBuffer->GpuVirtAddr(deviceIdx) + indirectOffset :
-                            0;
+                            indirectBufferVirtAddr;
 
                         if (indirectBufferVa == 0)
                         {
@@ -11078,10 +11276,10 @@ void CmdBuffer::InsertDebugMarker(
 #if ICD_GPUOPEN_DEVMODE_BUILD
     constexpr uint8 MarkerSourceApplication = 0;
 
-    const DevModeMgr* pDevModeMgr = m_pDevice->VkInstance()->GetDevModeMgr();
+    const IDevMode* pDevMode = m_pDevice->VkInstance()->GetDevModeMgr();
 
     // Insert Crash Analysis markers if requested
-    if ((pDevModeMgr != nullptr) && (pDevModeMgr->IsCrashAnalysisEnabled()))
+    if ((pDevMode != nullptr) && (pDevMode->IsCrashAnalysisEnabled()))
     {
         PalCmdBuffer(DefaultDeviceIndex)->CmdInsertExecutionMarker(isBegin,
                                                                    MarkerSourceApplication,
@@ -11374,6 +11572,7 @@ void CmdBuffer::ValidateGraphicsStates()
                     params.pPipeline         = pGraphicsPipeline->GetPalPipeline(deviceIdx);
                     params.gfxDynState       =
                         m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
+                    params.gfxShaderInfo     = pGraphicsPipeline->GetBindInfo();
                     if (params.gfxDynState.enable.depthClampMode &&
                         (params.gfxDynState.enable.depthClipMode == false))
                     {
@@ -11463,16 +11662,16 @@ void CmdBuffer::ValidateGraphicsStates()
                     Device::SetDefaultVrsRateParams(&vrsRate);
                 }
 
-                if (m_allGpuState.minSampleShading > 0.0)
+                // Both MSAA and VRS would utilize the value of PS_ITER_SAMPLES
+                // Thus, choose the min combiner (i.e. choose the higher quality rate) when both features are
+                // enabled
+                if ((m_allGpuState.msaaCreateInfo.pixelShaderSamples > 1) &&
+                    (m_allGpuState.vrsRate.flags.exposeVrsPixelsMask == 1) &&
+                    (pGraphicsPipeline != nullptr) &&
+                    (pGraphicsPipeline->GetPipelineFlags().shadingRateUsedInShader == false))
                 {
-                    if ((m_allGpuState.vrsRate.shadingRate == Pal::VrsShadingRate::_1x1) &&
-                        (pGraphicsPipeline != nullptr) &&
-                        (pGraphicsPipeline->GetPipelineFlags().shadingRateUsedInShader == false) &&
-                        pGraphicsPipeline->ContainsDynamicState(DynamicStatesInternal::FragmentShadingRateStateKhr))
-                    {
-                        vrsRate.combinerState[static_cast<uint32>(Pal::VrsCombinerStage::PsIterSamples)] =
-                            Pal::VrsCombiner::Override;
-                    }
+                    vrsRate.combinerState[static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] =
+                        Pal::VrsCombiner::Min;
                 }
 
                 PalCmdBuffer(deviceIdx)->CmdSetPerDrawVrsRate(vrsRate);
@@ -12656,6 +12855,38 @@ void CmdBuffer::DrawIndirect<true, true>(
     VkDeviceSize    countOffset);
 
 template
+void CmdBuffer::DrawIndirect<false, false>(
+    VkDeviceSize    indirectBufferVa,
+    VkDeviceSize    indirectBufferSize,
+    uint32_t        count,
+    uint32_t        stride,
+    VkDeviceSize    countBufferVa);
+
+template
+void CmdBuffer::DrawIndirect<true, false>(
+    VkDeviceSize    indirectBufferVa,
+    VkDeviceSize    indirectBufferSize,
+    uint32_t        count,
+    uint32_t        stride,
+    VkDeviceSize    countBufferVa);
+
+template
+void CmdBuffer::DrawIndirect<false, true>(
+    VkDeviceSize    indirectBufferVa,
+    VkDeviceSize    indirectBufferSize,
+    uint32_t        count,
+    uint32_t        stride,
+    VkDeviceSize    countBufferVa);
+
+template
+void CmdBuffer::DrawIndirect<true, true>(
+    VkDeviceSize    indirectBufferVa,
+    VkDeviceSize    indirectBufferSize,
+    uint32_t        count,
+    uint32_t        stride,
+    VkDeviceSize    countBufferVa);
+
+template
 void CmdBuffer::DrawMeshTasksIndirect<false>(
     VkBuffer        buffer,
     VkDeviceSize    offset,
@@ -12672,6 +12903,22 @@ void CmdBuffer::DrawMeshTasksIndirect<true>(
     uint32_t        stride,
     VkBuffer        countBuffer,
     VkDeviceSize    countOffset);
+
+template
+void CmdBuffer::DrawMeshTasksIndirect<false>(
+    VkDeviceSize    indirectBufferVa,
+    VkDeviceSize    indirectBufferSize,
+    uint32_t        count,
+    uint32_t        stride,
+    VkDeviceSize    countBufferVa);
+
+template
+void CmdBuffer::DrawMeshTasksIndirect<true>(
+    VkDeviceSize    indirectBufferVa,
+    VkDeviceSize    indirectBufferSize,
+    uint32_t        count,
+    uint32_t        stride,
+    VkDeviceSize    countBufferVa);
 
 template
 void CmdBuffer::ResolveImage<VkImageResolve>(

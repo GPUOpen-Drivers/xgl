@@ -280,11 +280,11 @@ VkResult Pipeline::BuildShaderStageInfo(
 
     uint32_t maxOutIdx = 0;
 
-    for (uint32_t i = 0; i < stageCount; ++i)
+    for (uint32_t stageIdx = 0; stageIdx < stageCount; ++stageIdx)
     {
-        const VkPipelineShaderStageCreateInfo& stageInfo = pStages[i];
+        const VkPipelineShaderStageCreateInfo& stageInfo = pStages[stageIdx];
         const ShaderStage                      stage     = ShaderFlagBitToStage(stageInfo.stage);
-        const uint32_t                         outIdx    = pfnGetOutputIdx(i, stage);
+        const uint32_t                         outIdx    = pfnGetOutputIdx(stageIdx, stage);
 
         maxOutIdx = Util::Max(maxOutIdx, outIdx + 1);
 
@@ -335,28 +335,30 @@ VkResult Pipeline::BuildShaderStageInfo(
 
             if (pShaderModuleCreateInfo != nullptr)
             {
-                flags    = pShaderModuleCreateInfo->flags;
+                flags                 = pShaderModuleCreateInfo->flags;
                 shaderBinary.codeSize = pShaderModuleCreateInfo->codeSize;
                 shaderBinary.pCode    = pShaderModuleCreateInfo->pCode;
 
                 codeHash = ShaderModule::BuildCodeHash(
                     shaderBinary.pCode,
                     shaderBinary.codeSize);
+
+                if (shaderBinary.pCode != nullptr)
+                {
+                    result = pCompiler->BuildShaderModule(
+                        pDevice,
+                        flags,
+                        VK_INTERNAL_SHADER_FLAGS_FORCE_UNCACHED_BIT,
+                        shaderBinary,
+                        &pTempModules[outIdx]);
+
+                    pTempModules[outIdx].codeHash          = codeHash;
+                    pShaderStageInfo[outIdx].pModuleHandle = &pTempModules[outIdx];
+                    pShaderStageInfo[outIdx].codeSize      = shaderBinary.codeSize;
+                }
             }
 
-            if (shaderBinary.pCode != nullptr)
-            {
-                result = pCompiler->BuildShaderModule(
-                    pDevice,
-                    flags,
-                    VK_INTERNAL_SHADER_FLAGS_FORCE_UNCACHED_BIT,
-                    shaderBinary,
-                    &pTempModules[outIdx]);
-
-                pShaderStageInfo[outIdx].pModuleHandle = &pTempModules[outIdx];
-                pShaderStageInfo[outIdx].codeSize = shaderBinary.codeSize;
-            }
-            else if (pPipelineShaderStageModuleIdentifierCreateInfoEXT != nullptr)
+            if (pPipelineShaderStageModuleIdentifierCreateInfoEXT != nullptr)
             {
                 // Get the 128 bit ShaderModule Hash
                 VK_ASSERT(pPipelineShaderStageModuleIdentifierCreateInfoEXT->identifierSize ==
@@ -377,11 +379,7 @@ VkResult Pipeline::BuildShaderStageInfo(
                 break;
             }
 
-            pShaderStageInfo[outIdx].codeHash      = ShaderModule::GetCodeHash(codeHash, stageInfo.pName);
-            if (pShaderStageInfo[outIdx].pModuleHandle == &pTempModules[outIdx])
-            {
-                pTempModules[outIdx].codeHash = pShaderStageInfo[outIdx].codeHash;
-            }
+            pShaderStageInfo[outIdx].codeHash = ShaderModule::GetCodeHash(codeHash, stageInfo.pName);
         }
 
         pShaderStageInfo[outIdx].stage               = stage;
@@ -446,9 +444,9 @@ void Pipeline::HandleExtensionStructs(
 
 // =====================================================================================================================
 Pipeline::Pipeline(
-    Device* const       pDevice,
+    Device* const               pDevice,
 #if VKI_RAY_TRACING
-    bool                hasRayTracing,
+    bool                        hasRayTracing,
 #endif
     VkPipelineBindPoint type)
     :
@@ -1410,6 +1408,24 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
 
     // If the requested number of executables was less than the available number of hw stages, return Incomplete
     return (*pInternalRepresentationCount < numberOfInternalRepresentations) ? VK_INCOMPLETE : VK_SUCCESS;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetPipelineIndirectDeviceAddressNV(
+    VkDevice                                        device,
+    const VkPipelineIndirectDeviceAddressInfoNV*    pInfo)
+{
+    VK_NOT_IMPLEMENTED;
+    return 0;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetPipelineIndirectMemoryRequirementsNV(
+    VkDevice                                        device,
+    const VkComputePipelineCreateInfo*              pCreateInfo,
+    VkMemoryRequirements2*                          pMemoryRequirements)
+{
+    VK_NOT_IMPLEMENTED;
 }
 
 } // namespace entry

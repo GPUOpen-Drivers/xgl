@@ -46,6 +46,8 @@
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
+#include "devmode/devmode_rgp.h"
+#include "devmode/devmode_ubertrace.h"
 #endif
 
 #include "res/ver.h"
@@ -90,7 +92,7 @@ Instance::Instance(
     m_preInitAppProfile(preInitProfile),
     m_screenCount(0),
     m_pScreenStorage(nullptr),
-    m_pDevModeMgr(nullptr),
+    m_pDevMode(nullptr),
     m_debugReportCallbacks(&m_palAllocator),
     m_debugUtilsMessengers(&m_palAllocator),
     m_logTagIdMask(0),
@@ -439,7 +441,7 @@ VkResult Instance::Init(
 
     // Late-initialize the developer mode manager.  Needs to be called after settings are committed but BEFORE
     // physical devices are late-initialized (below).
-    if ((status == VK_SUCCESS) && (m_pDevModeMgr != nullptr))
+    if ((status == VK_SUCCESS) && (m_pDevMode != nullptr))
     {
         DevModeLateInitialize();
     }
@@ -549,12 +551,10 @@ VkResult Instance::Init(
 
         InitDispatchTable();
 
-#if DEBUG
         // Optionally wait for a debugger to be attached
         utils::WaitIdleForDebugger(pPhysicalDevice->GetRuntimeSettings().waitForDebugger,
             &pPhysicalDevice->GetRuntimeSettings().waitForDebuggerExecutableName[0],
             pPhysicalDevice->GetRuntimeSettings().debugTimeout);
-#endif
     }
 
     return status;
@@ -630,9 +630,9 @@ VkResult Instance::LoadAndCommitSettings(
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
     // Inform developer mode manager of settings.  This also finalizes the developer mode manager.
-    if (m_pDevModeMgr != nullptr)
+    if (m_pDevMode != nullptr)
     {
-        m_pDevModeMgr->Finalize(deviceCount, settingsLoaders);
+        m_pDevMode->Finalize(deviceCount, settingsLoaders);
     }
 #endif
 
@@ -671,8 +671,8 @@ VkResult Instance::Destroy(void)
     AmdvlkLog(m_logTagIdMask, GeneralPrint, "%s End ********\n", GetApplicationName());
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    // Pipeline binary cache is required to be freed before destroying DevModeMgr
-    // because DevModeMgr manages the state of pipeline binary cache.
+    // Pipeline binary cache is required to be freed before destroying DevMode
+    // because DevMode manages the state of pipeline binary cache.
     uint32_t deviceCount = PhysicalDeviceManager::MaxPhysicalDevices;
     VkPhysicalDevice devices[PhysicalDeviceManager::MaxPhysicalDevices] = {};
     m_pPhysicalDeviceManager->EnumeratePhysicalDevices(&deviceCount, devices);
@@ -681,9 +681,9 @@ VkResult Instance::Destroy(void)
         ApiPhysicalDevice::ObjectFromHandle(devices[deviceIdx])->GetCompiler()->DestroyPipelineBinaryCache();
     }
 
-    if (m_pDevModeMgr != nullptr)
+    if (m_pDevMode != nullptr)
     {
-        m_pDevModeMgr->Destroy();
+        m_pDevMode->Destroy();
     }
 #endif
 
@@ -1049,12 +1049,24 @@ void Instance::DevModeEarlyInitialize()
 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
     VK_ASSERT(m_pPhysicalDeviceManager == nullptr);
-    VK_ASSERT(m_pDevModeMgr == nullptr);
+    VK_ASSERT(m_pDevMode == nullptr);
 
     // Initialize the devmode manager which abstracts interaction with the gpuopen dev driver component
     if (m_pPalPlatform->GetDevDriverServer() != nullptr)
     {
-        const VkResult result = DevModeMgr::Create(this, &m_pDevModeMgr);
+        VkResult result;
+
+#if PAL_BUILD_RDF
+        if ((m_pPalPlatform->GetTraceSession() != nullptr) &&
+            (m_pPalPlatform->GetTraceSession()->IsTracingEnabled()))
+        {
+            result = DevModeUberTrace::Create(this, reinterpret_cast<DevModeUberTrace**>(&m_pDevMode));
+        }
+        else
+#endif
+        {
+            result = DevModeRgp::Create(this, reinterpret_cast<DevModeRgp**>(&m_pDevMode));
+        }
 
         VK_ASSERT(result == VK_SUCCESS);
     }
@@ -1068,16 +1080,16 @@ void Instance::DevModeLateInitialize()
 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
     VK_ASSERT(m_pPhysicalDeviceManager != nullptr);
-    VK_ASSERT(m_pDevModeMgr != nullptr);
+    VK_ASSERT(m_pDevMode != nullptr);
 
     // Query if we need support for SQTT tracing, and notify the instance so that the correct dispatch table
     // layer can be installed.
-    if (m_pDevModeMgr->IsTracingEnabled())
+    if (m_pDevMode->IsTracingEnabled())
     {
         EnableTracingSupport();
     }
 
-    if (m_pDevModeMgr->IsCrashAnalysisEnabled())
+    if (m_pDevMode->IsCrashAnalysisEnabled())
     {
         EnableCrashAnalysisSupport();
     }

@@ -458,6 +458,14 @@ public:
         VkBuffer                                    countBuffer,
         VkDeviceSize                                countOffset);
 
+    template< bool indexed, bool useBufferCount>
+    void DrawIndirect(
+        VkDeviceSize                                indirectBufferVa,
+        VkDeviceSize                                indirectBufferSize,
+        uint32_t                                    count,
+        uint32_t                                    stride,
+        VkDeviceSize                                countBufferVa);
+
     void DrawMeshTasks(
         uint32_t                                    x,
         uint32_t                                    y,
@@ -471,6 +479,14 @@ public:
         uint32_t                                    stride,
         VkBuffer                                    countBuffer,
         VkDeviceSize                                countOffset);
+
+    template<bool useBufferCount>
+    void DrawMeshTasksIndirect(
+        VkDeviceSize                                indirectBufferVa,
+        VkDeviceSize                                indirectBufferSize,
+        uint32_t                                    count,
+        uint32_t                                    stride,
+        VkDeviceSize                                countBufferVa);
 
     void Dispatch(
         uint32_t                                    x,
@@ -486,8 +502,15 @@ public:
         uint32_t                                    dim_z);
 
     void DispatchIndirect(
+        VkDeviceSize                                indirectBufferVa);
+
+    void DispatchIndirect(
         VkBuffer                                    buffer,
         VkDeviceSize                                offset);
+
+    void ExecuteIndirect(
+        VkBool32                                    isPreprocessed,
+        const VkGeneratedCommandsInfoNV*            pInfo);
 
     template<typename BufferCopyType>
     void CopyBuffer(
@@ -1428,6 +1451,11 @@ public:
     }
 
 #if VKI_RAY_TRACING
+    uint64 GetCpsMemSize() const { return m_maxCpsMemSize; }
+
+    void ApplyPatchCpsRequests(
+        uint32_t               deviceIdx,
+        const Pal::IGpuMemory& cpsMem) const;
 
     bool HasRayTracing() const { return m_flags.hasRayTracing; }
 #endif
@@ -1460,10 +1488,9 @@ public:
     {
         return &m_debugPrintf;
     }
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(CmdBuffer);
-
-    uint32 GetHevcDbpIndex(const uint8_t* pRefPicList, uint32 dpbSlot);
 
     void ValidateGraphicsStates();
 
@@ -1823,6 +1850,7 @@ private:
         const RuntimeSettings&                 settings,
         CmdPool*                               pCmdPool,
         const RayTracingPipeline*              pPipeline,
+        uint32*                                pConstMem,
         Pal::gpusize                           constGpuAddr,
         uint32_t                               width,
         uint32_t                               height,
@@ -1851,7 +1879,15 @@ private:
         uint32_t               height,
         uint32_t               depth,
         Buffer*                pIndirectBuffer,
-        VkDeviceSize           indirectOffset);
+        VkDeviceSize           indirectOffset,
+        const Pal::gpusize     indirectBufferVa);
+
+    void AddPatchCpsRequest(
+        uint32_t                      deviceIdx,
+        GpuRt::DispatchRaysConstants* pConstsMem,
+        uint64_t                      bufSize);
+
+    void FreePatchCpsList();
 #endif
 
     void InsertDebugMarker(
@@ -1943,6 +1979,11 @@ private:
     bool                          m_reverseThreadGroupState;
 #if VKI_RAY_TRACING
     Util::Vector<InternalMemory*, 16, PalAllocator> m_scratchVidMemList; // Ray-tracing scratch memory
+
+    uint64                        m_maxCpsMemSize; // max ray sorting memory requested
+
+    typedef Util::Vector<GpuRt::DispatchRaysConstants*, 1, PalAllocator> PatchCpsVector;
+    PatchCpsVector m_patchCpsList[MaxPalDevices];
 #endif
 };
 
@@ -2233,6 +2274,26 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatchIndirect(
     VkCommandBuffer                             commandBuffer,
     VkBuffer                                    buffer,
     VkDeviceSize                                offset);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdPreprocessGeneratedCommandsNV(
+    VkCommandBuffer                             commandBuffer,
+    const VkGeneratedCommandsInfoNV*            pGeneratedCommandsInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdExecuteGeneratedCommandsNV(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    isPreprocessed,
+    const VkGeneratedCommandsInfoNV*            pGeneratedCommandsInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBindPipelineShaderGroupNV(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipeline                                  pipeline,
+    uint32_t                                    groupIndex);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdUpdatePipelineIndirectBufferNV(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipeline                                  pipeline);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBase(
     VkCommandBuffer                             commandBuffer,

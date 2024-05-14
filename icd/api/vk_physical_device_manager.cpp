@@ -39,6 +39,7 @@
 #include "palVectorImpl.h"
 #include <algorithm>
 #include <vector>
+#include "settings/experimentsLoader.h"
 
 namespace vk
 {
@@ -51,7 +52,8 @@ PhysicalDeviceManager::PhysicalDeviceManager(
     m_pInstance(pInstance),
     m_pDisplayManager(pDisplayManager),
     m_devices(pInstance->Allocator()),
-    m_pAllNullProperties(nullptr)
+    m_pAllNullProperties(nullptr),
+    m_pExperimentsLoader(nullptr)
 {
 
 }
@@ -107,7 +109,27 @@ VkResult PhysicalDeviceManager::Create(
 // =====================================================================================================================
 VkResult PhysicalDeviceManager::Initialize()
 {
-    return UpdateLockedPhysicalDeviceList();
+    VkResult result = VK_SUCCESS;
+
+    void* pExpLoader = m_pInstance->AllocMem(sizeof(ExperimentsLoader), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+
+    if (pExpLoader != nullptr)
+    {
+        m_pExperimentsLoader = VK_PLACEMENT_NEW(pExpLoader) ExperimentsLoader(m_pInstance->PalPlatform());
+
+        result = PalToVkResult(m_pExperimentsLoader->Init());
+    }
+    else
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        result = UpdateLockedPhysicalDeviceList();
+    }
+
+    return result;
 }
 
 // =====================================================================================================================
@@ -116,6 +138,12 @@ PhysicalDeviceManager::~PhysicalDeviceManager()
     if (m_pAllNullProperties != nullptr)
     {
         m_pInstance->FreeMem(m_pAllNullProperties);
+    }
+
+    if (m_pExperimentsLoader != nullptr)
+    {
+        m_pExperimentsLoader->~ExperimentsLoader();
+        m_pInstance->FreeMem(m_pExperimentsLoader);
     }
 
     DestroyLockedPhysicalDeviceList();
@@ -274,7 +302,8 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
             if (pLoader != nullptr)
             {
                 settingsArray[i] = VK_PLACEMENT_NEW(pLoader) VulkanSettingsLoader(pPalDeviceList[i],
-                                                                                  m_pInstance->PalPlatform());
+                                                                                  m_pInstance->PalPlatform(),
+                                                                                  m_pExperimentsLoader);
             }
             else
             {

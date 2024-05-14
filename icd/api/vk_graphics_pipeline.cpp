@@ -86,8 +86,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
 
         if (shouldCompile)
         {
-            bool skipCacheQuery = pDevice->GetRuntimeSettings().enablePipelineDump;
-
+            bool skipCacheQuery = false;
             if (skipCacheQuery == false)
             {
                 // Search the pipeline binary cache
@@ -105,26 +104,71 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
             }
         }
 
+        if (shouldCompile)
+        {
+            if ((pDevice->GetRuntimeSettings().ignoreFlagFailOnPipelineCompileRequired == false) &&
+                (flags & VK_PIPELINE_CREATE_2_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_KHR))
+            {
+                result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
+            }
+        }
+
+        bool shouldConvert = (pCreateInfo != nullptr) &&
+            (pDevice->GetRuntimeSettings().enablePipelineDump ||
+            (shouldCompile && (deviceIdx == DefaultDeviceIndex)));
+
+        VkResult convertResult = VK_ERROR_UNKNOWN;
+        if (shouldConvert)
+        {
+            convertResult = pDefaultCompiler->ConvertGraphicsPipelineInfo(
+                pDevice,
+                pCreateInfo,
+                extStructs,
+                flags,
+                pShaderInfo,
+                pPipelineLayout,
+                pPipelineOptimizerKey,
+                pBinaryMetadata,
+                pBinaryCreateInfo);
+            result = (result == VK_SUCCESS) ? convertResult : result;
+        }
+
+        if ((result == VK_SUCCESS) && (convertResult == VK_SUCCESS) && shouldCompile)
+        {
+            if (IsShaderModuleIdentifier(pBinaryCreateInfo->pipelineInfo.vs)   ||
+                IsShaderModuleIdentifier(pBinaryCreateInfo->pipelineInfo.gs)   ||
+                IsShaderModuleIdentifier(pBinaryCreateInfo->pipelineInfo.tcs)  ||
+                IsShaderModuleIdentifier(pBinaryCreateInfo->pipelineInfo.tes)  ||
+                IsShaderModuleIdentifier(pBinaryCreateInfo->pipelineInfo.fs)   ||
+                IsShaderModuleIdentifier(pBinaryCreateInfo->pipelineInfo.task) ||
+                IsShaderModuleIdentifier(pBinaryCreateInfo->pipelineInfo.mesh))
+            {
+                result = VK_ERROR_UNKNOWN;
+            }
+        }
+
+        if (pDevice->GetRuntimeSettings().enablePipelineDump && (convertResult == VK_SUCCESS))
+        {
+            if ((shouldCompile == false) || (result != VK_SUCCESS))
+            {
+                Vkgc::PipelineBuildInfo pipelineInfo = {};
+                pipelineInfo.pGraphicsInfo = &pBinaryCreateInfo->pipelineInfo;
+                pDefaultCompiler->DumpPipeline(
+                    pDevice->GetRuntimeSettings(),
+                    pipelineInfo,
+                    pBinaryCreateInfo->apiPsoHash,
+                    1,
+                    &pPipelineBinaries[deviceIdx],
+                    result);
+            }
+        }
+
         // Compile if unable to retrieve from cache
         if (shouldCompile)
         {
-            if ((deviceIdx == DefaultDeviceIndex) || (pCreateInfo == nullptr))
+            if (result == VK_SUCCESS)
             {
-                if (pCreateInfo != nullptr)
-                {
-                    result = pDefaultCompiler->ConvertGraphicsPipelineInfo(
-                        pDevice,
-                        pCreateInfo,
-                        extStructs,
-                        flags,
-                        pShaderInfo,
-                        pPipelineLayout,
-                        pPipelineOptimizerKey,
-                        pBinaryMetadata,
-                        pBinaryCreateInfo);
-                }
-
-                if (result == VK_SUCCESS)
+                if ((deviceIdx == DefaultDeviceIndex) || (pCreateInfo == nullptr))
                 {
                     result = pDefaultCompiler->CreateGraphicsPipelineBinary(
                         pDevice,
@@ -145,45 +189,45 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                             pBinaryCreateInfo->pBinaryMetadata);
                     }
                 }
-            }
-            else
-            {
-                GraphicsPipelineBinaryCreateInfo binaryCreateInfoMGPU = {};
-                PipelineMetadata                 binaryMetadataMGPU   = {};
-                result = pDefaultCompiler->ConvertGraphicsPipelineInfo(
-                    pDevice,
-                    pCreateInfo,
-                    extStructs,
-                    flags,
-                    pShaderInfo,
-                    pPipelineLayout,
-                    pPipelineOptimizerKey,
-                    &binaryMetadataMGPU,
-                    &binaryCreateInfoMGPU);
-
-                if (result == VK_SUCCESS)
+                else
                 {
-                    result = pDevice->GetCompiler(deviceIdx)->CreateGraphicsPipelineBinary(
+                    GraphicsPipelineBinaryCreateInfo binaryCreateInfoMGPU = {};
+                    PipelineMetadata                 binaryMetadataMGPU = {};
+                    result = pDefaultCompiler->ConvertGraphicsPipelineInfo(
                         pDevice,
-                        deviceIdx,
-                        pPipelineCache,
-                        &binaryCreateInfoMGPU,
+                        pCreateInfo,
+                        extStructs,
                         flags,
-                        &pPipelineBinaries[deviceIdx],
-                        &pCacheIds[deviceIdx]);
-                }
+                        pShaderInfo,
+                        pPipelineLayout,
+                        pPipelineOptimizerKey,
+                        &binaryMetadataMGPU,
+                        &binaryCreateInfoMGPU);
 
-                if (result == VK_SUCCESS)
-                {
-                    result = PipelineCompiler::SetPipelineCreationFeedbackInfo(
-                        pCreationFeedbackInfo,
-                        pCreateInfo->stageCount,
-                        pCreateInfo->pStages,
-                        &binaryCreateInfoMGPU.pipelineFeedback,
-                        binaryCreateInfoMGPU.stageFeedback);
-                }
+                    if (result == VK_SUCCESS)
+                    {
+                        result = pDevice->GetCompiler(deviceIdx)->CreateGraphicsPipelineBinary(
+                            pDevice,
+                            deviceIdx,
+                            pPipelineCache,
+                            &binaryCreateInfoMGPU,
+                            flags,
+                            &pPipelineBinaries[deviceIdx],
+                            &pCacheIds[deviceIdx]);
+                    }
 
-                pDefaultCompiler->FreeGraphicsPipelineCreateInfo(pDevice, &binaryCreateInfoMGPU, false, false);
+                    if (result == VK_SUCCESS)
+                    {
+                        result = PipelineCompiler::SetPipelineCreationFeedbackInfo(
+                            pCreationFeedbackInfo,
+                            pCreateInfo->stageCount,
+                            pCreateInfo->pStages,
+                            &binaryCreateInfoMGPU.pipelineFeedback,
+                            binaryCreateInfoMGPU.stageFeedback);
+                    }
+
+                    pDefaultCompiler->FreeGraphicsPipelineCreateInfo(pDevice, &binaryCreateInfoMGPU, false, false);
+                }
             }
         }
         else if (deviceIdx == DefaultDeviceIndex)
@@ -545,16 +589,17 @@ static bool IsGplFastLinkPossible(
 
 // =====================================================================================================================
 void DumpGplFastLinkInfo(
-    const Device*                     pDevice,
-    VkPipeline                        pipeline,
-    GraphicsPipelineBinaryCreateInfo* pCreateInfo)
+    const Device*                           pDevice,
+    VkPipeline                              pipeline,
+    const GraphicsPipelineBinaryCreateInfo& createInfo,
+    const GraphicsPipelineLibraryInfo&      libInfo)
 {
     const GraphicsPipeline* pGraphicsPipeline = GraphicsPipeline::ObjectFromHandle(pipeline);
     const Pal::IPipeline*   pPalPipeline      = pGraphicsPipeline->GetPalPipeline(DefaultDeviceIndex);
     const Pal::PipelineInfo info              = pPalPipeline->GetInfo();
     const RuntimeSettings&  settings          = pDevice->GetRuntimeSettings();
 
-    uint64_t dumpHash = settings.dumpPipelineWithApiHash ? pCreateInfo->apiPsoHash : info.internalPipelineHash.stable;
+    uint64_t dumpHash = settings.dumpPipelineWithApiHash ? createInfo.apiPsoHash : info.internalPipelineHash.stable;
 
     Vkgc::PipelineDumpOptions dumpOptions = {};
     dumpOptions.pDumpDir = settings.pipelineDumpDir;
@@ -563,49 +608,66 @@ void DumpGplFastLinkInfo(
     dumpOptions.dumpDuplicatePipelines = settings.dumpDuplicatePipelines;
 
     Vkgc::PipelineBuildInfo pipelineInfo = {};
-    pCreateInfo->pipelineInfo.unlinked = false;
-    pipelineInfo.pGraphicsInfo = &pCreateInfo->pipelineInfo;
+    pipelineInfo.pGraphicsInfo = &createInfo.pipelineInfo;
 
     void* pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, pipelineInfo, dumpHash);
     if (pPipelineDumpHandle != nullptr)
     {
-        char extraInfo[256] = {};
+        char preRasterFileName[Util::MaxFileNameStrLen] = {};
+        char fragmentFileName[Util::MaxFileNameStrLen] = {};
+        char colorExportFileName[Util::MaxFileNameStrLen] = {};
 
+        const GraphicsPipelineBinaryCreateInfo& preRasterCreateInfo =
+            libInfo.pPreRasterizationShaderLib->GetPipelineBinaryCreateInfo();
+        const GraphicsPipelineBinaryCreateInfo& fragmentCreateInfo =
+            libInfo.pFragmentShaderLib->GetPipelineBinaryCreateInfo();
+
+        uint64_t preRasterHash = settings.dumpPipelineWithApiHash ?
+            preRasterCreateInfo.apiPsoHash : preRasterCreateInfo.libraryHash[GraphicsLibraryPreRaster];
+        uint64_t fragmentHash = settings.dumpPipelineWithApiHash ?
+            fragmentCreateInfo.apiPsoHash : fragmentCreateInfo.libraryHash[GraphicsLibraryFragment];
+
+        Vkgc::IPipelineDumper::GetPipelineName(&preRasterCreateInfo.pipelineInfo,
+            preRasterFileName, Util::MaxFileNameStrLen, preRasterHash);
+        Vkgc::IPipelineDumper::GetPipelineName(&fragmentCreateInfo.pipelineInfo,
+            fragmentFileName, Util::MaxFileNameStrLen, fragmentHash);
+
+        if (createInfo.pipelineInfo.enableColorExportShader)
+        {
+            uint64_t colorExportHash = settings.dumpPipelineWithApiHash ?
+                createInfo.apiPsoHash : createInfo.libraryHash[GraphicsLibraryColorExport];
+
+            Vkgc::GraphicsPipelineBuildInfo colorExportInfo = {};
+            colorExportInfo.unlinked = true;
+            Vkgc::IPipelineDumper::GetPipelineName(&colorExportInfo,
+                colorExportFileName, Util::MaxFileNameStrLen, colorExportHash);
+        }
+
+        const char* fileNames[] = {preRasterFileName, fragmentFileName, colorExportFileName};
+        Vkgc::IPipelineDumper::DumpGraphicsLibraryFileName(pPipelineDumpHandle, fileNames);
+
+        char extraInfo[256] = {};
         Util::Snprintf(
             extraInfo,
             sizeof(extraInfo),
-            "; ApiPsoHash: 0x%016" PRIX64 "\n",
-            pCreateInfo->apiPsoHash);
+            "\n; ApiPsoHash: 0x%016" PRIX64 "\n",
+            createInfo.apiPsoHash);
         Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
-        for (uint32_t i = 0; i < GraphicsLibraryCount; i++)
-        {
-            if (pCreateInfo->pShaderLibraries[i] == nullptr)
-            {
-                continue;
-            }
-            const Pal::LibraryInfo&  libInfo = pCreateInfo->pShaderLibraries[i]->GetInfo();
-            Util::Snprintf(
-                extraInfo,
-                sizeof(extraInfo),
-                "; GraphicsPipelineLibrary Hash: 0x%016" PRIX64 "\n",
-                libInfo.internalLibraryHash.stable);
-            Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
-        }
 
         for (uint32_t i = 0; i < GraphicsLibraryCount; i++)
         {
-            if (pCreateInfo->pShaderLibraries[i] == nullptr)
+            if (createInfo.pShaderLibraries[i] == nullptr)
             {
                 continue;
             }
             uint32_t codeSize = 0;
-            Pal::Result result = pCreateInfo->pShaderLibraries[i]->GetCodeObject(&codeSize, nullptr);
+            Pal::Result result = createInfo.pShaderLibraries[i]->GetCodeObject(&codeSize, nullptr);
             if ((codeSize > 0) && (result == Pal::Result::Success))
             {
                 void* pCode = pDevice->VkInstance()->AllocMem(codeSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
                 if (pCode != nullptr)
                 {
-                    result = pCreateInfo->pShaderLibraries[i]->GetCodeObject(&codeSize, pCode);
+                    result = createInfo.pShaderLibraries[i]->GetCodeObject(&codeSize, pCode);
                     VK_ASSERT(result == Pal::Result::Success);
 
                     Vkgc::BinaryData libraryBinary = {};
@@ -619,8 +681,9 @@ void DumpGplFastLinkInfo(
             }
         }
 
-        PipelineCompiler::DumpPipelineMetadata(pPipelineDumpHandle, pCreateInfo->pBinaryMetadata);
+        PipelineCompiler::DumpPipelineMetadata(pPipelineDumpHandle, createInfo.pBinaryMetadata);
 
+        Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, "\n;CompileResult=FastLinkSuccess\n");
         Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
     }
 }
@@ -650,7 +713,7 @@ VkResult GraphicsPipeline::Create(
     GraphicsPipelineObjectCreateInfo objectCreateInfo     = {};
     GraphicsPipelineShaderStageInfo  shaderStageInfo      = {};
     PipelineOptimizerKey             pipelineOptimizerKey = {};
-    uint64_t                         apiPsoHash           = {};
+    uint64_t                         apiPsoHash           = 0;
     Util::MetroHash::Hash            elfHash              = {};
     PipelineMetadata                 binaryMetadata       = {};
     PipelineLayout*                  pPipelineLayout      = nullptr;
@@ -671,7 +734,6 @@ VkResult GraphicsPipeline::Create(
     // 1. Check whether GPL fast link is possible
     if (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink)
     {
-
         // If pipeline only contains PreRasterizationShaderLib and no fragment shader is in the create info,
         // we add a null fragment library in order to use fast link.
         if ((libInfo.flags.isLibrary == false) &&
@@ -763,7 +825,6 @@ VkResult GraphicsPipeline::Create(
             &shaderOptimizerKeys[0],
             &pipelineOptimizerKey,
             &apiPsoHash,
-            //&elfHash,
             &tempModules[0],
             &cacheId[0]);
 
@@ -921,7 +982,7 @@ VkResult GraphicsPipeline::Create(
 
         if (enableFastLink && pDevice->GetRuntimeSettings().enablePipelineDump)
         {
-            DumpGplFastLinkInfo(pDevice, *pPipeline, &binaryCreateInfo);
+            DumpGplFastLinkInfo(pDevice, *pPipeline, binaryCreateInfo, libInfo);
         }
     }
 
@@ -1599,7 +1660,7 @@ VkResult GraphicsPipeline::Destroy(
 {
     if (m_deferWorkload.pEvent != nullptr)
     {
-        auto result = m_deferWorkload.pEvent->Wait(10);
+        auto result = m_deferWorkload.pEvent->Wait(Util::fseconds{ 10 });
         if (result == Util::Result::Success)
         {
             Util::Destructor(m_deferWorkload.pEvent);
