@@ -52,6 +52,8 @@
 
 #include <stdio.h>
 
+using namespace std::chrono_literals;
+
 namespace vk
 {
 
@@ -113,7 +115,7 @@ VkResult SwapChain::Create(
     // the old swapchain should be flaged as deprecated no matter whether the new swapchain is created successfully.
     if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
     {
-        SwapChain::ObjectFromHandle(pCreateInfo->oldSwapchain)->MarkAsDeprecated(pAllocator);
+        SwapChain::ObjectFromHandle(pCreateInfo->oldSwapchain)->MarkAsDeprecated(true, pAllocator);
     }
 
     // Find the index of the device associated with the PAL screen and therefore, the PAL swap chain to be created
@@ -672,6 +674,7 @@ VkResult SwapChain::SetupAutoStereo(
 // Destroy Vulkan swap chain.
 VkResult SwapChain::Destroy(const VkAllocationCallbacks* pAllocator)
 {
+
     // Make sure the swapchain is idle and safe to be destroyed.
     if (m_pPalSwapChain != nullptr)
     {
@@ -718,9 +721,9 @@ VkResult SwapChain::AcquireNextImage(
     const VkStructHeader*            pAcquireInfo,
     uint32_t*                        pImageIndex)
 {
-    VkFence     fence     = VK_NULL_HANDLE;
-    VkSemaphore semaphore = VK_NULL_HANDLE;
-    uint64_t    timeout   = UINT64_MAX;
+    VkFence                     fence     = VK_NULL_HANDLE;
+    VkSemaphore                 semaphore = VK_NULL_HANDLE;
+    std::chrono::nanoseconds    timeout   = std::chrono::nanoseconds::max();
 
     const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
@@ -740,7 +743,7 @@ VkResult SwapChain::AcquireNextImage(
         {
             semaphore = pVkAcquireNextImageInfoKHR->semaphore;
             fence     = pVkAcquireNextImageInfoKHR->fence;
-            timeout   = pVkAcquireNextImageInfoKHR->timeout;
+            timeout   = Uint64ToChronoNano(pVkAcquireNextImageInfoKHR->timeout);
 
             Util::BitMaskScanForward(&presentationDeviceIdx, pVkAcquireNextImageInfoKHR->deviceMask);
 
@@ -768,7 +771,7 @@ VkResult SwapChain::AcquireNextImage(
 
         if (result == VK_SUCCESS)
         {
-            acquireInfo.timeout    = Uint64ToChronoNano(timeout);
+            acquireInfo.timeout    = timeout;
             acquireInfo.pSemaphore = (pSemaphore != nullptr) ?
                                       pSemaphore->PalSemaphore(DefaultDeviceIndex) :
                                       nullptr;
@@ -801,7 +804,7 @@ VkResult SwapChain::AcquireNextImage(
         result = VK_ERROR_OUT_OF_DATE_KHR;
     }
 
-    if ((timeout == 0) && (result == VK_TIMEOUT))
+    if ((timeout == 0s) && (result == VK_TIMEOUT))
     {
         result = VK_NOT_READY;
     }
@@ -887,10 +890,11 @@ bool SwapChain::IsFullscreenOrEfsePresent() const
 // =====================================================================================================================
 // Fills in the PAL swap chain present info with the appropriate image to present and returns its GPU memory.
 Pal::IGpuMemory* SwapChain::UpdatePresentInfo(
-    uint32_t                    deviceIdx,
-    uint32_t                    imageIndex,
-    Pal::PresentSwapChainInfo*  pPresentInfo,
-    const Pal::FlipStatusFlags& flipFlags)
+    uint32_t                                  deviceIdx,
+    uint32_t                                  imageIndex,
+    Pal::PresentSwapChainInfo*                pPresentInfo,
+    const Pal::FlipStatusFlags&               flipFlags,
+    const Pal::PerSourceFrameMetadataControl& metadataFlags)
 {
     Pal::IGpuMemory* pSrcImageGpuMemory = nullptr;
 
@@ -911,6 +915,7 @@ Pal::IGpuMemory* SwapChain::UpdatePresentInfo(
         )
     {
         m_pFullscreenMgr->TryEnterExclusive(this);
+
     }
 
     // Always fallback to windowed if FSE is not acquired to avoid missing presents.
@@ -1118,27 +1123,31 @@ bool SwapChain::IsSuboptimal(uint32_t deviceIdx)
 
 // =====================================================================================================================
 void SwapChain::MarkAsDeprecated(
+    bool                         releaseResources,
     const VkAllocationCallbacks* pAllocator)
 {
     m_deprecated = true;
 
-    if (m_pPalSwapChain != nullptr)
+    if (releaseResources)
     {
-        m_pPalSwapChain->WaitIdle();
-
-        for (uint32_t i = 0; i < m_properties.imageCount; ++i)
+        if (m_pPalSwapChain != nullptr)
         {
-            // Remove memory references to presentable image memory and destroy the images and image memory.
-            Memory::ObjectFromHandle(m_properties.imageMemory[i])->Free(m_pDevice, pAllocator);
-            Image::ObjectFromHandle(m_properties.images[i])->Destroy(m_pDevice, pAllocator);
+            m_pPalSwapChain->WaitIdle();
+
+            for (uint32_t i = 0; i < m_properties.imageCount; ++i)
+            {
+                // Remove memory references to presentable image memory and destroy the images and image memory.
+                Memory::ObjectFromHandle(m_properties.imageMemory[i])->Free(m_pDevice, pAllocator);
+                Image::ObjectFromHandle(m_properties.images[i])->Destroy(m_pDevice, pAllocator);
+            }
+
+            m_pPalSwapChain->Destroy();
+
+            // Set to null to avoid double deleting when the actual object gets destroyed.
+            m_pPalSwapChain = nullptr;
         }
 
-        m_pPalSwapChain->Destroy();
-
-        // Set to null to avoid double deleting when the actual object gets destroyed.
-        m_pPalSwapChain = nullptr;
     }
-
 }
 
 // =====================================================================================================================

@@ -40,7 +40,7 @@
 constexpr uint32_t RgpSqttInstrumentationSpecVersion = 1;
 
 // RGP SQTT Instrumentation Specification version for Vulkan-specific tables
-constexpr uint32_t RgpSqttInstrumentationApiVersion  = 0;
+constexpr uint32_t RgpSqttInstrumentationApiVersion  = 4;
 
 #if defined(BIGENDIAN_CPU) || defined(__BIG_ENDIAN__)
 static_assert(false, "The bitfields in this header match the RGP format specification with the assumption that "

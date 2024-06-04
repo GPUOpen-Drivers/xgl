@@ -100,6 +100,12 @@ struct AppProfilePattern
     AppProfilePatternEntry entries[16];
 };
 
+// define PatternEnd
+
+constexpr AppProfilePatternEntry PatternEnd = {};
+
+// Section START AppProfilePatternEntry for all Games
+
 constexpr AppProfilePatternEntry AppNameDoom =
 {
     PatternAppNameLower,
@@ -600,6 +606,24 @@ constexpr AppProfilePatternEntry AppNameX4Foundations
     "x4"
 };
 
+constexpr AppProfilePatternEntry AppNameHaloInfiniteLauncher
+{
+    PatternAppNameLower,
+    "haloinfinite.exe"
+};
+
+constexpr AppProfilePatternEntry AppNameTf2Win64
+{
+    PatternAppNameLower,
+    "tf_win64.exe"
+};
+
+constexpr AppProfilePatternEntry AppNameTf2Linux64
+{
+    PatternAppNameLower,
+    "tf_linux64"
+};
+
 constexpr AppProfilePatternEntry AppNameX4Engine
 {
     PatternEngineNameLower,
@@ -732,9 +756,36 @@ constexpr AppProfilePatternEntry AppEngineQuanticDream
     "quantic dream engine"
 };
 
-constexpr AppProfilePatternEntry PatternEnd = {};
+constexpr AppProfilePatternEntry AppNameEnshrouded =
+{
+    PatternAppNameLower,
+    "enshrouded"
+};
+
+constexpr AppProfilePatternEntry AppEngineHolistic =
+{
+    PatternEngineNameLower,
+    "holistic"
+};
+
+constexpr AppProfilePatternEntry AppNameWindowKill =
+{
+    PatternAppNameLower,
+    "windowkill"
+};
+
+constexpr AppProfilePatternEntry AppEngineGodot =
+{
+    PatternEngineNameLower,
+    "godot engine"
+};
+
+// Section END of AppProfilePatternEntry for all games
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
+// Note: If an app gets detected by both app name and engine name,
+// whatever comes first in this array will be the chosen app profile in ScanApplicationProfile().
+// This should get fixed so not as to get bitten by the order here!
 AppProfilePattern AppPatternTable[] =
 {
     {
@@ -795,14 +846,6 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::IdTechLauncher,
         {
             AppNameIdTechLauncher,
-            AppEngineIdTech,
-            PatternEnd
-        }
-    },
-
-    {
-        AppProfile::IdTechEngine,
-        {
             AppEngineIdTech,
             PatternEnd
         }
@@ -1376,6 +1419,32 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::DxvkHaloInfiniteLauncher,
+        {
+            AppNameHaloInfiniteLauncher,
+            AppEngineDXVK,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::DxvkTf2,
+        {
+            AppNameTf2Win64,
+            AppEngineDXVK,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::DxvkTf2,
+        {
+            AppNameTf2Linux64,
+            AppEngineDXVK,
+            PatternEnd
+        }
+    },
+    {
         AppProfile::MetalGearSolid5,
         {
             AppNameMetalGearSolid5,
@@ -1467,6 +1536,23 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::Enshrouded,
+        {
+            AppNameEnshrouded,
+            AppEngineHolistic,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::HolisticEngine,
+        {
+            AppEngineHolistic,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::Zink,
         {
             AppEngineZink,
@@ -1494,6 +1580,23 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::DXVK,
         {
             AppEngineDXVK,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::IdTechEngine,
+        {
+            AppEngineIdTech,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::WindowKill,
+        {
+            AppNameWindowKill,
+            AppEngineGodot,
             PatternEnd
         }
     }

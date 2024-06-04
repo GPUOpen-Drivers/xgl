@@ -4077,20 +4077,20 @@ const char* VkResultName(VkResult result);
 
 inline std::chrono::nanoseconds Uint64ToChronoNano(uint64_t nanoSeconds)
 {
-    const uint64_t maxNano = static_cast<uint64_t>(std::chrono::nanoseconds::max().count());
-    return std::chrono::nanoseconds { Util::Min(nanoSeconds, maxNano) };
+    constexpr uint64_t MaxNanos = uint64_t(std::chrono::nanoseconds::max().count());
+    return std::chrono::nanoseconds{ Util::Min(nanoSeconds, MaxNanos) };
 }
 
 inline std::chrono::milliseconds Uint64ToChronoMilli(uint64_t milliSeconds)
 {
-    const uint64_t maxMilli = static_cast<uint64_t>(std::chrono::milliseconds::max().count());
-    return std::chrono::milliseconds { Util::Min(milliSeconds, maxMilli) };
+    constexpr uint64_t MaxMillis = uint64_t(std::chrono::milliseconds::max().count());
+    return std::chrono::milliseconds{ Util::Min(milliSeconds, MaxMillis) };
 }
 
 inline std::chrono::seconds Uint64ToChronoSeconds(uint64_t seconds)
 {
-    const uint64_t maxSeconds = static_cast<uint64_t>(std::chrono::seconds::max().count());
-    return std::chrono::seconds { Util::Min(seconds, maxSeconds) };
+    constexpr uint64_t MaxSeconds = uint64_t(std::chrono::seconds::max().count());
+    return std::chrono::seconds{ Util::Min(seconds, MaxSeconds) };
 }
 
 } // namespace vk

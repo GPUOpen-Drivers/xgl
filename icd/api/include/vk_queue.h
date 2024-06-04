@@ -211,7 +211,8 @@ public:
 
     enum
     {
-        MaxQueueFamilies   = Pal::QueueTypeCount,  // Maximum number of queue families
+        MaxQueueFamilies   = Pal::QueueTypeCount // Maximum number of queue families
+        ,
         MaxQueuesPerFamily = 8,                    // Maximum number of queues per family
         MaxMultiQueues     = 4,
 

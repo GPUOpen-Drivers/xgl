@@ -971,14 +971,13 @@ static void ConvertImplicitSyncsLegacy(
         pBarrier->pipePoints[pBarrier->pipePointCount] = Pal::HwPipeBottom;
         pBarrier->pipePointCount++;
 
-        pBarrier->srcAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        pBarrier->implicitSrcCacheMask |= Pal::CoherColorTarget | Pal::CoherDepthStencilTarget;
     }
 }
 
 // =====================================================================================================================
 static void ConvertImplicitSyncs(
-    RPBarrierInfo* pBarrier,
+    RPBarrierInfo*         pBarrier,
     const RuntimeSettings& settings)
 {
     pBarrier->implicitSrcCacheMask = 0;
@@ -1015,17 +1014,15 @@ static void ConvertImplicitSyncs(
         pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_BLIT_BIT_KHR;
 
         pBarrier->implicitSrcCacheMask |= Pal::CoherResolveSrc;
+        pBarrier->implicitDstCacheMask |= Pal::CoherResolveDst;
     }
 
-    if (pBarrier->flags.implicitExternalOutgoing &&
-        (pBarrier->pipePointCount < (MaxHwPipePoints - 1)) &&
-        settings.implicitExternalSynchronization)
+    if (pBarrier->flags.implicitExternalOutgoing && settings.implicitExternalSynchronization)
     {
         pBarrier->srcStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
         pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_BLIT_BIT_KHR;
 
-        pBarrier->srcAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        pBarrier->implicitSrcCacheMask |= Pal::CoherColorTarget | Pal::CoherDepthStencilTarget;
     }
 }
 
@@ -1055,58 +1052,76 @@ void RenderPassBuilder::PostProcessSyncPoint(
             pSyncPoint->barrier.flags.needsGlobalTransition = 1;
         }
 
+        bool hasChangingLayout             = false;
+        bool isTransitioningOutOfUndefined = false;
+
+        if (pSyncPoint->transitions.NumElements() > 0)
+        {
+            for (auto it = pSyncPoint->transitions.Begin(); it.Get() != nullptr; it.Next())
+            {
+                RPTransitionInfo* info = it.Get();
+
+                if (info->prevLayout.layout == VK_IMAGE_LAYOUT_UNDEFINED)
+                {
+                    isTransitioningOutOfUndefined = true;
+                }
+
+                if ((info->prevLayout.layout != info->nextLayout.layout) ||
+                    (info->prevStencilLayout.layout != info->nextStencilLayout.layout))
+                {
+                    hasChangingLayout = true;
+                }
+
+                if (hasChangingLayout || isTransitioningOutOfUndefined)
+                {
+                    break;
+                }
+            }
+        }
+
+        // If srcSubpass for this barrier is VK_SUBPASS_EXTERNAL, srcStageMask is TOP_OF_PIPE and srcAccessMask is
+        // 0 then this syncTop barrier might be doing a metadata Init with a layout transition out of undefined
+        // layout. Set a flag here that can be tested later to set the srcStageMask correctly.
+        const bool needsFixForMetaDataInit =
+            ((pSyncPoint->flags.top)                                                       &&
+             (pSyncPoint->barrier.flags.explicitExternalIncoming)                          &&
+             (pSyncPoint->barrier.srcStageMask == VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR) &&
+             (pSyncPoint->barrier.srcAccessMask == 0));
+
+        // Set the dstStageMask to non-zero only if layout is changing. If the layout is not changing and if
+        // dstStageMask is 0, then it's quite likely that this is an empty barrier that can be skipped.
+        if ((pSyncPoint->barrier.dstStageMask == 0) && hasChangingLayout)
+        {
+            if (pSyncPoint->flags.top)
+            {
+                // If a transition occurs when entering a subpass (top == 1), it must be synced before the
+                // attachment is accessed. If we're leaving the subpass, chances are there's another barrier down
+                // the line that will sync the image correctly.
+                pSyncPoint->barrier.dstStageMask = AllShaderStages;
+            }
+            else
+            {
+                // BOTTOM_OF_PIPE in dst mask is effectively NONE.
+                pSyncPoint->barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
+            }
+        }
+
+        if ((pSyncPoint->barrier.srcStageMask == 0) || needsFixForMetaDataInit)
+        {
+            if (isTransitioningOutOfUndefined && hasChangingLayout)
+            {
+                pSyncPoint->barrier.srcStageMask |= pSyncPoint->barrier.dstStageMask;
+            }
+        }
+
+        const bool stageMasksNotEmpty = (((pSyncPoint->barrier.srcStageMask == 0) &&
+                                          (pSyncPoint->barrier.dstStageMask == 0)) == false);
+
         // The barrier is active if it does any waiting or global cache synchronization or attachment transitions
-        if ((pSyncPoint->barrier.pipePointCount > 0)          ||
-            (pSyncPoint->barrier.flags.needsGlobalTransition) ||
-            (pSyncPoint->transitions.NumElements() > 0))
+        if ((pSyncPoint->barrier.flags.needsGlobalTransition) ||
+            ((pSyncPoint->transitions.NumElements() > 0) && stageMasksNotEmpty))
         {
             pSyncPoint->flags.active = 1;
-
-            if (pSyncPoint->barrier.dstStageMask == 0)
-            {
-                if (pSyncPoint->flags.top && (pSyncPoint->transitions.NumElements() > 0))
-                {
-                    // If a transition occurs when entering a subpass (top == 1), it must be synced before the
-                    // attachment is accessed. If we're leaving the subpass, chances are there's another barrier down
-                    // the line that will sync the image correctly.
-                    pSyncPoint->barrier.dstStageMask = AllShaderStages;
-                }
-                else
-                {
-                    // BOTTOM_OF_PIPE in dst mask is effectively NONE.
-                    pSyncPoint->barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
-                }
-            }
-
-            // If srcSubpass for this barrier is VK_SUBPASS_EXTERNAL, srcStageMask is TOP_OF_PIPE and srcAccessMask is
-            // 0 then this syncTop barrier might be doing a metadata Init with a layout transition out of undefined
-            // layout. Set a flag here that can be tested later to set the srcStageMask correctly.
-            const bool needsFixForMetaDataInit =
-                ((pSyncPoint->flags.top)                                                       &&
-                 (pSyncPoint->barrier.flags.explicitExternalIncoming)                          &&
-                 (pSyncPoint->barrier.srcStageMask == VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR) &&
-                 (pSyncPoint->barrier.srcAccessMask == 0));
-
-            if ((pSyncPoint->barrier.srcStageMask == 0) || needsFixForMetaDataInit)
-            {
-                if (pSyncPoint->transitions.NumElements() > 0)
-                {
-                    // RPBarrierInfo consists of one set of src/dst stage masks which currently applies to each
-                    // transition in RPSyncPoint(). PAL now supports specifying src/dst stage masks for each individual
-                    // image transition. Since with this change we will loop over each transition to check for
-                    // undefined 'prev' layout, there might be some cases where we add unnecessary stalls for at least
-                    // some transitions.
-                    for (auto it = pSyncPoint->transitions.Begin(); it.Get() != nullptr; it.Next())
-                    {
-                        RPTransitionInfo* info = it.Get();
-
-                        if (info->prevLayout.layout == VK_IMAGE_LAYOUT_UNDEFINED)
-                        {
-                            pSyncPoint->barrier.srcStageMask |= pSyncPoint->barrier.dstStageMask;
-                        }
-                    }
-                }
-            }
         }
     }
     else
@@ -1300,10 +1315,15 @@ Pal::Result RenderPassBuilder::TrackAttachmentUsage(
         WaitForResolves(pSync);
     }
 
-    // Detect if an automatic layout transition is needed and insert one to the given sync point if so.  Note that
-    // these happen before load ops are triggered (below).
-    if ((pAttachment->prevReferenceLayout != layout) ||
-        ((pStencilLayout != nullptr) && (pAttachment->prevReferenceStencilLayout != *pStencilLayout)))
+    // We want to include all transitions if acquire-release barrier interface is used. If not, then detect if an
+    // automatic layout transition is needed and insert one to the given sync point if so. Note that these happen
+    // before load ops are triggered (below).
+    const bool shouldIncludeTransition =
+        (m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings().useAcquireReleaseInterface) ? true :
+        ((pAttachment->prevReferenceLayout != layout) ||
+         ((pStencilLayout != nullptr) && (pAttachment->prevReferenceStencilLayout != *pStencilLayout)));
+
+    if (shouldIncludeTransition)
     {
         RPTransitionInfo transition = {};
 

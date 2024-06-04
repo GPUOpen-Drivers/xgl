@@ -337,9 +337,8 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
     uint32_t gplMask = 0;
     for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
     {
-        if ((pShaderInfos[i]->pModuleData != nullptr) &&
-            (pShaderStageInfo->stages[i].pModuleHandle != nullptr) &&
-            pCompiler->IsValidShaderModule(pShaderStageInfo->stages[i].pModuleHandle) ||
+        if (((pShaderInfos[i]->pModuleData != nullptr) &&
+             pCompiler->IsValidShaderModule(pShaderStageInfo->stages[i].pModuleHandle)) ||
             (pShaderStageInfo->stages[i].codeHash.lower != 0) ||
             (pShaderStageInfo->stages[i].codeHash.upper != 0))
         {

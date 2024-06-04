@@ -559,7 +559,8 @@ VkResult QueryPoolWithStorageView::Initialize(
 
                     m_pStorageView[deviceIdx] = Util::VoidPtrInc(pMemory, apiSize + (viewSize * deviceIdx));
 
-                    m_pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &bufferViewInfo, m_pStorageView[deviceIdx]);
+                    m_pDevice->PalDevice(deviceIdx)->
+                        CreateUntypedBufferViewSrds(1, &bufferViewInfo, m_pStorageView[deviceIdx]);
                 }
             }
             else
@@ -1008,7 +1009,7 @@ VkResult AccelerationStructureQueryPool::GetResults(
              {
                  while (!ready)
                  {
-                     Util::SleepMs(0u);
+                     Util::Sleep(std::chrono::milliseconds{ 0 });
 
                      value = GetAccelerationStructureQueryResults(
                          m_queryType,

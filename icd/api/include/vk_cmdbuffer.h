@@ -51,9 +51,6 @@
 
 #include "renderpass/renderpass_builder.h"
 
-#if VKI_RAY_TRACING
-#endif
-
 #include "debug_printf.h"
 #include "palCmdBuffer.h"
 #include "palDequeImpl.h"
@@ -95,6 +92,7 @@ class QueryPool;
 #if VKI_RAY_TRACING
 class RayTracingPipeline;
 class AccelerationStructureQueryPool;
+class BvhBatchState;
 #endif
 
 constexpr uint8_t  DefaultStencilOpValue      = 1;
@@ -1458,6 +1456,10 @@ public:
         const Pal::IGpuMemory& cpsMem) const;
 
     bool HasRayTracing() const { return m_flags.hasRayTracing; }
+
+    BvhBatchState* GetBvhBatchState() const { return m_pBvhBatchState; }
+
+    void SetBvhBatchState(BvhBatchState* pBvhBatchState) { m_pBvhBatchState = pBvhBatchState; }
 #endif
 
     template <uint32_t numPalDevices, bool useCompactDescriptor>
@@ -1598,7 +1600,7 @@ private:
     void RPLoadOpClearColor(uint32_t count, const RPLoadOpClearInfo* pClears);
     void RPLoadOpClearDepthStencil(uint32_t count, const RPLoadOpClearInfo* pClears);
     void RPBindTargets(const RPBindTargetsInfo& targets);
-    void RPSyncPostLoadOpColorClear();
+    void RPSyncPostLoadOpColorClear(uint32_t count, const RPLoadOpClearInfo* pClears);
 
     void BindTargets();
 
@@ -1930,7 +1932,8 @@ private:
 #else
             uint32_t reserved4                           :  1;
 #endif
-            uint32_t reserved                            : 14;
+            uint32_t offsetMode                          :  1;
+            uint32_t reserved                            : 13;
         };
     };
 
@@ -1979,6 +1982,7 @@ private:
     bool                          m_reverseThreadGroupState;
 #if VKI_RAY_TRACING
     Util::Vector<InternalMemory*, 16, PalAllocator> m_scratchVidMemList; // Ray-tracing scratch memory
+    BvhBatchState*                m_pBvhBatchState;
 
     uint64                        m_maxCpsMemSize; // max ray sorting memory requested
 

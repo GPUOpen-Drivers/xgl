@@ -75,7 +75,7 @@ void WaitIdleForDebugger(
             // Timeout the driver to give debuggers a chance to load all of the symbols
             if (debugTimeout != 0)
             {
-                Util::SleepMs(debugTimeout);
+                Util::Sleep(std::chrono::milliseconds{ debugTimeout });
             }
         }
     }

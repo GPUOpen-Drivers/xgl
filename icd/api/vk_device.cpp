@@ -551,6 +551,9 @@ VkResult Device::Create(
                 if (reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->robustBufferAccess2)
                 {
                     deviceFeatures.robustBufferAccessExtended = true;
+                    {
+                        deviceFeatures.robustVertexBufferExtend = true;
+                    }
                 }
 
                 if (reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->robustImageAccess2)
@@ -1477,6 +1480,13 @@ void Device::InitDispatchTable()
     {
         m_pBarrierFilterLayer->OverrideDispatchTable(&m_dispatchTable);
     }
+
+#if VKI_RAY_TRACING
+    if ((RayTrace() != nullptr) && (RayTrace()->GetBvhBatchLayer() != nullptr))
+    {
+        RayTrace()->GetBvhBatchLayer()->OverrideDispatchTable(&m_dispatchTable);
+    }
+#endif
 
 #if VKI_GPU_DECOMPRESS
     if (m_pGpuDecoderLayer != nullptr)
@@ -3932,7 +3942,14 @@ void Device::GetAccelerationStructureBuildSizesKHR(
 
     const bool allowUpdate = inputs.flags & GpuRt::AccelStructBuildFlagAllowUpdate;
 
-    if (m_settings.ifhRayTracing)
+    const uint32 rtTossPoint = m_settings.rtTossPoint;
+
+    // Skip all work depending on rtTossPoint setting and type of work.
+    const bool tossWork = (((inputs.type == GpuRt::AccelStructType::TopLevel) && (rtTossPoint >= RtTossPointTlas)) ||
+                           ((inputs.type == GpuRt::AccelStructType::BottomLevel) &&
+                            (rtTossPoint >= RtTossPointBlasBuild)));
+
+    if (tossWork)
     {
         inputs.inputElemCount = 0;
     }

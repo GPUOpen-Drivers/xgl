@@ -346,6 +346,7 @@ VkResult Memory::Create(
 
             if (pPinnedHostPtr == nullptr)
             {
+
                 vkResult = CreateGpuMemory(
                     pDevice,
                     pAllocator,

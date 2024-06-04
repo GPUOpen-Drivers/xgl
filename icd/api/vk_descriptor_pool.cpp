@@ -517,6 +517,7 @@ VkResult DescriptorGpuMemHeap::Init(
     VkDescriptorPoolCreateFlags poolUsage   = pCreateInfo->flags;
     uint32_t                    maxSets     = pCreateInfo->maxSets;
     const VkDescriptorPoolSize* pTypeCount  = pCreateInfo->pPoolSizes;
+    uint32_t                    maxInlineUniformBlockBindings = 0;
 
     m_numPalDevices = pDevice->NumPalDevices();
     m_usage      = poolUsage;
@@ -540,6 +541,16 @@ VkResult DescriptorGpuMemHeap::Init(
 
                     break;
                 }
+                case VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO:
+                {
+                    const VkDescriptorPoolInlineUniformBlockCreateInfo* pDescriptorPoolInlineUniformBlockCreateInfo =
+                        reinterpret_cast<const VkDescriptorPoolInlineUniformBlockCreateInfo*>(pHeader);
+
+                    maxInlineUniformBlockBindings =
+                        pDescriptorPoolInlineUniformBlockCreateInfo->maxInlineUniformBlockBindings;
+
+                    break;
+                }
 
                 default:
                     break;
@@ -551,6 +562,8 @@ VkResult DescriptorGpuMemHeap::Init(
 
     VkResult result = VK_SUCCESS;
 
+    m_gpuMemAddrAlignment = pDevice->GetProperties().descriptorSizes.alignmentInDwords * sizeof(uint32_t);
+
     if (pDevice->GetRuntimeSettings().pipelineLayoutMode == PipelineLayoutAngle)
     {
         for (uint32_t i = 0; i < pCreateInfo->poolSizeCount; ++i)
@@ -561,6 +574,10 @@ VkResult DescriptorGpuMemHeap::Init(
     }
     else
     {
+        constexpr uint32_t InlineUniformGranularity = 4;
+
+        m_gpuMemSize += ((m_gpuMemAddrAlignment - InlineUniformGranularity) * maxInlineUniformBlockBindings);
+
         for (uint32_t i = 0; i < pCreateInfo->poolSizeCount; ++i)
         {
             if (pTypeCount[i].type == VK_DESCRIPTOR_TYPE_MUTABLE_EXT)
@@ -587,7 +604,7 @@ VkResult DescriptorGpuMemHeap::Init(
                 }
 
                 VK_ASSERT(maxSize > 0);
-                m_gpuMemSize += maxSize * sizeof(uint32_t) * pTypeCount[i].descriptorCount;
+                m_gpuMemSize += maxSize * pTypeCount[i].descriptorCount;
             }
             else
             {
@@ -596,8 +613,6 @@ VkResult DescriptorGpuMemHeap::Init(
             }
         }
     }
-
-    m_gpuMemAddrAlignment = pDevice->GetProperties().descriptorSizes.alignmentInDwords * sizeof(uint32_t);
 
     if (oneShot == false) //DYNAMIC USAGE
     {

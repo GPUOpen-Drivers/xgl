@@ -174,12 +174,13 @@ VkResult AccelerationStructure::ConvertBuildInputsKHR(
     uint32_t                                           deviceIndex,
     const VkAccelerationStructureBuildGeometryInfoKHR& info,
     const VkAccelerationStructureBuildRangeInfoKHR*    pBuildRangeInfos,
+    const uint32_t*                                    pMaxPrimitiveCounts,
     GeometryConvertHelper*                             pHelper,
     GpuRt::AccelStructBuildInputs*                     pInputs)
 {
     VkResult result = VK_SUCCESS;
 
-    pHelper->pMaxPrimitiveCounts = nullptr;
+    pHelper->pMaxPrimitiveCounts = pMaxPrimitiveCounts;
     pHelper->pBuildRangeInfos    = pBuildRangeInfos;
     pInputs->type                = ConvertAccelerationStructureType(info.type);
     pInputs->flags               = ConvertAccelerationStructureFlags(info.mode, info.flags);
@@ -202,7 +203,9 @@ VkResult AccelerationStructure::ConvertBuildInputsKHR(
 
             if (pInstanceGeom->geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR)
             {
-                pInputs->inputElemCount  = (pBuildRangeInfos != nullptr) ? pBuildRangeInfos->primitiveCount : 1;
+                pInputs->inputElemCount  = (pBuildRangeInfos != nullptr) ?
+                                           pBuildRangeInfos->primitiveCount :
+                                           pMaxPrimitiveCounts[0];
                 pInputs->inputElemLayout = pInstanceGeom->geometry.instances.arrayOfPointers ?
                                            GpuRt::InputElementLayout::ArrayOfPointers :
                                            GpuRt::InputElementLayout::Array;

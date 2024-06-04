@@ -1152,9 +1152,6 @@ VkResult Queue::Submit(
 
             const void* pNext = submitInfo.pNext;
 
-#if VKI_RAY_TRACING
-#endif
-
             while (pNext != nullptr)
             {
                 const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
@@ -1505,7 +1502,9 @@ VkResult Queue::Submit(
 
                                 if (palResult == Pal::Result::Success)
                                 {
-                                    palResult = PalQueueSubmit(m_pDevice, PalTmzQueue(deviceIdx), palSubmitInfo);
+                                    {
+                                        palResult = PalQueueSubmit(m_pDevice, PalTmzQueue(deviceIdx), palSubmitInfo);
+                                    }
                                 }
 
                                 VK_ASSERT(palResult == Pal::Result::Success);
@@ -1530,7 +1529,9 @@ VkResult Queue::Submit(
 
                                 if (palResult == Pal::Result::Success)
                                 {
-                                    palResult = PalQueueSubmit(m_pDevice, PalQueue(deviceIdx), palSubmitInfo);
+                                    {
+                                        palResult = PalQueueSubmit(m_pDevice, PalQueue(deviceIdx), palSubmitInfo);
+                                    }
                                 }
 
                                 VK_ASSERT(palResult == Pal::Result::Success);
@@ -1632,8 +1633,6 @@ VkResult Queue::Submit(
 
             DebugPrintf::PostQueueSubmit(m_pDevice, this, pCmdBuffers, cmdBufferCount);
 
-#if VKI_RAY_TRACING
-#endif
         }
     }
 
@@ -1986,17 +1985,9 @@ VkResult Queue::Present(
                     pPresentRects[r] = VkToPalRect(rect2D);
                 }
                 presentInfo.rectangleCount = pVkRegion->rectangleCount;
-                presentInfo.pRectangles    = pPresentRects;
+                presentInfo.pRectangles = pPresentRects;
             }
         }
-
-        // Fill in present information and obtain the PAL memory of the presentable image.
-        Pal::IGpuMemory* pGpuMemory = pSwapChain->UpdatePresentInfo(presentationDeviceIdx,
-                                                                    imageIndex,
-                                                                    &presentInfo,
-                                                                    m_flipStatus.flipFlags);
-
-        CmdBufState* pCmdBufState = m_pCmdBufferRing->AcquireCmdBuffer(m_pDevice, presentationDeviceIdx);
 
         // Ensure metadata is available before post processing.
         if (pSwapChain->GetFullscreenMgr() != nullptr)
@@ -2007,6 +1998,15 @@ VkResult Queue::Present(
 
             VK_ASSERT(palResult == Pal::Result::Success);
         }
+
+        // Fill in present information and obtain the PAL memory of the presentable image.
+        Pal::IGpuMemory* pGpuMemory = pSwapChain->UpdatePresentInfo(presentationDeviceIdx,
+                                                                    imageIndex,
+                                                                    &presentInfo,
+                                                                    m_flipStatus.flipFlags,
+                                                                    m_palFrameMetadataControl);
+
+        CmdBufState* pCmdBufState = m_pCmdBufferRing->AcquireCmdBuffer(m_pDevice, presentationDeviceIdx);
 
         // This must happen after the fullscreen manager has updated its overlay information and before the software
         // compositor has an opportunity to copy the presentable image in order to include the overlay itself.
@@ -2123,9 +2123,6 @@ VkResult Queue::Present(
             virtStackFrame.FreeArray(pPresentRects);
         }
     }
-
-#if VKI_RAY_TRACING
-#endif
 
     return result;
 }

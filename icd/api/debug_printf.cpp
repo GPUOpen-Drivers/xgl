@@ -37,6 +37,7 @@
 #include <cinttypes>
 
 using namespace vk;
+using namespace std::chrono_literals;
 
 //=====================================================================================================================
 DebugPrintf::DebugPrintf(
@@ -120,13 +121,18 @@ void DebugPrintf::BindPipeline(
 
             Pal::BufferViewInfo srdInfo = {};
             srdInfo.gpuAddr = m_printfMemory.GpuVirtAddr(deviceIdx);
-            srdInfo.range = m_printfMemory.Size();
+            srdInfo.range   = m_printfMemory.Size();
+
             pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &srdInfo, pTable);
+
             m_frame = 1;
+
             const Pal::uint32* pEntry = reinterpret_cast<const Pal::uint32*>(&tableVa);
+
             pCmdBuffer->CmdSetUserData(static_cast<Pal::PipelineBindPoint>(bindPoint), userDataOffset, 1, pEntry);
 
             m_parsedFormatStrings.Reset();
+
             for (auto it = pPipeline->GetFormatStrings()->Begin(); it.Get() != nullptr; it.Next())
             {
                 bool found = true;
@@ -214,7 +220,7 @@ Pal::Result DebugPrintf::PostQueueProcess(
             while (true)
             {
                 palResult = pDevice->PalDevice(DefaultDeviceIndex)->WaitForSemaphores(
-                    1, palSemaphores, waitValues, 0, std::chrono::nanoseconds {1000000llu});
+                    1, palSemaphores, waitValues, 0, 1ms);
 
                 decodeOffset = ProcessDebugPrintfBuffer(pDevice, deviceIdx, decodeOffset, &file);
                 if ((PalToVkResult(palResult) <= 0) || (loopIndex++ > 1000))

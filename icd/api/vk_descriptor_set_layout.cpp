@@ -184,7 +184,7 @@ uint32_t DescriptorSetLayout::GetSingleDescStaticSize(
         // as we pack the whole buffer SRD in the dynamic section (i.e. user data registers).
         size = 0;
         break;
-    case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+    case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
         size = 1;
         break;
     default:
@@ -193,7 +193,7 @@ uint32_t DescriptorSetLayout::GetSingleDescStaticSize(
         break;
     }
 
-    VK_ASSERT((type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT) || (Util::IsPow2Aligned(size, sizeof(uint32_t))));
+    VK_ASSERT((type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) || (Util::IsPow2Aligned(size, sizeof(uint32_t))));
 
     return size;
 }
@@ -231,7 +231,7 @@ uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(
         size *= maxMultiPlaneCount;
     }
 
-    if (descriptorInfo->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)
+    if (descriptorInfo->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK)
     {
         // A single binding corresponds to a whole uniform block, so handle it as one descriptor not array.
         size *= descriptorInfo->descriptorCount;
@@ -250,7 +250,7 @@ uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(
 {
     const BindingInfo& bindingInfo = pSrcDescSetLayout->Binding(binding);
 
-    return (bindingInfo.info.descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT) ?
+    return (bindingInfo.info.descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) ?
            bindingInfo.sta.dwSize : bindingInfo.sta.dwArrayStride;
 }
 
@@ -339,7 +339,7 @@ void DescriptorSetLayout::ConvertBindingInfo(
     // Dword offset to this binding
     pBindingSectionInfo->dwOffset = Util::RoundUpToMultiple(pSectionInfo->dwSize, descAlignmentInDw);
 
-    if (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)
+    if (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK)
     {
         // This allows access to inline uniform blocks using dwords offsets.
         // Vk(Write/Copy/Update)DescriptorSet use byte values, convert them to dword.

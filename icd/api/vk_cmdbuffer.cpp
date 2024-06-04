@@ -600,6 +600,7 @@ CmdBuffer::CmdBuffer(
     m_reverseThreadGroupState(false)
 #if VKI_RAY_TRACING
     , m_scratchVidMemList(pDevice->VkInstance()->Allocator())
+    , m_pBvhBatchState()
     , m_maxCpsMemSize(0)
     , m_patchCpsList
     {
@@ -630,6 +631,7 @@ CmdBuffer::CmdBuffer(
     m_flags.disableResetReleaseResources        = settings.disableResetReleaseResources;
     m_flags.subpassLoadOpClearsBoundAttachments = settings.subpassLoadOpClearsBoundAttachments;
     m_flags.preBindDefaultState                 = settings.preBindDefaultState;
+    m_flags.offsetMode                          = pDevice->GetEnabledFeatures().robustVertexBufferExtend;
 
     Pal::DeviceProperties info;
     m_pDevice->PalDevice(DefaultDeviceIndex)->GetProperties(&info);
@@ -637,14 +639,14 @@ CmdBuffer::CmdBuffer(
     m_flags.useBackupBuffer = false;
     memset(m_pBackupPalCmdBuffers, 0, sizeof(Pal::ICmdBuffer*) * MaxPalDevices);
 
-    // If supportReleaseAcquireInterface is true, the ASIC provides new barrier interface CmdReleaseThenAcquire()
-    // designed for Acquire/Release-based driver. This flag is currently enabled for gfx9 and above.
-    // If supportSplitReleaseAcquire is true, the ASIC provides split CmdRelease() and CmdAcquire() to express barrier,
-    // and CmdReleaseThenAcquire() is still valid. This flag is currently enabled for gfx10 and above.
-    m_flags.useReleaseAcquire       = info.gfxipProperties.flags.supportReleaseAcquireInterface &&
-                                      settings.useAcquireReleaseInterface;
-    m_flags.useSplitReleaseAcquire  = m_flags.useReleaseAcquire &&
-                                      info.gfxipProperties.flags.supportSplitReleaseAcquire;
+        // If supportReleaseAcquireInterface is true, the ASIC provides new barrier interface CmdReleaseThenAcquire()
+        // designed for Acquire/Release-based driver. This flag is currently enabled for gfx9 and above.
+        // If supportSplitReleaseAcquire is true, the ASIC provides split CmdRelease() and CmdAcquire() to express barrier,
+        // and CmdReleaseThenAcquire() is still valid. This flag is currently enabled for gfx10 and above.
+        m_flags.useReleaseAcquire       = info.gfxipProperties.flags.supportReleaseAcquireInterface &&
+                                          settings.useAcquireReleaseInterface;
+        m_flags.useSplitReleaseAcquire  = m_flags.useReleaseAcquire &&
+                                          info.gfxipProperties.flags.supportSplitReleaseAcquire;
 }
 
 // =====================================================================================================================
@@ -1827,9 +1829,6 @@ void CmdBuffer::ResetState()
 
     m_flags.hasConditionalRendering = false;
 
-#if VKI_RAY_TRACING
-#endif
-
     m_debugPrintf.Reset(m_pDevice);
     if (m_allGpuState.pDescBufBinding != nullptr)
     {
@@ -1868,6 +1867,14 @@ VkResult CmdBuffer::Reset(VkCommandBufferResetFlags flags)
 #if VKI_RAY_TRACING
         FreeRayTracingScratchVidMemory();
         FreePatchCpsList();
+
+        if (m_pBvhBatchState != nullptr)
+        {
+            // Called here (outside of the BvhBatchLayer because Reset can be triggered
+            // either directly on the command buffer or across the whole command pool.
+            m_pBvhBatchState->Log("Resetting via command buffer reset.\n");
+            m_pBvhBatchState->Reset();
+        }
 #endif
 
         result = PalToVkResult(PalCmdBufferReset(releaseResources));
@@ -2352,6 +2359,14 @@ VkResult CmdBuffer::Destroy(void)
 #if VKI_RAY_TRACING
     FreeRayTracingScratchVidMemory();
     FreePatchCpsList();
+
+    if (m_pBvhBatchState != nullptr)
+    {
+        // Called here (outside of the BvhBatchLayer because Destroy can be triggered
+        // either directly on the command buffer or across the whole command pool.
+        m_pBvhBatchState->Log("Resetting via command buffer destroy.\n");
+        m_pBvhBatchState->Reset();
+    }
 
 #endif
 
@@ -2982,7 +2997,7 @@ void CmdBuffer::BindVertexBuffersUpdateBindingRange(
             {
                 pBinding->range = pSizes[inputIdx];
 
-                if (offset != 0)
+                if ((offset != 0) && (m_flags.offsetMode == false))
                 {
                     padVertexBuffers = true;
                 }
@@ -3052,7 +3067,30 @@ void CmdBuffer::BindVertexBuffers(
                     pSizes,
                     pStrides);
 
-                PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(firstBinding, lowBindingCount, pBinding);
+                Pal::VertexBufferViews bufferViews =
+                {
+                    .firstBuffer = firstBinding,
+                    .bufferCount = lowBindingCount,
+                    .offsetMode = (m_flags.offsetMode == 1) ? true : false
+                };
+                Pal::VertexBufferView vertexViews[Pal::MaxVertexBuffers] = {};
+
+                if (m_flags.offsetMode)
+                {
+                    for (uint32_t idx = 0; idx < lowBindingCount; idx++)
+                    {
+                        vertexViews[idx].gpuva = pBinding[idx].gpuAddr;
+                        vertexViews[idx].sizeInBytes = pBinding[idx].range;
+                        vertexViews[idx].strideInBytes = pBinding[idx].stride;
+                    }
+                    bufferViews.pVertexBufferViews = vertexViews;
+                }
+                else
+                {
+                    bufferViews.pBufferViewInfos = pBinding;
+                }
+
+                PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
             }
 
         }
@@ -3115,9 +3153,31 @@ void CmdBuffer::UpdateVertexBufferStrides(
 
         if (firstChanged <= lastChanged)
         {
-            PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(
-                firstChanged, (lastChanged - firstChanged) + 1,
-                &PerGpuState(deviceIdx)->vbBindings[firstChanged]);
+            Pal::VertexBufferViews bufferViews =
+            {
+                .firstBuffer = firstChanged,
+                .bufferCount = (lastChanged - firstChanged) + 1,
+                .offsetMode = (m_flags.offsetMode == 1) ? true : false
+            };
+            Pal::VertexBufferView vertexViews[Pal::MaxVertexBuffers] = {};
+            auto pBinding = &PerGpuState(deviceIdx)->vbBindings[firstChanged];
+
+            if (m_flags.offsetMode)
+            {
+                for (uint32_t idx = 0; idx < (lastChanged - firstChanged + 1); idx++)
+                {
+                    vertexViews[idx].gpuva = pBinding[idx].gpuAddr;
+                    vertexViews[idx].sizeInBytes = pBinding[idx].range;
+                    vertexViews[idx].strideInBytes = pBinding[idx].stride;
+                }
+                bufferViews.pVertexBufferViews = vertexViews;
+            }
+            else
+            {
+                bufferViews.pBufferViewInfos = pBinding;
+            }
+
+            PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
         }
     }
     while (deviceGroup.IterateNext());
@@ -3480,16 +3540,69 @@ void CmdBuffer::ExecuteIndirect(
     const VkGeneratedCommandsInfoNV*    pInfo)
 {
     IndirectCommandsLayout* pLayout = IndirectCommandsLayout::ObjectFromHandle(pInfo->indirectCommandsLayout);
+    IndirectCommandsInfo    info    = pLayout->GetIndirectCommandsInfo();
+
+    uint64_t barrierCmd = 0;
+
+    if ((info.actionType == IndirectCommandsActionType::Draw) ||
+        (info.actionType == IndirectCommandsActionType::DrawIndexed))
+    {
+        const bool indexed = (info.actionType == IndirectCommandsActionType::DrawIndexed);
+        barrierCmd = (indexed ? DbgBarrierDrawIndexed : DbgBarrierDrawNonIndexed) | DbgBarrierDrawIndirect;
+
+        DbgBarrierPreCmd(barrierCmd);
+
+        ValidateGraphicsStates();
+    }
+    else if (info.actionType == IndirectCommandsActionType::Dispatch)
+    {
+        barrierCmd = DbgBarrierDispatchIndirect;
+
+        DbgBarrierPreCmd(barrierCmd);
+
+        if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute) == false)
+        {
+            RebindPipeline<PipelineBindCompute, false>();
+        }
+    }
+    else if (info.actionType == IndirectCommandsActionType::MeshTask)
+    {
+        barrierCmd = DbgBarrierDrawMeshTasksIndirect;
+
+        DbgBarrierPreCmd(barrierCmd);
+
+        ValidateGraphicsStates();
+    }
+    else
+    {
+        VK_NEVER_CALLED();
+    }
+
+    VK_ASSERT(pInfo->streamCount == 1);
+
+    const Buffer*   pArgumentBuffer = Buffer::ObjectFromHandle(pInfo->pStreams[0].buffer);
+    const uint64_t  argumentOffset  = pInfo->pStreams[0].offset;
+
+    const Buffer*   pCountBuffer    = Buffer::ObjectFromHandle(pInfo->sequencesCountBuffer);
+    const uint64_t  countOffset     = pInfo->sequencesCountOffset;
+
+    const uint32_t  maxCount        = pInfo->sequencesCount;
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
     {
         const uint32_t deviceIdx = deviceGroup.Index();
-        pLayout->BindPreprocessBuffer(pInfo->preprocessBuffer,
-                                      pInfo->preprocessOffset,
-                                      deviceIdx);
+
+        PalCmdBuffer(deviceIdx)->CmdExecuteIndirectCmds(
+            *pLayout->PalIndirectCmdGenerator(deviceIdx),
+            pArgumentBuffer->GpuVirtAddr(deviceIdx) + argumentOffset,
+            maxCount,
+            (pCountBuffer == nullptr) ? 0 : pCountBuffer->GpuVirtAddr(deviceIdx) + countOffset);
+
     }
     while (deviceGroup.IterateNext());
+
+    DbgBarrierPostCmd(barrierCmd);
 }
 
 // =====================================================================================================================
@@ -7733,33 +7846,99 @@ void CmdBuffer::RPEndSubpass()
 
 // =====================================================================================================================
 // Handles post-clear synchronization for load-op color clears when not auto-syncing.
-void CmdBuffer::RPSyncPostLoadOpColorClear()
+void CmdBuffer::RPSyncPostLoadOpColorClear(
+    uint32_t                 colorClearCount,
+    const RPLoadOpClearInfo* pClears)
 {
-    static const Pal::BarrierTransition transition =
+    if (m_flags.useReleaseAcquire)
     {
-        Pal::CoherClear,
-        Pal::CoherColorTarget,
-        {}
-    };
+        VK_ASSERT(colorClearCount > 0);
 
-    static const Pal::HwPipePoint PipePoint = Pal::HwPipePostBlt;
-    static const Pal::BarrierInfo Barrier   =
+        VirtualStackFrame virtStack(m_pStackAllocator);
+
+        Pal::AcquireReleaseInfo barrierInfo = {};
+
+        barrierInfo.reason = RgpBarrierExternalRenderPassSync;
+
+        Pal::ImgBarrier* pPalTransitions = (colorClearCount != 0) ?
+            virtStack.AllocArray<Pal::ImgBarrier>(colorClearCount) :
+            nullptr;
+        const Image** ppImages = (colorClearCount != 0) ?
+            virtStack.AllocArray<const Image*>(colorClearCount) :
+            nullptr;
+
+        for (uint32_t i = 0; i < colorClearCount; ++i)
+        {
+            const RPLoadOpClearInfo& clear = pClears[i];
+
+            const Framebuffer::Attachment& attachment = m_allGpuState.pFramebuffer->GetAttachment(clear.attachment);
+
+            VK_ASSERT(pPalTransitions != nullptr);
+            VK_ASSERT(ppImages != nullptr);
+
+            for (uint32_t sr = 0; sr < attachment.subresRangeCount; ++sr)
+            {
+                const uint32_t plane = attachment.subresRange[sr].startSubres.plane;
+
+                const Pal::ImageLayout oldLayout = RPGetAttachmentLayout(clear.attachment, plane);
+
+                const Pal::ImageLayout newLayout = { VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1 };
+
+                ppImages[barrierInfo.imageBarrierCount] = attachment.pImage;
+
+                pPalTransitions[barrierInfo.imageBarrierCount].srcStageMask = Pal::PipelineStageBlt;
+                pPalTransitions[barrierInfo.imageBarrierCount].dstStageMask = Pal::PipelineStageEarlyDsTarget;
+                pPalTransitions[barrierInfo.imageBarrierCount].srcAccessMask = Pal::CoherClear;
+                pPalTransitions[barrierInfo.imageBarrierCount].dstAccessMask = Pal::CoherColorTarget;
+                // We set the pImage to nullptr by default here. But, this will be computed correctly later for
+                // each device including DefaultDeviceIndex based on the deviceId.
+                pPalTransitions[barrierInfo.imageBarrierCount].pImage = nullptr;
+                pPalTransitions[barrierInfo.imageBarrierCount].oldLayout = oldLayout;
+                pPalTransitions[barrierInfo.imageBarrierCount].newLayout = newLayout;
+                pPalTransitions[barrierInfo.imageBarrierCount].subresRange = attachment.subresRange[sr];
+
+                barrierInfo.imageBarrierCount++;
+            }
+        }
+
+        barrierInfo.pImageBarriers = pPalTransitions;
+
+        PalCmdReleaseThenAcquire(
+            &barrierInfo,
+            nullptr,
+            nullptr,
+            pPalTransitions,
+            ppImages,
+            GetRpDeviceMask());
+    }
+    else
     {
-        Pal::HwPipePreRasterization,        // waitPoint
-        1,                                  // pipePointWaitCount
-        &PipePoint,                         // pPipePoints
-        0,                                  // gpuEventWaitCount
-        nullptr,                            // ppGpuEvents
-        0,                                  // rangeCheckedTargetWaitCount
-        nullptr,                            // ppTargets
-        1,                                  // transitionCount
-        &transition,                        // pTransitions
-        0,                                  // globalSrcCacheMask
-        0,                                  // globalDstCacheMask
-        RgpBarrierExternalRenderPassSync    // reason
-    };
+        static const Pal::BarrierTransition transition =
+        {
+            Pal::CoherClear,
+            Pal::CoherColorTarget,
+            {}
+        };
 
-    PalCmdBarrier(Barrier, GetRpDeviceMask());
+        static const Pal::HwPipePoint PipePoint = Pal::HwPipePostBlt;
+        static const Pal::BarrierInfo Barrier =
+        {
+            Pal::HwPipePreRasterization,        // waitPoint
+            1,                                  // pipePointWaitCount
+            &PipePoint,                         // pPipePoints
+            0,                                  // gpuEventWaitCount
+            nullptr,                            // ppGpuEvents
+            0,                                  // rangeCheckedTargetWaitCount
+            nullptr,                            // ppTargets
+            1,                                  // transitionCount
+            &transition,                        // pTransitions
+            0,                                  // globalSrcCacheMask
+            0,                                  // globalDstCacheMask
+            RgpBarrierExternalRenderPassSync    // reason
+        };
+
+        PalCmdBarrier(Barrier, GetRpDeviceMask());
+    }
 }
 
 // =====================================================================================================================
@@ -7799,14 +7978,15 @@ void CmdBuffer::RPBeginSubpass()
                 if (subpasses[i].begin.loadOps.colorClearCount > 0)
                 {
                     RPLoadOpClearColor(subpasses[i].begin.loadOps.colorClearCount,
-                        subpasses[i].begin.loadOps.pColorClears);
+                                       subpasses[i].begin.loadOps.pColorClears);
                 }
             }
 
             // If we are manually pre-syncing color clears, we must post-sync also
             if (subpasses[0].begin.syncTop.barrier.flags.preColorClearSync)
             {
-                RPSyncPostLoadOpColorClear();
+                RPSyncPostLoadOpColorClear(subpasses[0].begin.loadOps.colorClearCount,
+                                           subpasses[0].begin.loadOps.pColorClears);
             }
 
             for (uint32_t i = 0; i < subpassCount; ++i)
@@ -7815,7 +7995,7 @@ void CmdBuffer::RPBeginSubpass()
                 if (subpasses[i].begin.loadOps.dsClearCount > 0)
                 {
                     RPLoadOpClearDepthStencil(subpasses[i].begin.loadOps.dsClearCount,
-                        subpasses[i].begin.loadOps.pDsClears);
+                                              subpasses[i].begin.loadOps.pDsClears);
                 }
             }
 
@@ -7838,7 +8018,7 @@ void CmdBuffer::RPBeginSubpass()
             // If we are manually pre-syncing color clears, we must post-sync also
             if (subpass.begin.syncTop.barrier.flags.preColorClearSync)
             {
-                RPSyncPostLoadOpColorClear();
+                RPSyncPostLoadOpColorClear(subpass.begin.loadOps.colorClearCount, subpass.begin.loadOps.pColorClears);
             }
 
             // Execute any depth-stencil clear load operations
@@ -8051,11 +8231,10 @@ void CmdBuffer::RPSyncPoint(
                                             pVirtStack->AllocArray<const Image*>(maxTransitionCount) :
                                             nullptr;
 
-        const bool isDstStageNotBottomOfPipe = (dstStageMask != Pal::PipelineStageBottomOfPipe);
-
         // Construct global memory dependency to synchronize caches (subpass dependencies + implicit synchronization)
         if (rpBarrier.flags.needsGlobalTransition)
         {
+
             Pal::BarrierTransition globalTransition = { };
 
             m_pDevice->GetBarrierPolicy().ApplyBarrierCacheFlags(
@@ -8082,16 +8261,6 @@ void CmdBuffer::RPSyncPoint(
 
                 Pal::BarrierTransition imageTransition = { };
 
-                m_pDevice->GetBarrierPolicy().ApplyBarrierCacheFlags(
-                    rpBarrier.srcAccessMask,
-                    rpBarrier.dstAccessMask,
-                    VK_IMAGE_LAYOUT_GENERAL,
-                    VK_IMAGE_LAYOUT_GENERAL,
-                    &imageTransition);
-
-                uint32_t srcAccessMask = imageTransition.srcCacheMask | rpBarrier.implicitSrcCacheMask;
-                uint32_t dstAccessMask = imageTransition.dstCacheMask | rpBarrier.implicitDstCacheMask;
-
                 for (uint32_t sr = 0; sr < attachment.subresRangeCount; ++sr)
                 {
                     const uint32_t plane = attachment.subresRange[sr].startSubres.plane;
@@ -8107,50 +8276,55 @@ void CmdBuffer::RPSyncPoint(
                         tr.attachment,
                         plane);
 
-                    if ((oldLayout.usages  != newLayout.usages)  ||
-                        (oldLayout.engines != newLayout.engines) ||
-                        ((srcAccessMask    != dstAccessMask) && settings.rpBarrierCheckAccessMasks))
+                    m_pDevice->GetBarrierPolicy().ApplyBarrierCacheFlags(
+                        rpBarrier.srcAccessMask,
+                        rpBarrier.dstAccessMask,
+                        ((plane == 1) ? tr.prevStencilLayout.layout : tr.prevLayout.layout),
+                        ((plane == 1) ? tr.nextStencilLayout.layout : tr.nextLayout.layout),
+                        &imageTransition);
+
+                    uint32_t srcAccessMask = imageTransition.srcCacheMask | rpBarrier.implicitSrcCacheMask;
+                    uint32_t dstAccessMask = imageTransition.dstCacheMask | rpBarrier.implicitDstCacheMask;
+
+                    VK_ASSERT(acquireReleaseInfo.imageBarrierCount < maxTransitionCount);
+
+                    ppImages[acquireReleaseInfo.imageBarrierCount] = attachment.pImage;
+
+                    pPalTransitions[acquireReleaseInfo.imageBarrierCount].srcStageMask  = srcStageMask;
+                    pPalTransitions[acquireReleaseInfo.imageBarrierCount].dstStageMask  = dstStageMask;
+                    pPalTransitions[acquireReleaseInfo.imageBarrierCount].srcAccessMask = srcAccessMask;
+                    pPalTransitions[acquireReleaseInfo.imageBarrierCount].dstAccessMask = dstAccessMask;
+                    // We set the pImage to nullptr by default here. But, this will be computed correctly later for
+                    // each device including DefaultDeviceIndex based on the deviceId.
+                    pPalTransitions[acquireReleaseInfo.imageBarrierCount].pImage        = nullptr;
+                    pPalTransitions[acquireReleaseInfo.imageBarrierCount].oldLayout     = oldLayout;
+                    pPalTransitions[acquireReleaseInfo.imageBarrierCount].newLayout     = newLayout;
+                    pPalTransitions[acquireReleaseInfo.imageBarrierCount].subresRange   = attachment.subresRange[sr];
+
+                    const Pal::MsaaQuadSamplePattern* pQuadSamplePattern = nullptr;
+
+                    if (attachment.pImage->IsSampleLocationsCompatibleDepth() &&
+                        tr.flags.isInitialLayoutTransition)
                     {
-                        VK_ASSERT(acquireReleaseInfo.imageBarrierCount < maxTransitionCount);
+                        VK_ASSERT(attachment.pImage->HasDepth());
 
-                        ppImages[acquireReleaseInfo.imageBarrierCount] = attachment.pImage;
-
-                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].srcStageMask  = srcStageMask;
-                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].dstStageMask  = dstStageMask;
-                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].srcAccessMask = srcAccessMask;
-                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].dstAccessMask = dstAccessMask;
-                        // We set the pImage to nullptr by default here. But, this will be computed correctly later for
-                        // each device including DefaultDeviceIndex based on the deviceId.
-                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].pImage        = nullptr;
-                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].oldLayout     = oldLayout;
-                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].newLayout     = newLayout;
-                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].subresRange   = attachment.subresRange[sr];
-
-                        const Pal::MsaaQuadSamplePattern* pQuadSamplePattern = nullptr;
-
-                        if (attachment.pImage->IsSampleLocationsCompatibleDepth() &&
-                            tr.flags.isInitialLayoutTransition)
-                        {
-                            VK_ASSERT(attachment.pImage->HasDepth());
-
-                            // Use the provided sample locations for this attachment if this is its
-                            // initial layout transition
-                            pQuadSamplePattern =
-                                &m_renderPassInstance.pAttachments[tr.attachment].initialSamplePattern.locations;
-                        }
-                        else
-                        {
-                            // Otherwise, use the subpass' sample locations
-                            uint32_t subpass   = m_renderPassInstance.subpass;
-                            pQuadSamplePattern = &m_renderPassInstance.pSamplePatterns[subpass].locations;
-                        }
-
-                        pPalTransitions[acquireReleaseInfo.imageBarrierCount].pQuadSamplePattern = pQuadSamplePattern;
-
-                        RPSetAttachmentLayout(tr.attachment, plane, newLayout);
-
-                        acquireReleaseInfo.imageBarrierCount++;
+                        // Use the provided sample locations for this attachment if this is its
+                        // initial layout transition
+                        pQuadSamplePattern =
+                            &m_renderPassInstance.pAttachments[tr.attachment].initialSamplePattern.locations;
                     }
+                    else
+                    {
+                        // Otherwise, use the subpass' sample locations
+                        uint32_t subpass   = m_renderPassInstance.subpass;
+                        pQuadSamplePattern = &m_renderPassInstance.pSamplePatterns[subpass].locations;
+                    }
+
+                    pPalTransitions[acquireReleaseInfo.imageBarrierCount].pQuadSamplePattern = pQuadSamplePattern;
+
+                    RPSetAttachmentLayout(tr.attachment, plane, newLayout);
+
+                    acquireReleaseInfo.imageBarrierCount++;
                 }
             }
 
@@ -8170,12 +8344,13 @@ void CmdBuffer::RPSyncPoint(
             acquireReleaseInfo.dstGlobalAccessMask = 0;
         }
 
+        const bool stageMasksNotEmpty = (((srcStageMask == 0) && (dstStageMask == 0)) == false);
+
         // We do not require a dumb transition here in acquire/release interface because unlike Legacy barriers,
         // PAL flushes caches even if only the global barriers are passed-in without any image/buffer memory barriers.
 
         // Execute the barrier if it actually did anything
-        if ((acquireReleaseInfo.dstGlobalStageMask != Pal::PipelineStageBottomOfPipe) ||
-            ((acquireReleaseInfo.imageBarrierCount > 0) && isDstStageNotBottomOfPipe))
+        if (stageMasksNotEmpty)
         {
             PalCmdReleaseThenAcquire(
                 &acquireReleaseInfo,
@@ -9304,7 +9479,7 @@ void CmdBuffer::PushDescriptorSetKHR(
 
             case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
             case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-            case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+            case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
             default:
                 VK_ASSERT(!"Unexpected descriptor type");
                 break;
@@ -9862,9 +10037,31 @@ void CmdBuffer::SetVertexInput(
 
             if (firstChanged <= lastChanged)
             {
-                PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(
-                    firstChanged, (lastChanged - firstChanged) + 1,
-                    &PerGpuState(deviceIdx)->vbBindings[firstChanged]);
+                Pal::VertexBufferViews bufferViews =
+                {
+                    .firstBuffer = firstChanged,
+                    .bufferCount = (lastChanged - firstChanged) + 1,
+                    .offsetMode = (m_flags.offsetMode == 1) ? true : false
+                };
+                Pal::VertexBufferView vertexViews[Pal::MaxVertexBuffers] = {};
+                auto pBinding = &PerGpuState(deviceIdx)->vbBindings[firstChanged];
+
+                if (m_flags.offsetMode)
+                {
+                    for (uint32_t idx = 0; idx < (lastChanged - firstChanged + 1); idx++)
+                    {
+                        vertexViews[idx].gpuva = pBinding[idx].gpuAddr;
+                        vertexViews[idx].sizeInBytes = pBinding[idx].range;
+                        vertexViews[idx].strideInBytes = pBinding[idx].stride;
+                    }
+                    bufferViews.pVertexBufferViews = vertexViews;
+                }
+                else
+                {
+                    bufferViews.pBufferViewInfos = pBinding;
+                }
+
+                PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
             }
 
             if (vertexBufferCount != pBindState->dynamicBindInfo.gfxDynState.vertexBufferCount)
@@ -10420,6 +10617,9 @@ void CmdBuffer::BuildAccelerationStructuresPerDevice(
 {
     const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
+    Util::Vector<GpuRt::AccelStructBuildInfo, 16, PalAllocator> m_gpurtInfos(VkInstance()->Allocator());
+    Util::Vector<GeometryConvertHelper, 16, PalAllocator>       m_convHelpers(VkInstance()->Allocator());
+
     for (uint32_t infoIdx = 0; infoIdx < infoCount; ++infoIdx)
     {
         const VkAccelerationStructureBuildGeometryInfoKHR* pInfo         = &pInfos[infoIdx];
@@ -10447,6 +10647,7 @@ void CmdBuffer::BuildAccelerationStructuresPerDevice(
             deviceIndex,
             *pInfo,
             pBuildRangeInfos,
+            (ppMaxPrimitiveCounts != nullptr) ? ppMaxPrimitiveCounts[infoIdx] : nullptr,
             &helper,
             &info.inputs);
 
@@ -10456,7 +10657,19 @@ void CmdBuffer::BuildAccelerationStructuresPerDevice(
         const bool forceRebuildBottomLevel =
             Util::TestAnyFlagSet(settings.forceRebuildForUpdates, ForceRebuildForUpdatesBottomLevel);
 
-        if (settings.ifhRayTracing)
+        // Skip all work depending on rtTossPoint setting and type of work.
+        const uint32 rtTossPoint = settings.rtTossPoint;
+
+        const bool isUpdate = Util::TestAnyFlagSet(info.inputs.flags, GpuRt::AccelStructBuildFlagPerformUpdate);
+
+        const bool tossWork = (((info.inputs.type == GpuRt::AccelStructType::TopLevel) &&
+                                (rtTossPoint >= RtTossPointTlas)) ||
+                               ((info.inputs.type == GpuRt::AccelStructType::BottomLevel) &&
+                                (rtTossPoint >= RtTossPointBlasBuild)) ||
+                               ((info.inputs.type == GpuRt::AccelStructType::BottomLevel) &&
+                                (rtTossPoint >= RtTossPointBlasUpdate) && isUpdate));
+
+        if (tossWork)
         {
             info.inputs.inputElemCount = 0;
         }
@@ -10477,18 +10690,42 @@ void CmdBuffer::BuildAccelerationStructuresPerDevice(
 
             info.indirect.indirectGpuAddr  = pIndirectDeviceAddresses[infoIdx];
             info.indirect.indirectStride   = pIndirectStrides[infoIdx];
-            helper.pMaxPrimitiveCounts     = ppMaxPrimitiveCounts[infoIdx];
         }
 
-        DbgBarrierPreCmd((pInfo->type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR) ?
-                            DbgBuildAccelerationStructureTLAS : DbgBuildAccelerationStructureBLAS);
+        if (settings.batchBvhBuilds == BatchBvhModeDisabled)
+        {
+            DbgBarrierPreCmd((pInfo->type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR) ?
+                                DbgBuildAccelerationStructureTLAS : DbgBuildAccelerationStructureBLAS);
 
-        m_pDevice->RayTrace()->GpuRt(deviceIndex)->BuildAccelStruct(
+            m_pDevice->RayTrace()->GpuRt(deviceIndex)->BuildAccelStruct(
                 PalCmdBuffer(deviceIndex),
                 info);
 
-        DbgBarrierPostCmd((pInfo->type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR) ?
-                            DbgBuildAccelerationStructureTLAS : DbgBuildAccelerationStructureBLAS);
+            DbgBarrierPostCmd((pInfo->type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR) ?
+                                DbgBuildAccelerationStructureTLAS : DbgBuildAccelerationStructureBLAS);
+        }
+        else
+        {
+            m_gpurtInfos.PushBack(info);
+            m_convHelpers.PushBack(helper);
+        }
+    }
+
+    if (m_gpurtInfos.IsEmpty() == false)
+    {
+        DbgBarrierPreCmd(DbgBuildAccelerationStructureTLAS | DbgBuildAccelerationStructureBLAS);
+
+        VK_ASSERT(m_gpurtInfos.NumElements() == m_convHelpers.NumElements());
+        for (uint32 i = 0; i < m_gpurtInfos.NumElements(); ++i)
+        {
+            m_gpurtInfos[i].inputs.pClientData = &m_convHelpers[i];
+        }
+
+        m_pDevice->RayTrace()->GpuRt(deviceIndex)->BuildAccelStructs(
+            PalCmdBuffer(deviceIndex),
+            m_gpurtInfos);
+
+        DbgBarrierPostCmd(DbgBuildAccelerationStructureTLAS | DbgBuildAccelerationStructureBLAS);
     }
 }
 

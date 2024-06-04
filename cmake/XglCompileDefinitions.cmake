@@ -119,6 +119,9 @@ macro(xgl_set_compile_definitions)
     endif()
 #endif
 
+#if VKI_RAY_TRACING
+#endif
+
     if (XGL_ENABLE_GCOV)
         target_compile_definitions(xgl PRIVATE ICD_ENABLE_GCOV)
     endif()
@@ -127,6 +130,9 @@ macro(xgl_set_compile_definitions)
     if(VKI_GPU_DECOMPRESS)
         target_compile_definitions(xgl PRIVATE VKI_GPU_DECOMPRESS)
     endif()
+#endif
+
+#if VKI_RAY_TRACING
 #endif
 
 #if VKI_RAY_TRACING

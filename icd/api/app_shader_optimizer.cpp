@@ -1154,10 +1154,20 @@ void ShaderOptimizer::BuildAppProfile()
     if ((m_settings.pipelineProfileIgnoresAppProfile == false) && (pMemory != nullptr))
     {
         memset(pMemory, 0, newSize);
+        BuildAppProfileGeneric();
         {
             BuildAppProfileLlpc();
         }
     }
+}
+
+// =====================================================================================================================
+void ShaderOptimizer::BuildAppProfileGeneric()
+{
+    const AppProfile        appProfile   = m_pDevice->GetAppProfile();
+    const Pal::GpuType      gpuType      = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gpuType;
+
+    uint32 i = 0;
 }
 
 // =====================================================================================================================

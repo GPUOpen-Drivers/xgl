@@ -176,7 +176,11 @@ void VulkanSettingsLoader::OverrideSettingsBySystemInfo()
             char executableName[PATH_MAX];
             char executablePath[PATH_MAX];
             utils::GetExecutableNameAndPath(executableName, executablePath);
-            sprintf(m_settings.pipelineDumpDir, "%s/%s", m_settings.pipelineDumpDir, executableName);
+            Util::Snprintf(m_settings.pipelineDumpDir,
+                           sizeof(m_settings.pipelineDumpDir),
+                           "%s/%s",
+                           m_settings.pipelineDumpDir,
+                           executableName);
         }
 
         MakeAbsolutePath(m_settings.pipelineDumpDir, sizeof(m_settings.pipelineDumpDir),
@@ -809,7 +813,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 #endif
 
             m_settings.enableUberFetchShader  = true;
-
         }
 
         if (appProfile == AppProfile::Source2Engine)
@@ -823,7 +826,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.anisoThreshold = 1.0f;
 
             m_settings.disableMsaaStencilShaderRead = true;
-
         }
 
         if (appProfile == AppProfile::Talos)
@@ -1353,15 +1355,18 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.forceDepthClampBasedOnZExport = true;
         }
 
+        if ((appProfile == AppProfile::DxvkHaloInfiniteLauncher) ||
+            (appProfile == AppProfile::DxvkTf2)
 #ifndef ICD_X64_BUILD
-        if (appProfile == AppProfile::DXVK)
+        || (appProfile == AppProfile::DXVK)
+#endif
+        )
         {
-            // DXVK Tropic4/GTA4 page fault when GPL is enabled.
+            // DXVK Tropic4, GTA4, Halo Infinite Launcher page fault when GPL is enabled.
             // It looks incorrect pipeline layout is used. Force indirect can make optimized pipeline layout compatible
             // with fast-linked pipeline.
             m_settings.pipelineLayoutSchemeSelectionStrategy = PipelineLayoutSchemeSelectionStrategy::ForceIndirect;
         }
-#endif
 
         if (appProfile == AppProfile::AshesOfTheSingularity)
         {
@@ -1602,6 +1607,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (appProfile == AppProfile::Vkd3dEngine)
         {
             m_settings.exportNvComputeShaderDerivatives = true;
+            m_settings.exportNvDeviceGeneratedCommands  = true;
             m_settings.exportImageCompressionControl    = true;
         }
 
@@ -1610,6 +1616,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             m_settings.disableSingleMipAnisoOverride = false;
         }
+
     }
 
     return result;
@@ -1812,7 +1819,6 @@ void VulkanSettingsLoader::ValidateSettings()
         {
             buildMode = BvhBuildModePLOC;
         }
-
         m_settings.bvhBuildModeOverrideBlas = buildMode;
         m_settings.bvhBuildModeOverrideTlas = buildMode;
     }
@@ -1867,6 +1873,12 @@ void VulkanSettingsLoader::ValidateSettings()
     m_settings.indirectCalleeIntersection = Util::Min(255U, m_settings.indirectCalleeIntersection);
     m_settings.indirectCalleeCallable = Util::Min(255U, m_settings.indirectCalleeCallable);
     m_settings.indirectCalleeTraceRays = Util::Min(255U, m_settings.indirectCalleeTraceRays);
+
+    // Force invalid accel struct to skip traversal if toss point is traversal or greater
+    if (m_settings.rtTossPoint >= RtTossPointTraversal)
+    {
+        m_settings.forceInvalidAccelStruct = true;
+    }
 #endif
 
     // SkipDstCacheInv should not be enabled by default when acquire-release barrier interface is used, because PAL

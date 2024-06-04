@@ -218,7 +218,7 @@
         },
         {
           "Name": "BvhBuildModeAuto",
-          "Value": 3,
+          "Value": 4,
           "Description": "Only for override builds. If set, falls back to regular build options."
         }
       ]
@@ -1038,6 +1038,21 @@
       "Type": "bool"
     },
     {
+      "Name": "EnableImageMsaaLoadOpt",
+      "Description": "Enable image MSAA load optimization on Gfx11.",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "BuildTypes": [
+        "VKI_BUILD_GFX11"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Name": "DisableLoopUnrolls",
       "Description": "Disable loop unrolls. This modifies the default pipeline state and can be overwritten by fine-grain override settings.",
       "Tags": [
@@ -1445,7 +1460,7 @@
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Scope": "Driver",
       "Type": "bool",
@@ -2720,7 +2735,7 @@
     {
       "Name": "RtTraceRayCounterMode",
       "Type": "enum",
-      "Description": "Enable ray tracing counters. Written to the directory specified by RayTracingCapturePath. Press the RayTracingCaptureHotKey to dump when enabled.",
+      "Description": "Enable ray tracing counters. Written to the directory specified by RtDumpDir. Press the RtCaptureHotKey to dump when enabled.",
       "Scope": "Driver",
       "Tags": [
         "Ray Tracing"
@@ -3237,6 +3252,36 @@
       },
       "Type": "float",
       "Name": "RtTriangleSplittingPriority",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnableMergedEncodeBuild",
+      "Description": "Enable merged encode and build dispatch.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnableMergedEncodeUpdate",
+      "Description": "Enable merged encode and update dispatch.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
       "Scope": "Driver"
     },
     {
@@ -4192,44 +4237,6 @@
       "Scope": "Driver"
     },
     {
-      "Name": "RtGpuDebugFlags",
-      "Description": "Gpu Debug flags for GPU RT Debug feature (asserts/printf)",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "Defaults": {
-        "Default": "NoFlag"
-      },
-      "ValidValues": {
-        "IsEnum": true,
-        "Name": "RtGpuDebugFlags",
-        "Values": [
-          {
-            "Name": "NoFlag",
-            "Value": 0,
-            "Description": "Disable all gpu debug flags"
-          },
-          {
-            "Name": "HostAssert",
-            "Value": 1,
-            "Description": "Enable Asserts"
-          },
-          {
-            "Name": "HostPrint",
-            "Value": 2,
-            "Description": "Enable Prints"
-          },
-          {
-            "Name": "ShaderHalt",
-            "Value": 4,
-            "Description": "Enable Halt shader"
-          }
-        ]
-      },
-      "Type": "enum",
-      "Scope": "Driver"
-    },
-    {
       "Name": "EnableRemapScratchBuffer",
       "Description": "Enable Remapping BVH2 Data from ScratchBuffer to ResultBuffer",
       "Tags": [
@@ -4526,6 +4533,47 @@
         "Default": false
       },
       "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "BatchBvhBuilds",
+      "Description": "Group BVH builds and updates based on explicit app-provided batches or our own implicit batches.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": "BatchBvhModeDisabled"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "BatchBvhModeDisabled",
+            "Value": 0,
+            "Description": "Disables BVH batching"
+          },
+          {
+            "Name": "BatchBvhModeExplicit",
+            "Value": 1,
+            "Description": "Relies on batching done by application."
+          },
+          {
+            "Name": "BatchBvhModeImplicit",
+            "Value": 2,
+            "Description": "Enables our BvhBatchLayer for implicit BVH batching. Adds some overhead, but could be beneficial for apps written sub-optimally."
+          },
+          {
+            "Name": "BatchBvhModeImplicitAndLog",
+            "Value": 3,
+            "Description": "Same as BatchBvhModeImplicit, but also logs layer activity to [AMD_DEBUG_DIR]/BvhBatchLog.txt. AMD_DEBUG_DIR must be set when this option is enabled (otherwise initialization will fail)."
+          }
+        ],
+        "Name": "BatchBvhModes"
+      },
+      "Type": "enum",
       "Scope": "Driver"
     },
     {
@@ -7386,6 +7434,18 @@
       "Scope": "Driver"
     },
     {
+      "Description": "If true, disables ReZ for pipelines that only read/write depth",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "DisableDepthOnlyReZ",
+      "Scope": "Driver"
+    },
+    {
       "Name": "Ac01WaNotNeeded",
       "Description": "Allows use AC01 fast clears. Please also check setting: Ac01WaState.",
       "Tags": [
@@ -8679,8 +8739,8 @@
       "Scope": "Driver"
     },
     {
-      "Name": "IFHRayTracing",
-      "Description": "Makes the driver effectively skip the BVH build by reducing prim count to 0.",
+      "Name": "RtTossPoint",
+      "Description": "Set toss point for raytracing.",
       "Tags": [
         "Ray Tracing"
       ],
@@ -8688,9 +8748,40 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": false
+        "Default": "RtTossPointDisabled"
       },
-      "Type": "bool",
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "RtTossPointEnums",
+        "Values": [
+          {
+            "Name": "RtTossPointDisabled",
+            "Value": 0,
+            "Description": "No toss points, raytracing executes normally"
+          },
+          {
+            "Name": "RtTossPointTraversal",
+            "Value": 1,
+            "Description": "Disable traversal"
+          },
+          {
+            "Name": "RtTossPointTlas",
+            "Value": 2,
+            "Description": "Disable traversal, TLAS build/update"
+          },
+          {
+            "Name": "RtTossPointBlasUpdate",
+            "Value": 3,
+            "Description": "Disable traversal, TLAS build/update, BLAS update"
+          },
+          {
+            "Name": "RtTossPointBlasBuild",
+            "Value": 4,
+            "Description": "Disable traversal, TLAS build/update, BLAS update, BLAS build"
+          }
+        ]
+      },
+      "Type": "enum",
       "Scope": "Driver"
     },
     {
@@ -8709,7 +8800,7 @@
       "Scope": "Driver"
     },
     {
-      "Name": "GpuRtGpuDebugFlags",
+      "Name": "RtGpuDebugFlags",
       "Description": "GPURT GPU debug flags",
       "Tags": [
         "Ray Tracing"

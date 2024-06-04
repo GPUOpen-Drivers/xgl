@@ -399,8 +399,8 @@ void DescriptorUpdate::WriteBufferInfoDescriptors(
               (type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC));
 
     // Setup and create SRD for storage buffer case
-    info.swizzledFormat = Pal::UndefinedSwizzledFormat;
-    info.stride         = 0; // Raw buffers have a zero byte stride
+    info.swizzledFormat  = Pal::UndefinedSwizzledFormat;
+    info.stride          = 0; // Raw buffers have a zero byte stride
 
     Pal::IDevice* pPalDevice = pDevice->PalDevice(deviceIdx);
 
@@ -468,6 +468,7 @@ void DescriptorUpdate::SetAccelerationDescriptorsBufferViewFlags(
         pBufferViewInfo->flags.bypassMallRead  = 1;
         pBufferViewInfo->flags.bypassMallWrite = 1;
     }
+
 }
 
 void DescriptorUpdate::WriteAccelerationStructureDescriptors(
@@ -703,7 +704,7 @@ void DescriptorUpdate::WriteDescriptorSets(
                 destBinding.dyn.dwArrayStride);
             break;
 
-        case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+        case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
         {
             VK_ASSERT(params.pNext != nullptr);
             VK_ASSERT(Util::IsPow2Aligned(params.dstArrayElement, 4));
@@ -837,7 +838,7 @@ void DescriptorUpdate::CopyDescriptorSets(
             // Just to a straight memcpy covering the entire range.
             memcpy(pDestAddr, pSrcAddr, srcBinding.dyn.dwArrayStride * sizeof(uint32_t) * count);
         }
-        else if (srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)
+        else if (srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK)
         {
             VK_ASSERT(Util::IsPow2Aligned(params.srcArrayElement, 4));
             VK_ASSERT(Util::IsPow2Aligned(params.dstArrayElement, 4));

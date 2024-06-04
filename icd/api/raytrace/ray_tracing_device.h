@@ -31,6 +31,9 @@
 
 #include "khronos/vulkan.h"
 #include "vk_defines.h"
+#include "appopt/bvh_batch_layer.h"
+
+#include "vkgcDefs.h"
 
 namespace vk
 {
@@ -39,6 +42,7 @@ class Device;
 class Queue;
 class InternalMemory;
 class CmdBuffer;
+class PalAllocator;
 
 // Device-level structure for managing state related to ray-tracing.  Instantiated as part of a VkDevice.
 class RayTracingDevice
@@ -61,6 +65,8 @@ public:
         uint32_t        srd[BufferViewDwords];
     };
 
+    typedef Util::Vector<Vkgc::GpurtOption, 4, PalAllocator> GpurtOptions;
+
     RayTracingDevice(Device* pDevice);
     ~RayTracingDevice();
 
@@ -70,6 +76,7 @@ public:
     void CreateGpuRtDeviceSettings(GpuRt::DeviceSettings* pDeviceSettings);
     GpuRt::IDevice* GpuRt(uint32_t deviceIdx) { return m_pGpuRtDevice[deviceIdx]; }
     const GpuRt::DeviceSettings& DeviceSettings() const { return m_gpurtDeviceSettings; }
+    const GpurtOptions& GetGpurtOptions() const { return m_gpurtOptions; }
 
     Pal::Result InitCmdContext(uint32_t deviceIdx);
     CmdContext* GetCmdContext(uint32_t deviceIdx) { return &m_cmdContext[deviceIdx]; }
@@ -83,6 +90,8 @@ public:
         { return &m_accelStructTrackerResources[deviceIdx].srd[0]; }
 
     uint64_t GetAccelerationStructureUUID(const Pal::DeviceProperties& palProps);
+
+    BvhBatchLayer* GetBvhBatchLayer() { return m_pBvhBatchLayer; }
 
     uint32_t GetProfileRayFlags() const { return m_profileRayFlags; }
     uint32_t GetProfileMaxIterations() const { return m_profileMaxIterations; }
@@ -122,6 +131,7 @@ private:
 
     GpuRt::IDevice*                 m_pGpuRtDevice[MaxPalDevices];
     GpuRt::DeviceSettings           m_gpurtDeviceSettings;
+    GpurtOptions                    m_gpurtOptions;
 
     uint32_t                        m_profileRayFlags;           // Ray flag override for profiling
     uint32_t                        m_profileMaxIterations;      // Max traversal iterations
@@ -192,6 +202,10 @@ private:
         const VkStridedDeviceAddressRegionKHR* pMissSbt,
         const VkStridedDeviceAddressRegionKHR* pHitSbt,
         GpuRt::RtDispatchInfo*                 pDispatchInfo) const;
+
+    void CollectGpurtOptions(GpurtOptions* const pGpurtOptions) const;
+
+    BvhBatchLayer*                  m_pBvhBatchLayer;
 
     AccelStructTrackerResources     m_accelStructTrackerResources[MaxPalDevices];
 };

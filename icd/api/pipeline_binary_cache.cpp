@@ -696,9 +696,7 @@ Util::Result PipelineBinaryCache::InjectBinariesFromDirectory(
 
         if ((fileCount > 0u) && (result == Util::Result::Success))
         {
-            char*                               pFileNameBuffer = nullptr;
-            Util::Span<Util::StringView<char>>  fileNames;
-            Util::Span <char>                   fileNameBuffer;
+            char* pFileNameBuffer = nullptr;
 
             // Allocate space for pFileNames and pFileNameBuffer
             Util::StringView<char>* pFileNames = static_cast<Util::StringView<char>*>(
@@ -720,11 +718,11 @@ Util::Result PipelineBinaryCache::InjectBinariesFromDirectory(
                 }
             }
 
+            Util::Span<Util::StringView<char>> fileNames(pFileNames, fileCount);
+            Util::Span<char> fileNameBuffer(pFileNameBuffer, fileNameBufferSize);
+
             if (result == Util::Result::Success)
             {
-                fileNames = Util::Span<Util::StringView<char>>(pFileNames, fileCount);
-                fileNameBuffer = Util::Span<char>(pFileNameBuffer, fileNameBufferSize);
-
                 // Populate fileNames and fileNameBuffer.
                 result = Util::GetFileNamesInDir(settings.devModeElfReplacementDirectory, fileNames, fileNameBuffer);
 
@@ -1086,11 +1084,8 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
                         {
                             if (totalSize >= settings.pipelineCacheDefaultLocationLimitation)
                             {
-                                const uint64 sec = oldestTime.time_since_epoch().count() +
-                                                   settings.thresholdOfCleanUpCache;
-
                                 Util::RemoveFilesOfDirOlderThan(
-                                    pCachePath, Util::SecondsSinceEpoch { Uint64ToChronoSeconds(sec) });
+                                    pCachePath, oldestTime + Uint64ToChronoSeconds(settings.thresholdOfCleanUpCache));
                             }
                         }
                     }

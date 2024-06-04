@@ -201,6 +201,7 @@ private:
 
     void BuildTuningProfile();
     void BuildAppProfile();
+    void BuildAppProfileGeneric();
 
     void BuildAppProfileLlpc();
 

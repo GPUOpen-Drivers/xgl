@@ -84,18 +84,13 @@ public:
         const Device*                               pDevice,
         VkMemoryRequirements2*                      pMemoryRequirements) const;
 
-    void BindPreprocessBuffer(
-        VkBuffer                                    buffer,
-        VkDeviceSize                                memOffset,
-        uint32_t                                    deviceIdx);
-
     VkResult Destroy(
         Device*                                     pDevice,
         const VkAllocationCallbacks*                pAllocator);
 
-    const Pal::IIndirectCmdGenerator* PalIndirectCmdGenerator(uint32_t idx) const
+    const Pal::IIndirectCmdGenerator* PalIndirectCmdGenerator(uint32_t deviceIdx) const
     {
-        return m_perGpu[idx].pGenerator;
+        return m_perGpu[deviceIdx].pGenerator;
     }
 
     IndirectCommandsInfo GetIndirectCommandsInfo() const
@@ -110,13 +105,14 @@ private:
     struct PerGpuInfo
     {
         Pal::IIndirectCmdGenerator* pGenerator;
-        Pal::gpusize                preprocessBufferVirtAddr;
+        Pal::IGpuMemory*            pGpuMemory;
     };
 
     IndirectCommandsLayout(
         const Device*                               pDevice,
         const IndirectCommandsInfo&                 info,
-        Pal::IIndirectCmdGenerator**                pGenerator,
+        Pal::IIndirectCmdGenerator**                pGenerators,
+        Pal::IGpuMemory**                           pGpuMemory,
         const Pal::IndirectCmdGeneratorCreateInfo&  palCreateInfo);
 
     static size_t ObjectSize(const Device*  pDevice)
@@ -129,6 +125,12 @@ private:
         const VkIndirectCommandsLayoutCreateInfoNV* pCreateInfo,
         Pal::IndirectParam*                         pIndirectParams,
         Pal::IndirectCmdGeneratorCreateInfo*        pPalCreateInfo);
+
+    static VkResult BindGpuMemory(
+        const Device*                               pDevice,
+        const VkAllocationCallbacks*                pAllocator,
+        Pal::IIndirectCmdGenerator**                pGenerators,
+        Pal::IGpuMemory**                           pGpuMemory);
 
     IndirectCommandsInfo                    m_info;
     Pal::IndirectCmdGeneratorCreateInfo     m_palCreateInfo;

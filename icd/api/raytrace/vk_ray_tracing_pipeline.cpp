@@ -775,7 +775,8 @@ VkResult RayTracingPipeline::CreateImpl(
             }
 
             bool shouldConvert = (pCreateInfo != nullptr) &&
-                (settings.enablePipelineDump || (cacheResult != Util::Result::Success));
+                (settings.enablePipelineDump ||
+                 (cacheResult != Util::Result::Success));
 
             VkResult convertResult = VK_ERROR_UNKNOWN;
             if (shouldConvert)

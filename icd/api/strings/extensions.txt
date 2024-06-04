@@ -218,3 +218,5 @@ VK_KHR_dynamic_rendering_local_read
 VK_KHR_vertex_attribute_divisor
 VK_EXT_frame_boundary
 VK_EXT_image_compression_control
+#if VKI_RAY_TRACING
+#endif

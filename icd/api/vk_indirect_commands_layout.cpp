@@ -51,6 +51,7 @@ VkResult IndirectCommandsLayout::Create(
     createInfo.pParams = &indirectParams[0];
 
     Pal::IIndirectCmdGenerator* pGenerators[MaxPalDevices] = {};
+    Pal::IGpuMemory*            pGpuMemory[MaxPalDevices]  = {};
 
     const size_t apiSize = ObjectSize(pDevice);
     size_t totalSize     = apiSize;
@@ -156,10 +157,16 @@ VkResult IndirectCommandsLayout::Create(
 
     if (result == VK_SUCCESS)
     {
+        result = BindGpuMemory(pDevice, pAllocator, pGenerators, pGpuMemory);
+    }
+
+    if (result == VK_SUCCESS)
+    {
         VK_PLACEMENT_NEW(pMemory) IndirectCommandsLayout(
             pDevice,
             info,
             pGenerators,
+            pGpuMemory,
             createInfo);
 
         *pLayout = IndirectCommandsLayout::HandleFromVoidPointer(pMemory);
@@ -172,7 +179,8 @@ VkResult IndirectCommandsLayout::Create(
 IndirectCommandsLayout::IndirectCommandsLayout(
     const Device*                                   pDevice,
     const IndirectCommandsInfo&                     info,
-    Pal::IIndirectCmdGenerator**                    pPalGenerator,
+    Pal::IIndirectCmdGenerator**                    pGenerators,
+    Pal::IGpuMemory**                               pGpuMemory,
     const Pal::IndirectCmdGeneratorCreateInfo&      palCreateInfo)
     :
     m_info(info),
@@ -180,8 +188,8 @@ IndirectCommandsLayout::IndirectCommandsLayout(
 {
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
-        m_perGpu[deviceIdx].pGenerator               = pPalGenerator[deviceIdx];
-        m_perGpu[deviceIdx].preprocessBufferVirtAddr = 0;
+        m_perGpu[deviceIdx].pGenerator  = pGenerators[deviceIdx];
+        m_perGpu[deviceIdx].pGpuMemory  = pGpuMemory[deviceIdx];
     }
 }
 
@@ -305,28 +313,15 @@ void IndirectCommandsLayout::CalculateMemoryRequirements(
     VkMemoryRequirements2*                          pMemoryRequirements
     ) const
 {
-    VK_ASSERT(m_perGpu[DefaultDeviceIndex].pGenerator != nullptr);
+    // Our CP packet solution have no preprocess step. Gpu memory is not required.
+    pMemoryRequirements->memoryRequirements.size            = 0;
+    pMemoryRequirements->memoryRequirements.alignment       = 0;
+    pMemoryRequirements->memoryRequirements.memoryTypeBits  = 0;
+
     Pal::GpuMemoryRequirements memReqs = {};
-    m_perGpu[DefaultDeviceIndex].pGenerator->GetGpuMemoryRequirements(&memReqs);
-
-#if DEBUG
-    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
-    {
-        VK_ASSERT(m_perGpu[deviceIdx].pGenerator != nullptr);
-
-        if (deviceIdx != DefaultDeviceIndex)
-        {
-            Pal::GpuMemoryRequirements deviceReqs = {};
-            m_perGpu[deviceIdx].pGenerator->GetGpuMemoryRequirements(&deviceReqs);
-            VK_ASSERT(memcmp(&memReqs, &deviceReqs, sizeof(deviceReqs)) == 0);
-        }
-    }
-#endif
-
-    pMemoryRequirements->memoryRequirements.alignment = memReqs.alignment;
-    pMemoryRequirements->memoryRequirements.size      = memReqs.size;
-
-    pMemoryRequirements->memoryRequirements.memoryTypeBits = 0;
+    memReqs.flags.cpuAccess = 0;
+    memReqs.heaps[0]        = Pal::GpuHeap::GpuHeapInvisible;
+    memReqs.heapCount       = 1;
 
     for (uint32_t i = 0; i < memReqs.heapCount; ++i)
     {
@@ -340,21 +335,103 @@ void IndirectCommandsLayout::CalculateMemoryRequirements(
 }
 
 // =====================================================================================================================
-void IndirectCommandsLayout::BindPreprocessBuffer(
-    VkBuffer                                        buffer,
-    VkDeviceSize                                    memOffset,
-    uint32_t                                        deviceIdx)
+VkResult IndirectCommandsLayout::BindGpuMemory(
+    const Device*                                   pDevice,
+    const VkAllocationCallbacks*                    pAllocator,
+    Pal::IIndirectCmdGenerator**                    pGenerators,
+    Pal::IGpuMemory**                               pGpuMemory)
 {
-    Buffer* pBuffer = Buffer::ObjectFromHandle(buffer);
-    Pal::gpusize bufferVirtAddr = pBuffer->PalMemory(deviceIdx)->Desc().gpuVirtAddr + memOffset;
+    VkResult result = VK_SUCCESS;
+    Pal::Result palResult;
 
-    if (m_perGpu[deviceIdx].preprocessBufferVirtAddr != bufferVirtAddr)
+    Pal::GpuMemoryRequirements  memReqs[MaxPalDevices]        = {};
+    Pal::GpuMemoryCreateInfo    memCreateInfos[MaxPalDevices] = {};
+
+    size_t totalSize = 0;
+
+    void* pMemory = nullptr;
+
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
-        Pal::Result palResult = m_perGpu[deviceIdx].pGenerator->BindGpuMemory(pBuffer->PalMemory(deviceIdx),
-                                                                              memOffset);
-        VK_ASSERT(palResult == Pal::Result::Success);
-        m_perGpu[deviceIdx].preprocessBufferVirtAddr = bufferVirtAddr;
+        pGenerators[deviceIdx]->GetGpuMemoryRequirements(&memReqs[deviceIdx]);
+
+        memCreateInfos[deviceIdx].size          = memReqs[deviceIdx].size;
+        memCreateInfos[deviceIdx].alignment     = memReqs[deviceIdx].alignment;
+        memCreateInfos[deviceIdx].priority      = Pal::GpuMemPriority::Normal;
+        memCreateInfos[deviceIdx].heapCount     = memReqs[deviceIdx].heapCount;
+
+        for (uint32 i = 0; i < memReqs[deviceIdx].heapCount; ++i)
+        {
+            memCreateInfos[deviceIdx].heaps[i] = memReqs[deviceIdx].heaps[i];
+        }
+
+        const size_t size = pDevice->PalDevice(deviceIdx)->GetGpuMemorySize(memCreateInfos[deviceIdx],
+                                                                            &palResult);
+
+        if (palResult == Pal::Result::Success)
+        {
+            totalSize += size;
+        }
+        else
+        {
+            result = PalToVkResult(palResult);
+            break;
+        }
     }
+
+    if (result == VK_SUCCESS)
+    {
+        pMemory = pAllocator->pfnAllocation(pAllocator->pUserData,
+                                            totalSize,
+                                            VK_DEFAULT_MEM_ALIGN,
+                                            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+        if (pMemory == nullptr)
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        void* pPalMemory = pMemory;
+
+        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+        {
+            const size_t size = pDevice->PalDevice(deviceIdx)->GetGpuMemorySize(memCreateInfos[deviceIdx],
+                                                                                &palResult);
+
+            if (palResult == Pal::Result::Success)
+            {
+                palResult = pDevice->PalDevice(deviceIdx)->CreateGpuMemory(memCreateInfos[deviceIdx],
+                                                                           pPalMemory,
+                                                                           &pGpuMemory[deviceIdx]);
+            }
+
+            if (palResult == Pal::Result::Success)
+            {
+                // Gpu memory binding for IndirectCmdGenerator to build SRD containing properties and parameter data.
+                palResult = pGenerators[deviceIdx]->BindGpuMemory(pGpuMemory[deviceIdx], 0);
+            }
+            else
+            {
+                result = PalToVkResult(palResult);
+                break;
+            }
+
+            if (palResult == Pal::Result::Success)
+            {
+                pPalMemory = Util::VoidPtrInc(pPalMemory, size);
+            }
+            else
+            {
+                result = PalToVkResult(palResult);
+                break;
+            }
+        }
+    }
+
+    return result;
 }
 
 // =====================================================================================================================
@@ -368,8 +445,16 @@ VkResult IndirectCommandsLayout::Destroy(
         {
             m_perGpu[deviceIdx].pGenerator->Destroy();
         }
-        // It's app's reponsibility to free the preprocess buffer.
-        m_perGpu[deviceIdx].preprocessBufferVirtAddr = 0;
+
+        if (m_perGpu[deviceIdx].pGpuMemory != nullptr)
+        {
+            m_perGpu[deviceIdx].pGpuMemory->Destroy();
+        }
+    }
+
+    if (m_perGpu[DefaultDeviceIndex].pGpuMemory != nullptr)
+    {
+        pAllocator->pfnFree(pAllocator->pUserData, m_perGpu[DefaultDeviceIndex].pGpuMemory);
     }
 
     Util::Destructor(this);

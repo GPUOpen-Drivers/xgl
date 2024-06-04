@@ -299,7 +299,8 @@ private:
             uint32_t sampleLocsCompatDepth  : 1;  // VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT
             uint32_t isProtected            : 1;  // VK_IMAGE_CREATE_PROTECTED_BIT
             uint32_t treatAsSrgb            : 1;  // True if this image is to be interpreted as SRGB where possible
-            uint32_t reserved               : 15;
+            uint32_t reserved1              : 1;
+            uint32_t reserved               : 14;
         };
         uint32_t     u32All;
     };
@@ -334,7 +335,8 @@ private:
             uint32_t externallyShareable :  1; // True if the backing memory of this image may be shared externally.
             uint32_t externalD3DHandle   :  1; // True if image is backed by a D3D11 image
             uint32_t externalPinnedHost  :  1; // True if image backing memory is compatible with pinned sysmem.
-            uint32_t reserved            : 28;
+            uint32_t reserved1           :  1;
+            uint32_t reserved            :  27;
         };
         uint32_t u32All;
     };

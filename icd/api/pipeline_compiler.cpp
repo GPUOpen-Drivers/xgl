@@ -2233,7 +2233,7 @@ void PipelineCompiler::BuildPipelineShaderInfo(
         // but we want to force wavesize to wave32 internally depending on settings and shader stage.
         // We override any wavesize forced via shader opts also here.
         // NOTE: If the app uses subgroup size then wavesize forced here might get overriden later based on
-        // subgroupsize. To avoid this beahvior, DeprecateWave64Reporting must be set as well in settings.
+        // subgroupsize. To avoid this behavior, DeprecateWave64Reporting must be set as well in settings.
         pShaderInfoOut->options.waveSize =
             ShouldForceWave32(static_cast<ShaderStage>(stage), pDevice->GetRuntimeSettings().deprecateWave64) ?
                 32 : pShaderInfoOut->options.waveSize;
@@ -2330,6 +2330,8 @@ static void BuildPipelineShadersInfo(
     const GraphicsPipelineShaderStageInfo* pShaderInfo,
     GraphicsPipelineBinaryCreateInfo*      pCreateInfo)
 {
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+
     if (pCreateInfo->pipelineInfo.options.enableRelocatableShaderElf)
     {
         CompilerSolution::DisableNggCulling(&pCreateInfo->pipelineInfo.nggState);
@@ -2353,7 +2355,7 @@ static void BuildPipelineShadersInfo(
              (pShaderInfo->stages[stage].codeHash.lower != 0) ||
              (pShaderInfo->stages[stage].codeHash.upper != 0)))
         {
-            GraphicsLibraryType gplType = GetGraphicsLibraryType(static_cast<const ShaderStage>(stage));
+            GraphicsLibraryType gplType = GetGraphicsLibraryType(static_cast<ShaderStage>(stage));
 
             PipelineCompiler::BuildPipelineShaderInfo(pDevice,
                                     &pShaderInfo->stages[stage],
@@ -2362,6 +2364,26 @@ static void BuildPipelineShadersInfo(
                                     pCreateInfo->pPipelineProfileKey,
                                     &pCreateInfo->pipelineInfo.nggState
                                     );
+
+            if ((stage == ShaderStage::ShaderStageFragment) &&
+                (ppShaderInfoOut[stage]->options.allowReZ == true) && settings.disableDepthOnlyReZ)
+            {
+                bool usesDepthOnlyAttachments = true;
+
+                for (uint32_t i = 0; i < Pal::MaxColorTargets; ++i)
+                {
+                    if (pCreateInfo->pipelineInfo.cbState.target[i].channelWriteMask != 0)
+                    {
+                        usesDepthOnlyAttachments = false;
+                        break;
+                    }
+                }
+
+                if (usesDepthOnlyAttachments)
+                {
+                    ppShaderInfoOut[stage]->options.allowReZ = false;
+                }
+            }
         }
     }
 
@@ -2375,8 +2397,8 @@ static void BuildPipelineShadersInfo(
     //   details can be found in PipelineCompiler::ConvertGraphicsPipelineInfo().
     // PS: For standard gfx pipeline, GraphicsPipelineBuildInfo::enableUberFetchShader is never set as TRUE with default
     //     panel setting because VII and PRS are always available at the same time.
-    if (pDevice->GetRuntimeSettings().enableUberFetchShader ||
-        pDevice->GetRuntimeSettings().enableEarlyCompile ||
+    if (settings.enableUberFetchShader ||
+        settings.enableEarlyCompile ||
         (((pCreateInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) == 0) &&
          ((pCreateInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) != 0)) ||
         (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInput) == true)
@@ -2938,6 +2960,9 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                                                                        flags,
                                                                        &pCreateInfo->pipelineInfo.options
         );
+
+        pCreateInfo->pipelineInfo.useSoftwareVertexBufferDescriptors =
+            pDevice->GetEnabledFeatures().robustVertexBufferExtend;
 
     }
 
@@ -3787,7 +3812,7 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
         static_assert(RaytracingContinuations == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Continuations));
         pCreateInfo->pipelineInfo.mode = static_cast<Vkgc::LlpcRaytracingMode>(settings.llpcRaytracingMode);
 
-        static_assert(CpsFlagStackInGlobalMem == Vkgc::CpsFlagStackInGlobalMem);
+        static_assert(CpsFlagStackInGlobalMem == static_cast<unsigned>(Vkgc::CpsFlagStackInGlobalMem));
         pCreateInfo->pipelineInfo.cpsFlags = settings.cpsFlags;
 
         pCreateInfo->pipelineInfo.isReplay = isReplay;
@@ -3827,6 +3852,9 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
         {
             tempBufferSize += sizeof(BinaryData) * pIn->pLibraryInfo->libraryCount;
         }
+
+        const auto& gpurtOptions = pDevice->RayTrace()->GetGpurtOptions();
+        tempBufferSize += gpurtOptions.size() * sizeof(Vkgc::GpurtOption);
 
         // We can't have a pipeline with 0 shader stages
         VK_ASSERT(tempBufferSize > 0);
@@ -4022,6 +4050,17 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
 
                     pSummaries[i] = summary;
                 }
+            }
+
+            if (gpurtOptions.size() > 0)
+            {
+                Vkgc::GpurtOption* pGpurtOptions = reinterpret_cast<Vkgc::GpurtOption *>(
+                    VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferOffset));
+                size_t gpurtOptionsSize = sizeof(Vkgc::GpurtOption) * gpurtOptions.size();
+                tempBufferOffset += gpurtOptionsSize;
+                pCreateInfo->pipelineInfo.pGpurtOptions = pGpurtOptions;
+                pCreateInfo->pipelineInfo.gpurtOptionCount = gpurtOptions.size();
+                memcpy(pGpurtOptions, gpurtOptions.Data(), gpurtOptionsSize);
             }
         }
     }

@@ -821,6 +821,9 @@ VkResult PhysicalDevice::Initialize()
             finalizeInfo.supportedFullScreenFrameMetadata.p2pCmdFlag                = true;
             finalizeInfo.supportedFullScreenFrameMetadata.forceSwCfMode             = true;
             finalizeInfo.supportedFullScreenFrameMetadata.postFrameTimerSubmission  = true;
+
+            // Need to set all 3 bits to 1 per KMD request.
+            finalizeInfo.supportedFullScreenFrameMetadata.flipIntervalOverride      = 7;
         }
 
         finalizeInfo.internalTexOptLevel = VkToPalTexFilterQuality(settings.vulkanTexFilterQuality);
@@ -1323,6 +1326,7 @@ void PhysicalDevice::PopulateFormatProperties()
                 }
                 while (aspectMask != 0);
             }
+
         }
 
 #if VKI_RAY_TRACING
@@ -4098,11 +4102,17 @@ bool PhysicalDevice::RayTracingSupported() const
 }
 #endif
 
+// =====================================================================================================================
 static bool IsKhrCooperativeMatrixSupported(
     const PhysicalDevice* pPhysicalDevice)
 {
-    return ((pPhysicalDevice == nullptr) ||
-            (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportCooperativeMatrix));
+    const bool hasHardwareSupport =
+        ((pPhysicalDevice == nullptr) ||
+         (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportCooperativeMatrix));
+
+    bool emulateSupport = false;
+
+    return hasHardwareSupport || emulateSupport;
 }
 
 // =====================================================================================================================
@@ -4766,7 +4776,9 @@ void PhysicalDevice::PopulateQueueFamilies()
                 pQueueFamilyProps->minImageTransferGranularity.depth  = ((transferGranularityOverride >> 16) & 0xff);
             }
 
-            m_queueFamilyCount++;
+            {
+                m_queueFamilyCount++;
+            }
         }
     }
 
@@ -7006,6 +7018,9 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+#if VKI_RAY_TRACING
+#endif
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT*>(pHeader);
@@ -8296,6 +8311,9 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->fragmentShadingRateClampCombinerInputs = VK_TRUE;
             break;
         }
+
+#if VKI_RAY_TRACING
+#endif
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_PROPERTIES_EXT:
         {

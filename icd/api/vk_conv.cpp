@@ -750,6 +750,9 @@ const char* PalResultName(
     case Pal::Result::ErrorInvalidExternalHandle:
         resultName = "ErrorInvalidExternalHandle";
         break;
+    case Pal::Result::ErrorIncompatibleDisplayMode:
+        resultName = "ErrorIncompatibleDisplayMode";
+        break;
     default:
         VK_NOT_IMPLEMENTED;
         resultName = "??";
@@ -1127,6 +1130,7 @@ static uint32_t GetBufferSrdFormatInfo(
         bufferInfo.swizzledFormat = swizzledFormat;
         bufferInfo.range = UINT32_MAX;
         bufferInfo.stride = Pal::Formats::BytesPerPixel(swizzledFormat.format);
+
         pPhysicalDevice->PalDevice()->CreateTypedBufferViewSrds(1, &bufferInfo, result);
 
         // NOTE: Until now, all buffer format info is stored the fourth DWORD of buffer SRD. please modify

@@ -94,7 +94,6 @@ enum class AppProfile : uint32_t
     EvilGenius2,             // Evil Genius 2
     KnockoutCity,            // Knockout City
     SkyGold,                 // Sky Gold by NetEase
-    IdTechEngine,            // id Tech Engine (Default)
     Feral3DEngine,           // Feral3D Engine (Default)
     StrangeEngine,           // Strange Engine (Default)
     SedpEngine,              // Serious Engine (Default)
@@ -112,6 +111,9 @@ enum class AppProfile : uint32_t
     SniperElite5,            // Sniper Elite 5 by Rebellion
     SeriousSamVrTheLastHope, // Serious Sam VR The Last Hope by Croteam
     BaldursGate3,            // Baldur's Gate by Larian Studios
+    Enshrouded,              // Enshrouded by Keen Games
+    HolisticEngine,          // Holistic Engine by Keen Games
+    IdTechEngine,            // id Tech Engine (Default)
 #if VKI_RAY_TRACING
     ControlDX12,             // VKD3D Control Ultimate Edition
     RayTracingWeekends,      // RayTracingInVulkan demo
@@ -122,6 +124,9 @@ enum class AppProfile : uint32_t
     DxvkGodOfWar,            // DXVK God of War
     ELEX2,                   // ELEX II
     X4Foundations,           // X4: Foundations by Egosoft
+    DxvkHaloInfiniteLauncher,// DXVK Halo Infinite Launcher (Don't Confuse it with VKD3D
+                             // Halo Infinite Game)
+    DxvkTf2,                 // DXVK Team Fortress 2
     MetalGearSolid5,         // Metal Gear Solid5 : The Phantom Pain
     MetalGearSolid5Online,   // Metal Gear Solid5 : The Phantom Pain Online
     YamagiQuakeII,           // Yamagi Quake II
@@ -142,6 +147,7 @@ enum class AppProfile : uint32_t
     Enscape,                 // Enscape by Chaos
     Vkd3dEngine,             // vkd3d-proton for steam games
     DXVK,                    // DXVK
+    WindowKill,              // Windowkill by torcado
 };
 
 struct ProfileSettings

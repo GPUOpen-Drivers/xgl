@@ -39,6 +39,10 @@
 #include "palMetroHash.h"
 #include "palVectorImpl.h"
 
+#if VKI_RAY_TRACING
+#include "raytrace/ray_tracing_device.h"
+#endif
+
 namespace vk
 {
 
@@ -938,7 +942,7 @@ Vkgc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
         break;
-    case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+    case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
         nodeType = Vkgc::ResourceMappingNodeType::InlineBuffer;
         break;
     case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
@@ -1281,7 +1285,8 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
                 Vkgc::ShaderStageVertexBit,
                 userDataLayout.specConstBufVertexRegBase,
                 MaxInternalSpecConstBuffSize,
-                Vkgc::SpecConstInternalBufferBindingId + ShaderStage::ShaderStageVertex,
+                static_cast<uint32_t>(Vkgc::SpecConstInternalBufferBindingId) +
+                    static_cast<uint32_t>(ShaderStage::ShaderStageVertex),
                 &pUserDataNodes[userDataNodeCount],
                 &userDataNodeCount,
                 &pResourceNodes[mappingNodeCount],
@@ -1294,7 +1299,8 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
                 Vkgc::ShaderStageFragmentBit,
                 userDataLayout.specConstBufFragmentRegBase,
                 MaxInternalSpecConstBuffSize,
-                Vkgc::SpecConstInternalBufferBindingId + ShaderStage::ShaderStageFragment,
+                static_cast<uint32_t>(Vkgc::SpecConstInternalBufferBindingId) +
+                    static_cast<uint32_t>(ShaderStage::ShaderStageFragment),
                 &pUserDataNodes[userDataNodeCount],
                 &userDataNodeCount,
                 &pResourceNodes[mappingNodeCount],

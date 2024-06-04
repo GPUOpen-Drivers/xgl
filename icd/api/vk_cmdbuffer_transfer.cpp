@@ -419,7 +419,18 @@ void CmdBuffer::BlitImage(
         palCopyInfo.rotation = Pal::ImageRotation::Ccw0;
 
         palCopyInfo.pRegions        = pPalRegions;
-        palCopyInfo.flags.dstAsSrgb = pDstImage->TreatAsSrgb();
+
+        // PAL does gamma correction whenever the destination is a SRGB image or treated as one.
+        // If the source image is an UNORM image that contains SRGB data, we need to set dstAsNorm
+        // so PAL doesn't end up doing gamma correction on values that are already in SRGB space.
+        if (pSrcImage->TreatAsSrgb())
+        {
+            palCopyInfo.flags.dstAsNorm = true;
+        }
+        else if (pDstImage->TreatAsSrgb())
+        {
+            palCopyInfo.flags.dstAsSrgb = true;
+        }
 
         for (uint32_t regionIdx = 0; regionIdx < regionCount;)
         {
@@ -802,9 +813,9 @@ void CmdBuffer::QueryCopy(
     // 64-bit values)
     Pal::BufferViewInfo bufferViewInfo = {};
 
-    bufferViewInfo.range = destStride * queryCount;
-    bufferViewInfo.stride = 0; // Raw buffers have a zero byte stride
-    bufferViewInfo.swizzledFormat = Pal::UndefinedSwizzledFormat;
+    bufferViewInfo.range           = destStride * queryCount;
+    bufferViewInfo.stride          = 0; // Raw buffers have a zero byte stride
+    bufferViewInfo.swizzledFormat  = Pal::UndefinedSwizzledFormat;
 
     // Set query count
     userData[queryCountOffset] = queryCount;

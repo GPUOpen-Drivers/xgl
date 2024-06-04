@@ -33,6 +33,9 @@
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_memory.h"
 #include "include/vk_pipeline.h"
+#if VKI_RAY_TRACING
+#include "raytrace/ray_tracing_device.h"
+#endif
 
 #include "palPipeline.h"
 #include "palPipelineAbi.h"
@@ -152,7 +155,7 @@ VkResult ComputePipeline::CreatePipelineBinaries(
 
         bool shouldConvert = (pCreateInfo != nullptr) &&
             (pDevice->GetRuntimeSettings().enablePipelineDump ||
-                (shouldCompile && (pBinaryCreateInfo->pTempBuffer == nullptr)));
+             (shouldCompile && (pBinaryCreateInfo->pTempBuffer == nullptr)));
 
         VkResult convertResult = VK_ERROR_UNKNOWN;
         if (shouldConvert)
@@ -226,7 +229,6 @@ VkResult ComputePipeline::CreatePipelineBinaries(
 
         // Add to any cache layer where missing
         if ((result == VK_SUCCESS) && storeBinaryToCache)
-
         {
             pDevice->GetCompiler(deviceIdx)->CachePipelineBinary(
                 &pCacheIds[deviceIdx],
@@ -571,6 +573,7 @@ VkResult ComputePipeline::Create(
                 static_cast<const char*>(pipelineBinaries[DefaultDeviceIndex].pCode),
                 pComputePipeline->GetFormatStrings());
         }
+
     }
     else
     {

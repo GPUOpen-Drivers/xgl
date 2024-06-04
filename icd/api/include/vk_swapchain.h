@@ -157,10 +157,11 @@ public:
     bool IsFullscreenOrEfsePresent() const;
 
     Pal::IGpuMemory* UpdatePresentInfo(
-        uint32_t                    deviceIdx,
-        uint32_t                    imageIndex,
-        Pal::PresentSwapChainInfo*  pPresentInfo,
-        const Pal::FlipStatusFlags& flipFlags);
+        uint32_t                                  deviceIdx,
+        uint32_t                                  imageIndex,
+        Pal::PresentSwapChainInfo*                pPresentInfo,
+        const Pal::FlipStatusFlags&               flipFlags,
+        const Pal::PerSourceFrameMetadataControl& metadataFlags);
 
     bool BuildPostProcessingCommands(
         Pal::ICmdBuffer*                 pCmdBuf,
@@ -187,6 +188,7 @@ public:
         const VkHdrMetadataEXT* pMetadata);
 
     void MarkAsDeprecated(
+        bool                         releaseResources,
         const VkAllocationCallbacks* pAllocator);
 
     uint32_t GetVidPnSourceId() const

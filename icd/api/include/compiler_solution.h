@@ -365,6 +365,7 @@ public:
     virtual Vkgc::BinaryData ExtractPalElfBinary(const Vkgc::BinaryData& shaderBinary) = 0;
 
     static void DisableNggCulling(Vkgc::NggState* pNggState);
+    static const char* GetShaderStageName(ShaderStage shaderStage);
 
 #if VKI_RAY_TRACING
     static void UpdateRayTracingFunctionNames(
@@ -400,7 +401,6 @@ protected:
     PipelineBinaryCache* m_pBinaryCache;         // Internal pipeline binary cache
                                                  // NOTE: It is owned by PipelineCompiler.
     PipelineCompileCacheMatrix m_gplCacheMatrix; // Graphics pipeline compile statistic info
-    static const char* GetShaderStageName(ShaderStage shaderStage);
     static const char* GetGraphicsLibraryName(GraphicsLibraryType libraryType);
 private:
 

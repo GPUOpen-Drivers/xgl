@@ -112,9 +112,9 @@ void BufferView::BuildSrd(
     Pal::BufferViewInfo info        = {};
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
-    info.swizzledFormat = VkToPalFormat(format, settings);
-    info.stride         = Pal::Formats::BytesPerPixel(info.swizzledFormat.format);
-    info.range          = bufferRange;
+    info.swizzledFormat  = VkToPalFormat(format, settings);
+    info.stride          = Pal::Formats::BytesPerPixel(info.swizzledFormat.format);
+    info.range           = bufferRange;
 
     // Bypass Mall read/write if no alloc policy is set for SRDs
     if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocBufferViewSrds))

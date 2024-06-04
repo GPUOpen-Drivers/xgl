@@ -35,6 +35,9 @@
 #include "include/vk_render_pass.h"
 #include "include/vk_shader.h"
 #include "include/vk_cmdbuffer.h"
+#if VKI_RAY_TRACING
+#include "raytrace/ray_tracing_device.h"
+#endif
 
 #include "palAutoBuffer.h"
 #include "palCmdBuffer.h"
@@ -49,6 +52,7 @@
 #include <math.h>
 
 using namespace Util;
+using namespace std::chrono_literals;
 
 namespace vk
 {
@@ -115,7 +119,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
 
         bool shouldConvert = (pCreateInfo != nullptr) &&
             (pDevice->GetRuntimeSettings().enablePipelineDump ||
-            (shouldCompile && (deviceIdx == DefaultDeviceIndex)));
+             (shouldCompile && (deviceIdx == DefaultDeviceIndex)));
 
         VkResult convertResult = VK_ERROR_UNKNOWN;
         if (shouldConvert)
@@ -1660,7 +1664,7 @@ VkResult GraphicsPipeline::Destroy(
 {
     if (m_deferWorkload.pEvent != nullptr)
     {
-        auto result = m_deferWorkload.pEvent->Wait(Util::fseconds{ 10 });
+        auto result = m_deferWorkload.pEvent->Wait(10s);
         if (result == Util::Result::Success)
         {
             Util::Destructor(m_deferWorkload.pEvent);

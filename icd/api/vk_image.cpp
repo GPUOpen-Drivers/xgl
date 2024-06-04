@@ -409,68 +409,83 @@ void Image::ConvertImageCreateInfo(
         }
     }
 
+    const bool isZ24DsFormat = (settings.enableD24S8 &&
+                                ((pCreateInfo->format == VK_FORMAT_D24_UNORM_S8_UINT) ||
+                                 (pCreateInfo->format == VK_FORMAT_X8_D24_UNORM_PACK32)));
+
+    const bool isZ16DsFormat = ((pCreateInfo->format == VK_FORMAT_D16_UNORM) ||
+                                (pCreateInfo->format == VK_FORMAT_D16_UNORM_S8_UINT));
+
+    if (isZ24DsFormat)
+    {
+        pPalCreateInfo->usageFlags.depthAsZ24 = 1;
+    }
+
     pPalCreateInfo->metadataMode         = Pal::MetadataMode::Default;
     pPalCreateInfo->metadataTcCompatMode = Pal::MetadataTcCompatMode::Default;
 
-    // Don't force DCC to be enabled for performance reasons unless the image is larger than the minimum size set for
-    // compression, another performance optimization.
     const Pal::GfxIpLevel gfxLevel = palProperties.gfxLevel;
-    if (((pPalCreateInfo->extent.width * pPalCreateInfo->extent.height) >
-         (settings.disableSmallSurfColorCompressionSize * settings.disableSmallSurfColorCompressionSize)) &&
-        (Formats::IsColorFormat(createInfoFormat)))
+
     {
-        const uint32_t forceEnableDccMask = settings.forceEnableDcc;
-
-        const uint32_t bpp         = Pal::Formats::BitsPerPixel(pPalCreateInfo->swizzledFormat.format);
-        const bool isShaderStorage = (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT);
-
-        if (isShaderStorage &&
-            ((forceEnableDccMask & ForceDccDefault) == 0) &&
-            ((forceEnableDccMask & ForceDisableDcc) == 0))
+        // Don't force DCC to be enabled for performance reasons unless the image is larger than the minimum size set for
+        // compression, another performance optimization.
+        if (((pPalCreateInfo->extent.width * pPalCreateInfo->extent.height) >
+            (settings.disableSmallSurfColorCompressionSize * settings.disableSmallSurfColorCompressionSize)) &&
+            (Formats::IsColorFormat(createInfoFormat)))
         {
-            const bool isColorAttachment = (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+            const uint32_t forceEnableDccMask = settings.forceEnableDcc;
 
-            const bool is2DShaderStorageImage = (pCreateInfo->imageType & VK_IMAGE_TYPE_2D);
-            const bool is3DShaderStorageImage = (pCreateInfo->imageType & VK_IMAGE_TYPE_3D);
+            const uint32_t bpp         = Pal::Formats::BitsPerPixel(pPalCreateInfo->swizzledFormat.format);
+            const bool isShaderStorage = (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT);
 
-            // Enable DCC beyond what PAL does by default for color attachments
-            const bool shouldForceDccForCA = Util::TestAnyFlagSet(forceEnableDccMask, ForceDccForColorAttachments) &&
-                                             isColorAttachment;
-            const bool shouldForceDccForNonCAShaderStorage =
-                Util::TestAnyFlagSet(forceEnableDccMask, ForceDccForNonColorAttachmentShaderStorage) &&
-                (!isColorAttachment);
-
-            const bool shouldForceDccFor2D = Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor2DShaderStorage) &&
-                                             is2DShaderStorageImage;
-            const bool shouldForceDccFor3D = Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor3DShaderStorage) &&
-                                             is3DShaderStorageImage;
-
-            const bool shouldForceDccFor32Bpp =
-                Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor32BppShaderStorage) && (bpp >= 32) && (bpp < 64);
-
-            const bool shouldForceDccFor64Bpp =
-                Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor64BppShaderStorage) && (bpp >= 64);
-
-            const bool shouldForceDccForAllBpp =
-            ((Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor32BppShaderStorage) == false) &&
-                (Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor64BppShaderStorage) == false));
-
-            // To force enable shader storage DCC, at least one of 2D/3D and one of CA/non-CA need to be set
-            if ((shouldForceDccFor2D || shouldForceDccFor3D) &&
-                (shouldForceDccForCA || shouldForceDccForNonCAShaderStorage) &&
-                (shouldForceDccFor32Bpp || shouldForceDccFor64Bpp || shouldForceDccForAllBpp))
+            if (isShaderStorage &&
+                ((forceEnableDccMask & ForceDccDefault) == 0) &&
+                ((forceEnableDccMask & ForceDisableDcc) == 0))
             {
-                pPalCreateInfo->metadataMode = Pal::MetadataMode::ForceEnabled;
-            }
-        }
+                const bool isColorAttachment = (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
 
-        // This setting should only really be used for Vega20.
-        // Turn DCC on/off for identified cases where memory bandwidth is not the bottleneck to improve latency.
-        // PAL may do this implicitly, so specify force enabled instead of default.
-        if (settings.dccBitsPerPixelThreshold != UINT_MAX)
-        {
-            pPalCreateInfo->metadataMode = (bpp < settings.dccBitsPerPixelThreshold) ?
-                Pal::MetadataMode::Disabled : Pal::MetadataMode::ForceEnabled;
+                const bool is2DShaderStorageImage = (pCreateInfo->imageType & VK_IMAGE_TYPE_2D);
+                const bool is3DShaderStorageImage = (pCreateInfo->imageType & VK_IMAGE_TYPE_3D);
+
+                // Enable DCC beyond what PAL does by default for color attachments
+                const bool shouldForceDccForCA = Util::TestAnyFlagSet(forceEnableDccMask, ForceDccForColorAttachments) &&
+                    isColorAttachment;
+                const bool shouldForceDccForNonCAShaderStorage =
+                    Util::TestAnyFlagSet(forceEnableDccMask, ForceDccForNonColorAttachmentShaderStorage) &&
+                    (!isColorAttachment);
+
+                const bool shouldForceDccFor2D = Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor2DShaderStorage) &&
+                    is2DShaderStorageImage;
+                const bool shouldForceDccFor3D = Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor3DShaderStorage) &&
+                    is3DShaderStorageImage;
+
+                const bool shouldForceDccFor32Bpp =
+                    Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor32BppShaderStorage) && (bpp >= 32) && (bpp < 64);
+
+                const bool shouldForceDccFor64Bpp =
+                    Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor64BppShaderStorage) && (bpp >= 64);
+
+                const bool shouldForceDccForAllBpp =
+                    ((Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor32BppShaderStorage) == false) &&
+                        (Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor64BppShaderStorage) == false));
+
+                // To force enable shader storage DCC, at least one of 2D/3D and one of CA/non-CA need to be set
+                if ((shouldForceDccFor2D || shouldForceDccFor3D) &&
+                    (shouldForceDccForCA || shouldForceDccForNonCAShaderStorage) &&
+                    (shouldForceDccFor32Bpp || shouldForceDccFor64Bpp || shouldForceDccForAllBpp))
+                {
+                    pPalCreateInfo->metadataMode = Pal::MetadataMode::ForceEnabled;
+                }
+            }
+
+            // This setting should only really be used for Vega20.
+            // Turn DCC on/off for identified cases where memory bandwidth is not the bottleneck to improve latency.
+            // PAL may do this implicitly, so specify force enabled instead of default.
+            if (settings.dccBitsPerPixelThreshold != UINT_MAX)
+            {
+                pPalCreateInfo->metadataMode = (bpp < settings.dccBitsPerPixelThreshold) ?
+                    Pal::MetadataMode::Disabled : Pal::MetadataMode::ForceEnabled;
+            }
         }
     }
 
@@ -482,13 +497,6 @@ void Image::ConvertImageCreateInfo(
         (pCreateInfo->mipLevels > 4) && (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT))
     {
         pPalCreateInfo->metadataMode = Pal::MetadataMode::Disabled;
-    }
-
-    if (settings.enableD24S8                                  &&
-        ((pCreateInfo->format == VK_FORMAT_D24_UNORM_S8_UINT) ||
-         (pCreateInfo->format == VK_FORMAT_X8_D24_UNORM_PACK32)))
-    {
-        pPalCreateInfo->usageFlags.depthAsZ24 = 1;
     }
 
     // If DCC was disabled above, still attempt to use Fmask.
@@ -538,7 +546,7 @@ void Image::ConvertImageCreateInfo(
         if ((extStructs.pImageCompressionControl->sType == VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT) &&
             (extStructs.pImageCompressionControl->flags == VK_IMAGE_COMPRESSION_DISABLED_EXT))
         {
-            pPalCreateInfo->metadataMode = Pal::MetadataMode::Disabled;
+            pPalCreateInfo->metadataMode         = Pal::MetadataMode::Disabled;
             pPalCreateInfo->metadataTcCompatMode = Pal::MetadataTcCompatMode::Disabled;
         }
     }

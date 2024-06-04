@@ -918,11 +918,11 @@ protected:
 
     struct
     {
-        Pal::QueueType               palQueueType;
-        Pal::EngineType              palEngineType;
-        VkShaderStageFlags           validShaderStages;
-        uint32_t                     palImageLayoutFlag;
-        VkQueueFamilyProperties      properties;
+        Pal::QueueType                palQueueType;
+        Pal::EngineType               palEngineType;
+        VkShaderStageFlags            validShaderStages;
+        uint32_t                      palImageLayoutFlag;
+        VkQueueFamilyProperties       properties;
     } m_queueFamilies[Queue::MaxQueueFamilies];
 
     // List of indices for compute engines that aren't exclusive.

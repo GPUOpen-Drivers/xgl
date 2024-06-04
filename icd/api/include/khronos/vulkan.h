@@ -65,6 +65,9 @@
 #include "devext/vk_amd_shader_texel_buffer_explicit_format.h"
 #endif
 
+#if VKI_RAY_TRACING
+#endif
+
 #define VK_FORMAT_A1B5G5R5_UNORM_PACK16 VK_FORMAT_A1B5G5R5_UNORM_PACK16_KHR
 
 #define VK_FORMAT_BEGIN_RANGE VK_FORMAT_UNDEFINED

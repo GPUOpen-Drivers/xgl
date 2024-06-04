@@ -37,6 +37,8 @@
 
 #include <inttypes.h>
 
+using namespace std::chrono_literals;
+
 namespace vk
 {
 
@@ -846,7 +848,7 @@ void LlpcHelperThreadProvider::WaitForTasks()
 {
     while (m_pDeferredWorkload->completedInstances < m_pDeferredWorkload->totalInstances)
     {
-        m_pDeferredWorkload->event.Wait(Util::fseconds { 1.0f });
+        m_pDeferredWorkload->event.Wait(1s);
     }
 }
 
@@ -1018,6 +1020,11 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
     if (settings.enablePipelineDump)
     {
         llpcOptions[numOptions++] = "-enable-pipeline-dump";
+    }
+
+    if (settings.enableImageMsaaLoadOpt)
+    {
+        llpcOptions[numOptions++] = "-mattr=-msaa-load-dst-sel-bug";
     }
 
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-pipeline-dump-dir=%s", settings.pipelineDumpDir);

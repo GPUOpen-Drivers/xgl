@@ -75,6 +75,7 @@ public:
         uint32_t                                           deviceIndex,
         const VkAccelerationStructureBuildGeometryInfoKHR& info,
         const VkAccelerationStructureBuildRangeInfoKHR*    ppBuildRangeInfos,
+        const uint32_t*                                    pMaxPrimitiveCounts,
         GeometryConvertHelper*                             pHelper,
         GpuRt::AccelStructBuildInputs*                     pInputs);
 

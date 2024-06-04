@@ -169,6 +169,7 @@ if (VKI_RAY_TRACING)
         api/raytrace/vk_ray_tracing_pipeline.cpp
         api/raytrace/ray_tracing_device.cpp
         api/vk_deferred_operation.cpp
+        api/appopt/bvh_batch_layer.cpp
     )
 endif()
 #endif

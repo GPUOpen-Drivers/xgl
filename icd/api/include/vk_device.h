@@ -167,8 +167,9 @@ public:
             uint32                primitivesGeneratedQuery             : 1;
             uint32                reserved1                            : 1;
             uint32                reserved2                            : 1;
+            uint32                robustVertexBufferExtend             : 1;
 
-            uint32                reserved                             : 12;
+            uint32                reserved                             : 11;
         };
 
         uint32 u32All;
@@ -959,7 +960,7 @@ protected:
 
     // This is from device create info, VkDevicePrivateDataCreateInfoEXT
     uint32                              m_privateDataSlotRequestCount;
-    volatile uint64                     m_nextPrivateDataSlot;
+    uint64                              m_nextPrivateDataSlot;
     size_t                              m_privateDataSize;
     Util::RWLock                        m_privateDataRWLock;
 

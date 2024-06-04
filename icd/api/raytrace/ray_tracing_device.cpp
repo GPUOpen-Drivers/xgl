@@ -34,7 +34,9 @@
 #include "sqtt/sqtt_layer.h"
 #include "sqtt/sqtt_rgp_annotations.h"
 #include "palAutoBuffer.h"
+#include "palVectorImpl.h"
 #include "gpurt/gpurtLib.h"
+#include "g_gpurtOptions.h"
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
@@ -48,7 +50,9 @@ RayTracingDevice::RayTracingDevice(
     Device* pDevice)
     :
     m_pDevice(pDevice),
+    m_gpurtOptions(pDevice->VkInstance()->Allocator()),
     m_cmdContext(),
+    m_pBvhBatchLayer(nullptr),
     m_accelStructTrackerResources()
 {
 
@@ -73,6 +77,7 @@ VkResult RayTracingDevice::Init()
     }
 
     CreateGpuRtDeviceSettings(&m_gpurtDeviceSettings);
+    CollectGpurtOptions(&m_gpurtOptions);
 
     for (uint32_t deviceIdx = 0; (result == VK_SUCCESS) && (deviceIdx < m_pDevice->NumPalDevices()); ++deviceIdx)
     {
@@ -99,7 +104,6 @@ VkResult RayTracingDevice::Init()
             initInfo.pAccelStructTracker       = GetAccelStructTracker(deviceIdx);
             initInfo.accelStructTrackerGpuAddr = GetAccelStructTrackerGpuVa(deviceIdx);
 
-            initInfo.deviceSettings.gpuDebugFlags = m_pDevice->GetRuntimeSettings().rtGpuDebugFlags;
             initInfo.deviceSettings.emulatedRtIpLevel = Pal::RayTracingIpLevel::None;
             switch (m_pDevice->GetRuntimeSettings().emulatedRtIpLevel)
             {
@@ -136,17 +140,24 @@ VkResult RayTracingDevice::Init()
             callbacks.pfnFreeGpuMem                      = &RayTracingDevice::ClientFreeGpuMem;
             callbacks.pfnClientGetTemporaryGpuMemory     = &RayTracingDevice::ClientGetTemporaryGpuMemory;
 
-            Pal::Result palResult = GpuRt::CreateDevice(initInfo, callbacks, pMemory, &m_pGpuRtDevice[deviceIdx]);
+            result = PalToVkResult(GpuRt::CreateDevice(initInfo, callbacks, pMemory, &m_pGpuRtDevice[deviceIdx]));
 
-            if (palResult != Pal::Result::Success)
+            if (result == VK_SUCCESS)
             {
-                m_pDevice->VkInstance()->FreeMem(pMemory);
-
-                VK_NEVER_CALLED();
-
-                result = VK_ERROR_INITIALIZATION_FAILED;
+                result = BvhBatchLayer::CreateLayer(m_pDevice, &m_pBvhBatchLayer);
             }
 
+            if (result != VK_SUCCESS)
+            {
+                VK_NEVER_CALLED();
+
+                m_pDevice->VkInstance()->FreeMem(pMemory);
+
+                if (m_pBvhBatchLayer != nullptr)
+                {
+                    m_pBvhBatchLayer->DestroyLayer();
+                }
+            }
         }
     }
 
@@ -249,10 +260,47 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     m_profileRayFlags                   = TraceRayProfileFlagsToRayFlag(settings);
     m_profileMaxIterations              = TraceRayProfileMaxIterationsToMaxIterations(settings);
 
-    pDeviceSettings->gpuDebugFlags               = settings.gpuRtGpuDebugFlags;
+    pDeviceSettings->gpuDebugFlags               = settings.rtGpuDebugFlags;
     pDeviceSettings->enableRemapScratchBuffer    = settings.enableRemapScratchBuffer;
     pDeviceSettings->enableEarlyPairCompression  = settings.enableEarlyPairCompression;
     pDeviceSettings->trianglePairingSearchRadius = settings.trianglePairingSearchRadius;
+
+    pDeviceSettings->enableMergedEncodeBuild  = settings.enableMergedEncodeBuild;
+    pDeviceSettings->enableMergedEncodeUpdate = settings.enableMergedEncodeUpdate;
+}
+
+// =====================================================================================================================
+void RayTracingDevice::CollectGpurtOptions(
+    GpurtOptions* const pGpurtOptions
+    ) const
+{
+    const uint32_t optionCount = sizeof(GpuRt::OptionDefaults) / sizeof(GpuRt::OptionDefaults[0]);
+
+    // Set up option defaults so that it won't break when a newly added option has non-zero default.
+    Util::HashMap<uint32_t, uint64_t, PalAllocator> optionMap(optionCount, pGpurtOptions->GetAllocator());
+    optionMap.Init();
+    for (uint32_t i = 0; i < optionCount; i++)
+    {
+        // We should not have duplicated option defaults.
+        VK_ASSERT(optionMap.FindKey(GpuRt::OptionDefaults[i].nameHash) == nullptr);
+        optionMap.Insert(GpuRt::OptionDefaults[i].nameHash, GpuRt::OptionDefaults[i].value);
+    }
+
+    auto& settings = m_pDevice->GetRuntimeSettings();
+
+    uint32_t threadTraceEnabled = 0;
+    if (settings.rtEmitRayTracingShaderDataToken ||
+        m_pDevice->VkInstance()->PalPlatform()->IsRaytracingShaderDataTokenRequested())
+    {
+        threadTraceEnabled = 1;
+    }
+    *optionMap.FindKey(GpuRt::ThreadTraceEnabledOptionNameHash) = threadTraceEnabled;
+
+    pGpurtOptions->Clear();
+    for (auto it = optionMap.Begin(); it.Get() != nullptr; it.Next())
+    {
+        pGpurtOptions->PushBack({ it.Get()->key, it.Get()->value });
+    }
 }
 
 // =====================================================================================================================
@@ -295,6 +343,11 @@ void RayTracingDevice::Destroy()
     if (m_accelStructTrackerResources[0].pMem != nullptr)
     {
         m_pDevice->VkInstance()->FreeMem(m_accelStructTrackerResources[0].pMem);
+    }
+
+    if (m_pBvhBatchLayer != nullptr)
+    {
+        m_pBvhBatchLayer->DestroyLayer();
     }
 
     Util::Destructor(this);
@@ -724,11 +777,10 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
     void**                              ppResultMemory)        ///< [out] (Optional) Result PAL pipeline memory,
                                                                ///< if different from obj
 {
-    uint64_t spvPassMask =
-        static_cast<vk::Device*>(initInfo.pClientUserData)->GetRuntimeSettings().rtInternalPipelineSpvPassMask;
-    vk::Device* pDevice = static_cast<vk::Device*>(initInfo.pClientUserData);
+    vk::Device* pDevice  = static_cast<vk::Device*>(initInfo.pClientUserData);
     const auto& settings = pDevice->GetRuntimeSettings();
 
+    uint64_t spvPassMask    = settings.rtInternalPipelineSpvPassMask;
     uint64_t shaderTypeMask = 1ull << static_cast<uint64_t>(buildInfo.shaderType);
 
     bool useSpvPass = (shaderTypeMask & spvPassMask);

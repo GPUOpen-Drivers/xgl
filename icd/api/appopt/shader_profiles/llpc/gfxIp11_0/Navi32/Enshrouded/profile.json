@@ -1,0 +1,42 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x4eb6c36d1b5fab73 110e3e5875ad5038"
+        }
+      },
+      "action": {
+        "cs": {
+          "disableCodeSinking": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x3c706d601cf4803e 107f065dcad03a0b"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xcf8eb50df001f7cc ce615bacc3823464"
+        }
+      },
+      "action": {
+        "cs": {
+          "threadGroupSwizzleMode": "_16x16"
+        }
+      }
+    }
+  ]
+}
