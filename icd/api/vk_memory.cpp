@@ -336,7 +336,7 @@ VkResult Memory::Create(
             }
             else
             {
-                vkResult = OpenExternalMemory(pDevice, importInfo, &pMemory);
+                vkResult = OpenExternalMemory(pDevice, createInfo, importInfo, &pMemory);
             }
         }
         else
@@ -1057,9 +1057,10 @@ void Memory::Free(
 // Opens a POSIX external shared handle and creates a memory object corresponding to it.
 // Open external memory should not be multi-instance allocation.
 VkResult Memory::OpenExternalMemory(
-    Device*                 pDevice,
-    const ImportMemoryInfo& importInfo,
-    Memory**                ppMemory)
+    Device*                          pDevice,
+    const Pal::GpuMemoryCreateInfo&  localCreateInfo,
+    const ImportMemoryInfo&          importInfo,
+    Memory**                         ppMemory)
 {
     Pal::ExternalGpuMemoryOpenInfo openInfo = {};
     Pal::GpuMemoryCreateInfo createInfo = {};
@@ -1070,6 +1071,11 @@ VkResult Memory::OpenExternalMemory(
 
     createInfo.flags.globalGpuVa = pDevice->IsGlobalGpuVaEnabled();
     createInfo.heapAccess        = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
+
+    openInfo.flags.gl2Uncached     = localCreateInfo.flags.gl2Uncached;
+    openInfo.flags.mallRangeActive = localCreateInfo.flags.mallRangeActive;
+    openInfo.mallPolicy            = localCreateInfo.mallPolicy;
+    openInfo.mallRange             = localCreateInfo.mallRange;
 
     VK_ASSERT(pDevice  != nullptr);
     VK_ASSERT(ppMemory != nullptr);

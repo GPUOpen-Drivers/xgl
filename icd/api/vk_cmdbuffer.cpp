@@ -85,7 +85,7 @@ namespace
         0,  // range;
         0,  // stride;
         Pal::UndefinedSwizzledFormat,
-        0,  // flags
+        {{0}},  // flags
     };
 
 // =====================================================================================================================
@@ -2054,10 +2054,12 @@ void CmdBuffer::RebindPipeline()
         VK_NEVER_CALLED();
     }
 
+    // Push Constant user data layouts are scheme-agnostic, which will always be checked and rebound if
+    // needed.
     // In compact scheme, the top-level user data layout of two compatible pipeline layout may be different.
-    // Thus, pipeline layout needs to be checked and rebind the user data if needed.
+    // Thus, pipeline layout needs to be checked and rebound if needed.
     // In indirect scheme, the top-level user data layout is always the same for all the pipeline layouts built
-    // in this scheme. So user data doesn't require to be rebind in this case.
+    // in this scheme. So user data doesn't require to be rebound in this case.
     // Pipeline layouts in different scheme can never be compatible. In this case, calling vkCmdBindDescriptorSets()
     // to rebind descirptor sets is mandatory for user.
     if ((pNewUserDataLayout->scheme == m_allGpuState.pipelineState[bindPoint].userDataLayout.scheme) &&
@@ -2084,9 +2086,14 @@ void CmdBuffer::RebindPipeline()
         // A user data layout switch may also require some user data to be reloaded (for both gfx and compute).
         if (pNewUserDataLayout != nullptr)
         {
-            rebindFlags |= SwitchUserDataLayouts(bindPoint, pNewUserDataLayout);
+            rebindFlags |= SwitchCompactSchemeUserDataLayouts(bindPoint, pNewUserDataLayout);
         }
     }
+
+    rebindFlags |= SwitchCommonUserDataLayouts(bindPoint, pNewUserDataLayout);
+
+    // Cache the new user data layout information
+    m_allGpuState.pipelineState[bindPoint].userDataLayout = *pNewUserDataLayout;
 
     // Reprogram the user data if necessary
     if (rebindFlags != 0)
@@ -2167,10 +2174,10 @@ void CmdBuffer::BindPipeline(
 
 // =====================================================================================================================
 // Called during vkCmdBindPipeline when the new pipeline's layout might be different from the previously bound layout.
-// This function will compare the compatibility of those layouts and reprogram any user data to maintain previously-
-// written pipeline resources to make them available in the correct locations of the new pipeline layout.
-// compatible with the new layout remain correctly bound.
-CmdBuffer::RebindUserDataFlags CmdBuffer::SwitchUserDataLayouts(
+// This function will compare the compatibility of those layouts in compact scheme and reprogram any user data to
+// maintain previously-written pipeline resources to make them available in the correct locations of the new pipeline
+// layout. Those that are compatible with the new layout remain correctly bound.
+CmdBuffer::RebindUserDataFlags CmdBuffer::SwitchCompactSchemeUserDataLayouts(
     PipelineBindPoint      apiBindPoint,
     const UserDataLayout*  pNewUserDataLayout)
 {
@@ -2192,6 +2199,27 @@ CmdBuffer::RebindUserDataFlags CmdBuffer::SwitchUserDataLayouts(
         flags |= RebindUserDataDescriptorSets;
     }
 
+    return flags;
+}
+
+// =====================================================================================================================
+// Called during vkCmdBindPipeline when the new pipeline's layout might be different from the previously bound layout.
+// This function will compare the compatibility of those scheme-agnostic layouts and reprogram any user data to maintain
+// previously-written pipeline resources to make them available in the correct locations of the new pipeline layout.
+// Those that are compatible with the new layout remain correctly bound.
+CmdBuffer::RebindUserDataFlags CmdBuffer::SwitchCommonUserDataLayouts(
+    PipelineBindPoint      apiBindPoint,
+    const UserDataLayout*  pNewUserDataLayout)
+{
+    VK_ASSERT(pNewUserDataLayout != nullptr);
+
+    PipelineBindState* pBindState = &m_allGpuState.pipelineState[apiBindPoint];
+
+    RebindUserDataFlags flags = 0;
+
+    const auto& newUserDataLayout = pNewUserDataLayout->common;
+    const auto& curUserDataLayout = pBindState->userDataLayout.common;
+
     // Rebind push constants if necessary
     if ((newUserDataLayout.pushConstRegBase  != curUserDataLayout.pushConstRegBase) |
         (newUserDataLayout.pushConstRegCount != curUserDataLayout.pushConstRegCount))
@@ -2199,12 +2227,8 @@ CmdBuffer::RebindUserDataFlags CmdBuffer::SwitchUserDataLayouts(
         flags |= RebindUserDataPushConstants;
     }
 
-    // Cache the new user data layout information
-    pBindState->userDataLayout = *pNewUserDataLayout;
-
     return flags;
 }
-
 // =====================================================================================================================
 // Called during vkCmdBindPipeline when something requires rebinding API-provided top-level user data (descriptor
 // sets, push constants, etc.)
@@ -2214,14 +2238,17 @@ void CmdBuffer::RebindUserData(
     RebindUserDataFlags    flags)
 {
     VK_ASSERT(flags != 0);
-    VK_ASSERT(m_allGpuState.pipelineState[apiBindPoint].userDataLayout.scheme == PipelineLayoutScheme::Compact);
 
     const PipelineBindState& bindState = m_allGpuState.pipelineState[apiBindPoint];
-    const auto& userDataLayout         = bindState.userDataLayout.compact;
+
+    const auto& compactuserDataLayout = bindState.userDataLayout.compact;
+    const auto& commonUserDataLayout  = bindState.userDataLayout.common;
 
     if ((flags & RebindUserDataDescriptorSets) != 0)
     {
-        const uint32_t count = Util::Min(userDataLayout.setBindingRegCount, bindState.boundSetCount);
+        VK_ASSERT(bindState.userDataLayout.scheme == PipelineLayoutScheme::Compact);
+
+        const uint32_t count = Util::Min(compactuserDataLayout.setBindingRegCount, bindState.boundSetCount);
 
         if (count > 0)
         {
@@ -2232,7 +2259,7 @@ void CmdBuffer::RebindUserData(
 
                 PalCmdBuffer(deviceIdx)->CmdSetUserData(
                     palBindPoint,
-                    userDataLayout.setBindingRegBase,
+                    compactuserDataLayout.setBindingRegBase,
                     count,
                     PerGpuState(deviceIdx)->setBindingData[apiBindPoint]);
             }
@@ -2242,7 +2269,7 @@ void CmdBuffer::RebindUserData(
 
     if ((flags & RebindUserDataPushConstants) != 0)
     {
-        const uint32_t count = Util::Min(userDataLayout.pushConstRegCount, bindState.pushedConstCount);
+        const uint32_t count = Util::Min(commonUserDataLayout.pushConstRegCount, bindState.pushedConstCount);
 
         if (count > 0)
         {
@@ -2252,7 +2279,7 @@ void CmdBuffer::RebindUserData(
 
             PalCmdBufferSetUserData(
                 palBindPoint,
-                userDataLayout.pushConstRegBase,
+                commonUserDataLayout.pushConstRegBase,
                 count,
                 perDeviceStride,
                 bindState.pushConstData);
@@ -2261,6 +2288,8 @@ void CmdBuffer::RebindUserData(
 
     if (((flags & RebindUberFetchInternalMem) != 0) && (bindState.pVertexInputInternalData != nullptr))
     {
+        VK_ASSERT(bindState.userDataLayout.scheme == PipelineLayoutScheme::Compact);
+
         utils::IterateMask deviceGroup(m_curDeviceMask);
         do
         {
@@ -2268,7 +2297,7 @@ void CmdBuffer::RebindUserData(
 
             PalCmdBuffer(deviceIdx)->CmdSetUserData(
                 palBindPoint,
-                userDataLayout.uberFetchConstBufRegBase,
+                compactuserDataLayout.uberFetchConstBufRegBase,
                 2,
                 reinterpret_cast<const uint32_t*>(&bindState.pVertexInputInternalData->gpuAddress[deviceIdx]));
         }
@@ -3067,30 +3096,36 @@ void CmdBuffer::BindVertexBuffers(
                     pSizes,
                     pStrides);
 
-                Pal::VertexBufferViews bufferViews =
-                {
-                    .firstBuffer = firstBinding,
-                    .bufferCount = lowBindingCount,
-                    .offsetMode = (m_flags.offsetMode == 1) ? true : false
-                };
-                Pal::VertexBufferView vertexViews[Pal::MaxVertexBuffers] = {};
-
                 if (m_flags.offsetMode)
                 {
+                    Pal::VertexBufferView vertexViews[Pal::MaxVertexBuffers] = {};
                     for (uint32_t idx = 0; idx < lowBindingCount; idx++)
                     {
                         vertexViews[idx].gpuva = pBinding[idx].gpuAddr;
                         vertexViews[idx].sizeInBytes = pBinding[idx].range;
                         vertexViews[idx].strideInBytes = pBinding[idx].stride;
                     }
-                    bufferViews.pVertexBufferViews = vertexViews;
+
+                    const Pal::VertexBufferViews bufferViews =
+                    {
+                        .firstBuffer = firstBinding,
+                        .bufferCount = lowBindingCount,
+                        .offsetMode = true,
+                        .pVertexBufferViews = vertexViews
+                    };
+                    PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
                 }
                 else
                 {
-                    bufferViews.pBufferViewInfos = pBinding;
+                    const Pal::VertexBufferViews bufferViews =
+                    {
+                        .firstBuffer = firstBinding,
+                        .bufferCount = lowBindingCount,
+                        .offsetMode = false,
+                        .pBufferViewInfos = pBinding
+                    };
+                    PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
                 }
-
-                PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
             }
 
         }
@@ -3153,31 +3188,37 @@ void CmdBuffer::UpdateVertexBufferStrides(
 
         if (firstChanged <= lastChanged)
         {
-            Pal::VertexBufferViews bufferViews =
-            {
-                .firstBuffer = firstChanged,
-                .bufferCount = (lastChanged - firstChanged) + 1,
-                .offsetMode = (m_flags.offsetMode == 1) ? true : false
-            };
-            Pal::VertexBufferView vertexViews[Pal::MaxVertexBuffers] = {};
             auto pBinding = &PerGpuState(deviceIdx)->vbBindings[firstChanged];
-
             if (m_flags.offsetMode)
             {
+                Pal::VertexBufferView vertexViews[Pal::MaxVertexBuffers] = {};
                 for (uint32_t idx = 0; idx < (lastChanged - firstChanged + 1); idx++)
                 {
                     vertexViews[idx].gpuva = pBinding[idx].gpuAddr;
                     vertexViews[idx].sizeInBytes = pBinding[idx].range;
                     vertexViews[idx].strideInBytes = pBinding[idx].stride;
                 }
-                bufferViews.pVertexBufferViews = vertexViews;
+
+                const Pal::VertexBufferViews bufferViews =
+                {
+                    .firstBuffer = firstChanged,
+                    .bufferCount = (lastChanged - firstChanged) + 1,
+                    .offsetMode = true,
+                    .pVertexBufferViews = vertexViews
+                };
+                PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
             }
             else
             {
-                bufferViews.pBufferViewInfos = pBinding;
+                const Pal::VertexBufferViews bufferViews =
+                {
+                    .firstBuffer = firstChanged,
+                    .bufferCount = (lastChanged - firstChanged) + 1,
+                    .offsetMode = false,
+                    .pBufferViewInfos = pBinding
+                };
+                PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
             }
-
-            PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
         }
     }
     while (deviceGroup.IterateNext());
@@ -5906,14 +5947,6 @@ void CmdBuffer::ExecuteAcquireRelease(
                             VkToPalPipelineStageFlags(bufferMemoryBarrier.dstStageMask, false);
                         pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].flags.u32All   =
                             0;
-                        // We set the address to 0 by default here. But, this will be computed correctly later for each
-                        // device including DefaultDeviceIndex based on the deviceId.
-                        pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.address =
-                            0;
-                        pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.offset  =
-                            bufferMemoryBarrier.offset;
-                        pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.size    =
-                            bufferMemoryBarrier.size;
                         pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].srcAccessMask  =
                             tempTransition.srcCacheMask;
                         pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].dstAccessMask  =
@@ -6274,14 +6307,6 @@ void CmdBuffer::ExecuteReleaseThenAcquire(
 
                     pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].flags.u32All      =
                         0;
-                    // We set the address to 0 by default here. But, this will be computed correctly later for each
-                    // device including DefaultDeviceIndex based on the deviceId
-                    pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.address    =
-                        0;
-                    pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.offset     =
-                        pBufferMemoryBarriers[bufferMemoryBarrierIdx].offset;
-                    pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].memory.size       =
-                        pBufferMemoryBarriers[bufferMemoryBarrierIdx].size;
                     pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].srcStageMask      =
                         palSrcStageMask;
                     pPalBufferMemoryBarriers[acquireReleaseInfo.memoryBarrierCount].dstStageMask      =
@@ -6664,66 +6689,69 @@ void CmdBuffer::BeginQueryIndexed(
     DbgBarrierPreCmd(DbgBarrierQueryBeginEnd);
 
     const QueryPool* pBasePool = QueryPool::ObjectFromHandle(queryPool);
-    const auto palQueryControlFlags = VkToPalQueryControlFlags(pBasePool->GetQueryType(), flags);
 
-    // NOTE: This function is illegal to call for TimestampQueryPools and AccelerationStructureQueryPools
-    const PalQueryPool* pQueryPool = pBasePool->AsPalQueryPool();
-    Pal::QueryType queryType = pQueryPool->PalQueryType();
-    if (queryType == Pal::QueryType::StreamoutStats)
     {
-        queryType = static_cast<Pal::QueryType>(static_cast<uint32_t>(queryType) + index);
-    }
+        const auto palQueryControlFlags = VkToPalQueryControlFlags(pBasePool->GetQueryType(), flags);
 
-    utils::IterateMask deviceGroup(m_curDeviceMask);
-    do
-    {
-        const uint32_t deviceIdx = deviceGroup.Index();
-
-        PalCmdBuffer(deviceIdx)->CmdBeginQuery(*pQueryPool->PalPool(deviceIdx),
-            queryType,
-            query,
-            palQueryControlFlags);
-    }
-    while (deviceGroup.IterateNext());
-
-    const auto* const pRenderPass = m_allGpuState.pRenderPass;
-
-    // If queries are used while executing a render pass instance that has multiview enabled,
-    // the query uses N consecutive query indices in the query pool (starting at query) where
-    // N is the number of bits set in the view mask in the subpass the query is used in.
-    //
-    // Implementations may write the total result to the first query and
-    // write zero to the other queries.
-    if (((UsingDynamicRendering() == false) && pRenderPass->IsMultiviewEnabled()) ||
-        (m_allGpuState.dynamicRenderingInstance.viewMask != 0))
-    {
-        const auto viewMask  = (pRenderPass != nullptr) ? pRenderPass->GetViewMask(m_renderPassInstance.subpass) :
-            m_allGpuState.dynamicRenderingInstance.viewMask;
-
-        const auto viewCount = Util::CountSetBits(viewMask);
-
-        // Call Begin() and immediately call End() for all remaining queries,
-        // to set value of each remaining query to 0 and to make them avaliable.
-        for (uint32_t remainingQuery = 1; remainingQuery < viewCount; ++remainingQuery)
+        // NOTE: This function is illegal to call for TimestampQueryPools and AccelerationStructureQueryPools
+        const PalQueryPool* pQueryPool = pBasePool->AsPalQueryPool();
+        Pal::QueryType queryType = pQueryPool->PalQueryType();
+        if (queryType == Pal::QueryType::StreamoutStats)
         {
-            const auto remainingQueryIndex = query + remainingQuery;
+            queryType = static_cast<Pal::QueryType>(static_cast<uint32_t>(queryType) + index);
+        }
 
-            utils::IterateMask multiviewDeviceGroup(m_curDeviceMask);
-            do
+        utils::IterateMask deviceGroup(m_curDeviceMask);
+        do
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
+
+            PalCmdBuffer(deviceIdx)->CmdBeginQuery(*pQueryPool->PalPool(deviceIdx),
+                queryType,
+                query,
+                palQueryControlFlags);
+        }
+        while (deviceGroup.IterateNext());
+
+        const auto* const pRenderPass = m_allGpuState.pRenderPass;
+
+        // If queries are used while executing a render pass instance that has multiview enabled,
+        // the query uses N consecutive query indices in the query pool (starting at query) where
+        // N is the number of bits set in the view mask in the subpass the query is used in.
+        //
+        // Implementations may write the total result to the first query and
+        // write zero to the other queries.
+        if (((UsingDynamicRendering() == false) && pRenderPass->IsMultiviewEnabled()) ||
+            (m_allGpuState.dynamicRenderingInstance.viewMask != 0))
+        {
+            const auto viewMask  = (pRenderPass != nullptr) ? pRenderPass->GetViewMask(m_renderPassInstance.subpass) :
+                m_allGpuState.dynamicRenderingInstance.viewMask;
+
+            const auto viewCount = Util::CountSetBits(viewMask);
+
+            // Call Begin() and immediately call End() for all remaining queries,
+            // to set value of each remaining query to 0 and to make them avaliable.
+            for (uint32_t remainingQuery = 1; remainingQuery < viewCount; ++remainingQuery)
             {
-                const uint32_t deviceIdx = multiviewDeviceGroup.Index();
+                const auto remainingQueryIndex = query + remainingQuery;
 
-                PalCmdBuffer(deviceIdx)->CmdBeginQuery(
-                    *pQueryPool->PalPool(deviceIdx),
-                    pQueryPool->PalQueryType(),
-                    remainingQueryIndex, palQueryControlFlags);
+                utils::IterateMask multiviewDeviceGroup(m_curDeviceMask);
+                do
+                {
+                    const uint32_t deviceIdx = multiviewDeviceGroup.Index();
 
-                PalCmdBuffer(deviceIdx)->CmdEndQuery(
-                    *pQueryPool->PalPool(deviceIdx),
-                    pQueryPool->PalQueryType(),
-                    remainingQueryIndex);
+                    PalCmdBuffer(deviceIdx)->CmdBeginQuery(
+                        *pQueryPool->PalPool(deviceIdx),
+                        pQueryPool->PalQueryType(),
+                        remainingQueryIndex, palQueryControlFlags);
+
+                    PalCmdBuffer(deviceIdx)->CmdEndQuery(
+                        *pQueryPool->PalPool(deviceIdx),
+                        pQueryPool->PalQueryType(),
+                        remainingQueryIndex);
+                }
+                while (multiviewDeviceGroup.IterateNext());
             }
-            while (multiviewDeviceGroup.IterateNext());
         }
     }
 
@@ -6738,24 +6766,28 @@ void CmdBuffer::EndQueryIndexed(
 {
     DbgBarrierPreCmd(DbgBarrierQueryBeginEnd);
 
-    // NOTE: This function is illegal to call for TimestampQueryPools and  AccelerationStructureQueryPools
-    const PalQueryPool* pQueryPool = QueryPool::ObjectFromHandle(queryPool)->AsPalQueryPool();
-    Pal::QueryType queryType = pQueryPool->PalQueryType();
-    if (queryType == Pal::QueryType::StreamoutStats)
-    {
-        queryType = static_cast<Pal::QueryType>(static_cast<uint32_t>(queryType) + index);
-    }
+    const QueryPool* pBasePool = QueryPool::ObjectFromHandle(queryPool);
 
-    utils::IterateMask deviceGroup(m_curDeviceMask);
-    do
     {
-        const uint32_t deviceIdx = deviceGroup.Index();
+        // NOTE: This function is illegal to call for TimestampQueryPools and  AccelerationStructureQueryPools
+        const PalQueryPool* pQueryPool = pBasePool->AsPalQueryPool();
+        Pal::QueryType queryType = pQueryPool->PalQueryType();
+        if (queryType == Pal::QueryType::StreamoutStats)
+        {
+            queryType = static_cast<Pal::QueryType>(static_cast<uint32_t>(queryType) + index);
+        }
 
-        PalCmdBuffer(deviceIdx)->CmdEndQuery(*pQueryPool->PalPool(deviceIdx),
-            queryType,
-            query);
+        utils::IterateMask deviceGroup(m_curDeviceMask);
+        do
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
+
+            PalCmdBuffer(deviceIdx)->CmdEndQuery(*pQueryPool->PalPool(deviceIdx),
+                queryType,
+                query);
+        }
+        while (deviceGroup.IterateNext());
     }
-    while (deviceGroup.IterateNext());
 
     DbgBarrierPostCmd(DbgBarrierQueryBeginEnd);
 }
@@ -7221,13 +7253,6 @@ void CmdBuffer::PalCmdReleaseThenAcquire(
         }
         pAcquireReleaseInfo->pImageBarriers = pImageBarriers;
 
-        for (uint32_t i = 0; i < pAcquireReleaseInfo->memoryBarrierCount; i++)
-        {
-            if (ppBuffers != nullptr)
-            {
-                pBufferBarriers[i].memory.address = ppBuffers[i]->GpuVirtAddr(deviceIdx);
-            }
-        }
         pAcquireReleaseInfo->pMemoryBarriers = pBufferBarriers;
 
         PalCmdBuffer(deviceIdx)->CmdReleaseThenAcquire(*pAcquireReleaseInfo);
@@ -7267,13 +7292,6 @@ void CmdBuffer::PalCmdAcquire(
         }
         pAcquireReleaseInfo->pImageBarriers = pImageBarriers;
 
-        for (uint32_t i = 0; i < pAcquireReleaseInfo->memoryBarrierCount; i++)
-        {
-            if (ppBuffers != nullptr)
-            {
-                pBufferBarriers[i].memory.address = ppBuffers[i]->GpuVirtAddr(deviceIdx);
-            }
-        }
         pAcquireReleaseInfo->pMemoryBarriers = pBufferBarriers;
 
         if (pEvent->IsUseToken())
@@ -7357,13 +7375,6 @@ void CmdBuffer::PalCmdRelease(
         }
         pAcquireReleaseInfo->pImageBarriers = pImageBarriers;
 
-        for (uint32_t i = 0; i < pAcquireReleaseInfo->memoryBarrierCount; i++)
-        {
-            if (ppBuffers != nullptr)
-            {
-                pBufferBarriers[i].memory.address = ppBuffers[i]->GpuVirtAddr(deviceIdx);
-            }
-        }
         pAcquireReleaseInfo->pMemoryBarriers = pBufferBarriers;
 
         if (pEvent->IsUseToken())
@@ -9075,60 +9086,26 @@ void CmdBuffer::WritePushConstants(
 
     const UserDataLayout& userDataLayout = pLayout->GetInfo().userDataLayout;
 
-    if (userDataLayout.scheme == PipelineLayoutScheme::Compact)
-    {
-        // Program the user data register only if the current user data layout base matches that of the given
-        // layout.  Otherwise, what's happening is that the application is pushing constants for a future
-        // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant because
-        // a future vkCmdBindPipeline will reprogram the user data registers during the rebase.
-        if (PalPipelineBindingOwnedBy(palBindPoint, apiBindPoint) &&
-            (pBindState->userDataLayout.compact.pushConstRegBase == userDataLayout.compact.pushConstRegBase) &&
-            (pBindState->userDataLayout.compact.pushConstRegCount >= (startInDwords + lengthInDwords)))
-        {
-            utils::IterateMask deviceGroup(m_curDeviceMask);
-            do
-            {
-                const uint32_t deviceIdx = deviceGroup.Index();
-
-                PalCmdBuffer(deviceIdx)->CmdSetUserData(
-                    palBindPoint,
-                    pBindState->userDataLayout.compact.pushConstRegBase + startInDwords,
-                    lengthInDwords,
-                    pUserDataPtr);
-            }
-            while (deviceGroup.IterateNext());
-        }
-    }
-    else if (userDataLayout.scheme == PipelineLayoutScheme::Indirect)
+    // Program the user data register only if the current user data layout base matches that of the given
+    // layout.  Otherwise, what's happening is that the application is pushing constants for a future
+    // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant because
+    // a future vkCmdBindPipeline will reprogram the user data registers during the rebase.
+    if (PalPipelineBindingOwnedBy(palBindPoint, apiBindPoint) &&
+        (pBindState->userDataLayout.common.pushConstRegBase == userDataLayout.common.pushConstRegBase) &&
+        (pBindState->userDataLayout.common.pushConstRegCount >= (startInDwords + lengthInDwords)))
     {
         utils::IterateMask deviceGroup(m_curDeviceMask);
-
         do
         {
             const uint32_t deviceIdx = deviceGroup.Index();
 
-            Pal::gpusize gpuAddr;
-
-            void* pCpuAddr = PalCmdBuffer(deviceIdx)->CmdAllocateEmbeddedData(
-                userDataLayout.indirect.pushConstSizeInDword,
-                m_pDevice->GetProperties().descriptorSizes.alignmentInDwords,
-                &gpuAddr);
-
-            memcpy(pCpuAddr, pUserData, userDataLayout.indirect.pushConstSizeInDword * sizeof(uint32_t));
-
-            const uint32_t gpuAddrLow = static_cast<uint32_t>(gpuAddr);
-
             PalCmdBuffer(deviceIdx)->CmdSetUserData(
                 palBindPoint,
-                userDataLayout.indirect.pushConstPtrRegBase,
-                PipelineLayout::SetPtrRegCount,
-                &gpuAddrLow);
+                pBindState->userDataLayout.common.pushConstRegBase + startInDwords,
+                lengthInDwords,
+                pUserDataPtr);
         }
         while (deviceGroup.IterateNext());
-    }
-    else
-    {
-        VK_NEVER_CALLED();
     }
 }
 
@@ -9931,7 +9908,8 @@ DynamicVertexInputInternalData* CmdBuffer::BuildUberFetchShaderInternalData(
                             pVertexBindingDescriptions,
                             vertexAttributeDescriptionCount,
                             pVertexAttributeDescriptions,
-                            pUberFetchShaderInternalData);
+                            pUberFetchShaderInternalData,
+                            m_flags.offsetMode);
 
                     Pal::gpusize gpuAddress = {};
                     if (uberFetchShaderInternalDataSize > 0)
@@ -10037,31 +10015,37 @@ void CmdBuffer::SetVertexInput(
 
             if (firstChanged <= lastChanged)
             {
-                Pal::VertexBufferViews bufferViews =
-                {
-                    .firstBuffer = firstChanged,
-                    .bufferCount = (lastChanged - firstChanged) + 1,
-                    .offsetMode = (m_flags.offsetMode == 1) ? true : false
-                };
-                Pal::VertexBufferView vertexViews[Pal::MaxVertexBuffers] = {};
                 auto pBinding = &PerGpuState(deviceIdx)->vbBindings[firstChanged];
-
                 if (m_flags.offsetMode)
                 {
+                    Pal::VertexBufferView vertexViews[Pal::MaxVertexBuffers] = {};
                     for (uint32_t idx = 0; idx < (lastChanged - firstChanged + 1); idx++)
                     {
                         vertexViews[idx].gpuva = pBinding[idx].gpuAddr;
                         vertexViews[idx].sizeInBytes = pBinding[idx].range;
                         vertexViews[idx].strideInBytes = pBinding[idx].stride;
                     }
-                    bufferViews.pVertexBufferViews = vertexViews;
+
+                    const Pal::VertexBufferViews bufferViews =
+                    {
+                        .firstBuffer = firstChanged,
+                        .bufferCount = (lastChanged - firstChanged) + 1,
+                        .offsetMode = true,
+                        .pVertexBufferViews = vertexViews
+                    };
+                    PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
                 }
                 else
                 {
-                    bufferViews.pBufferViewInfos = pBinding;
+                    const Pal::VertexBufferViews bufferViews =
+                    {
+                        .firstBuffer = firstChanged,
+                        .bufferCount = (lastChanged - firstChanged) + 1,
+                        .offsetMode = false,
+                        .pBufferViewInfos = pBinding
+                    };
+                    PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
                 }
-
-                PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
             }
 
             if (vertexBufferCount != pBindState->dynamicBindInfo.gfxDynState.vertexBufferCount)
@@ -10094,7 +10078,7 @@ void CmdBuffer::SetRenderingAttachmentLocations(
 
 // =====================================================================================================================
 void CmdBuffer::SetRenderingInputAttachmentIndices(
-    const VkRenderingInputAttachmentIndexInfoKHR* pLocationInfo)
+    const VkRenderingInputAttachmentIndexInfoKHR* pInputAttachmentIndexInfo)
 {
 
 }

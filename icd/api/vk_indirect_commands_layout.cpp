@@ -254,18 +254,13 @@ void IndirectCommandsLayout::BuildPalCreateInfo(
             const PipelineLayout* pPipelineLayout   = PipelineLayout::ObjectFromHandle(token.pushconstantPipelineLayout);
             const UserDataLayout& userDataLayout    = pPipelineLayout->GetInfo().userDataLayout;
 
-            if (userDataLayout.scheme == PipelineLayoutScheme::Indirect)
-            {
-                VK_NOT_IMPLEMENTED;
-            }
-
             uint32_t startInDwords                  = token.pushconstantOffset / sizeof(uint32_t);
             uint32_t lengthInDwords                 = PipelineLayout::GetPushConstantSizeInDword(token.pushconstantSize);
 
             pIndirectParams[i].type                 = Pal::IndirectParamType::SetUserData;
             pIndirectParams[i].userData.entryCount  = lengthInDwords;
             pIndirectParams[i].sizeInBytes          = sizeof(uint32_t) * lengthInDwords;
-            pIndirectParams[i].userData.firstEntry  = userDataLayout.compact.pushConstRegBase + startInDwords;
+            pIndirectParams[i].userData.firstEntry  = userDataLayout.common.pushConstRegBase + startInDwords;
             pIndirectParams[i].userDataShaderUsage  = VkToPalShaderStageMask(token.pushconstantShaderStageFlags);
             break;
         }

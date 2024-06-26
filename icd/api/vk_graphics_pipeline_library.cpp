@@ -452,6 +452,7 @@ VkResult GraphicsPipelineLibrary::Create(
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
     const GraphicsPipelineExtStructs&   extStructs,
     VkPipelineCreateFlags2KHR           flags,
+    uint32_t                            internalFlags,
     const VkAllocationCallbacks*        pAllocator,
     VkPipeline*                         pPipeline)
 {
@@ -462,13 +463,18 @@ VkResult GraphicsPipelineLibrary::Create(
     void*    pSysMem = nullptr;
 
     GraphicsPipelineLibraryInfo libInfo;
-    ExtractLibraryInfo(pCreateInfo, extStructs, flags, &libInfo);
+    ExtractLibraryInfo(pDevice, pCreateInfo, extStructs, flags, &libInfo);
 
     GraphicsPipelineBinaryCreateInfo binaryCreateInfo = {};
     GraphicsPipelineShaderStageInfo  shaderStageInfo = {};
     GplModuleState                   tempModuleStates[ShaderStage::ShaderStageGfxCount] = {};
 
     binaryCreateInfo.pipelineInfo.iaState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    if ((internalFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FORCE_LLPC) != 0)
+    {
+        binaryCreateInfo.compilerType = PipelineCompilerTypeLlpc;
+    }
 
     // 1. Build shader stage infos
     if (result == VK_SUCCESS)
@@ -517,6 +523,7 @@ VkResult GraphicsPipelineLibrary::Create(
             pDevice,
             pCreateInfo,
             extStructs,
+            libInfo,
             flags,
             &shaderStageInfo,
             shaderOptimizerKeys,
@@ -529,6 +536,7 @@ VkResult GraphicsPipelineLibrary::Create(
     BuildApiHash(pCreateInfo,
                  flags,
                  extStructs,
+                 libInfo,
                  binaryCreateInfo,
                  &apiPsoHash,
                  &elfHash);
@@ -550,6 +558,7 @@ VkResult GraphicsPipelineLibrary::Create(
             pDevice,
             pCreateInfo,
             extStructs,
+            libInfo,
             flags,
             &shaderStageInfo,
             pPipelineLayout,
@@ -583,10 +592,12 @@ VkResult GraphicsPipelineLibrary::Create(
             pDevice,
             pCreateInfo,
             extStructs,
+            libInfo,
             flags,
             &pipelineOptimizerKey,
             &binaryMetadata,
-            &objectCreateInfo);
+            &objectCreateInfo,
+            &binaryCreateInfo);
 
         // Calculate object size
         apiSize = sizeof(GraphicsPipelineLibrary);
@@ -661,6 +672,12 @@ VkResult GraphicsPipelineLibrary::Destroy(
     Device*                      pDevice,
     const VkAllocationCallbacks* pAllocator)
 {
+    if (m_altLibrary != nullptr)
+    {
+        m_altLibrary->Destroy(pDevice, pAllocator);
+        m_altLibrary = nullptr;
+    }
+
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
     uint32_t libraryMask = 0;
@@ -712,7 +729,8 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
       m_objectCreateInfo(objectInfo),
       m_pBinaryCreateInfo(pBinaryInfo),
       m_libInfo(libInfo),
-      m_elfHash(elfHash)
+      m_elfHash(elfHash),
+      m_altLibrary(nullptr)
 {
     Util::MetroHash::Hash dummyCacheHash = {};
     Pipeline::Init(

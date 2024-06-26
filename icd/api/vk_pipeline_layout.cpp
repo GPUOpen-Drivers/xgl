@@ -183,6 +183,7 @@ VkResult PipelineLayout::ConvertCreateInfo(
             pDevice,
             pIn,
             pushConstantsSizeInBytes,
+            pushConstantsUserDataNodeCount,
             pInfo,
             pPipelineInfo,
             pSetUserDataLayouts);
@@ -296,8 +297,10 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
     // Finally, the vertex buffer table pointer is in the last user data register when applicable.
     // This allocation allows the descriptor set bindings to easily persist across pipeline switches.
 
-    VkResult result          = VK_SUCCESS;
-    auto*    pUserDataLayout = &pInfo->userDataLayout.compact;
+    VkResult result = VK_SUCCESS;
+
+    auto* pUserDataLayout       = &pInfo->userDataLayout.compact;
+    auto* pCommonUserDataLayout = &pInfo->userDataLayout.common;
 
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
@@ -426,8 +429,8 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
     // Allocate user data for push constants
     pPipelineInfo->numUserDataNodes += pushConstantsUserDataNodeCount;
 
-    pUserDataLayout->pushConstRegBase = pInfo->userDataRegCount;
-    pUserDataLayout->pushConstRegCount = pushConstRegCount;
+    pCommonUserDataLayout->pushConstRegBase  = pInfo->userDataRegCount;
+    pCommonUserDataLayout->pushConstRegCount = pushConstRegCount;
     pInfo->userDataRegCount += pushConstRegCount;
 
     // Populate user data layouts for each descriptor set that is active
@@ -581,6 +584,7 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
     const Device*                     pDevice,
     const VkPipelineLayoutCreateInfo* pIn,
     const uint32_t                    pushConstantsSizeInBytes,
+    const uint32_t                    pushConstantsUserDataNodeCount,
     Info*                             pInfo,
     PipelineInfo*                     pPipelineInfo,
     SetUserDataLayout*                pSetUserDataLayouts)
@@ -608,8 +612,11 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
     VK_ASSERT(settings.pipelineLayoutMode != PipelineLayoutAngle);
     VK_ASSERT(settings.enableEarlyCompile == false);
 
-    VkResult      result            = VK_SUCCESS;
-    auto*         pUserDataLayout   = &pInfo->userDataLayout.indirect;
+    VkResult result = VK_SUCCESS;
+
+    auto* pUserDataLayout       = &pInfo->userDataLayout.indirect;
+    auto* pCommonUserDataLayout = &pInfo->userDataLayout.common;
+
     uint32_t      totalDynDescCount = 0;
 
     memset(pPipelineInfo,            0, sizeof(PipelineInfo));
@@ -632,12 +639,12 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
         pInfo->userDataRegCount                  += 1;
     }
 
-    // Allocate user data for push constant buffer pointer
-    pUserDataLayout->pushConstPtrRegBase  = pInfo->userDataRegCount;
-    pUserDataLayout->pushConstSizeInDword = GetPushConstantSizeInDword(pushConstantsSizeInBytes);
-    pPipelineInfo->numUserDataNodes      += 1;
-    pPipelineInfo->numRsrcMapNodes       += 1;
-    pInfo->userDataRegCount              += 1;
+    // Allocate user data for push constants
+    uint32_t pushConstRegCount                = GetPushConstantSizeInDword(pushConstantsSizeInBytes);
+    pPipelineInfo->numUserDataNodes          += pushConstantsUserDataNodeCount;
+    pCommonUserDataLayout->pushConstRegBase   = pInfo->userDataRegCount;
+    pCommonUserDataLayout->pushConstRegCount  = pushConstRegCount;
+    pInfo->userDataRegCount                  += pushConstRegCount;
 
     // Allocate user data for transform feedback buffer
     if (ReserveXfbNode(pDevice))
@@ -1259,8 +1266,11 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
 {
     VK_ASSERT(m_info.userDataLayout.scheme == PipelineLayoutScheme::Compact);
 
-    VkResult    result             = VK_SUCCESS;
-    const auto& userDataLayout     = m_info.userDataLayout.compact;
+    VkResult result = VK_SUCCESS;
+
+    const auto& userDataLayout       = m_info.userDataLayout.compact;
+    const auto& commonUserDataLayout = m_info.userDataLayout.common;
+
     const bool  enableEarlyCompile = m_pDevice->GetRuntimeSettings().enableEarlyCompile;
 
     Vkgc::ResourceMappingRootNode* pUserDataNodes = static_cast<Vkgc::ResourceMappingRootNode*>(pBuffer);
@@ -1407,12 +1417,12 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
     }
 
     // TODO: Build the internal push constant resource mapping
-    if (userDataLayout.pushConstRegCount > 0)
+    if (commonUserDataLayout.pushConstRegCount > 0)
     {
         auto pPushConstNode = &pUserDataNodes[userDataNodeCount];
         pPushConstNode->node.type = Vkgc::ResourceMappingNodeType::PushConst;
-        pPushConstNode->node.offsetInDwords = userDataLayout.pushConstRegBase;
-        pPushConstNode->node.sizeInDwords = userDataLayout.pushConstRegCount;
+        pPushConstNode->node.offsetInDwords = commonUserDataLayout.pushConstRegBase;
+        pPushConstNode->node.sizeInDwords = commonUserDataLayout.pushConstRegCount;
         pPushConstNode->node.srdRange.set = Vkgc::InternalDescriptorSetId;
         pPushConstNode->visibility = stageMask;
 
@@ -1530,7 +1540,6 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
     VK_ASSERT(m_info.userDataLayout.scheme == PipelineLayoutScheme::Indirect);
 
     constexpr uint32_t VbTablePtrRegCount         = 1; // PAL requires all indirect user data tables to be 1DW
-    constexpr uint32_t PushConstPtrRegCount       = 1;
     constexpr uint32_t TransformFeedbackRegCount  = 1;
     constexpr uint32_t ReverseThreadGroupRegCount = 1;
     constexpr uint32_t DebugPrintfRegCount        = 1;
@@ -1539,7 +1548,8 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
 #endif
     constexpr uint32_t DescSetsPtrRegCount        = 2 * SetPtrRegCount * MaxDescriptorSets;
 
-    const auto& userDataLayout = m_info.userDataLayout.indirect;
+    const auto& userDataLayout       = m_info.userDataLayout.indirect;
+    const auto& commonUserDataLayout = m_info.userDataLayout.common;
 
     const bool uberFetchShaderEnabled     = IsUberFetchShaderEnabled<PipelineLayoutScheme::Indirect>(m_pDevice);
     const bool transformFeedbackEnabled   = ReserveXfbNode(m_pDevice);
@@ -1560,8 +1570,7 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
         regBaseOffset += SetPtrRegCount;
     }
 
-    const uint32_t pushConstPtrRegBase = regBaseOffset;
-    regBaseOffset                     += PushConstPtrRegCount;
+    regBaseOffset += commonUserDataLayout.pushConstRegCount;
 
     const uint32_t transformFeedbackRegBase = transformFeedbackEnabled ? regBaseOffset : InvalidReg;
     if (transformFeedbackRegBase != InvalidReg)
@@ -1628,29 +1637,14 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
             &mappingNodeCount);
     }
 
-    // Build push constants mapping
-    if (userDataLayout.pushConstSizeInDword > 0)
+    if (commonUserDataLayout.pushConstRegCount > 0)
     {
-        // Build mapping for push constant resource
-        Vkgc::ResourceMappingNode* pPushConstNode = &pResourceNodes[mappingNodeCount];
-
-        pPushConstNode->type                    = Vkgc::ResourceMappingNodeType::PushConst;
-        pPushConstNode->offsetInDwords          = 0;
-        pPushConstNode->sizeInDwords            = userDataLayout.pushConstSizeInDword;
-        pPushConstNode->srdRange.set            = Vkgc::InternalDescriptorSetId;
-        pPushConstNode->srdRange.strideInDwords = 0;
-
-        ++mappingNodeCount;
-
-        // Build mapping for the pointer pointing to push constants buffer
-        Vkgc::ResourceMappingRootNode* pPushConstPtrNode = &pUserDataNodes[userDataNodeCount];
-
-        pPushConstPtrNode->node.type               = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
-        pPushConstPtrNode->node.offsetInDwords     = pushConstPtrRegBase;
-        pPushConstPtrNode->node.sizeInDwords       = PushConstPtrRegCount;
-        pPushConstPtrNode->node.tablePtr.nodeCount = 1;
-        pPushConstPtrNode->node.tablePtr.pNext     = pPushConstNode;
-        pPushConstPtrNode->visibility              = stageMask;
+        auto pPushConstNode = &pUserDataNodes[userDataNodeCount];
+        pPushConstNode->node.type = Vkgc::ResourceMappingNodeType::PushConst;
+        pPushConstNode->node.offsetInDwords = commonUserDataLayout.pushConstRegBase;
+        pPushConstNode->node.sizeInDwords = commonUserDataLayout.pushConstRegCount;
+        pPushConstNode->node.srdRange.set = Vkgc::InternalDescriptorSetId;
+        pPushConstNode->visibility = stageMask;
 
         userDataNodeCount += 1;
     }

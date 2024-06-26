@@ -1166,6 +1166,7 @@ void ShaderOptimizer::BuildAppProfileGeneric()
 {
     const AppProfile        appProfile   = m_pDevice->GetAppProfile();
     const Pal::GpuType      gpuType      = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gpuType;
+    const Pal::AsicRevision asicRevision = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().revision;
 
     uint32 i = 0;
 }

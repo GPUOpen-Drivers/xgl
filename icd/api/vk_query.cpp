@@ -63,7 +63,9 @@ VkResult QueryPool::Create(
         else
 #endif
         {
-            result = PalQueryPool::Create(pDevice, pCreateInfo, pAllocator, &pObject);
+            {
+                result = PalQueryPool::Create(pDevice, pCreateInfo, pAllocator, &pObject);
+            }
         }
     }
     else

@@ -3209,7 +3209,8 @@ inline Pal::GpuBlock VkToPalGpuBlock(
     (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GE_SE_AMD) == static_cast<uint32_t>(Pal::GpuBlock::GeSe)) &&
     (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_DF_MALL_AMD) == static_cast<uint32_t>(Pal::GpuBlock::DfMall))
 #if VKI_BUILD_GFX11
-    && (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_SQ_WGP_AMD) == static_cast<uint32_t>(Pal::GpuBlock::SqWgp))
+    && (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_SQ_WGP_AMD) == static_cast<uint32_t>(Pal::GpuBlock::SqWgp)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_PC_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Pc))
 #endif
     ,
     "Need to update function convert::GpuBlock");
@@ -4065,7 +4066,8 @@ VkResult InitializeUberFetchShaderFormatTable(
 UberFetchShaderFormatInfo GetUberFetchShaderFormatInfo(
     const UberFetchShaderFormatInfoMap* pFormatInfoMap,
     const VkFormat                      vkFormat,
-    const bool                          isZeroStride);
+    const bool                          isZeroStride,
+    const bool                          isOffsetMode);
 
 // =====================================================================================================================
 VkFormat GetLowPrecisionDepthFormat(

@@ -59,6 +59,15 @@ struct UserDataLayout
 {
     PipelineLayoutScheme scheme;
 
+    struct
+    {
+        // Base user data register index to use for push constants
+        uint32_t pushConstRegBase;
+        // Number of user data registers used for push constants
+        uint32_t pushConstRegCount;
+
+    } common;
+
     union
     {
         struct
@@ -68,11 +77,6 @@ struct UserDataLayout
             uint32_t setBindingRegBase;
             // Number of user data registers used for the set binding points
             uint32_t setBindingRegCount;
-
-            // Base user data register index to use for push constants
-            uint32_t pushConstRegBase;
-            // Number of user data registers used for push constants
-            uint32_t pushConstRegCount;
 
             // Base user data register index to use for transform feedback.
             uint32_t transformFeedbackRegBase;
@@ -111,12 +115,6 @@ struct UserDataLayout
             // The total number of user data registers used is always MaxDescriptorSets * 2 * SetPtrRegCount
             uint32_t setBindingPtrRegBase;
 
-            // Base user data register index to use for buffer storing push constant data
-            // The number of user data register used is always 1
-            uint32_t pushConstPtrRegBase;
-
-            // The size of buffer required to store push constants
-            uint32_t pushConstSizeInDword;
             // Base use data register for debug printf
             uint32_t debugPrintfRegBase;
 
@@ -327,6 +325,7 @@ protected:
         const Device*                     pDevice,
         const VkPipelineLayoutCreateInfo* pIn,
         const uint32_t                    pushConstantsSizeInBytes,
+        const uint32_t                    pushConstantsUserDataNodeCount,
         Info*                             pInfo,
         PipelineInfo*                     pPipelineInfo,
         SetUserDataLayout*                pSetUserDataLayouts);

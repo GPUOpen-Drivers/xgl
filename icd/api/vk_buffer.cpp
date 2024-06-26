@@ -272,6 +272,17 @@ void Buffer::LogBufferCreate(
     desc.createFlags = pCreateInfo->flags;
     desc.usageFlags  = pCreateInfo->usage;
 
+#if VKI_RAY_TRACING
+    const VkBufferUsageFlagBits2KHR rtBufferUsageFlags =
+        VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
+        VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
+        VK_BUFFER_USAGE_2_SHADER_BINDING_TABLE_BIT_KHR;
+    const bool isBufferUsedForRt = (Device::GetBufferUsageFlagBits(pCreateInfo) & rtBufferUsageFlags) != 0;
+    if (isBufferUsedForRt)
+    {
+        desc.usageFlags |= static_cast<uint32>(PalUsageFlag::RayTracing);
+    }
+#endif
     Buffer* pBufferObj = Buffer::ObjectFromHandle(buffer);
 
     Pal::ResourceCreateEventData data = {};
@@ -285,6 +296,22 @@ void Buffer::LogBufferCreate(
         &data,
         sizeof(Pal::ResourceCreateEventData));
 
+#if VKI_RAY_TRACING
+    if (isBufferUsedForRt)
+    {
+        Pal::ResourceUpdateEventData updateData = {};
+        updateData.pObj                         = pBufferObj;
+        updateData.type                         = Pal::ResourceType::Buffer;
+        updateData.subresourceId                = 0;
+        updateData.beforeUsageFlags             = 0;
+        updateData.afterUsageFlags              = static_cast<uint32>(PalUsageFlag::RayTracing);
+
+        pDevice->VkInstance()->PalPlatform()->LogEvent(
+            Pal::PalEvent::ResourceInfoUpdate,
+            &updateData,
+            sizeof(updateData));
+    }
+#endif
     // If there is already memory bound, log it now.
     // @NOTE - This only handles the single GPU case currently.  MGPU is not supported by RMV v1
     Pal::IGpuMemory* pPalMemory = pBufferObj->PalMemory(DefaultDeviceIndex);

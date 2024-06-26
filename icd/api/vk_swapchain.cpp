@@ -784,7 +784,6 @@ VkResult SwapChain::AcquireNextImage(
 
             {
                 result = PalToVkResult(m_pPalSwapChain->AcquireNextImage(acquireInfo, pImageIndex));
-
             }
         }
 
@@ -911,8 +910,7 @@ Pal::IGpuMemory* SwapChain::UpdatePresentInfo(
 
     // Let the fullscreen manager perform any fullscreen ownership transitions and override some of this present
     // information in case it has enabled fullscreen.
-    if ((m_pFullscreenMgr != nullptr)
-        )
+    if (m_pFullscreenMgr != nullptr)
     {
         m_pFullscreenMgr->TryEnterExclusive(this);
 

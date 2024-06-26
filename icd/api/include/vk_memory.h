@@ -107,9 +107,10 @@ public:
         VkDeviceMemory*                  pMemory);
 
     static VkResult OpenExternalMemory(
-        Device*                     pDevice,
-        const ImportMemoryInfo&     importInfo,
-        Memory**                    ppMemory);
+        Device*                          pDevice,
+        const Pal::GpuMemoryCreateInfo&  localCreateInfo,
+        const ImportMemoryInfo&          importInfo,
+        Memory**                         ppMemory);
 
     Pal::OsExternalHandle GetShareHandle(VkExternalMemoryHandleTypeFlagBits handleType);
 

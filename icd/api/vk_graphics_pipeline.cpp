@@ -63,6 +63,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
     Device*                                        pDevice,
     const VkGraphicsPipelineCreateInfo*            pCreateInfo,
     const GraphicsPipelineExtStructs&              extStructs,
+    const GraphicsPipelineLibraryInfo&             libInfo,
     VkPipelineCreateFlags2KHR                      flags,
     const GraphicsPipelineShaderStageInfo*         pShaderInfo,
     const PipelineLayout*                          pPipelineLayout,
@@ -128,6 +129,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                 pDevice,
                 pCreateInfo,
                 extStructs,
+                libInfo,
                 flags,
                 pShaderInfo,
                 pPipelineLayout,
@@ -201,6 +203,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                         pDevice,
                         pCreateInfo,
                         extStructs,
+                        libInfo,
                         flags,
                         pShaderInfo,
                         pPipelineLayout,
@@ -568,9 +571,13 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
 }
 // =====================================================================================================================
 static bool IsGplFastLinkPossible(
-    const GraphicsPipelineLibraryInfo& libInfo)
+    const Device*                      pDevice,
+    const GraphicsPipelineLibraryInfo& libInfo,
+    const PipelineLayout*              pPipelineLayout)
 {
     bool result = false;
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+
     if ((libInfo.flags.isLibrary == false) &&
         (libInfo.flags.optimize == false) &&
         (libInfo.pFragmentShaderLib != nullptr) &&
@@ -581,8 +588,19 @@ static bool IsGplFastLinkPossible(
         const GraphicsPipelineBinaryCreateInfo& fragmentCreateInfo =
             libInfo.pFragmentShaderLib->GetPipelineBinaryCreateInfo();
 
+        bool isPushConstCompatible = true;
+
+        if (settings.pipelineLayoutPushConstantCompatibilityCheck)
+        {
+            isPushConstCompatible = (pPipelineLayout->GetInfo().userDataLayout.common.pushConstRegCount ==
+                                     libInfo.pFragmentShaderLib->GetUserDataLayout()->common.pushConstRegCount) &&
+                                    (pPipelineLayout->GetInfo().userDataLayout.common.pushConstRegCount ==
+                                     libInfo.pPreRasterizationShaderLib->GetUserDataLayout()->common.pushConstRegCount);
+        }
+
         if ((preRasterCreateInfo.pShaderLibraries[GraphicsLibraryPreRaster] != nullptr) &&
-            (fragmentCreateInfo.pShaderLibraries[GraphicsLibraryFragment] != nullptr))
+            (fragmentCreateInfo.pShaderLibraries[GraphicsLibraryFragment] != nullptr) &&
+            isPushConstCompatible)
         {
             result = true;
         }
@@ -606,10 +624,8 @@ void DumpGplFastLinkInfo(
     uint64_t dumpHash = settings.dumpPipelineWithApiHash ? createInfo.apiPsoHash : info.internalPipelineHash.stable;
 
     Vkgc::PipelineDumpOptions dumpOptions = {};
-    dumpOptions.pDumpDir = settings.pipelineDumpDir;
-    dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
-    dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
-    dumpOptions.dumpDuplicatePipelines = settings.dumpDuplicatePipelines;
+    char tempBuff[Util::MaxPathStrLen];
+    PipelineCompiler::InitPipelineDumpOption(&dumpOptions, settings, tempBuff, createInfo.compilerType);
 
     Vkgc::PipelineBuildInfo pipelineInfo = {};
     pipelineInfo.pGraphicsInfo = &createInfo.pipelineInfo;
@@ -733,7 +749,7 @@ VkResult GraphicsPipeline::Create(
     pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
 
     GraphicsPipelineLibraryInfo libInfo = {};
-    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, extStructs, flags, &libInfo);
+    GraphicsPipelineCommon::ExtractLibraryInfo(pDevice, pCreateInfo, extStructs, flags, &libInfo);
 
     // 1. Check whether GPL fast link is possible
     if (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink)
@@ -759,7 +775,7 @@ VkResult GraphicsPipeline::Create(
             }
         }
 
-        if (IsGplFastLinkPossible(libInfo))
+        if (IsGplFastLinkPossible(pDevice, libInfo, pPipelineLayout))
         {
             result = pDevice->GetCompiler(DefaultDeviceIndex)->BuildGplFastLinkCreateInfo(
                 pDevice, pCreateInfo, extStructs, flags, libInfo, pPipelineLayout, &binaryMetadata, &binaryCreateInfo);
@@ -806,6 +822,7 @@ VkResult GraphicsPipeline::Create(
                     BuildApiHash(pCreateInfo,
                                 flags,
                                 extStructs,
+                                libInfo,
                                 binaryCreateInfo,
                                 &apiPsoHash,
                                 &elfHash);
@@ -823,6 +840,7 @@ VkResult GraphicsPipeline::Create(
             pDevice,
             pCreateInfo,
             extStructs,
+            libInfo,
             flags,
             &shaderStageInfo,
             &binaryCreateInfo,
@@ -841,6 +859,7 @@ VkResult GraphicsPipeline::Create(
                 pDevice,
                 pCreateInfo,
                 extStructs,
+                libInfo,
                 flags,
                 &shaderStageInfo,
                 pPipelineLayout,
@@ -861,10 +880,12 @@ VkResult GraphicsPipeline::Create(
             pDevice,
             pCreateInfo,
             extStructs,
+            libInfo,
             flags,
             &pipelineOptimizerKey,
             &binaryMetadata,
-            &objectCreateInfo);
+            &objectCreateInfo,
+            &binaryCreateInfo);
 
         if (result == VK_SUCCESS)
         {
@@ -1040,6 +1061,7 @@ VkResult GraphicsPipeline::CreateCacheId(
     Device*                                 pDevice,
     const VkGraphicsPipelineCreateInfo*     pCreateInfo,
     const GraphicsPipelineExtStructs&       extStructs,
+    const GraphicsPipelineLibraryInfo&      libInfo,
     VkPipelineCreateFlags2KHR               flags,
     GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
     GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
@@ -1070,6 +1092,7 @@ VkResult GraphicsPipeline::CreateCacheId(
             pDevice,
             pCreateInfo,
             extStructs,
+            libInfo,
             flags,
             pShaderStageInfo,
             pShaderOptimizerKeys,
@@ -1080,6 +1103,7 @@ VkResult GraphicsPipeline::CreateCacheId(
         BuildApiHash(pCreateInfo,
                      flags,
                      extStructs,
+                     libInfo,
                      *pBinaryCreateInfo,
                      pApiPsoHash,
                      &elfHash);
@@ -1349,9 +1373,12 @@ VkResult GraphicsPipeline::DeferCreateOptimizedPipeline(
 
     if (result == VK_SUCCESS)
     {
+        GraphicsPipelineLibraryInfo libInfo = {};
+        ExtractLibraryInfo(nullptr, nullptr, extStructs, 0, &libInfo);
         result = CreatePipelineBinaries(pDevice,
                                         nullptr,
                                         extStructs,
+                                        libInfo,
                                         0,
                                         pShaderStageInfo,
                                         nullptr,

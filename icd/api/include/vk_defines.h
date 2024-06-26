@@ -189,7 +189,7 @@ namespace vk
     static const uint32_t MaxDescriptorSets = 32;
 
     // The maximum size of push constants in bytes
-    static const uint32_t MaxPushConstants = 128;
+    static const uint32_t MaxPushConstants = 256;
 
     // The maximum number of push descriptors that can appear in a descriptor set
     static const uint32_t MaxPushDescriptors = 32;
@@ -207,7 +207,8 @@ namespace vk
     // Enumerates the compiler types
     enum PipelineCompilerType : uint32_t
     {
-        PipelineCompilerTypeLlpc,  // Use shader compiler provided by LLPC
+        PipelineCompilerTypeInvalid,  // shader compiler is unknown
+        PipelineCompilerTypeLlpc,     // Use shader compiler provided by LLPC
     };
 
     // Point size must be set via gl_PointSize, otherwise it must be 1.0f

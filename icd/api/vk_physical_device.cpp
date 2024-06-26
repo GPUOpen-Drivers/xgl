@@ -488,12 +488,14 @@ VkResult PhysicalDevice::Create(
 // =====================================================================================================================
 // Converts from PAL format feature properties to Vulkan equivalents.
 static void GetFormatFeatureFlags(
+    const PhysicalDevice*                   pPhysicalDevice,
     const Pal::MergedFormatPropertiesTable& formatProperties,
     VkFormat                                format,
     VkImageTiling                           imageTiling,
     VkFormatFeatureFlags*                   pOutFormatFeatureFlags,
     const RuntimeSettings&                  settings)
 {
+    const Pal::DeviceProperties& palProps    = pPhysicalDevice->PalProperties();
     const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(format, settings);
 
     const size_t formatIdx = static_cast<size_t>(swizzledFormat.format);
@@ -549,7 +551,12 @@ static void GetFormatFeatureFlags(
         retFlags &= ~VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         retFlags &= ~VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
 
-        retFlags &= ~VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
+#if VKI_BUILD_GFX11
+        if (palProps.gfxLevel < Pal::GfxIpLevel::GfxIp11_0)
+#endif
+        {
+            retFlags &= ~VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
+        }
     }
     else
     {
@@ -792,6 +799,20 @@ VkResult PhysicalDevice::Initialize()
     Pal::Result result = m_pPalDevice->GetProperties(&m_properties);
 
     const RuntimeSettings& settings = GetRuntimeSettings();
+
+    if (settings.clampMaxImageSize > 0)
+    {
+        const Pal::Extent3d& maxDimensions = m_properties.imageProperties.maxDimensions;
+
+        m_properties.imageProperties.maxDimensions.width  =
+            Util::Min(maxDimensions.width, settings.clampMaxImageSize);
+
+        m_properties.imageProperties.maxDimensions.height =
+            Util::Min(maxDimensions.height, settings.clampMaxImageSize);
+
+        m_properties.imageProperties.maxDimensions.depth  =
+            Util::Min(maxDimensions.depth, settings.clampMaxImageSize);
+    }
 
     if (result == Pal::Result::Success)
     {
@@ -1256,8 +1277,8 @@ void PhysicalDevice::PopulateFormatProperties()
         VkFormatFeatureFlags optimalFlags = 0;
         VkFormatFeatureFlags bufferFlags  = 0;
 
-        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_LINEAR, &linearFlags, settings);
-        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_OPTIMAL, &optimalFlags, settings);
+        GetFormatFeatureFlags(this, fmtProperties, format, VK_IMAGE_TILING_LINEAR, &linearFlags, settings);
+        GetFormatFeatureFlags(this, fmtProperties, format, VK_IMAGE_TILING_OPTIMAL, &optimalFlags, settings);
 
         bufferFlags = linearFlags;
 
@@ -4106,13 +4127,8 @@ bool PhysicalDevice::RayTracingSupported() const
 static bool IsKhrCooperativeMatrixSupported(
     const PhysicalDevice* pPhysicalDevice)
 {
-    const bool hasHardwareSupport =
-        ((pPhysicalDevice == nullptr) ||
-         (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportCooperativeMatrix));
-
-    bool emulateSupport = false;
-
-    return hasHardwareSupport || emulateSupport;
+    return ((pPhysicalDevice == nullptr) ||
+            (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportCooperativeMatrix));
 }
 
 // =====================================================================================================================

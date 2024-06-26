@@ -902,6 +902,18 @@
       "Type": "enum"
     },
     {
+      "Name": "PipelineLayoutPushConstantCompatibilityCheck",
+      "Description": "Decide whether to enable push constant compatibility check in fast link",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
       "Name": "PipelineBinningMode",
       "Description": "Specifies whether to override binning setting for pipeline.",
       "Tags": [
@@ -929,6 +941,108 @@
           }
         ],
         "Name": "PipelineBinningMode"
+      },
+      "Scope": "Driver",
+      "Type": "enum"
+    },
+    {
+      "Name": "DisableBinningPsKill",
+      "Description": "Disable binning when the pixels can be rejected before the PS and the PS can kill the pixel.",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": "DisableBinningPsKillDefault"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "DisableBinningPsKillDisable",
+            "Value": 0,
+            "Description": "Enable Binning."
+          },
+          {
+            "Name": "DisableBinningPsKillEnable",
+            "Value": 1,
+            "Description": "Disable Binning"
+          },
+          {
+            "Name": "DisableBinningPsKillDefault",
+            "Value": 2,
+            "Description": "Default PAL values"
+          }
+        ],
+        "Name": "DisableBinningPsKill"
+      },
+      "Scope": "Driver",
+      "Type": "enum"
+    },
+    {
+      "Name": "BinningMaxPrimPerBatch",
+      "Description": "Max Prims per Batch",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32"
+    },
+    {
+      "Name": "BinningContextStatesPerBin",
+      "Description": "Binning Context States Per Bin",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32"
+    },
+    {
+      "Name": "BinningPersistentStatesPerBin",
+      "Description": "Binning Persistent State Per Bin",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32"
+    },
+    {
+      "Name": "BinningOverridePbbForMrt",
+      "Description": "Override binning setting for MRT >= 2 targets.",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": "BinningOverridePbbForMrtDefault"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "BinningOverridePbbForMrtDisable",
+            "Value": 0,
+            "Description": "Force PBB off for shader"
+          },
+          {
+            "Name": "BinningOverridePbbForMrtEnable",
+            "Value": 1,
+            "Description": "Force PBB on for shader"
+          },
+          {
+            "Name": "BinningOverridePbbForMrtDefault",
+            "Value": 2,
+            "Description": "Default PAL value"
+          }
+        ],
+        "Name": "BinningOverridePbbForMrt"
       },
       "Scope": "Driver",
       "Type": "enum"
@@ -1310,6 +1424,18 @@
       ],
       "Defaults": {
         "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
+      "Name": "ForcePerComponentFetchForUnalignedVbFormat",
+      "Description": "Force stride for unaligned vertex buffer format",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": true
       },
       "Scope": "Driver",
       "Type": "bool"
@@ -9166,6 +9292,18 @@
       "Type": "bool",
       "Scope": "Driver",
       "Name": "EnableColorClearAutoSync"
+    },
+    {
+      "Name": "ClampMaxImageSize",
+      "Description": "Clamp the max image dimensions (width, height and depth) to the minimum of the specified value and HW reported value. Useful for compatibility issues with older games running on newer HW.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
     }
   ]
 }

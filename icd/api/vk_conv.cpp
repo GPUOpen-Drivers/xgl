@@ -1383,8 +1383,14 @@ VkResult InitializeUberFetchShaderFormatTable(
     bufferInfo.stride = 0;
     pPhysicalDevice->PalDevice()->CreateUntypedBufferViewSrds(1, &bufferInfo, zeroStrideSrd);
 
+    uint32_t oobMask = defaultSrd[3] ^ zeroStrideSrd[3];
+
+    // OOB mask should 2. If PAL changes relevant logic, UberFetchShaderFormatInfo::bufferFormat/unpackedBufferFormat
+    // might to need be fixed.
+    VK_ASSERT(oobMask == 0x20000000);
+
     // Save the modified bits in buffer SRD
-    pFormatInfoMap->SetBufferFormatMask(defaultSrd[3] ^ zeroStrideSrd[3]);
+    pFormatInfoMap->SetBufferFormatMask(oobMask);
     return VK_SUCCESS;
  }
 #undef INIT_UBER_FORMATINFO
@@ -1393,14 +1399,20 @@ VkResult InitializeUberFetchShaderFormatTable(
 UberFetchShaderFormatInfo GetUberFetchShaderFormatInfo(
     const UberFetchShaderFormatInfoMap* pFormatInfoMap,
     const VkFormat                      vkFormat,
-    const bool                          isZeroStride)
+    const bool                          isZeroStride,
+    const bool                          isOffsetMode)
 {
     UberFetchShaderFormatInfo formatInfo = {};
     auto pFormatInfo = pFormatInfoMap->FindKey(vkFormat);
     if (pFormatInfo != nullptr)
     {
         formatInfo = *pFormatInfo;
-        if (isZeroStride)
+        if (isOffsetMode)
+        {
+            formatInfo.bufferFormat = formatInfo.bufferFormat | pFormatInfoMap->GetBufferFormatMask();
+            formatInfo.unpackedBufferFormat = formatInfo.unpackedBufferFormat | pFormatInfoMap->GetBufferFormatMask();
+        }
+        else if (isZeroStride)
         {
             // Apply zero stride modified bits, which are caclulated in UberFetchShaderFormatInfoMap initialization.
             formatInfo.bufferFormat = formatInfo.bufferFormat ^ pFormatInfoMap->GetBufferFormatMask();

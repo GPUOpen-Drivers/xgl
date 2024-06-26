@@ -69,7 +69,7 @@ extern "C" {
 #define VK_API_VERSION_1_0 VK_MAKE_API_VERSION(0, 1, 0, 0)// Patch version should always be set to 0
 
 // Version of this file
-#define VK_HEADER_VERSION 285
+#define VK_HEADER_VERSION 287
 
 // Complete version of this file
 #define VK_HEADER_VERSION_COMPLETE VK_MAKE_API_VERSION(0, 1, 3, VK_HEADER_VERSION)
@@ -1113,6 +1113,7 @@ typedef enum VkStructureType {
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_POOL_OVERALLOCATION_FEATURES_NV = 1000546000,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAW_ACCESS_CHAINS_FEATURES_NV = 1000555000,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT16_VECTOR_FEATURES_NV = 1000563000,
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_REPLICATED_COMPOSITES_FEATURES_EXT = 1000564000,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV = 1000568000,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_FEATURES_MESA = 1000575000,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_PROPERTIES_MESA = 1000575001,
@@ -1409,6 +1410,7 @@ typedef enum VkObjectType {
 } VkObjectType;
 
 typedef enum VkVendorId {
+    VK_VENDOR_ID_KHRONOS = 0x10000,
     VK_VENDOR_ID_VIV = 0x10001,
     VK_VENDOR_ID_VSI = 0x10002,
     VK_VENDOR_ID_KAZAN = 0x10003,
@@ -5790,7 +5792,8 @@ typedef enum VkDriverId {
     VK_DRIVER_ID_MESA_DOZEN = 23,
     VK_DRIVER_ID_MESA_NVK = 24,
     VK_DRIVER_ID_IMAGINATION_OPEN_SOURCE_MESA = 25,
-    VK_DRIVER_ID_MESA_AGXV = 26,
+    VK_DRIVER_ID_MESA_HONEYKRISP = 26,
+    VK_DRIVER_ID_RESERVED_27 = 27,
     VK_DRIVER_ID_AMD_PROPRIETARY_KHR = VK_DRIVER_ID_AMD_PROPRIETARY,
     VK_DRIVER_ID_AMD_OPEN_SOURCE_KHR = VK_DRIVER_ID_AMD_OPEN_SOURCE,
     VK_DRIVER_ID_MESA_RADV_KHR = VK_DRIVER_ID_MESA_RADV,
@@ -10265,7 +10268,7 @@ typedef struct VkRenderingInputAttachmentIndexInfoKHR {
 } VkRenderingInputAttachmentIndexInfoKHR;
 
 typedef void (VKAPI_PTR *PFN_vkCmdSetRenderingAttachmentLocationsKHR)(VkCommandBuffer commandBuffer, const VkRenderingAttachmentLocationInfoKHR* pLocationInfo);
-typedef void (VKAPI_PTR *PFN_vkCmdSetRenderingInputAttachmentIndicesKHR)(VkCommandBuffer commandBuffer, const VkRenderingInputAttachmentIndexInfoKHR* pLocationInfo);
+typedef void (VKAPI_PTR *PFN_vkCmdSetRenderingInputAttachmentIndicesKHR)(VkCommandBuffer commandBuffer, const VkRenderingInputAttachmentIndexInfoKHR* pInputAttachmentIndexInfo);
 
 #ifndef VK_NO_PROTOTYPES
 VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingAttachmentLocationsKHR(
@@ -10274,7 +10277,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingAttachmentLocationsKHR(
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingInputAttachmentIndicesKHR(
     VkCommandBuffer                             commandBuffer,
-    const VkRenderingInputAttachmentIndexInfoKHR* pLocationInfo);
+    const VkRenderingInputAttachmentIndexInfoKHR* pInputAttachmentIndexInfo);
 #endif
 
 
@@ -19157,6 +19160,18 @@ typedef struct VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV {
     void*              pNext;
     VkBool32           shaderFloat16VectorAtomics;
 } VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV;
+
+
+
+// VK_EXT_shader_replicated_composites is a preprocessor guard. Do not pass it to API calls.
+#define VK_EXT_shader_replicated_composites 1
+#define VK_EXT_SHADER_REPLICATED_COMPOSITES_SPEC_VERSION 1
+#define VK_EXT_SHADER_REPLICATED_COMPOSITES_EXTENSION_NAME "VK_EXT_shader_replicated_composites"
+typedef struct VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT {
+    VkStructureType    sType;
+    void*              pNext;
+    VkBool32           shaderReplicatedComposites;
+} VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT;
 
 
 

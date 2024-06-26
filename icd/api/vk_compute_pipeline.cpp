@@ -408,7 +408,7 @@ VkResult ComputePipeline::Create(
             &pipelineOptimizerKey,
             &apiPsoHash,
             &tempModule,
-            &cacheId[0]);
+            cacheId);
 
         binaryCreateInfo.apiPsoHash = apiPsoHash;
 

@@ -128,6 +128,20 @@ static uint32_t GpuRtShaderLibraryFlags(
 }
 #endif
 
+// =====================================================================================================================
+void PipelineCompiler::InitPipelineDumpOption(
+    Vkgc::PipelineDumpOptions* pDumpOptions,
+    const RuntimeSettings&     settings,
+    char*                      pBuffer,
+    PipelineCompilerType       type)
+{
+    pDumpOptions->filterPipelineDumpByType = settings.filterPipelineDumpByType;
+    pDumpOptions->filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
+    pDumpOptions->dumpDuplicatePipelines   = settings.dumpDuplicatePipelines;
+    pDumpOptions->pDumpDir                 = settings.pipelineDumpDir;
+}
+
+// =====================================================================================================================
 #if VKI_RAY_TRACING
 #endif
 
@@ -1113,10 +1127,8 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     if (settings.enablePipelineDump && (result == VK_SUCCESS))
     {
         Vkgc::PipelineDumpOptions dumpOptions = {};
-        dumpOptions.pDumpDir                  = settings.pipelineDumpDir;
-        dumpOptions.filterPipelineDumpByType  = settings.filterPipelineDumpByType;
-        dumpOptions.filterPipelineDumpByHash  = settings.filterPipelineDumpByHash;
-        dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
+        char tempBuff[Util::MaxPathStrLen];
+        InitPipelineDumpOption(&dumpOptions, settings, tempBuff, pCreateInfo->compilerType);
 
         Vkgc::PipelineBuildInfo pipelineInfo = {};
         pipelineInfo.pGraphicsInfo = &pCreateInfo->pipelineInfo;
@@ -1216,10 +1228,8 @@ VkResult PipelineCompiler::CreateGraphicsShaderBinary(
         uint64_t dumpHash = settings.dumpPipelineWithApiHash ? pCreateInfo->apiPsoHash : libraryHash;
 
         Vkgc::PipelineDumpOptions dumpOptions = {};
-        dumpOptions.pDumpDir                  = settings.pipelineDumpDir;
-        dumpOptions.filterPipelineDumpByType  = settings.filterPipelineDumpByType;
-        dumpOptions.filterPipelineDumpByHash  = settings.filterPipelineDumpByHash;
-        dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
+        char tempBuff[Util::MaxPathStrLen];
+        InitPipelineDumpOption(&dumpOptions, settings, tempBuff, pCreateInfo->compilerType);
 
         Vkgc::PipelineBuildInfo pipelineInfo = {};
         pipelineInfo.pGraphicsInfo           = &pCreateInfo->pipelineInfo;
@@ -1288,10 +1298,8 @@ VkResult PipelineCompiler::CreateColorExportShaderLibrary(
                                                                    MetroHash::Compact64(&cacheId);
 
             Vkgc::PipelineDumpOptions dumpOptions = {};
-            dumpOptions.pDumpDir                  = settings.pipelineDumpDir;
-            dumpOptions.filterPipelineDumpByType  = settings.filterPipelineDumpByType;
-            dumpOptions.filterPipelineDumpByHash  = settings.filterPipelineDumpByHash;
-            dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
+            char tempBuff[Util::MaxPathStrLen];
+            InitPipelineDumpOption(&dumpOptions, settings, tempBuff, pCreateInfo->compilerType);
 
             Vkgc::PipelineBuildInfo pipelineInfo = {};
             GraphicsPipelineBuildInfo graphicsInfo = pCreateInfo->pipelineInfo;
@@ -1488,10 +1496,8 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     if (settings.enablePipelineDump && (result == VK_SUCCESS))
     {
         Vkgc::PipelineDumpOptions dumpOptions = {};
-        dumpOptions.pDumpDir                 = settings.pipelineDumpDir;
-        dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
-        dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
-        dumpOptions.dumpDuplicatePipelines   = settings.dumpDuplicatePipelines;
+        char tempBuff[Util::MaxPathStrLen];
+        InitPipelineDumpOption(&dumpOptions, settings, tempBuff, pCreateInfo->compilerType);
 
         Vkgc::PipelineBuildInfo pipelineInfo = {};
         pipelineInfo.pComputeInfo = &pCreateInfo->pipelineInfo;
@@ -1865,6 +1871,8 @@ static void CopyPreRasterizationShaderState(
     pCreateInfo->pipelineInfo.rsState.rasterStream            = libInfo.pipelineInfo.rsState.rasterStream;
     pCreateInfo->pipelineInfo.nggState                        = libInfo.pipelineInfo.nggState;
     pCreateInfo->pipelineInfo.enableUberFetchShader           = libInfo.pipelineInfo.enableUberFetchShader;
+    pCreateInfo->pipelineInfo.useSoftwareVertexBufferDescriptors =
+        libInfo.pipelineInfo.useSoftwareVertexBufferDescriptors;
 
     MergePipelineOptions(libInfo.pipelineInfo.options, &pCreateInfo->pipelineInfo.options);
 
@@ -2309,7 +2317,11 @@ static void BuildCompilerInfo(
         &pCreateInfo->pipelineInfo.fs,
     };
 
-    pCreateInfo->compilerType = pDevice->GetCompiler(DefaultDeviceIndex)->CheckCompilerType(&pCreateInfo->pipelineInfo);
+    if (pCreateInfo->compilerType == PipelineCompilerTypeInvalid)
+    {
+        pCreateInfo->compilerType =
+            pDevice->GetCompiler(DefaultDeviceIndex)->CheckCompilerType(&pCreateInfo->pipelineInfo, 0, 0);
+    }
 
     for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
     {
@@ -2668,7 +2680,10 @@ static void BuildPreRasterizationShaderState(
 
     BuildPipelineShadersInfo<PrsShaderMask>(pDevice, pIn, dynamicStateFlags, pShaderInfo, pCreateInfo);
 
-    BuildCompilerInfo(pDevice, pShaderInfo, PrsShaderMask, pCreateInfo);
+    if (libInfo.flags.isLibrary)
+    {
+        BuildCompilerInfo(pDevice, pShaderInfo, PrsShaderMask, pCreateInfo);
+    }
 
     if (pCreateInfo->pipelineInfo.options.enableRelocatableShaderElf)
     {
@@ -2680,6 +2695,7 @@ static void BuildPreRasterizationShaderState(
 static void BuildFragmentShaderState(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pIn,
+    const GraphicsPipelineLibraryInfo&     libInfo,
     const GraphicsPipelineShaderStageInfo* pShaderInfo,
     GraphicsPipelineBinaryCreateInfo*      pCreateInfo,
     const uint64_t                         dynamicStateFlags)
@@ -2693,7 +2709,10 @@ static void BuildFragmentShaderState(
 
     BuildPipelineShadersInfo<FgsShaderMask>(pDevice, pIn, 0, pShaderInfo, pCreateInfo);
 
-    BuildCompilerInfo(pDevice, pShaderInfo, FgsShaderMask, pCreateInfo);
+    if (libInfo.flags.isLibrary)
+    {
+        BuildCompilerInfo(pDevice, pShaderInfo, FgsShaderMask, pCreateInfo);
+    }
 }
 
 // =====================================================================================================================
@@ -2924,6 +2943,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     Device*                                         pDevice,
     const VkGraphicsPipelineCreateInfo*             pIn,
     const GraphicsPipelineExtStructs&               extStructs,
+    const GraphicsPipelineLibraryInfo&              libInfo,
     VkPipelineCreateFlags2KHR                       flags,
     const GraphicsPipelineShaderStageInfo*          pShaderInfo,
     const PipelineLayout*                           pPipelineLayout,
@@ -2935,14 +2955,10 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     VkResult result = VK_SUCCESS;
 
-    GraphicsPipelineLibraryInfo libInfo;
-
     if (result == VK_SUCCESS)
     {
         pCreateInfo->pBinaryMetadata = pBinaryMetadata;
         pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
-
-        GraphicsPipelineCommon::ExtractLibraryInfo(pIn, extStructs, flags, &libInfo);
 
         pCreateInfo->libFlags = libInfo.libFlags;
 
@@ -3002,9 +3018,10 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         {
             if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
             {
-                BuildFragmentShaderState(pDevice, pIn, pShaderInfo, pCreateInfo, dynamicStateFlags);
+                BuildFragmentShaderState(pDevice, pIn, libInfo, pShaderInfo, pCreateInfo, dynamicStateFlags);
                 pCreateInfo->pipelineInfo.enableColorExportShader =
-                    (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink &&
+                    (libInfo.flags.isLibrary &&
+                     pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink &&
                      ((pShaderInfo->stages[ShaderStageFragment].pModuleHandle != nullptr) ||
                       (pShaderInfo->stages[ShaderStageFragment].codeHash.lower != 0) ||
                       (pShaderInfo->stages[ShaderStageFragment].codeHash.upper != 0)));
@@ -3113,6 +3130,7 @@ VkResult PipelineCompiler::BuildGplFastLinkCreateInfo(
     PipelineMetadata*                               pBinaryMetadata,
     GraphicsPipelineBinaryCreateInfo*               pCreateInfo)
 {
+
     VK_ASSERT(pIn != nullptr);
     VK_ASSERT(libInfo.pPreRasterizationShaderLib != nullptr);
     VK_ASSERT(libInfo.pFragmentShaderLib != nullptr);
@@ -3210,7 +3228,9 @@ VkResult PipelineCompiler::BuildGplFastLinkCreateInfo(
 // Checks which compiler is used
 template<class PipelineBuildInfo>
 PipelineCompilerType PipelineCompiler::CheckCompilerType(
-    const PipelineBuildInfo* pPipelineBuildInfo)
+    const PipelineBuildInfo* pPipelineBuildInfo,
+    uint64_t                 preRasterHash,
+    uint64_t                 fragmentHash)
 {
     uint32_t availCompilerMask = 0;
     uint32_t compilerMask = 0;
@@ -3432,7 +3452,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 
     if (result == VK_SUCCESS)
     {
-        pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
+        pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo, 0, 0);
 
         if (pShaderInfo->stage.pModuleHandle != nullptr)
         {
@@ -3986,7 +4006,7 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
             }
 
             {
-                pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
+                pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo, 0, 0);
             }
 
             for (uint32_t i = 0; i < pShaderInfo->stageCount; ++i)
@@ -4099,10 +4119,8 @@ VkResult PipelineCompiler::CreateRayTracingPipelineBinary(
     {
         Vkgc::PipelineDumpOptions dumpOptions = {};
 
-        dumpOptions.pDumpDir = settings.pipelineDumpDir;
-        dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
-        dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
-        dumpOptions.dumpDuplicatePipelines = settings.dumpDuplicatePipelines;
+        char tempBuff[Util::MaxPathStrLen];
+        InitPipelineDumpOption(&dumpOptions, settings, tempBuff, pCreateInfo->compilerType);
 
         Vkgc::PipelineBuildInfo pipelineInfo = {};
 
@@ -5260,6 +5278,7 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalDataImp(
     uint32_t                    vertexDivisorDescriptionCount,
     const VertexInputDivisor*   pVertexDivisorDescriptions,
     bool                        isDynamicStride,
+    bool                        isOffsetMode,
     void*                       pUberFetchShaderInternalData) const
 {
     const auto& settings = m_pPhysicalDevice->GetRuntimeSettings();
@@ -5300,10 +5319,37 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalDataImp(
         auto pBinding = GetVertexInputBinding(pAttrib->binding,
                                               vertexBindingDescriptionCount,
                                               pVertexBindingDescriptions);
-        auto attribFormatInfo = GetUberFetchShaderFormatInfo(
-            &m_uberFetchShaderInfoFormatMap,
-            pAttrib->format,
-            (isDynamicStride == false) && (pBinding->stride == 0));
+
+        uint32_t stride = pBinding->stride;
+        if (isDynamicStride)
+        {
+            stride = settings.forceAlignedForDynamicStride ? 0 : 1;
+        }
+
+        if (settings.forcePerComponentFetchForUnalignedVbFormat == 1)
+        {
+            // Force stride to 1, to handle unaligned offsets
+            switch (pAttrib->format)
+            {
+            case VK_FORMAT_R8G8_SSCALED:
+            case VK_FORMAT_R8G8_UNORM:
+            case VK_FORMAT_R8G8_SNORM:
+            case VK_FORMAT_R8G8_USCALED:
+            case VK_FORMAT_R8G8_SINT:
+            case VK_FORMAT_R8G8B8A8_UINT:
+            case VK_FORMAT_R8G8B8A8_SNORM:
+            case VK_FORMAT_R16G16_SFLOAT:
+            case VK_FORMAT_R16G16B16A16_USCALED:
+                stride = 1;
+                break;
+            default:
+                break;
+            }
+        }
+
+        auto attribFormatInfo =
+            GetUberFetchShaderFormatInfo(&m_uberFetchShaderInfoFormatMap, pAttrib->format, (stride == 0), isOffsetMode);
+
         void* pAttribInternalData =
             Util::VoidPtrInc(pAttribInternalBase, sizeof(Vkgc::UberFetchShaderAttribInfo) * pAttrib->location);
 
@@ -5326,12 +5372,6 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalDataImp(
         }
         else
         {
-            uint32_t stride = pBinding->stride;
-            if (isDynamicStride)
-            {
-                stride = settings.forceAlignedForDynamicStride ? 0 : 1;
-            }
-
             if (((stride % attribFormatInfo.alignment) == 0) &&
                 ((pAttrib->offset % attribFormatInfo.alignment) == 0))
             {
@@ -5449,7 +5489,8 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalData(
     const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
     uint32_t                                     vertexAttributeDescriptionCount,
     const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions,
-    void*                                        pUberFetchShaderInternalData)
+    void*                                        pUberFetchShaderInternalData,
+    bool                                         isOffsetMode)
 {
 
     uint32_t dataSize = BuildUberFetchShaderInternalDataImp(vertexBindingDescriptionCount,
@@ -5459,6 +5500,7 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalData(
                                                             vertexBindingDescriptionCount,
                                                             pVertexBindingDescriptions,
                                                             false,
+                                                            isOffsetMode,
                                                             pUberFetchShaderInternalData);
 
     return dataSize;
@@ -5469,6 +5511,7 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalData(
 uint32_t PipelineCompiler::BuildUberFetchShaderInternalData(
     const VkPipelineVertexInputStateCreateInfo* pVertexInput,
     bool                                        dynamicStride,
+    bool                                        isOffsetMode,
     void*                                       pUberFetchShaderInternalData) const
 {
     const VkPipelineVertexInputDivisorStateCreateInfoEXT* pVertexDivisor = nullptr;
@@ -5494,6 +5537,7 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalData(
                                                pVertexDivisor != nullptr ? pVertexDivisor->vertexBindingDivisorCount : 0,
                                                pVertexDivisor != nullptr ? pVertexDivisor->pVertexBindingDivisors : nullptr,
                                                dynamicStride,
+                                               isOffsetMode,
                                                pUberFetchShaderInternalData);
 }
 
@@ -5624,10 +5668,8 @@ void PipelineCompiler::DumpPipeline(
     VkResult                       result)
 {
     Vkgc::PipelineDumpOptions dumpOptions = {};
-    dumpOptions.pDumpDir                 = settings.pipelineDumpDir;
-    dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
-    dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
-    dumpOptions.dumpDuplicatePipelines   = settings.dumpDuplicatePipelines;
+    char tempBuff[Util::MaxPathStrLen];
+    InitPipelineDumpOption(&dumpOptions, settings, tempBuff, PipelineCompilerTypeInvalid);
 
     void* pPipelineDumpHandle = nullptr;
     if (settings.dumpPipelineWithApiHash)
@@ -5661,16 +5703,22 @@ void PipelineCompiler::DumpPipeline(
 
 template
 PipelineCompilerType PipelineCompiler::CheckCompilerType(
-    const Vkgc::ComputePipelineBuildInfo* pPipelineBuildInfo);
+    const Vkgc::ComputePipelineBuildInfo* pPipelineBuildInfo,
+    uint64_t                              preRrasterHash,
+    uint64_t                              fragmentHash);
 
 template
 PipelineCompilerType PipelineCompiler::CheckCompilerType(
-    const Vkgc::GraphicsPipelineBuildInfo* pPipelineBuildInfo);
+    const Vkgc::GraphicsPipelineBuildInfo* pPipelineBuildInfo,
+    uint64_t                               preRrasterHash,
+    uint64_t                               fragmentHash);
 
 #if VKI_RAY_TRACING
 template
 PipelineCompilerType PipelineCompiler::CheckCompilerType(
-    const Vkgc::RayTracingPipelineBuildInfo* pPipelineBuildInfo);
+    const Vkgc::RayTracingPipelineBuildInfo* pPipelineBuildInfo,
+    uint64_t                                 preRrasterHash,
+    uint64_t                                 fragmentHash);
 #endif
 
 }

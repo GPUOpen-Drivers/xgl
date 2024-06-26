@@ -732,7 +732,7 @@ public:
         const VkRenderingAttachmentLocationInfoKHR* pLocationInfo);
 
     void SetRenderingInputAttachmentIndices(
-        const VkRenderingInputAttachmentIndexInfoKHR* pLocationInfo);
+        const VkRenderingInputAttachmentIndexInfoKHR* pInputAttachmentIndexInfo);
 
     void SetColorBlendEnable(
         uint32_t                            firstAttachment,
@@ -1580,7 +1580,11 @@ private:
 
     typedef uint32_t RebindUserDataFlags;
 
-    RebindUserDataFlags SwitchUserDataLayouts(
+    RebindUserDataFlags SwitchCompactSchemeUserDataLayouts(
+        PipelineBindPoint      apiBindPoint,
+        const UserDataLayout*  pUserDataLayout);
+
+    RebindUserDataFlags SwitchCommonUserDataLayouts(
         PipelineBindPoint      apiBindPoint,
         const UserDataLayout*  pUserDataLayout);
 
@@ -2947,7 +2951,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingAttachmentLocationsKHR(
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingInputAttachmentIndicesKHR(
     VkCommandBuffer                                 commandBuffer,
-    const VkRenderingInputAttachmentIndexInfoKHR*   pLocationInfo);
+    const VkRenderingInputAttachmentIndexInfoKHR*   pInputAttachmentIndexInfo);
 
 } // namespace entry
 

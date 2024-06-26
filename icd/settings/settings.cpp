@@ -176,11 +176,13 @@ void VulkanSettingsLoader::OverrideSettingsBySystemInfo()
             char executableName[PATH_MAX];
             char executablePath[PATH_MAX];
             utils::GetExecutableNameAndPath(executableName, executablePath);
-            Util::Snprintf(m_settings.pipelineDumpDir,
-                           sizeof(m_settings.pipelineDumpDir),
+            char tmpDirStr[DD_SETTINGS_MAX_PATH_SIZE] = {0};
+            Util::Snprintf(tmpDirStr,
+                           sizeof(tmpDirStr),
                            "%s/%s",
                            m_settings.pipelineDumpDir,
                            executableName);
+            Util::Strncpy(m_settings.pipelineDumpDir, tmpDirStr, sizeof(m_settings.pipelineDumpDir));
         }
 
         MakeAbsolutePath(m_settings.pipelineDumpDir, sizeof(m_settings.pipelineDumpDir),
@@ -834,6 +836,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
             m_settings.forceDepthClampBasedOnZExport = true;
+
+            m_settings.clampMaxImageSize = 16384u;
         }
 
         if (appProfile == AppProfile::SeriousSamFusion)
@@ -841,6 +845,76 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
             m_settings.useAnisoThreshold = true;
             m_settings.anisoThreshold = 1.0f;
+
+            m_settings.clampMaxImageSize = 16384u;
+        }
+
+        if ((appProfile == AppProfile::TalosVR) ||
+            (appProfile == AppProfile::SeriousSamVrTheLastHope) ||
+            (appProfile == AppProfile::SedpEngine))
+        {
+            m_settings.clampMaxImageSize = 16384u;
+        }
+
+        if (appProfile == AppProfile::SeriousSam4)
+        {
+            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.forceEnableDcc = ForceDccDefault;
+            }
+
+            m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+
+            m_settings.clampMaxImageSize = 16384u;
+        }
+
+        if (appProfile == AppProfile::KnockoutCity)
+        {
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                    ForceDccForColorAttachments |
+                    ForceDccForNonColorAttachmentShaderStorage|
+                    ForceDccFor32BppShaderStorage);
+            }
+
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                    ForceDccForColorAttachments |
+                    ForceDccForNonColorAttachmentShaderStorage |
+                    ForceDccFor32BppShaderStorage |
+                    ForceDccFor64BppShaderStorage);
+
+                if (pInfo->revision == Pal::AsicRevision::Navi22)
+                {
+                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                }
+            }
+        }
+        if (appProfile == AppProfile::EvilGenius2)
+        {
+            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+            m_settings.csWaveSize = 64;
+            m_settings.fsWaveSize = 64;
+
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                if (pInfo->revision == Pal::AsicRevision::Navi21)
+                {
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                    m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+                }
+            }
+
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+            }
         }
 
         if (appProfile == AppProfile::QuakeEnhanced)
@@ -1366,6 +1440,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // It looks incorrect pipeline layout is used. Force indirect can make optimized pipeline layout compatible
             // with fast-linked pipeline.
             m_settings.pipelineLayoutSchemeSelectionStrategy = PipelineLayoutSchemeSelectionStrategy::ForceIndirect;
+
+            // It results from incorrect behavior of DXVK. Incompatible push constant size leads to Gpu page fault
+            // during fast link in pipeline creation.
+            m_settings.pipelineLayoutPushConstantCompatibilityCheck = true;
         }
 
         if (appProfile == AppProfile::AshesOfTheSingularity)
@@ -1573,11 +1651,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
             }
 #endif
-        }
-
-        if (appProfile == AppProfile::Zink)
-        {
-            m_settings.padVertexBuffers = true;
         }
 
         if (appProfile == AppProfile::SpidermanRemastered)
@@ -1897,7 +1970,30 @@ void VulkanSettingsLoader::UpdatePalSettings()
 
     pPalSettings->textureOptLevel = m_settings.vulkanTexFilterQuality;
 
+    switch (m_settings.disableBinningPsKill)
+    {
+    case DisableBinningPsKillEnable:
+        pPalSettings->disableBinningPsKill = Pal::OverrideMode::Enabled;
+        break;
+    case DisableBinningPsKillDisable:
+        pPalSettings->disableBinningPsKill = Pal::OverrideMode::Disabled;
+        break;
+    case DisableBinningPsKillDefault:
+    default:
+        pPalSettings->disableBinningPsKill = Pal::OverrideMode::Default;
+        break;
+    }
+
     pPalSettings->hintDisableSmallSurfColorCompressionSize = m_settings.disableSmallSurfColorCompressionSize;
+
+    pPalSettings->binningContextStatesPerBin = m_settings.binningContextStatesPerBin;
+    pPalSettings->binningPersistentStatesPerBin = m_settings.binningPersistentStatesPerBin;
+
+    // if 0 than we can skip it and let use pal's default value
+    if (m_settings.binningMaxPrimPerBatch > 0)
+    {
+        pPalSettings->binningMaxPrimPerBatch = m_settings.binningMaxPrimPerBatch;
+    }
 
     // Setting disableSkipFceOptimization to false enables an optimization in PAL that disregards the FCE in a transition
     // if one of the built in clear colors are used (white/black) and the image is TCC compatible.

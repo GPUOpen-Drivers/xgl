@@ -552,7 +552,7 @@ VkResult Device::Create(
                 {
                     deviceFeatures.robustBufferAccessExtended = true;
                     {
-                        deviceFeatures.robustVertexBufferExtend = true;
+                        deviceFeatures.robustVertexBufferExtend = false;
                     }
                 }
 
@@ -1885,7 +1885,7 @@ VkResult Device::CreateInternalComputePipeline(
         auto pShaderInfo = &pipelineBuildInfo.pipelineInfo.cs;
 
         pShaderInfo->pModuleData         = ShaderModule::GetFirstValidShaderData(&shaderModule);
-        pipelineBuildInfo.compilerType   = pCompiler->CheckCompilerType(&pipelineBuildInfo.pipelineInfo);
+        pipelineBuildInfo.compilerType   = pCompiler->CheckCompilerType(&pipelineBuildInfo.pipelineInfo, 0, 0);
         pShaderInfo->pModuleData         = ShaderModule::GetShaderData(pipelineBuildInfo.compilerType, &shaderModule);
 
         pShaderInfo->pSpecializationInfo = pSpecializationInfo;

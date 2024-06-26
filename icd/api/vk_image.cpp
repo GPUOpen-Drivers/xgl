@@ -196,7 +196,6 @@ Image::Image(
         pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT,
         imageFormat,
         extraLayoutUsages),
-    m_pSwapChain(nullptr),
     m_ResourceKey(resourceKey),
     m_memoryRequirements{}
 {
@@ -1528,8 +1527,6 @@ VkResult Image::BindSwapchainMemory(
 
     const SwapChain::Properties& properties = pSwapchain->GetProperties();
 
-    m_pSwapChain = pSwapchain;
-
     Memory* pMemory = Memory::ObjectFromHandle(properties.imageMemory[swapChainImageIndex]);
 
     Image*  pSwapchainImage    = Image::ObjectFromHandle(properties.images[swapChainImageIndex]);
@@ -1977,6 +1974,7 @@ void Image::CalculateMemoryRequirementsInternal(
     {
         pMemoryRequirements->size = Util::RoundUpToMultiple(palReqs.size, pMemoryRequirements->alignment);
     }
+
 }
 
 // =====================================================================================================================
@@ -2394,10 +2392,6 @@ void Image::CalculateSparseMemoryRequirements(
 // =====================================================================================================================
 void Image::RegisterPresentableImageWithSwapChain(SwapChain* pSwapChain)
 {
-    // Registration is only allowed to happen once
-    VK_ASSERT(m_pSwapChain == nullptr);
-    m_pSwapChain = pSwapChain;
-
     // If swapchain requires this image to be treated as SRGB.
     m_internalFlags.treatAsSrgb = pSwapChain->GetProperties().flags.treatAsSrgb;
 

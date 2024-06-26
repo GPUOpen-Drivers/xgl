@@ -43,6 +43,7 @@ public:
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
         const GraphicsPipelineExtStructs&   extStructs,
         VkPipelineCreateFlags2KHR           flags,
+        uint32_t                            internalFlags,
         const VkAllocationCallbacks*        pAllocator,
         VkPipeline*                         pPipeline);
 
@@ -66,6 +67,10 @@ public:
         { return &m_elfHash; }
 
     void GetOwnedPalShaderLibraries(const Pal::IShaderLibrary* pLibraries[GraphicsLibraryCount]) const;
+
+    void SetAltLibrary(GraphicsPipelineLibrary* pLibrary) { m_altLibrary = pLibrary; }
+
+    GraphicsPipelineLibrary* GetAltLibrary() const { return m_altLibrary; }
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(GraphicsPipelineLibrary);
 
@@ -94,6 +99,7 @@ private:
     const GraphicsPipelineLibraryInfo       m_libInfo;
     GplModuleState                          m_gplModuleStates[ShaderStage::ShaderStageGfxCount];
     const Util::MetroHash::Hash             m_elfHash;
+    GraphicsPipelineLibrary*                m_altLibrary;
 };
 
 }

@@ -229,6 +229,7 @@ public:
         Device*                                         pDevice,
         const VkGraphicsPipelineCreateInfo*             pIn,
         const GraphicsPipelineExtStructs&               extStructs,
+        const GraphicsPipelineLibraryInfo&              libInfo,
         VkPipelineCreateFlags2KHR                       flags,
         const GraphicsPipelineShaderStageInfo*          pShaderInfo,
         const PipelineLayout*                           pPipelineLayout,
@@ -321,7 +322,10 @@ public:
 #endif
 
     template<class PipelineBuildInfo>
-    PipelineCompilerType CheckCompilerType(const PipelineBuildInfo* pPipelineBuildInfo);
+    PipelineCompilerType CheckCompilerType(
+        const PipelineBuildInfo* pPipelineBuildInfo,
+        uint64_t                 preRasterHash,
+        uint64_t                 fragmentHash);
 
     uint32_t GetCompilerCollectionMask();
 
@@ -425,11 +429,13 @@ public:
         const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
         uint32_t                                     vertexAttributeDescriptionCount,
         const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions,
-        void*                                        pUberFetchShaderInternalData);
+        void*                                        pUberFetchShaderInternalData,
+        bool                                         isOffsetMode);
 
     uint32_t BuildUberFetchShaderInternalData(
         const VkPipelineVertexInputStateCreateInfo* pVertexInput,
         bool                                        dynamicStride,
+        bool                                        isOffsetMode,
         void*                                       pUberFetchShaderInternalData) const;
 
     static void ReadBinaryMetadata(
@@ -475,6 +481,12 @@ public:
         uint32_t                       binaryCount,
         const Vkgc::BinaryData*        pElfBinary,
         VkResult                       result);
+
+    static void InitPipelineDumpOption(
+        Vkgc::PipelineDumpOptions* pDumpOptions,
+        const RuntimeSettings&     settings,
+        char*                      pBuffer,
+        PipelineCompilerType       type);
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
 
@@ -539,6 +551,7 @@ private:
         uint32_t                    vertexDivisorDescriptionCount,
         const VertexInputDivisor*   pVertexDivisorDescriptions,
         bool                        isDynamicStride,
+        bool                        isOffsetMode,
         void*                       pUberFetchShaderInternalData) const;
     // -----------------------------------------------------------------------------------------------------------------
 

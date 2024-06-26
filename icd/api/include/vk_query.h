@@ -391,6 +391,7 @@ inline const TimestampQueryPool* QueryPool::AsTimestampQueryPool() const
     return static_cast<const TimestampQueryPool*>(this);
 }
 
+// =====================================================================================================================
 inline const QueryPoolWithStorageView* QueryPool::AsQueryPoolWithStorageView() const
 {
     if ((m_queryType != VK_QUERY_TYPE_TIMESTAMP)

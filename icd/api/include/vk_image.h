@@ -183,15 +183,6 @@ public:
     uint32_t GetArraySize() const
         { return m_arraySize; }
 
-    bool IsPresentable() const
-        { return m_pSwapChain != nullptr; }
-
-    VK_FORCEINLINE SwapChain* GetSwapChain() const
-    {
-        VK_ASSERT(m_pSwapChain != nullptr);
-        return m_pSwapChain;
-    }
-
     // We have to treat the image sparse if any of these flags are set
     static const VkImageCreateFlags SparseEnablingFlags =
         VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
@@ -415,6 +406,11 @@ private:
         const VkImageCreateInfo* pCreateInfo,
         VkMemoryRequirements2*   pMemoryRequirements);
 
+    static void GetVideoEncodeContextBufferMemoryRequirements(
+        const Device*            pDevice,
+        const VkImageCreateInfo* pCreateInfo,
+        VkMemoryRequirements*    pMemoryRequirements);
+
 #if defined(__unix__)
     static VkResult CreateImageWithModifierList(
         Device*                      pDevice,
@@ -473,9 +469,6 @@ private:
                                                   // for sparse images
 
     ImageBarrierPolicy      m_barrierPolicy;      // Barrier policy to use for this image
-
-    SwapChain*              m_pSwapChain;         // If this image is a presentable image this tells
-                                                  // which swap chain the image belongs to
 
     ResourceOptimizerKey    m_ResourceKey;
 

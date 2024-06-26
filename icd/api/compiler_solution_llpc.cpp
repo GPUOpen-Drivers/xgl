@@ -459,6 +459,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
         int64_t                         startTime = Util::GetPerfCpuTime();
 
         hasher.Update(pCreateInfo->libraryHash[gplType]);
+        hasher.Update(PipelineCompilerTypeLlpc);
         hasher.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
         hasher.Finalize(cacheId.bytes);
 
@@ -1203,7 +1204,8 @@ void CompilerSolutionLlpc::BuildPipelineInternalBufferData(
     if (needUberFetchShaderBuffer)
     {
         uint32_t uberFetchShaderInternalDataSize = pCompiler->BuildUberFetchShaderInternalData(
-            pVertexInput, pCreateInfo->pipelineInfo.dynamicVertexStride, pInternalBufferInfo->pData);
+            pVertexInput, pCreateInfo->pipelineInfo.dynamicVertexStride,
+            pCreateInfo->pipelineInfo.useSoftwareVertexBufferDescriptors, pInternalBufferInfo->pData);
 
         auto pBufferEntry = &pInternalBufferInfo->internalBufferEntries[0];
         pBufferEntry->userDataOffset = uberFetchConstBufRegBase;

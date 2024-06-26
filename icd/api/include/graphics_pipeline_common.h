@@ -145,6 +145,7 @@ struct GraphicsPipelineObjectCreateInfo
     VkShaderStageFlagBits                       activeStages;
     VkFormat                                    dbFormat;
     uint64_t                                    dynamicStates;
+    uint32_t                                    numTargets;
 #if VKI_RAY_TRACING
     uint32_t                                    dispatchRaysUserDataOffset;
 #endif
@@ -200,6 +201,9 @@ struct GraphicsPipelineExtStructs : PipelineExtStructs
     const VkPipelineLibraryCreateInfoKHR* pPipelineLibraryCreateInfoKHR;
 };
 
+// Internal flags for graphics pipeline library
+constexpr uint32_t VK_GRAPHICS_PIPELINE_LIBRARY_FORCE_LLPC = 1;
+
 // =====================================================================================================================
 // The common part used by both executable graphics pipelines and graphics pipeline libraries
 class GraphicsPipelineCommon : public Pipeline
@@ -245,6 +249,7 @@ public:
 
     // Extract graphics pipeline library related info from VkGraphicsPipelineCreateInfo.
     static void ExtractLibraryInfo(
+        const Device*                       pDevice,
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
         const GraphicsPipelineExtStructs&   extStructs,
         VkPipelineCreateFlags2KHR           flags,
@@ -264,19 +269,22 @@ public:
 protected:
     // Convert API information into internal create info used to create internal pipeline object
     static void BuildPipelineObjectCreateInfo(
-        const Device*                          pDevice,
-        const VkGraphicsPipelineCreateInfo*    pIn,
-        const GraphicsPipelineExtStructs&      extStructs,
-        VkPipelineCreateFlags2KHR              flags,
-        const PipelineOptimizerKey*            pOptimizerKey,
-        const PipelineMetadata*                pBinMeta,
-        GraphicsPipelineObjectCreateInfo*      pObjInfo);
+        const Device*                           pDevice,
+        const VkGraphicsPipelineCreateInfo*     pIn,
+        const GraphicsPipelineExtStructs&       extStructs,
+        const GraphicsPipelineLibraryInfo&      libInfo,
+        VkPipelineCreateFlags2KHR               flags,
+        const PipelineOptimizerKey*             pOptimizerKey,
+        const PipelineMetadata*                 pBinMeta,
+        GraphicsPipelineObjectCreateInfo*       pObjInfo,
+        const GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo);
 
     // Populates the profile key for tuning graphics pipelines
     static void GeneratePipelineOptimizerKey(
         const Device*                          pDevice,
         const VkGraphicsPipelineCreateInfo*    pCreateInfo,
         const GraphicsPipelineExtStructs&      extStructs,
+        const GraphicsPipelineLibraryInfo&     libInfo,
         VkPipelineCreateFlags2KHR              flags,
         const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
         ShaderOptimizerKey*                    pShaderKeys,
@@ -287,6 +295,7 @@ protected:
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,
         VkPipelineCreateFlags2KHR               flags,
         const GraphicsPipelineExtStructs&       extStructs,
+        const GraphicsPipelineLibraryInfo&      libInfo,
         const GraphicsPipelineBinaryCreateInfo& pBinaryCreateInfo,
         uint64_t*                               pApiHash,
         Util::MetroHash::Hash*                  elfHash);

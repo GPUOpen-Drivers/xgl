@@ -119,6 +119,12 @@ constexpr uint64_t PrsDynamicStatesMask = 0
 // - VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE
 // - VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE
 // - VK_DYNAMIC_STATE_STENCIL_OP
+// - VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT
+// - VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT
+// - VK_DYNAMIC_STATE_SAMPLE_MASK_EXT
+// - VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT
+// - VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT
+// - VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT
 constexpr uint64_t FgsDynamicStatesMask = 0
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthBounds))
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::StencilCompareMask))
@@ -130,7 +136,13 @@ constexpr uint64_t FgsDynamicStatesMask = 0
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthCompareOp))
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthBoundsTestEnable))
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::StencilTestEnable))
-    | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::StencilOp));
+    | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::StencilOp))
+    | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocations))
+    | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsEnable))
+    | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleMask))
+    | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::AlphaToCoverageEnable))
+    | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::AlphaToOneEnable))
+    | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::RasterizationSamples));
 
 // =====================================================================================================================
 // The dynamic states of Fragment Output Interface section
@@ -148,6 +160,7 @@ constexpr uint64_t FgsDynamicStatesMask = 0
 // - VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT (not available)
 // - VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT (not available)
 // - VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT (not available)
+// - VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR
 constexpr uint64_t FoiDynamicStatesMask = 0
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::BlendConstants))
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocations))
@@ -161,7 +174,8 @@ constexpr uint64_t FoiDynamicStatesMask = 0
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::ColorBlendEnable))
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::ColorBlendEquation))
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteMask))
-    | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsEnable));
+    | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsEnable))
+    | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr));
 
 // =====================================================================================================================
 // Helper function used to check whether a specific dynamic state is set
@@ -625,7 +639,7 @@ uint64_t GraphicsPipelineCommon::GetDynamicStateFlags(
                 dynamicState |= fgsMask & (1ULL << static_cast<uint32_t>(DynamicStatesInternal::StencilReference));
                 break;
             case VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR:
-                dynamicState |= fgsMask &
+                dynamicState |= (fgsMask | foiMask) &
                     (1ULL << static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr));
                 break;
             case VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE:
@@ -651,24 +665,27 @@ uint64_t GraphicsPipelineCommon::GetDynamicStateFlags(
                 dynamicState |= foiMask & (1ULL << static_cast<uint32_t>(DynamicStatesInternal::BlendConstants));
                 break;
             case VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT:
-                dynamicState |= foiMask & (1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocations));
+                dynamicState |= (fgsMask | foiMask) &
+                    (1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocations));
                 break;
             case VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT:
                 dynamicState |= foiMask & (1ULL << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnable));
                 break;
             case VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT:
-                dynamicState |= foiMask &
+                dynamicState |= (fgsMask | foiMask) &
                     (1ULL << static_cast<uint32_t>(DynamicStatesInternal::RasterizationSamples));
                 break;
             case VK_DYNAMIC_STATE_SAMPLE_MASK_EXT:
-                dynamicState |= foiMask & (1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleMask));
+                dynamicState |= (fgsMask | foiMask) &
+                    (1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleMask));
                 break;
             case VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT:
-                dynamicState |= foiMask &
+                dynamicState |= (fgsMask | foiMask) &
                     (1ULL << static_cast<uint32_t>(DynamicStatesInternal::AlphaToCoverageEnable));
                 break;
             case VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT:
-                dynamicState |= foiMask & (1ULL << static_cast<uint32_t>(DynamicStatesInternal::AlphaToOneEnable));
+                dynamicState |= (fgsMask | foiMask) &
+                    (1ULL << static_cast<uint32_t>(DynamicStatesInternal::AlphaToOneEnable));
                 break;
             case VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT:
                 dynamicState |= foiMask & (1ULL << static_cast<uint32_t>(DynamicStatesInternal::LogicOpEnable));
@@ -683,7 +700,7 @@ uint64_t GraphicsPipelineCommon::GetDynamicStateFlags(
                 dynamicState |= foiMask & (1ULL << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteMask));
                 break;
             case VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT:
-                dynamicState |= foiMask &
+                dynamicState |= (fgsMask | foiMask) &
                     (1ULL << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsEnable));
                 break;
             case VK_DYNAMIC_STATE_LOGIC_OP_EXT:
@@ -701,6 +718,7 @@ uint64_t GraphicsPipelineCommon::GetDynamicStateFlags(
 
 // =====================================================================================================================
 void GraphicsPipelineCommon::ExtractLibraryInfo(
+    const Device*                       pDevice,
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
     const GraphicsPipelineExtStructs&   extStructs,
     VkPipelineCreateFlags2KHR           flags,
@@ -759,6 +777,43 @@ void GraphicsPipelineCommon::ExtractLibraryInfo(
                     VK_ASSERT(pLibInfo->pFragmentOutputInterfaceLib == nullptr);
                     pLibInfo->pFragmentOutputInterfaceLib = pPipelineLib;
                     pLibInfo->libFlags &= ~VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
+                }
+            }
+        }
+
+        if ((pLibInfo->flags.isLibrary == false) &&
+            (pLibInfo->pPreRasterizationShaderLib != nullptr) ||
+            (pLibInfo->pFragmentShaderLib != nullptr))
+        {
+            uint64_t preRasterHash = 0;
+            uint64_t fragmentHash = 0;
+            if (pLibInfo->pPreRasterizationShaderLib != nullptr)
+            {
+                preRasterHash = pLibInfo->pPreRasterizationShaderLib->
+                    GetPipelineBinaryCreateInfo().libraryHash[GraphicsLibraryPreRaster];
+            }
+            if (pLibInfo->pFragmentShaderLib != nullptr)
+            {
+                fragmentHash = pLibInfo->pFragmentShaderLib->
+                    GetPipelineBinaryCreateInfo().libraryHash[GraphicsLibraryFragment];
+            }
+
+            PipelineCompilerType compilerType = pDevice->GetCompiler(DefaultDeviceIndex)->
+                CheckCompilerType<Vkgc::GraphicsPipelineBuildInfo>(nullptr, preRasterHash, fragmentHash);
+
+            if (pLibInfo->pPreRasterizationShaderLib != nullptr)
+            {
+                if (compilerType != pLibInfo->pPreRasterizationShaderLib->GetPipelineBinaryCreateInfo().compilerType)
+                {
+                    pLibInfo->pPreRasterizationShaderLib = pLibInfo->pPreRasterizationShaderLib->GetAltLibrary();
+                }
+            }
+
+            if (pLibInfo->pFragmentShaderLib != nullptr)
+            {
+                if (compilerType != pLibInfo->pFragmentShaderLib->GetPipelineBinaryCreateInfo().compilerType)
+                {
+                    pLibInfo->pFragmentShaderLib = pLibInfo->pFragmentShaderLib->GetAltLibrary();
                 }
             }
         }
@@ -829,8 +884,11 @@ VkResult GraphicsPipelineCommon::Create(
 
     if ((flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) != 0)
     {
-        result =  GraphicsPipelineLibrary::Create(
-            pDevice, pPipelineCache, pCreateInfo, extStructs, flags, pAllocator, pPipeline);
+        uint32_t compilerMask = pDevice->GetCompiler(DefaultDeviceIndex)->GetCompilerCollectionMask();
+        {
+            result = GraphicsPipelineLibrary::Create(
+                pDevice, pPipelineCache, pCreateInfo, extStructs, flags, 0, pAllocator, pPipeline);
+        }
     }
     else
     {
@@ -993,21 +1051,6 @@ static void BuildRasterizationState(
     pInfo->pipeline.rsState.pointCoordOrigin       = Pal::PointOrigin::UpperLeft;
     pInfo->pipeline.rsState.shadeMode              = Pal::ShadeMode::Flat;
     pInfo->pipeline.rsState.rasterizeLastLinePixel = 0;
-
-    // Pipeline Binning Override
-    switch (pDevice->GetPipelineBinningMode())
-    {
-    case PipelineBinningModeEnable:
-        pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Enable;
-        break;
-    case PipelineBinningModeDisable:
-        pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Disable;
-        break;
-    case PipelineBinningModeDefault:
-    default:
-        pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Default;
-        break;
-    }
 
     if (pRs != nullptr)
     {
@@ -2153,18 +2196,23 @@ static void BuildExecutablePipelineState(
 
 // =====================================================================================================================
 void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
-    const Device*                          pDevice,
-    const VkGraphicsPipelineCreateInfo*    pIn,
-    const GraphicsPipelineExtStructs&      extStructs,
-    VkPipelineCreateFlags2KHR              flags,
-    const PipelineOptimizerKey*            pOptimizerKey,
-    const PipelineMetadata*                pBinMeta,
-    GraphicsPipelineObjectCreateInfo*      pInfo)
+    const Device*                           pDevice,
+    const VkGraphicsPipelineCreateInfo*     pIn,
+    const GraphicsPipelineExtStructs&       extStructs,
+    const GraphicsPipelineLibraryInfo&      libInfo,
+    VkPipelineCreateFlags2KHR               flags,
+    const PipelineOptimizerKey*             pOptimizerKey,
+    const PipelineMetadata*                 pBinMeta,
+    GraphicsPipelineObjectCreateInfo*       pInfo,
+    const GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo)
 {
     VK_ASSERT(pBinMeta != nullptr);
 
-    GraphicsPipelineLibraryInfo libInfo;
-    ExtractLibraryInfo(pIn, extStructs, flags, &libInfo);
+    pInfo->numTargets = 0;
+    for (uint32_t i = 0; i < MaxColorTargets; ++i)
+    {
+        pInfo->numTargets += pBinaryCreateInfo->pipelineInfo.cbState.target[i].channelWriteMask ? 1 : 0;
+    }
 
     bool hasMesh = false;
 #if VKI_RAY_TRACING
@@ -2242,6 +2290,34 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
         {
             CopyFragmentOutputInterfaceState(libInfo.pFragmentOutputInterfaceLib, pInfo);
         }
+
+        // Pipeline Binning Override
+        switch (pDevice->GetPipelineBinningMode())
+        {
+        case PipelineBinningModeEnable:
+            pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Enable;
+            break;
+        case PipelineBinningModeDisable:
+            pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Disable;
+            break;
+        case PipelineBinningModeDefault:
+        default:
+            pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Default;
+            break;
+        }
+
+        // Override binning setting only when the shader has MRT >= 2
+        if (pInfo->numTargets >= 2)
+        {
+            if (pDevice->GetRuntimeSettings().binningOverridePbbForMrt == BinningOverridePbbForMrtEnable)
+            {
+                pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Enable;
+            }
+            else if (pDevice->GetRuntimeSettings().binningOverridePbbForMrt == BinningOverridePbbForMrtDisable)
+            {
+                pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Disable;
+            }
+        }
     }
 
     if (libInfo.flags.isLibrary == false)
@@ -2265,14 +2341,12 @@ void GraphicsPipelineCommon::GeneratePipelineOptimizerKey(
     const Device*                          pDevice,
     const VkGraphicsPipelineCreateInfo*    pCreateInfo,
     const GraphicsPipelineExtStructs&      extStructs,
+    const GraphicsPipelineLibraryInfo&     libInfo,
     VkPipelineCreateFlags2KHR              flags,
     const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
     ShaderOptimizerKey*                    pShaderKeys,
     PipelineOptimizerKey*                  pPipelineKey)
 {
-    GraphicsPipelineLibraryInfo libInfo;
-    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, extStructs, flags, &libInfo);
-
     pPipelineKey->shaderCount = VK_ARRAY_SIZE(pShaderStageInfo->stages);
     pPipelineKey->pShaders    = pShaderKeys;
 
@@ -2940,15 +3014,13 @@ void GraphicsPipelineCommon::BuildApiHash(
     const VkGraphicsPipelineCreateInfo*     pCreateInfo,
     VkPipelineCreateFlags2KHR               flags,
     const GraphicsPipelineExtStructs&       extStructs,
+    const GraphicsPipelineLibraryInfo&      libInfo,
     const GraphicsPipelineBinaryCreateInfo& binaryCreateInfo,
     uint64_t*                               pApiHash,
     Util::MetroHash::Hash*                  pElfHash)
 {
     Util::MetroHash128 elfHasher;
     Util::MetroHash128 apiHasher;
-
-    GraphicsPipelineLibraryInfo libInfo;
-    GraphicsPipelineCommon::ExtractLibraryInfo(pCreateInfo, extStructs, flags, &libInfo);
 
     uint64_t dynamicStateFlags = GetDynamicStateFlags(pCreateInfo->pDynamicState, &libInfo);
     elfHasher.Update(dynamicStateFlags);
