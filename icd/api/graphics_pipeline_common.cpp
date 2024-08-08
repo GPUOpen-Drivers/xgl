@@ -782,8 +782,8 @@ void GraphicsPipelineCommon::ExtractLibraryInfo(
         }
 
         if ((pLibInfo->flags.isLibrary == false) &&
-            (pLibInfo->pPreRasterizationShaderLib != nullptr) ||
-            (pLibInfo->pFragmentShaderLib != nullptr))
+            ((pLibInfo->pPreRasterizationShaderLib != nullptr) ||
+             (pLibInfo->pFragmentShaderLib != nullptr)))
         {
             uint64_t preRasterHash = 0;
             uint64_t fragmentHash = 0;
@@ -869,18 +869,11 @@ VkResult GraphicsPipelineCommon::Create(
 {
     VkResult result;
 
+    UpdatePipelineCreateFlags(pDevice, &flags);
+
     GraphicsPipelineExtStructs extStructs = {};
 
     HandleExtensionStructs(pCreateInfo, &extStructs);
-
-    if (pDevice->GetRuntimeSettings().pipelineLinkOptimizationMode == PipelineLinkOptimizationNeverOptimized)
-    {
-        flags &= ~VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT;
-    }
-    else if (pDevice->GetRuntimeSettings().pipelineLinkOptimizationMode == PipelineLinkOptimizationAlwaysOptimized)
-    {
-        flags |= VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT;
-    }
 
     if ((flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) != 0)
     {
@@ -897,6 +890,77 @@ VkResult GraphicsPipelineCommon::Create(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+VkResult GraphicsPipelineCommon::CreateCacheId(
+    const Device*                           pDevice,
+    const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+    const GraphicsPipelineExtStructs&       extStructs,
+    const GraphicsPipelineLibraryInfo&      libInfo,
+    VkPipelineCreateFlags2KHR               flags,
+    GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
+    GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
+    ShaderOptimizerKey*                     pShaderOptimizerKeys,
+    PipelineOptimizerKey*                   pPipelineOptimizerKey,
+    uint64_t*                               pApiPsoHash,
+    ShaderModuleHandle*                     pTempModules,
+    Util::MetroHash::Hash*                  pCacheIds)
+{
+    VkResult result;
+
+    UpdatePipelineCreateFlags(pDevice, &flags);
+
+    if ((flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) != 0)
+    {
+        result = GraphicsPipelineLibrary::CreateApiPsoHashAndElfHash(
+            pDevice,
+            pCreateInfo,
+            extStructs,
+            libInfo,
+            flags,
+            pShaderStageInfo,
+            pBinaryCreateInfo,
+            pShaderOptimizerKeys,
+            pPipelineOptimizerKey,
+            pApiPsoHash,
+            pTempModules,
+            pCacheIds);
+    }
+    else
+    {
+        result = GraphicsPipeline::CreateCacheId(
+            pDevice,
+            pCreateInfo,
+            extStructs,
+            libInfo,
+            flags,
+            pShaderStageInfo,
+            pBinaryCreateInfo,
+            pShaderOptimizerKeys,
+            pPipelineOptimizerKey,
+            pApiPsoHash,
+            pTempModules,
+            pCacheIds);
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+void GraphicsPipelineCommon::UpdatePipelineCreateFlags(
+    const Device*                           pDevice,
+    VkPipelineCreateFlags2KHR*              pFlags)
+{
+
+    if (pDevice->GetRuntimeSettings().pipelineLinkOptimizationMode == PipelineLinkOptimizationNeverOptimized)
+    {
+        *pFlags &= ~VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT;
+    }
+    else if (pDevice->GetRuntimeSettings().pipelineLinkOptimizationMode == PipelineLinkOptimizationAlwaysOptimized)
+    {
+        *pFlags |= VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT;
+    }
 }
 
 // =====================================================================================================================
@@ -1024,6 +1088,8 @@ static void CopyFragmentOutputInterfaceState(
     pInfo->immedInfo.msaaCreateInfo.occlusionQuerySamples   = libInfo.immedInfo.msaaCreateInfo.occlusionQuerySamples;
     pInfo->immedInfo.msaaCreateInfo.flags.enable1xMsaaSampleLocations =
         libInfo.immedInfo.msaaCreateInfo.flags.enable1xMsaaSampleLocations;
+    pInfo->immedInfo.msaaCreateInfo.flags.forceSampleRateShading      =
+        libInfo.immedInfo.msaaCreateInfo.flags.forceSampleRateShading;
 
     pInfo->immedInfo.samplePattern    = libInfo.immedInfo.samplePattern;
     pInfo->immedInfo.minSampleShading = libInfo.immedInfo.minSampleShading;
@@ -1385,6 +1451,7 @@ static void BuildVrsRateParams(
 
 // =====================================================================================================================
 static void BuildMultisampleState(
+    const Device*                               pDevice,
     const VkPipelineMultisampleStateCreateInfo* pMs,
     const RenderPass*                           pRenderPass,
     const uint32_t                              subpass,
@@ -1433,14 +1500,17 @@ static void BuildMultisampleState(
 
         if (pMs->sampleShadingEnable && (pMs->minSampleShading > 0.0f))
         {
-            pInfo->immedInfo.msaaCreateInfo.pixelShaderSamples =
-                Pow2Pad(static_cast<uint32_t>(ceil(subpassColorSampleCount * pMs->minSampleShading)));
-            pInfo->immedInfo.minSampleShading = pMs->minSampleShading;
+            const uint32_t pixelShaderSamples =
+                static_cast<uint32_t>(ceil(subpassColorSampleCount * pMs->minSampleShading));
+            pInfo->immedInfo.msaaCreateInfo.pixelShaderSamples           = Pow2Pad(pixelShaderSamples);
+            pInfo->immedInfo.msaaCreateInfo.flags.forceSampleRateShading = (pixelShaderSamples > 1) ? 1 : 0;
+            pInfo->immedInfo.minSampleShading                            = pMs->minSampleShading;
         }
         else
         {
-            pInfo->immedInfo.msaaCreateInfo.pixelShaderSamples = 1;
-            pInfo->immedInfo.minSampleShading = 0.0f;
+            pInfo->immedInfo.msaaCreateInfo.pixelShaderSamples           = 1;
+            pInfo->immedInfo.msaaCreateInfo.flags.forceSampleRateShading = 0;
+            pInfo->immedInfo.minSampleShading                            = 0.0f;
         }
 
         pInfo->immedInfo.msaaCreateInfo.depthStencilSamples = subpassDepthSampleCount;
@@ -1993,7 +2063,7 @@ static void BuildFragmentOutputInterfaceState(
     const uint32_t    subpass          = pIn->subpass;
 
     // Build states via VkPipelineMultisampleStateCreateInfo
-    BuildMultisampleState(pIn->pMultisampleState, pRenderPass, subpass, dynamicStateFlags, pInfo);
+    BuildMultisampleState(pDevice, pIn->pMultisampleState, pRenderPass, subpass, dynamicStateFlags, pInfo);
 
     auto pPipelineRenderingCreateInfoKHR = extStructs.pPipelineRenderingCreateInfo;
 

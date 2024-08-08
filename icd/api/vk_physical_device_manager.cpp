@@ -424,9 +424,7 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
         {
             PhysicalDevice* pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(deviceList[currentDeviceIndex]);
 
-            Pal::DeviceProperties info;
-
-            pPhysicalDevice->PalDevice()->GetProperties(&info);
+            const Pal::DeviceProperties& info = pPhysicalDevice->PalProperties();
 
             PerfIndex perf;
 

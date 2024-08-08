@@ -22,34 +22,44 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+#if VKI_RAY_TRACING
+#ifndef __SPLIT_RAYTRACING_LAYER_H__
+#define __SPLIT_RAYTRACING_LAYER_H__
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
+#pragma once
 
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
+#include "opt_layer.h"
+#include "vk_cmdbuffer.h"
 
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
+namespace vk
+{
+// =====================================================================================================================
+// Class for the Split Raytracing Layer to simplify calls to the overriden dispatch table from the layer's entrypoints
+class SplitRaytracingLayer final : public OptLayer
+{
+public:
+    SplitRaytracingLayer(Device*);
+    virtual ~SplitRaytracingLayer() {}
 
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
+    virtual void OverrideDispatchTable(DispatchTable* pDispatchTable) override;
 
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   316
+    static VkResult CreateLayer(Device* pDevice, SplitRaytracingLayer** ppLayer);
+    void DestroyLayer();
 
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
+    Instance* VkInstance() { return m_pInstance; }
+    static void TraceRaysDispatchPerDevice(
+        CmdBuffer*  pCmdBuffer,
+        uint32_t    deviceIdx,
+        uint32_t    width,
+        uint32_t    height,
+        uint32_t    depth);
 
-// These values specify the driver ID and driver info string
-#define VULKAN_DRIVER_ID            VK_DRIVER_ID_AMD_OPEN_SOURCE_KHR  // "AMDOPEN"
-#define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
-#define VULKAN_DRIVER_INFO_STR      "2024.Q3.1"
-#define VULKAN_DRIVER_INFO_STR_LLPC "(LLPC)"
+private:
+    Instance*      m_pInstance;
+    PAL_DISALLOW_COPY_AND_ASSIGN(SplitRaytracingLayer);
+};
 
-// These values tell which version of the conformance test the driver is compliant against
-#define CTS_VERSION_MAJOR           1
-#define CTS_VERSION_MINOR           3
-#define CTS_VERSION_SUBMINOR        5
-#define CTS_VERSION_PATCH           2
+}; // namespace vk
+
+#endif /* __SPLIT_RAYTRACING_LAYER_H__ */
+#endif /* VKI_RAY_TRACING */

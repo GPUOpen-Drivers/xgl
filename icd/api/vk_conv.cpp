@@ -954,8 +954,8 @@ const char* VkResultName(
         errName = "VK_ERROR_PIPELINE_COMPILE_REQUIRED_EXT";
         break;
 
-    case VkResult::VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT:
-        errName = "VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT";
+    case VkResult::VK_INCOMPATIBLE_SHADER_BINARY_EXT:
+        errName = "VK_INCOMPATIBLE_SHADER_BINARY_EXT";
         break;
 
     default:
@@ -1258,47 +1258,47 @@ VkResult InitializeUberFetchShaderFormatTable(
     INIT_UBER_FORMATINFO(R32_UINT,
         PalFmt_R(32, Uint),                       PalFmt_R(32, Uint),                       1, 0, 1, 4, 4);
     INIT_UBER_FORMATINFO(R32G32_SFLOAT,
-        PalFmt_RG(32, 32, Float),                 PalFmt_RG(32, 32, Float),                 1, 0, 2, 4, 4);
+        PalFmt_RG(32, 32, Float),                 PalFmt_R(32, Float),                      1, 0, 2, 4, 4);
     INIT_UBER_FORMATINFO(R32G32_SINT,
-        PalFmt_RG(32, 32, Sint),                  PalFmt_RG(32, 32, Sint),                  1, 0, 2, 4, 4);
+        PalFmt_RG(32, 32, Sint),                  PalFmt_R(32, Sint),                       1, 0, 2, 4, 4);
     INIT_UBER_FORMATINFO(R32G32_UINT,
-        PalFmt_RG(32, 32, Uint),                  PalFmt_RG(32, 32, Uint),                  1, 0, 2, 4, 4);
+        PalFmt_RG(32, 32, Uint),                  PalFmt_R(32, Uint),                       1, 0, 2, 4, 4);
     INIT_UBER_FORMATINFO(R32G32B32_SFLOAT,
-        PalFmt_RGB(32, 32, 32, Float),            PalFmt_RGB(32, 32, 32, Float),            1, 0, 3, 4, 4);
+        PalFmt_RGB(32, 32, 32, Float),            PalFmt_R(32, Float),                      1, 0, 3, 4, 4);
     INIT_UBER_FORMATINFO(R32G32B32_SINT,
-        PalFmt_RGB(32, 32, 32, Sint),             PalFmt_RGB(32, 32, 32, Sint),             1, 0, 3, 4, 4);
+        PalFmt_RGB(32, 32, 32, Sint),             PalFmt_R(32, Sint),                       1, 0, 3, 4, 4);
     INIT_UBER_FORMATINFO(R32G32B32_UINT,
-        PalFmt_RGB(32, 32, 32, Uint),             PalFmt_RGB(32, 32, 32, Uint),             1, 0, 3, 4, 4);
+        PalFmt_RGB(32, 32, 32, Uint),             PalFmt_R(32, Uint),                       1, 0, 3, 4, 4);
     INIT_UBER_FORMATINFO(R32G32B32A32_SFLOAT,
-        PalFmt_RGBA(32, 32, 32, 32, Float),       PalFmt_RGBA(32, 32, 32, 32, Float),       1, 0, 4, 4, 4);
+        PalFmt_RGBA(32, 32, 32, 32, Float),       PalFmt_R(32, Float),                      1, 0, 4, 4, 4);
     INIT_UBER_FORMATINFO(R32G32B32A32_SINT,
-        PalFmt_RGBA(32, 32, 32, 32, Sint),        PalFmt_RGBA(32, 32, 32, 32, Sint),        1, 0, 4, 4, 4);
+        PalFmt_RGBA(32, 32, 32, 32, Sint),        PalFmt_R(32, Sint),                       1, 0, 4, 4, 4);
     INIT_UBER_FORMATINFO(R32G32B32A32_UINT,
-        PalFmt_RGBA(32, 32, 32, 32, Uint),        PalFmt_RGBA(32, 32, 32, 32, Uint),        1, 0, 4, 4, 4);
+        PalFmt_RGBA(32, 32, 32, 32, Uint),        PalFmt_R(32, Uint),                       1, 0, 4, 4, 4);
     INIT_UBER_FORMATINFO(R64_SFLOAT,
-        PalFmt_RG(32, 32, Uint),                  PalFmt_RG(32, 32, Uint),                  0, 0, 1, 8, 4);
+        PalFmt_RG(32, 32, Uint),                  PalFmt_R(32, Uint),                       0, 0, 1, 8, 4);
     INIT_UBER_FORMATINFO(R64_SINT,
-        PalFmt_RG(32, 32, Uint),                  PalFmt_RG(32, 32, Uint),                  0, 0, 1, 8, 4);
+        PalFmt_RG(32, 32, Uint),                  PalFmt_R(32, Uint),                       0, 0, 1, 8, 4);
     INIT_UBER_FORMATINFO(R64_UINT,
-        PalFmt_RG(32, 32, Uint),                  PalFmt_RG(32, 32, Uint),                  0, 0, 1, 8, 4);
+        PalFmt_RG(32, 32, Uint),                  PalFmt_R(32, Uint),                       0, 0, 1, 8, 4);
     INIT_UBER_FORMATINFO(R64G64_SFLOAT,
-        PalFmt_RG(32, 32, Uint),                  PalFmt_RG(32, 32, Uint),                  0, 0, 2, 8, 4);
+        PalFmt_RG(32, 32, Uint),                  PalFmt_R(32, Uint),                       0, 0, 2, 8, 4);
     INIT_UBER_FORMATINFO(R64G64_SINT,
-        PalFmt_RG(32, 32, Uint),                  PalFmt_RG(32, 32, Uint),                  0, 0, 2, 8, 4);
+        PalFmt_RG(32, 32, Uint),                  PalFmt_R(32, Uint),                       0, 0, 2, 8, 4);
     INIT_UBER_FORMATINFO(R64G64_UINT,
-        PalFmt_RG(32, 32, Uint),                  PalFmt_RG(32, 32, Uint),                  0, 0, 2, 8, 4);
+        PalFmt_RG(32, 32, Uint),                  PalFmt_R(32, Uint),                       0, 0, 2, 8, 4);
     INIT_UBER_FORMATINFO(R64G64B64_SFLOAT,
-        PalFmt_RG(32, 32, Uint),                  PalFmt_RG(32, 32, Uint),                  0, 0, 3, 8, 4);
+        PalFmt_RG(32, 32, Uint),                  PalFmt_R(32, Uint),                       0, 0, 3, 8, 4);
     INIT_UBER_FORMATINFO(R64G64B64_SINT,
-        PalFmt_RG(32, 32, Uint),                  PalFmt_RG(32, 32, Uint),                  0, 0, 3, 8, 4);
+        PalFmt_RG(32, 32, Uint),                  PalFmt_R(32, Uint),                       0, 0, 3, 8, 4);
     INIT_UBER_FORMATINFO(R64G64B64_UINT,
-        PalFmt_RG(32, 32, Uint),                  PalFmt_RG(32, 32, Uint),                  0, 0, 3, 8, 4);
+        PalFmt_RG(32, 32, Uint),                  PalFmt_R(32, Uint),                       0, 0, 3, 8, 4);
     INIT_UBER_FORMATINFO(R64G64B64A64_SFLOAT,
-        PalFmt_RG(32, 32, Uint),                  PalFmt_RG(32, 32, Uint),                  0, 0, 4, 8, 4);
+        PalFmt_RG(32, 32, Uint),                  PalFmt_R(32, Uint),                       0, 0, 4, 8, 4);
     INIT_UBER_FORMATINFO(R64G64B64A64_SINT,
-        PalFmt_RG(32, 32, Uint),                  PalFmt_RG(32, 32, Uint),                  0, 0, 4, 8, 4);
+        PalFmt_RG(32, 32, Uint),                  PalFmt_R(32, Uint),                       0, 0, 4, 8, 4);
     INIT_UBER_FORMATINFO(R64G64B64A64_UINT,
-        PalFmt_RG(32, 32, Uint),                  PalFmt_RG(32, 32, Uint),                  0, 0, 4, 8, 4);
+        PalFmt_RG(32, 32, Uint),                  PalFmt_R(32, Uint),                       0, 0, 4, 8, 4);
     INIT_UBER_FORMATINFO(R8_SINT,
         PalFmt_R(8, Sint),                        PalFmt_R(8, Sint),                        1, 0, 1, 1, 1);
     INIT_UBER_FORMATINFO(R8_SNORM,

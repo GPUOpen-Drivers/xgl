@@ -46,6 +46,7 @@
 
 #include "palList.h"
 #include "palHashMap.h"
+#include "palVector.h"
 
 namespace vk
 {
@@ -65,6 +66,15 @@ struct SqttBindTargetParams
     const ImageView*             pDepthStencil;
     const Pal::BindTargetParams* pBindParams;
 };
+
+struct DevUserMarkerString
+{
+    uint32_t length;
+    char     string[128];
+};
+
+using DevUserMarkerOpHistory = Util::Vector<uint32_t, 16, PalAllocator>;
+using DevStringTable = Util::Vector<DevUserMarkerString, 16, PalAllocator>;
 
 // =====================================================================================================================
 // This is an auxiliary structure that tracks whatever queue-level state is necessary to handle SQTT marker
@@ -180,6 +190,10 @@ public:
     void AddDebugTag(uint64_t tag);
     bool HasDebugTag(uint64_t tag) const;
 
+    uint64_t GetUserMarkerContextValue() const;
+    const DevUserMarkerOpHistory& GetUserMarkerOpHistory() const;
+    const DevStringTable& GetUserMarkerStrings() const;
+
 private:
     RgpSqttMarkerEvent BuildEventMarker(RgpSqttMarkerEventType apiType);
     void WriteCbStartMarker() const;
@@ -240,6 +254,9 @@ private:
     } m_currentBarrier;
 
     Util::List<uint64_t, PalAllocator> m_debugTags;
+
+    DevUserMarkerOpHistory m_userMarkerOpHistory;    // User marker operation history
+    DevStringTable         m_userMarkerStrings;      // User marker strings informatio
 };
 
 void SqttOverrideDispatchTable(DispatchTable* pDispatchTable, SqttMgr* pMgr);

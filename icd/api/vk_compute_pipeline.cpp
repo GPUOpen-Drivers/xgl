@@ -751,19 +751,4 @@ void ComputePipeline::BindToCmdBuffer(
     }
 }
 
-// =====================================================================================================================
-void ComputePipeline::BindNullPipeline(CmdBuffer* pCmdBuffer)
-{
-    const uint32_t numGroupedCmdBuffers = pCmdBuffer->VkDevice()->NumPalDevices();
-
-    Pal::PipelineBindParams params = {};
-    params.pipelineBindPoint       = Pal::PipelineBindPoint::Compute;
-    params.apiPsoHash = Pal::InternalApiPsoHash;
-
-    for (uint32_t deviceIdx = 0; deviceIdx < numGroupedCmdBuffers; deviceIdx++)
-    {
-        pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdBindPipeline(params);
-    }
-}
-
 } // namespace vk

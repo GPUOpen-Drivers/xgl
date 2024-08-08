@@ -76,7 +76,6 @@ struct GraphicsPipelineObjectImmedInfo
     Pal::MsaaStateCreateInfo              msaaCreateInfo;
     Pal::ColorBlendStateCreateInfo        blendCreateInfo;
     bool                                  rasterizerDiscardEnable;
-    bool                                  checkDeferCompilePipeline;
     float                                 minSampleShading;
     uint32_t                              colorWriteEnable;
     uint32_t                              colorWriteMask;
@@ -218,6 +217,20 @@ public:
         const VkAllocationCallbacks*        pAllocator,
         VkPipeline*                         pPipeline);
 
+    static VkResult CreateCacheId(
+        const Device*                           pDevice,
+        const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+        const GraphicsPipelineExtStructs&       extStructs,
+        const GraphicsPipelineLibraryInfo&      libInfo,
+        VkPipelineCreateFlags2KHR               flags,
+        GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
+        GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
+        ShaderOptimizerKey*                     pShaderOptimizerKeys,
+        PipelineOptimizerKey*                   pPipelineOptimizerKey,
+        uint64_t*                               pApiPsoHash,
+        ShaderModuleHandle*                     pTempModules,
+        Util::MetroHash::Hash*                  pCacheIds);
+
     // Get the active shader stages through API info
     static VkShaderStageFlagBits GetActiveShaderStages(
         const VkGraphicsPipelineCreateInfo* pGraphicsPipelineCreateInfo,
@@ -265,6 +278,11 @@ public:
         VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT |
         VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT           |
         VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
+
+    // Extracts extension structs from VkGraphicsPipelineCreateInfo
+    static void HandleExtensionStructs(
+        const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        GraphicsPipelineExtStructs*         pExtStructs);
 
 protected:
     // Convert API information into internal create info used to create internal pipeline object
@@ -335,10 +353,10 @@ protected:
         const GraphicsPipelineLibraryInfo*  pLibInfo,
         uint64_t                            dynamicStateFlags);
 
-    // Extracts extension structs from VkGraphicsPipelineCreateInfo
-    static void HandleExtensionStructs(
-        const VkGraphicsPipelineCreateInfo* pCreateInfo,
-        GraphicsPipelineExtStructs*         pExtStructs);
+    // Updates pipeline create flags prior to pipeline creation
+    static void UpdatePipelineCreateFlags(
+        const Device*                           pDevice,
+        VkPipelineCreateFlags2KHR*              pFlags);
 
     // Constructor of GraphicsPipelineCommon
     GraphicsPipelineCommon(

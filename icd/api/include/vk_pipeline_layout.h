@@ -87,9 +87,6 @@ struct UserDataLayout
             // The number of user data register used is always 2
             uint32_t uberFetchConstBufRegBase;
 
-            // Base user data register indices to use for buffers storing specialization constants
-            uint32_t specConstBufVertexRegBase;
-            uint32_t specConstBufFragmentRegBase;
             // Base use data register for debug printf
             uint32_t debugPrintfRegBase;
 
@@ -336,6 +333,7 @@ protected:
 
 #if VKI_RAY_TRACING
     static bool HasRayTracing(
+        const Device*                     pDevice,
         const VkPipelineLayoutCreateInfo* pIn);
 #endif
 

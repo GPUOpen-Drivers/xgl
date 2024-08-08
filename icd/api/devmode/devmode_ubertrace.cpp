@@ -48,6 +48,8 @@
 #include "pal.h"
 #include "palCodeObjectTraceSource.h"
 #include "palQueueTimingsTraceSource.h"
+#include "palStringTableTraceSource.h"
+#include "palUserMarkerHistoryTraceSource.h"
 
 // gpuopen headers
 #include "devDriverServer.h"
@@ -75,7 +77,10 @@ DevModeUberTrace::DevModeUberTrace(
     m_globalFrameIndex(1), // Must start from 1 according to RGP spec
     m_pTraceSession(pInstance->PalPlatform()->GetTraceSession()),
     m_pCodeObjectTraceSource(nullptr),
-    m_pQueueTimingsTraceSource(nullptr)
+    m_pQueueTimingsTraceSource(nullptr),
+    m_pStringTableTraceSource(nullptr),
+    m_pUserMarkerHistoryTraceSource(nullptr),
+    m_stringTableId(0)
 {
 }
 
@@ -510,66 +515,118 @@ bool DevModeUberTrace::IsQueueTimingActive(
 }
 
 // =====================================================================================================================
+bool DevModeUberTrace::IsTraceRunning() const
+{
+    return m_pTraceSession->GetTraceSessionState() == GpuUtil::TraceSessionState::Running;
+}
+
+// =====================================================================================================================
 Pal::Result DevModeUberTrace::InitUberTraceResources(
     Pal::IDevice* pPalDevice)
 {
     Pal::Result result = Pal::Result::ErrorOutOfMemory;
 
-    void* pStorage = m_pInstance->AllocMem(sizeof(GpuUtil::CodeObjectTraceSource), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+    const size_t traceSourcesAllocSize = sizeof(GpuUtil::CodeObjectTraceSource) +
+                                         sizeof(GpuUtil::QueueTimingsTraceSource) +
+                                         sizeof(GpuUtil::StringTableTraceSource) +
+                                         sizeof(GpuUtil::UserMarkerHistoryTraceSource);
+
+    void* pStorage = m_pInstance->AllocMem(traceSourcesAllocSize, VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
 
     if (pStorage != nullptr)
     {
-        m_pCodeObjectTraceSource = VK_PLACEMENT_NEW(pStorage)
+        void* pObjStorage = pStorage;
+
+        m_pCodeObjectTraceSource = VK_PLACEMENT_NEW(pObjStorage)
                                    GpuUtil::CodeObjectTraceSource(m_pInstance->PalPlatform());
 
+        pObjStorage = VoidPtrInc(pObjStorage, sizeof(GpuUtil::CodeObjectTraceSource));
+
+        m_pQueueTimingsTraceSource = VK_PLACEMENT_NEW(pObjStorage)
+                                     GpuUtil::QueueTimingsTraceSource(m_pInstance->PalPlatform());
+
+        pObjStorage = VoidPtrInc(pObjStorage, sizeof(GpuUtil::QueueTimingsTraceSource));
+
+        m_pStringTableTraceSource = VK_PLACEMENT_NEW(pObjStorage)
+                                    GpuUtil::StringTableTraceSource(m_pInstance->PalPlatform());
+
+        pObjStorage = VoidPtrInc(pObjStorage, sizeof(GpuUtil::StringTableTraceSource));
+
+        m_pUserMarkerHistoryTraceSource = VK_PLACEMENT_NEW(pObjStorage)
+                                          GpuUtil::UserMarkerHistoryTraceSource(m_pInstance->PalPlatform());
+
         result = m_pTraceSession->RegisterSource(m_pCodeObjectTraceSource);
-    }
 
-    if (result == Pal::Result::Success)
-    {
-        pStorage = m_pInstance->AllocMem(sizeof(GpuUtil::QueueTimingsTraceSource), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-
-        if (pStorage != nullptr)
+        if (result == Pal::Result::Success)
         {
-            m_pQueueTimingsTraceSource = VK_PLACEMENT_NEW(pStorage)
-                                         GpuUtil::QueueTimingsTraceSource(m_pInstance->PalPlatform());
-
+            result = m_pQueueTimingsTraceSource->Init(pPalDevice);
+        }
+        if (result == Pal::Result::Success)
+        {
             result = m_pTraceSession->RegisterSource(m_pQueueTimingsTraceSource);
         }
-        else
+        if (result == Pal::Result::Success)
         {
-            result = Pal::Result::ErrorOutOfMemory;
+            result = m_pTraceSession->RegisterSource(m_pStringTableTraceSource);
+        }
+        if (result == Pal::Result::Success)
+        {
+            result = m_pTraceSession->RegisterSource(m_pUserMarkerHistoryTraceSource);
+        }
+
+        if (result != Pal::Result::Success)
+        {
+            DestroyUberTraceResources();
         }
     }
 
-    if (result == Pal::Result::Success)
-    {
-        result = m_pQueueTimingsTraceSource->Init(pPalDevice);
-    }
-
-    if (result != Pal::Result::Success)
-    {
-        DestroyUberTraceResources();
-    }
     return result;
 }
 
 // =====================================================================================================================
 void DevModeUberTrace::DestroyUberTraceResources()
 {
-    if (m_pCodeObjectTraceSource != nullptr)
+    if (m_pUserMarkerHistoryTraceSource != nullptr)
     {
-        m_pTraceSession->UnregisterSource(m_pCodeObjectTraceSource);
-        m_pInstance->FreeMem(m_pCodeObjectTraceSource);
-        m_pCodeObjectTraceSource = nullptr;
+        m_pTraceSession->UnregisterSource(m_pUserMarkerHistoryTraceSource);
+        m_pUserMarkerHistoryTraceSource = nullptr;
     }
-
+    if (m_pStringTableTraceSource != nullptr)
+    {
+        m_pTraceSession->UnregisterSource(m_pStringTableTraceSource);
+        m_pStringTableTraceSource = nullptr;
+    }
     if (m_pQueueTimingsTraceSource != nullptr)
     {
         m_pTraceSession->UnregisterSource(m_pQueueTimingsTraceSource);
-        m_pInstance->FreeMem(m_pQueueTimingsTraceSource);
         m_pQueueTimingsTraceSource = nullptr;
     }
+    if (m_pCodeObjectTraceSource != nullptr)
+    {
+        m_pTraceSession->UnregisterSource(m_pCodeObjectTraceSource);
+        m_pCodeObjectTraceSource = nullptr;
+    }
+
+    // The 4 trace sources are allocated  in a single memory allocation
+    m_pInstance->FreeMem(m_pCodeObjectTraceSource);
+}
+
+// =====================================================================================================================
+void DevModeUberTrace::ProcessMarkerTable(
+    uint32        sqttCbId,
+    uint32        numOps,
+    const uint32* pUserMarkerOpHistory,
+    uint32        numMarkerStrings,
+    const uint32* pMarkerStringOffsets,
+    uint32        markerStringDataSize,
+    const char*   pMarkerStringData)
+{
+    uint32_t tableId = ++m_stringTableId;
+
+    m_pStringTableTraceSource->AddStringTable(tableId,
+                                              numMarkerStrings, pMarkerStringOffsets,
+                                              pMarkerStringData, markerStringDataSize);
+    m_pUserMarkerHistoryTraceSource->AddUserMarkerHistory(sqttCbId, tableId, numOps, pUserMarkerOpHistory);
 }
 
 } // namespace vk

@@ -66,3 +66,4 @@ macro(xgl_append_gcov_coverage_flags)
         message(FATAL_ERROR "Unknown compiler ID: ${CMAKE_CXX_COMPILER_ID}")
     endif()
 endmacro()
+

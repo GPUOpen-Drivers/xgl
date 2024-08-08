@@ -159,7 +159,7 @@ public:
         VkPipeline*                             pPipeline);
 
     static VkResult CreateCacheId(
-        Device*                                 pDevice,
+        const Device*                           pDevice,
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,
         const GraphicsPipelineExtStructs&       extStructs,
         const GraphicsPipelineLibraryInfo&      libInfo,
@@ -192,7 +192,7 @@ public:
         { return m_pPalColorBlend[deviceIdx]; }
 
     const Pal::IPipeline* GetPalPipeline(uint32_t deviceIdx) const
-        { return  UseOptimizedPipeline() ? m_pOptimizedPipeline[deviceIdx] : m_pPalPipeline[deviceIdx]; }
+        { return m_pPalPipeline[deviceIdx]; }
 
     const Pal::IShaderLibrary* GetPalShaderLibrary(GraphicsLibraryType type) const
         { return m_pPalShaderLibrary[type]; }
@@ -214,8 +214,6 @@ public:
 
     bool IsPointSizeUsed() const
         { return m_flags.isPointSizeUsed; }
-
-    static void BindNullPipeline(CmdBuffer* pCmdBuffer);
 
     // Returns value of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
     // defined by flags member of VkGraphicsPipelineCreateInfo.
@@ -285,15 +283,6 @@ protected:
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(GraphicsPipeline);
 
-    VkResult DeferCreateOptimizedPipeline(
-        Device*                           pDevice,
-        PipelineCache*                    pPipelineCache,
-        GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
-        GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
-        GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
-        const GraphicsPipelineExtStructs& extStructs,
-        Util::MetroHash::Hash*            pCacheIds);
-
     static VkResult CreatePalPipelineObjects(
         Device*                           pDevice,
         PipelineCache*                    pPipelineCache,
@@ -303,29 +292,6 @@ private:
         void*                             pSystemMem,
         Pal::IPipeline**                  pPalPipeline);
 
-    void SetOptimizedPipeline(Pal::IPipeline** pPalPipeline);
-
-    bool UseOptimizedPipeline() const
-    {
-        bool result = m_info.checkDeferCompilePipeline;
-        if (result)
-        {
-            Util::MutexAuto pipelineSwitchLock(const_cast<Util::Mutex*>(&m_pipelineSwitchLock));
-            result = m_pOptimizedPipeline[0] != nullptr && m_optimizedPipelineHash != 0;
-        }
-        return result;
-    }
-    VkResult BuildDeferCompileWorkload(
-        Device*                           pDevice,
-        PipelineCache*                    pPipelineCache,
-        GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo,
-        GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
-        GraphicsPipelineObjectCreateInfo* pObjectCreateInfo,
-        const GraphicsPipelineExtStructs& extStructs,
-        Util::MetroHash::Hash*            pCacheIds);
-
-    static void ExecuteDeferCreateOptimizedPipeline(void* pPayload);
-
     GraphicsPipelineObjectImmedInfo m_info;                            // Immediate state that will go in CmdSet* functions
     Pal::IMsaaState*                m_pPalMsaa[MaxPalDevices];         // PAL MSAA state object
     Pal::IColorBlendState*          m_pPalColorBlend[MaxPalDevices];   // PAL color blend state object
@@ -334,10 +300,6 @@ private:
     const InternalMemory*           m_pInternalMem;                    // Memory object of internal buffer
     VbBindingInfo                   m_vbInfo;                          // Information about vertex buffer bindings
     PipelineInternalBufferInfo      m_internalBufferInfo;              // Information about internal buffer
-    Pal::IPipeline*                 m_pOptimizedPipeline[MaxPalDevices]; // Optimized PAL pipelines
-    uint64_t                        m_optimizedPipelineHash;           // Pipeline hash of optimized PAL pipelines
-    Util::Mutex                     m_pipelineSwitchLock;              // Lock for optimized pipeline and default pipeline
-    DeferredCompileWorkload         m_deferWorkload;                   // Workload of deferred compiled
     GraphicsPipelineObjectFlags     m_flags;
 };
 

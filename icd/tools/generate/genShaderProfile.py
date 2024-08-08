@@ -519,10 +519,11 @@ def get_game_titles(file_path):
             if "#if" in title:
                 has_build_type = True
                 directive = title.strip("#if ")
-                game_title_info[directive] = {
-                    "gameTitles": [],
-                    "buildTypes": {"andType": [directive]}
-                }
+                if directive not in game_title_info:
+                    game_title_info[directive] = {
+                        "gameTitles": [],
+                        "buildTypes": {"andType": [directive]}
+                    }
                 continue
 
             if ("#end" in title) or ("#else" in title):

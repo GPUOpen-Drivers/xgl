@@ -198,7 +198,7 @@ static bool SupportInternalModuleCache(
     const uint32_t                  compilerMask,
     const VkShaderModuleCreateFlags internalShaderFlags)
 {
-    bool supportInternalModuleCache = pDevice->GetRuntimeSettings().enableEarlyCompile;
+    bool supportInternalModuleCache = false;
 
     if (Util::TestAnyFlagSet(internalShaderFlags, VK_INTERNAL_SHADER_FLAGS_FORCE_UNCACHED_BIT))
     {
@@ -318,8 +318,7 @@ VkResult PipelineCompiler::Initialize()
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
 
     // Initialize GfxIp informations per PAL device properties
-    Pal::DeviceProperties info;
-    pPalDevice->GetProperties(&info);
+    const Pal::DeviceProperties& info = m_pPhysicalDevice->PalProperties();
 
     switch (info.gfxLevel)
     {
@@ -337,7 +336,6 @@ VkResult PipelineCompiler::Initialize()
         m_gfxIp.minor = 0;
         break;
 #endif
-
     default:
         VK_NEVER_CALLED();
         break;
@@ -353,6 +351,7 @@ VkResult PipelineCompiler::Initialize()
         ((settings.usePalPipelineCaching) ||
          (m_pPhysicalDevice->VkInstance()->GetDevModeMgr() != nullptr)))
     {
+        // This call to PipelineBinaryCache::Create must use the VkInstance allocation callbacks to avoid issues.
         m_pBinaryCache = PipelineBinaryCache::Create(
                 m_pPhysicalDevice->VkInstance()->GetAllocCallbacks(),
                 m_pPhysicalDevice->GetPlatformKey(),
@@ -394,12 +393,6 @@ VkResult PipelineCompiler::Initialize()
     if (result == VK_SUCCESS)
     {
         result = InitializeUberFetchShaderFormatTable(m_pPhysicalDevice, &m_uberFetchShaderInfoFormatMap);
-    }
-
-    if (result == VK_SUCCESS)
-    {
-        uint32_t threadCount = settings.deferCompileOptimizedPipeline ? settings.deferCompileThreadCount : 0;
-        m_deferCompileMgr.Init(threadCount, m_pPhysicalDevice->VkInstance()->Allocator());
     }
 
     return result;
@@ -698,21 +691,6 @@ VkResult PipelineCompiler::BuildShaderModule(
         pInstance->FreeMem(const_cast<void*>(finalData.pCode));
     }
     return result;
-}
-
-// =====================================================================================================================
-// Try to early compile shader if possible
-void PipelineCompiler::TryEarlyCompileShaderModule(
-    const Device*       pDevice,
-    ShaderModuleHandle* pModule)
-{
-    const uint32_t compilerMask = GetCompilerCollectionMask();
-
-    if (compilerMask & (1 << PipelineCompilerTypeLlpc))
-    {
-        m_compilerSolutionLlpc.TryEarlyCompileShaderModule(pDevice, pModule);
-    }
-
 }
 
 // =====================================================================================================================
@@ -1140,7 +1118,6 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
     if (shouldCompile && (result == VK_SUCCESS))
     {
-        pCreateInfo->pBinaryMetadata->enableEarlyCompile    = pCreateInfo->pipelineInfo.enableEarlyCompile;
         pCreateInfo->pBinaryMetadata->enableUberFetchShader = pCreateInfo->pipelineInfo.enableUberFetchShader;
 
         result = GetSolution(pCreateInfo->compilerType)->CreateGraphicsPipelineBinary(
@@ -1211,7 +1188,7 @@ VkResult PipelineCompiler::CreateGraphicsShaderBinary(
     PipelineCache*                    pPipelineCache,
     GraphicsLibraryType               gplType,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-    GplModuleState*                  pModuleState)
+    GplModuleState*                   pModuleState)
 {
     VkResult result = VK_SUCCESS;
 
@@ -1739,8 +1716,6 @@ static void CopyPipelineShadersInfo(
             libInfo.pShaderLibraries[GraphicsLibraryPreRaster];
         pCreateInfo->pBinaryMetadata->pointSizeUsed = libInfo.pBinaryMetadata->pointSizeUsed;
         pCreateInfo->pBinaryMetadata->enableUberFetchShader = libInfo.pBinaryMetadata->enableUberFetchShader;
-        pCreateInfo->pBinaryMetadata->enableEarlyCompile = libInfo.pBinaryMetadata->enableEarlyCompile;
-
     }
     else if (shaderMask == FgsShaderMask)
     {
@@ -1808,6 +1783,7 @@ static void CopyVertexInputInterfaceState(
     pCreateInfo->pipelineInfo.iaState.topology           = libInfo.pipelineInfo.iaState.topology;
     pCreateInfo->pipelineInfo.iaState.disableVertexReuse = libInfo.pipelineInfo.iaState.disableVertexReuse;
     pCreateInfo->pipelineInfo.dynamicVertexStride        = libInfo.pipelineInfo.dynamicVertexStride;
+    pCreateInfo->pipelineInfo.dynamicTopology            = libInfo.pipelineInfo.dynamicTopology;
 
     if (pCreateInfo->pipelineInfo.pVertexInput != nullptr)
     {
@@ -1847,8 +1823,7 @@ static void MergePipelineOptions(
     pDst->enableInterpModePatch                 |= src.enableInterpModePatch;
     pDst->pageMigrationEnabled                  |= src.pageMigrationEnabled;
     pDst->optimizationLevel                     |= src.optimizationLevel;
-    pDst->disableTruncCoordForGather            |= src.disableTruncCoordForGather;
-
+    pDst->glState.disableTruncCoordForGather    |= src.glState.disableTruncCoordForGather;
     pDst->shadowDescriptorTableUsage   = src.shadowDescriptorTableUsage;
     pDst->shadowDescriptorTablePtrHigh = src.shadowDescriptorTablePtrHigh;
     pDst->overrideThreadGroupSizeX     = src.overrideThreadGroupSizeX;
@@ -2071,8 +2046,9 @@ static void BuildMultisampleState(
                 gridSize = pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo.sampleLocationGridSize;
             }
 
-            if ((gridSize.width <= 1) && (gridSize.height <= 1)
-               )
+            if ((gridSize.width <= 1) &&
+                (gridSize.height <= 1) &&
+                (pDevice->GetRuntimeSettings().disablePatchInterpMode == false))
             {
                 pCreateInfo->pipelineInfo.options.enableInterpModePatch = true;
             }
@@ -2400,7 +2376,7 @@ static void BuildPipelineShadersInfo(
     }
 
     // Uber fetch shader is actually used in the following scenes:
-    // * enableUberFetchShader or enableEarlyCompile is set as TRUE in panel.
+    // * enableUberFetchShader is set as TRUE in panel.
     // * When creating pipeline, GraphicsPipelineBuildInfo::enableUberFetchShader controls the actual enablement. It is
     //   only set when Vertex Input Interface section (VII) is not available and Pre-Rasterization Shader (PRS) is
     //   available, or inherits from its PRS parent (referenced library). However, enableUberFetchShader would also be
@@ -2410,7 +2386,6 @@ static void BuildPipelineShadersInfo(
     // PS: For standard gfx pipeline, GraphicsPipelineBuildInfo::enableUberFetchShader is never set as TRUE with default
     //     panel setting because VII and PRS are always available at the same time.
     if (settings.enableUberFetchShader ||
-        settings.enableEarlyCompile ||
         (((pCreateInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) == 0) &&
          ((pCreateInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) != 0)) ||
         (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::VertexInput) == true)
@@ -2590,6 +2565,11 @@ static void BuildVertexInputInterfaceState(
     const VkShaderStageFlagBits         activeStages,
     GraphicsPipelineBinaryCreateInfo*   pCreateInfo)
 {
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::PrimitiveTopology) == true)
+    {
+        pCreateInfo->pipelineInfo.dynamicTopology = true;
+    }
+
     pCreateInfo->pipelineInfo.iaState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     if ((pIn->pInputAssemblyState) && (Util::TestAnyFlagSet(activeStages, VK_SHADER_STAGE_MESH_BIT_EXT) == false))
     {
@@ -2640,7 +2620,7 @@ static void BuildPreRasterizationShaderState(
         pDevice->GetEnabledFeatures().assumeDynamicTopologyInLibs ||
         (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::PrimitiveTopology) &&
         pDevice->GetEnabledFeatures().dynamicPrimitiveTopologyUnrestricted) ||
-        (vertexInputAbsent && pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink);
+        vertexInputAbsent;
 
     BuildRasterizationState(pIn->pRasterizationState, dynamicStateFlags, &isConservativeOverestimation, pCreateInfo);
 
@@ -2900,7 +2880,6 @@ VkResult PipelineCompiler::UploadInternalBufferData(
         if (result != VK_SUCCESS)
         {
             VK_NEVER_CALLED();
-            pCreateInfo->pipelineInfo.enableEarlyCompile = false;
             pCreateInfo->pipelineInfo.enableUberFetchShader = false;
             if (pMem != nullptr)
             {
@@ -3021,7 +3000,6 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 BuildFragmentShaderState(pDevice, pIn, libInfo, pShaderInfo, pCreateInfo, dynamicStateFlags);
                 pCreateInfo->pipelineInfo.enableColorExportShader =
                     (libInfo.flags.isLibrary &&
-                     pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink &&
                      ((pShaderInfo->stages[ShaderStageFragment].pModuleHandle != nullptr) ||
                       (pShaderInfo->stages[ShaderStageFragment].codeHash.lower != 0) ||
                       (pShaderInfo->stages[ShaderStageFragment].codeHash.upper != 0)));
@@ -3078,6 +3056,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                  (libInfo.pVertexInputInterfaceLib != nullptr)))
             {
                 pCreateInfo->pipelineInfo.enableUberFetchShader = false;
+                pCreateInfo->pBinaryMetadata->enableUberFetchShader = false;
+                pCreateInfo->pBinaryMetadata->internalBufferInfo.internalBufferCount = 0;
             }
 
             if (libInfo.flags.isLibrary)
@@ -3339,7 +3319,7 @@ void PipelineCompiler::ApplyPipelineOptions(
 
     pOptions->reverseThreadGroup = settings.enableAlternatingThreadGroupOrder;
 
-    pOptions->disableTruncCoordForGather = settings.disableTruncCoordForGather;
+    pOptions->glState.disableTruncCoordForGather = settings.disableTruncCoordForGather;
 
     pOptions->disablePerCompFetch = settings.disablePerCompFetch;
 
@@ -3696,12 +3676,11 @@ void PipelineCompiler::FreeComputePipelineCreateInfo(
 void PipelineCompiler::FreeGraphicsPipelineCreateInfo(
     Device*                           pDevice,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-    bool                              keepConvertTempMemory,
     bool                              keepInternalMem)
 {
     auto pInstance = pDevice->VkInstance();
 
-    if ((pCreateInfo->pTempBuffer != nullptr) && (keepConvertTempMemory == false))
+    if (pCreateInfo->pTempBuffer != nullptr)
     {
         pInstance->FreeMem(pCreateInfo->pTempBuffer);
         pCreateInfo->pTempBuffer = nullptr;
@@ -3822,7 +3801,11 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
 
         pCreateInfo->pipelineInfo.maxRecursionDepth = pIn->maxPipelineRayRecursionDepth;
         pCreateInfo->pipelineInfo.indirectStageMask = settings.rtIndirectStageMask;
-        static_assert(RaytracingNone == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::None));
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 74
+        static_assert(RaytracingAuto == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::None));
+#else
+        static_assert(RaytracingAuto == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Auto));
+#endif
         static_assert(RaytracingLegacy == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Legacy));
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 69
         static_assert(RaytracingContinufy == static_cast<unsigned>(Vkgc::LlpcRaytracingMode::Gpurt2));
@@ -4975,8 +4958,6 @@ void PipelineCompiler::BuildPipelineInternalBufferData(
     GraphicsPipelineBinaryCreateInfo* pCreateInfo)
 {
     uint32_t fetchShaderConstBufRegBase  = PipelineLayout::InvalidReg;
-    uint32_t specConstBufVertexRegBase   = PipelineLayout::InvalidReg;
-    uint32_t specConstBufFragmentRegBase = PipelineLayout::InvalidReg;
 
     const UserDataLayout& layout = pPipelineLayout->GetInfo().userDataLayout;
 
@@ -4984,8 +4965,6 @@ void PipelineCompiler::BuildPipelineInternalBufferData(
     {
     case PipelineLayoutScheme::Compact:
         fetchShaderConstBufRegBase  = layout.compact.uberFetchConstBufRegBase;
-        specConstBufVertexRegBase   = layout.compact.specConstBufVertexRegBase;
-        specConstBufFragmentRegBase = layout.compact.specConstBufFragmentRegBase;
         break;
     case PipelineLayoutScheme::Indirect:
         fetchShaderConstBufRegBase = layout.indirect.uberFetchConstBufRegBase;
@@ -4998,8 +4977,6 @@ void PipelineCompiler::BuildPipelineInternalBufferData(
     GetSolution(pCreateInfo->compilerType)->BuildPipelineInternalBufferData(
         this,
         fetchShaderConstBufRegBase,
-        specConstBufVertexRegBase,
-        specConstBufFragmentRegBase,
         needCache,
         pCreateInfo);
 }
@@ -5118,7 +5095,12 @@ VkResult PipelineCompiler::WriteBinaryMetadata(
         auto   pInstance       = pPhysicalDevice->Manager()->VkInstance();
 
         Util::Abi::PipelineAbiProcessor<PalAllocator> abiProcessor(pDevice->VkInstance()->Allocator());
-        palResult = abiProcessor.LoadFromBuffer(pElfBinary->pCode, pElfBinary->codeSize);
+        palResult = abiProcessor.Init();
+
+        if (palResult == Pal::Result::Success)
+        {
+            palResult = abiProcessor.LoadFromBuffer(pElfBinary->pCode, pElfBinary->codeSize);
+        }
 
         if (palResult == Pal::Result::Success)
         {
@@ -5563,14 +5545,12 @@ void PipelineCompiler::DumpPipelineMetadata(
         ";pointSizeUsed                 = %u\n"
         ";dualSrcBlendingUsed           = %u\n"
         ";shadingRateUsedInShader       = %u\n"
-        ";enableEarlyCompile            = %u\n"
         ";enableUberFetchShader         = %u\n"
         ";postDepthCoverageEnable       = %u\n"
         ";psOnlyPointCoordEnable        = %u\n",
         pBinaryMetadata->pointSizeUsed,
         pBinaryMetadata->dualSrcBlendingUsed,
         pBinaryMetadata->shadingRateUsedInShader,
-        pBinaryMetadata->enableEarlyCompile,
         pBinaryMetadata->enableUberFetchShader,
         pBinaryMetadata->postDepthCoverageEnable,
         pBinaryMetadata->psOnlyPointCoordEnable);

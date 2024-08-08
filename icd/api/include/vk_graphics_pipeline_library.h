@@ -47,6 +47,20 @@ public:
         const VkAllocationCallbacks*        pAllocator,
         VkPipeline*                         pPipeline);
 
+    static VkResult CreateApiPsoHashAndElfHash(
+        const Device*                           pDevice,
+        const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+        const GraphicsPipelineExtStructs&       extStructs,
+        const GraphicsPipelineLibraryInfo&      libInfo,
+        VkPipelineCreateFlags2KHR               flags,
+        GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
+        GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
+        ShaderOptimizerKey*                     pShaderOptimizerKeys,
+        PipelineOptimizerKey*                   pPipelineOptimizerKey,
+        uint64_t*                               pApiPsoHash,
+        ShaderModuleHandle*                     pTempModules,
+        Util::MetroHash::Hash*                  pElfHash);
+
     VkResult Destroy(
         Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator) override;
@@ -88,6 +102,7 @@ private:
         const Device*                          pDevice,
         PipelineCache*                         pPipelineCache,
         const VkGraphicsPipelineCreateInfo*    pCreateInfo,
+        const GraphicsPipelineExtStructs&      extStructs,
         const GraphicsPipelineLibraryInfo*     pLibInfo,
         const GraphicsPipelineShaderStageInfo* pShaderStageInfo,
         GraphicsPipelineBinaryCreateInfo*      pBinaryCreateInfo,

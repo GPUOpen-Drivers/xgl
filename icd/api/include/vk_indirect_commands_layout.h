@@ -71,11 +71,11 @@ struct IndirectCommandsInfo
  //
  // Indirect commands layout objects describe the information of indirect commands, as well as how to interpret and
  // process indirect buffers.
-class IndirectCommandsLayout final : public NonDispatchable<VkIndirectCommandsLayoutNV, IndirectCommandsLayout>
+class IndirectCommandsLayoutNV final : public NonDispatchable<VkIndirectCommandsLayoutNV, IndirectCommandsLayoutNV>
 {
 public:
     static VkResult Create(
-        const Device*                               pDevice,
+        Device*                                     pDevice,
         const VkIndirectCommandsLayoutCreateInfoNV* pCreateInfo,
         const VkAllocationCallbacks*                pAllocator,
         VkIndirectCommandsLayoutNV*                 pLayout);
@@ -90,7 +90,7 @@ public:
 
     const Pal::IIndirectCmdGenerator* PalIndirectCmdGenerator(uint32_t deviceIdx) const
     {
-        return m_perGpu[deviceIdx].pGenerator;
+        return m_pPalGenerator[deviceIdx];
     }
 
     IndirectCommandsInfo GetIndirectCommandsInfo() const
@@ -100,25 +100,16 @@ public:
 
 private:
 
-    PAL_DISALLOW_COPY_AND_ASSIGN(IndirectCommandsLayout);
+    PAL_DISALLOW_COPY_AND_ASSIGN(IndirectCommandsLayoutNV);
 
-    struct PerGpuInfo
-    {
-        Pal::IIndirectCmdGenerator* pGenerator;
-        Pal::IGpuMemory*            pGpuMemory;
-    };
-
-    IndirectCommandsLayout(
+    IndirectCommandsLayoutNV(
         const Device*                               pDevice,
         const IndirectCommandsInfo&                 info,
-        Pal::IIndirectCmdGenerator**                pGenerators,
-        Pal::IGpuMemory**                           pGpuMemory,
+        Pal::IIndirectCmdGenerator**                ppPalGenerator,
         const Pal::IndirectCmdGeneratorCreateInfo&  palCreateInfo);
 
-    static size_t ObjectSize(const Device*  pDevice)
-    {
-        return sizeof(IndirectCommandsLayout) + ((pDevice->NumPalDevices() - 1) * sizeof(PerGpuInfo));
-    }
+    VkResult Initialize(
+        Device*                                     pDevice);
 
     static void BuildPalCreateInfo(
         const Device*                               pDevice,
@@ -126,15 +117,10 @@ private:
         Pal::IndirectParam*                         pIndirectParams,
         Pal::IndirectCmdGeneratorCreateInfo*        pPalCreateInfo);
 
-    static VkResult BindGpuMemory(
-        const Device*                               pDevice,
-        const VkAllocationCallbacks*                pAllocator,
-        Pal::IIndirectCmdGenerator**                pGenerators,
-        Pal::IGpuMemory**                           pGpuMemory);
-
-    IndirectCommandsInfo                    m_info;
-    Pal::IndirectCmdGeneratorCreateInfo     m_palCreateInfo;
-    PerGpuInfo                              m_perGpu[1];
+    IndirectCommandsInfo                            m_info;
+    Pal::IndirectCmdGeneratorCreateInfo             m_palCreateInfo;
+    Pal::IIndirectCmdGenerator*                     m_pPalGenerator[MaxPalDevices];
+    InternalMemory                                  m_internalMem;
 };
 
 // Max usage is the situation where indirect commands layout drains push constants size plus uses indirect index & vertex

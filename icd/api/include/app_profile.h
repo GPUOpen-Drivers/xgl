@@ -77,6 +77,7 @@ enum class AppProfile : uint32_t
     DiRT4,                   // DiRT4 by Feral3D
     Rage2,                   // Rage2 by Avalanche Studios
     RainbowSixSiege,         // Tom Clancy's Rainbow Six Siege: Operation Phantom by Ubisoft
+    RainbowSixExtraction,    // Tom Clancy's Rainbow Six Extraction by Ubisoft
     WolfensteinYoungblood,   // Wolfenstein Youngblood by Machine Games
     RedDeadRedemption2,      // Red Dead Redemption 2 by Rockstar
     DoomEternal,             // Doom Eternal by id Software
@@ -106,7 +107,6 @@ enum class AppProfile : uint32_t
     XSystemEngine,           // XSystem Engine by Laminar Research
     UnityEngine,             // Unity Engine by Unity Technologies (Default)
     SaschaWillemsExamples,   // Vulkan Examples by Sascha Willems
-    Hyperscape,              // Hyperscape by Ubisoft
     SeriousSam4,             // Serious Sam 4 by Croteam
     SniperElite5,            // Sniper Elite 5 by Rebellion
     SeriousSamVrTheLastHope, // Serious Sam VR The Last Hope by Croteam
@@ -118,14 +118,13 @@ enum class AppProfile : uint32_t
     ControlDX12,             // VKD3D Control Ultimate Edition
     RayTracingWeekends,      // RayTracingInVulkan demo
 #endif
-    Maxon,                   // Maxon
-    AngleEngine,             // Angle Engine
     CSGO,                    // Counter-Strike: Global Offensive
     DxvkGodOfWar,            // DXVK God of War
     ELEX2,                   // ELEX II
     X4Foundations,           // X4: Foundations by Egosoft
     DxvkHaloInfiniteLauncher,// DXVK Halo Infinite Launcher (Don't Confuse it with VKD3D
                              // Halo Infinite Game)
+    Starfield,               // VKD3D Starfield
     DxvkTf2,                 // DXVK Team Fortress 2
     MetalGearSolid5,         // Metal Gear Solid5 : The Phantom Pain
     MetalGearSolid5Online,   // Metal Gear Solid5 : The Phantom Pain Online

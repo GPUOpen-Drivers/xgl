@@ -76,6 +76,7 @@
 #include "raytrace/ray_tracing_util.h"
 #include "raytrace/vk_ray_tracing_pipeline.h"
 #include "raytrace/vk_acceleration_structure.h"
+#include "appopt/split_raytracing_layer.h"
 #endif
 
 #include "sqtt/sqtt_layer.h"
@@ -552,7 +553,7 @@ VkResult Device::Create(
                 {
                     deviceFeatures.robustBufferAccessExtended = true;
                     {
-                        deviceFeatures.robustVertexBufferExtend = false;
+                        deviceFeatures.robustVertexBufferExtend = true;
                     }
                 }
 
@@ -1131,8 +1132,7 @@ VkResult Device::Initialize(
     }
 
     memcpy(&m_pQueues, pQueues, sizeof(m_pQueues));
-    Pal::DeviceProperties deviceProps = {};
-    result = PalToVkResult(PalDevice(DefaultDeviceIndex)->GetProperties(&deviceProps));
+    const Pal::DeviceProperties& deviceProps = pPhysicalDevice->PalProperties();
 
     if (result == VK_SUCCESS)
     {
@@ -1482,9 +1482,17 @@ void Device::InitDispatchTable()
     }
 
 #if VKI_RAY_TRACING
-    if ((RayTrace() != nullptr) && (RayTrace()->GetBvhBatchLayer() != nullptr))
+    RayTracingDevice* pRayTrace = RayTrace();
+    if (pRayTrace != nullptr)
     {
-        RayTrace()->GetBvhBatchLayer()->OverrideDispatchTable(&m_dispatchTable);
+        if (pRayTrace->GetBvhBatchLayer() != nullptr)
+        {
+            pRayTrace->GetBvhBatchLayer()->OverrideDispatchTable(&m_dispatchTable);
+        }
+        if (pRayTrace->GetSplitRaytracingLayer() != nullptr)
+        {
+            pRayTrace->GetSplitRaytracingLayer()->OverrideDispatchTable(&m_dispatchTable);
+        }
     }
 #endif
 
@@ -2152,7 +2160,6 @@ VkResult Device::CreateInternalPipelines()
 #endif
 
     if ((result == VK_SUCCESS) &&
-        GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink &&
         GetEnabledFeatures().graphicsPipelineLibrary)
     {
         static constexpr uint8_t NullFragment[] =
@@ -3207,7 +3214,14 @@ VkResult Device::ImportSemaphore(
     VkSemaphore                 semaphore,
     const ImportSemaphoreInfo&  importInfo)
 {
-    return Semaphore::ObjectFromHandle(semaphore)->ImportSemaphore(this, importInfo);
+    VkResult   result     = VK_SUCCESS;
+    Semaphore* pSemaphore = Semaphore::ObjectFromHandle(semaphore);
+
+    {
+        result = pSemaphore->ImportSemaphore(this, importInfo);
+    }
+
+    return result;
 }
 
 // =====================================================================================================================
@@ -3661,7 +3675,7 @@ VkResult Device::CreateIndirectCommandsLayout(
     const VkAllocationCallbacks*                pAllocator,
     VkIndirectCommandsLayoutNV*                 pIndirectCommandsLayout)
 {
-    return IndirectCommandsLayout::Create(this, pCreateInfo, pAllocator, pIndirectCommandsLayout);
+    return IndirectCommandsLayoutNV::Create(this, pCreateInfo, pAllocator, pIndirectCommandsLayout);
 }
 
 // =====================================================================================================================
@@ -5421,7 +5435,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetGeneratedCommandsMemoryRequirementsNV(
     VkMemoryRequirements2*                              pMemoryRequirements)
 {
     const Device* pDevice = ApiDevice::ObjectFromHandle(device);
-    const IndirectCommandsLayout* pLayout = IndirectCommandsLayout::ObjectFromHandle(pInfo->indirectCommandsLayout);
+    const IndirectCommandsLayoutNV* pLayout = IndirectCommandsLayoutNV::ObjectFromHandle(pInfo->indirectCommandsLayout);
 
     pLayout->CalculateMemoryRequirements(pDevice, pMemoryRequirements);
 }
@@ -5434,7 +5448,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateIndirectCommandsLayoutNV(
     VkIndirectCommandsLayoutNV*                         pIndirectCommandsLayout)
 {
     Device* pDevice = ApiDevice::ObjectFromHandle(device);
-    const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+    const VkAllocationCallbacks* pAllocCB = (pAllocator != nullptr) ? pAllocator :
+                                                                      pDevice->VkInstance()->GetAllocCallbacks();
 
     return pDevice->CreateIndirectCommandsLayout(pCreateInfo, pAllocCB, pIndirectCommandsLayout);
 }
@@ -5448,9 +5463,10 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyIndirectCommandsLayoutNV(
     if (indirectCommandsLayout != VK_NULL_HANDLE)
     {
         Device* pDevice = ApiDevice::ObjectFromHandle(device);
-        const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+        const VkAllocationCallbacks* pAllocCB = (pAllocator != nullptr) ? pAllocator :
+                                                                          pDevice->VkInstance()->GetAllocCallbacks();
 
-        IndirectCommandsLayout::ObjectFromHandle(indirectCommandsLayout)->Destroy(pDevice, pAllocCB);
+        IndirectCommandsLayoutNV::ObjectFromHandle(indirectCommandsLayout)->Destroy(pDevice, pAllocCB);
     }
 }
 
@@ -5466,3 +5482,6 @@ VkPipelineCreateFlags2KHR vk::Device::GetPipelineCreateFlags<VkRayTracingPipelin
 template
 VkPipelineCreateFlags2KHR vk::Device::GetPipelineCreateFlags<VkComputePipelineCreateInfo>(
     const VkComputePipelineCreateInfo* pCreateInfo);
+template
+VkPipelineCreateFlags2KHR vk::Device::GetPipelineCreateFlags<VkGraphicsPipelineCreateInfo>(
+    const VkGraphicsPipelineCreateInfo* pCreateInfo);

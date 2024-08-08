@@ -311,6 +311,7 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
     const Device*                           pDevice,
     PipelineCache*                          pPipelineCache,
     const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+    const GraphicsPipelineExtStructs&       extStructs,
     const GraphicsPipelineLibraryInfo*      pLibInfo,
     const GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
     GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
@@ -359,7 +360,11 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
             if (canBuildShader)
             {
                 result = pCompiler->CreateGraphicsShaderBinary(
-                    pDevice, pPipelineCache, gplType, pBinaryCreateInfo, &pTempModuleStages[i]);
+                    pDevice,
+                    pPipelineCache,
+                    gplType,
+                    pBinaryCreateInfo,
+                    &pTempModuleStages[i]);
                 gplMask |= (1 << gplType);
             }
 
@@ -384,7 +389,11 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 
             VK_ASSERT(pTempModuleStages[TempIdx].elfPackage.codeSize == 0);
             result = pCompiler->CreateGraphicsShaderBinary(
-                pDevice, pPipelineCache, GraphicsLibraryPreRaster, pBinaryCreateInfo, &pTempModuleStages[TempIdx]);
+                pDevice,
+                pPipelineCache,
+                GraphicsLibraryPreRaster,
+                pBinaryCreateInfo,
+                &pTempModuleStages[TempIdx]);
         }
 
         if ((pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT) &&
@@ -395,51 +404,45 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 
             VK_ASSERT(pTempModuleStages[TempIdx].elfPackage.codeSize == 0);
 
-            result = pCompiler->CreateGraphicsShaderBinary(pDevice, pPipelineCache,
-                GraphicsLibraryFragment, pBinaryCreateInfo, &pTempModuleStages[TempIdx]);
+            result = pCompiler->CreateGraphicsShaderBinary(
+                pDevice,
+                pPipelineCache,
+                GraphicsLibraryFragment,
+                pBinaryCreateInfo,
+                &pTempModuleStages[TempIdx]);
         }
     }
 
     // Create shader libraries for fast-link
-    if (pDevice->GetRuntimeSettings().useShaderLibraryForPipelineLibraryFastLink)
+    for (uint32_t stage = 0; (result == VK_SUCCESS) && (stage < ShaderStage::ShaderStageGfxCount); ++stage)
     {
-        for (uint32_t stage = 0; (result == VK_SUCCESS) && (stage < ShaderStage::ShaderStageGfxCount); ++stage)
+        GraphicsLibraryType gplType = GetGraphicsLibraryType(static_cast<ShaderStage>(stage));
+        if ((pBinaryCreateInfo->earlyElfPackage[gplType].pCode != nullptr) &&
+            (pBinaryCreateInfo->pShaderLibraries[gplType] == nullptr))
         {
-            GraphicsLibraryType gplType = GetGraphicsLibraryType(static_cast<ShaderStage>(stage));
-            if ((pBinaryCreateInfo->earlyElfPackage[gplType].pCode != nullptr) &&
-                (pBinaryCreateInfo->pShaderLibraries[gplType] == nullptr))
+            Vkgc::BinaryData  palElfBinary = {};
+
+            palElfBinary = pCompiler->GetSolution(pBinaryCreateInfo->compilerType)->
+                ExtractPalElfBinary(pBinaryCreateInfo->earlyElfPackage[gplType]);
+            if (palElfBinary.codeSize > 0)
             {
-                Vkgc::BinaryData  palElfBinary = {};
-
-                palElfBinary = pCompiler->GetSolution(pBinaryCreateInfo->compilerType)->
-                    ExtractPalElfBinary(pBinaryCreateInfo->earlyElfPackage[gplType]);
-                if (palElfBinary.codeSize > 0)
-                {
-                    result = pCompiler->CreateGraphicsShaderLibrary(pDevice,
-                                                                    palElfBinary,
-                                                                    pAllocator,
-                                                                    &pBinaryCreateInfo->pShaderLibraries[gplType]);
-                    pBinaryCreateInfo->earlyElfPackage[gplType].pCode = nullptr;
-
-                    if (pTempModuleStages[stage].elfPackage.codeSize > 0)
-                    {
-                        pDevice->VkInstance()->FreeMem(const_cast<void*>(pTempModuleStages[stage].elfPackage.pCode));
-                        pTempModuleStages[stage].elfPackage = {};
-                    }
-                }
+                result = pCompiler->CreateGraphicsShaderLibrary(pDevice,
+                                                                palElfBinary,
+                                                                pAllocator,
+                                                                &pBinaryCreateInfo->pShaderLibraries[gplType]);
             }
         }
+    }
 
-        // If there is no fragment shader when create fragment library, we use a null pal graphics library.
-        if ((pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) &&
-            (pBinaryCreateInfo->pipelineInfo.fs.pModuleData == nullptr) &&
-            (pShaderStageInfo->stages[ShaderStageFragment].codeHash.lower == 0) &&
-            (pShaderStageInfo->stages[ShaderStageFragment].codeHash.upper == 0))
-        {
-            const auto& fragmentCreateInfo = pDevice->GetNullFragmentLib()->GetPipelineBinaryCreateInfo();
-            pBinaryCreateInfo->pShaderLibraries[GraphicsLibraryFragment] =
-                fragmentCreateInfo.pShaderLibraries[GraphicsLibraryFragment];
-        }
+    // If there is no fragment shader when create fragment library, we use a null pal graphics library.
+    if ((pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) &&
+        (pBinaryCreateInfo->pipelineInfo.fs.pModuleData == nullptr) &&
+        (pShaderStageInfo->stages[ShaderStageFragment].codeHash.lower == 0) &&
+        (pShaderStageInfo->stages[ShaderStageFragment].codeHash.upper == 0))
+    {
+        const auto& fragmentCreateInfo = pDevice->GetNullFragmentLib()->GetPipelineBinaryCreateInfo();
+        pBinaryCreateInfo->pShaderLibraries[GraphicsLibraryFragment] =
+            fragmentCreateInfo.pShaderLibraries[GraphicsLibraryFragment];
     }
 
     return result;
@@ -476,22 +479,35 @@ VkResult GraphicsPipelineLibrary::Create(
         binaryCreateInfo.compilerType = PipelineCompilerTypeLlpc;
     }
 
-    // 1. Build shader stage infos
+    ShaderModuleHandle    tempModules[ShaderStage::ShaderStageGfxCount]         = {};
+    PipelineOptimizerKey  pipelineOptimizerKey                                  = {};
+    ShaderOptimizerKey    shaderOptimizerKeys[ShaderStage::ShaderStageGfxCount] = {};
+    uint64_t              apiPsoHash                                            = {};
+    Util::MetroHash::Hash elfHash                                               = {};
+
+    static_assert(VK_ARRAY_SIZE(shaderOptimizerKeys) == VK_ARRAY_SIZE(shaderStageInfo.stages),
+                  "Please ensure stage count matches between gfx profile key and shader stage info.");
+
+    // 1. Create Api PSO Hash and Elf Hash
+    result = CreateApiPsoHashAndElfHash(
+        pDevice,
+        pCreateInfo,
+        extStructs,
+        libInfo,
+        flags,
+        &shaderStageInfo,
+        &binaryCreateInfo,
+        shaderOptimizerKeys,
+        &pipelineOptimizerKey,
+        &apiPsoHash,
+        tempModules,
+        &elfHash);
+
+    // 2. Initialize tempModuleStates
     if (result == VK_SUCCESS)
     {
-        ShaderModuleHandle               tempModules[ShaderStage::ShaderStageGfxCount] = {};
-        result = BuildShaderStageInfo(pDevice,
-                                      pCreateInfo->stageCount,
-                                      pCreateInfo->pStages,
-                                      [](const uint32_t inputIdx, const uint32_t stageIdx)
-                                      {
-                                          return stageIdx;
-                                      },
-                                      shaderStageInfo.stages,
-                                      tempModules,
-                                      binaryCreateInfo.stageFeedback);
+        binaryCreateInfo.apiPsoHash = apiPsoHash;
 
-        // Initialize tempModuleStates
         for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; stage++)
         {
             if (shaderStageInfo.stages[stage].pModuleHandle != nullptr)
@@ -510,39 +526,7 @@ VkResult GraphicsPipelineLibrary::Create(
         }
     }
 
-    // 2. Build ShaderOptimizer pipeline key
-    PipelineOptimizerKey pipelineOptimizerKey = {};
-    ShaderOptimizerKey   shaderOptimizerKeys[ShaderStage::ShaderStageGfxCount] = {};
-    if (result == VK_SUCCESS)
-    {
-        static_assert(
-            VK_ARRAY_SIZE(shaderOptimizerKeys) == VK_ARRAY_SIZE(shaderStageInfo.stages),
-            "Please ensure stage count matches between gfx profile key and shader stage info.");
-
-        GeneratePipelineOptimizerKey(
-            pDevice,
-            pCreateInfo,
-            extStructs,
-            libInfo,
-            flags,
-            &shaderStageInfo,
-            shaderOptimizerKeys,
-            &pipelineOptimizerKey);
-    }
-
-    // 3. Build API and ELF hashes
-    uint64_t              apiPsoHash = {};
-    Util::MetroHash::Hash elfHash    = {};
-    BuildApiHash(pCreateInfo,
-                 flags,
-                 extStructs,
-                 libInfo,
-                 binaryCreateInfo,
-                 &apiPsoHash,
-                 &elfHash);
-    binaryCreateInfo.apiPsoHash = apiPsoHash;
-
-    // 4. Get pipeline layout
+    // 3. Get pipeline layout
     const PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
 
     if (pPipelineLayout == nullptr)
@@ -550,7 +534,7 @@ VkResult GraphicsPipelineLibrary::Create(
         pPipelineLayout = pDevice->GetNullPipelineLayout();
     }
 
-    // 5. Populate binary create info
+    // 4. Populate binary create info
     PipelineMetadata binaryMetadata = {};
     if (result == VK_SUCCESS)
     {
@@ -567,23 +551,40 @@ VkResult GraphicsPipelineLibrary::Create(
             &binaryCreateInfo);
     }
 
-    GraphicsPipelineObjectCreateInfo objectCreateInfo = {};
     if (result == VK_SUCCESS)
     {
-        // 6. Create partial pipeline binary for fast-link
+        // 5. Create partial pipeline binary for fast-link
         result = CreatePartialPipelineBinary(
             pDevice,
             pPipelineCache,
             pCreateInfo,
+            extStructs,
             &libInfo,
             &shaderStageInfo,
             &binaryCreateInfo,
             pAllocator,
             tempModuleStates);
+
+        // Clean up temporary storage
+        for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
+        {
+            GraphicsLibraryType gplType = GetGraphicsLibraryType(static_cast<ShaderStage>(stage));
+
+            binaryCreateInfo.earlyElfPackage[gplType].pCode = nullptr;
+
+            if (tempModuleStates[stage].elfPackage.codeSize > 0)
+            {
+                pDevice->VkInstance()->FreeMem(const_cast<void*>(tempModuleStates[stage].elfPackage.pCode));
+                tempModuleStates[stage].elfPackage = {};
+            }
+        }
     }
 
     // Cleanup temp memory in binaryCreateInfo.
-    pDevice->GetCompiler(DefaultDeviceIndex)->FreeGraphicsPipelineCreateInfo(pDevice, &binaryCreateInfo, false, true);
+    pDevice->GetCompiler(DefaultDeviceIndex)->FreeGraphicsPipelineCreateInfo(pDevice, &binaryCreateInfo, true);
+
+    GraphicsPipelineObjectCreateInfo objectCreateInfo   = {};
+    size_t                           auxiliarySize      = 0;
 
     if (result == VK_SUCCESS)
     {
@@ -600,11 +601,11 @@ VkResult GraphicsPipelineLibrary::Create(
             &binaryCreateInfo);
 
         // Calculate object size
-        apiSize = sizeof(GraphicsPipelineLibrary);
-        size_t auxiliarySize = 0;
+        apiSize       = sizeof(GraphicsPipelineLibrary);
+        auxiliarySize = 0;
         DumpGraphicsPipelineBinaryCreateInfo(&binaryCreateInfo, nullptr, &auxiliarySize);
 
-        const size_t objSize = apiSize + auxiliarySize;
+        size_t objSize = apiSize + auxiliarySize;
 
         // Allocate memory
         pSysMem = pDevice->AllocApiObject(pAllocator, objSize);
@@ -662,6 +663,58 @@ VkResult GraphicsPipelineLibrary::Create(
             pCreateInfo->pStages,
             &pBinInfo->pipelineFeedback,
             pBinInfo->stageFeedback);
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+VkResult GraphicsPipelineLibrary::CreateApiPsoHashAndElfHash(
+    const Device*                           pDevice,
+    const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+    const GraphicsPipelineExtStructs&       extStructs,
+    const GraphicsPipelineLibraryInfo&      libInfo,
+    VkPipelineCreateFlags2KHR               flags,
+    GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
+    GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
+    ShaderOptimizerKey*                     pShaderOptimizerKeys,
+    PipelineOptimizerKey*                   pPipelineOptimizerKey,
+    uint64_t*                               pApiPsoHash,
+    ShaderModuleHandle*                     pTempModules,
+    Util::MetroHash::Hash*                  pElfHash)
+{
+    // 1. Build shader stage infos
+    VkResult result = BuildShaderStageInfo(pDevice,
+                                           pCreateInfo->stageCount,
+                                           pCreateInfo->pStages,
+                                           [](const uint32_t inputIdx, const uint32_t stageIdx)
+                                           {
+                                               return stageIdx;
+                                           },
+                                           pShaderStageInfo->stages,
+                                           pTempModules,
+                                           pBinaryCreateInfo->stageFeedback);
+
+    if (result == VK_SUCCESS)
+    {
+        // 2. Build ShaderOptimizer pipeline key
+        GeneratePipelineOptimizerKey(pDevice,
+                                     pCreateInfo,
+                                     extStructs,
+                                     libInfo,
+                                     flags,
+                                     pShaderStageInfo,
+                                     pShaderOptimizerKeys,
+                                     pPipelineOptimizerKey);
+
+        // 3. Build API and ELF hashes
+        BuildApiHash(pCreateInfo,
+                     flags,
+                     extStructs,
+                     libInfo,
+                     *pBinaryCreateInfo,
+                     pApiPsoHash,
+                     pElfHash);
     }
 
     return result;

@@ -564,53 +564,42 @@ VkResult DescriptorGpuMemHeap::Init(
 
     m_gpuMemAddrAlignment = pDevice->GetProperties().descriptorSizes.alignmentInDwords * sizeof(uint32_t);
 
-    if (pDevice->GetRuntimeSettings().pipelineLayoutMode == PipelineLayoutAngle)
+    constexpr uint32_t InlineUniformGranularity = 4;
+
+    m_gpuMemSize += ((m_gpuMemAddrAlignment - InlineUniformGranularity) * maxInlineUniformBlockBindings);
+
+    for (uint32_t i = 0; i < pCreateInfo->poolSizeCount; ++i)
     {
-        for (uint32_t i = 0; i < pCreateInfo->poolSizeCount; ++i)
+        if (pTypeCount[i].type == VK_DESCRIPTOR_TYPE_MUTABLE_EXT)
         {
-            m_gpuMemSize += AngleDescPattern::DescriptorSetBindingStride * sizeof(uint32_t) *
-                pTypeCount[i].descriptorCount;
+            uint32_t maxSize = 0;
+            if ((pMutableDescriptorTypeCreateInfoEXT != nullptr) &&
+                (pMutableDescriptorTypeCreateInfoEXT->pMutableDescriptorTypeLists != nullptr) &&
+                (i < pMutableDescriptorTypeCreateInfoEXT->mutableDescriptorTypeListCount))
+            {
+                const VkMutableDescriptorTypeListEXT& list =
+                    pMutableDescriptorTypeCreateInfoEXT->pMutableDescriptorTypeLists[i];
+                for (uint32_t j = 0; j < list.descriptorTypeCount; ++j)
+                {
+                    maxSize = Util::Max(maxSize,
+                        DescriptorSetLayout::GetSingleDescStaticSize(pDevice, list.pDescriptorTypes[j]));
+                }
+            }
+
+            // If no mutable type list passed, assume largest
+            if (maxSize == 0)
+            {
+                maxSize = DescriptorSetLayout::GetSingleDescStaticSize(
+                    pDevice, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+            }
+
+            VK_ASSERT(maxSize > 0);
+            m_gpuMemSize += maxSize * pTypeCount[i].descriptorCount;
         }
-    }
-    else
-    {
-        constexpr uint32_t InlineUniformGranularity = 4;
-
-        m_gpuMemSize += ((m_gpuMemAddrAlignment - InlineUniformGranularity) * maxInlineUniformBlockBindings);
-
-        for (uint32_t i = 0; i < pCreateInfo->poolSizeCount; ++i)
+        else
         {
-            if (pTypeCount[i].type == VK_DESCRIPTOR_TYPE_MUTABLE_EXT)
-            {
-                uint32_t maxSize = 0;
-                if ((pMutableDescriptorTypeCreateInfoEXT != nullptr) &&
-                    (pMutableDescriptorTypeCreateInfoEXT->pMutableDescriptorTypeLists != nullptr) &&
-                    (i < pMutableDescriptorTypeCreateInfoEXT->mutableDescriptorTypeListCount))
-                {
-                    const VkMutableDescriptorTypeListEXT& list =
-                        pMutableDescriptorTypeCreateInfoEXT->pMutableDescriptorTypeLists[i];
-                    for (uint32_t j = 0; j < list.descriptorTypeCount; ++j)
-                    {
-                        maxSize = Util::Max(maxSize,
-                            DescriptorSetLayout::GetSingleDescStaticSize(pDevice, list.pDescriptorTypes[j]));
-                    }
-                }
-
-                // If no mutable type list passed, assume largest
-                if (maxSize == 0)
-                {
-                    maxSize = DescriptorSetLayout::GetSingleDescStaticSize(
-                        pDevice, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-                }
-
-                VK_ASSERT(maxSize > 0);
-                m_gpuMemSize += maxSize * pTypeCount[i].descriptorCount;
-            }
-            else
-            {
-                m_gpuMemSize += DescriptorSetLayout::GetSingleDescStaticSize(pDevice, pTypeCount[i].type) *
-                    pTypeCount[i].descriptorCount;
-            }
+            m_gpuMemSize += DescriptorSetLayout::GetSingleDescStaticSize(pDevice, pTypeCount[i].type) *
+                pTypeCount[i].descriptorCount;
         }
     }
 

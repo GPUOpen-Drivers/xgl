@@ -619,11 +619,6 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
         // Determine the alignment requirement of descriptors in dwords.
         uint32 descAlignmentInDw    = pDevice->GetProperties().descriptorSizes.alignmentInDwords;
         uint32 staDescAlignmentInDw = descAlignmentInDw;
-        if (pDevice->GetRuntimeSettings().pipelineLayoutMode == PipelineLayoutAngle)
-        {
-            VK_ASSERT(AngleDescPattern::DescriptorSetBindingStride % descAlignmentInDw == 0);
-            staDescAlignmentInDw = AngleDescPattern::DescriptorSetBindingStride;
-        }
         // If the last binding has the VARIABLE_DESCRIPTOR_COUNT_BIT set, write the varDescDwStride
         if ((bindingNumber == (pOut->count - 1)) && pBinding->bindingFlags.variableDescriptorCount)
         {

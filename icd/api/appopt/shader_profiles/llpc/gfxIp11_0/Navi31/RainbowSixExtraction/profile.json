@@ -1,0 +1,29 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xdf44ae88f263605d 6d21f3936125b78b"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x0d4d93d110132347 fc0524f24ac8b128"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": true,
+          "nsaThreshold": 2
+        }
+      }
+    }
+  ]
+}

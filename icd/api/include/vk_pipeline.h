@@ -243,6 +243,11 @@ public:
         Util::MetroHash::Hash*       pCacheId
     );
 
+    static void FreeTempModules(
+        const Device*       pDevice,
+        const uint32_t      maxStageCount,
+        ShaderModuleHandle* pTempModules);
+
 protected:
     Pipeline(
         Device* const               pDevice,
@@ -281,11 +286,6 @@ protected:
         ShaderStageInfo*                       pShaderStageInfo,
         ShaderModuleHandle*                    pTempModules,
         PipelineCreationFeedback*              pFeedbacks);
-
-    static void FreeTempModules(
-        const Device*       pDevice,
-        const uint32_t      maxStageCount,
-        ShaderModuleHandle* pTempModules);
 
     // Extract extension structs that are common between pipeline types from their respective Vk*PipelineCreateInfo
     static void HandleExtensionStructs(

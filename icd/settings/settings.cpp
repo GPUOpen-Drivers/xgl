@@ -42,7 +42,6 @@
 #include "palPlatform.h"
 
 #include "devDriverServer.h"
-#include "protocols/ddSettingsService.h"
 #include "dd_settings_service.h"
 #include "experimentsLoader.h"
 
@@ -115,6 +114,16 @@ static ExpShaderWaveSize XglSwsToExpSws(
     }
 
     return wsOut;
+}
+
+// =====================================================================================================================
+static void OverrideVkd3dCommonSettings(
+    RuntimeSettings* pSettings)
+{
+    pSettings->exportNvComputeShaderDerivatives = true;
+    pSettings->exportNvDeviceGeneratedCommands  = true;
+    pSettings->exportImageCompressionControl    = true;
+    pSettings->disableSingleMipAnisoOverride    = false;
 }
 
 // =====================================================================================================================
@@ -409,1287 +418,1309 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     Pal::PalPublicSettings* pPalSettings = m_pDevice->GetPublicSettings();
 
+    // By allowing the enable/disable to be set by environment variable, any third party platform owners
+    // can enable or disable the feature based on their internal feedback and not have to wait for a driver
+    // update to catch issues
+
+    const char* pPipelineCacheEnvVar = getenv(m_settings.pipelineCachingEnvironmentVariable);
+
+    if (pPipelineCacheEnvVar != nullptr)
     {
+        m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) != 0);
+    }
 
-        // By allowing the enable/disable to be set by environment variable, any third party platform owners
-        // can enable or disable the feature based on their internal feedback and not have to wait for a driver
-        // update to catch issues
+    const char* pEnableInternalCacheToDisk = getenv("AMD_VK_ENABLE_INTERNAL_PIPELINECACHING_TO_DISK");
+    if (pEnableInternalCacheToDisk != nullptr)
+    {
+        m_settings.enableInternalPipelineCachingToDisk = (atoi(pEnableInternalCacheToDisk) != 0);
+    }
 
-        const char* pPipelineCacheEnvVar = getenv(m_settings.pipelineCachingEnvironmentVariable);
-
-        if (pPipelineCacheEnvVar != nullptr)
-        {
-            m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) != 0);
-        }
-
-        const char* pEnableInternalCacheToDisk = getenv("AMD_VK_ENABLE_INTERNAL_PIPELINECACHING_TO_DISK");
-        if (pEnableInternalCacheToDisk != nullptr)
-        {
-            m_settings.enableInternalPipelineCachingToDisk = (atoi(pEnableInternalCacheToDisk) != 0);
-        }
-
+    {
         // In general, DCC is very beneficial for color attachments, 2D, 3D shader storage resources that have BPP>=32.
         // If this is completely offset, maybe by increased shader read latency or partial writes of DCC blocks, it should
         // be debugged on a case by case basis.
-        m_settings.forceEnableDcc = (ForceDccForColorAttachments |
-                                        ForceDccFor2DShaderStorage |
-                                        ForceDccFor3DShaderStorage |
-                                        ForceDccFor32BppShaderStorage |
-                                        ForceDccFor64BppShaderStorage);
+        m_settings.forceEnableDcc = (ForceDccForColorAttachments   |
+                                     ForceDccFor2DShaderStorage    |
+                                     ForceDccFor3DShaderStorage    |
+                                     ForceDccFor32BppShaderStorage |
+                                     ForceDccFor64BppShaderStorage);
+    }
 
-        m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
 #if VKI_RAY_TRACING
-        const char* pMaxInlinedShadersEnvVar = getenv("AMD_VK_MAX_INLINED_SHADERS");
+    const char* pMaxInlinedShadersEnvVar = getenv("AMD_VK_MAX_INLINED_SHADERS");
 
-        if (pMaxInlinedShadersEnvVar != nullptr)
-        {
-            m_settings.maxUnifiedNonRayGenShaders = static_cast<uint32_t>(atoi(pMaxInlinedShadersEnvVar));
-        }
+    if (pMaxInlinedShadersEnvVar != nullptr)
+    {
+        m_settings.maxUnifiedNonRayGenShaders = static_cast<uint32_t>(atoi(pMaxInlinedShadersEnvVar));
+    }
 #if VKI_BUILD_GFX11
-        // Default optimized RT settings for Navi31 / 32,
-        // which has physical VGPR 1536 per SIMD
-        if (pInfo->gfxipProperties.shaderCore.vgprsPerSimd == 1536)
-        {
-            // 1.2% faster - Corresponds to 1.5x VGPR feature
-            m_settings.rtIndirectVgprLimit = 120;
+    // Default optimized RT settings for Navi31 / 32,
+    // which has physical VGPR 1536 per SIMD
+    if (pInfo->gfxipProperties.shaderCore.vgprsPerSimd == 1536)
+    {
+        // 1.2% faster - Corresponds to 1.5x VGPR feature
+        m_settings.rtIndirectVgprLimit = 120;
 
-            // 1% faster using indirectCallTargetOccupancyPerSimd of 0.75
-            m_settings.indirectCallTargetOccupancyPerSimd = 0.75;
+        // 1% faster using indirectCallTargetOccupancyPerSimd of 0.75
+        m_settings.indirectCallTargetOccupancyPerSimd = 0.75;
+    }
+#endif
+#endif
+
+    if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+    {
+        // Enable NGG culling by default for Navi2x.
+        m_settings.nggEnableBackfaceCulling = true;
+        m_settings.nggEnableSmallPrimFilter = true;
+
+        // Enable NGG compactionless mode for Navi2x
+        m_settings.nggCompactVertex = false;
+
+    }
+
+    {
+        m_settings.disableImplicitInvariantExports = false;
+    }
+
+#if VKI_BUILD_GFX11
+    if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+    {
+        // Enable NGG compactionless mode for Navi3x
+        m_settings.nggCompactVertex = false;
+
+        // Hardcode wave sizes per shader stage until the ML model is trained and perf lab testing is done
+        m_settings.csWaveSize = 64;
+        m_settings.fsWaveSize = 64;
+    }
+#endif
+
+    // Put command buffers in local for large/resizable BAR systems with > 7 GBs of local heap
+    constexpr gpusize _1GB = 1024ull * 1024ull * 1024ull;
+
+    if (pInfo->gpuMemoryProperties.barSize > (7ull * _1GB))
+    {
+        if ((appProfile != AppProfile::WorldWarZ)
+            && (appProfile != AppProfile::XPlane)
+            && (appProfile != AppProfile::SeriousSam4))
+        {
+            m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
+            m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
         }
-#endif
-#endif
+
+        if ((appProfile == AppProfile::DoomEternal)  ||
+            (appProfile == AppProfile::SniperElite5) ||
+            (appProfile == AppProfile::CSGO))
+        {
+            m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc;
+        }
+    }
+
+    // Allow device memory overallocation for <= 2GBs of VRAM including APUs.
+    if (pInfo->gpuMemoryProperties.maxLocalMemSize <= (2ull * _1GB))
+    {
+        m_settings.memoryDeviceOverallocationAllowed = true;
+    }
+
+    if (appProfile == AppProfile::Doom)
+    {
+        m_settings.enableSpvPerfOptimal = true;
+
+        m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
+
+        m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
+            SkipImageLayoutUndefined |
+            SkipDuplicateResourceBarriers;
+
+        m_settings.modifyResourceKeyForAppProfile = true;
+        m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
+
+        // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+        // can't do any better than returning a non-null function pointer for them.
+        m_settings.lenientInstanceFuncQuery = true;
+    }
+
+    if (appProfile == AppProfile::DoomVFR)
+    {
+        // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+        // can't do any better than returning a non-null function pointer for them.
+        m_settings.lenientInstanceFuncQuery = true;
+
+        // This works around a crash at app startup.
+        m_settings.ignoreSuboptimalSwapchainSize = true;
+
+        m_settings.forceEnableDcc = ForceDccDefault;
+
+        if (pInfo->revision == Pal::AsicRevision::Navi14)
+        {
+            m_settings.barrierFilterOptions = SkipImageLayoutUndefined;
+        }
+    }
+
+    if (appProfile == AppProfile::WolfensteinII)
+    {
+        m_settings.zeroInitIlRegs = true;
+
+        m_settings.disableSingleMipAnisoOverride = false;
 
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
         {
-            // Enable NGG culling by default for Navi2x.
-            m_settings.nggEnableBackfaceCulling = true;
-            m_settings.nggEnableSmallPrimFilter = true;
+            // Mall no alloc settings give a 2.91% gain
+            m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+            m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+        }
 
-            // Enable NGG compactionless mode for Navi2x
-            m_settings.nggCompactVertex = false;
+        // Don't enable DCC for color attachments aside from those listed in the app_resource_optimizer
+        m_settings.forceEnableDcc = ForceDccDefault;
+    }
 
+    if (appProfile == AppProfile::WolfensteinYoungblood)
+    {
+        m_settings.overrideHeapGartCacheableToUswc = true;
+
+        if (pInfo->gpuType == Pal::GpuType::Discrete)
+        {
+            m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
+            m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
+        }
+
+        // Don't enable DCC for color attachments aside from those listed in the app_resource_optimizer
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+        {
+            m_settings.forceEnableDcc = ForceDccDefault;
+        }
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            if (pInfo->revision == Pal::AsicRevision::Navi21)
+            {
+            }
+        }
+#if VKI_BUILD_GFX11
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        {
+
+#if VKI_BUILD_NAVI31
+            if (pInfo->revision == Pal::AsicRevision::Navi31)
+            {
+                {
+                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+                }
+            }
+#endif
+        }
+#endif
+    }
+
+    if ((appProfile == AppProfile::WolfensteinII) ||
+        (appProfile == AppProfile::WolfensteinYoungblood))
+    {
+        m_settings.enableSpvPerfOptimal = true;
+
+        m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
+
+        m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
+            SkipImageLayoutUndefined;
+
+        m_settings.modifyResourceKeyForAppProfile = true;
+        m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
+
+        m_settings.asyncComputeQueueLimit = 1;
+
+        // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+        // can't do any better than returning a non-null function pointer for them.
+        m_settings.lenientInstanceFuncQuery = true;
+    }
+
+    if (((appProfile == AppProfile::WolfensteinII) ||
+            (appProfile == AppProfile::WolfensteinYoungblood) ||
+            (appProfile == AppProfile::Doom)) &&
+        ((pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1) ||
+            (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)))
+    {
+        m_settings.asyncComputeQueueMaxWavesPerCu = 20;
+        m_settings.nggSubgroupSizing = NggSubgroupExplicit;
+        m_settings.nggVertsPerSubgroup = 254;
+        m_settings.nggPrimsPerSubgroup = 128;
+    }
+
+    if (appProfile == AppProfile::WorldWarZ)
+    {
+        // This application oversubscribes on 4 GB cards during ALT+TAB
+        m_settings.memoryDeviceOverallocationAllowed = true;
+
+        m_settings.reportSuboptimalPresentAsOutOfDate = true;
+
+        if (pInfo->revision != Pal::AsicRevision::Navi21)
+        {
+            m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
         }
 
         {
-            m_settings.disableImplicitInvariantExports = false;
+            m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage              |
+                                         ForceDccForNonColorAttachmentShaderStorage |
+                                         ForceDccForColorAttachments                |
+                                         ForceDccFor2DShaderStorage);
+        }
+
+        // Mall no alloc setting gives a ~0.82% gain
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            m_settings.csWaveSize = 64;
+            m_settings.fsWaveSize = 64;
+
+            if (pInfo->revision == Pal::AsicRevision::Navi21)
+            {
+                m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage |
+                                             ForceDccFor32BppShaderStorage |
+                                             ForceDccForNonColorAttachmentShaderStorage |
+                                             ForceDccForColorAttachments |
+                                             ForceDccFor3DShaderStorage);
+
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+            }
+
+            if (pInfo->revision == Pal::AsicRevision::Navi22)
+            {
+                m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                                             ForceDccForColorAttachments |
+                                             ForceDccForNonColorAttachmentShaderStorage |
+                                             ForceDccFor64BppShaderStorage);
+
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+            }
+
+            if (pInfo->revision == Pal::AsicRevision::Navi23)
+            {
+                m_settings.forceEnableDcc = (ForceDccFor32BppShaderStorage |
+                                             ForceDccForNonColorAttachmentShaderStorage |
+                                             ForceDccForColorAttachments |
+                                             ForceDccFor3DShaderStorage);
+            }
+
+            if (pInfo->revision == Pal::AsicRevision::Navi24)
+            {
+                m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage |
+                                             ForceDccForNonColorAttachmentShaderStorage |
+                                             ForceDccForColorAttachments |
+                                             ForceDccFor3DShaderStorage);
+
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+            }
         }
 
 #if VKI_BUILD_GFX11
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
-            // Enable NGG compactionless mode for Navi3x
-            m_settings.nggCompactVertex = false;
-
-            // Hardcode wave sizes per shader stage until the ML model is trained and perf lab testing is done
-            m_settings.csWaveSize = 64;
-            m_settings.fsWaveSize = 64;
+            m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::SkipDstCacheInv;
         }
 #endif
 
-        // Put command buffers in local for large/resizable BAR systems with > 7 GBs of local heap
-        constexpr gpusize _1GB = 1024ull * 1024ull * 1024ull;
+        m_settings.implicitExternalSynchronization = false;
+    }
 
-        if (pInfo->gpuMemoryProperties.barSize > (7ull * _1GB))
+    if (appProfile == AppProfile::WolfensteinCyberpilot)
+    {
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
         {
-            if ((appProfile != AppProfile::WorldWarZ)
-                && (appProfile != AppProfile::XPlane)
-               )
+            m_settings.barrierFilterOptions = SkipImageLayoutUndefined;
+
+        }
+    }
+
+    if (appProfile == AppProfile::IdTechEngine)
+    {
+        m_settings.enableSpvPerfOptimal = true;
+
+        // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+        // can't do any better than returning a non-null function pointer for them.
+        m_settings.lenientInstanceFuncQuery = true;
+    }
+
+    if (appProfile == AppProfile::Dota2)
+    {
+        pPalSettings->fastDepthStencilClearMode = Pal::FastDepthStencilClearMode::Graphics;
+
+        m_settings.disableSmallSurfColorCompressionSize = 511;
+
+        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+        m_settings.useAnisoThreshold = true;
+        m_settings.anisoThreshold = 1.0f;
+
+        m_settings.disableMsaaStencilShaderRead = true;
+
+        // Disable image type checking on Navi10 to avoid 2% loss.
+        m_settings.disableImageResourceTypeCheck = true;
+
+    }
+
+    if (appProfile == AppProfile::CSGO)
+    {
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+
+            if (pInfo->revision == Pal::AsicRevision::Navi21)
             {
-                m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
-                m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
+                m_settings.csWaveSize = 32;
+                m_settings.fsWaveSize = 32;
+
+                m_settings.mallNoAllocCtPolicy  = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
             }
 
-            if ((appProfile == AppProfile::DoomEternal)  ||
-                (appProfile == AppProfile::SniperElite5) ||
-                (appProfile == AppProfile::CSGO))
+            if (pInfo->revision == Pal::AsicRevision::Navi22)
             {
-                m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc;
+                m_settings.mallNoAllocDsPolicy = MallNoAllocDsPolicy::MallNoAllocDsAsSnsr;
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
+            }
+
+            if (pInfo->revision == Pal::AsicRevision::Navi23)
+            {
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrPolicy::MallNoAllocCtSsrAsSnsr;
+                m_settings.mallNoAllocSsrPolicy   = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
+            }
+
+            if (pInfo->revision == Pal::AsicRevision::Navi24)
+            {
+                m_settings.csWaveSize           = 64;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
             }
         }
 
-        // Allow device memory overallocation for <= 2GBs of VRAM including APUs.
-        if (pInfo->gpuMemoryProperties.maxLocalMemSize <= (2ull * _1GB))
+#if VKI_BUILD_GFX11
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
-            m_settings.memoryDeviceOverallocationAllowed = true;
+            m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
+            m_settings.ac01WaNotNeeded = true;
+
+            if (pInfo->gpuType == Pal::GpuType::Discrete)
+            {
+                m_settings.rpmViewsBypassMall   = RpmViewBypassMall::RpmViewBypassMallOnCbDbWrite |
+                                                    RpmViewBypassMall::RpmViewBypassMallOnRead;
+            }
+
+#if VKI_BUILD_NAVI31
+            if (pInfo->revision == Pal::AsicRevision::Navi31)
+            {
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
+            }
+#endif
+
+#if VKI_BUILD_NAVI32
+            if (pInfo->revision == Pal::AsicRevision::Navi32)
+            {
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
+            }
+#endif
+
+#if VKI_BUILD_NAVI33
+            if (pInfo->revision == Pal::AsicRevision::Navi33)
+            {
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrPolicy::MallNoAllocCtSsrAsSnsr;
+            }
+#endif
+        }
+#endif
+
+        m_settings.enableUberFetchShader  = true;
+    }
+
+    if (appProfile == AppProfile::Source2Engine)
+    {
+        pPalSettings->fastDepthStencilClearMode = Pal::FastDepthStencilClearMode::Graphics;
+
+        m_settings.disableSmallSurfColorCompressionSize = 511;
+
+        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+        m_settings.useAnisoThreshold = true;
+        m_settings.anisoThreshold = 1.0f;
+
+        m_settings.disableMsaaStencilShaderRead = true;
+    }
+
+    if (appProfile == AppProfile::Talos)
+    {
+        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+        m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+        m_settings.forceDepthClampBasedOnZExport = true;
+
+        m_settings.clampMaxImageSize = 16384u;
+    }
+
+    if (appProfile == AppProfile::SeriousSamFusion)
+    {
+        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+        m_settings.useAnisoThreshold = true;
+        m_settings.anisoThreshold = 1.0f;
+
+        m_settings.clampMaxImageSize = 16384u;
+    }
+
+    if ((appProfile == AppProfile::TalosVR) ||
+        (appProfile == AppProfile::SeriousSamVrTheLastHope) ||
+        (appProfile == AppProfile::SedpEngine))
+    {
+        m_settings.clampMaxImageSize = 16384u;
+    }
+
+    if (appProfile == AppProfile::SeriousSam4)
+    {
+        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            m_settings.forceEnableDcc = ForceDccDefault;
         }
 
-        if (appProfile == AppProfile::Doom)
+        m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+
+        m_settings.clampMaxImageSize = 16384u;
+    }
+
+    if (appProfile == AppProfile::KnockoutCity)
+    {
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
         {
-            m_settings.enableSpvPerfOptimal = true;
-
-            m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
-
-            m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
-                SkipImageLayoutUndefined |
-                SkipDuplicateResourceBarriers;
-
-            m_settings.modifyResourceKeyForAppProfile = true;
-            m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
-
-            // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
-            // can't do any better than returning a non-null function pointer for them.
-            m_settings.lenientInstanceFuncQuery = true;
+            m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                                         ForceDccForColorAttachments |
+                                         ForceDccForNonColorAttachmentShaderStorage|
+                                         ForceDccFor32BppShaderStorage);
         }
 
-        if (appProfile == AppProfile::DoomVFR)
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
         {
-            // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
-            // can't do any better than returning a non-null function pointer for them.
-            m_settings.lenientInstanceFuncQuery = true;
+            m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                                         ForceDccForColorAttachments |
+                                         ForceDccForNonColorAttachmentShaderStorage |
+                                         ForceDccFor32BppShaderStorage |
+                                         ForceDccFor64BppShaderStorage);
 
-            // This works around a crash at app startup.
-            m_settings.ignoreSuboptimalSwapchainSize = true;
+            if (pInfo->revision == Pal::AsicRevision::Navi22)
+            {
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+            }
+        }
+    }
+    if (appProfile == AppProfile::EvilGenius2)
+    {
+        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+        m_settings.csWaveSize = 64;
+        m_settings.fsWaveSize = 64;
 
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            if (pInfo->revision == Pal::AsicRevision::Navi21)
+            {
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+            }
+        }
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+        {
+            m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+        }
+    }
+
+    if (appProfile == AppProfile::QuakeEnhanced)
+    {
+        // Originally applied to QuakeRemastered - this setting applies to QuakeEnhanced now since it's an update
+        // to the same game.
+        m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
+
+#if VKI_BUILD_GFX11
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        {
+            m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
+        }
+#endif
+    }
+
+    if (appProfile == AppProfile::SedpEngine)
+    {
+        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+    }
+
+    if (appProfile == AppProfile::StrangeBrigade)
+    {
+
+        if (pInfo->gpuType == Pal::GpuType::Discrete)
+        {
+            m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc;
+            m_settings.cmdAllocatorDataHeap      = Pal::GpuHeapLocal;
+            m_settings.cmdAllocatorEmbeddedHeap  = Pal::GpuHeapLocal;
+        }
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+        {
+            m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                         ForceDccFor3DShaderStorage |
+                                         ForceDccForColorAttachments |
+                                         ForceDccFor64BppShaderStorage);
+
+            m_settings.enableNgg = 0x0;
+        }
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+
+            m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabledForMgpu;
+
+            m_settings.overrideWgpMode = WgpMode::WgpModeWgp;
+            m_settings.csWaveSize = 64;
+            m_settings.fsWaveSize = 64;
+            m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                                         ForceDccForColorAttachments |
+                                         ForceDccFor32BppShaderStorage);
+        }
+#if VKI_BUILD_GFX11
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        {
+#if VKI_BUILD_NAVI31
+            if (pInfo->revision == Pal::AsicRevision::Navi31)
+            {
+                m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+                m_settings.pipelineBinningMode = PipelineBinningModeEnable;
+            }
+#endif
+        }
+#endif
+    }
+
+    if (appProfile == AppProfile::ZombieArmy4)
+    {
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+        {
+            m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                         ForceDccForColorAttachments |
+                                         ForceDccFor64BppShaderStorage);
+
+            m_settings.enableNgg = 0x0;
+            m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+        }
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            m_settings.enableNgg = 0x3;
+            m_settings.nggEnableFrustumCulling = true;
+            m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+        }
+    }
+
+    if (appProfile == AppProfile::MadMax)
+    {
+        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+        m_settings.useAnisoThreshold = true;
+        m_settings.anisoThreshold = 1.0f;
+        m_settings.disableResetReleaseResources = true;
+        m_settings.implicitExternalSynchronization = false;
+    }
+
+    if (appProfile == AppProfile::F1_2017)
+    {
+        // F1 2017 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
+        m_settings.forceEnableDcc = ForceDccDefault;
+    }
+
+    if (appProfile == AppProfile::ThronesOfBritannia)
+    {
+        m_settings.disableHtileBasedMsaaRead = true;
+        m_settings.enableFullCopyDstOnly = true;
+    }
+
+    if (appProfile == AppProfile::DiRT4)
+    {
+        // DiRT 4 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
+        m_settings.forceEnableDcc = ForceDccDefault;
+
+        m_settings.forceDepthClampBasedOnZExport = true;
+    }
+
+    if (appProfile == AppProfile::WarHammerII)
+    {
+        // WarHammer II performs worse with DCC forced on, so just let the PAL heuristics decide
+        // what's best for now.
+        m_settings.forceEnableDcc = ForceDccDefault;
+
+        m_settings.ac01WaNotNeeded = true;
+    }
+
+    if (appProfile == AppProfile::WarHammerIII)
+    {
+        m_settings.ac01WaNotNeeded = true;
+    }
+
+    if (appProfile == AppProfile::RainbowSixSiege)
+    {
+        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+        m_settings.useAnisoThreshold = true;
+        m_settings.anisoThreshold = 1.0f;
+
+        // Ignore suboptimal swapchain size to fix crash on task switch
+        m_settings.ignoreSuboptimalSwapchainSize = true;
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+        {
+            m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                         ForceDccForColorAttachments |
+                                         ForceDccForNonColorAttachmentShaderStorage);
+        }
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            m_settings.nggEnableBackfaceCulling = false;
+            m_settings.nggEnableSmallPrimFilter = false;
+
+            if (pInfo->revision == Pal::AsicRevision::Navi23)
+            {
+                m_settings.overrideLocalHeapSizeInGBs = 8;
+                m_settings.memoryDeviceOverallocationAllowed = true;
+            }
+
+            if (pInfo->revision == Pal::AsicRevision::Navi24)
+            {
+                m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                                             ForceDccForColorAttachments |
+                                             ForceDccForNonColorAttachmentShaderStorage |
+                                             ForceDccFor32BppShaderStorage);
+
+                m_settings.overrideLocalHeapSizeInGBs = 8;
+                m_settings.memoryDeviceOverallocationAllowed = true;
+            }
+        }
+
+    }
+
+    if (appProfile == AppProfile::RainbowSixExtraction)
+    {
+#if VKI_BUILD_GFX11
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        {
+            m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                         ForceDccForColorAttachments |
+                                         ForceDccForNonColorAttachmentShaderStorage |
+                                         ForceDccFor32BppShaderStorage |
+                                         ForceDccFor64BppShaderStorage);
+
+            m_settings.disableLoopUnrolls = true;
+            m_settings.forceCsThreadIdSwizzling = true;
+        }
+#endif
+    }
+
+    if (appProfile == AppProfile::Rage2)
+    {
+        //PM4 optimizations give us another 1.5% perf increase
+        m_settings.optimizeCmdbufMode = OptimizeCmdbufMode::EnableOptimizeCmdbuf;
+
+        m_settings.enableAceShaderPrefetch = false;
+
+        // Rage 2 currently has all it's images set to VK_SHARING_MODE_CONCURRENT.
+        // Forcing these images to use VK_SHARING_MODE_EXCLUSIVE gives us around 5% perf increase.
+        m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusiveForNonColorAttachments;
+
+        // Disable image type checking to avoid 1% loss.
+        m_settings.disableImageResourceTypeCheck = true;
+
+        m_settings.implicitExternalSynchronization = false;
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+        {
+            // Rage 2 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
             m_settings.forceEnableDcc = ForceDccDefault;
 
-            if (pInfo->revision == Pal::AsicRevision::Navi14)
+        }
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            m_settings.pipelineBinningMode = PipelineBinningModeDisable;
+            m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+            m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+
+            m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                                         ForceDccForColorAttachments |
+                                         ForceDccForNonColorAttachmentShaderStorage |
+                                         ForceDccFor32BppShaderStorage |
+                                         ForceDccFor64BppShaderStorage);
+
+            if (pInfo->revision != Pal::AsicRevision::Navi21)
             {
-                m_settings.barrierFilterOptions = SkipImageLayoutUndefined;
+                m_settings.forceEnableDcc |= ForceDccFor2DShaderStorage;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+            }
+
+            {
+                m_settings.csWaveSize = 64;
+                m_settings.fsWaveSize = 64;
             }
         }
 
-        if (appProfile == AppProfile::WolfensteinII)
+#if VKI_BUILD_GFX11
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
-            m_settings.zeroInitIlRegs = true;
+            m_settings.pipelineBinningMode = PipelineBinningModeDisable;
+            m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+            m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
 
-            m_settings.disableSingleMipAnisoOverride = false;
+            m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                                         ForceDccForColorAttachments |
+                                         ForceDccForNonColorAttachmentShaderStorage |
+                                         ForceDccFor32BppShaderStorage |
+                                         ForceDccFor64BppShaderStorage);
+        }
+#endif
+    }
 
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+    if (appProfile == AppProfile::RedDeadRedemption2)
+    {
+        m_settings.enableAcquireBeforeSignal = true;
+
+        m_settings.limitSampleCounts = VK_SAMPLE_COUNT_1_BIT |
+            VK_SAMPLE_COUNT_2_BIT |
+            VK_SAMPLE_COUNT_4_BIT;
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+        {
+        }
+
+        // Force exclusive sharing mode - 2% gain
+        m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
+        m_settings.implicitExternalSynchronization = false;
+
+        if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
+        {
+            m_settings.pipelineBinningMode  = PipelineBinningModeDisable;
+            m_settings.mallNoAllocCtPolicy  = MallNoAllocCtAsSnsr;
+            m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+            m_settings.forceEnableDcc       = (ForceDccFor2DShaderStorage  |
+                                               ForceDccFor3DShaderStorage  |
+                                               ForceDccForColorAttachments |
+                                               ForceDccFor64BppShaderStorage);
+
+#if VKI_BUILD_GFX11
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
             {
-                // Mall no alloc settings give a 2.91% gain
+                m_settings.forceEnableDcc      |= ForceDccForNonColorAttachmentShaderStorage;
+            }
+#endif
+        }
+
+        m_settings.ac01WaNotNeeded = true;
+    }
+
+    if (appProfile == AppProfile::GhostReconBreakpoint)
+    {
+
+        // Override the PAL default for 3D color attachments and storage images to match GFX9's, SW_R/z-slice order.
+        m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                         ForceDccFor3DShaderStorage |
+                                         ForceDccForColorAttachments |
+                                         ForceDccForNonColorAttachmentShaderStorage |
+                                         ForceDccFor64BppShaderStorage);
+        }
+
+        m_settings.implicitExternalSynchronization = false;
+    }
+
+    if (appProfile == AppProfile::BaldursGate3)
+    {
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+        {
+            m_settings.csWaveSize = 64;
+            m_settings.fsWaveSize = 64;
+        }
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            m_settings.csWaveSize = 64;
+            m_settings.fsWaveSize = 64;
+
+            if (pInfo->revision == Pal::AsicRevision::Navi21)
+            {
+                m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+            }
+            else if (pInfo->revision == Pal::AsicRevision::Navi22)
+            {
+                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                             ForceDccFor3DShaderStorage |
+                                             ForceDccForColorAttachments);
+
+                m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+            }
+            else if (pInfo->revision == Pal::AsicRevision::Navi23)
+            {
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+            }
+            else if (pInfo->revision == Pal::AsicRevision::Navi24)
+            {
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+
+                m_settings.memoryDeviceOverallocationAllowed = true;
+            }
+        }
+
+#if VKI_BUILD_GFX11
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        {
+            m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
+        }
+#endif
+    }
+
+#if VKI_RAY_TRACING
+    if (appProfile == AppProfile::Quake2RTX)
+    {
+        m_settings.memoryDeviceOverallocationAllowed = true;
+
+        if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
+        {
+            m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
+
+            m_settings.rtTriangleCompressionMode = NoTriangleCompression;
+
+            m_settings.useFlipHint = false;
+
+            m_settings.maxTotalSizeOfUnifiedShaders = UINT_MAX;
+
+            m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                         ForceDccFor3DShaderStorage |
+                                         ForceDccForColorAttachments |
+                                         ForceDccFor64BppShaderStorage);
+
+        }
+
+#if VKI_BUILD_GFX11
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        {
+            // Gives ~0.5% gain at 4k
+            m_settings.enableAceShaderPrefetch = false;
+        }
+#endif
+    }
+
+    if (appProfile == AppProfile::ControlDX12)
+    {
+        if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
+        {
+            m_settings.rtEnableCompilePipelineLibrary = false;
+        }
+
+#if VKI_BUILD_GFX11
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        {
+            // Gives ~2.22% gain at 1080p
+            m_settings.enableAceShaderPrefetch = false;
+        }
+#endif
+    }
+
+    if (appProfile == AppProfile::RayTracingWeekends)
+    {
+#if VKI_BUILD_GFX11
+        if ((pInfo->revision != Pal::AsicRevision::Navi31)
+#if VKI_BUILD_NAVI32
+            && (pInfo->revision != Pal::AsicRevision::Navi32)
+#endif
+            )
+#endif
+        {
+            {
+                m_settings.rtUnifiedVgprLimit = 64;
+            }
+        }
+    }
+#endif
+
+    if (appProfile == AppProfile::DoomEternal)
+    {
+        m_settings.barrierFilterOptions  = SkipStrayExecutionDependencies;
+
+        m_settings.modifyResourceKeyForAppProfile = true;
+        m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
+
+        // PM4 optimizations give us 1% gain
+        m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
+
+        m_settings.enableSpvPerfOptimal = true;
+
+        // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+        // can't do any better than returning a non-null function pointer for them.
+        m_settings.lenientInstanceFuncQuery = true;
+
+        m_settings.backgroundFullscreenIgnorePresentErrors = true;
+
+        m_settings.implicitExternalSynchronization = false;
+
+        m_settings.alwaysReportHdrFormats = true;
+
+        if (pInfo->gpuType == Pal::GpuType::Discrete)
+        {
+            m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
+            m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
+        }
+
+        // Coarse optimizations that apply to multiple GFXIPs go below
+        if (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false)
+        {
+            m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::AvoidCpuMemoryCoher;
+        }
+
+        if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
+        {
+#if VKI_RAY_TRACING
+            m_settings.rtBvhBuildModeFastTrace = BvhBuildModeLinear;
+            m_settings.rtEnableTopDownBuild    = false;
+            m_settings.plocRadius              = 4;
+
+            // 13% Gain @ 4k - Allows overlapping builds
+            m_settings.enableAceShaderPrefetch = false;
+#endif
+            m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+        }
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+        {
+            //  Doom Eternal performs better when DCC is not forced on. 2% gain on 4k.
+            m_settings.forceEnableDcc = ForceDccDefault;
+
+            // Doom Eternal performs better with NGG disabled (3% gain on 4k), likely because idTech runs it's own
+            // triangle culling and there are no options in the game to turn it off making NGG somewhat redundant.
+            m_settings.enableNgg = false;
+
+            m_settings.asyncComputeQueueMaxWavesPerCu = 20;
+
+            m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+
+            m_settings.csWaveSize = 64;
+        }
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            m_settings.asyncComputeQueueMaxWavesPerCu = 20;
+            m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+
+            if (pInfo->revision != Pal::AsicRevision::Navi21)
+            {
                 m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
                 m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
             }
 
-            // Don't enable DCC for color attachments aside from those listed in the app_resource_optimizer
-            m_settings.forceEnableDcc = ForceDccDefault;
+            m_settings.csWaveSize = 64;
         }
-
-        if (appProfile == AppProfile::WolfensteinYoungblood)
-        {
-            m_settings.overrideHeapGartCacheableToUswc = true;
-
-            if (pInfo->gpuType == Pal::GpuType::Discrete)
-            {
-                m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
-                m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
-            }
-
-            // Don't enable DCC for color attachments aside from those listed in the app_resource_optimizer
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.forceEnableDcc = ForceDccDefault;
-            }
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-                if (pInfo->revision == Pal::AsicRevision::Navi21)
-                {
-                }
-            }
 #if VKI_BUILD_GFX11
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
-
-#if VKI_BUILD_NAVI31
-                if (pInfo->revision == Pal::AsicRevision::Navi31)
-                {
-                    {
-                        m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                        m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-                    }
-                }
-#endif
-            }
-#endif
-        }
-
-        if ((appProfile == AppProfile::WolfensteinII) ||
-            (appProfile == AppProfile::WolfensteinYoungblood))
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
-            m_settings.enableSpvPerfOptimal = true;
-
-            m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
-
-            m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
-                SkipImageLayoutUndefined;
-
-            m_settings.modifyResourceKeyForAppProfile = true;
-            m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
-
-            m_settings.asyncComputeQueueLimit = 1;
-
-            // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
-            // can't do any better than returning a non-null function pointer for them.
-            m_settings.lenientInstanceFuncQuery = true;
-        }
-
-        if (((appProfile == AppProfile::WolfensteinII) ||
-             (appProfile == AppProfile::WolfensteinYoungblood) ||
-             (appProfile == AppProfile::Doom)) &&
-            ((pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1) ||
-             (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)))
-        {
-            m_settings.asyncComputeQueueMaxWavesPerCu = 20;
-            m_settings.nggSubgroupSizing = NggSubgroupExplicit;
-            m_settings.nggVertsPerSubgroup = 254;
-            m_settings.nggPrimsPerSubgroup = 128;
-        }
-
-        if (appProfile == AppProfile::WorldWarZ)
-        {
-            // This application oversubscribes on 4 GB cards during ALT+TAB
-            m_settings.memoryDeviceOverallocationAllowed = true;
-
-            m_settings.reportSuboptimalPresentAsOutOfDate = true;
-
-            if (pInfo->revision != Pal::AsicRevision::Navi21)
-            {
-                m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
-            }
-
-            // WWZ performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-            m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage |
-                ForceDccForNonColorAttachmentShaderStorage |
-                ForceDccForColorAttachments |
-                ForceDccFor2DShaderStorage);
-
-            // Mall no alloc setting gives a ~0.82% gain
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.csWaveSize = 64;
-                m_settings.fsWaveSize = 64;
-
-                if (pInfo->revision == Pal::AsicRevision::Navi21)
-                {
-                    m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage |
-                                                 ForceDccFor32BppShaderStorage |
-                                                 ForceDccForNonColorAttachmentShaderStorage |
-                                                 ForceDccForColorAttachments |
-                                                 ForceDccFor3DShaderStorage);
-
-                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                }
-
-                if (pInfo->revision == Pal::AsicRevision::Navi22)
-                {
-                    m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
-                        ForceDccForColorAttachments |
-                        ForceDccForNonColorAttachmentShaderStorage |
-                        ForceDccFor64BppShaderStorage);
-
-                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                }
-
-                if (pInfo->revision == Pal::AsicRevision::Navi23)
-                {
-                    m_settings.forceEnableDcc = (ForceDccFor32BppShaderStorage |
-                        ForceDccForNonColorAttachmentShaderStorage |
-                        ForceDccForColorAttachments |
-                        ForceDccFor3DShaderStorage);
-                }
-
-                if (pInfo->revision == Pal::AsicRevision::Navi24)
-                {
-                    m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage |
-                        ForceDccForNonColorAttachmentShaderStorage |
-                        ForceDccForColorAttachments |
-                        ForceDccFor3DShaderStorage);
-
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                }
-            }
-
-#if VKI_BUILD_GFX11
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
-                m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::SkipDstCacheInv;
-            }
-#endif
-
-            m_settings.implicitExternalSynchronization = false;
-        }
-
-        if (appProfile == AppProfile::WolfensteinCyberpilot)
-        {
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.barrierFilterOptions = SkipImageLayoutUndefined;
-
-            }
-        }
-
-        if (appProfile == AppProfile::IdTechEngine)
-        {
-            m_settings.enableSpvPerfOptimal = true;
-
-            // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
-            // can't do any better than returning a non-null function pointer for them.
-            m_settings.lenientInstanceFuncQuery = true;
-        }
-
-        if (appProfile == AppProfile::Dota2)
-        {
-            pPalSettings->fastDepthStencilClearMode = Pal::FastDepthStencilClearMode::Graphics;
-
-            m_settings.disableSmallSurfColorCompressionSize = 511;
-
-            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
-            m_settings.useAnisoThreshold = true;
-            m_settings.anisoThreshold = 1.0f;
-
-            m_settings.disableMsaaStencilShaderRead = true;
-
-            // Disable image type checking on Navi10 to avoid 2% loss.
-            m_settings.disableImageResourceTypeCheck = true;
-
-        }
-
-        if (appProfile == AppProfile::CSGO)
-        {
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-
-                if (pInfo->revision == Pal::AsicRevision::Navi21)
-                {
-                    m_settings.csWaveSize = 32;
-                    m_settings.fsWaveSize = 32;
-
-                    m_settings.mallNoAllocCtPolicy  = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
-                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
-                }
-
-                if (pInfo->revision == Pal::AsicRevision::Navi22)
-                {
-                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsPolicy::MallNoAllocDsAsSnsr;
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
-                }
-
-                if (pInfo->revision == Pal::AsicRevision::Navi23)
-                {
-                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrPolicy::MallNoAllocCtSsrAsSnsr;
-                    m_settings.mallNoAllocSsrPolicy   = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
-                }
-
-                if (pInfo->revision == Pal::AsicRevision::Navi24)
-                {
-                    m_settings.csWaveSize           = 64;
-                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
-                }
-            }
-
-#if VKI_BUILD_GFX11
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
-                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
-                m_settings.ac01WaNotNeeded = true;
-
-                if (pInfo->gpuType == Pal::GpuType::Discrete)
-                {
-                    m_settings.rpmViewsBypassMall   = RpmViewBypassMall::RpmViewBypassMallOnCbDbWrite |
-                                                      RpmViewBypassMall::RpmViewBypassMallOnRead;
-                }
-
-#if VKI_BUILD_NAVI31
-                if (pInfo->revision == Pal::AsicRevision::Navi31)
-                {
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
-                }
-#endif
-
+            // Navi31 Mall and Tiling Settings
+            if ((pInfo->revision == Pal::AsicRevision::Navi31)
 #if VKI_BUILD_NAVI32
-                if (pInfo->revision == Pal::AsicRevision::Navi32)
-                {
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
-                }
+                || (pInfo->revision == Pal::AsicRevision::Navi32)
 #endif
+                )
+            {
+                // Mall no alloc settings give a ~1% gain
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
 
-#if VKI_BUILD_NAVI33
-                if (pInfo->revision == Pal::AsicRevision::Navi33)
-                {
-                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrPolicy::MallNoAllocCtSsrAsSnsr;
-                }
+                // This provides ~6% gain at 4k
+                m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
+            }
+        }
 #endif
-            }
+    }
+
+    if (appProfile == AppProfile::IdTechLauncher)
+    {
+        m_settings.enableInternalPipelineCachingToDisk = false;
+    }
+
+    if (appProfile == AppProfile::SaschaWillemsExamples)
+    {
+        m_settings.forceDepthClampBasedOnZExport = true;
+    }
+
+    if ((appProfile == AppProfile::DxvkHaloInfiniteLauncher) ||
+        (appProfile == AppProfile::DxvkTf2)
+#ifndef ICD_X64_BUILD
+    || (appProfile == AppProfile::DXVK)
 #endif
+    )
+    {
+        // DXVK Tropic4, GTA4, Halo Infinite Launcher page fault when GPL is enabled.
+        // It looks incorrect pipeline layout is used. Force indirect can make optimized pipeline layout compatible
+        // with fast-linked pipeline.
+        m_settings.pipelineLayoutSchemeSelectionStrategy = PipelineLayoutSchemeSelectionStrategy::ForceIndirect;
 
-            m_settings.enableUberFetchShader  = true;
-        }
+        // It results from incorrect behavior of DXVK. Incompatible push constant size leads to Gpu page fault
+        // during fast link in pipeline creation.
+        m_settings.pipelineLayoutPushConstantCompatibilityCheck = true;
+    }
 
-        if (appProfile == AppProfile::Source2Engine)
+    if (appProfile == AppProfile::AshesOfTheSingularity)
+    {
+        // Disable image type checking on Navi10 to avoid 2.5% loss in Ashes
+        m_settings.disableImageResourceTypeCheck = true;
+        m_settings.overrideUndefinedLayoutToTransferSrcOptimal = true;
+    }
+
+    if (appProfile == AppProfile::DetroitBecomeHuman)
+    {
+        // Disable image type checking on Navi10 to avoid 1.5% loss in Detroit
+        m_settings.disableImageResourceTypeCheck = true;
+
+        // This restores previous driver behavior where depth compression was disabled for VK_IMAGE_LAYOUT_GENERAL.
+        // There is an image memory barrier missing to synchronize DB metadata and L2 causing hair corruption in
+        // some scenes.
+        m_settings.forceResolveLayoutForDepthStencilTransferUsage = true;
+
+        if (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false)
         {
-            pPalSettings->fastDepthStencilClearMode = Pal::FastDepthStencilClearMode::Graphics;
-
-            m_settings.disableSmallSurfColorCompressionSize = 511;
-
-            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
-            m_settings.useAnisoThreshold = true;
-            m_settings.anisoThreshold = 1.0f;
-
-            m_settings.disableMsaaStencilShaderRead = true;
+            m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::AvoidCpuMemoryCoher;
         }
+        m_settings.skipUnMapMemory = true;
+    }
 
-        if (appProfile == AppProfile::Talos)
+    if (appProfile == AppProfile::WarThunder)
+    {
+        // A larger minImageCount can get a huge performance gain for game WarThunder.
+        m_settings.forceMinImageCount = 3;
+
+        m_settings.enableDumbTransitionSync = false;
+        m_settings.forceDisableGlobalBarrierCacheSync = true;
+    }
+
+    if (appProfile == AppProfile::MetroExodus)
+    {
+        // A larger minImageCount can get a performance gain for game Metro Exodus.
+        m_settings.forceMinImageCount = 3;
+
+#if VKI_BUILD_GFX11
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
-            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
-            m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-            m_settings.forceDepthClampBasedOnZExport = true;
-
-            m_settings.clampMaxImageSize = 16384u;
+            // Gives ~0.9% gain at 1080p
+            m_settings.enableAceShaderPrefetch = false;
         }
+#endif
+    }
 
-        if (appProfile == AppProfile::SeriousSamFusion)
+    if (appProfile == AppProfile::X4Foundations)
+    {
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
         {
-            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
-            m_settings.useAnisoThreshold = true;
-            m_settings.anisoThreshold = 1.0f;
-
-            m_settings.clampMaxImageSize = 16384u;
+            m_settings.disableHtileBasedMsaaRead = true;
         }
+    }
 
-        if ((appProfile == AppProfile::TalosVR) ||
-            (appProfile == AppProfile::SeriousSamVrTheLastHope) ||
-            (appProfile == AppProfile::SedpEngine))
+    if (appProfile == AppProfile::SHARK)
+    {
+        m_settings.initializeVramToZero = false;
+    }
+
+    if (appProfile == AppProfile::Valheim)
+    {
+        m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
+
+        if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
         {
-            m_settings.clampMaxImageSize = 16384u;
-        }
+            m_settings.csWaveSize = 32;
+            m_settings.fsWaveSize = 64;
 
-        if (appProfile == AppProfile::SeriousSam4)
-        {
-            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            if (pInfo->revision == Pal::AsicRevision::Navi21)
             {
-                m_settings.forceEnableDcc = ForceDccDefault;
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
             }
-
-            m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
-
-            m_settings.clampMaxImageSize = 16384u;
-        }
-
-        if (appProfile == AppProfile::KnockoutCity)
-        {
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            else if (pInfo->revision == Pal::AsicRevision::Navi22)
             {
-                m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
-                    ForceDccForColorAttachments |
-                    ForceDccForNonColorAttachmentShaderStorage|
-                    ForceDccFor32BppShaderStorage);
+                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                             ForceDccForColorAttachments |
+                                             ForceDccFor3DShaderStorage |
+                                             ForceDccForNonColorAttachmentShaderStorage);
+
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
             }
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            else if (pInfo->revision == Pal::AsicRevision::Navi23)
             {
-                m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
-                    ForceDccForColorAttachments |
-                    ForceDccForNonColorAttachmentShaderStorage |
-                    ForceDccFor32BppShaderStorage |
-                    ForceDccFor64BppShaderStorage);
-
-                if (pInfo->revision == Pal::AsicRevision::Navi22)
-                {
-                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                }
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
             }
         }
-        if (appProfile == AppProfile::EvilGenius2)
+    }
+
+    if (appProfile == AppProfile::SniperElite5)
+    {
+        m_settings.alwaysReportHdrFormats = true;
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
         {
-            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
             m_settings.csWaveSize = 64;
             m_settings.fsWaveSize = 64;
 
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            if (pInfo->revision == Pal::AsicRevision::Navi21)
             {
-                if (pInfo->revision == Pal::AsicRevision::Navi21)
-                {
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                    m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
-                }
+                m_settings.pipelineBinningMode = PipelineBinningModeDisable;
             }
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
-            }
-        }
-
-        if (appProfile == AppProfile::QuakeEnhanced)
-        {
-            // Originally applied to QuakeRemastered - this setting applies to QuakeEnhanced now since it's an update
-            // to the same game.
-            m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
-
-#if VKI_BUILD_GFX11
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
-                m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
-            }
-#endif
-        }
-
-        if (appProfile == AppProfile::SedpEngine)
-        {
-            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
-        }
-
-        if (appProfile == AppProfile::StrangeBrigade)
-        {
-
-            if (pInfo->gpuType == Pal::GpuType::Discrete)
-            {
-                m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc;
-                m_settings.cmdAllocatorDataHeap      = Pal::GpuHeapLocal;
-                m_settings.cmdAllocatorEmbeddedHeap  = Pal::GpuHeapLocal;
-            }
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            else if (pInfo->revision == Pal::AsicRevision::Navi22)
             {
                 m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
-                    ForceDccFor3DShaderStorage |
-                    ForceDccForColorAttachments |
-                    ForceDccFor64BppShaderStorage);
-
-                m_settings.enableNgg = 0x0;
-            }
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-
-                m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabledForMgpu;
-
-                m_settings.overrideWgpMode = WgpMode::WgpModeWgp;
-                m_settings.csWaveSize = 64;
-                m_settings.fsWaveSize = 64;
-                m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
-                                             ForceDccForColorAttachments |
                                              ForceDccFor32BppShaderStorage);
             }
-#if VKI_BUILD_GFX11
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            else if (pInfo->revision == Pal::AsicRevision::Navi23)
             {
-#if VKI_BUILD_NAVI31
-                if (pInfo->revision == Pal::AsicRevision::Navi31)
-                {
-                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
-                    m_settings.pipelineBinningMode = PipelineBinningModeEnable;
-                }
-#endif
+                m_settings.pipelineBinningMode = PipelineBinningModeDisable;
             }
-#endif
-        }
-
-        if (appProfile == AppProfile::ZombieArmy4)
-        {
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
-                    ForceDccForColorAttachments |
-                    ForceDccFor64BppShaderStorage);
-
-                m_settings.enableNgg = 0x0;
-                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
-            }
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.enableNgg = 0x3;
-                m_settings.nggEnableFrustumCulling = true;
-                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
-            }
-        }
-
-        if (appProfile == AppProfile::MadMax)
-        {
-            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
-            m_settings.useAnisoThreshold = true;
-            m_settings.anisoThreshold = 1.0f;
-            m_settings.disableResetReleaseResources = true;
-            m_settings.implicitExternalSynchronization = false;
-        }
-
-        if (appProfile == AppProfile::F1_2017)
-        {
-            // F1 2017 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-            m_settings.forceEnableDcc = ForceDccDefault;
-        }
-
-        if (appProfile == AppProfile::ThronesOfBritannia)
-        {
-            m_settings.disableHtileBasedMsaaRead = true;
-            m_settings.enableFullCopyDstOnly = true;
-        }
-
-        if (appProfile == AppProfile::DiRT4)
-        {
-            // DiRT 4 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-            m_settings.forceEnableDcc = ForceDccDefault;
-
-            m_settings.forceDepthClampBasedOnZExport = true;
-        }
-
-        if (appProfile == AppProfile::WarHammerII)
-        {
-            // WarHammer II performs worse with DCC forced on, so just let the PAL heuristics decide
-            // what's best for now.
-            m_settings.forceEnableDcc = ForceDccDefault;
-
-            m_settings.ac01WaNotNeeded = true;
-        }
-
-        if (appProfile == AppProfile::WarHammerIII)
-        {
-            m_settings.ac01WaNotNeeded = true;
-        }
-
-        if (appProfile == AppProfile::RainbowSixSiege)
-        {
-            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
-            m_settings.useAnisoThreshold = true;
-            m_settings.anisoThreshold = 1.0f;
-
-            // Ignore suboptimal swapchain size to fix crash on task switch
-            m_settings.ignoreSuboptimalSwapchainSize = true;
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
-                    ForceDccForColorAttachments |
-                    ForceDccForNonColorAttachmentShaderStorage);
-            }
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.nggEnableBackfaceCulling = false;
-                m_settings.nggEnableSmallPrimFilter = false;
-
-                if (pInfo->revision == Pal::AsicRevision::Navi23)
-                {
-                    m_settings.overrideLocalHeapSizeInGBs = 8;
-                    m_settings.memoryDeviceOverallocationAllowed = true;
-                }
-
-                if (pInfo->revision == Pal::AsicRevision::Navi24)
-                {
-                    m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
-                        ForceDccForColorAttachments |
-                        ForceDccForNonColorAttachmentShaderStorage |
-                        ForceDccFor32BppShaderStorage);
-
-                    m_settings.overrideLocalHeapSizeInGBs = 8;
-                    m_settings.memoryDeviceOverallocationAllowed = true;
-                }
-            }
-
-        }
-
-        if (appProfile == AppProfile::Rage2)
-        {
-            //PM4 optimizations give us another 1.5% perf increase
-            m_settings.optimizeCmdbufMode = OptimizeCmdbufMode::EnableOptimizeCmdbuf;
-
-            m_settings.enableAceShaderPrefetch = false;
-
-            // Rage 2 currently has all it's images set to VK_SHARING_MODE_CONCURRENT.
-            // Forcing these images to use VK_SHARING_MODE_EXCLUSIVE gives us around 5% perf increase.
-            m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusiveForNonColorAttachments;
-
-            // Disable image type checking to avoid 1% loss.
-            m_settings.disableImageResourceTypeCheck = true;
-
-            m_settings.implicitExternalSynchronization = false;
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
-            {
-                // Rage 2 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-                m_settings.forceEnableDcc = ForceDccDefault;
-
-            }
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            else if (pInfo->revision == Pal::AsicRevision::Navi24)
             {
                 m_settings.pipelineBinningMode = PipelineBinningModeDisable;
                 m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
                 m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-
-                m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
-                                             ForceDccForColorAttachments |
-                                             ForceDccForNonColorAttachmentShaderStorage |
-                                             ForceDccFor32BppShaderStorage |
-                                             ForceDccFor64BppShaderStorage);
-
-                if (pInfo->revision != Pal::AsicRevision::Navi21)
-                {
-                    m_settings.forceEnableDcc |= ForceDccFor2DShaderStorage;
-                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                }
-
-                {
-                    m_settings.csWaveSize = 64;
-                    m_settings.fsWaveSize = 64;
-                }
             }
-
+        }
 #if VKI_BUILD_GFX11
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
-                m_settings.pipelineBinningMode = PipelineBinningModeDisable;
-                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-
-                m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
-                                             ForceDccForColorAttachments |
-                                             ForceDccForNonColorAttachmentShaderStorage |
-                                             ForceDccFor32BppShaderStorage |
-                                             ForceDccFor64BppShaderStorage);
-            }
-#endif
-        }
-
-        if (appProfile == AppProfile::RedDeadRedemption2)
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
-            m_settings.enableAcquireBeforeSignal = true;
-
-            m_settings.limitSampleCounts = VK_SAMPLE_COUNT_1_BIT |
-                VK_SAMPLE_COUNT_2_BIT |
-                VK_SAMPLE_COUNT_4_BIT;
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
-            {
-            }
-
-            // Force exclusive sharing mode - 2% gain
-            m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
-            m_settings.implicitExternalSynchronization = false;
-
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.pipelineBinningMode  = PipelineBinningModeDisable;
-                m_settings.mallNoAllocCtPolicy  = MallNoAllocCtAsSnsr;
-                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-                m_settings.forceEnableDcc       = (ForceDccFor2DShaderStorage  |
-                                                   ForceDccFor3DShaderStorage  |
-                                                   ForceDccForColorAttachments |
-                                                   ForceDccFor64BppShaderStorage);
-
-#if VKI_BUILD_GFX11
-                if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-                {
-                    m_settings.forceEnableDcc      |= ForceDccForNonColorAttachmentShaderStorage;
-                }
-#endif
-            }
-
-            m_settings.ac01WaNotNeeded = true;
-        }
-
-        if (appProfile == AppProfile::GhostReconBreakpoint)
-        {
-
-            // Override the PAL default for 3D color attachments and storage images to match GFX9's, SW_R/z-slice order.
-            m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
-                                             ForceDccFor3DShaderStorage |
-                                             ForceDccForColorAttachments |
-                                             ForceDccForNonColorAttachmentShaderStorage |
-                                             ForceDccFor64BppShaderStorage);
-            }
-
-            m_settings.implicitExternalSynchronization = false;
-        }
-
-        if (appProfile == AppProfile::BaldursGate3)
-        {
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
-            {
-                m_settings.csWaveSize = 64;
-                m_settings.fsWaveSize = 64;
-            }
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.csWaveSize = 64;
-                m_settings.fsWaveSize = 64;
-
-                if (pInfo->revision == Pal::AsicRevision::Navi21)
-                {
-                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
-                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-                }
-                else if (pInfo->revision == Pal::AsicRevision::Navi22)
-                {
-                    m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
-                                                 ForceDccFor3DShaderStorage |
-                                                 ForceDccForColorAttachments);
-
-                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
-                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-                }
-                else if (pInfo->revision == Pal::AsicRevision::Navi23)
-                {
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
-                }
-                else if (pInfo->revision == Pal::AsicRevision::Navi24)
-                {
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
-
-                    m_settings.memoryDeviceOverallocationAllowed = true;
-                }
-            }
-
-#if VKI_BUILD_GFX11
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
-                m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
-            }
-#endif
-        }
-
-#if VKI_RAY_TRACING
-        if (appProfile == AppProfile::Quake2RTX)
-        {
-            m_settings.memoryDeviceOverallocationAllowed = true;
-
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
-
-                m_settings.rtTriangleCompressionMode = NoTriangleCompression;
-
-                m_settings.useFlipHint = false;
-
-                m_settings.maxTotalSizeOfUnifiedShaders = UINT_MAX;
-
-                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
-                                             ForceDccFor3DShaderStorage |
-                                             ForceDccForColorAttachments |
-                                             ForceDccFor64BppShaderStorage);
-
-            }
-
-#if VKI_BUILD_GFX11
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
-                // Gives ~0.5% gain at 4k
-                m_settings.enableAceShaderPrefetch = false;
-            }
-#endif
-        }
-
-        if (appProfile == AppProfile::ControlDX12)
-        {
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.rtEnableCompilePipelineLibrary = false;
-            }
-
-#if VKI_BUILD_GFX11
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
-                // Gives ~2.22% gain at 1080p
-                m_settings.enableAceShaderPrefetch = false;
-            }
-#endif
-        }
-
-        if (appProfile == AppProfile::RayTracingWeekends)
-        {
-#if VKI_BUILD_GFX11
-            if ((pInfo->revision != Pal::AsicRevision::Navi31)
-#if VKI_BUILD_NAVI32
-                && (pInfo->revision != Pal::AsicRevision::Navi32)
-#endif
-                )
-#endif
-            {
-                {
-                    m_settings.rtUnifiedVgprLimit = 64;
-                }
-            }
-        }
-#endif
-
-        if (appProfile == AppProfile::DoomEternal)
-        {
-            m_settings.barrierFilterOptions  = SkipStrayExecutionDependencies;
-
-            m_settings.modifyResourceKeyForAppProfile = true;
-            m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
-
-            // PM4 optimizations give us 1% gain
-            m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
-
-            m_settings.enableSpvPerfOptimal = true;
-
-            // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
-            // can't do any better than returning a non-null function pointer for them.
-            m_settings.lenientInstanceFuncQuery = true;
-
-            m_settings.backgroundFullscreenIgnorePresentErrors = true;
-
-            m_settings.implicitExternalSynchronization = false;
-
-            m_settings.alwaysReportHdrFormats = true;
-
-#if VKI_RAY_TRACING
-            m_settings.indirectCallConvention = IndirectConvention0;
-#endif
-
-            if (pInfo->gpuType == Pal::GpuType::Discrete)
-            {
-                m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
-                m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
-            }
-
-            // Coarse optimizations that apply to multiple GFXIPs go below
-            if (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false)
-            {
-                m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::AvoidCpuMemoryCoher;
-            }
-
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
-            {
-#if VKI_RAY_TRACING
-                m_settings.rtBvhBuildModeFastTrace = BvhBuildModeLinear;
-                m_settings.rtEnableTopDownBuild    = false;
-                m_settings.plocRadius              = 4;
-
-                // 13% Gain @ 4k - Allows overlapping builds
-                m_settings.enableAceShaderPrefetch = false;
-#endif
-                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
-            }
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
-            {
-                //  Doom Eternal performs better when DCC is not forced on. 2% gain on 4k.
-                m_settings.forceEnableDcc = ForceDccDefault;
-
-                // Doom Eternal performs better with NGG disabled (3% gain on 4k), likely because idTech runs it's own
-                // triangle culling and there are no options in the game to turn it off making NGG somewhat redundant.
-                m_settings.enableNgg = false;
-
-                m_settings.asyncComputeQueueMaxWavesPerCu = 20;
-
-                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
-
-                m_settings.csWaveSize = 64;
-            }
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.asyncComputeQueueMaxWavesPerCu = 20;
-                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-
-                if (pInfo->revision != Pal::AsicRevision::Navi21)
-                {
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                }
-
-                m_settings.csWaveSize = 64;
-            }
-#if VKI_BUILD_GFX11
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
-                // Navi31 Mall and Tiling Settings
-                if ((pInfo->revision == Pal::AsicRevision::Navi31)
-#if VKI_BUILD_NAVI32
-                    || (pInfo->revision == Pal::AsicRevision::Navi32)
-#endif
-                    )
-                {
-                    // Mall no alloc settings give a ~1% gain
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-
-                    // This provides ~6% gain at 4k
-                    m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
-                }
-            }
-#endif
-        }
-
-        if (appProfile == AppProfile::IdTechLauncher)
-        {
-            m_settings.enableInternalPipelineCachingToDisk = false;
-        }
-
-        if (appProfile == AppProfile::SaschaWillemsExamples)
-        {
-            m_settings.forceDepthClampBasedOnZExport = true;
-        }
-
-        if ((appProfile == AppProfile::DxvkHaloInfiniteLauncher) ||
-            (appProfile == AppProfile::DxvkTf2)
-#ifndef ICD_X64_BUILD
-        || (appProfile == AppProfile::DXVK)
-#endif
-        )
-        {
-            // DXVK Tropic4, GTA4, Halo Infinite Launcher page fault when GPL is enabled.
-            // It looks incorrect pipeline layout is used. Force indirect can make optimized pipeline layout compatible
-            // with fast-linked pipeline.
-            m_settings.pipelineLayoutSchemeSelectionStrategy = PipelineLayoutSchemeSelectionStrategy::ForceIndirect;
-
-            // It results from incorrect behavior of DXVK. Incompatible push constant size leads to Gpu page fault
-            // during fast link in pipeline creation.
-            m_settings.pipelineLayoutPushConstantCompatibilityCheck = true;
-        }
-
-        if (appProfile == AppProfile::AshesOfTheSingularity)
-        {
-            // Disable image type checking on Navi10 to avoid 2.5% loss in Ashes
-            m_settings.disableImageResourceTypeCheck = true;
-            m_settings.overrideUndefinedLayoutToTransferSrcOptimal = true;
-        }
-
-        if (appProfile == AppProfile::DetroitBecomeHuman)
-        {
-            // Disable image type checking on Navi10 to avoid 1.5% loss in Detroit
-            m_settings.disableImageResourceTypeCheck = true;
-
-            // This restores previous driver behavior where depth compression was disabled for VK_IMAGE_LAYOUT_GENERAL.
-            // There is an image memory barrier missing to synchronize DB metadata and L2 causing hair corruption in
-            // some scenes.
-            m_settings.forceResolveLayoutForDepthStencilTransferUsage = true;
-
-            if (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false)
-            {
-                m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::AvoidCpuMemoryCoher;
-            }
-            m_settings.skipUnMapMemory = true;
-        }
-
-        if (appProfile == AppProfile::WarThunder)
-        {
-            // A larger minImageCount can get a huge performance gain for game WarThunder.
-            m_settings.forceMinImageCount = 3;
-
-            m_settings.enableDumbTransitionSync = false;
-            m_settings.forceDisableGlobalBarrierCacheSync = true;
-        }
-
-        if (appProfile == AppProfile::MetroExodus)
-        {
-            // A larger minImageCount can get a performance gain for game Metro Exodus.
-            m_settings.forceMinImageCount = 3;
-
-#if VKI_BUILD_GFX11
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
-                // Gives ~0.9% gain at 1080p
-                m_settings.enableAceShaderPrefetch = false;
-            }
-#endif
-        }
-
-        if (appProfile == AppProfile::X4Foundations)
-        {
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.disableHtileBasedMsaaRead = true;
-            }
-        }
-
-        if (appProfile == AppProfile::SHARK)
-        {
-            m_settings.initializeVramToZero = false;
-        }
-
-        if (appProfile == AppProfile::Valheim)
-        {
-            m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
-
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.csWaveSize = 32;
-                m_settings.fsWaveSize = 64;
-
-                if (pInfo->revision == Pal::AsicRevision::Navi21)
-                {
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                }
-                else if (pInfo->revision == Pal::AsicRevision::Navi22)
-                {
-                    m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
-                        ForceDccForColorAttachments |
-                        ForceDccFor3DShaderStorage |
-                        ForceDccForNonColorAttachmentShaderStorage);
-
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                }
-                else if (pInfo->revision == Pal::AsicRevision::Navi23)
-                {
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                    m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
-                }
-            }
-        }
-
-        if (appProfile == AppProfile::SniperElite5)
-        {
-            m_settings.alwaysReportHdrFormats = true;
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.csWaveSize = 64;
-                m_settings.fsWaveSize = 64;
-
-                if (pInfo->revision == Pal::AsicRevision::Navi21)
-                {
-                    m_settings.pipelineBinningMode = PipelineBinningModeDisable;
-                }
-                else if (pInfo->revision == Pal::AsicRevision::Navi22)
-                {
-                    m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
-                                                 ForceDccFor32BppShaderStorage);
-                }
-                else if (pInfo->revision == Pal::AsicRevision::Navi23)
-                {
-                    m_settings.pipelineBinningMode = PipelineBinningModeDisable;
-                }
-                else if (pInfo->revision == Pal::AsicRevision::Navi24)
-                {
-                    m_settings.pipelineBinningMode = PipelineBinningModeDisable;
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
-                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
-                }
-            }
-#if VKI_BUILD_GFX11
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
 #if VKI_BUILD_NAVI31
-                if (pInfo->revision == Pal::AsicRevision::Navi31)
-                {
-                    // This provides ~4.2% gain at 4k
-                    m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
-                    m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
-                }
+            if (pInfo->revision == Pal::AsicRevision::Navi31)
+            {
+                // This provides ~4.2% gain at 4k
+                m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+            }
 #endif
 #if VKI_BUILD_NAVI33
-                if (pInfo->revision == Pal::AsicRevision::Navi33)
+            if (pInfo->revision == Pal::AsicRevision::Navi33)
+            {
                 {
-                    {
-                        m_settings.forceCsThreadIdSwizzling = true;
-                    }
+                    m_settings.forceCsThreadIdSwizzling = true;
                 }
-#endif
             }
 #endif
         }
+#endif
+    }
 
-        if (appProfile == AppProfile::MetalGearSolid5)
+    if (appProfile == AppProfile::MetalGearSolid5)
+    {
+        m_settings.padVertexBuffers = true;
+    }
+
+    if (appProfile == AppProfile::MetalGearSolid5Online)
+    {
+        m_settings.padVertexBuffers = true;
+    }
+
+    if (appProfile == AppProfile::YamagiQuakeII)
+    {
+        m_settings.forceImageSharingMode =
+            ForceImageSharingMode::ForceImageSharingModeExclusiveForNonColorAttachments;
+    }
+
+    if (appProfile == AppProfile::XPlane)
+    {
+
+        if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
         {
-            m_settings.padVertexBuffers = true;
+            m_settings.disableHtileBasedMsaaRead = true;
         }
 
-        if (appProfile == AppProfile::MetalGearSolid5Online)
-        {
-            m_settings.padVertexBuffers = true;
-        }
+        m_settings.padVertexBuffers = true;
+    }
 
-        if (appProfile == AppProfile::YamagiQuakeII)
-        {
-            m_settings.forceImageSharingMode =
-                ForceImageSharingMode::ForceImageSharingModeExclusiveForNonColorAttachments;
-        }
+    if (appProfile == AppProfile::Battlefield1)
+    {
+        m_settings.forceDisableAnisoFilter = true;
+    }
 
-        if (appProfile == AppProfile::XPlane)
-        {
+    if (appProfile == AppProfile::DDraceNetwork)
+    {
+        m_settings.ignorePreferredPresentMode = true;
+    }
 
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.disableHtileBasedMsaaRead = true;
-            }
+    if (appProfile == AppProfile::SaintsRowV)
+    {
+        m_settings.barrierFilterOptions = BarrierFilterOptions::FlushOnHostMask;
 
-            m_settings.padVertexBuffers = true;
-        }
+    }
 
-        if (appProfile == AppProfile::Battlefield1)
-        {
-            m_settings.forceDisableAnisoFilter = true;
-        }
-
-        if (appProfile == AppProfile::DDraceNetwork)
-        {
-            m_settings.ignorePreferredPresentMode = true;
-        }
-
-        if (appProfile == AppProfile::SaintsRowV)
-        {
-            m_settings.barrierFilterOptions = BarrierFilterOptions::FlushOnHostMask;
-
-        }
-
-        if ((appProfile == AppProfile::HalfLifeAlyx) ||
-            (appProfile == AppProfile::Satisfactory))
-        {
+    if ((appProfile == AppProfile::HalfLifeAlyx) ||
+        (appProfile == AppProfile::Satisfactory))
+    {
 #if VKI_BUILD_GFX11
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
-                m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
-            }
-#endif
-        }
-
-        if (appProfile == AppProfile::RomeRemastered)
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
+            m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
+        }
+#endif
+    }
+
+    if (appProfile == AppProfile::RomeRemastered)
+    {
 #if VKI_BUILD_GFX11
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-            {
-                m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
-            }
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        {
+            m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
+        }
 #endif
-        }
+    }
 
-        if (appProfile == AppProfile::SpidermanRemastered)
-        {
-            m_settings.supportMutableDescriptors = false;
-        }
+    if (appProfile == AppProfile::SpidermanRemastered)
+    {
+        m_settings.supportMutableDescriptors = false;
+    }
 
-        if (appProfile == AppProfile::Enscape)
-        {
-            m_settings.enableSpvPerfOptimal    = true;
-            m_settings.optimizeCmdbufMode      = EnableOptimizeCmdbuf;
-            m_settings.enableAceShaderPrefetch = false;
+    if (appProfile == AppProfile::Enscape)
+    {
+        m_settings.enableSpvPerfOptimal    = true;
+        m_settings.optimizeCmdbufMode      = EnableOptimizeCmdbuf;
+        m_settings.enableAceShaderPrefetch = false;
 
 #if VKI_RAY_TRACING
-            m_settings.plocRadius              = 4;
-            m_settings.rtBvhBuildModeFastTrace = BvhBuildModeLinear;
-            m_settings.rtEnableTopDownBuild    = false;
+        m_settings.plocRadius              = 4;
+        m_settings.rtBvhBuildModeFastTrace = BvhBuildModeLinear;
+        m_settings.rtEnableTopDownBuild    = false;
 
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.asyncComputeQueueMaxWavesPerCu = 20;
-                m_settings.csWaveSize                     = 64;
-            }
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            m_settings.asyncComputeQueueMaxWavesPerCu = 20;
+            m_settings.csWaveSize                     = 64;
+        }
 #endif
-        }
+    }
 
-        if (appProfile == AppProfile::Vkd3dEngine)
+    if (appProfile == AppProfile::Starfield)
+    {
+        OverrideVkd3dCommonSettings(&m_settings);
+
+#if VKI_BUILD_GFX11
+        if ((pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            )
         {
-            m_settings.exportNvComputeShaderDerivatives = true;
-            m_settings.exportNvDeviceGeneratedCommands  = true;
-            m_settings.exportImageCompressionControl    = true;
+            m_settings.fsWaveSize = 32;
         }
+#endif
+    }
 
-        if ((appProfile == AppProfile::DXVK) ||
-            (appProfile == AppProfile::Vkd3dEngine))
-        {
-            m_settings.disableSingleMipAnisoOverride = false;
-        }
+    if (appProfile == AppProfile::Vkd3dEngine)
+    {
+        OverrideVkd3dCommonSettings(&m_settings);
+    }
 
+    if (appProfile == AppProfile::DXVK)
+    {
+        m_settings.disableSingleMipAnisoOverride = false;
     }
 
     return result;
@@ -1778,13 +1809,6 @@ VkResult VulkanSettingsLoader::ProcessSettings(
 
         // We need to override debug file paths settings to absolute paths as per system info
         OverrideSettingsBySystemInfo();
-
-        // Modify defaults based on application profile and panel settings
-        if ((*pAppProfile == AppProfile::AngleEngine) && m_settings.deferCompileOptimizedPipeline)
-        {
-            m_settings.enableEarlyCompile = true;
-            m_settings.pipelineLayoutMode = PipelineLayoutMode::PipelineLayoutAngle;
-        }
 
         DumpAppProfileChanges(*pAppProfile);
 
@@ -1923,12 +1947,6 @@ void VulkanSettingsLoader::ValidateSettings()
         m_settings.enableRaytracingSupport = false;
     }
 
-    // When using continuations, always set thread group size to 32 x 1 x 1, that's what we only support.
-    if (m_settings.llpcRaytracingMode == RaytracingContinuations)
-    {
-        m_settings.rtFlattenThreadGroupSize = 32;
-    }
-
 #if VKI_BUILD_GFX11
     // RTIP 2.0+ is always expected to support hardware traversal stack
     VK_ASSERT((rayTracingIpLevel <= Pal::RayTracingIpLevel::RtIp1_1) ||
@@ -2030,6 +2048,11 @@ void VulkanSettingsLoader::UpdatePalSettings()
     if (m_settings.ac01WaNotNeeded)
     {
         pPalSettings->ac01WaNotNeeded = true;
+    }
+
+    if (m_settings.expandHiZRangeForResummarize)
+    {
+        pPalSettings->expandHiZRangeForResummarize = true;
     }
 
 }

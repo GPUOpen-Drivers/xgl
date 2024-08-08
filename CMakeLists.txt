@@ -210,19 +210,13 @@ string(APPEND CMAKE_CXX_FLAGS "${ICD_GCOV_COMPILE_FLAGS}")
 
 ### Generator Dependencies ############################################################################################
 # Python3
-find_package(PythonInterp 3)
-if(NOT PYTHONINTERP_FOUND)
+find_package(Python3 3.6)
+if(NOT Python3_FOUND)
     if(UNIX)
-        message(FATAL_ERROR "Python 3 is needed to generate some source files.")
-    endif()
-else()
-    if(UNIX)
-        if(${PYTHON_VERSION_MINOR} LESS "6")
-            message(FATAL_ERROR "Python 3.6(CPython) or higher is needed to generate some source files.")
-        endif()
+        message(FATAL_ERROR "Python 3.6 or higher is needed to generate some source files.")
     endif()
 endif()
-set(PYTHON_CMD ${PYTHON_EXECUTABLE})
+set(PYTHON_CMD ${Python3_EXECUTABLE})
 
 # Perl
 find_package(Perl 5)

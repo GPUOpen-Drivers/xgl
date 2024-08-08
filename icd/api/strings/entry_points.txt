@@ -583,3 +583,4 @@ vkCmdBindDescriptorBufferEmbeddedSamplers2EXT       @device       @dext(KHR_main
 vkCmdSetRenderingAttachmentLocationsKHR             @device       @dext(KHR_dynamic_rendering_local_read)
 vkCmdSetRenderingInputAttachmentIndicesKHR          @device       @dext(KHR_dynamic_rendering_local_read)
 
+vkCmdSetDepthBias2EXT                               @device       @dext(EXT_depth_bias_control)

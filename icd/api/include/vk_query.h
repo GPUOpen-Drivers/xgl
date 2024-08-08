@@ -311,6 +311,8 @@ class TimestampQueryPool final : public QueryPoolWithStorageView
 {
 public:
     static constexpr uint32_t TimestampNotReadyChunk = UINT32_MAX;
+    static constexpr uint8_t NotReadyByte = UINT8_MAX;
+
     // +------------------------+------------------------+
     // | TimestampNotReadyChunk | TimestampNotReadyChunk |
     // |------------------------+------------------------|

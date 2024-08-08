@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <atomic>
 #include "devmode/devmode_mgr.h"
 #include "palTraceSession.h"
 
@@ -47,6 +48,8 @@ namespace GpuUtil
 {
 class CodeObjectTraceSource;
 class QueueTimingsTraceSource;
+class StringTableTraceSource;
+class UserMarkerHistoryTraceSource;
 }
 
 namespace vk
@@ -85,6 +88,7 @@ public:
     virtual bool IsTracingEnabled() const override;
     virtual bool IsCrashAnalysisEnabled() const override { return m_crashAnalysisEnabled; }
     virtual bool IsQueueTimingActive(const Device* pDevice) const override;
+    virtual bool IsTraceRunning() const override;
 
     virtual Pal::Result TimedQueueSubmit(
         uint32_t               deviceIdx,
@@ -123,6 +127,15 @@ public:
     virtual void DeregisterPipelineCache(
         PipelineBinaryCache* pPipelineCache) override { };
 
+    virtual void ProcessMarkerTable(
+        uint32        sqttCbId,
+        uint32        numOps,
+        const uint32* pUserMarkerOpHistory,
+        uint32        numMarkerStrings,
+        const uint32* pMarkerStringOffsets,
+        uint32        markerStringDataSize,
+        const char*   pMarkerStringData);
+
 private:
     DevModeUberTrace(Instance* pInstance);
 
@@ -140,6 +153,9 @@ private:
     GpuUtil::TraceSession*              m_pTraceSession;
     GpuUtil::CodeObjectTraceSource*     m_pCodeObjectTraceSource;
     GpuUtil::QueueTimingsTraceSource*   m_pQueueTimingsTraceSource;
+    GpuUtil::StringTableTraceSource*    m_pStringTableTraceSource;
+    GpuUtil::UserMarkerHistoryTraceSource* m_pUserMarkerHistoryTraceSource;
+    std::atomic<uint32_t>               m_stringTableId;
 #endif
 };
 

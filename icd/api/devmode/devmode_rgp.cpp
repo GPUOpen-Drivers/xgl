@@ -52,6 +52,8 @@
 #include "palHashBaseImpl.h"
 #include "palListImpl.h"
 #include "palVectorImpl.h"
+#include "palStringTableTraceSource.h"
+#include "palUserMarkerHistoryTraceSource.h"
 
 // gpuopen headers
 #include "devDriverServer.h"
@@ -337,7 +339,10 @@ DevModeRgp::DevModeRgp(
     m_staticVmidActive(false),
     m_crashAnalysisEnabled(false),
     m_perfCounterIds(pInstance->Allocator()),
-    m_pipelineCaches(pInstance->Allocator())
+    m_pipelineCaches(pInstance->Allocator()),
+    m_stringTableId(0),
+    m_pStringTableTraceSource(nullptr),
+    m_pUserMarkerHistoryTraceSource(nullptr)
 {
     memset(&m_trace, 0, sizeof(m_trace));
 }
@@ -345,6 +350,7 @@ DevModeRgp::DevModeRgp(
 // =====================================================================================================================
 DevModeRgp::~DevModeRgp()
 {
+    DestroyUserMarkerTraceSources();
     DestroyRGPTracing(&m_trace);
 }
 
@@ -2199,8 +2205,8 @@ Pal::Result DevModeRgp::InitRGPTracing(
             pState->pGpaSession = VK_PLACEMENT_NEW(pStorage) GpuUtil::GpaSession(
                 m_pInstance->PalPlatform(),
                 pPalDevice,
-                VK_VERSION_MAJOR(apiVersion),
-                VK_VERSION_MINOR(apiVersion),
+                VK_API_VERSION_MAJOR(apiVersion),
+                VK_API_VERSION_MINOR(apiVersion),
                 GpuUtil::ApiType::Vulkan,
                 RgpSqttInstrumentationSpecVersion,
                 RgpSqttInstrumentationApiVersion);
@@ -2252,6 +2258,69 @@ Pal::Result DevModeRgp::InitRGPTracing(
 }
 
 // =====================================================================================================================
+// Init trace sources for exporting UserMarker to RRA (and RGP in the future)
+Pal::Result DevModeRgp::InitUserMarkerTraceSources()
+{
+    Pal::Result result = Pal::Result::ErrorOutOfMemory;
+
+    GpuUtil::TraceSession* pTraceSession = m_pInstance->PalPlatform()->GetTraceSession();
+
+    const size_t traceSourcesAllocSize = sizeof(GpuUtil::StringTableTraceSource) +
+                                         sizeof(GpuUtil::UserMarkerHistoryTraceSource);
+
+    void* pStorage = m_pInstance->AllocMem(traceSourcesAllocSize,
+                                           VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+
+    if (pStorage != nullptr)
+    {
+        void* pObjStorage = pStorage;
+
+        m_pStringTableTraceSource = VK_PLACEMENT_NEW(pObjStorage)
+            GpuUtil::StringTableTraceSource(m_pInstance->PalPlatform());
+
+        pObjStorage = VoidPtrInc(pObjStorage, sizeof(GpuUtil::StringTableTraceSource));
+
+        m_pUserMarkerHistoryTraceSource = VK_PLACEMENT_NEW(pObjStorage)
+            GpuUtil::UserMarkerHistoryTraceSource(m_pInstance->PalPlatform());
+
+        result = pTraceSession->RegisterSource(m_pStringTableTraceSource);
+
+        if (result == Pal::Result::Success)
+        {
+            result = pTraceSession->RegisterSource(m_pUserMarkerHistoryTraceSource);
+        }
+
+        if (result != Pal::Result::Success)
+        {
+            DestroyUserMarkerTraceSources();
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Clean up resources related to UserMarker trace sources
+void DevModeRgp::DestroyUserMarkerTraceSources()
+{
+    GpuUtil::TraceSession* pTraceSession = m_pInstance->PalPlatform()->GetTraceSession();
+
+    if (m_pUserMarkerHistoryTraceSource != nullptr)
+    {
+        pTraceSession->UnregisterSource(m_pUserMarkerHistoryTraceSource);
+        m_pUserMarkerHistoryTraceSource = nullptr;
+    }
+    if (m_pStringTableTraceSource != nullptr)
+    {
+        pTraceSession->UnregisterSource(m_pStringTableTraceSource);
+        m_pStringTableTraceSource = nullptr;
+    }
+
+    // The 2 trace sources are allocated in a single memory allocation
+    m_pInstance->FreeMem(m_pStringTableTraceSource);
+}
+
+// =====================================================================================================================
 // Called when a new device is created.  This will preallocate reusable RGP trace resources for that device.
 void DevModeRgp::PostDeviceCreate(Device* pDevice)
 {
@@ -2259,6 +2328,8 @@ void DevModeRgp::PostDeviceCreate(Device* pDevice)
 
     // Pre-allocate trace resources for this device
     CheckTraceDeviceChanged(&m_trace, pDevice);
+
+    InitUserMarkerTraceSources();
 
     auto* pDriverControlServer = m_pDevDriverServer->GetDriverControlServer();
 
@@ -2774,6 +2845,31 @@ bool DevModeRgp::GetTraceFrameEndTag(
     }
 
     return active;
+}
+
+// =====================================================================================================================
+bool DevModeRgp::IsTraceRunning() const
+{
+    const GpuUtil::TraceSession* pTraceSession = m_pInstance->PalPlatform()->GetTraceSession();
+    return pTraceSession->GetTraceSessionState() == GpuUtil::TraceSessionState::Running;
+}
+
+// =====================================================================================================================
+void DevModeRgp::ProcessMarkerTable(
+    uint32        sqttCbId,
+    uint32        numOps,
+    const uint32* pUserMarkerOpHistory,
+    uint32        numMarkerStrings,
+    const uint32* pMarkerStringOffsets,
+    uint32        markerStringDataSize,
+    const char*   pMarkerStringData)
+{
+    uint32_t tableId = ++m_stringTableId;
+
+    m_pStringTableTraceSource->AddStringTable(tableId,
+                                              numMarkerStrings, pMarkerStringOffsets,
+                                              pMarkerStringData, markerStringDataSize);
+    m_pUserMarkerHistoryTraceSource->AddUserMarkerHistory(sqttCbId, tableId, numOps, pUserMarkerOpHistory);
 }
 
 }; // namespace vk

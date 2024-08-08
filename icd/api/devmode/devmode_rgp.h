@@ -46,6 +46,8 @@
 #include "gpuopen.h"
 #endif
 
+#include <atomic>
+
 // PAL forward declarations
 namespace Pal
 {
@@ -64,6 +66,13 @@ namespace RGPProtocol
 {
 class RGPServer;
 }
+}
+
+// GpuUtil forward declarations
+namespace GpuUtil
+{
+class StringTableTraceSource;
+class UserMarkerHistoryTraceSource;
 }
 
 namespace vk
@@ -135,6 +144,7 @@ public:
     virtual bool IsQueueTimingActive(const Device* pDevice) const override;
     virtual bool GetTraceFrameBeginTag(uint64_t* pTag) const override;
     virtual bool GetTraceFrameEndTag(uint64_t* pTag) const override;
+    virtual bool IsTraceRunning() const override;
 
     virtual Util::Result RegisterPipelineCache(
         PipelineBinaryCache* pPipelineCache,
@@ -142,6 +152,15 @@ public:
 
     virtual void DeregisterPipelineCache(
         PipelineBinaryCache* pPipelineCache) override;
+
+    virtual void ProcessMarkerTable(
+        uint32        sqttCbId,
+        uint32        numOps,
+        const uint32* pUserMarkerOpHistory,
+        uint32        numMarkerStrings,
+        const uint32* pMarkerStringOffsets,
+        uint32        markerStringDataSize,
+        const char*   pMarkerStringData) override;
 
     Util::ListIterator<PipelineBinaryCache*, PalAllocator> GetPipelineCacheListIterator()
         { return m_pipelineCaches.Begin(); }
@@ -252,6 +271,9 @@ private:
     Pal::Result InitRGPTracing(TraceState* pState, Device* pDevice);
     void DestroyRGPTracing(TraceState* pState);
 
+    Pal::Result InitUserMarkerTraceSources();
+    void DestroyUserMarkerTraceSources();
+
     Pal::Result InitTraceQueueResources(TraceState* pState, bool* pHasDebugVmid, const Queue* pQueue, bool auxQueue);
     Pal::Result InitTraceQueueResourcesForDevice(TraceState* pState, bool* pHasDebugVmid);
     Pal::Result InitTraceQueueFamilyResources(TraceState* pTraceState, TraceQueueFamilyState* pFamilyState);
@@ -312,6 +334,10 @@ private:
 
     PipelineCacheList                   m_pipelineCaches;
     Util::RWLock                        m_pipelineReinjectionLock;
+
+    std::atomic<uint32_t>               m_stringTableId;
+    GpuUtil::StringTableTraceSource*    m_pStringTableTraceSource;
+    GpuUtil::UserMarkerHistoryTraceSource* m_pUserMarkerHistoryTraceSource;
 #endif
 };
 

@@ -162,10 +162,6 @@ public:
         const Vkgc::BinaryData&         shaderBinary,
         ShaderModuleHandle*             pShaderModule);
 
-    void TryEarlyCompileShaderModule(
-        const Device*       pDevice,
-        ShaderModuleHandle* pModule);
-
     bool IsValidShaderModule(
         const ShaderModuleHandle* pShaderModule) const;
 
@@ -270,7 +266,6 @@ public:
     void FreeGraphicsPipelineCreateInfo(
         Device*                           pDevice,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-        bool                              keepConvertTempMem,
         bool                              keepInternalMem);
 
 #if VKI_RAY_TRACING

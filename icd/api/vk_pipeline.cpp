@@ -942,9 +942,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetShaderInfoAMD(
 
                     ConvertShaderInfoStatistics(palStats, pStats);
 
-                    Pal::DeviceProperties info;
-
-                    pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalDevice()->GetProperties(&info);
+                    const Pal::DeviceProperties& info = pDevice->GetPalProperties();
 
                     pStats->numPhysicalVgprs = info.gfxipProperties.shaderCore.vgprsPerSimd;
                     pStats->numPhysicalSgprs = info.gfxipProperties.shaderCore.sgprsPerSimd;

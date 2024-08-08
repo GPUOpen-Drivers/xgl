@@ -454,14 +454,18 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
     bool elfReplace = false;
     if (pCreateInfo->earlyElfPackage[gplType].pCode == nullptr)
     {
-        Util::MetroHash128              hasher;
-        Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
-        int64_t                         startTime = Util::GetPerfCpuTime();
+        Llpc::GraphicsPipelineBuildOut  pipelineOut    = {};
+        int64_t                         startTime      = Util::GetPerfCpuTime();
+        bool                            binaryProvided = false;
 
-        hasher.Update(pCreateInfo->libraryHash[gplType]);
-        hasher.Update(PipelineCompilerTypeLlpc);
-        hasher.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
-        hasher.Finalize(cacheId.bytes);
+        if (binaryProvided == false)
+        {
+            Util::MetroHash128 hasher;
+            hasher.Update(pCreateInfo->libraryHash[gplType]);
+            hasher.Update(PipelineCompilerTypeLlpc);
+            hasher.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
+            hasher.Finalize(cacheId.bytes);
+        }
 
         Vkgc::BinaryData finalBinary = {};
         if ((pDevice->GetRuntimeSettings().shaderReplaceMode == ShaderReplacePipelineBinaryHash) ||
@@ -493,7 +497,12 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
                 &pCreateInfo->pipelineInfo.mesh,
                 &pCreateInfo->pipelineInfo.fs
             };
-            LoadShaderBinaryFromCache(pPipelineCache, &cacheId, &shaderLibraryBinary, &hitCache, &hitAppCache);
+
+            if (binaryProvided == false)
+            {
+                LoadShaderBinaryFromCache(pPipelineCache, &cacheId, &shaderLibraryBinary, &hitCache, &hitAppCache);
+            }
+
             if (pPipelineCache != nullptr)
             {
                 // Update the shader feedback
@@ -925,6 +934,7 @@ VkResult CompilerSolutionLlpc::CreateRayTracingPipelineBinary(
         void* pOutShaderGroup = static_cast<void*>(pipelineOut.shaderGroupHandle.shaderHandles);
 
         pPipelineBinary->librarySummary = pipelineOut.librarySummary;
+        pPipelineBinary->isCps = pipelineOut.isCps;
     }
     *pCompileTime = Util::GetPerfCpuTime() - startTime;
 
@@ -1152,8 +1162,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
 void CompilerSolutionLlpc::BuildPipelineInternalBufferData(
     const PipelineCompiler*           pCompiler,
     const uint32_t                    uberFetchConstBufRegBase,
-    const uint32_t                    specConstBufVertexRegBase,
-    const uint32_t                    specConstBufFragmentRegBase,
     bool                              needCache,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo)
 {
@@ -1168,7 +1176,7 @@ void CompilerSolutionLlpc::BuildPipelineInternalBufferData(
     const VkPipelineVertexInputStateCreateInfo* pVertexInput = nullptr;
     bool needUberFetchShaderBuffer = false;
 
-    if (pCreateInfo->pipelineInfo.enableUberFetchShader || pCreateInfo->pipelineInfo.enableEarlyCompile)
+    if (pCreateInfo->pipelineInfo.enableUberFetchShader)
     {
         pVertexInput = pCreateInfo->pipelineInfo.pVertexInput;
         // For monolithic pipeline (needCache = true), we need save internal buffer data to cache, so we always need
@@ -1193,7 +1201,6 @@ void CompilerSolutionLlpc::BuildPipelineInternalBufferData(
             VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
         if (pInternalBufferInfo->pData == nullptr)
         {
-            pCreateInfo->pipelineInfo.enableEarlyCompile = false;
             pCreateInfo->pipelineInfo.enableUberFetchShader = false;
             pInternalBufferInfo->dataSize = 0;
             needUberFetchShaderBuffer = false;

@@ -148,7 +148,6 @@ struct PipelineMetadata
     bool                       pointSizeUsed;
     bool                       dualSrcBlendingUsed;
     bool                       shadingRateUsedInShader;
-    bool                       enableEarlyCompile;
     bool                       enableUberFetchShader;
     bool                       postDepthCoverageEnable;
     uint32_t                   psOnlyPointCoordEnable;
@@ -256,6 +255,7 @@ struct RayTracingPipelineBinary
 {
     uint32_t                            maxFunctionCallDepth;
     bool                                hasTraceRay;
+    bool                                isCps;
     uint32_t                            pipelineBinCount;
     Vkgc::BinaryData*                   pPipelineBins;
     Vkgc::RayTracingShaderGroupHandle   shaderGroupHandle;
@@ -284,10 +284,6 @@ public:
         const Vkgc::BinaryData&      shaderBinary,
         ShaderModuleHandle*          pShaderModule,
         const PipelineOptimizerKey&  profileKey) = 0;
-
-    virtual void TryEarlyCompileShaderModule(
-        const Device*       pDevice,
-        ShaderModuleHandle* pShaderModule) = 0;
 
     virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) = 0;
 
@@ -346,8 +342,6 @@ public:
     virtual void BuildPipelineInternalBufferData(
         const PipelineCompiler*           pCompiler,
         const uint32_t                    uberFetchConstBufRegBase,
-        const uint32_t                    specConstBufVertexRegBase,
-        const uint32_t                    specConstBufFragmentRegBase,
         bool                              needCache,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo) = 0;
 

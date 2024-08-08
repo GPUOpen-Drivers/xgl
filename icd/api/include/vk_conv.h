@@ -1594,6 +1594,7 @@ void VkToPalImageScaledCopyRegion(
     Pal::ChNumFormat            srcFormat,
     uint32_t                    srcArraySize,
     Pal::ChNumFormat            dstFormat,
+    uint32_t                    dstArraySize,
     Pal::ImageScaledCopyRegion* pPalRegions,
     uint32_t*                   pPalRegionIndex)
 {
@@ -1611,12 +1612,13 @@ void VkToPalImageScaledCopyRegion(
     region.dstOffset = VkToPalOffset3d(imageBlit.dstOffsets[0]);
     region.dstExtent = VkToPalSignedExtent3d(imageBlit.dstOffsets);
 
-    // Source and destination aspect masks and layer counts must match
+    // Source and destination aspect masks must match
     VK_ASSERT(imageBlit.srcSubresource.aspectMask == imageBlit.dstSubresource.aspectMask);
-    VK_ASSERT(imageBlit.srcSubresource.layerCount == imageBlit.dstSubresource.layerCount);
 
-    region.numSlices = (imageBlit.srcSubresource.layerCount == VK_REMAINING_ARRAY_LAYERS) ?
+    region.srcSlices = (imageBlit.srcSubresource.layerCount == VK_REMAINING_ARRAY_LAYERS) ?
         (srcArraySize - imageBlit.srcSubresource.baseArrayLayer) : imageBlit.srcSubresource.layerCount;
+    region.dstSlices = (imageBlit.dstSubresource.layerCount == VK_REMAINING_ARRAY_LAYERS) ?
+        (dstArraySize - imageBlit.dstSubresource.baseArrayLayer) : imageBlit.dstSubresource.layerCount;
 
     // As we don't allow copying between different types of aspects we don't need to worry about dealing with both
     // aspect masks separately.
@@ -1956,7 +1958,7 @@ namespace convert
 
         case VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT:
         case VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT:
-        case VK_COLOR_SPACE_DCI_P3_LINEAR_EXT:
+        case VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT:
             palColorSpaceBits = Pal::ScreenColorSpace::TfSrgb;
             palColorSpaceBits |= Pal::ScreenColorSpace::CsDciP3;
             break;

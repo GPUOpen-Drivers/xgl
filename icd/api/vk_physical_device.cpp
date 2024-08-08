@@ -551,12 +551,7 @@ static void GetFormatFeatureFlags(
         retFlags &= ~VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         retFlags &= ~VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
 
-#if VKI_BUILD_GFX11
-        if (palProps.gfxLevel < Pal::GfxIpLevel::GfxIp11_0)
-#endif
-        {
-            retFlags &= ~VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
-        }
+        retFlags &= ~VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
     }
     else
     {
@@ -2159,7 +2154,8 @@ VkResult PhysicalDevice::GetImageFormatProperties(
         (((usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0)                           &&
          ((supportedFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) == 0))           ||
         (((usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) != 0)                           &&
-         ((supportedFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) == 0))              ||
+         ((supportedFeatures & (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)) == 0)) ||
         (((usage & VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) != 0)       &&
          ((supportedFeatures & VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) == 0)))
     {
@@ -2571,11 +2567,11 @@ VkResult PhysicalDevice::GetPhysicalDeviceCalibrateableTimeDomainsEXT(
     uint32_t*                           pTimeDomainCount,
     VkTimeDomainEXT*                    pTimeDomains)
 {
-    Pal::DeviceProperties deviceProperties = {};
-    VkResult result = PalToVkResult(m_pPalDevice->GetProperties(&deviceProperties));
-    VK_ASSERT(result == VK_SUCCESS);
+    const Pal::DeviceProperties& deviceProperties = PalProperties();
 
     uint32_t timeDomainCount = Util::CountSetBits(deviceProperties.osProperties.timeDomains.u32All);
+
+    VkResult result = VK_SUCCESS;
 
     if (pTimeDomains == nullptr)
     {
@@ -2713,6 +2709,7 @@ void PhysicalDevice::GetDeviceProperties(
 
     memcpy(pProperties->deviceName, palProps.gpuName,
         Util::Min(Pal::MaxDeviceName, Pal::uint32(VK_MAX_PHYSICAL_DEVICE_NAME_SIZE)));
+
     pProperties->deviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE - 1] = 0;
 
     pProperties->limits = GetLimits();
@@ -2745,14 +2742,15 @@ bool PhysicalDevice::QueueSupportsPresents(
 {
     // Do we have any of this engine type and, if so, does it support a queueType that supports presents?
     const Pal::EngineType palEngineType = m_queueFamilies[queueFamilyIndex].palEngineType;
+    const Pal::QueueType  palQueueType  = m_queueFamilies[queueFamilyIndex].palQueueType;
     const auto& engineProps             = m_properties.engineProperties[palEngineType];
+    const auto& queueProperties         = m_properties.queueProperties[palQueueType];
 
     Pal::PresentMode presentMode =
-        (platform == VK_ICD_WSI_PLATFORM_DISPLAY)? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
+        (platform == VK_ICD_WSI_PLATFORM_DISPLAY) ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
 
-    return (engineProps.engineCount > 0) &&
+    return (engineProps.engineCount > 0) && queueProperties.flags.supportsSwapChainPresents &&
            (m_pPalDevice->GetSupportedSwapChainModes(VkToPalWsiPlatform(platform), presentMode) != 0);
-
 }
 
 // =====================================================================================================================
@@ -3805,8 +3803,8 @@ VkResult PhysicalDevice::GetSurfaceFormats(
     {
         // The w/a here will be removed once more presentable format is supported on base driver side.
         const VkSurfaceFormatKHR formatList[] = {
-            { VK_FORMAT_B8G8R8A8_UNORM, VK_COLORSPACE_SRGB_NONLINEAR_KHR },
-            { VK_FORMAT_B8G8R8A8_SRGB,  VK_COLORSPACE_SRGB_NONLINEAR_KHR }
+            { VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR },
+            { VK_FORMAT_B8G8R8A8_SRGB,  VK_COLOR_SPACE_SRGB_NONLINEAR_KHR }
         };
         const uint32_t formatCount = sizeof(formatList) / sizeof(formatList[0]);
 
@@ -4412,7 +4410,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     }
 
     bool exposeNvComputeShaderDerivatives  = false;
-
     if ((pPhysicalDevice == nullptr) || (pPhysicalDevice->GetRuntimeSettings().exportNvComputeShaderDerivatives))
     {
         exposeNvComputeShaderDerivatives = true;
@@ -6218,8 +6215,8 @@ size_t PhysicalDevice::GetFeatures2(
 
                 if (updateFeatures)
                 {
-                    pExtInfo->fragmentShaderSampleInterlock = VK_FALSE;
-                    pExtInfo->fragmentShaderPixelInterlock = VK_FALSE;
+                    pExtInfo->fragmentShaderSampleInterlock = VK_TRUE;
+                    pExtInfo->fragmentShaderPixelInterlock = VK_TRUE;
                     pExtInfo->fragmentShaderShadingRateInterlock = VK_FALSE;
                 }
 
@@ -7028,6 +7025,19 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     pExtInfo->maintenance6 = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceMaintenance7FeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->maintenance7 = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -8325,6 +8335,21 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->blockTexelViewCompatibleMultipleLayers = VK_TRUE;
             pProps->maxCombinedImageSamplerDescriptorCount = MaxCombinedImageSamplerDescriptorCount;
             pProps->fragmentShadingRateClampCombinerInputs = VK_TRUE;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_PROPERTIES_KHR:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceMaintenance7PropertiesKHR*>(pNext);
+
+            pProps->robustFragmentShadingRateAttachmentAccess                 = true;
+            pProps->separateDepthStencilAttachmentAccess                      = true;
+            pProps->maxDescriptorSetTotalUniformBuffersDynamic                = MaxDynamicUniformDescriptors;
+            pProps->maxDescriptorSetTotalStorageBuffersDynamic                = MaxDynamicStorageDescriptors;
+            pProps->maxDescriptorSetTotalBuffersDynamic                       = MaxDynamicDescriptors;
+            pProps->maxDescriptorSetUpdateAfterBindTotalUniformBuffersDynamic = MaxDynamicUniformDescriptors;
+            pProps->maxDescriptorSetUpdateAfterBindTotalStorageBuffersDynamic = MaxDynamicStorageDescriptors;
+            pProps->maxDescriptorSetUpdateAfterBindTotalBuffersDynamic        = MaxDynamicDescriptors;
             break;
         }
 

@@ -160,6 +160,18 @@ public:
         const VkAllocationCallbacks*             pAllocator,
         DeferredWorkload*                        pDeferredWorkload);
 
+    static VkResult CreateCacheId(
+        const Device*                               pDevice,
+        const VkRayTracingPipelineCreateInfoKHR*    pCreateInfo,
+        VkPipelineCreateFlags2KHR                   flags,
+        const bool                                  hasLibraries,
+        RayTracingPipelineShaderStageInfo*          pShaderInfo,
+        PipelineOptimizerKey*                       pPipelineOptimizerKey,
+        uint64_t*                                   pApiPsoHash,
+        Util::MetroHash::Hash*                      pElfHash,
+        ShaderModuleHandle*                         pTempModule,
+        Util::MetroHash::Hash*                      pCacheIds);
+
     void BindToCmdBuffer(
         CmdBuffer*                           pCmdBuffer,
         const Pal::DynamicComputeShaderInfo& dynamicBindInfo) const;
@@ -177,8 +189,6 @@ public:
         uint32_t                            deviceIndex,
         uint32_t                            group,
         VkShaderGroupShaderKHR              groupShader) const;
-
-    static void BindNullPipeline(CmdBuffer* pCmdBuffer);
 
     uint32_t GetAttributeSize() const
         { return m_attributeSize; }
@@ -219,6 +229,9 @@ public:
     bool CheckHasTraceRay() const
         { return m_hasTraceRay; }
 
+    bool CheckIsCps() const
+        { return m_isCps; }
+
     void UpdatePipelineImplCreateInfo(const VkRayTracingPipelineCreateInfoKHR* pCreateInfoIn);
 
     static void ConvertStaticPipelineFlags(const Device* pDevice,
@@ -233,6 +246,9 @@ public:
                          uint32_t  width,
                          uint32_t  height,
                          uint32_t  depth) const;
+
+    uint32_t GetTotalShaderCount() const
+        { return m_totalShaderCount; }
 
 protected:
     // Make sure that this value should be equal to Bil::RayTracingTileWidth defined in bilInstructionRayTracing.h
@@ -291,9 +307,6 @@ protected:
 
     uint32_t GetNativeShaderCount() const
         { return m_nativeShaderCount; }
-
-    uint32_t GetTotalShaderCount() const
-        { return m_totalShaderCount; }
 
     // Converted creation info parameters of the Vulkan ray tracing pipeline
     struct CreateInfo
@@ -363,6 +376,7 @@ private:
 
     PipelineImplCreateInfo            m_createInfo;
     bool                              m_hasTraceRay;
+    bool                              m_isCps;
     Util::MetroHash::Hash             m_elfHash;
 
     CaptureReplayVaMappingBufferInfo  m_captureReplayVaMappingBufferInfo;

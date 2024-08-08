@@ -79,6 +79,7 @@ namespace vk
 class ComputePipeline;
 class Device;
 class ApiCmdBuffer;
+class CmdBuffer;
 class Framebuffer;
 class GraphicsPipeline;
 class Image;
@@ -101,6 +102,15 @@ constexpr uint8_t  DefaultIndex7BitsValue     = 0x7F;
 constexpr uint8_t  DefaultTidValue            = 0xFF;
 constexpr uint8_t  AssociatedFlag             = 31;
 constexpr uint32_t DefaultAssociatedFlagValue = (1 << AssociatedFlag);
+
+#if VKI_RAY_TRACING
+typedef void (*PFN_traceRaysDispatchPerDevice)(
+    CmdBuffer*                             pCmdBuffer,
+    uint32_t                               deviceIdx,
+    uint32_t                               width,
+    uint32_t                               height,
+    uint32_t                               depth);
+#endif
 
 // Internal API pipeline binding points
 enum PipelineBindPoint
@@ -217,6 +227,9 @@ struct PerGpuRenderState
     // size if global buffer is not used.
     // backendSize is normally considered as scratch size.
     Pal::CompilerStackSizes maxPipelineStackSizes;
+
+    // Dynamic pipeline stack size that is set by API.
+    uint32_t dynamicPipelineStackSize;
 
     // VB bindings in source non-SRD form
     Pal::BufferViewInfo vbBindings[Pal::MaxVertexBuffers];
@@ -409,6 +422,9 @@ public:
         gpusize                 sizeInBytes,
         InternalSubAllocPool    poolId,
         InternalMemory**        ppInternalMemory);
+
+    void SetTraceRaysDispatchPerDevice(PFN_traceRaysDispatchPerDevice pfnRTDispatch)
+        { m_pfnTraceRaysDispatchPerDevice = pfnRTDispatch; }
 #endif
 
     VkResult End(void);
@@ -1323,6 +1339,8 @@ public:
     SqttCmdBufferState* GetSqttState()
         { return m_pSqttState; }
 
+    uint64_t GetUserMarkerContextValue() const;
+
     static bool IsStaticStateDifferent(
         uint32_t currentToken,
         uint32_t newToken)
@@ -1599,6 +1617,7 @@ private:
     void RPBeginSubpass();
     void RPEndSubpass();
     void RPResolveAttachments(uint32_t count, const RPResolveInfo* pResolves);
+    void RPResolveMsaa(const RPResolveInfo& params);
     void RPSyncPoint(const RPSyncPointInfo& syncPoint, VirtualStackFrame* pVirtStack);
     void RPSyncPointLegacy(const RPSyncPointInfo& syncPoint, VirtualStackFrame* pVirtStack);
     void RPLoadOpClearColor(uint32_t count, const RPLoadOpClearInfo* pClears);
@@ -1842,6 +1861,13 @@ private:
         uint32_t                               height,
         uint32_t                               depth);
 
+    static void TraceRaysDispatchPerDevice(
+        CmdBuffer*                             pCmdBuffer,
+        uint32_t                               deviceIdx,
+        uint32_t                               width,
+        uint32_t                               height,
+        uint32_t                               depth);
+
     void TraceRaysIndirectPerDevice(
         const uint32_t                         deviceIdx,
         GpuRt::ExecuteIndirectArgType          indirectArgType,
@@ -1849,7 +1875,8 @@ private:
         const VkStridedDeviceAddressRegionKHR& missShaderBindingTable,
         const VkStridedDeviceAddressRegionKHR& hitShaderBindingTable,
         const VkStridedDeviceAddressRegionKHR& callableShaderBindingTable,
-        VkDeviceAddress                        indirectDeviceAddress);
+        VkDeviceAddress                        indirectDeviceAddress,
+        uint64_t                               userMarkerContext);
 
     void GetRayTracingDispatchArgs(
         uint32_t                               deviceIdx,
@@ -1992,6 +2019,10 @@ private:
 
     typedef Util::Vector<GpuRt::DispatchRaysConstants*, 1, PalAllocator> PatchCpsVector;
     PatchCpsVector m_patchCpsList[MaxPalDevices];
+#endif
+
+#if VKI_RAY_TRACING
+    PFN_traceRaysDispatchPerDevice m_pfnTraceRaysDispatchPerDevice;
 #endif
 };
 
@@ -2952,6 +2983,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingAttachmentLocationsKHR(
 VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingInputAttachmentIndicesKHR(
     VkCommandBuffer                                 commandBuffer,
     const VkRenderingInputAttachmentIndexInfoKHR*   pInputAttachmentIndexInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBias2EXT(
+    VkCommandBuffer                                 commandBuffer,
+    const VkDepthBiasInfoEXT*                       pDepthBiasInfo);
 
 } // namespace entry
 

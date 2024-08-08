@@ -712,19 +712,17 @@ VkResult TimestampQueryPool::GetResults(
             volatile const uint64_t* pTimestamp =
                 reinterpret_cast<const uint64_t*>(Util::VoidPtrInc(pSrcData, srcSlotOffset));
 
-            // Test if the timestamp query is available
-            uint64_t value = *pTimestamp;
-            bool ready     = (value != TimestampNotReady);
-
             // Wait until the timestamp query has become available
             if ((flags & VK_QUERY_RESULT_WAIT_BIT) != 0)
             {
-                while (!ready)
+                while ((*pTimestamp) == TimestampNotReady)
                 {
-                    value = *pTimestamp;
-                    ready = (value != TimestampNotReady);
+                    Util::YieldThread();
                 }
             }
+
+            // Test if the timestamp query is available
+            const bool ready = ((*pTimestamp) != TimestampNotReady);
 
             // Get a pointer to the start of this slot's data
             void* pSlotData = Util::VoidPtrInc(pData, static_cast<size_t>(dstSlot * stride));
@@ -737,7 +735,7 @@ VkResult TimestampQueryPool::GetResults(
 
                 if (ready)
                 {
-                    pSlot[0] = value;
+                    pSlot[0] = (*pTimestamp);
                 }
 
                 if ((flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) != 0)
@@ -751,7 +749,8 @@ VkResult TimestampQueryPool::GetResults(
 
                 if (ready)
                 {
-                    pSlot[0] = static_cast<uint32_t>(value); // Note: 32-bit results are allowed to wrap
+                    // Note: 32-bit results are allowed to wrap
+                    pSlot[0] = static_cast<uint32_t>(*pTimestamp);
                 }
 
                 if ((flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) != 0)
@@ -788,24 +787,18 @@ void TimestampQueryPool::Reset(
         queryCount = Util::Min(queryCount, m_entryCount - startQuery);
 
         // Query pool size needs to be reset in qwords.
-        const uint32_t queryDataSize = (m_slotSize * queryCount) / sizeof(uint64_t);
+        const uint32_t queryDataSize = (m_slotSize * queryCount);
+
         for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
         {
             void* pMappedAddr = nullptr;
             if (m_internalMem.Map(deviceIdx, &pMappedAddr) == Pal::Result::Success)
             {
-                uint64_t* pQueryData = static_cast<uint64_t*>(Util::VoidPtrInc(pMappedAddr,
-                                                                               (m_slotSize * startQuery)));
+                void* pQueryData = Util::VoidPtrInc(pMappedAddr, (m_slotSize * startQuery));
 
-                for (uint32_t idx = 0; idx < queryDataSize; idx++)
-                {
-                    pQueryData[idx] = TimestampNotReady;
-                }
+                memset(pQueryData, NotReadyByte, queryDataSize);
 
-                if (pMappedAddr != nullptr)
-                {
-                    m_internalMem.Unmap(deviceIdx);
-                }
+                m_internalMem.Unmap(deviceIdx);
             }
         }
     }

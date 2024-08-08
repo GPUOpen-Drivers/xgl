@@ -92,10 +92,6 @@ public:
         ShaderModuleHandle*          pShaderModule,
         const PipelineOptimizerKey&  profileKey) override;
 
-    virtual void TryEarlyCompileShaderModule(
-        const Device*       pDevice,
-        ShaderModuleHandle* pModule) override { }
-
     virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) override;
 
     virtual VkResult CreateGraphicsPipelineBinary(
@@ -159,8 +155,6 @@ public:
     virtual void BuildPipelineInternalBufferData(
         const PipelineCompiler*           pCompiler,
         const uint32_t                    uberFetchConstBufRegBase,
-        const uint32_t                    specConstBufVertexRegBase,
-        const uint32_t                    specConstBufFragmentRegBase,
         bool                              needCache,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo) override;
 

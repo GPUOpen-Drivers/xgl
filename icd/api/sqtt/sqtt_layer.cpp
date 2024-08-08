@@ -50,9 +50,11 @@
 #include "sqtt/sqtt_layer.h"
 #include "sqtt/sqtt_mgr.h"
 
+#include "palAutoBuffer.h"
 #include "palEventDefs.h"
 #include "palHashMapImpl.h"
 #include "palListImpl.h"
+#include "palVectorImpl.h"
 
 namespace vk
 {
@@ -282,7 +284,9 @@ SqttCmdBufferState::SqttCmdBufferState(
 #if ICD_GPUOPEN_DEVMODE_BUILD
     m_instructionTrace({ false, IDevMode::InvalidTargetPipelineHash, VK_PIPELINE_BIND_POINT_MAX_ENUM }),
 #endif
-    m_debugTags(pCmdBuf->VkInstance()->Allocator())
+    m_debugTags(pCmdBuf->VkInstance()->Allocator()),
+    m_userMarkerOpHistory(pCmdBuf->VkInstance()->Allocator()),
+    m_userMarkerStrings(pCmdBuf->VkInstance()->Allocator())
 {
     m_cbId.u32All       = 0;
     m_deviceId          = reinterpret_cast<uint64_t>(ApiDevice::FromObject(m_pCmdBuf->VkDevice()));
@@ -317,6 +321,8 @@ void SqttCmdBufferState::Begin(
     const VkCommandBufferBeginInfo* pBeginInfo)
 {
     m_currentEventId = 0;
+    m_userMarkerOpHistory.Clear();
+    m_userMarkerStrings.Clear();
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
     if (m_pDevMode != nullptr)
@@ -1136,12 +1142,26 @@ void SqttCmdBufferState::DebugMarkerInsert(
 void SqttCmdBufferState::DebugLabelBegin(
     const VkDebugUtilsLabelEXT* pMarkerInfo)
 {
+    DevUserMarkerString userMarkerString;
+    userMarkerString.length = static_cast<uint32>(strlen(pMarkerInfo->pLabelName)) + 1;
+    Util::Strncpy(userMarkerString.string, pMarkerInfo->pLabelName, sizeof(userMarkerString.string));
+    m_userMarkerStrings.PushBack(userMarkerString);
+
+    Pal::Developer::UserMarkerOpInfo opInfo;
+    opInfo.opType   = static_cast<uint8_t>(Pal::Developer::UserMarkerOpType::Push);
+    opInfo.strIndex = static_cast<uint32_t>(m_userMarkerStrings.size());
+    m_userMarkerOpHistory.PushBack(opInfo.u32All);
+
     WriteUserEventMarker(RgpSqttMarkerUserEventPush, pMarkerInfo->pLabelName);
 }
 
 // =====================================================================================================================
 void SqttCmdBufferState::DebugLabelEnd()
 {
+    Pal::Developer::UserMarkerOpInfo opInfo;
+    opInfo.opType = static_cast<uint8_t>(Pal::Developer::UserMarkerOpType::Pop);
+    m_userMarkerOpHistory.PushBack(opInfo.u32All);
+
     WriteUserEventMarker(RgpSqttMarkerUserEventPop, nullptr);
 }
 
@@ -1179,6 +1199,24 @@ bool SqttCmdBufferState::HasDebugTag(
     }
 
     return false;
+}
+
+// =====================================================================================================================
+uint64_t SqttCmdBufferState::GetUserMarkerContextValue() const
+{
+    return (uint64_t(m_cbId.u32All) << 32) | m_userMarkerOpHistory.NumElements();
+}
+
+// =====================================================================================================================
+const DevUserMarkerOpHistory& SqttCmdBufferState::GetUserMarkerOpHistory() const
+{
+    return m_userMarkerOpHistory;
+}
+
+// =====================================================================================================================
+const DevStringTable& SqttCmdBufferState::GetUserMarkerStrings() const
+{
+    return m_userMarkerStrings;
 }
 
 // =====================================================================================================================
@@ -2115,6 +2153,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDebugMarkerBeginEXT(
     const VkDebugMarkerMarkerInfoEXT*           pMarkerInfo)
 {
     const VkCommandBuffer cmdBuffer = commandBuffer;
+
     SQTT_SETUP();
 
     pSqtt->DebugMarkerBegin(pMarkerInfo);
@@ -2127,6 +2166,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDebugMarkerEndEXT(
     VkCommandBuffer                             commandBuffer)
 {
     VkCommandBuffer cmdBuffer = commandBuffer;
+
     SQTT_SETUP();
 
     pSqtt->DebugMarkerEnd();
@@ -2793,6 +2833,49 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
 
     CheckRGPFrameBegin(pQueue, pDevMode, submitCount, pSubmits);
 #endif
+
+    if (pDevMode->IsTraceRunning())
+    {
+        for (uint32_t i = 0; i < pSubmits->commandBufferCount; ++i)
+        {
+            CmdBuffer* pCmdBuf = ApiCmdBuffer::ObjectFromHandle(pSubmits->pCommandBuffers[i]);
+
+            const auto& userMarkerOpHistory = pCmdBuf->GetSqttState()->GetUserMarkerOpHistory();
+            const auto& userMarkerStrings = pCmdBuf->GetSqttState()->GetUserMarkerStrings();
+
+            if ((userMarkerOpHistory.NumElements() > 0) && (userMarkerStrings.IsEmpty() == false))
+            {
+                uint32_t stringDataSizeInBytes = 0;
+                for (uint32 j = 0; j < userMarkerStrings.NumElements(); ++j)
+                {
+                    stringDataSizeInBytes += userMarkerStrings.At(j).length;
+                }
+
+                const uint32 baseOffset = sizeof(uint32) * userMarkerStrings.NumElements();
+                AutoBuffer<uint32_t, 16, vk::PalAllocator> stringOffsets(
+                    userMarkerStrings.NumElements(), pQueue->VkDevice()->VkInstance()->Allocator());
+                AutoBuffer<char, 128, vk::PalAllocator> stringData(
+                    stringDataSizeInBytes, pQueue->VkDevice()->VkInstance()->Allocator());
+
+                for (uint32 j = 0, offset = 0; j < userMarkerStrings.NumElements(); ++j)
+                {
+                    const DevUserMarkerString& markerString = userMarkerStrings.At(j);
+                    memcpy(stringData.Data() + offset, markerString.string, markerString.length);
+                    stringOffsets[j] = offset + baseOffset;
+                    offset += markerString.length;
+                }
+
+                pDevMode->ProcessMarkerTable(
+                    pCmdBuf->GetSqttState()->GetId().u32All,
+                    userMarkerOpHistory.NumElements(),
+                    userMarkerOpHistory.Data(),
+                    userMarkerStrings.NumElements(),
+                    stringOffsets.Data(),
+                    stringDataSizeInBytes,
+                    stringData.Data());
+            }
+        }
+    }
 
     VkResult result = SQTT_CALL_NEXT_LAYER(vkQueueSubmit)(queue, submitCount, pSubmits, fence);
 

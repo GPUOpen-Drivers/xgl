@@ -841,34 +841,6 @@
       "Type": "enum"
     },
     {
-      "Name": "PipelineLayoutMode",
-      "Description": "Control the pipeline descriptor layout for early compile",
-      "Tags": [
-        "Pipeline Options"
-      ],
-      "Defaults": {
-        "Default": "PipelineLayoutDefault"
-      },
-      "ValidValues": {
-        "IsEnum": true,
-        "Values": [
-          {
-            "Name": "PipelineLayoutDefault",
-            "Value": 0,
-            "Description": "Build descritptor layout with default layout"
-          },
-          {
-            "Name": "PipelineLayoutAngle",
-            "Value": 1,
-            "Description": "Build descriptor layout compatible with angle base app"
-          }
-        ],
-        "Name": "PipelineLayoutMode"
-      },
-      "Scope": "Driver",
-      "Type": "enum"
-    },
-    {
       "Name": "PipelineLayoutSchemeSelectionStrategy",
       "Description": "Decide how to choose the scheme of pipeline layout",
       "Tags": [
@@ -1227,18 +1199,6 @@
       "Scope": "Driver"
     },
     {
-      "Name": "UseShaderLibraryForPipelineLibraryFastLink",
-      "Description": "Whether use Pal shader library for pipeline library fast-link",
-      "Tags": [
-        "Pipeline Options"
-      ],
-      "Defaults": {
-        "Default": true
-      },
-      "Type": "bool",
-      "Scope": "Driver"
-    },
-    {
       "Name": "ForceLinkTimeOptimizationInShaderObject",
       "Description": "Whether force enable link time optimziation in shader object layer",
       "Tags": [
@@ -1453,45 +1413,6 @@
       "Type": "bool"
     },
     {
-      "Name": "EnableEarlyCompile",
-      "Description": "Enable pipeline early compile.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool"
-    },
-    {
-      "Name": "DeferCompileOptimizedPipeline",
-      "Description": "Whether enable defer compile optimized pipeline, it only affects option EnableUberFetchShader and EnableEarlyCompile",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool"
-    },
-    {
-      "Name": "DeferCompileThreadCount",
-      "Description": "Assistant thread count for deferred compile operation, if count is greater than the internal limitation, the real thread count will be clamped to the limitation.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": "0xFFFFFFFF"
-      },
-      "Scope": "Driver",
-      "Type": "uint32",
-      "Flags": {
-        "IsHex": true
-      }
-    },
-    {
       "Name": "DisablePerCompFetch",
       "Description": "Disable per component fetch in uber fetch shader.",
       "Tags": [
@@ -1530,18 +1451,6 @@
     {
       "Name": "ForceAlignedForDynamicStride",
       "Description": "Force vertex stride is aligned when dynamic vertex stride is enabled",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool"
-    },
-    {
-      "Name": "SupportPatchSpecConst",
-      "Description": "Support patch specialized constant",
       "Tags": [
         "SPIRV Options"
       ],
@@ -2504,7 +2413,7 @@
       ],
       "Defaults": {
         "Default": true,
-        "AndroidDefault": false
+        "Android": false
       },
       "Type": "bool",
       "Scope": "Driver"
@@ -2764,6 +2673,18 @@
       "Name": "DumpPipelineCompileCacheMatrix"
     },
     {
+      "Description": "If true, interpMode patch will be not applied to APP. Therefore, the option should only be enabled via application profile.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "DisablePatchInterpMode"
+    },
+    {
       "Name": "LlpcRaytracingMode",
       "BuildTypes": [
         "VKI_RAY_TRACING"
@@ -2776,9 +2697,9 @@
         "IsEnum": true,
         "Values": [
           {
-            "Name": "RaytracingNone",
+            "Name": "RaytracingAuto",
             "Value": 0,
-            "Description": "No Raytracing compiling path."
+            "Description": "Let compiler choose raytracing mode automatically."
           },
           {
             "Name": "RaytracingLegacy",
@@ -5713,6 +5634,18 @@
       "Type": "bool"
     },
     {
+      "Name": "InfiniteDeviceWaitIdle",
+      "Description": "Wait for vkDeviceWaitIdle() infinitely instead of returning VK_TIMEOUT directly.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
       "Name": "UseOldDeviceUUIDCalculation",
       "Description": "Old calculation only use pci bdf (busNumber, deviceNumber, functionNumber) to compose the UUID.",
       "Tags": [
@@ -6792,7 +6725,7 @@
         "IsEnum": true,
         "SkipGen": true
       },
-      "Description": "Override the ImageTilingPreference setting value for 3D images used as color attachments or shader storage.",
+      "Description": "Override the ImageTilingPreference setting value for 3D images used as color attachments or shader storage where possible.",
       "Tags": [
         "Optimization"
       ],
@@ -7494,6 +7427,18 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Resummarize the htile values from the depth-stencil surface contents.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "ExpandHiZRangeForResummarize"
+    },
+    {
       "Description": "Force all ray tracing shaders compiled in unified mode to have swizzled thread groups.",
       "Tags": [
         "Optimization"
@@ -7629,7 +7574,7 @@
       ],
       "Defaults": {
         "Default": false,
-        "AndroidDefault": true
+        "Android": true
       },
       "Scope": "Driver",
       "Type": "bool",
@@ -8968,6 +8913,66 @@
         ]
       },
       "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Split ray tracing dispatch call",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "SplitRayTracingDispatch",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Split the X dimension of a ray tracing dspatch call into RtDispatchSplitX parts",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 16
+      },
+      "Type": "uint32",
+      "Name": "RtDispatchSplitX",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Split the Y dimension of a ray tracing dspatch call into RtDispatchSplitY parts",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 16
+      },
+      "Type": "uint32",
+      "Name": "RtDispatchSplitY",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Split the Z dimension of a ray tracing dspatch call into RtDispatchSplitZ parts",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": 1
+      },
+      "Type": "uint32",
+      "Name": "RtDispatchSplitZ",
       "Scope": "Driver"
     },
     {

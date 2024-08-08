@@ -420,14 +420,12 @@ void CmdBuffer::BlitImage(
 
         palCopyInfo.pRegions        = pPalRegions;
 
-        // PAL does gamma correction whenever the destination is a SRGB image or treated as one.
-        // If the source image is an UNORM image that contains SRGB data, we need to set dstAsNorm
-        // so PAL doesn't end up doing gamma correction on values that are already in SRGB space.
         if (pSrcImage->TreatAsSrgb())
         {
-            palCopyInfo.flags.dstAsNorm = true;
+            palCopyInfo.flags.srcAsSrgb = true;
         }
-        else if (pDstImage->TreatAsSrgb())
+
+        if (pDstImage->TreatAsSrgb())
         {
             palCopyInfo.flags.dstAsSrgb = true;
         }
@@ -444,11 +442,20 @@ void CmdBuffer::BlitImage(
                 static_cast<uint32_t>(region.srcOffsets[1].y - region.srcOffsets[0].y),
                 static_cast<uint32_t>(region.srcOffsets[1].z - region.srcOffsets[0].z)
             };
+            const VkExtent3D     dstExtent =
+            {
+                static_cast<uint32_t>(region.dstOffsets[1].x - region.dstOffsets[0].x),
+                static_cast<uint32_t>(region.dstOffsets[1].y - region.dstOffsets[0].y),
+                static_cast<uint32_t>(region.dstOffsets[1].z - region.dstOffsets[0].z)
+            };
+            const bool directCopyDepth = (srcExtent.depth == dstExtent.depth) ||
+                                         ((srcExtent.depth == region.dstSubresource.layerCount) &&
+                                          (dstExtent.depth == region.srcSubresource.layerCount));
 
             if ((pSrcImage->GetFormat() == pDstImage->GetFormat()) &&
-                (srcExtent.width  == static_cast<uint32_t>(region.dstOffsets[1].x - region.dstOffsets[0].x)) &&
-                (srcExtent.height == static_cast<uint32_t>(region.dstOffsets[1].y - region.dstOffsets[0].y)) &&
-                (srcExtent.depth  == static_cast<uint32_t>(region.dstOffsets[1].z - region.dstOffsets[0].z)))
+                (srcExtent.width  == dstExtent.width) &&
+                (srcExtent.height == dstExtent.height) &&
+                directCopyDepth)
             {
                 const VkImageCopy imageCopy =
                 {
@@ -476,7 +483,7 @@ void CmdBuffer::BlitImage(
                        (palCopyInfo.regionCount <= (regionBatch - MaxPalAspectsPerMask)))
                 {
                     VkToPalImageScaledCopyRegion(pRegions[regionIdx], srcFormat.format, pSrcImage->GetArraySize(),
-                        dstFormat.format, pPalRegions, &palCopyInfo.regionCount);
+                        dstFormat.format, pDstImage->GetArraySize(), pPalRegions, &palCopyInfo.regionCount);
 
                     ++regionIdx;
                 }

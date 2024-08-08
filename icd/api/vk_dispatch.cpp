@@ -846,6 +846,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdSetRenderingAttachmentLocationsKHR         );
     INIT_DISPATCH_ENTRY(vkCmdSetRenderingInputAttachmentIndicesKHR      );
 
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthBias2EXT                           );
 }
 
 // =====================================================================================================================

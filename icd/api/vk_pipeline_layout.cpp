@@ -56,7 +56,6 @@ static bool IsUberFetchShaderEnabled(const Device* pDevice)
     bool enabled = false;
 
     if (pDevice->GetRuntimeSettings().enableUberFetchShader ||
-        (pDevice->GetRuntimeSettings().enableEarlyCompile && (scheme == PipelineLayoutScheme::Compact)) ||
         pDevice->IsExtensionEnabled(DeviceExtensions::EXT_GRAPHICS_PIPELINE_LIBRARY) ||
         pDevice->IsExtensionEnabled(DeviceExtensions::EXT_VERTEX_INPUT_DYNAMIC_STATE)
     )
@@ -235,33 +234,44 @@ void PipelineLayout::ProcessPushConstantsInfo(
 // =====================================================================================================================
 // Checks if GpuRT resource mappings will need to be added to this pipeline layout
 bool PipelineLayout::HasRayTracing(
+    const Device*                     pDevice,
     const VkPipelineLayoutCreateInfo* pIn)
 {
     bool rtFound = false;
 
-    for (uint32_t setIndex = 0; (setIndex < pIn->setLayoutCount) && (rtFound == false); ++setIndex)
+    if (pDevice->RayTrace() != nullptr)
     {
-        if (pIn->pSetLayouts[setIndex] != VK_NULL_HANDLE)
+        if (pIn->setLayoutCount == 0)
         {
-            const auto pSetLayout = DescriptorSetLayout::ObjectFromHandle(pIn->pSetLayouts[setIndex]);
+            // If layout is empty, we will reserve raytracing node. Otherwise the resources that gpurt requires
+            // will not be bound.
+            rtFound = true;
+        }
 
-            // Test if the set layout supports the RayGen stage (required for RT pipelines)
-            // Without this check, compilation fails for RT pipelines that don't utilize trace ray
-            if (Util::TestAnyFlagSet(pSetLayout->Info().activeStageMask, VK_SHADER_STAGE_RAYGEN_BIT_KHR) == true)
+        for (uint32_t setIndex = 0; (setIndex < pIn->setLayoutCount) && (rtFound == false); ++setIndex)
+        {
+            if (pIn->pSetLayouts[setIndex] != VK_NULL_HANDLE)
             {
-                rtFound = true;
-                break;
-            }
+                const auto pSetLayout = DescriptorSetLayout::ObjectFromHandle(pIn->pSetLayouts[setIndex]);
 
-            // Test if an acceleration structure descriptor binding is present (necessary for pipelines with ray query)
-            for (uint32_t bindingIndex = 0; bindingIndex < pSetLayout->Info().count; ++bindingIndex)
-            {
-                const DescriptorSetLayout::BindingInfo& binding = pSetLayout->Binding(bindingIndex);
-
-                if (binding.info.descriptorType == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR)
+                // Test if the set layout supports the RayGen stage (required for RT pipelines)
+                // Without this check, compilation fails for RT pipelines that don't utilize trace ray
+                if (Util::TestAnyFlagSet(pSetLayout->Info().activeStageMask, VK_SHADER_STAGE_RAYGEN_BIT_KHR) == true)
                 {
                     rtFound = true;
                     break;
+                }
+
+                // Test if an acceleration structure descriptor binding is present (necessary for pipelines with ray query)
+                for (uint32_t bindingIndex = 0; bindingIndex < pSetLayout->Info().count; ++bindingIndex)
+                {
+                    const DescriptorSetLayout::BindingInfo& binding = pSetLayout->Binding(bindingIndex);
+
+                    if (binding.info.descriptorType == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR)
+                    {
+                        rtFound = true;
+                        break;
+                    }
                 }
             }
         }
@@ -308,24 +318,7 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
     memset(&(pInfo->userDataLayout), 0, sizeof(UserDataLayout));
     pInfo->userDataLayout.scheme = PipelineLayoutScheme::Compact;
 
-    if (settings.enableEarlyCompile)
-    {
-        // Early compile mode will enable uber-fetch shader and spec constant buffer on vertex shader and
-        // fragment shader implicitly.  So we need three reserved node.
-        // Each buffer consume 2 user data register now.
-        pPipelineInfo->numUserDataNodes += 3;
-        pInfo->userDataRegCount         += 3 * InternalConstBufferRegCount;
-
-        pUserDataLayout->uberFetchConstBufRegBase    = FetchShaderInternalBufferOffset;
-        pUserDataLayout->specConstBufVertexRegBase   = SpecConstBufferVertexOffset;
-        pUserDataLayout->specConstBufFragmentRegBase = SpecConstBufferFragmentOffset;
-    }
-    else
-    {
-        pUserDataLayout->uberFetchConstBufRegBase    = InvalidReg;
-        pUserDataLayout->specConstBufVertexRegBase   = InvalidReg;
-        pUserDataLayout->specConstBufFragmentRegBase = InvalidReg;
-    }
+    pUserDataLayout->uberFetchConstBufRegBase    = InvalidReg;
 
     VK_ASSERT(pIn->setLayoutCount <= MaxDescriptorSets);
 
@@ -345,15 +338,14 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
     }
 
 #if VKI_RAY_TRACING
-    if (HasRayTracing(pIn))
+    if (HasRayTracing(pDevice, pIn))
     {
         gfxReservedCount += (InternalConstBufferRegCount + MaxTraceRayUserDataRegCount);
     }
 #endif
 
     // the user data entries for uber-fetch shader const buffer
-    if (IsUberFetchShaderEnabled<PipelineLayoutScheme::Compact>(pDevice) &&
-        (settings.enableEarlyCompile == false))
+    if (IsUberFetchShaderEnabled<PipelineLayoutScheme::Compact>(pDevice))
     {
         gfxReservedCount += SetPtrRegCount;
     }
@@ -374,8 +366,7 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
 
     // If uber-fetch shader is not enabled for early compile, the user data entries for uber-fetch shader const
     // buffer is appended at the bottom of user data table.  Just following vertex buffer table.
-    if (IsUberFetchShaderEnabled<PipelineLayoutScheme::Compact>(pDevice) &&
-        (pDevice->GetRuntimeSettings().enableEarlyCompile == false))
+    if (IsUberFetchShaderEnabled<PipelineLayoutScheme::Compact>(pDevice))
     {
         VK_ASSERT(pUserDataLayout->uberFetchConstBufRegBase == InvalidReg);
 
@@ -411,7 +402,7 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
         &pUserDataLayout->threadGroupReversalRegBase);
 
 #if VKI_RAY_TRACING
-    if (HasRayTracing(pIn))
+    if (HasRayTracing(pDevice, pIn))
     {
         // Reserve one node for indirect RT capture replay.
         pPipelineInfo->numUserDataNodes += 1;
@@ -545,17 +536,6 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
 
         // Add the number of user data regs used by this set to the total count for the whole layout
         pInfo->userDataRegCount += pSetUserData->totalRegCount;
-        if (settings.pipelineLayoutMode == PipelineLayoutAngle)
-        {
-            // Force next set firstRegOffset align to AngleDescPattern.
-            if ((i + 1) < Util::ArrayLen(AngleDescPattern::DescriptorSetOffset))
-            {
-                if (pInfo->userDataRegCount < AngleDescPattern::DescriptorSetOffset[i + 1])
-                {
-                    pInfo->userDataRegCount = AngleDescPattern::DescriptorSetOffset[i + 1];
-                }
-            }
-        }
     }
 
     // Calculate total number of user data regs used for active descriptor set data
@@ -609,8 +589,6 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
 
     VK_ASSERT(pIn->setLayoutCount <= MaxDescriptorSets);
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
-    VK_ASSERT(settings.pipelineLayoutMode != PipelineLayoutAngle);
-    VK_ASSERT(settings.enableEarlyCompile == false);
 
     VkResult result = VK_SUCCESS;
 
@@ -675,7 +653,7 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
         &pUserDataLayout->threadGroupReversalRegBase);
 
 #if VKI_RAY_TRACING
-    if (HasRayTracing(pIn))
+    if (HasRayTracing(pDevice, pIn))
     {
         pUserDataLayout->dispatchRaysArgsPtrRegBase = pInfo->userDataRegCount;
         pPipelineInfo->numUserDataNodes            += MaxTraceRayUserDataNodeCount;
@@ -1271,8 +1249,6 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
     const auto& userDataLayout       = m_info.userDataLayout.compact;
     const auto& commonUserDataLayout = m_info.userDataLayout.common;
 
-    const bool  enableEarlyCompile = m_pDevice->GetRuntimeSettings().enableEarlyCompile;
-
     Vkgc::ResourceMappingRootNode* pUserDataNodes = static_cast<Vkgc::ResourceMappingRootNode*>(pBuffer);
     Vkgc::ResourceMappingNode* pResourceNodes =
         reinterpret_cast<Vkgc::ResourceMappingNode*>(pUserDataNodes + m_pipelineInfo.numUserDataNodes);
@@ -1283,44 +1259,10 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
     uint32_t mappingNodeCount     = 0; // Number of consumed ResourceMappingNodes (only sub-nodes)
     uint32_t descriptorRangeCount = 0; // Number of consumed StaticResourceValues
 
-    if (enableEarlyCompile)
-    {
-        VK_ASSERT(userDataLayout.specConstBufVertexRegBase   == SpecConstBufferVertexOffset);
-        VK_ASSERT(userDataLayout.specConstBufFragmentRegBase == SpecConstBufferFragmentOffset);
-
-        constexpr uint32_t MaxInternalSpecConstBuffSize = UINT16_MAX;
-        if (stageMask & Vkgc::ShaderStageVertexBit)
-        {
-            BuildLlpcInternalInlineBufferMapping(
-                Vkgc::ShaderStageVertexBit,
-                userDataLayout.specConstBufVertexRegBase,
-                MaxInternalSpecConstBuffSize,
-                static_cast<uint32_t>(Vkgc::SpecConstInternalBufferBindingId) +
-                    static_cast<uint32_t>(ShaderStage::ShaderStageVertex),
-                &pUserDataNodes[userDataNodeCount],
-                &userDataNodeCount,
-                &pResourceNodes[mappingNodeCount],
-                &mappingNodeCount);
-        }
-
-        if (stageMask & Vkgc::ShaderStageFragmentBit)
-        {
-            BuildLlpcInternalInlineBufferMapping(
-                Vkgc::ShaderStageFragmentBit,
-                userDataLayout.specConstBufFragmentRegBase,
-                MaxInternalSpecConstBuffSize,
-                static_cast<uint32_t>(Vkgc::SpecConstInternalBufferBindingId) +
-                    static_cast<uint32_t>(ShaderStage::ShaderStageFragment),
-                &pUserDataNodes[userDataNodeCount],
-                &userDataNodeCount,
-                &pResourceNodes[mappingNodeCount],
-                &mappingNodeCount);
-        }
-    }
     if (pVbInfo != nullptr)
     {
         const uint32_t tailingVertexBufferRegCount =
-            (appendFetchShaderCb && (enableEarlyCompile == false)) ?
+            appendFetchShaderCb ?
             (VbTablePtrRegCount + InternalConstBufferRegCount) : VbTablePtrRegCount;
 
         if ((m_info.userDataRegCount + tailingVertexBufferRegCount) <=
@@ -1336,8 +1278,6 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
 
             if (appendFetchShaderCb)
             {
-                VK_ASSERT((enableEarlyCompile == false) ||
-                    (userDataLayout.uberFetchConstBufRegBase == FetchShaderInternalBufferOffset));
                 const uint32_t MaxUberFetchConstBufSize = PipelineCompiler::GetMaxUberFetchShaderInternalDataSize();
                 // Append node for uber fetch shader constant buffer
                 BuildLlpcInternalInlineBufferMapping(

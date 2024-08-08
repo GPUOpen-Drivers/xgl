@@ -313,6 +313,7 @@ RayTracingPipeline::RayTracingPipeline(
     m_ppShaderLibraries(nullptr),
     m_createInfo(pDevice),
     m_hasTraceRay(false),
+    m_isCps(false),
     m_elfHash{},
     m_captureReplayVaMappingBufferInfo{}
 {
@@ -474,16 +475,13 @@ VkResult RayTracingPipeline::CreateImpl(
 
         PipelineCompiler* pDefaultCompiler = m_pDevice->GetCompiler(DefaultDeviceIndex);
 
-        Util::MetroHash::Hash elfHash    = {};
-        uint64_t              apiPsoHash = {};
-        BuildApiHash(pCreateInfo, flags, &elfHash, &apiPsoHash);
-
         binaryCreateInfo.pDeferredWorkload = pDeferredWorkload;
-        binaryCreateInfo.apiPsoHash        = apiPsoHash;
 
         auto pPipelineCreationFeedbackCreateInfo = extStructs.pPipelineCreationFeedbackCreateInfoEXT;
 
         PipelineCompiler::InitPipelineCreationFeedback(pPipelineCreationFeedbackCreateInfo);
+        bool                     binariesProvided                = false;
+        Util::MetroHash::Hash    cacheId[MaxPalDevices]          = {};
 
         RayTracingPipelineShaderStageInfo shaderInfo        = {};
         PipelineOptimizerKey              optimizerKey      = {};
@@ -526,58 +524,11 @@ VkResult RayTracingPipeline::CreateImpl(
                 placement.FixupPtrs(pShaderTempBuffer);
 
                 shaderInfo.stageCount = nativeShaderCount;
-
-                result = BuildShaderStageInfo(m_pDevice,
-                                              nativeShaderCount,
-                                              pCreateInfo->pStages,
-                                              [](const uint32_t inputIdx, const uint32_t stageIdx)
-                                              {
-                                                  return inputIdx;
-                                              },
-                                              shaderInfo.pStages,
-                                              pTempModules,
-                                              nullptr);
             }
             else
             {
                 result = VK_ERROR_OUT_OF_HOST_MEMORY;
             }
-        }
-
-        if (result == VK_SUCCESS)
-        {
-            uint32_t shaderIdx       = 0;
-            optimizerKey.shaderCount = totalShaderCount;
-
-            for (; shaderIdx < nativeShaderCount; ++shaderIdx)
-            {
-                const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>(
-                    ShaderModule::GetFirstValidShaderData(shaderInfo.pStages[shaderIdx].pModuleHandle));
-
-                m_pDevice->GetShaderOptimizer()->CreateShaderOptimizerKey(
-                    pModuleData,
-                    shaderInfo.pStages[shaderIdx].codeHash,
-                    shaderInfo.pStages[shaderIdx].stage,
-                    shaderInfo.pStages[shaderIdx].codeSize,
-                    &optimizerKey.pShaders[shaderIdx]);
-            }
-
-            if (hasLibraries)
-            {
-                for (uint32_t libraryIdx = 0; libraryIdx < pCreateInfo->pLibraryInfo->libraryCount; ++libraryIdx)
-                {
-                    const auto pLibrary = RayTracingPipeline::ObjectFromHandle(
-                        pCreateInfo->pLibraryInfo->pLibraries[libraryIdx]);
-                    const auto shaderCount = pLibrary->GetTotalShaderCount();
-
-                    memcpy(&optimizerKey.pShaders[shaderIdx],
-                           pLibrary->GetShaderOptKeys(),
-                           sizeof(ShaderOptimizerKey) * shaderCount);
-                    shaderIdx += shaderCount;
-                }
-            }
-
-            VK_ASSERT(shaderIdx == totalShaderCount);
         }
 
         // Allocate buffer for shader groups
@@ -711,11 +662,37 @@ VkResult RayTracingPipeline::CreateImpl(
                 result = VK_ERROR_OUT_OF_HOST_MEMORY;
             }
         }
-
-        Util::MetroHash::Hash cacheId[MaxPalDevices] = {};
-
         const auto pPipelineBinaryCache = (pPipelineCache != nullptr) ? pPipelineCache->GetPipelineCache()
                                                                       : nullptr;
+
+        // Build API and ELF hashes
+        Util::MetroHash::Hash elfHash    = {};
+        uint64_t              apiPsoHash = {};
+
+        if (result == VK_SUCCESS)
+        {
+            optimizerKey.shaderCount = totalShaderCount;
+
+            if (binariesProvided == false)
+            {
+                result = CreateCacheId(
+                    m_pDevice,
+                    pCreateInfo,
+                    flags,
+                    hasLibraries,
+                    &shaderInfo,
+                    &optimizerKey,
+                    &apiPsoHash,
+                    &elfHash,
+                    pTempModules,
+                    cacheId);
+
+                binaryCreateInfo.apiPsoHash = apiPsoHash;
+            }
+        }
+
+        bool                  storeBinaryToPipeline = false;
+        bool                  storeBinaryToCache    = true;
 
         for (uint32_t deviceIdx = 0; (result == VK_SUCCESS) && (deviceIdx < m_pDevice->NumPalDevices()); deviceIdx++)
         {
@@ -725,39 +702,44 @@ VkResult RayTracingPipeline::CreateImpl(
             // PAL Pipeline caching
             Util::Result cacheResult = Util::Result::NotFound;
 
-            ElfHashToCacheId(
-                m_pDevice,
-                deviceIdx,
-                elfHash,
-                optimizerKey,
-                &cacheId[deviceIdx]
-            );
-
             bool forceCompilation = false;
             if (forceCompilation == false)
             {
                 Vkgc::BinaryData cachedBinData = {};
 
-                // Search the pipeline binary cache.
-                cacheResult = pDefaultCompiler->GetCachedPipelineBinary(
-                    &cacheId[deviceIdx],
-                    pPipelineBinaryCache,
-                    &cachedBinData,
-                    &isUserCacheHit,
-                    &isInternalCacheHit,
-                    &binaryCreateInfo.freeCompilerBinary,
-                    &binaryCreateInfo.pipelineFeedback);
-
-                // Found the pipeline; Add it to any cache layers where it's missing.
-                if (cacheResult == Util::Result::Success)
+                if (binariesProvided == false)
                 {
-                    m_pDevice->GetCompiler(deviceIdx)->CachePipelineBinary(
+                    // Search the pipeline binary cache.
+                    cacheResult = pDefaultCompiler->GetCachedPipelineBinary(
                         &cacheId[deviceIdx],
                         pPipelineBinaryCache,
                         &cachedBinData,
-                        isUserCacheHit,
-                        isInternalCacheHit);
+                        &isUserCacheHit,
+                        &isInternalCacheHit,
+                        &binaryCreateInfo.freeCompilerBinary,
+                        &binaryCreateInfo.pipelineFeedback);
 
+                    // Found the pipeline; Add it to any cache layers where it's missing.
+                    if (cacheResult == Util::Result::Success)
+                    {
+                        if (storeBinaryToCache)
+                        {
+                            m_pDevice->GetCompiler(deviceIdx)->CachePipelineBinary(
+                                &cacheId[deviceIdx],
+                                pPipelineBinaryCache,
+                                &cachedBinData,
+                                isUserCacheHit,
+                                isInternalCacheHit);
+                        }
+
+                    }
+                }
+                else
+                {
+                }
+
+                if (cacheResult == Util::Result::Success)
+                {
                     // Unpack the cached blob into separate binaries.
                     pDefaultCompiler->ExtractRayTracingPipelineBinary(
                         &cachedBinData,
@@ -844,14 +826,19 @@ VkResult RayTracingPipeline::CreateImpl(
 
                     if (cachedBinData.pCode != nullptr)
                     {
-                        m_pDevice->GetCompiler(deviceIdx)->CachePipelineBinary(
-                            &cacheId[deviceIdx],
-                            pPipelineBinaryCache,
-                            &cachedBinData,
-                            isUserCacheHit,
-                            isInternalCacheHit);
+                        if (storeBinaryToCache)
+                        {
+                            m_pDevice->GetCompiler(deviceIdx)->CachePipelineBinary(
+                                &cacheId[deviceIdx],
+                                pPipelineBinaryCache,
+                                &cachedBinData,
+                                isUserCacheHit,
+                                isInternalCacheHit);
+                        }
 
-                        m_pDevice->VkInstance()->FreeMem(const_cast<void*>(cachedBinData.pCode));
+                        {
+                            m_pDevice->VkInstance()->FreeMem(const_cast<void*>(cachedBinData.pCode));
+                        }
                     }
                 }
             }
@@ -871,6 +858,7 @@ VkResult RayTracingPipeline::CreateImpl(
         }
 
         m_hasTraceRay = pipelineBinaries[DefaultDeviceIndex].hasTraceRay;
+        m_isCps = pipelineBinaries[DefaultDeviceIndex].isCps;
 
         uint32_t funcCount = 0;
         if (result == VK_SUCCESS)
@@ -1119,7 +1107,7 @@ VkResult RayTracingPipeline::CreateImpl(
                             auto UpdateLibStackSizes = [&](uint32_t libIdx)
                             {
                                 auto pShaderLibrary = ppDeviceShaderLibraries[libIdx];
-                                if (settings.llpcRaytracingMode >= RaytracingContinufy)
+                                if (CheckIsCps())
                                 {
                                     auto libFuncList = pShaderLibrary->GetShaderLibFunctionInfos();
 
@@ -1399,7 +1387,7 @@ VkResult RayTracingPipeline::CreateImpl(
                          Util::Max(closestHitStackMax, missStackMax)) +
                         (2 * callableStackMax);
 
-                    if (settings.llpcRaytracingMode >= RaytracingContinufy)
+                    if (CheckIsCps())
                     {
                         // The size we calculated above is frontend stack size for continuations.
                         m_defaultPipelineStackSizes[deviceIdx].frontendSize = defaultPipelineStackSize;
@@ -1412,7 +1400,7 @@ VkResult RayTracingPipeline::CreateImpl(
 
                     // TraceRay is the last function in function list, record it regardless we are building library or
                     // not, so that a pipeline will get its own TraceRayGpuVa correctly.
-                    if (funcCount > 0)
+                    if (m_hasTraceRay && (funcCount > 0))
                     {
                         const auto traceRayFuncIndex = funcCount - 1;
                         traceRayGpuVas[deviceIdx] =
@@ -1512,6 +1500,7 @@ VkResult RayTracingPipeline::CreateImpl(
         }
         else
         {
+
             for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
             {
                 // Internal memory allocation failed, free PAL event object if it gets created
@@ -1545,11 +1534,14 @@ VkResult RayTracingPipeline::CreateImpl(
         }
 
         // Free the created pipeline binaries now that the PAL Pipelines/PipelineBinaryInfo have read them.
-        for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+        if (binariesProvided == false)
         {
-            m_pDevice->GetCompiler(deviceIdx)->FreeRayTracingPipelineBinary(
-                &binaryCreateInfo,
-                &pipelineBinaries[deviceIdx]);
+            for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+            {
+                m_pDevice->GetCompiler(deviceIdx)->FreeRayTracingPipelineBinary(
+                    &binaryCreateInfo,
+                    &pipelineBinaries[deviceIdx]);
+            }
         }
 
         pAllocator->pfnFree(pAllocator->pUserData, pTempBuffer);
@@ -1580,6 +1572,90 @@ VkResult RayTracingPipeline::CreateImpl(
 
             // The hash is same as pipline dump file name, we can easily analyze further.
             AmdvlkLog(settings.logTagIdMask, PipelineCompileTime, "0x%016llX-%llu", apiPsoHash, duration);
+        }
+    }
+
+    return result;
+}
+
+VkResult RayTracingPipeline::CreateCacheId(
+    const Device*                               pDevice,
+    const VkRayTracingPipelineCreateInfoKHR*    pCreateInfo,
+    VkPipelineCreateFlags2KHR                   flags,
+    const bool                                  hasLibraries,
+    RayTracingPipelineShaderStageInfo*          pShaderInfo,
+    PipelineOptimizerKey*                       pPipelineOptimizerKey,
+    uint64_t*                                   pApiPsoHash,
+    Util::MetroHash::Hash*                      pElfHash,
+    ShaderModuleHandle*                         pTempModules,
+    Util::MetroHash::Hash*                      pCacheIds)
+{
+    VkResult result = VK_SUCCESS;
+
+    // 1. Build shader stage info
+    if (pPipelineOptimizerKey->shaderCount > 0)
+    {
+        result = BuildShaderStageInfo(
+            pDevice,
+            pCreateInfo->stageCount,
+            pCreateInfo->pStages,
+            [](const uint32_t inputIdx, const uint32_t stageIdx)
+            {
+                return inputIdx;
+            },
+            pShaderInfo->pStages,
+            pTempModules,
+            nullptr);
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        // 2. Build ShaderOptimizer pipeline key
+        uint32_t shaderIdx = 0;
+
+        for (; shaderIdx < pCreateInfo->stageCount; ++shaderIdx)
+        {
+            const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>(
+                ShaderModule::GetFirstValidShaderData(pShaderInfo->pStages[shaderIdx].pModuleHandle));
+
+            pDevice->GetShaderOptimizer()->CreateShaderOptimizerKey(
+                pModuleData,
+                pShaderInfo->pStages[shaderIdx].codeHash,
+                pShaderInfo->pStages[shaderIdx].stage,
+                pShaderInfo->pStages[shaderIdx].codeSize,
+                &pPipelineOptimizerKey->pShaders[shaderIdx]);
+        }
+
+        if (hasLibraries)
+        {
+            for (uint32_t libraryIdx = 0; libraryIdx < pCreateInfo->pLibraryInfo->libraryCount; ++libraryIdx)
+            {
+                const auto pLibrary = RayTracingPipeline::ObjectFromHandle(
+                    pCreateInfo->pLibraryInfo->pLibraries[libraryIdx]);
+                const auto shaderCount = pLibrary->GetTotalShaderCount();
+
+                memcpy(&pPipelineOptimizerKey->pShaders[shaderIdx],
+                       pLibrary->GetShaderOptKeys(),
+                       sizeof(ShaderOptimizerKey) * shaderCount);
+                shaderIdx += shaderCount;
+            }
+        }
+
+        VK_ASSERT(shaderIdx == pPipelineOptimizerKey->shaderCount);
+
+        // 3. Build API and ELF hashes
+        BuildApiHash(pCreateInfo, flags, pElfHash, pApiPsoHash);
+
+        // 4. Build Cache IDs
+        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+        {
+            ElfHashToCacheId(
+                pDevice,
+                deviceIdx,
+                *pElfHash,
+                *pPipelineOptimizerKey,
+                &pCacheIds[deviceIdx]
+                );
         }
     }
 
@@ -1914,22 +1990,6 @@ void RayTracingPipeline::BindToCmdBuffer(
 }
 
 // =====================================================================================================================
-void RayTracingPipeline::BindNullPipeline(
-    CmdBuffer* pCmdBuffer)
-{
-    const uint32_t numGroupedCmdBuffers = pCmdBuffer->VkDevice()->NumPalDevices();
-
-    Pal::PipelineBindParams params = {};
-    params.pipelineBindPoint       = Pal::PipelineBindPoint::Compute;
-    params.apiPsoHash              = Pal::InternalApiPsoHash;
-
-    for (uint32_t deviceIdx = 0; deviceIdx < numGroupedCmdBuffers; deviceIdx++)
-    {
-        pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdBindPipeline(params);
-    }
-}
-
-// =====================================================================================================================
 bool RayTracingPipeline::MapShaderIdToShaderHandle(
     Pal::ShaderLibraryFunctionInfo*   pIndirectFuncList,
     uint32_t*                         pShaderNameMap,
@@ -2140,7 +2200,11 @@ void RayTracingPipeline::GetDispatchSize(
 
     const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
-    if (settings.rtFlattenThreadGroupSize == 0)
+    // NOTE: For CPS, we only support flatten thread group so far.
+    const uint32_t flattenThreadGroupSize =
+        CheckIsCps() ? settings.dispatchRaysThreadGroupSize : settings.rtFlattenThreadGroupSize;
+
+    if (flattenThreadGroupSize == 0)
     {
         *pDispatchSizeX = Util::RoundUpQuotient(width,  settings.rtThreadGroupSizeX);
         *pDispatchSizeY = Util::RoundUpQuotient(height, settings.rtThreadGroupSizeY);
@@ -2152,15 +2216,15 @@ void RayTracingPipeline::GetDispatchSize(
 
         if ((width > 1) && (height > 1))
         {
-            const uint32_t tileHeight = settings.rtFlattenThreadGroupSize / RayTracingTileWidth;
+            const uint32_t tileHeight = flattenThreadGroupSize / RayTracingTileWidth;
             const uint32_t paddedWidth = Util::Pow2Align(width, RayTracingTileWidth);
             const uint32_t paddedHeight = Util::Pow2Align(height, tileHeight);
 
-            dispatchSize = Util::RoundUpQuotient(paddedWidth * paddedHeight, settings.rtFlattenThreadGroupSize);
+            dispatchSize = Util::RoundUpQuotient(paddedWidth * paddedHeight, flattenThreadGroupSize);
         }
         else
         {
-            dispatchSize = Util::RoundUpQuotient(width * height, settings.rtFlattenThreadGroupSize);
+            dispatchSize = Util::RoundUpQuotient(width * height, flattenThreadGroupSize);
         }
 
         *pDispatchSizeX = dispatchSize;

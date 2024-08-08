@@ -233,8 +233,7 @@ VkResult Sampler::Create(
 
     // Figure out how big a sampler SRD is. This is not the most efficient way of doing
     // things, so we could cache the SRD size.
-    Pal::DeviceProperties props;
-    pDevice->PalDevice(DefaultDeviceIndex)->GetProperties(&props);
+    const Pal::DeviceProperties& props = pDevice->GetPalProperties();
 
     const uint32 apiSize = sizeof(Sampler);
     const uint32 palSize = props.gfxipProperties.srdSizes.sampler;

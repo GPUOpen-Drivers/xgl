@@ -52,11 +52,8 @@
 
 namespace Pal
 {
-
-enum WsiPlatform : uint32;
 // Forward declare PAL classes used in this file.
 class IDevice;
-
 } // namespace Pal
 
 namespace Util

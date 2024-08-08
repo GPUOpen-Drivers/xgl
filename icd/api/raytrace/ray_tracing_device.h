@@ -32,6 +32,7 @@
 #include "khronos/vulkan.h"
 #include "vk_defines.h"
 #include "appopt/bvh_batch_layer.h"
+#include "appopt/split_raytracing_layer.h"
 
 #include "vkgcDefs.h"
 
@@ -92,6 +93,7 @@ public:
     uint64_t GetAccelerationStructureUUID(const Pal::DeviceProperties& palProps);
 
     BvhBatchLayer* GetBvhBatchLayer() { return m_pBvhBatchLayer; }
+    SplitRaytracingLayer* GetSplitRaytracingLayer() { return m_pSplitRaytracingLayer; }
 
     uint32_t GetProfileRayFlags() const { return m_profileRayFlags; }
     uint32_t GetProfileMaxIterations() const { return m_profileMaxIterations; }
@@ -107,6 +109,7 @@ public:
         uint32_t                               depth,
         uint32_t                               shaderCount,
         uint64_t                               apiHash,
+        uint64_t                               userMarkerContext,
         const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
         const VkStridedDeviceAddressRegionKHR* pMissSbt,
         const VkStridedDeviceAddressRegionKHR* pHitSbt,
@@ -120,6 +123,7 @@ public:
         uint32_t                               originalThreadGroupSizeZ,
         uint32_t                               shaderCount,
         uint64_t                               apiHash,
+        uint64_t                               userMarkerContext,
         const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
         const VkStridedDeviceAddressRegionKHR* pMissSbt,
         const VkStridedDeviceAddressRegionKHR* pHitSbt,
@@ -198,6 +202,7 @@ private:
         uint32_t                               depth,
         uint32_t                               shaderCount,
         uint64_t                               apiHash,
+        uint64_t                               userMarkerContext,
         const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
         const VkStridedDeviceAddressRegionKHR* pMissSbt,
         const VkStridedDeviceAddressRegionKHR* pHitSbt,
@@ -206,6 +211,7 @@ private:
     void CollectGpurtOptions(GpurtOptions* const pGpurtOptions) const;
 
     BvhBatchLayer*                  m_pBvhBatchLayer;
+    SplitRaytracingLayer*           m_pSplitRaytracingLayer;
 
     AccelStructTrackerResources     m_accelStructTrackerResources[MaxPalDevices];
 };

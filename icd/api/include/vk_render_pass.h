@@ -246,11 +246,6 @@ public:
         return m_createInfo.pSubpasses[subpass].stencilResolveMode;
     }
 
-    VkImageAspectFlags GetResolveDepthStecilAspect(uint32_t subpass) const
-    {
-        return m_createInfo.pSubpasses[subpass].depthStencilResolveAttachment.aspectMask;
-    }
-
     uint32_t GetSubpassColorReferenceCount(uint32_t subPassIndex) const;
     uint32_t GetAttachmentCount() const { return m_createInfo.attachmentCount; }
     const AttachmentDescription& GetAttachmentDesc(uint32_t attachmentIndex) const;

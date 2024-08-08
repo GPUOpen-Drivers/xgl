@@ -121,6 +121,8 @@ VkResult PipelineCache::Create(
             }
 
             vk::PhysicalDevice* pDefaultPhysicalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+
+            // This call to PipelineBinaryCache::Create must use the VkInstance allocation callbacks to avoid issues.
             pBinaryCache = PipelineBinaryCache::Create(
                 pDefaultPhysicalDevice->VkInstance()->GetAllocCallbacks(),
                 pDefaultPhysicalDevice->GetPlatformKey(),

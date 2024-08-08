@@ -633,8 +633,7 @@ CmdBuffer::CmdBuffer(
     m_flags.preBindDefaultState                 = settings.preBindDefaultState;
     m_flags.offsetMode                          = pDevice->GetEnabledFeatures().robustVertexBufferExtend;
 
-    Pal::DeviceProperties info;
-    m_pDevice->PalDevice(DefaultDeviceIndex)->GetProperties(&info);
+    const Pal::DeviceProperties& info = m_pDevice->GetPalProperties();
 
     m_flags.useBackupBuffer = false;
     memset(m_pBackupPalCmdBuffers, 0, sizeof(Pal::ICmdBuffer*) * MaxPalDevices);
@@ -646,7 +645,7 @@ CmdBuffer::CmdBuffer(
         m_flags.useReleaseAcquire       = info.gfxipProperties.flags.supportReleaseAcquireInterface &&
                                           settings.useAcquireReleaseInterface;
         m_flags.useSplitReleaseAcquire  = m_flags.useReleaseAcquire &&
-                                          info.gfxipProperties.flags.supportSplitReleaseAcquire;
+                                          info.queueProperties[m_palQueueType].flags.supportSplitReleaseAcquire;
 }
 
 // =====================================================================================================================
@@ -872,6 +871,10 @@ VkResult CmdBuffer::Initialize(
     {
         m_debugPrintf.Init(m_pDevice);
     }
+
+#if VKI_RAY_TRACING
+    m_pfnTraceRaysDispatchPerDevice = CmdBuffer::TraceRaysDispatchPerDevice;
+#endif
     return PalToVkResult(result);
 }
 
@@ -1801,6 +1804,7 @@ void CmdBuffer::ResetPipelineState()
         pPerGpuState->viewport.vertDiscardRatio = 1.0f;
         pPerGpuState->viewport.depthRange       = Pal::DepthRange::ZeroToOne;
         pPerGpuState->maxPipelineStackSizes     = {};
+        pPerGpuState->dynamicPipelineStackSize  = 0;
 
         deviceIdx++;
     }
@@ -1937,83 +1941,70 @@ void CmdBuffer::RebindPipeline()
     {
         const ComputePipeline* pPipeline = m_allGpuState.pComputePipeline;
 
-        if (pPipeline != nullptr)
+        VK_ASSERT(pPipeline != nullptr);
+
+        const PhysicalDevice*  pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+
+        if ((pPhysicalDevice->GetQueueFamilyPalQueueType(m_queueFamilyIndex) == Pal::QueueTypeCompute) &&
+            (m_asyncComputeQueueMaxWavesPerCu > 0))
         {
-            const PhysicalDevice*  pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+            Pal::DynamicComputeShaderInfo dynamicInfo = {};
 
-            if ((pPhysicalDevice->GetQueueFamilyPalQueueType(m_queueFamilyIndex) == Pal::QueueTypeCompute) &&
-                (m_asyncComputeQueueMaxWavesPerCu > 0))
-            {
-                Pal::DynamicComputeShaderInfo dynamicInfo = {};
+            dynamicInfo.maxWavesPerCu = static_cast<float>(m_asyncComputeQueueMaxWavesPerCu);
 
-                dynamicInfo.maxWavesPerCu = static_cast<float>(m_asyncComputeQueueMaxWavesPerCu);
-
-                pPipeline->BindToCmdBuffer(this, dynamicInfo);
-            }
-            else
-            {
-                pPipeline->BindToCmdBuffer(this, pPipeline->GetBindInfo());
-            }
-
-            palBindPoint       = Pal::PipelineBindPoint::Compute;
-            pNewUserDataLayout = pPipeline->GetUserDataLayout();
+            pPipeline->BindToCmdBuffer(this, dynamicInfo);
         }
         else
         {
-            ComputePipeline::BindNullPipeline(this);
+            pPipeline->BindToCmdBuffer(this, pPipeline->GetBindInfo());
         }
 
-        palBindPoint = Pal::PipelineBindPoint::Compute;
+        pNewUserDataLayout = pPipeline->GetUserDataLayout();
+        palBindPoint       = Pal::PipelineBindPoint::Compute;
     }
     else if (bindPoint == PipelineBindGraphics)
     {
         const GraphicsPipeline* pPipeline = m_allGpuState.pGraphicsPipeline;
 
-        if (pPipeline != nullptr)
+        VK_ASSERT(pPipeline != nullptr);
+
+        pPipeline->BindToCmdBuffer(this);
+
+        if (pPipeline->ContainsStaticState(DynamicStatesInternal::VertexInputBindingStride))
         {
-            pPipeline->BindToCmdBuffer(this);
+            UpdateVertexBufferStrides(pPipeline);
+        }
 
-            if (pPipeline->ContainsStaticState(DynamicStatesInternal::VertexInputBindingStride))
+        pNewUserDataLayout = pPipeline->GetUserDataLayout();
+        palBindPoint       = Pal::PipelineBindPoint::Graphics;
+
+        // Update dynamic vertex input state and check whether need rebind uber-fetch shader internal memory
+        PipelineBindState* pBindState = &m_allGpuState.pipelineState[PipelineBindGraphics];
+        if (pPipeline->ContainsDynamicState(DynamicStatesInternal::VertexInput))
+        {
+            if (pBindState->hasDynamicVertexInput == false)
             {
-                UpdateVertexBufferStrides(pPipeline);
-            }
-
-            pNewUserDataLayout = pPipeline->GetUserDataLayout();
-
-            // Update dynamic vertex input state and check whether need rebind uber-fetch shader internal memory
-            PipelineBindState* pBindState = &m_allGpuState.pipelineState[PipelineBindGraphics];
-            if (pPipeline->ContainsDynamicState(DynamicStatesInternal::VertexInput))
-            {
-                if (pBindState->hasDynamicVertexInput == false)
+                if (pBindState->pVertexInputInternalData != nullptr)
                 {
-                    if (pBindState->pVertexInputInternalData != nullptr)
-                    {
-                        rebindFlags |= RebindUberFetchInternalMem;
-                    }
-                    pBindState->hasDynamicVertexInput = true;
+                    rebindFlags |= RebindUberFetchInternalMem;
                 }
-                uint32_t newUberFetchShaderUserData = GetUberFetchShaderUserData(pNewUserDataLayout);
-                if (GetUberFetchShaderUserData(&pBindState->userDataLayout) != newUberFetchShaderUserData)
-                {
-                    SetUberFetchShaderUserData(&pBindState->userDataLayout, newUberFetchShaderUserData);
-
-                    if (pBindState->pVertexInputInternalData != nullptr)
-                    {
-                        rebindFlags |= RebindUberFetchInternalMem;
-                    }
-                }
+                pBindState->hasDynamicVertexInput = true;
             }
-            else
+            uint32_t newUberFetchShaderUserData = GetUberFetchShaderUserData(pNewUserDataLayout);
+            if (GetUberFetchShaderUserData(&pBindState->userDataLayout) != newUberFetchShaderUserData)
             {
-                pBindState->hasDynamicVertexInput = false;
+                SetUberFetchShaderUserData(&pBindState->userDataLayout, newUberFetchShaderUserData);
+
+                if (pBindState->pVertexInputInternalData != nullptr)
+                {
+                    rebindFlags |= RebindUberFetchInternalMem;
+                }
             }
         }
         else
         {
-            GraphicsPipeline::BindNullPipeline(this);
+            pBindState->hasDynamicVertexInput = false;
         }
-
-        palBindPoint = Pal::PipelineBindPoint::Graphics;
     }
 
 #if VKI_RAY_TRACING
@@ -2021,38 +2012,34 @@ void CmdBuffer::RebindPipeline()
     {
         const RayTracingPipeline* pPipeline = m_allGpuState.pRayTracingPipeline;
 
-        if (pPipeline != nullptr)
+        VK_ASSERT(pPipeline != nullptr);
+
+        const PhysicalDevice*  pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+
+        if ((pPhysicalDevice->GetQueueFamilyPalQueueType(m_queueFamilyIndex) == Pal::QueueTypeCompute) &&
+            (m_asyncComputeQueueMaxWavesPerCu > 0))
         {
-            const PhysicalDevice*  pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+            Pal::DynamicComputeShaderInfo dynamicInfo = {};
 
-            if ((pPhysicalDevice->GetQueueFamilyPalQueueType(m_queueFamilyIndex) == Pal::QueueTypeCompute) &&
-                (m_asyncComputeQueueMaxWavesPerCu > 0))
-            {
-                Pal::DynamicComputeShaderInfo dynamicInfo = {};
+            dynamicInfo.maxWavesPerCu = static_cast<float>(m_asyncComputeQueueMaxWavesPerCu);
 
-                dynamicInfo.maxWavesPerCu = static_cast<float>(m_asyncComputeQueueMaxWavesPerCu);
-
-                pPipeline->BindToCmdBuffer(this, dynamicInfo);
-            }
-            else
-            {
-                pPipeline->BindToCmdBuffer(this, pPipeline->GetBindInfo());
-            }
-
-            pNewUserDataLayout = pPipeline->GetUserDataLayout();
+            pPipeline->BindToCmdBuffer(this, dynamicInfo);
         }
         else
         {
-            RayTracingPipeline::BindNullPipeline(this);
+            pPipeline->BindToCmdBuffer(this, pPipeline->GetBindInfo());
         }
 
-        palBindPoint = Pal::PipelineBindPoint::Compute;
+        pNewUserDataLayout = pPipeline->GetUserDataLayout();
+        palBindPoint       = Pal::PipelineBindPoint::Compute;
     }
 #endif
     else
     {
         VK_NEVER_CALLED();
     }
+
+    VK_ASSERT(pNewUserDataLayout != nullptr);
 
     // Push Constant user data layouts are scheme-agnostic, which will always be checked and rebound if
     // needed.
@@ -2084,10 +2071,7 @@ void CmdBuffer::RebindPipeline()
         VK_ASSERT(PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Graphics, PipelineBindGraphics));
 
         // A user data layout switch may also require some user data to be reloaded (for both gfx and compute).
-        if (pNewUserDataLayout != nullptr)
-        {
-            rebindFlags |= SwitchCompactSchemeUserDataLayouts(bindPoint, pNewUserDataLayout);
-        }
+        rebindFlags |= SwitchCompactSchemeUserDataLayouts(bindPoint, pNewUserDataLayout);
     }
 
     rebindFlags |= SwitchCommonUserDataLayouts(bindPoint, pNewUserDataLayout);
@@ -3580,8 +3564,8 @@ void CmdBuffer::ExecuteIndirect(
     VkBool32                            isPreprocessed,
     const VkGeneratedCommandsInfoNV*    pInfo)
 {
-    IndirectCommandsLayout* pLayout = IndirectCommandsLayout::ObjectFromHandle(pInfo->indirectCommandsLayout);
-    IndirectCommandsInfo    info    = pLayout->GetIndirectCommandsInfo();
+    IndirectCommandsLayoutNV* pLayout = IndirectCommandsLayoutNV::ObjectFromHandle(pInfo->indirectCommandsLayout);
+    IndirectCommandsInfo    info      = pLayout->GetIndirectCommandsInfo();
 
     uint64_t barrierCmd = 0;
 
@@ -4895,7 +4879,7 @@ void CmdBuffer::StoreAttachmentInfo(
 {
     const ImageView* const pImageView = ImageView::ObjectFromHandle(renderingAttachmentInfo.imageView);
 
-    if(pImageView != nullptr)
+    if (pImageView != nullptr)
     {
         const Image*           pColorImage = pImageView->GetImage();
 
@@ -4917,11 +4901,16 @@ void CmdBuffer::StoreAttachmentInfo(
 
             if (pResolveImage != nullptr)
             {
+                const RPImageLayout resolveLayout = { renderingAttachmentInfo.resolveImageLayout,
+                    Pal::LayoutResolveDst };
                 pDynamicRenderingAttachement->resolveImageLayout =
-                    pResolveImage->GetAttachmentLayout(
-                        { renderingAttachmentInfo.resolveImageLayout, Pal::LayoutResolveDst }, 0, this);
+                    pResolveImage->GetAttachmentLayout(resolveLayout, 0, this);
             }
         }
+    }
+    else
+    {
+        *pDynamicRenderingAttachement = {};
     }
 }
 
@@ -5210,9 +5199,11 @@ void CmdBuffer::EndRendering()
             if ((renderingAttachmentInfo.resolveMode != VK_RESOLVE_MODE_NONE) &&
                 (renderingAttachmentInfo.pResolveImageView != nullptr))
             {
-                ResolveImage(
-                    VK_IMAGE_ASPECT_COLOR_BIT,
-                    renderingAttachmentInfo);
+                {
+                    ResolveImage(
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        renderingAttachmentInfo);
+                }
             }
         }
 
@@ -5255,7 +5246,8 @@ void CmdBuffer::ResetEvent(
 
     if (pEvent->IsUseToken())
     {
-        pEvent->SetSyncToken(0xFFFFFFFF);
+        const Pal::ReleaseToken token = { 0xFFFFFF, 0xFF };
+        pEvent->SetSyncToken(token);
     }
     else
     {
@@ -6536,9 +6528,8 @@ void CmdBuffer::PipelineBarrier(
                         imageMemoryBarrierCount,
                         pImageMemoryBarriers,
                         &barrier);
-
-        DbgBarrierPostCmd(DbgBarrierPipelineBarrierWaitEvents);
     }
+    DbgBarrierPostCmd(DbgBarrierPipelineBarrierWaitEvents);
 }
 
 // =====================================================================================================================
@@ -7297,7 +7288,8 @@ void CmdBuffer::PalCmdAcquire(
         if (pEvent->IsUseToken())
         {
             // Allocate space to store sync token values (automatically rewound on unscope)
-            uint32* pSyncTokens = eventCount > 0 ? pVirtStackFrame->AllocArray<uint32>(eventCount) : nullptr;
+            Pal::ReleaseToken* pSyncTokens = eventCount > 0 ?
+                                             pVirtStackFrame->AllocArray<Pal::ReleaseToken>(eventCount) : nullptr;
 
             if (pSyncTokens != nullptr)
             {
@@ -7477,7 +7469,6 @@ void CmdBuffer::WriteTimestamp(
             if (remainingQueryCount > 0)
             {
                 const auto firstRemainingQuery = query + 1;
-                constexpr uint32_t TimestampZeroChunk = 0;
 
                 // Set value of each remaining query to 0 and to make them avaliable.
                 // Note that values of remaining queries (to which 0 was written) are not considered timestamps.
@@ -7485,7 +7476,7 @@ void CmdBuffer::WriteTimestamp(
                    *pQueryPool,
                     firstRemainingQuery,
                     remainingQueryCount,
-                    TimestampZeroChunk);
+                    0u);
             }
         }
     }
@@ -8666,7 +8657,7 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
 }
 
 // =====================================================================================================================
-// Launches one or more MSAA resolves during a render pass instance.
+// Launches one or more resolves during a render pass instance.
 void CmdBuffer::RPResolveAttachments(
     uint32_t             count,
     const RPResolveInfo* pResolves)
@@ -8681,137 +8672,137 @@ void CmdBuffer::RPResolveAttachments(
     {
         const RPResolveInfo& params = pResolves[i];
 
-        const Framebuffer::Attachment& srcAttachment =
-            m_allGpuState.pFramebuffer->GetAttachment(params.src.attachment);
-        const Framebuffer::Attachment& dstAttachment =
-            m_allGpuState.pFramebuffer->GetAttachment(params.dst.attachment);
-
-        // Both color and depth-stencil resolves are allowed by resolve attachments
-        // SubresRange shall be exactly same for src and dst.
-        VK_ASSERT(srcAttachment.subresRangeCount == dstAttachment.subresRangeCount);
-        VK_ASSERT(srcAttachment.subresRange[0].numMips == 1);
-
-        const uint32_t sliceCount = Util::Min(
-            srcAttachment.subresRange[0].numSlices,
-            dstAttachment.subresRange[0].numSlices);
-
-        // We expect MSAA images to never have mipmaps
-        VK_ASSERT(srcAttachment.subresRange[0].startSubres.mipLevel == 0);
-
-        uint32_t aspectRegionCount                           = 0;
-        uint32_t srcResolvePlanes[MaxRangePerAttachment]     = {};
-        uint32_t dstResolvePlanes[MaxRangePerAttachment]     = {};
-        const VkFormat   srcResolveFormat                    = srcAttachment.pView->GetViewFormat();
-        const VkFormat   dstResolveFormat                    = dstAttachment.pView->GetViewFormat();
-        Pal::ResolveMode resolveModes[MaxRangePerAttachment] = {};
-
-        const Pal::MsaaQuadSamplePattern* pSampleLocations = nullptr;
-
-        if (Formats::IsDepthStencilFormat(srcResolveFormat) == false)
         {
-            resolveModes[0]     = Pal::ResolveMode::Average;
-            srcResolvePlanes[0] = 0;
-            dstResolvePlanes[0] = 0;
-            aspectRegionCount   = 1;
-        }
-        else
-        {
-            const uint32_t subpass = m_renderPassInstance.subpass;
-
-            const VkResolveModeFlagBits depthResolveMode   =
-                m_allGpuState.pRenderPass->GetDepthResolveMode(subpass);
-            const VkResolveModeFlagBits stencilResolveMode =
-                m_allGpuState.pRenderPass->GetStencilResolveMode(subpass);
-            const VkImageAspectFlags depthStecilAcpect     =
-                m_allGpuState.pRenderPass->GetResolveDepthStecilAspect(subpass);
-
-            if (Formats::HasDepth(srcResolveFormat))
-            {
-                // Must be specified because the source image was created with sampleLocsAlwaysKnown set
-                pSampleLocations = &m_renderPassInstance.pSamplePatterns[subpass].locations;
-            }
-
-            if ((depthResolveMode != VK_RESOLVE_MODE_NONE) &&
-                ((depthStecilAcpect & VK_IMAGE_ASPECT_DEPTH_BIT) != 0))
-            {
-
-                bool bResolveAspect = Formats::HasDepth(srcResolveFormat) && Formats::HasDepth(dstResolveFormat);
-
-                if (bResolveAspect)
-                {
-                    resolveModes[aspectRegionCount] = VkToPalResolveMode(depthResolveMode);
-                    srcResolvePlanes[aspectRegionCount] = 0;
-                    dstResolvePlanes[aspectRegionCount] = 0;
-                    aspectRegionCount++;
-                }
-            }
-
-            if ((stencilResolveMode != VK_RESOLVE_MODE_NONE) &&
-                ((depthStecilAcpect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0))
-            {
-
-                bool bResolveAspect = Formats::HasStencil(srcResolveFormat) && Formats::HasStencil(dstResolveFormat);
-
-                if (bResolveAspect)
-                {
-                    resolveModes[aspectRegionCount] = VkToPalResolveMode(stencilResolveMode);
-                    srcResolvePlanes[aspectRegionCount] = Formats::HasDepth(srcResolveFormat) ? 1 : 0;
-                    dstResolvePlanes[aspectRegionCount] = Formats::HasDepth(dstResolveFormat) ? 1 : 0;
-                    aspectRegionCount++;
-                }
-            }
-        }
-
-        // Depth and stencil might have different resolve mode, so allowing resolve each aspect independently.
-        for (uint32_t aspectRegionIndex = 0; aspectRegionIndex < aspectRegionCount; ++aspectRegionIndex)
-        {
-            // During split-frame-rendering, the image to resolve could be split across multiple devices.
-            Pal::ImageResolveRegion regions[MaxPalDevices];
-
-            const Pal::ImageLayout srcLayout = RPGetAttachmentLayout(params.src.attachment,
-                                                                     srcResolvePlanes[aspectRegionIndex]);
-            const Pal::ImageLayout dstLayout = RPGetAttachmentLayout(params.dst.attachment,
-                                                                     dstResolvePlanes[aspectRegionIndex]);
-
-            for (uint32_t idx = 0; idx < m_renderPassInstance.renderAreaCount; idx++)
-            {
-                const Pal::Rect& renderArea = m_renderPassInstance.renderArea[idx];
-
-                regions[idx].srcPlane       = srcResolvePlanes[aspectRegionIndex];
-                regions[idx].srcSlice       = srcAttachment.subresRange[0].startSubres.arraySlice;
-                regions[idx].srcOffset.x    = renderArea.offset.x;
-                regions[idx].srcOffset.y    = renderArea.offset.y;
-                regions[idx].srcOffset.z    = 0;
-                regions[idx].dstPlane       = dstResolvePlanes[aspectRegionIndex];
-                regions[idx].dstMipLevel    = dstAttachment.subresRange[0].startSubres.mipLevel;
-                regions[idx].dstSlice       = dstAttachment.subresRange[0].startSubres.arraySlice;
-                regions[idx].dstOffset.x    = renderArea.offset.x;
-                regions[idx].dstOffset.y    = renderArea.offset.y;
-                regions[idx].dstOffset.z    = 0;
-                regions[idx].extent.width   = renderArea.extent.width;
-                regions[idx].extent.height  = renderArea.extent.height;
-                regions[idx].extent.depth   = 1;
-                regions[idx].numSlices      = sliceCount;
-                regions[idx].swizzledFormat = Pal::UndefinedSwizzledFormat;
-
-                regions[idx].pQuadSamplePattern = pSampleLocations;
-            }
-
-            PalCmdResolveImage(
-                *srcAttachment.pImage,
-                srcLayout,
-                *dstAttachment.pImage,
-                dstLayout,
-                resolveModes[aspectRegionIndex],
-                m_renderPassInstance.renderAreaCount,
-                regions,
-                GetRpDeviceMask());
+            RPResolveMsaa(params);
         }
     }
 
     if (m_pSqttState != nullptr)
     {
         m_pSqttState->EndRenderPassResolve();
+    }
+}
+
+// =====================================================================================================================
+// Launches one or more MSAA resolves during a render pass instance.
+void CmdBuffer::RPResolveMsaa(
+    const RPResolveInfo& params)
+{
+    const Framebuffer::Attachment& srcAttachment =
+        m_allGpuState.pFramebuffer->GetAttachment(params.src.attachment);
+    const Framebuffer::Attachment& dstAttachment =
+        m_allGpuState.pFramebuffer->GetAttachment(params.dst.attachment);
+
+    // Both color and depth-stencil resolves are allowed by resolve attachments
+    // SubresRange shall be exactly same for src and dst.
+    VK_ASSERT(srcAttachment.subresRangeCount == dstAttachment.subresRangeCount);
+    VK_ASSERT(srcAttachment.subresRange[0].numMips == 1);
+
+    const uint32_t sliceCount = Util::Min(
+        srcAttachment.subresRange[0].numSlices,
+        dstAttachment.subresRange[0].numSlices);
+
+    // We expect MSAA images to never have mipmaps
+    VK_ASSERT(srcAttachment.subresRange[0].startSubres.mipLevel == 0);
+
+    uint32_t aspectRegionCount                           = 0;
+    uint32_t srcResolvePlanes[MaxRangePerAttachment]     = {};
+    uint32_t dstResolvePlanes[MaxRangePerAttachment]     = {};
+    const VkFormat   srcResolveFormat                    = srcAttachment.pView->GetViewFormat();
+    const VkFormat   dstResolveFormat                    = dstAttachment.pView->GetViewFormat();
+    Pal::ResolveMode resolveModes[MaxRangePerAttachment] = {};
+
+    const Pal::MsaaQuadSamplePattern* pSampleLocations = nullptr;
+
+    if (Formats::IsDepthStencilFormat(srcResolveFormat) == false)
+    {
+        resolveModes[0]     = Pal::ResolveMode::Average;
+        srcResolvePlanes[0] = 0;
+        dstResolvePlanes[0] = 0;
+        aspectRegionCount   = 1;
+    }
+    else
+    {
+        const uint32_t subpass = m_renderPassInstance.subpass;
+
+        const VkResolveModeFlagBits depthResolveMode   =
+            m_allGpuState.pRenderPass->GetDepthResolveMode(subpass);
+        const VkResolveModeFlagBits stencilResolveMode =
+            m_allGpuState.pRenderPass->GetStencilResolveMode(subpass);
+
+        if (Formats::HasDepth(srcResolveFormat))
+        {
+            // Must be specified because the source image was created with sampleLocsAlwaysKnown set
+            pSampleLocations = &m_renderPassInstance.pSamplePatterns[subpass].locations;
+        }
+
+        if (depthResolveMode != VK_RESOLVE_MODE_NONE)
+        {
+            if (Formats::HasDepth(srcResolveFormat) && Formats::HasDepth(dstResolveFormat))
+            {
+                resolveModes[aspectRegionCount] = VkToPalResolveMode(depthResolveMode);
+                srcResolvePlanes[aspectRegionCount] = 0;
+                dstResolvePlanes[aspectRegionCount] = 0;
+                aspectRegionCount++;
+            }
+        }
+
+        if (stencilResolveMode != VK_RESOLVE_MODE_NONE)
+        {
+            if (Formats::HasStencil(srcResolveFormat) && Formats::HasStencil(dstResolveFormat))
+            {
+                resolveModes[aspectRegionCount] = VkToPalResolveMode(stencilResolveMode);
+                srcResolvePlanes[aspectRegionCount] = Formats::HasDepth(srcResolveFormat) ? 1 : 0;
+                dstResolvePlanes[aspectRegionCount] = Formats::HasDepth(dstResolveFormat) ? 1 : 0;
+                aspectRegionCount++;
+            }
+        }
+    }
+
+    // Depth and stencil might have different resolve mode, so allowing resolve each aspect independently.
+    for (uint32_t aspectRegionIndex = 0; aspectRegionIndex < aspectRegionCount; ++aspectRegionIndex)
+    {
+        // During split-frame-rendering, the image to resolve could be split across multiple devices.
+        Pal::ImageResolveRegion regions[MaxPalDevices];
+
+        const Pal::ImageLayout srcLayout = RPGetAttachmentLayout(params.src.attachment,
+                                                                    srcResolvePlanes[aspectRegionIndex]);
+        const Pal::ImageLayout dstLayout = RPGetAttachmentLayout(params.dst.attachment,
+                                                                    dstResolvePlanes[aspectRegionIndex]);
+
+        for (uint32_t idx = 0; idx < m_renderPassInstance.renderAreaCount; idx++)
+        {
+            const Pal::Rect& renderArea = m_renderPassInstance.renderArea[idx];
+
+            regions[idx].srcPlane       = srcResolvePlanes[aspectRegionIndex];
+            regions[idx].srcSlice       = srcAttachment.subresRange[0].startSubres.arraySlice;
+            regions[idx].srcOffset.x    = renderArea.offset.x;
+            regions[idx].srcOffset.y    = renderArea.offset.y;
+            regions[idx].srcOffset.z    = 0;
+            regions[idx].dstPlane       = dstResolvePlanes[aspectRegionIndex];
+            regions[idx].dstMipLevel    = dstAttachment.subresRange[0].startSubres.mipLevel;
+            regions[idx].dstSlice       = dstAttachment.subresRange[0].startSubres.arraySlice;
+            regions[idx].dstOffset.x    = renderArea.offset.x;
+            regions[idx].dstOffset.y    = renderArea.offset.y;
+            regions[idx].dstOffset.z    = 0;
+            regions[idx].extent.width   = renderArea.extent.width;
+            regions[idx].extent.height  = renderArea.extent.height;
+            regions[idx].extent.depth   = 1;
+            regions[idx].numSlices      = sliceCount;
+            regions[idx].swizzledFormat = Pal::UndefinedSwizzledFormat;
+
+            regions[idx].pQuadSamplePattern = pSampleLocations;
+        }
+
+        PalCmdResolveImage(
+            *srcAttachment.pImage,
+            srcLayout,
+            *dstAttachment.pImage,
+            dstLayout,
+            resolveModes[aspectRegionIndex],
+            m_renderPassInstance.renderAreaCount,
+            regions,
+            GetRpDeviceMask());
     }
 }
 
@@ -10911,7 +10902,7 @@ void CmdBuffer::GetRayTracingDispatchArgs(
            m_pDevice->RayTrace()->GetAccelStructTrackerSrd(deviceIdx),
            sizeof(pConstants->descriptorTable.accelStructTrackerSrd));
 
-    if (settings.llpcRaytracingMode >= RaytracingContinufy)
+    if (pPipeline->CheckIsCps())
     {
         Pal::CompilerStackSizes stackSizes = PerGpuState(deviceIdx)->maxPipelineStackSizes;
         pConstants->constData.cpsFrontendStackSize = stackSizes.frontendSize;
@@ -10954,6 +10945,7 @@ void CmdBuffer::GetRayTracingDispatchArgs(
                                              depth,
                                              pPipeline->GetShaderGroupCount() + 1,
                                              pPipeline->GetApiHash(),
+                                             GetUserMarkerContextValue(),
                                              &raygenSbt,
                                              &missSbt,
                                              &hitSbt,
@@ -11038,13 +11030,7 @@ void CmdBuffer::TraceRaysPerDevice(
 
     PalCmdBuffer(deviceIdx)->CmdSetUserData(Pal::PipelineBindPoint::Compute, dispatchRaysUserData, 1, &constGpuAddrLow);
 
-    uint32_t dispatchSizeX = 0;
-    uint32_t dispatchSizeY = 0;
-    uint32_t dispatchSizeZ = 0;
-
-    pPipeline->GetDispatchSize(&dispatchSizeX, &dispatchSizeY, &dispatchSizeZ, width, height, depth);
-
-    PalCmdBuffer(deviceIdx)->CmdDispatch({ dispatchSizeX, dispatchSizeY, dispatchSizeZ });
+    m_pfnTraceRaysDispatchPerDevice(this, deviceIdx, width, height, depth);
 
     DbgBarrierPostCmd(DbgTraceRays);
 }
@@ -11071,7 +11057,8 @@ void CmdBuffer::TraceRaysIndirect(
             missShaderBindingTable,
             hitShaderBindingTable,
             callableShaderBindingTable,
-            indirectDeviceAddress);
+            indirectDeviceAddress,
+            GetUserMarkerContextValue());
     }
     while (deviceGroup.IterateNext());
 }
@@ -11118,6 +11105,23 @@ void CmdBuffer::SyncIndirectCopy(
 }
 
 // =====================================================================================================================
+void CmdBuffer::TraceRaysDispatchPerDevice(
+    CmdBuffer*  pCmdBuffer,
+    uint32_t    deviceIdx,
+    uint32_t    width,
+    uint32_t    height,
+    uint32_t    depth)
+{
+    const RayTracingPipeline* pPipeline = pCmdBuffer->m_allGpuState.pRayTracingPipeline;
+    uint32_t dispatchSizeX = 0;
+    uint32_t dispatchSizeY = 0;
+    uint32_t dispatchSizeZ = 0;
+
+    pPipeline->GetDispatchSize(&dispatchSizeX, &dispatchSizeY, &dispatchSizeZ, width, height, depth);
+    pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdDispatch({ dispatchSizeX, dispatchSizeY, dispatchSizeZ });
+}
+
+// =====================================================================================================================
 void CmdBuffer::TraceRaysIndirectPerDevice(
     const uint32_t                         deviceIdx,
     GpuRt::ExecuteIndirectArgType          indirectArgType,
@@ -11125,7 +11129,8 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
     const VkStridedDeviceAddressRegionKHR& missShaderBindingTable,
     const VkStridedDeviceAddressRegionKHR& hitShaderBindingTable,
     const VkStridedDeviceAddressRegionKHR& callableShaderBindingTable,
-    VkDeviceAddress                        indirectDeviceAddress)
+    VkDeviceAddress                        indirectDeviceAddress,
+    uint64_t                               userMarkerContext)
 {
     DbgBarrierPreCmd(DbgTraceRays);
 
@@ -11167,7 +11172,11 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
     pInitConstants->indirectMode       =
         (indirectArgType == GpuRt::ExecuteIndirectArgType::DispatchDimensions) ? 0 : 1;
 
-    if (settings.rtFlattenThreadGroupSize == 0)
+    // NOTE: For CPS, we only support flatten thread group so far.
+    const uint32_t flattenThreadGroupSize =
+        pPipeline->CheckIsCps() ? settings.dispatchRaysThreadGroupSize : settings.rtFlattenThreadGroupSize;
+
+    if (flattenThreadGroupSize == 0)
     {
         pInitConstants->dispatchDimSwizzleMode = 0;
         pInitConstants->rtThreadGroupSizeX     = settings.rtThreadGroupSizeX;
@@ -11177,7 +11186,7 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
     else
     {
         pInitConstants->dispatchDimSwizzleMode = 1;
-        pInitConstants->rtThreadGroupSizeX     = settings.rtFlattenThreadGroupSize;
+        pInitConstants->rtThreadGroupSizeX     = flattenThreadGroupSize;
         pInitConstants->rtThreadGroupSizeY     = 1;
         pInitConstants->rtThreadGroupSizeZ     = 1;
     }
@@ -11197,6 +11206,7 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
                                                  0,
                                                  pPipeline->GetShaderGroupCount() + 1,
                                                  pPipeline->GetApiHash(),
+                                                 userMarkerContext,
                                                  &raygenShaderBindingTable,
                                                  &missShaderBindingTable,
                                                  &hitShaderBindingTable,
@@ -11351,18 +11361,7 @@ void CmdBuffer::SetRayTracingPipelineStackSize(
     do
     {
         const uint32_t deviceIdx = deviceGroup.Index();
-
-        const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
-        Pal::CompilerStackSizes stackSizes = {};
-        if (settings.llpcRaytracingMode >= RaytracingContinufy)
-        {
-            stackSizes.frontendSize = pipelineStackSize;
-        }
-        else
-        {
-            stackSizes.backendSize = pipelineStackSize;
-        }
-        UpdateLargestPipelineStackSizes(deviceIdx, stackSizes);
+        PerGpuState(deviceIdx)->dynamicPipelineStackSize = pipelineStackSize;
     }
     while (deviceGroup.IterateNext());
 }
@@ -11439,6 +11438,7 @@ void CmdBuffer::BindRayQueryConstants(
                                                                  depth  * pOrigThreadgroupDims[2],
                                                                  1,
                                                                  pPipeline->GetApiHash(),
+                                                                 GetUserMarkerContextValue(),
                                                                  nullptr,
                                                                  nullptr,
                                                                  nullptr,
@@ -11455,6 +11455,7 @@ void CmdBuffer::BindRayQueryConstants(
                                                                          pOrigThreadgroupDims[2],
                                                                          1,
                                                                          pPipeline->GetApiHash(),
+                                                                         GetUserMarkerContextValue(),
                                                                          nullptr,
                                                                          nullptr,
                                                                          nullptr,
@@ -11518,18 +11519,22 @@ uint32_t CmdBuffer::GetPipelineScratchSize(
 {
     uint32_t scratchSize = 0;
 #if VKI_RAY_TRACING
-    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
-    auto stackSizes = PerGpuState(deviceIdx)->maxPipelineStackSizes;
-    if ((settings.llpcRaytracingMode >= RaytracingContinufy) &&
-        ((settings.cpsFlags & CpsFlagStackInGlobalMem) == 0))
+    if (m_allGpuState.pRayTracingPipeline != nullptr)
     {
-        // Continuations with stack in scratch
-        scratchSize = stackSizes.backendSize + stackSizes.frontendSize;
-    }
-    else
-    {
-        // Non-continuations or continuations stack in global memory
-        scratchSize = stackSizes.backendSize;
+        const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+        auto stackSizes = PerGpuState(deviceIdx)->maxPipelineStackSizes;
+        auto dynamicStackSize = PerGpuState(deviceIdx)->dynamicPipelineStackSize;
+
+        if (m_allGpuState.pRayTracingPipeline->CheckIsCps() && ((settings.cpsFlags & CpsFlagStackInGlobalMem) == 0))
+        {
+            // Continuations with stack in scratch
+            scratchSize = stackSizes.backendSize + Util::Max(stackSizes.frontendSize, dynamicStackSize);
+        }
+        else
+        {
+            // Non-continuations or continuations stack in global memory
+            scratchSize = Util::Max(stackSizes.backendSize, dynamicStackSize);
+        }
     }
 #endif
     return scratchSize;
@@ -11666,6 +11671,22 @@ void CmdBuffer::ValidateGraphicsStates()
             {
                 m_allGpuState.msaaCreateInfo.flags.enable1xMsaaSampleLocations = enable1xMsaaSampleLocations;
                 m_allGpuState.dirtyGraphics.msaa = 1;
+            }
+        }
+
+        if (m_allGpuState.dirtyGraphics.msaa || m_allGpuState.dirtyGraphics.pipeline)
+        {
+            const GraphicsPipeline* pGraphicsPipeline = m_allGpuState.pGraphicsPipeline;
+            if (pGraphicsPipeline != nullptr)
+            {
+                const uint8 forceSampleRateShading =
+                    (m_allGpuState.msaaCreateInfo.pixelShaderSamples > 1) &&
+                    (pGraphicsPipeline->GetPipelineFlags().sampleShadingEnable != 0);
+                if (m_allGpuState.msaaCreateInfo.flags.forceSampleRateShading != forceSampleRateShading)
+                {
+                    m_allGpuState.msaaCreateInfo.flags.forceSampleRateShading = forceSampleRateShading;
+                    m_allGpuState.dirtyGraphics.msaa = 1;
+                }
             }
         }
 
@@ -13034,6 +13055,12 @@ PFN_vkCmdPushDescriptorSetWithTemplate2KHR CmdBuffer::GetCmdPushDescriptorSetWit
     }
 
     return pFunc;
+}
+
+// =====================================================================================================================
+uint64_t CmdBuffer::GetUserMarkerContextValue() const
+{
+    return (m_pSqttState != nullptr) ? m_pSqttState->GetUserMarkerContextValue() : 0;
 }
 
 // =====================================================================================================================

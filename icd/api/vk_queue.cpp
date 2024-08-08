@@ -1304,7 +1304,8 @@ VkResult Queue::Submit(
             palSubmitInfo.gpuMemRefCount       = 0;
             palSubmitInfo.pGpuMemoryRefs       = nullptr;
 
-            const uint32_t deviceCount = (pDeviceGroupInfo == nullptr) ? 1 : m_pDevice->NumPalDevices();
+            const uint32_t deviceCount = ((pDeviceGroupInfo == nullptr) && (isSynchronization2 == false)) ?
+                                         1 : m_pDevice->NumPalDevices();
             for (uint32_t deviceIdx = 0; (deviceIdx < deviceCount) && (result == VK_SUCCESS); deviceIdx++)
             {
                 Pal::Result palResult = Pal::Result::Success;
@@ -1341,7 +1342,18 @@ VkResult Queue::Submit(
 
                 for (uint32_t i = 0; i < cmdBufferCount; ++i)
                 {
-                    if ((deviceCount > 1) &&
+                    if (isSynchronization2)
+                    {
+                        const VkSubmitInfo2KHR* pSubmitInfoKhr =
+                            reinterpret_cast<const VkSubmitInfo2KHR*>(&pSubmits[submitIdx]);
+
+                        if ((pSubmitInfoKhr->pCommandBufferInfos[i].deviceMask != 0) &&
+                            ((pSubmitInfoKhr->pCommandBufferInfos[i].deviceMask & deviceMask) == 0))
+                        {
+                            continue;
+                        }
+                    }
+                    else if ((pDeviceGroupInfo != nullptr) &&
                         (pDeviceGroupInfo->pCommandBufferDeviceMasks != nullptr) &&
                         (pDeviceGroupInfo->pCommandBufferDeviceMasks[i] & deviceMask) == 0)
                     {
@@ -1644,12 +1656,17 @@ VkResult Queue::Submit(
 VkResult Queue::WaitIdle(void)
 {
     Pal::Result palResult = Pal::Result::Success;
+    const RuntimeSettings* pSettings = &m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings();
 
     for (uint32_t deviceIdx = 0;
         (deviceIdx < m_pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
         deviceIdx++)
     {
-        palResult = PalQueue(deviceIdx)->WaitIdle();
+        do
+        {
+            palResult = PalQueue(deviceIdx)->WaitIdle();
+        }
+        while ((pSettings->infiniteDeviceWaitIdle) && (palResult == Pal::Result::Timeout));
     }
 
     return PalToVkResult(palResult);
@@ -1987,16 +2004,6 @@ VkResult Queue::Present(
                 presentInfo.rectangleCount = pVkRegion->rectangleCount;
                 presentInfo.pRectangles = pPresentRects;
             }
-        }
-
-        // Ensure metadata is available before post processing.
-        if (pSwapChain->GetFullscreenMgr() != nullptr)
-        {
-            Pal::Result palResult = m_pDevice->PalDevice(DefaultDeviceIndex)->PollFullScreenFrameMetadataControl(
-                pSwapChain->GetVidPnSourceId(),
-                &m_palFrameMetadataControl);
-
-            VK_ASSERT(palResult == Pal::Result::Success);
         }
 
         // Fill in present information and obtain the PAL memory of the presentable image.

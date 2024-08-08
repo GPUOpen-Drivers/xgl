@@ -217,11 +217,6 @@ VkResult ShaderModule::Init(
 
     m_handle.codeHash = m_codeHash;
 
-    if (result == VK_SUCCESS)
-    {
-        pCompiler->TryEarlyCompileShaderModule(pDevice, &m_handle);
-    }
-
     return result;
 }
 

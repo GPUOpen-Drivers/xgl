@@ -730,11 +730,12 @@ Pal::Result RenderPassBuilder::BuildResolveAttachmentReferences(
             const AttachmentReference& src = subpassDesc.pColorAttachments[target];
             const AttachmentReference& dst = subpassDesc.pResolveAttachments[target];
 
-            const RPImageLayout srcLayout = { src.layout, Pal::LayoutResolveSrc };
-            const RPImageLayout dstLayout = { dst.layout, Pal::LayoutResolveDst };
+            RPImageLayout srcLayout = { src.layout, Pal::LayoutResolveSrc };
+            RPImageLayout dstLayout = { dst.layout, Pal::LayoutResolveDst };
 
             if ((dst.attachment != VK_ATTACHMENT_UNUSED) && (src.attachment != VK_ATTACHMENT_UNUSED))
             {
+
                 result = TrackAttachmentUsage(
                     subpass,
                     AttachRefResolveSrc,

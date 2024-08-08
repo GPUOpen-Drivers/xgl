@@ -181,6 +181,7 @@ VK_EXT_load_store_op_none
 VK_KHR_maintenance4
 VK_KHR_maintenance5
 VK_KHR_maintenance6
+VK_KHR_maintenance7
 VK_AMD_shader_early_and_late_fragment_tests
 VK_EXT_mesh_shader
 VK_EXT_image_view_min_lod
@@ -220,3 +221,4 @@ VK_EXT_frame_boundary
 VK_EXT_image_compression_control
 #if VKI_RAY_TRACING
 #endif
+VK_EXT_depth_bias_control

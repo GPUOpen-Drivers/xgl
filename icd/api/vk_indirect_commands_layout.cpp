@@ -37,8 +37,8 @@ namespace vk
 {
 // =====================================================================================================================
 // Creates an indirect commands layout object.
-VkResult IndirectCommandsLayout::Create(
-    const Device*                                   pDevice,
+VkResult IndirectCommandsLayoutNV::Create(
+    Device*                                         pDevice,
     const VkIndirectCommandsLayoutCreateInfoNV*     pCreateInfo,
     const VkAllocationCallbacks*                    pAllocator,
     VkIndirectCommandsLayoutNV*                     pLayout)
@@ -46,14 +46,15 @@ VkResult IndirectCommandsLayout::Create(
     VkResult result = VK_SUCCESS;
     Pal::Result palResult;
 
+    IndirectCommandsLayoutNV* pObject = nullptr;
+
     Pal::IndirectCmdGeneratorCreateInfo createInfo = {};
     Pal::IndirectParam indirectParams[MaxIndirectTokenCount] = {};
     createInfo.pParams = &indirectParams[0];
 
-    Pal::IIndirectCmdGenerator* pGenerators[MaxPalDevices] = {};
-    Pal::IGpuMemory*            pGpuMemory[MaxPalDevices]  = {};
+    Pal::IIndirectCmdGenerator* pPalGenerator[MaxPalDevices] = {};
 
-    const size_t apiSize = ObjectSize(pDevice);
+    const size_t apiSize = sizeof(IndirectCommandsLayoutNV);
     size_t totalSize     = apiSize;
     size_t palSize       = 0;
 
@@ -140,7 +141,7 @@ VkResult IndirectCommandsLayout::Create(
             {
                 palResult = pDevice->PalDevice(deviceIdx)->CreateIndirectCmdGenerator(createInfo,
                                                                                       pPalMemory,
-                                                                                      &pGenerators[deviceIdx]);
+                                                                                      &pPalGenerator[deviceIdx]);
             }
 
             if (palResult == Pal::Result::Success)
@@ -157,50 +158,88 @@ VkResult IndirectCommandsLayout::Create(
 
     if (result == VK_SUCCESS)
     {
-        result = BindGpuMemory(pDevice, pAllocator, pGenerators, pGpuMemory);
+        pObject = VK_PLACEMENT_NEW(pMemory) IndirectCommandsLayoutNV(
+            pDevice,
+            info,
+            pPalGenerator,
+            createInfo);
+
+        result = pObject->Initialize(pDevice);
     }
 
     if (result == VK_SUCCESS)
     {
-        VK_PLACEMENT_NEW(pMemory) IndirectCommandsLayout(
-            pDevice,
-            info,
-            pGenerators,
-            pGpuMemory,
-            createInfo);
+        *pLayout = IndirectCommandsLayoutNV::HandleFromVoidPointer(pMemory);
+    }
+    else
+    {
+        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+        {
+            if (pPalGenerator[deviceIdx] != nullptr)
+            {
+                pPalGenerator[deviceIdx]->Destroy();
+            }
+        }
 
-        *pLayout = IndirectCommandsLayout::HandleFromVoidPointer(pMemory);
+        Util::Destructor(pObject);
+
+        pDevice->FreeApiObject(pAllocator, pMemory);
     }
 
     return result;
 }
 
 // =====================================================================================================================
-IndirectCommandsLayout::IndirectCommandsLayout(
+IndirectCommandsLayoutNV::IndirectCommandsLayoutNV(
     const Device*                                   pDevice,
     const IndirectCommandsInfo&                     info,
-    Pal::IIndirectCmdGenerator**                    pGenerators,
-    Pal::IGpuMemory**                               pGpuMemory,
+    Pal::IIndirectCmdGenerator**                    ppPalGenerator,
     const Pal::IndirectCmdGeneratorCreateInfo&      palCreateInfo)
     :
     m_info(info),
-    m_palCreateInfo(palCreateInfo)
+    m_palCreateInfo(palCreateInfo),
+    m_internalMem()
 {
-    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
-    {
-        m_perGpu[deviceIdx].pGenerator  = pGenerators[deviceIdx];
-        m_perGpu[deviceIdx].pGpuMemory  = pGpuMemory[deviceIdx];
-    }
+    memcpy(m_pPalGenerator, ppPalGenerator, sizeof(m_pPalGenerator));
 }
 
 // =====================================================================================================================
-void IndirectCommandsLayout::BuildPalCreateInfo(
+VkResult IndirectCommandsLayoutNV::Initialize(
+    Device*                                         pDevice)
+{
+    VkResult result = VK_SUCCESS;
+
+    constexpr bool ReadOnly            = false;
+    constexpr bool RemoveInvisibleHeap = true;
+    constexpr bool PersistentMapped    = false;
+
+    // Allocate and bind GPU memory for the object
+    result = pDevice->MemMgr()->AllocAndBindGpuMem(
+        pDevice->NumPalDevices(),
+        reinterpret_cast<Pal::IGpuMemoryBindable**>(&m_pPalGenerator),
+        ReadOnly,
+        &m_internalMem,
+        pDevice->GetPalDeviceMask(),
+        RemoveInvisibleHeap,
+        PersistentMapped,
+        VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NV,
+        IndirectCommandsLayoutNV::IntValueFromHandle(IndirectCommandsLayoutNV::HandleFromObject(this)));
+
+    return result;
+}
+
+// =====================================================================================================================
+void IndirectCommandsLayoutNV::BuildPalCreateInfo(
     const Device*                                   pDevice,
     const VkIndirectCommandsLayoutCreateInfoNV*     pCreateInfo,
     Pal::IndirectParam*                             pIndirectParams,
     Pal::IndirectCmdGeneratorCreateInfo*            pPalCreateInfo)
 {
+    uint32_t paramCount = 0;
+    uint32_t expectedOffset = 0;
     uint32_t bindingArgsSize = 0;
+
+    bool useNativeIndexType = true;
 
     const bool isDispatch = (pCreateInfo->pTokens[pCreateInfo->tokenCount - 1].tokenType
                                 == VK_INDIRECT_COMMANDS_TOKEN_TYPE_DISPATCH_NV);
@@ -209,59 +248,73 @@ void IndirectCommandsLayout::BuildPalCreateInfo(
     {
         const VkIndirectCommandsLayoutTokenNV& token = pCreateInfo->pTokens[i];
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 889
+        // Set a padding operation to handle non tightly packed indirect arguments buffers
+        VK_ASSERT(token.offset >= expectedOffset);
+        if (token.offset > expectedOffset)
+        {
+            pIndirectParams[paramCount].type        = Pal::IndirectParamType::Padding;
+            pIndirectParams[paramCount].sizeInBytes = token.offset - expectedOffset;
+
+            bindingArgsSize += pIndirectParams[paramCount].sizeInBytes;
+            paramCount++;
+        }
+#endif
+
         switch (token.tokenType)
         {
         case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_NV:
-            pIndirectParams[i].type         = Pal::IndirectParamType::Draw;
-            pIndirectParams[i].sizeInBytes  = sizeof(Pal::DrawIndirectArgs);
+            pIndirectParams[paramCount].type        = Pal::IndirectParamType::Draw;
+            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::DrawIndirectArgs);
             static_assert(sizeof(Pal::DrawIndirectArgs) == sizeof(VkDrawIndirectCommand));
             break;
 
         case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_INDEXED_NV:
-            pIndirectParams[i].type         = Pal::IndirectParamType::DrawIndexed;
-            pIndirectParams[i].sizeInBytes  = sizeof(Pal::DrawIndexedIndirectArgs);
+            pIndirectParams[paramCount].type        = Pal::IndirectParamType::DrawIndexed;
+            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::DrawIndexedIndirectArgs);
             static_assert(sizeof(Pal::DrawIndexedIndirectArgs) == sizeof(VkDrawIndexedIndirectCommand));
             break;
 
         case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DISPATCH_NV:
-            pIndirectParams[i].type         = Pal::IndirectParamType::Dispatch;
-            pIndirectParams[i].sizeInBytes  = sizeof(Pal::DispatchIndirectArgs);
+            pIndirectParams[paramCount].type        = Pal::IndirectParamType::Dispatch;
+            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::DispatchIndirectArgs);
             static_assert(sizeof(Pal::DispatchIndirectArgs) == sizeof(VkDispatchIndirectCommand));
             break;
 
         case VK_INDIRECT_COMMANDS_TOKEN_TYPE_INDEX_BUFFER_NV:
-            pIndirectParams[i].type         = Pal::IndirectParamType::BindIndexData;
-            pIndirectParams[i].sizeInBytes  = sizeof(Pal::BindIndexDataIndirectArgs);
+            pIndirectParams[paramCount].type        = Pal::IndirectParamType::BindIndexData;
+            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::BindIndexDataIndirectArgs);
+            useNativeIndexType = (token.indexTypeCount == 0);
             static_assert(sizeof(Pal::BindIndexDataIndirectArgs) == sizeof(VkBindIndexBufferIndirectCommandNV));
             break;
 
         case VK_INDIRECT_COMMANDS_TOKEN_TYPE_VERTEX_BUFFER_NV:
-            pIndirectParams[i].type                 = Pal::IndirectParamType::BindVertexData;
-            pIndirectParams[i].sizeInBytes          = sizeof(Pal::BindVertexDataIndirectArgs);
-            pIndirectParams[i].vertexData.bufferId  = token.vertexBindingUnit;
-            pIndirectParams[i].userDataShaderUsage  = Pal::ApiShaderStageVertex;
+            pIndirectParams[paramCount].type                = Pal::IndirectParamType::BindVertexData;
+            pIndirectParams[paramCount].sizeInBytes         = sizeof(Pal::BindVertexDataIndirectArgs);
+            pIndirectParams[paramCount].vertexData.bufferId = token.vertexBindingUnit;
+            pIndirectParams[paramCount].userDataShaderUsage = Pal::ApiShaderStageVertex;
             static_assert(sizeof(Pal::BindVertexDataIndirectArgs) == sizeof(VkBindVertexBufferIndirectCommandNV));
             break;
 
         case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_MESH_TASKS_NV:
-            pIndirectParams[i].type                 = Pal::IndirectParamType::DispatchMesh;
-            pIndirectParams[i].sizeInBytes          = sizeof(Pal::DispatchMeshIndirectArgs);
+            pIndirectParams[paramCount].type        = Pal::IndirectParamType::DispatchMesh;
+            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::DispatchMeshIndirectArgs);
             static_assert(sizeof(Pal::DispatchMeshIndirectArgs) == sizeof(VkDrawMeshTasksIndirectCommandEXT));
             break;
 
         case VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_NV:
         {
-            const PipelineLayout* pPipelineLayout   = PipelineLayout::ObjectFromHandle(token.pushconstantPipelineLayout);
-            const UserDataLayout& userDataLayout    = pPipelineLayout->GetInfo().userDataLayout;
+            const PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(token.pushconstantPipelineLayout);
+            const UserDataLayout& userDataLayout  = pPipelineLayout->GetInfo().userDataLayout;
 
-            uint32_t startInDwords                  = token.pushconstantOffset / sizeof(uint32_t);
-            uint32_t lengthInDwords                 = PipelineLayout::GetPushConstantSizeInDword(token.pushconstantSize);
+            uint32_t startInDwords  = token.pushconstantOffset / sizeof(uint32_t);
+            uint32_t lengthInDwords = PipelineLayout::GetPushConstantSizeInDword(token.pushconstantSize);
 
-            pIndirectParams[i].type                 = Pal::IndirectParamType::SetUserData;
-            pIndirectParams[i].userData.entryCount  = lengthInDwords;
-            pIndirectParams[i].sizeInBytes          = sizeof(uint32_t) * lengthInDwords;
-            pIndirectParams[i].userData.firstEntry  = userDataLayout.common.pushConstRegBase + startInDwords;
-            pIndirectParams[i].userDataShaderUsage  = VkToPalShaderStageMask(token.pushconstantShaderStageFlags);
+            pIndirectParams[paramCount].type                = Pal::IndirectParamType::SetUserData;
+            pIndirectParams[paramCount].userData.entryCount = lengthInDwords;
+            pIndirectParams[paramCount].sizeInBytes         = sizeof(uint32_t) * lengthInDwords;
+            pIndirectParams[paramCount].userData.firstEntry = userDataLayout.common.pushConstRegBase + startInDwords;
+            pIndirectParams[paramCount].userDataShaderUsage = VkToPalShaderStageMask(token.pushconstantShaderStageFlags);
             break;
         }
 
@@ -278,10 +331,20 @@ void IndirectCommandsLayout::BuildPalCreateInfo(
 
         }
 
+        // Override userDataShaderUsage to compute shader only for dispatch type
+        if (isDispatch)
+        {
+            pIndirectParams[paramCount].userDataShaderUsage = Pal::ShaderStageFlagBits::ApiShaderStageCompute;
+        }
+
         if (i < (pCreateInfo->tokenCount - 1))
         {
-            bindingArgsSize += pIndirectParams[i].sizeInBytes;
+            bindingArgsSize += pIndirectParams[paramCount].sizeInBytes;
         }
+
+        // Calculate expected offset of the next token assuming indirect arguments buffers are tightly packed
+        expectedOffset = token.offset + pIndirectParams[paramCount].sizeInBytes;
+        paramCount++;
     }
 
     for (uint32_t i = 0; i < pCreateInfo->streamCount; ++i)
@@ -290,20 +353,19 @@ void IndirectCommandsLayout::BuildPalCreateInfo(
         pPalCreateInfo->strideInBytes += stride;
     }
 
-    pPalCreateInfo->paramCount = pCreateInfo->tokenCount;
+    pPalCreateInfo->paramCount = paramCount;
 
-    // Override userDataShaderUsage to compute shader only for dispatch type
-    if (isDispatch)
-    {
-        for (uint32_t i = 0; i < pPalCreateInfo->paramCount; ++i)
-        {
-            pIndirectParams[i].userDataShaderUsage = Pal::ShaderStageFlagBits::ApiShaderStageCompute;
-        }
-    }
+    constexpr uint32_t DxgiIndexTypeUint8  = 62;
+    constexpr uint32_t DxgiIndexTypeUint16 = 57;
+    constexpr uint32_t DxgiIndexTypeUint32 = 42;
+
+    pPalCreateInfo->indexTypeTokens[0] = useNativeIndexType ? VK_INDEX_TYPE_UINT8_KHR : DxgiIndexTypeUint8;
+    pPalCreateInfo->indexTypeTokens[1] = useNativeIndexType ? VK_INDEX_TYPE_UINT16    : DxgiIndexTypeUint16;
+    pPalCreateInfo->indexTypeTokens[2] = useNativeIndexType ? VK_INDEX_TYPE_UINT32    : DxgiIndexTypeUint32;
 }
 
 // =====================================================================================================================
-void IndirectCommandsLayout::CalculateMemoryRequirements(
+void IndirectCommandsLayoutNV::CalculateMemoryRequirements(
     const Device*                                   pDevice,
     VkMemoryRequirements2*                          pMemoryRequirements
     ) const
@@ -315,8 +377,9 @@ void IndirectCommandsLayout::CalculateMemoryRequirements(
 
     Pal::GpuMemoryRequirements memReqs = {};
     memReqs.flags.cpuAccess = 0;
+    memReqs.heapCount       = 2;
     memReqs.heaps[0]        = Pal::GpuHeap::GpuHeapInvisible;
-    memReqs.heapCount       = 1;
+    memReqs.heaps[1]        = Pal::GpuHeap::GpuHeapLocal;
 
     for (uint32_t i = 0; i < memReqs.heapCount; ++i)
     {
@@ -330,127 +393,19 @@ void IndirectCommandsLayout::CalculateMemoryRequirements(
 }
 
 // =====================================================================================================================
-VkResult IndirectCommandsLayout::BindGpuMemory(
-    const Device*                                   pDevice,
-    const VkAllocationCallbacks*                    pAllocator,
-    Pal::IIndirectCmdGenerator**                    pGenerators,
-    Pal::IGpuMemory**                               pGpuMemory)
-{
-    VkResult result = VK_SUCCESS;
-    Pal::Result palResult;
-
-    Pal::GpuMemoryRequirements  memReqs[MaxPalDevices]        = {};
-    Pal::GpuMemoryCreateInfo    memCreateInfos[MaxPalDevices] = {};
-
-    size_t totalSize = 0;
-
-    void* pMemory = nullptr;
-
-    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
-    {
-        pGenerators[deviceIdx]->GetGpuMemoryRequirements(&memReqs[deviceIdx]);
-
-        memCreateInfos[deviceIdx].size          = memReqs[deviceIdx].size;
-        memCreateInfos[deviceIdx].alignment     = memReqs[deviceIdx].alignment;
-        memCreateInfos[deviceIdx].priority      = Pal::GpuMemPriority::Normal;
-        memCreateInfos[deviceIdx].heapCount     = memReqs[deviceIdx].heapCount;
-
-        for (uint32 i = 0; i < memReqs[deviceIdx].heapCount; ++i)
-        {
-            memCreateInfos[deviceIdx].heaps[i] = memReqs[deviceIdx].heaps[i];
-        }
-
-        const size_t size = pDevice->PalDevice(deviceIdx)->GetGpuMemorySize(memCreateInfos[deviceIdx],
-                                                                            &palResult);
-
-        if (palResult == Pal::Result::Success)
-        {
-            totalSize += size;
-        }
-        else
-        {
-            result = PalToVkResult(palResult);
-            break;
-        }
-    }
-
-    if (result == VK_SUCCESS)
-    {
-        pMemory = pAllocator->pfnAllocation(pAllocator->pUserData,
-                                            totalSize,
-                                            VK_DEFAULT_MEM_ALIGN,
-                                            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-
-        if (pMemory == nullptr)
-        {
-            result = VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
-    }
-
-    if (result == VK_SUCCESS)
-    {
-        void* pPalMemory = pMemory;
-
-        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
-        {
-            const size_t size = pDevice->PalDevice(deviceIdx)->GetGpuMemorySize(memCreateInfos[deviceIdx],
-                                                                                &palResult);
-
-            if (palResult == Pal::Result::Success)
-            {
-                palResult = pDevice->PalDevice(deviceIdx)->CreateGpuMemory(memCreateInfos[deviceIdx],
-                                                                           pPalMemory,
-                                                                           &pGpuMemory[deviceIdx]);
-            }
-
-            if (palResult == Pal::Result::Success)
-            {
-                // Gpu memory binding for IndirectCmdGenerator to build SRD containing properties and parameter data.
-                palResult = pGenerators[deviceIdx]->BindGpuMemory(pGpuMemory[deviceIdx], 0);
-            }
-            else
-            {
-                result = PalToVkResult(palResult);
-                break;
-            }
-
-            if (palResult == Pal::Result::Success)
-            {
-                pPalMemory = Util::VoidPtrInc(pPalMemory, size);
-            }
-            else
-            {
-                result = PalToVkResult(palResult);
-                break;
-            }
-        }
-    }
-
-    return result;
-}
-
-// =====================================================================================================================
-VkResult IndirectCommandsLayout::Destroy(
+VkResult IndirectCommandsLayoutNV::Destroy(
     Device*                                         pDevice,
     const VkAllocationCallbacks*                    pAllocator)
 {
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
-        if (m_perGpu[deviceIdx].pGenerator != nullptr)
+        if (m_pPalGenerator[deviceIdx] != nullptr)
         {
-            m_perGpu[deviceIdx].pGenerator->Destroy();
-        }
-
-        if (m_perGpu[deviceIdx].pGpuMemory != nullptr)
-        {
-            m_perGpu[deviceIdx].pGpuMemory->Destroy();
+            m_pPalGenerator[deviceIdx]->Destroy();
         }
     }
 
-    if (m_perGpu[DefaultDeviceIndex].pGpuMemory != nullptr)
-    {
-        pAllocator->pfnFree(pAllocator->pUserData, m_perGpu[DefaultDeviceIndex].pGpuMemory);
-    }
+    pDevice->MemMgr()->FreeGpuMem(&m_internalMem);
 
     Util::Destructor(this);
 

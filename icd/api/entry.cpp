@@ -1856,6 +1856,13 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingInputAttachmentIndicesKHR(
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetRenderingInputAttachmentIndices(pLocationInfo);
 }
 
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBias2EXT(
+    VkCommandBuffer                                 commandBuffer,
+    const VkDepthBiasInfoEXT*                       pDepthBiasInfo)
+{
+}
+
 } // namespace entry
 
 } // namespace vk

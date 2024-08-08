@@ -462,10 +462,10 @@ constexpr AppProfilePatternEntry AppNameRainbowSixSiege =
     "rainbow six siege"
 };
 
-constexpr AppProfilePatternEntry AppNameHyperscape =
+constexpr AppProfilePatternEntry AppNameRainbowSixExtraction =
 {
     PatternAppNameLower,
-    "hyperscape"
+    "rainbow six extraction"
 };
 
 constexpr AppProfilePatternEntry AppEngineScimitar =
@@ -546,12 +546,6 @@ constexpr AppProfilePatternEntry AppEngineUnity =
     "unity"
 };
 
-constexpr AppProfilePatternEntry AppEngineAngle =
-{
-    PatternEngineNameLower,
-    "angle"
-};
-
 constexpr AppProfilePatternEntry AppNameValheim =
 {
     PatternExeNameLower,
@@ -610,6 +604,12 @@ constexpr AppProfilePatternEntry AppNameHaloInfiniteLauncher
 {
     PatternAppNameLower,
     "haloinfinite.exe"
+};
+
+constexpr AppProfilePatternEntry AppNameStarfield
+{
+    PatternAppNameLower,
+    "starfield.exe"
 };
 
 constexpr AppProfilePatternEntry AppNameTf2Win64
@@ -1204,6 +1204,16 @@ AppProfilePattern AppPatternTable[] =
             PatternEnd
         }
     },
+
+    {
+        AppProfile::RainbowSixExtraction,
+        {
+            AppNameRainbowSixExtraction,
+            AppEngineScimitar,
+            PatternEnd
+        }
+    },
+
     {
        AppProfile::KnockoutCity,
        {
@@ -1217,15 +1227,6 @@ AppProfilePattern AppPatternTable[] =
            AppNameEvilGenius2,
            PatternEnd
        }
-    },
-
-    {
-        AppProfile::Hyperscape,
-        {
-            AppNameHyperscape,
-            AppEngineScimitar,
-            PatternEnd
-        }
     },
 
     {
@@ -1361,14 +1362,6 @@ AppProfilePattern AppPatternTable[] =
 #endif
 
     {
-        AppProfile::AngleEngine,
-        {
-            AppEngineAngle,
-            PatternEnd
-        }
-    },
-
-    {
         AppProfile::CSGO,
         {
             AppNameCSGO,
@@ -1423,6 +1416,15 @@ AppProfilePattern AppPatternTable[] =
         {
             AppNameHaloInfiniteLauncher,
             AppEngineDXVK,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Starfield,
+        {
+            AppNameStarfield,
+            AppEngineVKD3D,
             PatternEnd
         }
     },

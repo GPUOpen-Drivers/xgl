@@ -1,0 +1,203 @@
+/*
+ ***********************************************************************************************************************
+ *
+ *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
+ *
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
+ *
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
+#if VKI_RAY_TRACING
+#include "split_raytracing_layer.h"
+
+#include "include/vk_cmdbuffer.h"
+#include "include/vk_device.h"
+#include "include/vk_conv.h"
+#include "raytrace/ray_tracing_device.h"
+#include "raytrace/vk_ray_tracing_pipeline.h"
+
+namespace vk
+{
+
+// =====================================================================================================================
+// The method TraceRaysDispatchPerDevice is used to split a dispatch into multiple smaller ones, it helps prevent TDR
+// for some specified scenarios and allows the Windows GUI to operate without stuttering.
+// The limiations of this method:
+//  1) It cannot prevent TDR when the IB needs more than 5 ~ 6 to be exectued on a Windows platform.
+//  2) It cannot prevent TDR when there is no preemption request arrives in 2 seconds.
+void SplitRaytracingLayer::TraceRaysDispatchPerDevice(
+    CmdBuffer*  pCmdBuffer,
+    uint32_t    deviceIdx,
+    uint32_t    width,
+    uint32_t    height,
+    uint32_t    depth)
+{
+    const RuntimeSettings& settings     = pCmdBuffer->VkDevice()->GetRuntimeSettings();
+    const RayTracingPipeline* pPipeline = pCmdBuffer->RenderState()->pRayTracingPipeline;
+
+    const uint32_t splitX = settings.rtDispatchSplitX;
+    const uint32_t splitY = settings.rtDispatchSplitY;
+    const uint32_t splitZ = settings.rtDispatchSplitZ;
+
+    const uint32_t blockW = (width + splitX - 1)  / splitX;
+    const uint32_t blockH = (height + splitY - 1) / splitY;
+    const uint32_t blockD = (depth + splitZ - 1)  / splitZ;
+
+    uint32_t dispatchSizeX = 0;
+    uint32_t dispatchSizeY = 0;
+    uint32_t dispatchSizeZ = 0;
+
+    pPipeline->GetDispatchSize(&dispatchSizeX, &dispatchSizeY, &dispatchSizeZ, blockW, blockH, blockD);
+
+    for (uint32_t z = 0; z < splitZ; z++)
+    {
+        uint32_t zOffset = z * blockD;
+        for (uint32_t x = 0; x < splitX; x++)
+        {
+            uint32_t xOffset = x * blockW;
+            for (uint32_t y = 0; y < splitY; y++)
+            {
+                uint32_t yOffset = y * blockH;
+
+                uint32_t dispatchOffsetX = 0;
+                uint32_t dispatchOffsetY = 0;
+                uint32_t dispatchOffsetZ = 0;
+
+                pPipeline->GetDispatchSize(&dispatchOffsetX,
+                                           &dispatchOffsetY,
+                                           &dispatchOffsetZ,
+                                           xOffset,
+                                           yOffset,
+                                           zOffset);
+
+                pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdDispatchOffset(
+                    { dispatchOffsetX, dispatchOffsetY, dispatchOffsetZ },
+                    { dispatchSizeX,   dispatchSizeY,   dispatchSizeZ },
+                    { dispatchSizeX,   dispatchSizeY,   dispatchSizeZ });
+
+                // To avoid TDR, the large dispatch is split into mulitple smaller sub-dispatches. However,
+                // when a MCBP event arrives, PFP may have already processed all dispatch commands, so mulitple
+                // smaller sub-dispatches cannot be interrupted by MCBP in this case.
+                // The Barrier below is used to stall the PFP and allow MCBP to happen between dispatches.
+                Pal::BarrierTransition transition   = {};
+                transition.srcCacheMask             = Pal::CoherShaderRead;
+                transition.dstCacheMask             = Pal::CoherShaderRead;
+                const Pal::HwPipePoint postCs       = Pal::HwPipePostCs;
+                Pal::BarrierInfo barrierInfo        = {};
+                barrierInfo.pipePointWaitCount      = 1;
+                barrierInfo.pPipePoints             = &postCs;
+                barrierInfo.waitPoint               = Pal::HwPipeTop;
+                pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdBarrier(barrierInfo);
+
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
+VkResult SplitRaytracingLayer::CreateLayer(
+    Device*                 pDevice,
+    SplitRaytracingLayer**  ppLayer)
+{
+    VkResult               result   = VK_SUCCESS;
+    SplitRaytracingLayer*  pLayer   = nullptr;
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+
+    if (settings.splitRayTracingDispatch)
+    {
+        void* pMem = pDevice->VkInstance()->AllocMem(sizeof(SplitRaytracingLayer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+        if (pMem != nullptr)
+        {
+            pLayer = VK_PLACEMENT_NEW(pMem) SplitRaytracingLayer(pDevice);
+            *ppLayer = pLayer;
+        }
+        else
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+SplitRaytracingLayer::SplitRaytracingLayer(Device* pDevice)
+    :
+    m_pInstance(pDevice->VkInstance())
+{
+}
+
+// =====================================================================================================================
+void SplitRaytracingLayer::DestroyLayer()
+{
+    Util::Destructor(this);
+    m_pInstance->FreeMem(this);
+}
+
+namespace entry
+{
+
+namespace splitRaytracingLayer
+{
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysKHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkStridedDeviceAddressRegionKHR*      pRaygenShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pMissShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pHitShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR*      pCallableShaderBindingTable,
+    uint32_t                                    width,
+    uint32_t                                    height,
+    uint32_t                                    depth)
+{
+    CmdBuffer* pCmdBuffer = ApiCmdBuffer::ObjectFromHandle(commandBuffer);
+    pCmdBuffer->SetTraceRaysDispatchPerDevice(SplitRaytracingLayer::TraceRaysDispatchPerDevice);
+
+    SplitRaytracingLayer* pLayer = pCmdBuffer->VkDevice()->RayTrace()->GetSplitRaytracingLayer();
+    pLayer->GetNextLayer()->GetEntryPoints().vkCmdTraceRaysKHR(
+         commandBuffer,
+         pRaygenShaderBindingTable,
+         pMissShaderBindingTable,
+         pHitShaderBindingTable,
+         pCallableShaderBindingTable,
+         width,
+         height,
+         depth);
+}
+} // splitRaytracingLayer entry
+} // namespace entry
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#define SPLIT_RAYTRACING_OVERRIDE_ALIAS(entry_name, func_name) \
+    pDispatchTable->OverrideEntryPoints()->entry_name = vk::entry::splitRaytracingLayer::func_name
+
+#define SPLIT_RAYTRACING_OVERRIDE_ENTRY(entry_name) SPLIT_RAYTRACING_OVERRIDE_ALIAS(entry_name, entry_name)
+
+// =====================================================================================================================
+void SplitRaytracingLayer::OverrideDispatchTable(
+    DispatchTable* pDispatchTable)
+{
+    // Save current device dispatch table to use as the next layer.
+    m_nextLayer = *pDispatchTable;
+
+    SPLIT_RAYTRACING_OVERRIDE_ENTRY(vkCmdTraceRaysKHR);
+}
+
+} // namespace vk
+#endif

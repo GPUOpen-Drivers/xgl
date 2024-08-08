@@ -123,6 +123,7 @@ public:
         Pal::IQueueSemaphore*          pQueueSemaphore) = 0;
 
     virtual bool IsQueueTimingActive(const Device* pDevice) const = 0;
+    virtual bool IsTraceRunning() const { return false; }
     virtual bool GetTraceFrameBeginTag(uint64_t* pTag) const = 0;
     virtual bool GetTraceFrameEndTag(uint64_t* pTag) const = 0;
 
@@ -132,6 +133,16 @@ public:
 
     virtual void DeregisterPipelineCache(
         PipelineBinaryCache* pPipelineCache) = 0;
+
+    virtual void ProcessMarkerTable(
+        uint32        sqttCbId,
+        uint32        numOps,
+        const uint32* pUserMarkerOpHistory,
+        uint32        numMarkerStrings,
+        const uint32* pMarkerStringOffsets,
+        uint32        markerStringDataSize,
+        const char*   pMarkerStringData) {}
+
 #endif
 };
 

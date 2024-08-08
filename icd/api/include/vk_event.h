@@ -75,12 +75,12 @@ public:
         return m_pPalEvents[deviceIdx];
     }
 
-    VK_FORCEINLINE uint32 GetSyncToken() const
+    VK_FORCEINLINE  Pal::ReleaseToken GetSyncToken() const
     {
         return m_syncToken;
     }
 
-    VK_FORCEINLINE void SetSyncToken(uint32 syncToken)
+    VK_FORCEINLINE void SetSyncToken(Pal::ReleaseToken syncToken)
     {
         m_syncToken = syncToken;
     }
@@ -108,7 +108,7 @@ private:
     union
     {
         Pal::IGpuEvent*    m_pPalEvents[MaxPalDevices];
-        uint32             m_syncToken;
+        Pal::ReleaseToken  m_syncToken;
     };
 
     InternalMemory         m_internalGpuMem;

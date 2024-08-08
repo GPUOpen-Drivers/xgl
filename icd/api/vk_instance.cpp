@@ -458,8 +458,8 @@ VkResult Instance::Init(
     if (status == VK_SUCCESS)
     {
         PhysicalDevice* pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(devices[DefaultDeviceIndex]);
-        Pal::DeviceProperties info;
-        pPhysicalDevice->PalDevice()->GetProperties(&info);
+        const Pal::DeviceProperties& info = pPhysicalDevice->PalProperties();
+
         if (pPhysicalDevice->GetRuntimeSettings().enableSpp && info.gfxipProperties.flags.supportSpp)
         {
             wchar_t executableName[PATH_MAX];

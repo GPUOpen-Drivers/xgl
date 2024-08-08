@@ -98,7 +98,7 @@ public:
 
     static bool IsColorSpaceHdr(VkColorSpaceKHR colorSpace)
     {
-        return (colorSpace != VK_COLORSPACE_SRGB_NONLINEAR_KHR);
+        return (colorSpace != VK_COLOR_SPACE_SRGB_NONLINEAR_KHR);
     }
 
 private:

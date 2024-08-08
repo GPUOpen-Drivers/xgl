@@ -91,8 +91,6 @@ public:
         CmdBuffer*                           pCmdBuffer,
         const Pal::DynamicComputeShaderInfo& computeShaderInfo) const;
 
-    static void BindNullPipeline(CmdBuffer* pCmdBuffer);
-
     const Pal::DynamicComputeShaderInfo& GetBindInfo() const
         { return m_info.computeShaderInfo; }
 

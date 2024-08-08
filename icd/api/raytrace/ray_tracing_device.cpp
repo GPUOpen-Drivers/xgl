@@ -53,6 +53,7 @@ RayTracingDevice::RayTracingDevice(
     m_gpurtOptions(pDevice->VkInstance()->Allocator()),
     m_cmdContext(),
     m_pBvhBatchLayer(nullptr),
+    m_pSplitRaytracingLayer(nullptr),
     m_accelStructTrackerResources()
 {
 
@@ -147,6 +148,11 @@ VkResult RayTracingDevice::Init()
                 result = BvhBatchLayer::CreateLayer(m_pDevice, &m_pBvhBatchLayer);
             }
 
+            if (result == VK_SUCCESS)
+            {
+                result = SplitRaytracingLayer::CreateLayer(m_pDevice, &m_pSplitRaytracingLayer);
+            }
+
             if (result != VK_SUCCESS)
             {
                 VK_NEVER_CALLED();
@@ -156,6 +162,11 @@ VkResult RayTracingDevice::Init()
                 if (m_pBvhBatchLayer != nullptr)
                 {
                     m_pBvhBatchLayer->DestroyLayer();
+                }
+
+                if (m_pSplitRaytracingLayer != nullptr)
+                {
+                    m_pSplitRaytracingLayer->DestroyLayer();
                 }
             }
         }
@@ -348,6 +359,11 @@ void RayTracingDevice::Destroy()
     if (m_pBvhBatchLayer != nullptr)
     {
         m_pBvhBatchLayer->DestroyLayer();
+    }
+
+    if (m_pSplitRaytracingLayer != nullptr)
+    {
+        m_pSplitRaytracingLayer->DestroyLayer();
     }
 
     Util::Destructor(this);
@@ -648,6 +664,7 @@ void RayTracingDevice::SetDispatchInfo(
     uint32_t                               depth,
     uint32_t                               shaderCount,
     uint64_t                               apiHash,
+    uint64_t                               userMarkerContext,
     const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
     const VkStridedDeviceAddressRegionKHR* pMissSbt,
     const VkStridedDeviceAddressRegionKHR* pHitSbt,
@@ -684,6 +701,8 @@ void RayTracingDevice::SetDispatchInfo(
         dispatchInfo.hitGroupTable.addr       = static_cast<Pal::gpusize>(pHitSbt->deviceAddress);
         dispatchInfo.hitGroupTable.size       = static_cast<Pal::gpusize>(pHitSbt->size);
         dispatchInfo.hitGroupTable.stride     = static_cast<Pal::gpusize>(pHitSbt->stride);
+
+        dispatchInfo.userMarkerContext        = userMarkerContext;
     }
 
     (*pDispatchInfo) = dispatchInfo;
@@ -699,6 +718,7 @@ void RayTracingDevice::TraceDispatch(
     uint32_t                               depth,
     uint32_t                               shaderCount,
     uint64_t                               apiHash,
+    uint64_t                               userMarkerContext,
     const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
     const VkStridedDeviceAddressRegionKHR* pMissSbt,
     const VkStridedDeviceAddressRegionKHR* pHitSbt,
@@ -713,6 +733,7 @@ void RayTracingDevice::TraceDispatch(
                         depth,
                         shaderCount,
                         apiHash,
+                        userMarkerContext,
                         pRaygenSbt,
                         pMissSbt,
                         pHitSbt,
@@ -735,6 +756,7 @@ void RayTracingDevice::TraceIndirectDispatch(
     uint32_t                               originalThreadGroupSizeZ,
     uint32_t                               shaderCount,
     uint64_t                               apiHash,
+    uint64_t                               userMarkerContext,
     const VkStridedDeviceAddressRegionKHR* pRaygenSbt,
     const VkStridedDeviceAddressRegionKHR* pMissSbt,
     const VkStridedDeviceAddressRegionKHR* pHitSbt,
@@ -750,6 +772,7 @@ void RayTracingDevice::TraceIndirectDispatch(
                         0,
                         shaderCount,
                         apiHash,
+                        userMarkerContext,
                         pRaygenSbt,
                         pMissSbt,
                         pHitSbt,
@@ -835,9 +858,20 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
                 nodes[nodeIndex].node.srdRange.set      = node.descSet;
                 nodes[nodeIndex].node.srdRange.binding  = node.binding;
             }
+            else if (node.type == GpuRt::NodeType::Srv)
+            {
+                nodes[nodeIndex].node.type              =
+                    Vkgc::ResourceMappingNodeType::DescriptorResource;
+                nodes[nodeIndex].node.sizeInDwords      = node.dwSize;
+                nodes[nodeIndex].node.offsetInDwords    = node.dwOffset;
+                nodes[nodeIndex].node.srdRange.set      = node.descSet;
+                nodes[nodeIndex].node.srdRange.binding  = node.binding;
+            }
             else if ((node.type == GpuRt::NodeType::ConstantBufferTable) ||
-                (node.type == GpuRt::NodeType::UavTable) ||
-                (node.type == GpuRt::NodeType::TypedUavTable))
+                     (node.type == GpuRt::NodeType::UavTable) ||
+                     (node.type == GpuRt::NodeType::TypedUavTable) ||
+                     (node.type == GpuRt::NodeType::SrvTable) ||
+                     (node.type == GpuRt::NodeType::TypedSrvTable))
             {
                 Vkgc::ResourceMappingNode* pSubNode      = &subNodes[subNodeIndex++];
                 nodes[nodeIndex].node.type               =
@@ -857,6 +891,10 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
                     break;
                 case GpuRt::NodeType::ConstantBufferTable:
                     pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
+                    break;
+                case GpuRt::NodeType::SrvTable:
+                case GpuRt::NodeType::TypedSrvTable:
+                    pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorResource;
                     break;
                 default:
                     VK_NEVER_CALLED();

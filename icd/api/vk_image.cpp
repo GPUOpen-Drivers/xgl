@@ -260,8 +260,14 @@ void Image::ConvertImageCreateInfo(
     pPalCreateInfo->tilingOptMode     = pDevice->GetTilingOptMode();
     pPalCreateInfo->imageMemoryBudget = settings.imageMemoryBudget;
 
-    if ((pCreateInfo->imageType == VK_IMAGE_TYPE_3D) &&
-        (pCreateInfo->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT)))
+    const bool isSparse = (pCreateInfo->flags & SparseEnablingFlags) != 0;
+
+    // Forcing non-default tiling preference for 3D PRT images would require us to expose custom block size support for
+    // these. But, we want to support residencyStandard3DBlockShape = true instead.
+    // Hence, imageTilingPreference3dGpuWritable can be used only for non-sparse images.
+    if ((pCreateInfo->imageType == VK_IMAGE_TYPE_3D)                                              &&
+        (pCreateInfo->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT)) &&
+        (isSparse == false))
     {
         pPalCreateInfo->tilingPreference = settings.imageTilingPreference3dGpuWritable;
     }
