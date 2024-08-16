@@ -9474,7 +9474,7 @@ VkResult PhysicalDevice::GetDisplayModeProperties(
         // The refresh rate returned by pal is HZ.
         // Spec requires refresh rate to be "the number of times the display is refreshed each second
         // multiplied by 1000", in other words, HZ * 1000
-        properties[i].parameters.refreshRate = pScreenMode[i]->refreshRate * 1000;
+        properties[i].parameters.refreshRate = (pScreenMode[i]->refreshRate.numerator * 1.0f / pScreenMode[i]->refreshRate.denominator) * 1000;
     }
 
     *pPropertyCount = loopCount;
@@ -9538,7 +9538,7 @@ VkResult PhysicalDevice::CreateDisplayMode(
         // The modes are considered as identical if the dimension as well as the refresh rate are the same.
         if ((pCreateInfo->parameters.visibleRegion.width  == pScreenMode[i]->extent.width) &&
             (pCreateInfo->parameters.visibleRegion.height == pScreenMode[i]->extent.height) &&
-            (pCreateInfo->parameters.refreshRate          == pScreenMode[i]->refreshRate * 1000))
+            (pCreateInfo->parameters.refreshRate          == (pScreenMode[i]->refreshRate.numerator * 1.0f / pScreenMode[i]->refreshRate.denominator) * 1000))
         {
             isValidMode = true;
             break;
@@ -9569,7 +9569,8 @@ VkResult PhysicalDevice::CreateDisplayMode(
         {
             pNewMode->palScreenMode.extent.width  = pCreateInfo->parameters.visibleRegion.width;
             pNewMode->palScreenMode.extent.height = pCreateInfo->parameters.visibleRegion.height;
-            pNewMode->palScreenMode.refreshRate   = pCreateInfo->parameters.refreshRate;
+            pNewMode->palScreenMode.refreshRate.numerator   = pCreateInfo->parameters.refreshRate;
+            pNewMode->palScreenMode.refreshRate.denominator = 1000;
             pNewMode->palScreenMode.flags.u32All  = 0;
             pNewMode->pScreen                     = pScreen;
             *pMode = reinterpret_cast<VkDisplayModeKHR>(pNewMode);
