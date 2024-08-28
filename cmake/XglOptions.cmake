@@ -65,6 +65,14 @@ macro(xgl_options)
 
     option(XGL_BUILD_PHOENIX2 "Build vulkan for PHOENIX2" ON)
 
+#if VKI_BUILD_GFX115
+    option(XGL_BUILD_GFX115 "Build vulkan for GFX115" ON)
+#endif
+
+#if VKI_BUILD_STRIX1
+    option(XGL_BUILD_STRIX1 "Build vulkan for STRIX1" ON)
+#endif
+
     option(XGL_BUILD_TESTS "Build tests?" OFF)
 
     option(XGL_BUILD_TOOLS "Build tools?" OFF)

@@ -1509,6 +1509,10 @@ public:
         return &m_debugPrintf;
     }
 
+    void InsertDebugMarker(
+        const char* pLabelName,
+        bool        isBegin);
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(CmdBuffer);
 
@@ -1922,10 +1926,6 @@ private:
 
     void FreePatchCpsList();
 #endif
-
-    void InsertDebugMarker(
-        const char* pLabelName,
-        bool        isBegin);
 
     void BindVertexBuffersUpdateBindingRange(
         uint32_t                    deviceIdx,

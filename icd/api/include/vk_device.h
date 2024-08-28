@@ -162,13 +162,12 @@ public:
             uint32                deviceAddressBindingReport           : 1;
             // True if EXT_DEVICE_MEMORY_REPORT or EXT_DEVICE_ADDRESS_BINDING_REPORT is enabled.
             uint32                gpuMemoryEventHandler                : 1;
-            uint32                assumeDynamicTopologyInLibs          : 1;
             // True if EXT_PRIMITIVES_GENERATED_QUERY is enabled.
             uint32                primitivesGeneratedQuery             : 1;
             uint32                reserved1                            : 1;
             uint32                reserved2                            : 1;
+            uint32                deviceGeneratedCommands              : 1;
             uint32                robustVertexBufferExtend             : 1;
-
             uint32                reserved                             : 11;
         };
 

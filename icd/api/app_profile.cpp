@@ -600,7 +600,7 @@ constexpr AppProfilePatternEntry AppNameX4Foundations
     "x4"
 };
 
-constexpr AppProfilePatternEntry AppNameHaloInfiniteLauncher
+constexpr AppProfilePatternEntry AppNameHaloInfinite
 {
     PatternAppNameLower,
     "haloinfinite.exe"
@@ -778,6 +778,18 @@ constexpr AppProfilePatternEntry AppEngineGodot =
 {
     PatternEngineNameLower,
     "godot engine"
+};
+
+constexpr AppProfilePatternEntry AppNameArchean =
+{
+    PatternAppNameLower,
+    "archean"
+};
+
+constexpr AppProfilePatternEntry AppEngineXenon =
+{
+    PatternEngineNameLower,
+    "xenonengine"
 };
 
 // Section END of AppProfilePatternEntry for all games
@@ -1414,8 +1426,17 @@ AppProfilePattern AppPatternTable[] =
     {
         AppProfile::DxvkHaloInfiniteLauncher,
         {
-            AppNameHaloInfiniteLauncher,
+            AppNameHaloInfinite,
             AppEngineDXVK,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::HaloInfinite,
+        {
+            AppNameHaloInfinite,
+            AppEngineVKD3D,
             PatternEnd
         }
     },
@@ -1599,6 +1620,15 @@ AppProfilePattern AppPatternTable[] =
         {
             AppNameWindowKill,
             AppEngineGodot,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Archean,
+        {
+            AppNameArchean,
+            AppEngineXenon,
             PatternEnd
         }
     }

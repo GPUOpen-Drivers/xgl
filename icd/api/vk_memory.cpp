@@ -413,7 +413,7 @@ VkResult Memory::Create(
                     pPalGpuMem,
                     Memory::IntValueFromHandle(*pMemoryHandle),
                     VK_OBJECT_TYPE_DEVICE_MEMORY,
-                    pAllocInfo->memoryTypeIndex,
+                    memoryProperties.memoryTypes[pAllocInfo->memoryTypeIndex].heapIndex,
                     false
                 );
             }

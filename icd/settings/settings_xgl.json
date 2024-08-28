@@ -4638,7 +4638,7 @@
       },
       "ValidValues": {
         "IsEnum": true,
-        "Is64Bit": true,
+        "EnumSize": 64,
         "Values": [
           {
             "Name": "DbgBarrierDrawNonIndexed",

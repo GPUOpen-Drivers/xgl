@@ -2364,6 +2364,10 @@ ENTRIES_TEMPLATE = {
                     "shaderStage": "ShaderStage::ShaderStageCompute"
                 }
             },
+
+            # Add "comment" key which is not used by genShaderProfile script, but provides tuning notes.
+            "comment": [str],
+
             # The "BuildTypes" key is not used by the genShaderProfile script in any way. It is included here simply to
             # mark this key as a valid key that can be a part of each entry in the entries list in profile.json files.
             "BuildTypes": []
@@ -2979,6 +2983,7 @@ bool ShaderProfile::ParseJsonProfileEntry(
     {
         "pattern",
         "action",
+        "comment",
         // BuildTypes key is added here only to maintain consistency. The value against this key (if any in JSON) \
 is not read at runtime.
         "BuildTypes"
@@ -3054,3 +3059,4 @@ void ShaderProfile::ParseDwordArray(
     }
 }
 """
+

@@ -1102,7 +1102,7 @@ VkResult Queue::Submit(
 
     VkResult result = VK_SUCCESS;
 
-    const bool isSynchronization2 = std::is_same<SubmitInfoType, VkSubmitInfo2KHR>::value;
+    constexpr bool IsSynchronization2 = std::is_same<SubmitInfoType, VkSubmitInfo2KHR>::value;
 
 #if VKI_RAY_TRACING
     FreeRetiredCpsStackMem();
@@ -1159,7 +1159,7 @@ VkResult Queue::Submit(
                 switch (static_cast<int32_t>(pHeader->sType))
                 {
                 case VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO:
-                    VK_ASSERT(isSynchronization2 == false);
+                    VK_ASSERT(IsSynchronization2 == false);
                     pDeviceGroupInfo = static_cast<const VkDeviceGroupSubmitInfo*>(pNext);
                     break;
 
@@ -1168,7 +1168,7 @@ VkResult Queue::Submit(
                     const VkTimelineSemaphoreSubmitInfo* pTimelineSemaphoreInfo =
                         static_cast<const VkTimelineSemaphoreSubmitInfo*>(pNext);
 
-                    VK_ASSERT(isSynchronization2 == false);
+                    VK_ASSERT(IsSynchronization2 == false);
 
                     waitValueCount         = pTimelineSemaphoreInfo->waitSemaphoreValueCount;
                     pWaitSemaphoreValues   = pTimelineSemaphoreInfo->pWaitSemaphoreValues;
@@ -1177,7 +1177,7 @@ VkResult Queue::Submit(
                     break;
                 }
                 case VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO:
-                    VK_ASSERT(isSynchronization2 == false);
+                    VK_ASSERT(IsSynchronization2 == false);
 
                     pProtectedSubmitInfo = static_cast<const VkProtectedSubmitInfo*>(pNext);
                     protectedSubmit      = pProtectedSubmitInfo->protectedSubmit;
@@ -1202,7 +1202,7 @@ VkResult Queue::Submit(
             uint32_t cmdBufferCount      = 0;
             uint32_t waitSemaphoreCount  = 0;
 
-            if (isSynchronization2)
+            if (IsSynchronization2)
             {
                 const VkSubmitInfo2KHR* pSubmitInfoKhr =
                     reinterpret_cast<const VkSubmitInfo2KHR*>(&pSubmits[submitIdx]);
@@ -1304,8 +1304,8 @@ VkResult Queue::Submit(
             palSubmitInfo.gpuMemRefCount       = 0;
             palSubmitInfo.pGpuMemoryRefs       = nullptr;
 
-            const uint32_t deviceCount = ((pDeviceGroupInfo == nullptr) && (isSynchronization2 == false)) ?
-                                         1 : m_pDevice->NumPalDevices();
+            const uint32_t deviceCount = (IsSynchronization2 || (pDeviceGroupInfo != nullptr)) ?
+                                         m_pDevice->NumPalDevices() : 1;
             for (uint32_t deviceIdx = 0; (deviceIdx < deviceCount) && (result == VK_SUCCESS); deviceIdx++)
             {
                 Pal::Result palResult = Pal::Result::Success;
@@ -1342,7 +1342,7 @@ VkResult Queue::Submit(
 
                 for (uint32_t i = 0; i < cmdBufferCount; ++i)
                 {
-                    if (isSynchronization2)
+                    if (IsSynchronization2)
                     {
                         const VkSubmitInfo2KHR* pSubmitInfoKhr =
                             reinterpret_cast<const VkSubmitInfo2KHR*>(&pSubmits[submitIdx]);
@@ -1586,14 +1586,14 @@ VkResult Queue::Submit(
                 virtStackFrame.FreeArray(pCmdBufInfos);
             }
 
-            if (isSynchronization2 && (pCmdBuffers != nullptr))
+            if (IsSynchronization2 && (pCmdBuffers != nullptr))
             {
                 virtStackFrame.FreeArray(pCmdBuffers);
             }
 
             virtStackFrame.FreeArray(pPalCmdBuffers);
 
-            if (isSynchronization2)
+            if (IsSynchronization2)
             {
                 const VkSubmitInfo2KHR* pSubmitInfoKhr =
                     reinterpret_cast<const VkSubmitInfo2KHR*>(&pSubmits[submitIdx]);

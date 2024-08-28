@@ -88,7 +88,7 @@ VkResult IndirectCommandsLayoutNV::Create(
         break;
 
     case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_MESH_TASKS_NV:
-        info.actionType = IndirectCommandsActionType::MeshTask;
+        info.actionType = IndirectCommandsActionType::DrawMeshTask;
         break;
 
     default:

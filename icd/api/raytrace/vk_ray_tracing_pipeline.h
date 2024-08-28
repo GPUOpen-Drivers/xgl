@@ -67,6 +67,21 @@ struct ShaderGroupStackSizes
     VkDeviceSize closestHitSize;
     VkDeviceSize anyHitSize;
     VkDeviceSize intersectionSize;
+    union
+    {
+        struct
+        {
+            // Following bits indicate corresponding stack size needs to consider trace ray stack size, but it is not
+            // available when the calculation happens (e.g., when compiling pipeline library).
+            uint32_t generalSizeNeedAddTraceRay : 1;
+            uint32_t closestHitSizeNeedAddTraceRay : 1;
+            uint32_t anyHitSizeNeedAddTraceRay : 1;
+            uint32_t intersectionSizeNeedAddTraceRay : 1;
+            uint32_t reserved : 28;
+        };
+        uint32_t u32All;
+
+    }metadata;
 };
 
 struct ShaderGroupInfo
@@ -188,7 +203,8 @@ public:
     VkDeviceSize GetRayTracingShaderGroupStackSize(
         uint32_t                            deviceIndex,
         uint32_t                            group,
-        VkShaderGroupShaderKHR              groupShader) const;
+        VkShaderGroupShaderKHR              groupShader,
+        VkDeviceSize                        traceRaySize) const;
 
     uint32_t GetAttributeSize() const
         { return m_attributeSize; }

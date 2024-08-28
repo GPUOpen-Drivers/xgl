@@ -239,7 +239,8 @@ bool PipelineLayout::HasRayTracing(
 {
     bool rtFound = false;
 
-    if (pDevice->RayTrace() != nullptr)
+    if ((pDevice->RayTrace() != nullptr)
+        )
     {
         if (pIn->setLayoutCount == 0)
         {
@@ -1174,12 +1175,13 @@ void PipelineLayout::BuildLlpcRayTracingDispatchArgumentsMapping(
     uint32_t*                      pStaNodeCount
     ) const
 {
+    const uint32_t srdSize = GpuRt::MaxBufferSrdSize;
     const Vkgc::ResourceMappingNode TraceRayLayout[] =
     {
         // TODO: Replace binding and set with enum once it is defined in vkgcDefs.h
         { Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact, 2, 0, {{93, 17, 0}} },
-        { Vkgc::ResourceMappingNodeType::DescriptorConstBuffer, 4, 2, {{93, 0, 0}} },
-        { Vkgc::ResourceMappingNodeType::DescriptorBuffer, 4, 6, {{93, 1, 0}} },
+        { Vkgc::ResourceMappingNodeType::DescriptorConstBuffer, srdSize, 2, {{93, 0, 0}} },
+        { Vkgc::ResourceMappingNodeType::DescriptorBuffer, srdSize, 2 + srdSize, {{93, 1, 0}} },
     };
     const uint32_t TraceRayLayoutNodeCount = static_cast<uint32_t>(Util::ArrayLen(TraceRayLayout));
 

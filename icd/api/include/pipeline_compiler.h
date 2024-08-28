@@ -424,8 +424,9 @@ public:
         const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
         uint32_t                                     vertexAttributeDescriptionCount,
         const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions,
-        void*                                        pUberFetchShaderInternalData,
-        bool                                         isOffsetMode);
+        bool                                         dynamicStride,
+        bool                                         isOffsetMode,
+        void*                                        pUberFetchShaderInternalData) const;
 
     uint32_t BuildUberFetchShaderInternalData(
         const VkPipelineVertexInputStateCreateInfo* pVertexInput,

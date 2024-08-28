@@ -300,7 +300,8 @@ void Image::ConvertImageCreateInfo(
     // regarding DCC.
     pPalCreateInfo->flags.perSubresInit = 1;
 
-    if (extStructs.pExternalMemoryImageCreateInfo != nullptr)
+    if ((extStructs.pExternalMemoryImageCreateInfo != nullptr) &&
+        (extStructs.pExternalMemoryImageCreateInfo->handleTypes != 0))
     {
         pPalCreateInfo->flags.invariant        = 1;
         pPalCreateInfo->flags.optimalShareable = 1;

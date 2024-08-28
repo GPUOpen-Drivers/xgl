@@ -860,8 +860,8 @@ void Pipeline::ElfHashToCacheId(
 
     // Extensions and features whose enablement affects compiler inputs (and hence the binary)
     hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO));
-    hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_PRIMITIVES_GENERATED_QUERY));
     {
+        hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_PRIMITIVES_GENERATED_QUERY));
         hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK));
         hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT));
         hasher.Update(pDevice->GetEnabledFeatures().scalarBlockLayout);

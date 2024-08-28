@@ -1246,7 +1246,7 @@ void CmdBuffer::PalCmdDrawMeshTasksIndirect(
         Pal::GpuVirtAddrAndStride gpuVirtAddrAndStride =
         {
             pBuffer->GpuVirtAddr(deviceIdx) + static_cast<Pal::gpusize>(offset),
-            stride
+            {stride},
         };
 
         PalCmdBuffer(deviceIdx)->CmdDispatchMeshIndirectMulti(
@@ -1611,14 +1611,15 @@ VkResult CmdBuffer::Begin(
                                                          DefaultLineWidth,
                                                          limits.pointSizeRange[0],
                                                          limits.pointSizeRange[1] };
-
-        utils::IterateMask deviceGroup(GetDeviceMask());
-        do
         {
-            const uint32_t deviceIdx = deviceGroup.Index();
-            PalCmdBuffer(deviceIdx)->CmdSetPointLineRasterState(params);
+            utils::IterateMask deviceGroup(GetDeviceMask());
+            do
+            {
+                const uint32_t deviceIdx = deviceGroup.Index();
+                PalCmdBuffer(deviceIdx)->CmdSetPointLineRasterState(params);
+            }
+            while (deviceGroup.IterateNext());
         }
-        while (deviceGroup.IterateNext());
 
         const uint32_t supportedVrsRates = deviceProps.gfxipProperties.supportedVrsRates;
 
@@ -1641,6 +1642,21 @@ VkResult CmdBuffer::Begin(
                 // A null source image implies 1x1 shading rate for the image combiner stage.
                 PalCmdBuffer(deviceIdx)->CmdBindSampleRateImage(nullptr);
             } while (deviceGroupVrs.IterateNext());
+        }
+
+        // Reset transform feedback-related state once, in case it'll be used without first binding a valid xfb.
+        // This is legal, but no primitives data will be generated until a valid xfb is bound in the pipeline.
+        if (m_pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK))
+        {
+            utils::IterateMask deviceGroup(GetDeviceMask());
+            do
+            {
+                // Disable transform feedback by setting bound buffer's size and stride to 0.
+                const uint32_t deviceIdx = deviceGroup.Index();
+                const Pal::BindStreamOutTargetParams nullParams = {};
+                PalCmdBuffer(deviceIdx)->CmdBindStreamOutTargets(nullParams);
+            }
+            while (deviceGroup.IterateNext());
         }
     }
 
@@ -3295,7 +3311,7 @@ void CmdBuffer::DrawIndirect(
             Pal::GpuVirtAddrAndStride gpuVirtAddrAndStride =
             {
                 pBuffer->GpuVirtAddr(deviceIdx) + static_cast<Pal::gpusize>(offset),
-                stride
+                {stride},
             };
 
             if (useBufferCount)
@@ -3343,7 +3359,7 @@ void CmdBuffer::DrawIndirect(
 #endif
 
     VK_ASSERT(stride <= indirectBufferSize);
-    Pal::GpuVirtAddrAndStride gpuVirtAddrAndStride = { indirectBufferVa, stride };
+    Pal::GpuVirtAddrAndStride gpuVirtAddrAndStride = { indirectBufferVa, {stride} };
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
@@ -3434,7 +3450,7 @@ void CmdBuffer::DrawMeshTasksIndirect(
 
     VK_ASSERT(stride <= indirectBufferSize);
 
-    Pal::GpuVirtAddrAndStride gpuVirtAddrAndStride = { indirectBufferVa, stride };
+    Pal::GpuVirtAddrAndStride gpuVirtAddrAndStride = { indirectBufferVa, {stride} };
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
@@ -3570,10 +3586,20 @@ void CmdBuffer::ExecuteIndirect(
     uint64_t barrierCmd = 0;
 
     if ((info.actionType == IndirectCommandsActionType::Draw) ||
-        (info.actionType == IndirectCommandsActionType::DrawIndexed))
+        (info.actionType == IndirectCommandsActionType::DrawIndexed) ||
+        (info.actionType == IndirectCommandsActionType::DrawMeshTask))
     {
-        const bool indexed = (info.actionType == IndirectCommandsActionType::DrawIndexed);
-        barrierCmd = (indexed ? DbgBarrierDrawIndexed : DbgBarrierDrawNonIndexed) | DbgBarrierDrawIndirect;
+        const bool isMeshTask = (info.actionType == IndirectCommandsActionType::DrawMeshTask);
+        const bool isIndexed  = (info.actionType == IndirectCommandsActionType::DrawIndexed);
+
+        if (isMeshTask)
+        {
+            barrierCmd = DbgBarrierDrawMeshTasksIndirect;
+        }
+        else
+        {
+            barrierCmd = (isIndexed ? DbgBarrierDrawIndexed : DbgBarrierDrawNonIndexed) | DbgBarrierDrawIndirect;
+        }
 
         DbgBarrierPreCmd(barrierCmd);
 
@@ -3589,14 +3615,6 @@ void CmdBuffer::ExecuteIndirect(
         {
             RebindPipeline<PipelineBindCompute, false>();
         }
-    }
-    else if (info.actionType == IndirectCommandsActionType::MeshTask)
-    {
-        barrierCmd = DbgBarrierDrawMeshTasksIndirect;
-
-        DbgBarrierPreCmd(barrierCmd);
-
-        ValidateGraphicsStates();
     }
     else
     {
@@ -3623,7 +3641,6 @@ void CmdBuffer::ExecuteIndirect(
             pArgumentBuffer->GpuVirtAddr(deviceIdx) + argumentOffset,
             maxCount,
             (pCountBuffer == nullptr) ? 0 : pCountBuffer->GpuVirtAddr(deviceIdx) + countOffset);
-
     }
     while (deviceGroup.IterateNext());
 
@@ -4932,6 +4949,7 @@ void CmdBuffer::BeginRendering(
     m_allGpuState.dynamicRenderingInstance.viewMask = pRenderingInfo->viewMask;
     m_allGpuState.dynamicRenderingInstance.colorAttachmentCount = pRenderingInfo->colorAttachmentCount;
     m_allGpuState.dynamicRenderingInstance.enableResolveTarget = false;
+    m_allGpuState.dirtyGraphics.colorWriteMask = 1;
 
     for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; ++i)
     {
@@ -5108,7 +5126,22 @@ void CmdBuffer::ResolveImage(
         const uint32_t sliceCount = Util::Min(subresRangeSrc.numSlices,
                                               subresRangeDst.numSlices);
 
-        regions[idx].swizzledFormat = Pal::UndefinedSwizzledFormat;
+        VkFormat viewFormat        = dynamicRenderingAttachments.pImageView->GetViewFormat();
+        VkFormat resolveViewFormat = dynamicRenderingAttachments.pResolveImageView->GetViewFormat();
+
+        if ((viewFormat        != dynamicRenderingAttachments.pImageView->GetImage()->GetFormat()) ||
+            (resolveViewFormat != dynamicRenderingAttachments.pResolveImageView->GetImage()->GetFormat()))
+        {
+            // VUID-VkRenderingAttachmentInfo-imageView-06865:
+            // imageView and resolveImageView must have the same VkFormat
+            VK_ASSERT(viewFormat == resolveViewFormat);
+            regions[idx].swizzledFormat = VkToPalFormat(viewFormat, m_pDevice->GetRuntimeSettings());
+        }
+        else
+        {
+            regions[idx].swizzledFormat = Pal::UndefinedSwizzledFormat;
+        }
+
         regions[idx].extent.width   = renderArea.extent.width;
         regions[idx].extent.height  = renderArea.extent.height;
         regions[idx].extent.depth   = 1;
@@ -5246,7 +5279,7 @@ void CmdBuffer::ResetEvent(
 
     if (pEvent->IsUseToken())
     {
-        const Pal::ReleaseToken token = { 0xFFFFFF, 0xFF };
+        const Pal::ReleaseToken token = { {0xFFFFFF, 0xFF} };
         pEvent->SetSyncToken(token);
     }
     else
@@ -8789,7 +8822,19 @@ void CmdBuffer::RPResolveMsaa(
             regions[idx].extent.height  = renderArea.extent.height;
             regions[idx].extent.depth   = 1;
             regions[idx].numSlices      = sliceCount;
-            regions[idx].swizzledFormat = Pal::UndefinedSwizzledFormat;
+
+            if ((srcResolveFormat != srcAttachment.pImage->GetFormat()) ||
+                (dstResolveFormat != dstAttachment.pImage->GetFormat()))
+            {
+                // VUID-VkSubpassDescription-pResolveAttachments-00850:
+                // each resolve attachment must have the same VkFormat as its corresponding color attachment
+                VK_ASSERT(srcResolveFormat == dstResolveFormat);
+                regions[idx].swizzledFormat = VkToPalFormat(srcResolveFormat, m_pDevice->GetRuntimeSettings());
+            }
+            else
+            {
+                regions[idx].swizzledFormat = Pal::UndefinedSwizzledFormat;
+            }
 
             regions[idx].pQuadSamplePattern = pSampleLocations;
         }
@@ -9888,6 +9933,9 @@ DynamicVertexInputInternalData* CmdBuffer::BuildUberFetchShaderInternalData(
             if (m_pUberFetchShaderTempBuffer != nullptr)
             {
                 void* pUberFetchShaderInternalData = m_pUberFetchShaderTempBuffer;
+
+                bool isDynamicStride = (m_pDevice->GetEnabledFeatures().deviceGeneratedCommands == true);
+
                 utils::IterateMask deviceGroup(m_curDeviceMask);
                 do
                 {
@@ -9899,8 +9947,9 @@ DynamicVertexInputInternalData* CmdBuffer::BuildUberFetchShaderInternalData(
                             pVertexBindingDescriptions,
                             vertexAttributeDescriptionCount,
                             pVertexAttributeDescriptions,
-                            pUberFetchShaderInternalData,
-                            m_flags.offsetMode);
+                            isDynamicStride,
+                            m_flags.offsetMode,
+                            pUberFetchShaderInternalData);
 
                     Pal::gpusize gpuAddress = {};
                     if (uberFetchShaderInternalDataSize > 0)
@@ -10321,8 +10370,8 @@ void CmdBuffer::EndTransformFeedback(
             {
                 PalCmdBuffer(deviceIdx)->CmdSaveBufferFilledSizes(counterBufferAddr);
 
-                // Disable transform feedback by set bound buffer's size and stride to 0.
-                Pal::BindStreamOutTargetParams  params = {};
+                // Disable transform feedback by setting bound buffer's size and stride to 0.
+                const Pal::BindStreamOutTargetParams  params = {};
                 PalCmdBuffer(deviceIdx)->CmdBindStreamOutTargets(params);
                 m_pTransformFeedbackState->enabled = false;
             }
@@ -10900,7 +10949,7 @@ void CmdBuffer::GetRayTracingDispatchArgs(
 
     memcpy(pConstants->descriptorTable.accelStructTrackerSrd,
            m_pDevice->RayTrace()->GetAccelStructTrackerSrd(deviceIdx),
-           sizeof(pConstants->descriptorTable.accelStructTrackerSrd));
+           m_pDevice->GetProperties().descriptorSizes.bufferView);
 
     if (pPipeline->CheckIsCps())
     {
@@ -11200,6 +11249,7 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
     initUserData.outputCounterMetaVa    = 0uLL;
 
     m_pDevice->RayTrace()->TraceIndirectDispatch(deviceIdx,
+                                                 this,
                                                  GpuRt::RtPipelineType::RayTracing,
                                                  0,
                                                  0,
@@ -11403,7 +11453,7 @@ void CmdBuffer::BindRayQueryConstants(
                 {
                     memcpy(constants.descriptorTable.accelStructTrackerSrd,
                         VkDevice()->RayTrace()->GetAccelStructTrackerSrd(deviceIdx),
-                        sizeof(constants.descriptorTable.accelStructTrackerSrd));
+                        VkDevice()->GetProperties().descriptorSizes.bufferView);
                 }
 
                 if (rtCountersEnabled)
@@ -11449,6 +11499,7 @@ void CmdBuffer::BindRayQueryConstants(
                             uint64 counterMetadataGpuVa = 0uLL;
 
                             m_pDevice->RayTrace()->TraceIndirectDispatch(deviceIdx,
+                                                                         this,
                                                                          GpuRt::RtPipelineType::Compute,
                                                                          pOrigThreadgroupDims[0],
                                                                          pOrigThreadgroupDims[1],
@@ -11837,16 +11888,15 @@ void CmdBuffer::ValidateGraphicsStates()
                 const GraphicsPipeline* pGraphicsPipeline = m_allGpuState.pGraphicsPipeline;
 
                 const bool isPointSizeUsed = (pGraphicsPipeline != nullptr) && pGraphicsPipeline->IsPointSizeUsed();
-                Pal::ViewportParams    viewport = PerGpuState(deviceIdx)->viewport;
+                Pal::ViewportParams    viewportParams = PerGpuState(deviceIdx)->viewport;
                 if (isPointSizeUsed)
                 {
                     // The default vaule is 1.0f which means the guardband is disabled.
                     // Values more than 1.0f enable guardband.
-                    viewport.horzDiscardRatio = 10.0f;
-                    viewport.vertDiscardRatio = 10.0f;
+                    viewportParams.horzDiscardRatio = 10.0f;
+                    viewportParams.vertDiscardRatio = 10.0f;
                 }
-
-                PalCmdBuffer(deviceIdx)->CmdSetViewports(viewport);
+                PalCmdBuffer(deviceIdx)->CmdSetViewports(viewportParams);
 
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
             }

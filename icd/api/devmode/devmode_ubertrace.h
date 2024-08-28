@@ -134,7 +134,7 @@ public:
         uint32        numMarkerStrings,
         const uint32* pMarkerStringOffsets,
         uint32        markerStringDataSize,
-        const char*   pMarkerStringData);
+        const char*   pMarkerStringData) override;
 
 private:
     DevModeUberTrace(Instance* pInstance);

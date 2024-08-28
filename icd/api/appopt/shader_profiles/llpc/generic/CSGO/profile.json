@@ -11,6 +11,45 @@
           "favorLatencyHiding": true
         }
       }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x24DFE73ADEC799EA 8D071534C2C16DD7"
+        }
+      },
+      "action": {
+        "cs": {
+          "favorLatencyHiding": true
+        }
+      },
+      "comment": "MSAA 8x"
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0xACDE520F0F6543C2 2D3BA91A14373265"
+        }
+      },
+      "action": {
+        "cs": {
+          "favorLatencyHiding": true
+        }
+      },
+      "comment": "MSAA 4x"
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0xABCCB3D9CB7B7526 D67F54AB28FF6F7D"
+        }
+      },
+      "action": {
+        "cs": {
+          "favorLatencyHiding": true
+        }
+      },
+      "comment": "MSAA 2x"
     }
   ]
 }

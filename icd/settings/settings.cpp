@@ -495,6 +495,17 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.fsWaveSize = 64;
     }
 #endif
+    switch (pInfo->revision)
+    {
+#if VKI_BUILD_STRIX1
+    case Pal::AsicRevision::Strix1:
+        // Remove this when displayDcc corruption issue is fixed on Strix.
+        m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
+        break;
+#endif
+    default:
+        break;
+    }
 
     // Put command buffers in local for large/resizable BAR systems with > 7 GBs of local heap
     constexpr gpusize _1GB = 1024ull * 1024ull * 1024ull;
@@ -1304,7 +1315,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         }
 
 #if VKI_BUILD_GFX11
-        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
         {
             // Gives ~0.5% gain at 4k
             m_settings.enableAceShaderPrefetch = false;
@@ -1320,7 +1331,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         }
 
 #if VKI_BUILD_GFX11
-        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
         {
             // Gives ~2.22% gain at 1080p
             m_settings.enableAceShaderPrefetch = false;
@@ -1330,13 +1341,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     if (appProfile == AppProfile::RayTracingWeekends)
     {
-#if VKI_BUILD_GFX11
-        if ((pInfo->revision != Pal::AsicRevision::Navi31)
-#if VKI_BUILD_NAVI32
-            && (pInfo->revision != Pal::AsicRevision::Navi32)
-#endif
-            )
-#endif
+        if (pInfo->gfxipProperties.shaderCore.vgprsPerSimd == 1024)
         {
             {
                 m_settings.rtUnifiedVgprLimit = 64;
@@ -1508,7 +1513,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.forceMinImageCount = 3;
 
 #if VKI_BUILD_GFX11
-        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
         {
             // Gives ~0.9% gain at 1080p
             m_settings.enableAceShaderPrefetch = false;
@@ -1700,12 +1705,21 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 #endif
     }
 
+    if (appProfile == AppProfile::HaloInfinite)
+    {
+        OverrideVkd3dCommonSettings(&m_settings);
+
+    }
+
     if (appProfile == AppProfile::Starfield)
     {
         OverrideVkd3dCommonSettings(&m_settings);
 
 #if VKI_BUILD_GFX11
         if ((pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+#if VKI_BUILD_GFX115
+            || (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_5)
+#endif
             )
         {
             m_settings.fsWaveSize = 32;
@@ -1721,6 +1735,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     if (appProfile == AppProfile::DXVK)
     {
         m_settings.disableSingleMipAnisoOverride = false;
+    }
+
+    if (appProfile == AppProfile::Archean)
+    {
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+        }
     }
 
     return result;
@@ -1862,6 +1883,7 @@ void VulkanSettingsLoader::ReadPublicSettings()
     {
         m_settings.vSyncControl = static_cast<VSyncControl>(vSyncControl);
     }
+
 }
 
 // =====================================================================================================================

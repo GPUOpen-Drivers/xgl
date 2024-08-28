@@ -58,7 +58,7 @@ public:
         Pal::IFence*        pFence;
     };
 
-    static const uint32_t BufferViewDwords = 4;
+    static const uint32_t BufferViewDwords = GpuRt::MaxBufferSrdSize;
 
     struct AccelStructTrackerResources
     {
@@ -117,6 +117,7 @@ public:
 
     void TraceIndirectDispatch(
         uint32_t                               deviceIdx,
+        CmdBuffer*                             pCmdBuffer,
         GpuRt::RtPipelineType                  pipelineType,
         uint32_t                               originalThreadGroupSizeX,
         uint32_t                               originalThreadGroupSizeY,

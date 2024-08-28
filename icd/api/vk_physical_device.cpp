@@ -31,6 +31,7 @@
 
 #include "include/khronos/vulkan.h"
 #include "include/color_space_helper.h"
+#include "include/pipeline_binary_cache.h"
 #include "include/vk_buffer_view.h"
 #include "include/vk_descriptor_buffer.h"
 #include "include/vk_dispatch.h"
@@ -404,6 +405,7 @@ PhysicalDevice::PhysicalDevice(
     m_memoryTypeMaskForDescriptorBuffers(0),
     m_pSettingsLoader(pSettingsLoader),
     m_sampleLocationSampleCounts(0),
+    m_formatFeaturesTable{},
     m_vrHighPrioritySubEngineIndex(UINT32_MAX),
     m_RtCuHighComputeSubEngineIndex(UINT32_MAX),
     m_tunnelComputeSubEngineIndex(UINT32_MAX),
@@ -4433,6 +4435,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE5));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE6));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE7));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PUSH_DESCRIPTOR));
 
@@ -4572,12 +4575,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PHYSICAL_DEVICE_DRM));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_DRM_FORMAT_MODIFIER));
 #endif
-
-    if ((pPhysicalDevice == nullptr) ||
-        VerifyAstcHdrFormatSupport(*pPhysicalDevice))
-    {
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_TEXTURE_COMPRESSION_ASTC_HDR));
-    }
 
     if (pInstance->GetAPIVersion() >= VK_MAKE_API_VERSION(0, 1, 1, 0))
     {
@@ -5200,6 +5197,9 @@ void PhysicalDevice::GetPhysicalDeviceDotProduct16Properties(
     const VkBool32 int16DotSupport = (Is16BitInstructionsSupported()
 #if VKI_BUILD_GFX11
         && (PalProperties().gfxLevel < Pal::GfxIpLevel::GfxIp11_0)
+#endif
+#if VKI_BUILD_GFX115
+        && (PalProperties().gfxLevel < Pal::GfxIpLevel::GfxIp11_5)
 #endif
         ) ? VK_TRUE : VK_FALSE;
 
@@ -6451,7 +6451,8 @@ size_t PhysicalDevice::GetFeatures2(
                     pExtInfo->subgroupSizeControl                                = VK_TRUE;
                     pExtInfo->computeFullSubgroups                               = VK_TRUE;
                     pExtInfo->synchronization2                                   = VK_TRUE;
-                    pExtInfo->textureCompressionASTC_HDR                         = VerifyAstcHdrFormatSupport(*this);
+                    VK_ASSERT(VerifyAstcHdrFormatSupport(*this) == VK_FALSE);
+                    pExtInfo->textureCompressionASTC_HDR                         = VK_FALSE;
                     pExtInfo->shaderZeroInitializeWorkgroupMemory                = VK_TRUE;
                     pExtInfo->dynamicRendering                                   = VK_TRUE;
                     pExtInfo->shaderIntegerDotProduct                            = VK_TRUE;
@@ -7133,7 +7134,8 @@ size_t PhysicalDevice::GetFeatures2(
 
                 if (updateFeatures)
                 {
-                    pExtInfo->textureCompressionASTC_HDR = VerifyAstcHdrFormatSupport(*this);
+                    VK_ASSERT(VerifyAstcHdrFormatSupport(*this) == VK_FALSE);
+                    pExtInfo->textureCompressionASTC_HDR = VK_FALSE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -8463,12 +8465,12 @@ void PhysicalDevice::GetDeviceProperties2(
         {
             auto* pProps = static_cast<VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV*>(pNext);
             pProps->maxIndirectCommandsStreamCount              = 1;
-            pProps->maxIndirectCommandsStreamStride             = UINT32_MAX;
+            pProps->maxIndirectCommandsStreamStride             = MaxIndirectCommandsStride;
             pProps->maxIndirectCommandsTokenCount               = MaxIndirectTokenCount;
             pProps->maxIndirectCommandsTokenOffset              = MaxIndirectTokenOffset;
-            pProps->minIndirectCommandsBufferOffsetAlignment    = 4;
-            pProps->minSequencesCountBufferOffsetAlignment      = 4;
-            pProps->minSequencesIndexBufferOffsetAlignment      = 4;
+            pProps->minIndirectCommandsBufferOffsetAlignment    = MinIndirectAlignment;
+            pProps->minSequencesCountBufferOffsetAlignment      = MinIndirectAlignment;
+            pProps->minSequencesIndexBufferOffsetAlignment      = MinIndirectAlignment;
             pProps->maxGraphicsShaderGroupCount                 = 0;
             pProps->maxIndirectSequenceCount                    = UINT32_MAX >> 1;
             break;
@@ -8507,6 +8509,15 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->hasRender    = palProps.osProperties.flags.hasRenderDrmNode;
             pProps->renderMajor  = palProps.osProperties.renderDrmNodeMajor;
             pProps->renderMinor  = palProps.osProperties.renderDrmNodeMinor;
+            break;
+        }
+#endif
+
+#if VKI_COPY_MEMORY_INDIRECT
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_KHR:
+        {
+            auto* pProps = reinterpret_cast<VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR*>(pNext);
+            pProps->supportedQueues = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
             break;
         }
 #endif

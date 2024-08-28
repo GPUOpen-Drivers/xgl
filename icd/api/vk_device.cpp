@@ -109,6 +109,7 @@
 #include "palAutoBuffer.h"
 #include "palBorderColorPalette.h"
 #include "palVectorImpl.h"
+#include "palArchiveFile.h"
 
 #include <cmath>
 
@@ -728,7 +729,6 @@ VkResult Device::Create(
             if (pPhysicalDevice->GetRuntimeSettings().dynamicPrimitiveTopologyUnrestricted)
             {
                 deviceFeatures.dynamicPrimitiveTopologyUnrestricted = true;
-                deviceFeatures.assumeDynamicTopologyInLibs = deviceFeatures.graphicsPipelineLibrary;
             }
         }
 

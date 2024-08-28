@@ -510,7 +510,7 @@ VkResult RayTracingDevice::InitAccelStructTracker()
                             "The size of the AccelStructTracker SRD mismatches between XGL and GPURT.");
 
             // Ensure the SRD size matches with the size reported by PAL
-            VK_ASSERT(sizeof(pTracker->srd) ==
+            VK_ASSERT(sizeof(pTracker->srd) >=
                 m_pDevice->VkPhysicalDevice(deviceIdx)->PalProperties().gfxipProperties.srdSizes.bufferView);
 
             pPalDevice->CreateUntypedBufferViewSrds(1, &viewInfo, &pTracker->srd);
@@ -750,6 +750,7 @@ void RayTracingDevice::TraceDispatch(
 // =====================================================================================================================
 void RayTracingDevice::TraceIndirectDispatch(
     uint32_t                               deviceIdx,
+    CmdBuffer*                             pCmdBuffer,
     GpuRt::RtPipelineType                  pipelineType,
     uint32_t                               originalThreadGroupSizeX,
     uint32_t                               originalThreadGroupSizeY,
@@ -763,31 +764,33 @@ void RayTracingDevice::TraceIndirectDispatch(
     Pal::gpusize*                          pCounterMetadataVa,
     void*                                  pConstants)
 {
+    GpuRt::RtDispatchInfo dispatchInfo = {};
+
+    SetDispatchInfo(pipelineType,
+                    0,
+                    0,
+                    0,
+                    shaderCount,
+                    apiHash,
+                    userMarkerContext,
+                    pRaygenSbt,
+                    pMissSbt,
+                    pHitSbt,
+                    &dispatchInfo);
+
+    dispatchInfo.threadGroupSizeX = originalThreadGroupSizeX;
+    dispatchInfo.threadGroupSizeY = originalThreadGroupSizeY;
+    dispatchInfo.threadGroupSizeZ = originalThreadGroupSizeZ;
+
     if (m_pGpuRtDevice[deviceIdx]->RayHistoryTraceActive())
     {
-        GpuRt::RtDispatchInfo dispatchInfo = {};
-        SetDispatchInfo(pipelineType,
-                        0,
-                        0,
-                        0,
-                        shaderCount,
-                        apiHash,
-                        userMarkerContext,
-                        pRaygenSbt,
-                        pMissSbt,
-                        pHitSbt,
-                        &dispatchInfo);
-
-        dispatchInfo.threadGroupSizeX = originalThreadGroupSizeX;
-        dispatchInfo.threadGroupSizeY = originalThreadGroupSizeY;
-        dispatchInfo.threadGroupSizeZ = originalThreadGroupSizeZ;
-
         m_pGpuRtDevice[deviceIdx]->TraceIndirectRtDispatch(pipelineType,
                                                            dispatchInfo,
                                                            1,
                                                            pCounterMetadataVa,
                                                            pConstants);
     }
+
 }
 
 // =====================================================================================================================
@@ -988,11 +991,16 @@ void RayTracingDevice::ClientInsertRGPMarker(
     Pal::ICmdBuffer* pPalCmdbuf = static_cast<Pal::ICmdBuffer*>(cmdBuffer);
     vk::CmdBuffer* pCmdbuf = static_cast<vk::CmdBuffer*>(pPalCmdbuf->GetClientData());
 
-    if ((pCmdbuf != nullptr) && (pCmdbuf->GetSqttState() != nullptr))
+    if (pCmdbuf != nullptr)
     {
-        pCmdbuf->GetSqttState()->WriteUserEventMarker(
-            isPush ? vk::RgpSqttMarkerUserEventPush : vk::RgpSqttMarkerUserEventPop,
-            pMarker);
+        if (pCmdbuf->GetSqttState() != nullptr)
+        {
+            pCmdbuf->GetSqttState()->WriteUserEventMarker(
+                isPush ? vk::RgpSqttMarkerUserEventPush : vk::RgpSqttMarkerUserEventPop,
+                pMarker);
+        }
+
+        pCmdbuf->InsertDebugMarker(pMarker, isPush);
     }
 }
 

@@ -939,6 +939,19 @@ VkResult RayTracingPipeline::CreateImpl(
 
         if (result == VK_SUCCESS)
         {
+            const auto pBinaries = pipelineBinaries[DefaultDeviceIndex].pPipelineBins;
+
+            // If pPipelineBinaries[DefaultDeviceIndex] is sufficient for all devices, the other pipeline binaries
+            // won't be created.  Otherwise, like if gl_DeviceIndex is used, they will be.
+            if (pBinaries[0].pCode != nullptr)
+            {
+                localPipelineInfo.pipeline.flags.clientInternal = false;
+                localPipelineInfo.pipeline.pipelineBinarySize   = pBinaries[0].codeSize;
+                localPipelineInfo.pipeline.pPipelineBinary      = pBinaries[0].pCode;
+                localPipelineInfo.pipeline.maxFunctionCallDepth =
+                                pipelineBinaries[DefaultDeviceIndex].maxFunctionCallDepth;
+            }
+
             // Get the pipeline and shader size from PAL and allocate memory.
             pipelineSize =
                 m_pDevice->PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(localPipelineInfo.pipeline, nullptr);
@@ -1006,19 +1019,6 @@ VkResult RayTracingPipeline::CreateImpl(
                 const auto ppDeviceShaderLibraries = ppShaderLibraries + deviceIdx * funcCount;
                 void*      pDeviceShaderLibraryMem = Util::VoidPtrInc(pPalShaderLibraryMem,
                                                                       deviceIdx * funcCount * shaderLibrarySize);
-
-                VK_ASSERT(pipelineSize ==
-                    m_pDevice->PalDevice(deviceIdx)->GetComputePipelineSize(localPipelineInfo.pipeline, nullptr));
-
-                // If pPipelineBinaries[DefaultDeviceIndex] is sufficient for all devices, the other pipeline binaries
-                // won't be created.  Otherwise, like if gl_DeviceIndex is used, they will be.
-                if (pBinaries[0].pCode != nullptr)
-                {
-                    localPipelineInfo.pipeline.flags.clientInternal = false;
-                    localPipelineInfo.pipeline.pipelineBinarySize   = pBinaries[0].codeSize;
-                    localPipelineInfo.pipeline.pPipelineBinary      = pBinaries[0].pCode;
-                    localPipelineInfo.pipeline.maxFunctionCallDepth = pipelineBinaries[deviceIdx].maxFunctionCallDepth;
-                }
 
                 // Copy indirect function info
                 uint32_t       funcIndex           = 0;
@@ -1093,6 +1093,7 @@ VkResult RayTracingPipeline::CreateImpl(
                     uint32_t intersectionStackMax = 0;
                     uint32_t callableStackMax     = 0;
                     uint32_t backendStackSizeMax  = 0;
+                    uint32_t traceRayStackSize    = 0;
 
                     if ((palResult == Util::Result::Success) && ((funcCount > 0) || hasLibraries))
                     {
@@ -1145,17 +1146,6 @@ VkResult RayTracingPipeline::CreateImpl(
                                     if (pShaderStackSize[funcIdx] == ~0ULL)
                                     {
                                         UpdateLibStackSizes(funcIdx);
-
-                                        if (pTraceRayUsage[funcIdx])
-                                        {
-                                            const uint32_t traceRayFuncIdx = pShaderNameMap[traceRayShaderIndex];
-                                            if ((pShaderStackSize[traceRayFuncIdx] == ~0ULL) &&
-                                                (ppDeviceShaderLibraries[traceRayFuncIdx] != nullptr))
-                                            {
-                                                UpdateLibStackSizes(traceRayFuncIdx);
-                                            }
-                                            pShaderStackSize[funcIdx] += pShaderStackSize[traceRayFuncIdx];
-                                        }
                                     }
                                     VK_ASSERT(pShaderStackSize[funcIdx] != ~0ULL);
                                     stackSize = pShaderStackSize[funcIdx];
@@ -1163,6 +1153,24 @@ VkResult RayTracingPipeline::CreateImpl(
                             }
                             return stackSize;
                         };
+
+                        auto GetTraceRayUsage = [&](uint32_t shaderIdx) -> bool
+                        {
+                            if (shaderIdx != VK_SHADER_UNUSED_KHR)
+                            {
+                                const uint32_t funcIdx = pShaderNameMap[shaderIdx];
+                                if (funcIdx < funcCount)
+                                {
+                                    return pTraceRayUsage[funcIdx];
+                                }
+                            }
+                            return false;
+                        };
+
+                        if (m_hasTraceRay)
+                        {
+                            traceRayStackSize = GetFuncStackSize(traceRayShaderIndex);
+                        }
 
                         for (uint32_t groupIdx = 0; groupIdx < m_createInfo.GetGroupCount(); ++groupIdx)
                         {
@@ -1173,6 +1181,19 @@ VkResult RayTracingPipeline::CreateImpl(
                             {
                             case VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR:
                                 pCurrentStackSizes->generalSize = GetFuncStackSize(groupInfo.generalShader);
+
+                                if (GetTraceRayUsage(groupInfo.generalShader))
+                                {
+                                    if (m_hasTraceRay)
+                                    {
+                                        pCurrentStackSizes->generalSize += traceRayStackSize;
+                                    }
+                                    else
+                                    {
+                                        pCurrentStackSizes->metadata.generalSizeNeedAddTraceRay = 1;
+                                    }
+                                }
+
                                 switch (m_createInfo.GetStageList().At(groupInfo.generalShader).stage)
                                 {
                                 case VK_SHADER_STAGE_RAYGEN_BIT_KHR:
@@ -1196,25 +1217,57 @@ VkResult RayTracingPipeline::CreateImpl(
                                 }
                                 break;
 
-                            case VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR:
-                                pCurrentStackSizes->anyHitSize     = GetFuncStackSize(groupInfo.anyHitShader);
-                                pCurrentStackSizes->closestHitSize = GetFuncStackSize(groupInfo.closestHitShader);
-                                anyHitStackMax = Util::Max(
-                                    anyHitStackMax, static_cast<uint32_t>(pCurrentStackSizes->anyHitSize));
-                                closestHitStackMax = Util::Max(
-                                    closestHitStackMax, static_cast<uint32_t>(pCurrentStackSizes->closestHitSize));
-                                break;
-
                             case VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR:
-                                pCurrentStackSizes->anyHitSize       = GetFuncStackSize(groupInfo.anyHitShader);
-                                pCurrentStackSizes->closestHitSize   = GetFuncStackSize(groupInfo.closestHitShader);
                                 pCurrentStackSizes->intersectionSize = GetFuncStackSize(groupInfo.intersectionShader);
-                                anyHitStackMax = Util::Max(
-                                    anyHitStackMax, static_cast<uint32_t>(pCurrentStackSizes->anyHitSize));
-                                closestHitStackMax = Util::Max(
-                                    closestHitStackMax, static_cast<uint32_t>(pCurrentStackSizes->closestHitSize));
+
+                                if (GetTraceRayUsage(groupInfo.intersectionShader))
+                                {
+                                    if (m_hasTraceRay)
+                                    {
+                                        pCurrentStackSizes->intersectionSize += traceRayStackSize;
+                                    }
+                                    else
+                                    {
+                                        pCurrentStackSizes->metadata.intersectionSizeNeedAddTraceRay = 1;
+                                    }
+                                }
+
                                 intersectionStackMax = Util::Max(
                                     intersectionStackMax, static_cast<uint32_t>(pCurrentStackSizes->intersectionSize));
+                                // falls through
+
+                            case VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR:
+                                pCurrentStackSizes->anyHitSize = GetFuncStackSize(groupInfo.anyHitShader);
+                                pCurrentStackSizes->closestHitSize = GetFuncStackSize(groupInfo.closestHitShader);
+
+                                if (GetTraceRayUsage(groupInfo.anyHitShader))
+                                {
+                                    if (m_hasTraceRay)
+                                    {
+                                        pCurrentStackSizes->anyHitSize += traceRayStackSize;
+                                    }
+                                    else
+                                    {
+                                        pCurrentStackSizes->metadata.anyHitSizeNeedAddTraceRay = 1;
+                                    }
+                                }
+
+                                if (GetTraceRayUsage(groupInfo.closestHitShader))
+                                {
+                                    if (m_hasTraceRay)
+                                    {
+                                        pCurrentStackSizes->closestHitSize += traceRayStackSize;
+                                    }
+                                    else
+                                    {
+                                        pCurrentStackSizes->metadata.closestHitSizeNeedAddTraceRay = 1;
+                                    }
+                                }
+
+                                anyHitStackMax = Util::Max(
+                                    anyHitStackMax, static_cast<uint32_t>(pCurrentStackSizes->anyHitSize));
+                                closestHitStackMax = Util::Max(
+                                    closestHitStackMax, static_cast<uint32_t>(pCurrentStackSizes->closestHitSize));
                                 break;
 
                             default:
@@ -1312,7 +1365,8 @@ VkResult RayTracingPipeline::CreateImpl(
                                             pPipelineLib->GetRayTracingShaderGroupStackSize(
                                                 deviceIdx,
                                                 libGroupIdx,
-                                                VK_SHADER_GROUP_SHADER_GENERAL_KHR);
+                                                VK_SHADER_GROUP_SHADER_GENERAL_KHR,
+                                                traceRayStackSize);
                                         if ((stages & VK_SHADER_STAGE_RAYGEN_BIT_KHR) != 0)
                                         {
                                             rayGenStackMax = Util::Max(
@@ -1342,7 +1396,8 @@ VkResult RayTracingPipeline::CreateImpl(
                                             pPipelineLib->GetRayTracingShaderGroupStackSize(
                                                 deviceIdx,
                                                 libGroupIdx,
-                                                VK_SHADER_GROUP_SHADER_INTERSECTION_KHR);
+                                                VK_SHADER_GROUP_SHADER_INTERSECTION_KHR,
+                                                traceRayStackSize);
                                         intersectionStackMax = Util::Max(
                                             intersectionStackMax,
                                             static_cast<uint32_t>(pStackSizes->intersectionSize));
@@ -1354,12 +1409,14 @@ VkResult RayTracingPipeline::CreateImpl(
                                             pPipelineLib->GetRayTracingShaderGroupStackSize(
                                                 deviceIdx,
                                                 libGroupIdx,
-                                                VK_SHADER_GROUP_SHADER_ANY_HIT_KHR);
+                                                VK_SHADER_GROUP_SHADER_ANY_HIT_KHR,
+                                                traceRayStackSize);
                                         pStackSizes->closestHitSize =
                                             pPipelineLib->GetRayTracingShaderGroupStackSize(
                                                 deviceIdx,
                                                 libGroupIdx,
-                                                VK_SHADER_GROUP_SHADER_CLOSEST_HIT_KHR);
+                                                VK_SHADER_GROUP_SHADER_CLOSEST_HIT_KHR,
+                                                traceRayStackSize);
                                         anyHitStackMax = Util::Max(
                                             anyHitStackMax,
                                             static_cast<uint32_t>(pStackSizes->anyHitSize));
@@ -2043,7 +2100,8 @@ void RayTracingPipeline::GetRayTracingShaderGroupHandles(
 VkDeviceSize RayTracingPipeline::GetRayTracingShaderGroupStackSize(
     uint32_t                            deviceIndex,
     uint32_t                            group,
-    VkShaderGroupShaderKHR              groupShader) const
+    VkShaderGroupShaderKHR              groupShader,
+    VkDeviceSize                        traceRaySize) const
 {
     VkDeviceSize stackSize = 0;
 
@@ -2053,15 +2111,31 @@ VkDeviceSize RayTracingPipeline::GetRayTracingShaderGroupStackSize(
         {
         case VK_SHADER_GROUP_SHADER_GENERAL_KHR:
             stackSize = m_pShaderGroupStackSizes[deviceIndex][group].generalSize;
+            if (m_pShaderGroupStackSizes[deviceIndex][group].metadata.generalSizeNeedAddTraceRay)
+            {
+                stackSize += traceRaySize;
+            }
             break;
         case VK_SHADER_GROUP_SHADER_CLOSEST_HIT_KHR:
             stackSize = m_pShaderGroupStackSizes[deviceIndex][group].closestHitSize;
+            if (m_pShaderGroupStackSizes[deviceIndex][group].metadata.closestHitSizeNeedAddTraceRay)
+            {
+                stackSize += traceRaySize;
+            }
             break;
         case VK_SHADER_GROUP_SHADER_ANY_HIT_KHR:
             stackSize = m_pShaderGroupStackSizes[deviceIndex][group].anyHitSize;
+            if (m_pShaderGroupStackSizes[deviceIndex][group].metadata.anyHitSizeNeedAddTraceRay)
+            {
+                stackSize += traceRaySize;
+            }
             break;
         case VK_SHADER_GROUP_SHADER_INTERSECTION_KHR:
             stackSize = m_pShaderGroupStackSizes[deviceIndex][group].intersectionSize;
+            if (m_pShaderGroupStackSizes[deviceIndex][group].metadata.intersectionSizeNeedAddTraceRay)
+            {
+                stackSize += traceRaySize;
+            }
             break;
         default:
             VK_NEVER_CALLED();
@@ -2398,7 +2472,7 @@ VKAPI_ATTR VkDeviceSize VKAPI_CALL vkGetRayTracingShaderGroupStackSizeKHR(
 {
     RayTracingPipeline* pPipeline = RayTracingPipeline::ObjectFromHandle(pipeline);
 
-    return pPipeline->GetRayTracingShaderGroupStackSize(DefaultDeviceIndex, group, groupShader);
+    return pPipeline->GetRayTracingShaderGroupStackSize(DefaultDeviceIndex, group, groupShader, 0);
 }
 
 }; // namespace entry

@@ -336,6 +336,12 @@ VkResult PipelineCompiler::Initialize()
         m_gfxIp.minor = 0;
         break;
 #endif
+#if VKI_BUILD_GFX115
+    case Pal::GfxIpLevel::GfxIp11_5:
+        m_gfxIp.major = 11;
+        m_gfxIp.minor = 5;
+        break;
+#endif
     default:
         VK_NEVER_CALLED();
         break;
@@ -1861,19 +1867,11 @@ static void CopyFragmentShaderState(
 {
     const GraphicsPipelineBinaryCreateInfo& libInfo = pLibrary->GetPipelineBinaryCreateInfo();
 
-    if (libInfo.pipelineInfo.rsState.perSampleShading || (libInfo.pipelineInfo.rsState.numSamples != 1))
-    {
-        // pMultisampleState is not NULL.
-        pCreateInfo->pipelineInfo.rsState.perSampleShading   = libInfo.pipelineInfo.rsState.perSampleShading;
-        pCreateInfo->pipelineInfo.rsState.dynamicSampleInfo  = libInfo.pipelineInfo.rsState.dynamicSampleInfo;
-        pCreateInfo->pipelineInfo.rsState.numSamples         = libInfo.pipelineInfo.rsState.numSamples;
-        pCreateInfo->pipelineInfo.rsState.samplePatternIdx   = libInfo.pipelineInfo.rsState.samplePatternIdx;
-        pCreateInfo->pipelineInfo.rsState.pixelShaderSamples = libInfo.pipelineInfo.rsState.pixelShaderSamples;
-    }
-    else
-    {
-        pCreateInfo->pipelineInfo.rsState.numSamples = 1;
-    }
+    pCreateInfo->pipelineInfo.rsState.perSampleShading   = libInfo.pipelineInfo.rsState.perSampleShading;
+    pCreateInfo->pipelineInfo.rsState.dynamicSampleInfo  = libInfo.pipelineInfo.rsState.dynamicSampleInfo;
+    pCreateInfo->pipelineInfo.rsState.numSamples         = libInfo.pipelineInfo.rsState.numSamples;
+    pCreateInfo->pipelineInfo.rsState.samplePatternIdx   = libInfo.pipelineInfo.rsState.samplePatternIdx;
+    pCreateInfo->pipelineInfo.rsState.pixelShaderSamples = libInfo.pipelineInfo.rsState.pixelShaderSamples;
 
     pCreateInfo->pipelineInfo.dsState.depthTestEnable   = libInfo.pipelineInfo.dsState.depthTestEnable;
     pCreateInfo->pipelineInfo.dsState.depthWriteEnable  = libInfo.pipelineInfo.dsState.depthWriteEnable;
@@ -1987,50 +1985,42 @@ static void BuildMultisampleState(
     GraphicsPipelineBinaryCreateInfo*           pCreateInfo,
     const uint64_t                              dynamicStateFlags)
 {
+    if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizationSamples))
+    {
+        pCreateInfo->pipelineInfo.rsState.dynamicSampleInfo = true;
+    }
+
     if (pMs != nullptr)
     {
-        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizationSamples))
+        if ((pMs->rasterizationSamples != 1) && (pCreateInfo->pipelineInfo.rsState.dynamicSampleInfo == false))
         {
-            // This will be updated later
-            pCreateInfo->pipelineInfo.rsState.perSampleShading = true;
-            pCreateInfo->pipelineInfo.rsState.pixelShaderSamples = 1;
-            pCreateInfo->pipelineInfo.rsState.samplePatternIdx = 0;
-            pCreateInfo->pipelineInfo.rsState.numSamples = 1;
-            pCreateInfo->pipelineInfo.rsState.dynamicSampleInfo = true;
-            pCreateInfo->pipelineInfo.options.enableInterpModePatch = false;
-        }
-        else
-        {
-            if (pMs->rasterizationSamples != 1)
+            uint32_t subpassCoverageSampleCount;
+            uint32_t subpassColorSampleCount;
+            GraphicsPipelineCommon::GetSubpassSampleCount(
+                pMs, pRenderPass, subpass, &subpassCoverageSampleCount, &subpassColorSampleCount, nullptr);
+
+            if (pMs->sampleShadingEnable && (pMs->minSampleShading > 0.0f))
             {
-                uint32_t subpassCoverageSampleCount;
-                uint32_t subpassColorSampleCount;
-                GraphicsPipelineCommon::GetSubpassSampleCount(
-                    pMs, pRenderPass, subpass, &subpassCoverageSampleCount, &subpassColorSampleCount, nullptr);
-
-                if (pMs->sampleShadingEnable && (pMs->minSampleShading > 0.0f))
-                {
-                    pCreateInfo->pipelineInfo.rsState.perSampleShading =
-                        ((subpassColorSampleCount * pMs->minSampleShading) > 1.0f);
-                    pCreateInfo->pipelineInfo.rsState.pixelShaderSamples =
-                        Pow2Pad(static_cast<uint32_t>(ceil(subpassColorSampleCount * pMs->minSampleShading)));
-                }
-                else
-                {
-                    pCreateInfo->pipelineInfo.rsState.perSampleShading = false;
-                    pCreateInfo->pipelineInfo.rsState.pixelShaderSamples = 1;
-                }
-
-                // NOTE: The sample pattern index here is actually the offset of sample position pair. This is
-                // different from the field of creation info of image view. For image view, the sample pattern
-                // index is really table index of the sample pattern.
-                pCreateInfo->pipelineInfo.rsState.samplePatternIdx =
-                    Device::GetDefaultSamplePatternIndex(subpassCoverageSampleCount) * Pal::MaxMsaaRasterizerSamples;
+                pCreateInfo->pipelineInfo.rsState.perSampleShading =
+                    ((subpassColorSampleCount * pMs->minSampleShading) > 1.0f);
+                pCreateInfo->pipelineInfo.rsState.pixelShaderSamples =
+                    Pow2Pad(static_cast<uint32_t>(ceil(subpassColorSampleCount * pMs->minSampleShading)));
+            }
+            else
+            {
+                pCreateInfo->pipelineInfo.rsState.perSampleShading = false;
+                pCreateInfo->pipelineInfo.rsState.pixelShaderSamples = 1;
             }
 
-            pCreateInfo->pipelineInfo.rsState.numSamples = pMs->rasterizationSamples;
-            pCreateInfo->pipelineInfo.options.enableInterpModePatch = false;
+            // NOTE: The sample pattern index here is actually the offset of sample position pair. This is
+            // different from the field of creation info of image view. For image view, the sample pattern
+            // index is really table index of the sample pattern.
+            pCreateInfo->pipelineInfo.rsState.samplePatternIdx =
+                Device::GetDefaultSamplePatternIndex(subpassCoverageSampleCount) * Pal::MaxMsaaRasterizerSamples;
         }
+
+        pCreateInfo->pipelineInfo.rsState.numSamples = pMs->rasterizationSamples;
+        pCreateInfo->pipelineInfo.options.enableInterpModePatch = false;
 
         if (pCreateInfo->pipelineInfo.rsState.perSampleShading)
         {
@@ -2611,13 +2601,14 @@ static void BuildPreRasterizationShaderState(
 {
     const RenderPass* pRenderPass                  = RenderPass::ObjectFromHandle(pIn->renderPass);
     bool              isConservativeOverestimation = false;
+    bool              assumeDynamicTopologyInLibs  = false;
     bool              vertexInputAbsent =
         libInfo.flags.isLibrary &&
         (libInfo.pVertexInputInterfaceLib == nullptr) &&
         ((libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) == 0);
 
     bool              unrestrictedPrimitiveTopology =
-        pDevice->GetEnabledFeatures().assumeDynamicTopologyInLibs ||
+        assumeDynamicTopologyInLibs ||
         (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::PrimitiveTopology) &&
         pDevice->GetEnabledFeatures().dynamicPrimitiveTopologyUnrestricted) ||
         vertexInputAbsent;
@@ -3335,7 +3326,8 @@ void PipelineCompiler::ApplyPipelineOptions(
     {
         pOptions->extendedRobustness.nullDescriptor = true;
     }
-    if (pDevice->GetEnabledFeatures().primitivesGeneratedQuery)
+    if (pDevice->GetEnabledFeatures().primitivesGeneratedQuery
+        )
     {
         pOptions->enablePrimGeneratedQuery = true;
     }
@@ -5471,17 +5463,18 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalData(
     const VkVertexInputBindingDescription2EXT*   pVertexBindingDescriptions,
     uint32_t                                     vertexAttributeDescriptionCount,
     const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions,
-    void*                                        pUberFetchShaderInternalData,
-    bool                                         isOffsetMode)
+    bool                                         dynamicStride,
+    bool                                         isOffsetMode,
+    void*                                        pUberFetchShaderInternalData
+    ) const
 {
-
     uint32_t dataSize = BuildUberFetchShaderInternalDataImp(vertexBindingDescriptionCount,
                                                             pVertexBindingDescriptions,
                                                             vertexAttributeDescriptionCount,
                                                             pVertexAttributeDescriptions,
                                                             vertexBindingDescriptionCount,
                                                             pVertexBindingDescriptions,
-                                                            false,
+                                                            dynamicStride,
                                                             isOffsetMode,
                                                             pUberFetchShaderInternalData);
 
@@ -5494,7 +5487,8 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalData(
     const VkPipelineVertexInputStateCreateInfo* pVertexInput,
     bool                                        dynamicStride,
     bool                                        isOffsetMode,
-    void*                                       pUberFetchShaderInternalData) const
+    void*                                       pUberFetchShaderInternalData
+    ) const
 {
     const VkPipelineVertexInputDivisorStateCreateInfoEXT* pVertexDivisor = nullptr;
     const vk::VkStructHeader* pStructHeader =

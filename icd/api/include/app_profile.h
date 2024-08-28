@@ -122,8 +122,8 @@ enum class AppProfile : uint32_t
     DxvkGodOfWar,            // DXVK God of War
     ELEX2,                   // ELEX II
     X4Foundations,           // X4: Foundations by Egosoft
-    DxvkHaloInfiniteLauncher,// DXVK Halo Infinite Launcher (Don't Confuse it with VKD3D
-                             // Halo Infinite Game)
+    DxvkHaloInfiniteLauncher,// DXVK Halo Infinite Launcher
+    HaloInfinite,            // VKD3D Halo Infinite
     Starfield,               // VKD3D Starfield
     DxvkTf2,                 // DXVK Team Fortress 2
     MetalGearSolid5,         // Metal Gear Solid5 : The Phantom Pain
@@ -147,6 +147,7 @@ enum class AppProfile : uint32_t
     Vkd3dEngine,             // vkd3d-proton for steam games
     DXVK,                    // DXVK
     WindowKill,              // Windowkill by torcado
+    Archean,                 // Archean by batcholi
 };
 
 struct ProfileSettings

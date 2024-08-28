@@ -167,6 +167,12 @@ public:
 
     CacheAdapter* GetCacheAdapter() { return m_pCacheAdapter; }
 
+    // Override the driver's default location
+    static constexpr char     EnvVarPath[] = "AMD_VK_PIPELINE_CACHE_PATH";
+
+    // Filename of an additional, read-only archive
+    static constexpr char     EnvVarReadOnlyFileName[] = "AMD_VK_PIPELINE_CACHE_READ_ONLY_FILENAME";
+
 private:
     PAL_DISALLOW_DEFAULT_CTOR(PipelineBinaryCache);
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineBinaryCache);
@@ -215,14 +221,8 @@ private:
     Util::IArchiveFile* OpenWritableArchive(const char* path, const char* fileName, size_t bufferSize);
     Util::ICacheLayer*  CreateFileLayer(Util::IArchiveFile* pFile);
 
-    // Override the driver's default location
-    static constexpr char     EnvVarPath[] = "AMD_VK_PIPELINE_CACHE_PATH";
-
     // Override the driver's default name (Hash of application name)
     static constexpr char     EnvVarFileName[] = "AMD_VK_PIPELINE_CACHE_FILENAME";
-
-    // Filename of an additional, read-only archive
-    static constexpr char     EnvVarReadOnlyFileName[] = "AMD_VK_PIPELINE_CACHE_READ_ONLY_FILENAME";
 
     static const uint32_t     ArchiveType;                // TypeId created by hashed string VK_SHADER_PIPELINE_CACHE
     static const uint32_t     ElfType;                    // TypeId created by hashed string VK_PIPELINE_ELF

@@ -434,12 +434,9 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
                     const auto& info          = pPalPipeline[deviceIdx]->GetInfo();
 
                     if ((info.ps.flags.perSampleShading == 1) ||
-                        (info.ps.flags.enablePops == 1) ||
-                        ((info.ps.flags.usesSampleMask  == 1) &&
-                         (palProperties.gfxipProperties.flags.supportVrsWithDsExports == 0)))
+                        (info.ps.flags.enablePops == 1))
                     {
-                        // Override the shader rate to 1x1 if SampleId used in shader, or POPS is enabled, or
-                        // supportVrsWithDsExports is not supported and SampleMask used in shader.
+                        // Override the shader rate to 1x1 if SampleId used in shader, or POPS is enabled.
                         Device::SetDefaultVrsRateParams(&pObjectCreateInfo->immedInfo.vrsRateParams);
 
                         pObjectCreateInfo->flags.force1x1ShaderRate = true;
@@ -461,6 +458,16 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
                             pObjectCreateInfo->immedInfo.vrsRateParams.combinerState[
                                 static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] = Pal::VrsCombiner::Min;
                         }
+                    }
+                    else if ((info.ps.flags.usesSampleMask == 1) &&
+                             (palProperties.gfxipProperties.flags.supportVrsWithDsExports == 0))
+                    {
+                        // Override the shader rate to 1x1 if supportVrsWithDsExports is not supported and SampleMask
+                        // used in shader.
+                        Device::SetDefaultVrsRateParams(&pObjectCreateInfo->immedInfo.vrsRateParams);
+
+                        pObjectCreateInfo->flags.force1x1ShaderRate = true;
+                        pObjectCreateInfo->immedInfo.msaaCreateInfo.pixelShaderSamples = 1;
                     }
                 }
 

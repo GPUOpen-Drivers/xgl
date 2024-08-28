@@ -1346,6 +1346,7 @@ static void BuildViewportState(
 {
     if (pVp != nullptr)
     {
+
         EXTRACT_VK_STRUCTURES_0(
             viewportDepthClipControl,
             PipelineViewportDepthClipControlCreateInfoEXT,
@@ -2302,7 +2303,7 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
         hasMesh = true;
     }
 
-    pInfo->dynamicStates = GetDynamicStateFlags(pIn->pDynamicState, &libInfo);;
+    pInfo->dynamicStates = GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
 
     if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)
     {

@@ -53,24 +53,32 @@ struct IndirectParam;
 namespace vk
 {
 
+enum IndirectCommandsLayoutType
+{
+    Standalone = 0,
+    GeneratedCommands
+};
+
 enum IndirectCommandsActionType
 {
     Draw = 0,
     DrawIndexed,
     Dispatch,
-    MeshTask
+    DrawMeshTask
 };
 
 struct IndirectCommandsInfo
 {
     IndirectCommandsActionType  actionType;
+    IndirectCommandsLayoutType  layoutType;
+    uint32_t                    strideInBytes;
 };
 
- // =====================================================================================================================
- // API implementation of Vulkan indirect commands layout
- //
- // Indirect commands layout objects describe the information of indirect commands, as well as how to interpret and
- // process indirect buffers.
+// =====================================================================================================================
+// API implementation of Vulkan NV indirect commands layout
+//
+// Indirect commands layout objects describe the information of indirect commands, as well as how to interpret and
+// process indirect buffers.
 class IndirectCommandsLayoutNV final : public NonDispatchable<VkIndirectCommandsLayoutNV, IndirectCommandsLayoutNV>
 {
 public:
@@ -125,11 +133,9 @@ private:
 
 // Max usage is the situation where indirect commands layout drains push constants size plus uses indirect index & vertex
 // buffer binding and ends with a draw indexed.
-constexpr uint32_t MaxIndirectTokenCount  = MaxPushConstRegCount + 3;
-constexpr uint32_t MaxIndirectTokenOffset = MaxPushConstants +
-                                            sizeof(VkBindIndexBufferIndirectCommandNV) +
-                                            sizeof(VkBindVertexBufferIndirectCommandNV) +
-                                            sizeof(VkDrawIndexedIndirectCommand);
+constexpr uint32_t MaxIndirectTokenCount     = MaxPushConstRegCount + 3;
+constexpr uint32_t MaxIndirectCommandsStride = 1 << 11;
+constexpr uint32_t MaxIndirectTokenOffset    = MaxIndirectCommandsStride - 1;
+constexpr uint32_t MinIndirectAlignment      = sizeof(uint32_t);
 } // namespace vk
-
 #endif /* __VK_INDIRECT_COMMANDS_LAYOUT_H__ */
