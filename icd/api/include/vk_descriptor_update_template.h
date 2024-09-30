@@ -104,7 +104,8 @@ private:
     template <size_t imageDescSize,
               size_t fmaskDescSize,
               size_t samplerDescSize,
-              size_t bufferDescSize,
+              size_t typedBufferDescSize,
+              size_t untypedBufferDescSize,
               uint32_t numPalDevices>
     static PfnUpdateEntry GetUpdateEntryFunc(
         VkDescriptorType                        descriptorType,

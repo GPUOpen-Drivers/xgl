@@ -991,9 +991,15 @@ static void ConvertImplicitSyncs(
         pBarrier->srcStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
         pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR;
 
-        pBarrier->implicitSrcCacheMask |= pBarrier->flags.preColorResolveSync ? Pal::CoherColorTarget :
-                                                                                Pal::CoherDepthStencilTarget;
-        pBarrier->implicitDstCacheMask |= Pal::CoherResolveDst;
+        // It's possible that color and DS are both included in a single barrier for resolves. As a result of that we
+        // cannot rely on preColorResolveSync and preDsResolveSync to determine the cache mask here. Instead, include
+        // both here and then in RPSyncPoint we use excludeAccessMask to filter out unnecessary mask.
+        pBarrier->implicitSrcCacheMask |= Pal::CoherColorTarget | Pal::CoherDepthStencilTarget;
+
+        // Ideally, we should specify CoherResolveSrc here but since this preResolveSync barrier can specify multiple
+        // image transitions it's possible that different images in this barrier are used as src and dst for the
+        // resolve operation. Thus, it's better to specify just CoherResolve here.
+        pBarrier->implicitDstCacheMask |= Pal::CoherResolve;
     }
 
     // Wait for (non-auto-synced) pre-clear if necessary.  No need to augment the pipe point because the prior work falls
@@ -1009,13 +1015,14 @@ static void ConvertImplicitSyncs(
     // Augment the active source pipeline stages for resolves if we need to wait for prior resolves to complete
     if (pBarrier->flags.postResolveSync)
     {
-        // TopOfPipe causes a stall at PFP which is not really needed for images. As an optimization for Acq-Rel
-        // barriers we instead set dstStage to Blt here.
+        // Wait until the prior resolves complete
         pBarrier->srcStageMask |= VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR;
-        pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_BLIT_BIT_KHR;
+        pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR |
+                                  VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR    |
+                                  VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR;
 
-        pBarrier->implicitSrcCacheMask |= Pal::CoherResolveSrc;
-        pBarrier->implicitDstCacheMask |= Pal::CoherResolveDst;
+        pBarrier->implicitSrcCacheMask |= Pal::CoherResolve;
+        pBarrier->implicitDstCacheMask |= Pal::CoherColorTarget | Pal::CoherDepthStencilTarget;
     }
 
     if (pBarrier->flags.implicitExternalOutgoing && settings.implicitExternalSynchronization)

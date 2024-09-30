@@ -389,7 +389,7 @@ void Device::Init(
 {
     m_info = info;
     m_imageViewSizeInDwords = m_info.pDeviceProperties->gfxipProperties.srdSizes.imageView / sizeof(uint32);
-    m_bufferViewSizeInDwords = m_info.pDeviceProperties->gfxipProperties.srdSizes.bufferView / sizeof(uint32);
+    m_bufferViewSizeInDwords = m_info.pDeviceProperties->gfxipProperties.srdSizes.typedBufferView / sizeof(uint32);
 
     // 3 Table and 1 TexBuffer, and 2 Image resource
     m_srdDwords[static_cast<uint32>(InternalTexConvertCsType::ConvertASTCToRGBA8)]

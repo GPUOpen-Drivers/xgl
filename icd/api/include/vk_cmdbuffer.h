@@ -923,7 +923,8 @@ public:
 
     template <size_t imageDescSize,
               size_t samplerDescSize,
-              size_t bufferDescSize,
+              size_t typedBufferDescSize,
+              size_t untypedBufferDescSize,
               uint32_t numPalDevices>
     void PushDescriptorSetKHR(
         VkPipelineBindPoint                         pipelineBindPoint,
@@ -1105,8 +1106,7 @@ public:
 
     void PalCmdAcquire(
         Pal::AcquireReleaseInfo* pAcquireReleaseInfo,
-        uint32_t                 eventCount,
-        const VkEvent*           pEvents,
+        const VkEvent            event,
         Pal::MemBarrier* const   pBufferBarriers,
         const Buffer** const     ppBuffers,
         Pal::ImgBarrier* const   pImageBarriers,
@@ -1116,8 +1116,7 @@ public:
 
     void PalCmdRelease(
         Pal::AcquireReleaseInfo* pAcquireReleaseInfo,
-        uint32_t                 eventCount,
-        const VkEvent*           pEvents,
+        const VkEvent            event,
         Pal::MemBarrier* const   pBufferBarriers,
         const Buffer** const     ppBuffers,
         Pal::ImgBarrier* const   pImageBarriers,
@@ -1316,7 +1315,7 @@ public:
     uint32_t NumDeviceEvents(uint32_t numEvents) const
         { return m_numPalDevices * numEvents; }
 
-#if VK_ENABLE_DEBUG_BARRIERS
+#if VKI_ENABLE_DEBUG_BARRIERS
     void DbgBarrierPreCmd(uint64_t cmd)
     {
         if (m_dbgBarrierPreCmdMask & (cmd))
@@ -1488,9 +1487,10 @@ public:
         const VkPushConstantsInfoKHR* pPushConstantsInfo);
 
     template <size_t imageDescSize,
-          size_t samplerDescSize,
-          size_t bufferDescSize,
-          uint32_t numPalDevices>
+              size_t samplerDescSize,
+              size_t typedBufferDescSize,
+              size_t untypedBufferDescSize,
+              uint32_t numPalDevices>
     void PushDescriptorSet2KHR(
         const VkPushDescriptorSetInfoKHR* pPushDescriptorSetInfo);
 
@@ -1514,6 +1514,16 @@ public:
         bool        isBegin);
 
 private:
+
+    void BatchedLoadOpClears(
+        uint32_t                   clearCount,
+        const ImageView**          pImageViews,
+        const Pal::ClearColor*     pClearColors,
+        const Pal::ImageLayout*    pClearLayouts,
+        const Pal::SubresRange*    pRanges,
+        const Pal::SwizzledFormat* pClearFormats,
+        uint32_t                   viewMask);
+
     PAL_DISALLOW_COPY_AND_ASSIGN(CmdBuffer);
 
     void ValidateGraphicsStates();
@@ -1585,9 +1595,8 @@ private:
         const VkImageMemoryBarrier*  pImageMemoryBarriers);
 
     void ExecuteAcquireRelease(
-        uint32_t                     eventCount,
-        const VkEvent*               pEvents,
         uint32_t                     dependencyCount,
+        const VkEvent*               pEvents,
         const VkDependencyInfoKHR*   pDependencyInfos,
         AcquireReleaseMode           acquireReleaseMode,
         uint32_t                     rgpBarrierReasonType);
@@ -1687,7 +1696,7 @@ private:
 #endif
     void ReleaseResources();
 
-#if VK_ENABLE_DEBUG_BARRIERS
+#if VKI_ENABLE_DEBUG_BARRIERS
     void DbgCmdBarrier(bool preCmd);
 #endif
 
@@ -1742,7 +1751,8 @@ private:
 
     template <size_t imageDescSize,
               size_t samplerDescSize,
-              size_t bufferDescSize,
+              size_t typedBufferDescSize,
+              size_t untypedBufferDescSize,
               uint32_t numPalDevices>
     static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetKHR(
         VkCommandBuffer                             commandBuffer,
@@ -1773,7 +1783,8 @@ private:
 
     template <size_t imageDescSize,
               size_t samplerDescSize,
-              size_t bufferDescSize,
+              size_t typedBufferDescSize,
+              size_t untypedBufferDescSize,
               uint32_t numPalDevices>
     static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSet2KHR(
         VkCommandBuffer                             commandBuffer,
@@ -1955,8 +1966,7 @@ private:
             uint32_t preBindDefaultState                 :  1;
             uint32_t useReleaseAcquire                   :  1;
             uint32_t useSplitReleaseAcquire              :  1;
-            uint32_t useBackupBuffer : 1;
-            uint32_t reserved2                           :  3;
+            uint32_t useBackupBuffer                     :  1;
             uint32_t isRenderingSuspended                :  1;
 #if VKI_RAY_TRACING
             uint32_t hasRayTracing                       :  1;
@@ -1964,7 +1974,7 @@ private:
             uint32_t reserved4                           :  1;
 #endif
             uint32_t offsetMode                          :  1;
-            uint32_t reserved                            : 13;
+            uint32_t reserved                            : 16;
         };
     };
 
@@ -1996,7 +2006,7 @@ private:
     RenderPassInstanceState       m_renderPassInstance;
     TransformFeedbackState*       m_pTransformFeedbackState;
 
-#if VK_ENABLE_DEBUG_BARRIERS
+#if VKI_ENABLE_DEBUG_BARRIERS
     uint64_t                      m_dbgBarrierPreCmdMask;
     uint64_t                      m_dbgBarrierPostCmdMask;
 #endif

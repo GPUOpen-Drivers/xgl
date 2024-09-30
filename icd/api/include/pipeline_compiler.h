@@ -157,8 +157,7 @@ public:
 
     VkResult BuildShaderModule(
         const Device*                   pDevice,
-        const VkShaderModuleCreateFlags flags,
-        const VkShaderModuleCreateFlags internalShaderFlags,
+        const ShaderModuleFlags         flags,
         const Vkgc::BinaryData&         shaderBinary,
         ShaderModuleHandle*             pShaderModule);
 
@@ -182,6 +181,8 @@ public:
         PipelineCache*                    pPipelineCache,
         GraphicsLibraryType               gplType,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        const Vkgc::BinaryData*           pProvidedBinary,
+        const Util::MetroHash::Hash*      pProvidedBinaryHash,
         GplModuleState*                   pModuleState);
 
     VkResult CreateColorExportShaderLibrary(
@@ -345,33 +346,9 @@ public:
         bool                              needCache,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo);
 
-    void GetComputePipelineCacheId(
-        uint32_t                         deviceIdx,
-        ComputePipelineBinaryCreateInfo* pCreateInfo,
-        uint64_t                         pipelineHash,
-        const Util::MetroHash::Hash&     settingsHash,
-        Util::MetroHash::Hash*           pCacheId);
-
-    void GetGraphicsPipelineCacheId(
-        uint32_t                          deviceIdx,
-        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-        uint64_t                          pipelineHash,
-        const Util::MetroHash::Hash&      settingsHash,
-        Util::MetroHash::Hash*            pCacheId);
-
     void GetColorExportShaderCacheId(
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
         Util::MetroHash::Hash*            pCacheId);
-
-#if VKI_RAY_TRACING
-    void GetRayTracingPipelineCacheId(
-        uint32_t                            deviceIdx,
-        uint32_t                            numDevices,
-        RayTracingPipelineBinaryCreateInfo* pCreateInfo,
-        uint64_t                            pipelineHash,
-        const Util::MetroHash::Hash&        settingsHash,
-        Util::MetroHash::Hash*              pCacheId);
-#endif
 
     static void BuildNggState(
         const Device*                     pDevice,
@@ -520,21 +497,19 @@ private:
 #endif
 
     VkResult LoadShaderModuleFromCache(
-        const VkShaderModuleCreateFlags flags,
-        const VkShaderModuleCreateFlags internalShaderFlags,
+        const ShaderModuleFlags         flags,
         const uint32_t                  compilerMask,
         const Util::MetroHash::Hash&    uniqueHash,
         ShaderModuleHandle*             pShaderModule);
 
     void StoreShaderModuleToCache(
-        const VkShaderModuleCreateFlags flags,
-        const VkShaderModuleCreateFlags internalShaderFlags,
+        const ShaderModuleFlags         flags,
         const uint32_t                  compilerMask,
         const Util::MetroHash::Hash&    uniqueHash,
         ShaderModuleHandle*             pShaderModule);
 
     Util::MetroHash::Hash GetShaderModuleCacheHash(
-        const VkShaderModuleCreateFlags flags,
+        const ShaderModuleFlags         flags,
         const uint32_t                  compilerMask,
         const Util::MetroHash::Hash&    uniqueHash);
 

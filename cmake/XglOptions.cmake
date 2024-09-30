@@ -29,46 +29,25 @@ macro(xgl_options)
 
 ### Cached Project Options #############################################################################################
 
+#if VKI_ENABLE_DEBUG_BARRIERS
+    option(VKI_ENABLE_DEBUG_BARRIERS "Build with debug barriers enabled?" OFF)
+#endif
+#if VKI_RUNTIME_APP_PROFILE
+    option(VKI_RUNTIME_APP_PROFILE "Build with runtime app profile?" OFF)
+#endif
+#if VKI_DEVMODE_COMPILER_SETTINGS
+    option(VKI_DEVMODE_COMPILER_SETTINGS "Build with devmode compiler settings?" OFF)
+#endif
+
     option(XGL_ENABLE_PRINTS_ASSERTS "Build with debug print enabled?" OFF)
 
     option(XGL_ENABLE_LTO "Build with LTO enabled?" ON)
 
     option(XGL_ENABLE_GCOV "Build with gcov source code coverage?" OFF)
 
-    option(XGL_BUILD_GFX103 "Build vulkan for GFX103" ON)
-
-    option(XGL_BUILD_NAVI12 "Build vulkan for Navi12" ON)
-
-    option(XGL_BUILD_REMBRANDT "Build vulkan for REMBRANDT" ON)
-
-    option(XGL_BUILD_RAPHAEL "Build vulkan for RAPHAEL" ON)
-
-    option(XGL_BUILD_MENDOCINO "Build vulkan for MENDOCINO" ON)
-
-#if VKI_BUILD_GFX11
-    option(XGL_BUILD_GFX11 "Build vulkan for GFX11" ON)
-#endif
-
-#if VKI_BUILD_NAVI31
-    option(XGL_BUILD_NAVI31 "Build vulkan for Navi31" ON)
-#endif
-
-#if VKI_BUILD_NAVI32
-    option(XGL_BUILD_NAVI32 "Build vulkan for Navi32" ON)
-#endif
-
-#if VKI_BUILD_NAVI33
-    option(XGL_BUILD_NAVI33 "Build vulkan for Navi33" ON)
-#endif
-
-    option(XGL_BUILD_PHOENIX1 "Build vulkan for PHOENIX1" ON)
-
-    option(XGL_BUILD_PHOENIX2 "Build vulkan for PHOENIX2" ON)
-
 #if VKI_BUILD_GFX115
     option(XGL_BUILD_GFX115 "Build vulkan for GFX115" ON)
 #endif
-
 #if VKI_BUILD_STRIX1
     option(XGL_BUILD_STRIX1 "Build vulkan for STRIX1" ON)
 #endif
@@ -85,7 +64,7 @@ macro(xgl_options)
     option(VKI_GPU_DECOMPRESS "Build vulkan with GPU_DECOMPRESS" ON)
 #endif
 
-        option(ICD_BUILD_LLPC "Build LLPC?" ON)
+    option(ICD_BUILD_LLPC "Build LLPC?" ON)
 
     option(XGL_LLVM_UPSTREAM "Build with upstreamed LLVM?" OFF)
 

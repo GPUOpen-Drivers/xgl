@@ -1,4 +1,4 @@
-/*
+﻿/*
  ***********************************************************************************************************************
  *
  *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
@@ -255,6 +255,12 @@ public:
         const VkPipelineLayoutCreateInfo*   pCreateInfo,
         const VkAllocationCallbacks*        pAllocator,
         VkPipelineLayout*                   pPipelineLayout);
+
+    static VkResult GenerateUserDataLayout(
+        const Device*                       pDevice,
+        const VkPipelineLayoutCreateInfo*   pCreateInfo,
+        const VkAllocationCallbacks*        pAllocator,
+        UserDataLayout*                     pUserDataLayout);
 
     VkResult Destroy(
         Device*                             pDevice,

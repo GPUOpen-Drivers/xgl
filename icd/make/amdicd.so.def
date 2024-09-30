@@ -37,6 +37,7 @@ global:
     vkEnumerateInstanceExtensionProperties;
     vkEnumerateInstanceLayerProperties;
     vkEnumerateInstanceVersion;
+    GetSettingsBlobsAll;
 local:
     *;
 };

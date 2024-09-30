@@ -148,6 +148,7 @@ enum class AppProfile : uint32_t
     DXVK,                    // DXVK
     WindowKill,              // Windowkill by torcado
     Archean,                 // Archean by batcholi
+    Houdini,                 // Houdini
 };
 
 struct ProfileSettings

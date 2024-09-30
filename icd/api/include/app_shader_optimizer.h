@@ -205,7 +205,7 @@ private:
 
     void BuildAppProfileLlpc();
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     void BuildRuntimeProfile();
     void RuntimeProfileParseError();
 #endif
@@ -225,7 +225,7 @@ private:
 
     ShaderProfile          m_appShaderProfile;
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     PipelineProfile        m_runtimeProfile;
 #endif
 

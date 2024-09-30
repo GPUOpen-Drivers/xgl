@@ -64,7 +64,8 @@ enum IndirectCommandsActionType
     Draw = 0,
     DrawIndexed,
     Dispatch,
-    DrawMeshTask
+    DrawMeshTask,
+    TraceRay
 };
 
 struct IndirectCommandsInfo
@@ -72,6 +73,7 @@ struct IndirectCommandsInfo
     IndirectCommandsActionType  actionType;
     IndirectCommandsLayoutType  layoutType;
     uint32_t                    strideInBytes;
+    uint32_t                    preActionArgSizeInBytes;
 };
 
 // =====================================================================================================================

@@ -196,6 +196,7 @@ VK_EXT_image_2d_view_of_3d
 VK_EXT_depth_clamp_zero_one
 VK_EXT_primitives_generated_query
 VK_EXT_non_seamless_cube_map
+VK_KHR_pipeline_binary
 VK_EXT_image_sliced_view_of_3d
 VK_KHR_shader_maximal_reconvergence
 VK_EXT_shader_module_identifier

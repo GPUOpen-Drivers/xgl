@@ -35,6 +35,7 @@
 #include "sqtt/sqtt_rgp_annotations.h"
 #include "palAutoBuffer.h"
 #include "palVectorImpl.h"
+#include "palArchiveFile.h"
 #include "gpurt/gpurtLib.h"
 #include "g_gpurtOptions.h"
 
@@ -70,6 +71,7 @@ RayTracingDevice::~RayTracingDevice()
 VkResult RayTracingDevice::Init()
 {
     VkResult result = VK_SUCCESS;
+    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
     if (InitAccelStructTracker() != VK_SUCCESS)
     {
@@ -106,7 +108,7 @@ VkResult RayTracingDevice::Init()
             initInfo.accelStructTrackerGpuAddr = GetAccelStructTrackerGpuVa(deviceIdx);
 
             initInfo.deviceSettings.emulatedRtIpLevel = Pal::RayTracingIpLevel::None;
-            switch (m_pDevice->GetRuntimeSettings().emulatedRtIpLevel)
+            switch (settings.emulatedRtIpLevel)
             {
             case EmulatedRtIpLevelNone:
                 break;
@@ -114,11 +116,9 @@ VkResult RayTracingDevice::Init()
             case EmulatedRtIpLevel1_1:
                 initInfo.deviceSettings.emulatedRtIpLevel = Pal::RayTracingIpLevel::RtIp1_1;
                 break;
-#if VKI_BUILD_GFX11
             case EmulatedRtIpLevel2_0:
                 initInfo.deviceSettings.emulatedRtIpLevel = Pal::RayTracingIpLevel::RtIp2_0;
                 break;
-#endif
             default:
                 break;
             }
@@ -252,7 +252,6 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->accelerationStructureUUID         = GetAccelerationStructureUUID(
                                                      m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties());
     pDeviceSettings->enableMergeSort                   = settings.enableMergeSort;
-    pDeviceSettings->fastBuildThreshold                = settings.fastBuildThreshold;
     pDeviceSettings->lbvhBuildThreshold                = settings.lbvhBuildThreshold;
     pDeviceSettings->enableBVHBuildDebugCounters       = settings.enableBvhBuildDebugCounters;
     pDeviceSettings->enableInsertBarriersInBuildAS     = settings.enableInsertBarriersInBuildAs;
@@ -278,6 +277,8 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
 
     pDeviceSettings->enableMergedEncodeBuild  = settings.enableMergedEncodeBuild;
     pDeviceSettings->enableMergedEncodeUpdate = settings.enableMergedEncodeUpdate;
+    pDeviceSettings->checkBufferOverlapsInBatch = settings.rtCheckBufferOverlapsInBatch;
+    pDeviceSettings->disableCompaction          = settings.rtDisableAccelStructCompaction;
 }
 
 // =====================================================================================================================
@@ -511,7 +512,7 @@ VkResult RayTracingDevice::InitAccelStructTracker()
 
             // Ensure the SRD size matches with the size reported by PAL
             VK_ASSERT(sizeof(pTracker->srd) >=
-                m_pDevice->VkPhysicalDevice(deviceIdx)->PalProperties().gfxipProperties.srdSizes.bufferView);
+                m_pDevice->VkPhysicalDevice(deviceIdx)->PalProperties().gfxipProperties.srdSizes.untypedBufferView);
 
             pPalDevice->CreateUntypedBufferViewSrds(1, &viewInfo, &pTracker->srd);
         }
@@ -545,7 +546,7 @@ VkResult RayTracingDevice::InitAccelStructTracker()
             // Create null view if tracking is disabled.
             memcpy(&m_accelStructTrackerResources[deviceIdx].srd[0],
                    props.gfxipProperties.nullSrds.pNullBufferView,
-                   props.gfxipProperties.srdSizes.bufferView);
+                   props.gfxipProperties.srdSizes.untypedBufferView);
         }
     }
 
@@ -684,9 +685,7 @@ void RayTracingDevice::SetDispatchInfo(
     dispatchInfo.stateObjectHash     = apiHash;
 
     dispatchInfo.boxSortMode         = settings.boxSortingHeuristic;
-#if VKI_BUILD_GFX11
     dispatchInfo.usesNodePtrFlags    = settings.rtEnableNodePointerFlags ? 1 : 0;
-#endif
 
     if (pipelineType == GpuRt::RtPipelineType::RayTracing)
     {
@@ -821,10 +820,19 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
         const void* pPipelineBinary         = nullptr;
         size_t pipelineBinarySize           = 0;
 
+        Vkgc::BinaryData spvBin =
+            {
+                .codeSize = buildInfo.code.spvSize,
+                .pCode    = buildInfo.code.pSpvCode
+            };
+
         Vkgc::ResourceMappingRootNode nodes[GpuRt::MaxInternalPipelineNodes]    = {};
         Vkgc::ResourceMappingNode subNodes[GpuRt::MaxInternalPipelineNodes]     = {};
         uint32_t subNodeIndex = 0;
-        const uint32_t bufferSrdSizeDw = pDevice->GetProperties().descriptorSizes.bufferView / sizeof(uint32_t);
+        const uint32_t typedBufferSrdSizeDw   =
+            pDevice->GetProperties().descriptorSizes.typedBufferView / sizeof(uint32_t);
+        const uint32_t untypedBufferSrdSizeDw =
+            pDevice->GetProperties().descriptorSizes.untypedBufferView / sizeof(uint32_t);
 
         for (uint32_t nodeIndex = 0; nodeIndex < buildInfo.nodeCount; ++nodeIndex)
         {
@@ -863,8 +871,17 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
             }
             else if (node.type == GpuRt::NodeType::Srv)
             {
-                nodes[nodeIndex].node.type              =
-                    Vkgc::ResourceMappingNodeType::DescriptorResource;
+                nodes[nodeIndex].node.type = Vkgc::ResourceMappingNodeType::DescriptorResource;
+
+                if (node.srdStride == 2)
+                {
+                    nodes[nodeIndex].node.type = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
+                }
+                else if (node.srdStride == 4)
+                {
+                    nodes[nodeIndex].node.type = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
+                }
+
                 nodes[nodeIndex].node.sizeInDwords      = node.dwSize;
                 nodes[nodeIndex].node.offsetInDwords    = node.dwOffset;
                 nodes[nodeIndex].node.srdRange.set      = node.descSet;
@@ -888,22 +905,28 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
                 {
                 case GpuRt::NodeType::UavTable:
                     pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
+                    pSubNode->sizeInDwords = untypedBufferSrdSizeDw;
                     break;
                 case GpuRt::NodeType::TypedUavTable:
                     pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
+                    pSubNode->sizeInDwords = typedBufferSrdSizeDw;
                     break;
                 case GpuRt::NodeType::ConstantBufferTable:
                     pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
+                    pSubNode->sizeInDwords = untypedBufferSrdSizeDw;
                     break;
                 case GpuRt::NodeType::SrvTable:
+                    pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorResource;
+                    pSubNode->sizeInDwords = untypedBufferSrdSizeDw;
+                    break;
                 case GpuRt::NodeType::TypedSrvTable:
                     pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorResource;
+                    pSubNode->sizeInDwords = typedBufferSrdSizeDw;
                     break;
                 default:
                     VK_NEVER_CALLED();
                 }
                 pSubNode->offsetInDwords    = 0;
-                pSubNode->sizeInDwords      = bufferSrdSizeDw;
                 pSubNode->srdRange.set      = node.descSet;
                 pSubNode->srdRange.binding  = node.binding;
             }
@@ -934,8 +957,6 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
             compileConstants.pConstants
         };
 
-        Vkgc::BinaryData spvBin = { buildInfo.code.spvSize, buildInfo.code.pSpvCode };
-
         bool forceWave64 = false;
 
         // Overide wave size for these GpuRT shader types
@@ -947,11 +968,11 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
             forceWave64 = true;
         }
 
-        result = pDevice->CreateInternalComputePipeline(buildInfo.code.spvSize,
-                                                        static_cast<const uint8_t*>(buildInfo.code.pSpvCode),
+        result = pDevice->CreateInternalComputePipeline(spvBin.codeSize,
+                                                        static_cast<const uint8_t*>(spvBin.pCode),
                                                         buildInfo.nodeCount,
                                                         nodes,
-                                                        VK_INTERNAL_SHADER_FLAGS_RAY_TRACING_INTERNAL_SHADER_BIT,
+                                                        ShaderModuleInternalRayTracingShader,
                                                         forceWave64,
                                                         &specializationInfo,
                                                         &pDevice->GetInternalRayTracingPipeline());

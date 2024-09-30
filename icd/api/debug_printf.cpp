@@ -114,8 +114,8 @@ void DebugPrintf::BindPipeline(
         {
             m_pPipeline = pPipeline;
 
-            const size_t bufferSrdSize =
-                pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.srdSizes.bufferView;
+            const size_t bufferSrdSize = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->
+                PalProperties().gfxipProperties.srdSizes.untypedBufferView;
             void* pTable = pCmdBuffer->CmdAllocateEmbeddedData(
                 bufferSrdSize, bufferSrdSize, &tableVa);
 
@@ -142,6 +142,7 @@ void DebugPrintf::BindPipeline(
                 pSubSections->Reserve(1);
                 ParseFormatStringsToSubSection(it.Get()->value.printStr, pSubSections);
             }
+
             constexpr VkSemaphoreTypeCreateInfo semaphoreTypeInfo
             {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
@@ -174,7 +175,7 @@ void DebugPrintf::Init(
     const Device* pDevice)
 {
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
-    if ((settings.enableDebugPrintf) && (m_state == Uninitialized))
+    if ((pDevice->GetEnabledFeatures().enableDebugPrintf) && (m_state == Uninitialized))
     {
         m_state = Enabled;
         m_pPipeline = nullptr;
@@ -280,6 +281,7 @@ uint64_t DebugPrintf::ProcessDebugPrintfBuffer(
             outputDecodedSpecifiers.Reserve(5);
             // Set pPtr point to the head of the system memory
             pPtr = pPrintBuffer;
+
             while ((bufferSize - decodeOffset) > 1)
             {
                 // Decode entry
@@ -329,11 +331,16 @@ uint64_t DebugPrintf::ProcessDebugPrintfBuffer(
                                     varIndex,
                                     &outputDecodedSpecifiers[varIndex]);
                 }
+
                 OutputBufferString(formatString, *pSubSections, &outputBufferStr);
+
                 decodeOffset += outputsInDwords;
             }
+
             WriteToFile(pFile, outputBufferStr);
+
             pDevice->VkInstance()->FreeMem(pPrintBuffer);
+
             m_frame++;
         }
     }
@@ -739,6 +746,7 @@ void DebugPrintf::DecodeFormatStringsFromElf(
                             }
                             }
                         }
+
                         bool found = true;
                         PrintfElfString* pElfString = nullptr;
                         result = pFormatStrings->FindAllocate(hashValue, &found, &pElfString);
@@ -770,3 +778,4 @@ void DebugPrintf::DecodeFormatStringsFromElf(
         }
     }
 }
+

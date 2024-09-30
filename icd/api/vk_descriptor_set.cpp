@@ -519,7 +519,8 @@ void DescriptorUpdate::WriteInlineUniformBlock(
 template <size_t imageDescSize,
           size_t fmaskDescSize,
           size_t samplerDescSize,
-          size_t bufferDescSize,
+          size_t typedBufferDescSize,
+          size_t untypedBufferDescSize,
           uint32_t numPalDevices>
 void DescriptorUpdate::WriteDescriptorSets(
     const Device*                pDevice,
@@ -639,7 +640,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             break;
 
         case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-            WriteBufferDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER>(
+            WriteBufferDescriptors<typedBufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER>(
                 params.pTexelBufferView,
                 deviceIdx,
                 pDestAddr,
@@ -648,7 +649,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             break;
 
         case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-            WriteBufferDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER>(
+            WriteBufferDescriptors<typedBufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER>(
                 params.pTexelBufferView,
                 deviceIdx,
                 pDestAddr,
@@ -657,7 +658,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             break;
 
         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-            WriteBufferInfoDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER>(
+            WriteBufferInfoDescriptors<untypedBufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER>(
                 pDevice,
                 params.pBufferInfo,
                 deviceIdx,
@@ -667,7 +668,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             break;
 
         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-            WriteBufferInfoDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER>(
+            WriteBufferInfoDescriptors<untypedBufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER>(
                 pDevice,
                 params.pBufferInfo,
                 deviceIdx,
@@ -681,7 +682,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             pDestAddr = pDestSet->DynamicDescriptorData(deviceIdx) +
                         pDestSet->Layout()->GetDstDynOffset(destBinding, params.dstArrayElement);
 
-            WriteBufferInfoDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC>(
+            WriteBufferInfoDescriptors<untypedBufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC>(
                 pDevice,
                 params.pBufferInfo,
                 deviceIdx,
@@ -695,7 +696,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             pDestAddr = pDestSet->DynamicDescriptorData(deviceIdx) +
                         pDestSet->Layout()->GetDstDynOffset(destBinding, params.dstArrayElement);
 
-            WriteBufferInfoDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC>(
+            WriteBufferInfoDescriptors<untypedBufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC>(
                 pDevice,
                 params.pBufferInfo,
                 deviceIdx,
@@ -923,7 +924,8 @@ void DescriptorUpdate::CopyDescriptorSets(
 template <size_t imageDescSize,
           size_t fmaskDescSize,
           size_t samplerDescSize,
-          size_t bufferDescSize,
+          size_t typedBufferDescSize,
+          size_t untypedBufferDescSize,
           uint32_t numPalDevices>
 VKAPI_ATTR void VKAPI_CALL DescriptorUpdate::UpdateDescriptorSets(
     VkDevice                                    device,
@@ -936,7 +938,8 @@ VKAPI_ATTR void VKAPI_CALL DescriptorUpdate::UpdateDescriptorSets(
 
     for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
     {
-        WriteDescriptorSets<imageDescSize, fmaskDescSize, samplerDescSize, bufferDescSize, numPalDevices>(
+        WriteDescriptorSets
+            <imageDescSize, fmaskDescSize, samplerDescSize, typedBufferDescSize, untypedBufferDescSize, numPalDevices>(
             pDevice,
             deviceIdx,
             descriptorWriteCount,
@@ -988,39 +991,70 @@ template <uint32_t numPalDevices>
 PFN_vkUpdateDescriptorSets DescriptorUpdate::GetUpdateDescriptorSetsFunc(
     const Device* pDevice)
 {
-    const size_t imageDescSize      = pDevice->GetProperties().descriptorSizes.imageView;
-    const size_t fmaskDescSize      = pDevice->GetProperties().descriptorSizes.fmaskView;
-    const size_t samplerDescSize    = pDevice->GetProperties().descriptorSizes.sampler;
-    const size_t bufferDescSize     = pDevice->GetProperties().descriptorSizes.bufferView;
+    const size_t imageDescSize         = pDevice->GetProperties().descriptorSizes.imageView;
+    const size_t fmaskDescSize         = pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead ?
+                                         pDevice->GetProperties().descriptorSizes.fmaskView : 0;
+    const size_t samplerDescSize       = pDevice->GetProperties().descriptorSizes.sampler;
+    const size_t typedBufferDescSize   = pDevice->GetProperties().descriptorSizes.typedBufferView;
+    const size_t untypedBufferDescSize = pDevice->GetProperties().descriptorSizes.untypedBufferView;
+
     PFN_vkUpdateDescriptorSets pFunc = nullptr;
 
-    if ((imageDescSize == 32) &&
-        (samplerDescSize == 16) &&
-        (bufferDescSize == 16))
+    if ((imageDescSize         == 32) &&
+        (fmaskDescSize         == 0)  &&
+        (samplerDescSize       == 16) &&
+        (typedBufferDescSize   == 16) &&
+        (untypedBufferDescSize == 16))
     {
-        if ((pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead == false) || (fmaskDescSize == 0))
-        {
-            pFunc = &UpdateDescriptorSets<
-                32,
-                0,
-                16,
-                16,
-                numPalDevices>;
-        }
-        else if (fmaskDescSize == 32)
-        {
-            pFunc = &UpdateDescriptorSets<
-                32,
-                32,
-                16,
-                16,
-                numPalDevices>;
-        }
-        else
-        {
-            VK_NEVER_CALLED();
-            pFunc = nullptr;
-        }
+        pFunc = &UpdateDescriptorSets<
+            32,
+            0,
+            16,
+            16,
+            16,
+            numPalDevices>;
+    }
+    else if ((imageDescSize         == 32) &&
+             (fmaskDescSize         == 32)  &&
+             (samplerDescSize       == 16) &&
+             (typedBufferDescSize   == 16) &&
+             (untypedBufferDescSize == 16))
+    {
+        pFunc = &UpdateDescriptorSets<
+            32,
+            32,
+            16,
+            16,
+            16,
+            numPalDevices>;
+    }
+    else if ((imageDescSize         == 32) &&
+             (fmaskDescSize         == 0)  &&
+             (samplerDescSize       == 16) &&
+             (typedBufferDescSize   == 24) &&
+             (untypedBufferDescSize == 16))
+    {
+        pFunc = &UpdateDescriptorSets<
+            32,
+            0,
+            16,
+            24,
+            16,
+            numPalDevices>;
+    }
+    else if ((imageDescSize         == 32) &&
+             (fmaskDescSize         == 32)  &&
+             (samplerDescSize       == 16) &&
+             (typedBufferDescSize   == 24) &&
+             (untypedBufferDescSize == 16))
+    {
+        pFunc = &UpdateDescriptorSets<
+            32,
+            32,
+            16,
+            24,
+            16,
+            numPalDevices>;
     }
     else
     {
@@ -1136,6 +1170,24 @@ void DescriptorUpdate::WriteBufferDescriptors<16, VK_DESCRIPTOR_TYPE_UNIFORM_TEX
 
 template
 void DescriptorUpdate::WriteBufferDescriptors<16, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER>(
+    const VkBufferView*                 pDescriptors,
+    uint32_t                            deviceIdx,
+    uint32_t*                           pDestAddr,
+    uint32_t                            count,
+    uint32_t                            dwStride,
+    size_t                              descriptorStrideInBytes);
+
+template
+void DescriptorUpdate::WriteBufferDescriptors<24, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER>(
+    const VkBufferView*                 pDescriptors,
+    uint32_t                            deviceIdx,
+    uint32_t*                           pDestAddr,
+    uint32_t                            count,
+    uint32_t                            dwStride,
+    size_t                              descriptorStrideInBytes);
+
+template
+void DescriptorUpdate::WriteBufferDescriptors<24, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER>(
     const VkBufferView*                 pDescriptors,
     uint32_t                            deviceIdx,
     uint32_t*                           pDestAddr,

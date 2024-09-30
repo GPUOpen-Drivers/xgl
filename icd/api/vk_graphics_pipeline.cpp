@@ -30,6 +30,7 @@
 #include "include/vk_graphics_pipeline_library.h"
 #include "include/vk_instance.h"
 #include "include/vk_memory.h"
+#include "include/vk_pipeline_binary.h"
 #include "include/vk_pipeline_cache.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_render_pass.h"
@@ -79,6 +80,8 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
     const uint32_t    numPalDevices      = pDevice->NumPalDevices();
     PipelineCompiler* pDefaultCompiler   = pDevice->GetCompiler(DefaultDeviceIndex);
     bool              storeBinaryToCache = true;
+
+    storeBinaryToCache = (flags & VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR) == 0;
 
     // Load or create the pipeline binary
     PipelineBinaryCache* pPipelineBinaryCache = (pPipelineCache != nullptr) ? pPipelineCache->GetPipelineCache()
@@ -280,9 +283,6 @@ VkResult GraphicsPipeline::CreatePalPipelineObjects(
 {
     size_t palSize = 0;
 
-    pObjectCreateInfo->pipeline.pipelineBinarySize = pPipelineBinaries[DefaultDeviceIndex].codeSize;
-    pObjectCreateInfo->pipeline.pPipelineBinary    = pPipelineBinaries[DefaultDeviceIndex].pCode;
-
     Pal::Result palResult = Pal::Result::Success;
     palSize =
         pDevice->PalDevice(DefaultDeviceIndex)->GetGraphicsPipelineSize(pObjectCreateInfo->pipeline, &palResult);
@@ -367,6 +367,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
     PipelineCache*                      pPipelineCache,
     const Util::MetroHash::Hash*        pCacheIds,
     uint64_t                            apiPsoHash,
+    const PipelineBinaryStorage&        binaryStorage,
     GraphicsPipelineObjectCreateInfo*   pObjectCreateInfo,
     VkPipeline*                         pPipeline)
 {
@@ -386,12 +387,20 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
     // Get the pipeline size from PAL and allocate memory.
     void*  pSystemMem = nullptr;
     size_t palSize    = 0;
+    pObjectCreateInfo->pipeline.pipelineBinarySize = pPipelineBinaries[DefaultDeviceIndex].codeSize;
+    pObjectCreateInfo->pipeline.pPipelineBinary    = pPipelineBinaries[DefaultDeviceIndex].pCode;
 
     palSize =
         pDevice->PalDevice(DefaultDeviceIndex)->GetGraphicsPipelineSize(pObjectCreateInfo->pipeline, &palResult);
     VK_ASSERT(palResult == Pal::Result::Success);
 
     size_t     allocationSize        = sizeof(GraphicsPipeline) + (palSize * numPalDevices);
+    const bool storeBinaryToPipeline = (flags & VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR) != 0;
+
+    if (storeBinaryToPipeline)
+    {
+        allocationSize += sizeof(PipelineBinaryStorage);
+    }
 
     pSystemMem = pDevice->AllocApiObject(
         pAllocator,
@@ -414,6 +423,8 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
             Util::VoidPtrInc(pSystemMem, sizeof(GraphicsPipeline)),
             pPalPipeline);
     }
+
+    PipelineBinaryStorage* pPermBinaryStorage = nullptr;
 
     if (result == VK_SUCCESS)
     {
@@ -507,6 +518,15 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
 
         result = PalToVkResult(palResult);
 
+        if ((result == VK_SUCCESS) && storeBinaryToPipeline)
+        {
+            size_t pipelineBinaryOffset = sizeof(GraphicsPipeline) + (palSize * numPalDevices);
+            pPermBinaryStorage = static_cast<PipelineBinaryStorage*>(Util::VoidPtrInc(pSystemMem,
+                                                                                      pipelineBinaryOffset));
+
+            // Simply copy the existing allocations to the new struct.
+            memcpy(pPermBinaryStorage, &binaryStorage, sizeof(PipelineBinaryStorage));
+        }
     }
 
     // On success, wrap it up in a Vulkan object.
@@ -516,6 +536,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
             pDevice,
             pPalPipeline,
             pPipelineLayout,
+            pPermBinaryStorage,
             pObjectCreateInfo->immedInfo,
             pObjectCreateInfo->staticStateMask,
             pObjectCreateInfo->flags,
@@ -535,7 +556,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
             &palPipelineHasher);
 
         *pPipeline = GraphicsPipeline::HandleFromVoidPointer(pSystemMem);
-        if (pDevice->GetRuntimeSettings().enableDebugPrintf)
+        if (pDevice->GetEnabledFeatures().enableDebugPrintf)
         {
             GraphicsPipeline* pGraphicsPipeline = static_cast<GraphicsPipeline*>(pSystemMem);
             pGraphicsPipeline->ClearFormatString();
@@ -759,6 +780,39 @@ VkResult GraphicsPipeline::Create(
     Util::MetroHash::Hash            gplCacheId[GraphicsLibraryCount]                      = {};
     uint32_t                         numShaderLibraries = 0;
 
+    auto pPipelineBinaryInfoKHR = extStructs.pPipelineBinaryInfoKHR;
+
+    if (pPipelineBinaryInfoKHR != nullptr)
+    {
+        if (pPipelineBinaryInfoKHR->binaryCount > 0)
+        {
+            VK_ASSERT(pPipelineBinaryInfoKHR->binaryCount == pDevice->NumPalDevices());
+            binariesProvided = true;
+        }
+
+        for (uint32_t deviceIdx = 0;
+             deviceIdx < pPipelineBinaryInfoKHR->binaryCount;
+             ++deviceIdx)
+        {
+            const auto pBinary = PipelineBinary::ObjectFromHandle(
+                pPipelineBinaryInfoKHR->pPipelineBinaries[deviceIdx]);
+
+            cacheId[deviceIdx]          = pBinary->BinaryKey();
+            pipelineBinaries[deviceIdx] = pBinary->BinaryData();
+
+            if (deviceIdx == DefaultDeviceIndex)
+            {
+                pDefaultCompiler->ReadBinaryMetadata(
+                    pDevice,
+                    pipelineBinaries[deviceIdx],
+                    &binaryMetadata);
+            }
+        }
+    }
+
+    PipelineBinaryStorage binaryStorage         = {};
+    const bool            storeBinaryToPipeline = (flags & VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR) != 0;
+
     VK_ASSERT(pCreateInfo->layout != VK_NULL_HANDLE);
     pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
 
@@ -905,6 +959,77 @@ VkResult GraphicsPipeline::Create(
         }
     }
 
+    // 4. Store created binaries for pipeline_binary
+    if ((result == VK_SUCCESS) && storeBinaryToPipeline)
+    {
+        if (gplProvided)
+        {
+            for (uint32_t gplType = 0;
+                 (gplType < GraphicsLibraryCount)            &&
+                 (shaderLibraries[gplType] != nullptr)       &&
+                 Util::TestAnyFlagSet(gplMask, 1 << gplType) &&
+                 (result == VK_SUCCESS);
+                 ++gplType)
+            {
+                uint32 codeSize = 0;
+
+                shaderLibraries[gplType]->GetCodeObject(&codeSize, nullptr);
+
+                void* pMemory = pAllocator->pfnAllocation(
+                    pAllocator->pUserData,
+                    codeSize,
+                    VK_DEFAULT_MEM_ALIGN,
+                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);     // retained in the pipeline object
+
+                if (pMemory != nullptr)
+                {
+                    shaderLibraries[gplType]->GetCodeObject(&codeSize, pMemory);
+
+                    InsertBinaryData(
+                        &binaryStorage,
+                        gplType,
+                        gplCacheId[gplType],
+                        codeSize,
+                        pMemory);
+                }
+                else
+                {
+                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
+            }
+        }
+        else
+        {
+            for (uint32_t deviceIdx = 0; (deviceIdx < pDevice->NumPalDevices()) && (result == VK_SUCCESS); ++deviceIdx)
+            {
+                void* pMemory = pAllocator->pfnAllocation(
+                    pAllocator->pUserData,
+                    pipelineBinaries[deviceIdx].codeSize,
+                    VK_DEFAULT_MEM_ALIGN,
+                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);     // retained in the pipeline object
+
+                if (pMemory != nullptr)
+                {
+                    memcpy(
+                        pMemory,
+                        pipelineBinaries[deviceIdx].pCode,
+                        pipelineBinaries[deviceIdx].codeSize);
+
+                    InsertBinaryData(
+                        &binaryStorage,
+                        deviceIdx,
+                        cacheId[deviceIdx],
+                        pipelineBinaries[deviceIdx].codeSize,
+                        pMemory);
+                }
+                else
+                {
+                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
+            }
+        }
+    }
+
     if (result == VK_SUCCESS)
     {
         // 5. Build pipeline object create info
@@ -947,9 +1072,15 @@ VkResult GraphicsPipeline::Create(
                 pPipelineCache,
                 cacheId,
                 apiPsoHash,
+                binaryStorage,
                 &objectCreateInfo,
                 pPipeline);
 
+            if (result != VK_SUCCESS)
+            {
+                // Free the binaries only if we failed to create the pipeline objects.
+                FreeBinaryStorage(&binaryStorage, pAllocator);
+            }
         }
     }
 
@@ -1195,6 +1326,7 @@ GraphicsPipeline::GraphicsPipeline(
     Device* const                          pDevice,
     Pal::IPipeline**                       pPalPipeline,
     const PipelineLayout*                  pLayout,
+    PipelineBinaryStorage*                 pBinaryStorage,
     const GraphicsPipelineObjectImmedInfo& immedInfo,
     uint64_t                               staticStateMask,
     GraphicsPipelineObjectFlags            flags,
@@ -1228,6 +1360,7 @@ GraphicsPipeline::GraphicsPipeline(
     Pipeline::Init(
         pPalPipeline,
         pLayout,
+        pBinaryStorage,
         staticStateMask,
 #if VKI_RAY_TRACING
         dispatchRaysUserDataOffset,
@@ -1725,6 +1858,7 @@ void GraphicsPipeline::BindToCmdBuffer(
                 pRenderState->msaaCreateInfo.sampleClusters          = m_info.msaaCreateInfo.sampleClusters;
                 pRenderState->msaaCreateInfo.alphaToCoverageSamples  = m_info.msaaCreateInfo.alphaToCoverageSamples;
                 pRenderState->msaaCreateInfo.occlusionQuerySamples   = m_info.msaaCreateInfo.occlusionQuerySamples;
+
                 if (m_flags.customSampleLocations)
                 {
                     pRenderState->msaaCreateInfo.flags.enable1xMsaaSampleLocations =
@@ -2003,7 +2137,8 @@ void GraphicsPipeline::BindToCmdBuffer(
         }
 
         if (ContainsStaticState(DynamicStatesInternal::SampleLocations) &&
-            ContainsStaticState(DynamicStatesInternal::SampleLocationsEnable))
+            ContainsStaticState(DynamicStatesInternal::SampleLocationsEnable) &&
+            ContainsStaticState(DynamicStatesInternal::RasterizationSamples))
         {
             if ((pRenderState->sampleLocationsEnable != m_flags.customSampleLocations) ||
                 (memcmp(&pRenderState->samplePattern, &m_info.samplePattern, sizeof(SamplePattern)) != 0))
@@ -2019,17 +2154,27 @@ void GraphicsPipeline::BindToCmdBuffer(
         {
             if (ContainsStaticState(DynamicStatesInternal::SampleLocations))
             {
-                if (memcmp(&pRenderState->samplePattern, &m_info.samplePattern, sizeof(SamplePattern)) != 0)
+                if (memcmp(&pRenderState->samplePattern.locations,
+                           &m_info.samplePattern.locations,
+                           sizeof(Pal::MsaaQuadSamplePattern)) != 0)
                 {
-                    pRenderState->samplePattern = m_info.samplePattern;
+                    pRenderState->samplePattern.locations = m_info.samplePattern.locations;
                     pRenderState->dirtyGraphics.samplePattern = 1;
                 }
             }
-            else if (ContainsStaticState(DynamicStatesInternal::SampleLocationsEnable))
+            if (ContainsStaticState(DynamicStatesInternal::SampleLocationsEnable))
             {
                 if (pRenderState->sampleLocationsEnable != m_flags.customSampleLocations)
                 {
                     pRenderState->sampleLocationsEnable = m_flags.customSampleLocations;
+                    pRenderState->dirtyGraphics.samplePattern = 1;
+                }
+            }
+            if (ContainsStaticState(DynamicStatesInternal::RasterizationSamples))
+            {
+                if (pRenderState->samplePattern.sampleCount != m_info.samplePattern.sampleCount)
+                {
+                    pRenderState->samplePattern.sampleCount = m_info.samplePattern.sampleCount;
                     pRenderState->dirtyGraphics.samplePattern = 1;
                 }
             }

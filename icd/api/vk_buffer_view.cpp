@@ -46,9 +46,11 @@ VkResult BufferView::Create(
 
     // Allocate memory for the buffer view
     const size_t apiSize = sizeof(BufferView);
-    const size_t bufferSrdSize =
-        pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.srdSizes.bufferView;
-    size_t srdSize = bufferSrdSize;
+    const size_t srdSize = (pCreateInfo->format == VK_FORMAT_UNDEFINED) ?
+                     pDevice->VkPhysicalDevice(DefaultDeviceIndex)->
+                        PalProperties().gfxipProperties.srdSizes.untypedBufferView :
+                     pDevice->VkPhysicalDevice(DefaultDeviceIndex)->
+                        PalProperties().gfxipProperties.srdSizes.typedBufferView;
 
     const size_t objSize = apiSize +
         (srdSize * pDevice->NumPalDevices());
@@ -87,7 +89,6 @@ VkResult BufferView::Create(
              bufferAddress,
              pCreateInfo->format,
              pDevice->NumPalDevices(),
-             srdSize,
              pSrdMemory);
 
     VK_PLACEMENT_NEW(pMemory) BufferView(pDevice, static_cast<uint32_t>(srdSize), pSrdMemory);
@@ -105,7 +106,6 @@ void BufferView::BuildSrd(
     const Pal::gpusize*           bufferAddress,
     const VkFormat                format,
     const uint32_t                deviceNum,
-    const size_t                  srdSize,
     void*                         pSrdMemory)
 {
     // Build the SRD
@@ -129,19 +129,20 @@ void BufferView::BuildSrd(
 
         if (format != VK_FORMAT_UNDEFINED)
         {
+            const uint32_t srdSize =
+                pDevice->VkPhysicalDevice(deviceIdx)->PalProperties().gfxipProperties.srdSizes.typedBufferView;
             pDevice->PalDevice(deviceIdx)->CreateTypedBufferViewSrds(
                 1, &info, Util::VoidPtrInc(pSrdMemory, srdSize * deviceIdx));
         }
         else
         {
-            info.stride = 0; // Raw buffers have a zero byte stride
+            const uint32_t srdSize =
+                pDevice->VkPhysicalDevice(deviceIdx)->PalProperties().gfxipProperties.srdSizes.untypedBufferView;
+            info.stride            = 0; // Raw buffers have a zero byte stride
 
             pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(
                 1, &info, Util::VoidPtrInc(pSrdMemory, srdSize * deviceIdx));
         }
-
-        VK_ASSERT(srdSize >=
-                  pDevice->VkPhysicalDevice(deviceIdx)->PalProperties().gfxipProperties.srdSizes.bufferView);
     }
 }
 

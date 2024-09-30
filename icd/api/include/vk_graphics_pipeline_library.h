@@ -96,6 +96,7 @@ private:
         const Util::MetroHash::Hash&            elfHash,
         const uint64_t                          apiHash,
         const GplModuleState*                   pGplModuleStates,
+        PipelineBinaryStorage*                  pBinaryStorage,
         const PipelineLayout*                   pPipelineLayout);
 
     static VkResult CreatePartialPipelineBinary(

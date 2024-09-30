@@ -158,7 +158,7 @@ ShaderModule::ShaderModule(
     :
     m_codeSize(codeSize),
     m_pCode(pCode),
-    m_flags(flags)
+    m_flags(ConvertVkShaderModuleCreateFlags(flags))
 {
     m_codeHash = BuildCodeHash(pCode, codeSize);
 
@@ -211,7 +211,6 @@ VkResult ShaderModule::Init(
     VkResult result = pCompiler->BuildShaderModule(
         pDevice,
         m_flags,
-        0,
         shaderBinary,
         &m_handle);
 

@@ -44,7 +44,7 @@
 #include "include/vk_fence.h"
 #include "include/vk_formats.h"
 #include "include/vk_framebuffer.h"
-
+#include "include/vk_pipeline_binary.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_physical_device.h"
 #include "include/vk_image.h"
@@ -742,6 +742,12 @@ VkResult Device::Create(
         {
             deviceFeatures.strictImageSizeRequirements = false;
         }
+
+        if (pPhysicalDevice->GetRuntimeSettings().enableDebugPrintf
+           )
+        {
+            deviceFeatures.enableDebugPrintf = true;
+        }
     }
 
     if (palResult == Pal::Result::Success)
@@ -1154,15 +1160,16 @@ VkResult Device::Initialize(
     }
 
 #if VKI_RAY_TRACING
-    m_properties.rayTracingIpLevel          = deviceProps.gfxipProperties.rayTracingIp;
+    m_properties.rayTracingIpLevel                 = deviceProps.gfxipProperties.rayTracingIp;
 #endif
-    m_properties.virtualMemAllocGranularity = deviceProps.gpuMemoryProperties.virtualMemAllocGranularity;
-    m_properties.virtualMemPageSize         = deviceProps.gpuMemoryProperties.virtualMemPageSize;
-    m_properties.descriptorSizes.bufferView = deviceProps.gfxipProperties.srdSizes.bufferView;
-    m_properties.descriptorSizes.imageView  = deviceProps.gfxipProperties.srdSizes.imageView;
-    m_properties.descriptorSizes.fmaskView  = deviceProps.gfxipProperties.srdSizes.fmaskView;
-    m_properties.descriptorSizes.sampler    = deviceProps.gfxipProperties.srdSizes.sampler;
-    m_properties.descriptorSizes.bvh        = deviceProps.gfxipProperties.srdSizes.bvh;
+    m_properties.virtualMemAllocGranularity        = deviceProps.gpuMemoryProperties.virtualMemAllocGranularity;
+    m_properties.virtualMemPageSize                = deviceProps.gpuMemoryProperties.virtualMemPageSize;
+    m_properties.descriptorSizes.typedBufferView   = deviceProps.gfxipProperties.srdSizes.typedBufferView;
+    m_properties.descriptorSizes.untypedBufferView = deviceProps.gfxipProperties.srdSizes.untypedBufferView;
+    m_properties.descriptorSizes.imageView         = deviceProps.gfxipProperties.srdSizes.imageView;
+    m_properties.descriptorSizes.fmaskView         = deviceProps.gfxipProperties.srdSizes.fmaskView;
+    m_properties.descriptorSizes.sampler           = deviceProps.gfxipProperties.srdSizes.sampler;
+    m_properties.descriptorSizes.bvh               = deviceProps.gfxipProperties.srdSizes.bvh;
     // Size of combined image samplers is the sum of the image and sampler SRD sizes (8DW + 4DW)
     m_properties.descriptorSizes.combinedImageSampler =
         m_properties.descriptorSizes.imageView +
@@ -1849,7 +1856,7 @@ VkResult Device::CreateInternalComputePipeline(
     const uint8_t*                 pCode,
     uint32_t                       numUserDataNodes,
     Vkgc::ResourceMappingRootNode* pUserDataNodes,
-    VkShaderModuleCreateFlags      internalShaderFlags,
+    ShaderModuleFlags              flags,
     bool                           forceWave64,
     const VkSpecializationInfo*    pSpecializationInfo,
     InternalPipeline*              pInternalPipeline)
@@ -1879,10 +1886,9 @@ VkResult Device::CreateInternalComputePipeline(
 
     // Build shader module
     Vkgc::BinaryData spvBin = { codeByteSize, pCode };
-    internalShaderFlags |= VK_INTERNAL_SHADER_FLAGS_INTERNAL_SHADER_BIT;
+    ShaderModuleFlags internalShaderFlags = flags | ShaderModuleInternalShader;
     result = pCompiler->BuildShaderModule(
         this,
-        0,
         internalShaderFlags,
         spvBin,
         &shaderModule);
@@ -2103,34 +2109,38 @@ VkResult Device::CreateInternalPipelines()
 
     Vkgc::ResourceMappingRootNode userDataNodes[3] = {};
 
-    const uint32_t uavViewSize = m_properties.descriptorSizes.bufferView / sizeof(uint32_t);
+    const uint32_t untypedViewDwSize = m_properties.descriptorSizes.untypedBufferView / sizeof(uint32_t);
+    const uint32_t typedViewDwSize   = m_properties.descriptorSizes.typedBufferView / sizeof(uint32_t);
+    uint32_t offset                  = 0;
 
     // Timestamp counter storage view
-    userDataNodes[0].node.type = useStridedShader ?
+    userDataNodes[0].node.type                    = useStridedShader ?
         Vkgc::ResourceMappingNodeType::DescriptorBuffer : Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
-    userDataNodes[0].node.offsetInDwords = 0;
-    userDataNodes[0].node.sizeInDwords = uavViewSize;
-    userDataNodes[0].node.srdRange.set = 0;
-    userDataNodes[0].node.srdRange.binding = 0;
+    userDataNodes[0].node.offsetInDwords          = 0;
+    userDataNodes[0].node.sizeInDwords            = useStridedShader ? untypedViewDwSize : typedViewDwSize;
+    userDataNodes[0].node.srdRange.set            = 0;
+    userDataNodes[0].node.srdRange.binding        = 0;
     userDataNodes[0].node.srdRange.strideInDwords = 0;
-    userDataNodes[0].visibility = Vkgc::ShaderStageComputeBit;
+    userDataNodes[0].visibility                   = Vkgc::ShaderStageComputeBit;
+    offset                                       += userDataNodes[0].node.sizeInDwords;
 
     // Copy destination storage view
-    userDataNodes[1].node.type = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
-    userDataNodes[1].node.offsetInDwords = uavViewSize;
-    userDataNodes[1].node.sizeInDwords = uavViewSize;
-    userDataNodes[1].node.srdRange.set = 0;
-    userDataNodes[1].node.srdRange.binding = 1;
+    userDataNodes[1].node.type                    = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
+    userDataNodes[1].node.offsetInDwords          = offset;
+    userDataNodes[1].node.sizeInDwords            = untypedViewDwSize;
+    userDataNodes[1].node.srdRange.set            = 0;
+    userDataNodes[1].node.srdRange.binding        = 1;
     userDataNodes[1].node.srdRange.strideInDwords = 0;
-    userDataNodes[1].visibility = Vkgc::ShaderStageComputeBit;
+    userDataNodes[1].visibility                   = Vkgc::ShaderStageComputeBit;
+    offset                                       += userDataNodes[1].node.sizeInDwords;
 
     // Inline constant data
-    userDataNodes[2].node.type = Vkgc::ResourceMappingNodeType::PushConst;
-    userDataNodes[2].node.offsetInDwords = 2 * uavViewSize;
-    userDataNodes[2].node.sizeInDwords = 4;
-    userDataNodes[2].node.srdRange.set = Vkgc::InternalDescriptorSetId;
+    userDataNodes[2].node.type                    = Vkgc::ResourceMappingNodeType::PushConst;
+    userDataNodes[2].node.offsetInDwords          = offset;
+    userDataNodes[2].node.sizeInDwords            = 4;
+    userDataNodes[2].node.srdRange.set            = Vkgc::InternalDescriptorSetId;
     userDataNodes[2].node.srdRange.strideInDwords = 0;
-    userDataNodes[2].visibility = Vkgc::ShaderStageComputeBit;
+    userDataNodes[2].visibility                   = Vkgc::ShaderStageComputeBit;
 
     result = CreateInternalComputePipeline(
         spvCodeSize,
@@ -4176,6 +4186,7 @@ VkResult Device::GetDeviceFaultInfoEXT(
         {
             m_retrievedFaultData = true;
         }
+
     }
 
     if (m_pageFaultStatus.flags.pageFault == false)
@@ -4218,6 +4229,7 @@ VkResult Device::GetDeviceFaultInfoEXT(
                                                                         VK_DEVICE_FAULT_ADDRESS_TYPE_WRITE_INVALID_EXT;
         pAddressInfo->reportedAddress   = static_cast<VkDeviceAddress>(m_pageFaultStatus.faultAddress);
         pAddressInfo->addressPrecision  = 4096;
+
     }
 
     return result;
@@ -5402,6 +5414,69 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceFaultInfoEXT(
 {
     Device* pDevice = ApiDevice::ObjectFromHandle(device);
     return pDevice->GetDeviceFaultInfoEXT(pFaultCounts, pFaultInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineBinariesKHR(
+    VkDevice                                    device,
+    const VkPipelineBinaryCreateInfoKHR*        pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkPipelineBinaryHandlesInfoKHR*             pBinaries)
+{
+    const auto pDevice  = ApiDevice::ObjectFromHandle(device);
+    const auto pAllocCB = (pAllocator != nullptr) ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+
+    return PipelineBinary::CreatePipelineBinaries(pDevice, pCreateInfo, pAllocCB, pBinaries);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkDestroyPipelineBinaryKHR(
+    VkDevice                                    device,
+    VkPipelineBinaryKHR                         pipelineBinary,
+    const VkAllocationCallbacks*                pAllocator)
+{
+    const auto pDevice  = ApiDevice::ObjectFromHandle(device);
+    const auto pAllocCB = (pAllocator != nullptr) ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+    const auto pBinary  = PipelineBinary::ObjectFromHandle(pipelineBinary);
+
+    pBinary->DestroyPipelineBinary(pDevice, pAllocCB);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineKeyKHR(
+    VkDevice                                    device,
+    const VkPipelineCreateInfoKHR*              pPipelineCreateInfo,
+    VkPipelineBinaryKeyKHR*                     pPipelineBinaryKey)
+{
+    const auto pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return PipelineBinary::GetPipelineKey(pDevice, pPipelineCreateInfo, pPipelineBinaryKey);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineBinaryDataKHR(
+    VkDevice                                    device,
+    const VkPipelineBinaryDataInfoKHR*          pInfo,
+    VkPipelineBinaryKeyKHR*                     pPipelineBinaryKey,
+    size_t*                                     pPipelineBinaryDataSize,
+    void*                                       pPipelineBinaryData)
+{
+    const auto pBinary = PipelineBinary::ObjectFromHandle(pInfo->pipelineBinary);
+
+    return pBinary->GetPipelineBinaryData(pPipelineBinaryKey, pPipelineBinaryDataSize, pPipelineBinaryData);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkReleaseCapturedPipelineDataKHR(
+    VkDevice                                    device,
+    const VkReleaseCapturedPipelineDataInfoKHR* pInfo,
+    const VkAllocationCallbacks*                pAllocator)
+{
+    const auto pDevice   = ApiDevice::ObjectFromHandle(device);
+    const auto pPipeline = Pipeline::BaseObjectFromHandle(pInfo->pipeline);
+    const auto pAllocCB  = (pAllocator != nullptr) ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+
+    return PipelineBinary::ReleaseCapturedPipelineData(pDevice, pPipeline, pAllocCB);
 }
 
 // =====================================================================================================================

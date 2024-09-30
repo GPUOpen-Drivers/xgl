@@ -369,4 +369,29 @@ uint32_t CompilerSolution::GetRayTracingVgprLimit(
 }
 #endif
 
+bool CompilerSolution::ClonePipelineBinary(
+    const Vkgc::BinaryData* pProvidedBinary,
+    Vkgc::BinaryData*       pNewBinary)
+{
+    bool success = false;
+
+    // Create memory, to be freed later, just as StoreShaderBinaryToCache does.  The VkInstance allocation callbacks
+    // are used here for consistency with the PipelineBinaryCache that backs the PipelineCache.
+    void* pBinaryData = m_pPhysicalDevice->Manager()->VkInstance()->AllocMem(
+        pProvidedBinary->codeSize,
+        VK_DEFAULT_MEM_ALIGN,
+        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+    if (pBinaryData != nullptr)
+    {
+        memcpy(pBinaryData, pProvidedBinary->pCode, pProvidedBinary->codeSize);
+
+        pNewBinary->pCode    = pBinaryData;
+        pNewBinary->codeSize = pProvidedBinary->codeSize;
+        success              = true;
+    }
+
+    return success;
+}
+
 }

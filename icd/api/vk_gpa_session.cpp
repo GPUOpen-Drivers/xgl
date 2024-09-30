@@ -240,17 +240,13 @@ VkResult GpaSession::CmdBeginSample(
     sampleConfig.flags.sampleInternalOperations      = pGpaSampleBeginInfo->sampleInternalOperations;
     sampleConfig.flags.cacheFlushOnCounterCollection = pGpaSampleBeginInfo->cacheFlushOnCounterCollection;
     sampleConfig.flags.sqShaderMask                  = pGpaSampleBeginInfo->sqShaderMaskEnable;
-
-#if VKI_BUILD_GFX11
     sampleConfig.flags.sqWgpShaderMask               = pGpaSampleBeginInfo->sqShaderMaskEnable;
-#endif
+
     sampleConfig.sqShaderMask = static_cast<Pal::PerfExperimentShaderFlags>(
         VkToPalPerfExperimentShaderFlags(pGpaSampleBeginInfo->sqShaderMask));
 
-#if VKI_BUILD_GFX11
     sampleConfig.sqWgpShaderMask = static_cast<Pal::PerfExperimentShaderFlags>(
         VkToPalPerfExperimentShaderFlags(pGpaSampleBeginInfo->sqShaderMask));
-#endif
 
     VirtualStackFrame virtStackFrame(pCmdbuf->GetStackAllocator());
 

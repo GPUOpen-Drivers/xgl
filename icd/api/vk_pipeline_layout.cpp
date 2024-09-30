@@ -333,7 +333,7 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
         gfxReservedCount++;
     }
 
-    if (pDevice->GetRuntimeSettings().enableDebugPrintf)
+    if (pDevice->GetEnabledFeatures().enableDebugPrintf)
     {
         gfxReservedCount++;
     }
@@ -386,7 +386,7 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
         pPipelineInfo->numUserDataNodes += 1;
     }
 
-    if (pDevice->GetRuntimeSettings().enableDebugPrintf)
+    if (pDevice->GetEnabledFeatures().enableDebugPrintf)
     {
         pPipelineInfo->numUserDataNodes += 1;
         pUserDataLayout->debugPrintfRegBase = pInfo->userDataRegCount;
@@ -633,7 +633,7 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
         pInfo->userDataRegCount                  += 1;
     }
 
-    if (settings.enableDebugPrintf)
+    if (pDevice->GetEnabledFeatures().enableDebugPrintf)
     {
         pPipelineInfo->numUserDataNodes    += 1;
         pUserDataLayout->debugPrintfRegBase = pInfo->userDataRegCount;
@@ -887,6 +887,54 @@ VkResult PipelineLayout::Create(
 }
 
 // =====================================================================================================================
+// Extract user data layout based on createInfo with no pipeline layout object being actually created
+VkResult PipelineLayout::GenerateUserDataLayout(
+    const Device*                                   pDevice,
+    const VkPipelineLayoutCreateInfo*               pCreateInfo,
+    const VkAllocationCallbacks*                    pAllocator,
+    UserDataLayout*                                 pUserDataLayout)
+{
+    VkResult result = VK_SUCCESS;
+
+    Info               info               = {};
+    PipelineInfo       pipelineInfo       = {};
+    SetUserDataLayout* pSetUserDataLayout = nullptr;
+
+    const size_t setUserDataLayoutSize =
+        Util::Pow2Align((pCreateInfo->setLayoutCount * sizeof(SetUserDataLayout)), ExtraDataAlignment());
+
+    void* pMemory = pAllocator->pfnAllocation(pAllocator->pUserData,
+                                              setUserDataLayoutSize,
+                                              VK_DEFAULT_MEM_ALIGN,
+                                              VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+    if (pMemory != nullptr)
+    {
+        pSetUserDataLayout = static_cast<PipelineLayout::SetUserDataLayout*>(pMemory);
+
+        result = ConvertCreateInfo(
+            pDevice,
+            pCreateInfo,
+            &info,
+            &pipelineInfo,
+            pSetUserDataLayout);
+
+        if (result == VK_SUCCESS)
+        {
+            *pUserDataLayout = info.userDataLayout;
+        }
+
+        pAllocator->pfnFree(pAllocator->pUserData, pMemory);
+    }
+    else
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 // Translates VkDescriptorType to VKGC ResourceMappingNodeType
 Vkgc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
     VkDescriptorType descriptorType)
@@ -1037,7 +1085,7 @@ void PipelineLayout::BuildLlpcVertexBufferTableMapping(
     if (pVbInfo != nullptr)
     {
         // Build the table description itself
-        const uint32_t srdDwSize = m_pDevice->GetProperties().descriptorSizes.bufferView / sizeof(uint32_t);
+        const uint32_t srdDwSize = m_pDevice->GetProperties().descriptorSizes.untypedBufferView / sizeof(uint32_t);
         const uint32_t vbTableSize = pVbInfo->bindingTableSize * srdDwSize;
 
         // Add the set pointer node pointing to this table
@@ -1346,7 +1394,7 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
             &userDataNodeCount);
     }
 
-    if (m_pDevice->GetRuntimeSettings().enableDebugPrintf)
+    if (m_pDevice->GetEnabledFeatures().enableDebugPrintf)
     {
         BuildLlpcDebugPrintfMapping(
             stageMask,
@@ -1640,7 +1688,7 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
     }
 #endif
 
-    if (m_pDevice->GetRuntimeSettings().enableDebugPrintf)
+    if (m_pDevice->GetEnabledFeatures().enableDebugPrintf)
     {
         BuildLlpcDebugPrintfMapping(
             stageMask,

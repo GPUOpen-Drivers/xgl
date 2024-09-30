@@ -583,5 +583,11 @@ vkCmdBindDescriptorBufferEmbeddedSamplers2EXT       @device       @dext(KHR_main
 vkCmdSetRenderingAttachmentLocationsKHR             @device       @dext(KHR_dynamic_rendering_local_read)
 vkCmdSetRenderingInputAttachmentIndicesKHR          @device       @dext(KHR_dynamic_rendering_local_read)
 
+vkCreatePipelineBinariesKHR                         @device       @dext(KHR_pipeline_binary)
+vkDestroyPipelineBinaryKHR                          @device       @dext(KHR_pipeline_binary)
+vkGetPipelineKeyKHR                                 @device       @dext(KHR_pipeline_binary)
+vkGetPipelineBinaryDataKHR                          @device       @dext(KHR_pipeline_binary)
+vkReleaseCapturedPipelineDataKHR                    @device       @dext(KHR_pipeline_binary)
+
 vkCmdSetDepthBias2EXT                               @device       @dext(EXT_depth_bias_control)
 

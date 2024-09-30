@@ -127,7 +127,16 @@ VkResult Buffer::Create(
             VK_ASSERT(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetPrtFeatures() & Pal::PrtFeatureBuffer);
         }
 
-        if ((pCreateInfo->flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT) != 0)
+        // Use the descriptor table VA range for descriptor buffers because we need to program descriptors
+        // with a single (32-bit) user data entry and there is no such guarentee with the default VA range.
+        if ((Device::GetBufferUsageFlagBits(pCreateInfo) &
+            (VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+             VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT  |
+             VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT)) != 0)
+        {
+            gpuMemoryCreateInfo.vaRange = Pal::VaRange::DescriptorTable;
+        }
+        else if ((pCreateInfo->flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT) != 0)
         {
             gpuMemoryCreateInfo.vaRange = Pal::VaRange::CaptureReplay;
         }

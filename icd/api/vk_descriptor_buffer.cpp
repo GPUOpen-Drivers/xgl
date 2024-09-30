@@ -86,10 +86,6 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorEXT(
     const Device*             pDevice = ApiDevice::ObjectFromHandle(device);
     const Device::Properties& props   = pDevice->GetProperties();
 
-    VK_ASSERT((props.descriptorSizes.imageView  == 32) &&
-              (props.descriptorSizes.sampler    == 16) &&
-              (props.descriptorSizes.bufferView == 16));
-
     switch (static_cast<uint32_t>(pDescriptorInfo->type))
     {
     case VK_DESCRIPTOR_TYPE_SAMPLER:
@@ -198,6 +194,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorEXT(
     {
         if (pDescriptorInfo->data.pUniformTexelBuffer != nullptr)
         {
+            VK_ASSERT(pDescriptorInfo->data.pUniformTexelBuffer->format != VK_FORMAT_UNDEFINED);
             BufferView::BuildSrd(
                 pDevice,
                 0,
@@ -205,12 +202,11 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorEXT(
                 static_cast<const Pal::gpusize*> (&pDescriptorInfo->data.pUniformTexelBuffer->address),
                 pDescriptorInfo->data.pUniformTexelBuffer->format,
                 1,
-                props.descriptorSizes.bufferView,
                 pDescriptor);
         }
         else
         {
-            memset(pDescriptor, 0, props.descriptorSizes.bufferView);
+            memset(pDescriptor, 0, props.descriptorSizes.typedBufferView);
         }
         break;
     }
@@ -231,7 +227,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorEXT(
         }
         else
         {
-            memset(pDescriptor, 0, props.descriptorSizes.bufferView);
+            memset(pDescriptor, 0, props.descriptorSizes.untypedBufferView);
         }
 
         break;
@@ -249,12 +245,11 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorEXT(
                 static_cast<const Pal::gpusize*> (&pDescriptorInfo->data.pUniformBuffer->address),
                 VK_FORMAT_UNDEFINED,
                 1,
-                props.descriptorSizes.bufferView,
                 pDescriptor);
         }
         else
         {
-            memset(pDescriptor, 0, props.descriptorSizes.bufferView);
+            memset(pDescriptor, 0, props.descriptorSizes.untypedBufferView);
         }
         break;
     }

@@ -1122,20 +1122,24 @@ static uint32_t GetBufferSrdFormatInfo(
     }
     else
     {
-        VK_ASSERT(pPhysicalDevice->PalProperties().gfxipProperties.srdSizes.bufferView == 4 * sizeof(uint32_t));
+        const Pal::DeviceProperties& palProperties = pPhysicalDevice->PalProperties();
+        VK_ASSERT(palProperties.gfxipProperties.srdSizes.typedBufferView <= MaxBufferSrdSize * sizeof(uint32_t));
 
-        uint32_t result[4] = {};
-        Pal::BufferViewInfo bufferInfo = {};
-        bufferInfo.gpuAddr = 0x300000000ull;
-        bufferInfo.swizzledFormat = swizzledFormat;
-        bufferInfo.range = UINT32_MAX;
-        bufferInfo.stride = Pal::Formats::BytesPerPixel(swizzledFormat.format);
+        uint32_t result[MaxBufferSrdSize] = {};
+        Pal::BufferViewInfo bufferInfo    = {};
+        bufferInfo.gpuAddr                = 0x300000000ull;
+        bufferInfo.swizzledFormat         = swizzledFormat;
+        bufferInfo.range                  = UINT32_MAX;
+        bufferInfo.stride                 = Pal::Formats::BytesPerPixel(swizzledFormat.format);
 
         pPhysicalDevice->PalDevice()->CreateTypedBufferViewSrds(1, &bufferInfo, result);
 
-        // NOTE: Until now, all buffer format info is stored the fourth DWORD of buffer SRD. please modify
+        // NOTE: Until now, all buffer format info is stored the last DWORD of buffer SRD. please modify
         // both BilVertexFetchManager::IssueUberFetchInst and UberFetchShaderFormatInfo once it is changed.
-        return result[3];
+
+        {
+            return result[3];
+        }
     }
 }
 
@@ -1366,7 +1370,7 @@ VkResult InitializeUberFetchShaderFormatTable(
     // to avoid access the exact bit in buffer SRD, we create untypeded buffer twice with different stride,
     // and record the modified bits.
 
-    VK_ASSERT(pPhysicalDevice->PalProperties().gfxipProperties.srdSizes.bufferView == 4 * sizeof(uint32_t));
+    VK_ASSERT(pPhysicalDevice->PalProperties().gfxipProperties.srdSizes.untypedBufferView == 4 * sizeof(uint32_t));
 
     uint32_t defaultSrd[4]         = {};
     uint32_t zeroStrideSrd[4]      = {};

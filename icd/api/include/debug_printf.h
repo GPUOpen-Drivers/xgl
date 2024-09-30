@@ -51,8 +51,8 @@ typedef Util::Vector<bool, 8, Util::GenericAllocator> PrintfBit;
 // Printf Elf string and bits position
 struct PrintfElfString
 {
-    PrintfString printStr; // Printf format string
-    PrintfBit    bit64s;   // Bit positions of output variables
+    PrintfString printStr;      // Printf format string
+    PrintfBit    bit64s;        // Bit positions of output variables
     PrintfElfString() : printStr(nullptr), bit64s(nullptr)
     {
     }

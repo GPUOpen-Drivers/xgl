@@ -63,7 +63,7 @@ void ResourceOptimizer::Init()
 
     BuildTuningProfile();
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     BuildRuntimeProfile();
 
 #endif
@@ -127,7 +127,7 @@ void ResourceOptimizer::OverrideImageCreateInfo(
 
     ApplyProfileToImageCreateInfo(m_tuningProfile, resourceKey, pCreateInfo);
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     ApplyProfileToImageCreateInfo(m_runtimeProfile, resourceKey, pCreateInfo);
 #endif
 
@@ -141,7 +141,7 @@ void ResourceOptimizer::OverrideImageViewCreateInfo(
 
     ApplyProfileToImageViewCreateInfo(m_tuningProfile, resourceKey, pPalViewInfo);
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     ApplyProfileToImageViewCreateInfo(m_runtimeProfile, resourceKey, pPalViewInfo);
 #endif
 }
@@ -457,7 +457,7 @@ void ResourceOptimizer::BuildAppProfile()
     }
 }
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
 void ResourceOptimizer::BuildRuntimeProfile()
 {
     memset(&m_runtimeProfile, 0, sizeof(m_runtimeProfile));

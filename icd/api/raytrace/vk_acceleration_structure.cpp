@@ -556,6 +556,24 @@ GpuRt::Geometry AccelerationStructure::ClientConvertAccelStructBuildGeometryKHR(
         case VK_FORMAT_R16G16_SNORM:
             pTriangles->vertexFormat = GpuRt::VertexFormat::R16G16_Snorm;
             break;
+        case VK_FORMAT_R16G16_UNORM:
+            pTriangles->vertexFormat = GpuRt::VertexFormat::R16G16_Unorm;
+            break;
+        case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+            pTriangles->vertexFormat = GpuRt::VertexFormat::R10G10B10A2_Unorm;
+            break;
+        case VK_FORMAT_R8G8B8A8_UNORM:
+            pTriangles->vertexFormat = GpuRt::VertexFormat::R8G8B8A8_Unorm;
+            break;
+        case VK_FORMAT_R8G8B8A8_SNORM:
+            pTriangles->vertexFormat = GpuRt::VertexFormat::R8G8B8A8_Snorm;
+            break;
+        case VK_FORMAT_R8G8_UNORM:
+            pTriangles->vertexFormat = GpuRt::VertexFormat::R8G8_Unorm;
+            break;
+        case VK_FORMAT_R8G8_SNORM:
+            pTriangles->vertexFormat = GpuRt::VertexFormat::R8G8_Snorm;
+            break;
         default:
             VK_NEVER_CALLED();
             pTriangles->vertexFormat = GpuRt::VertexFormat::R32G32B32_Float;

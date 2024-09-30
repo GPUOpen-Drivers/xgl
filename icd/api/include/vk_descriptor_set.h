@@ -324,7 +324,8 @@ private:
     template <size_t imageDescSize,
               size_t fmaskDescSize,
               size_t samplerDescSize,
-              size_t bufferDescSize,
+              size_t typedBufferDescSize,
+              size_t untypedBufferDescSize,
               uint32_t numPalDevices>
     static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(
         VkDevice                                    device,
@@ -336,7 +337,8 @@ private:
     template <size_t imageDescSize,
               size_t fmaskDescSize,
               size_t samplerDescSize,
-              size_t bufferDescSize,
+              size_t typedBufferDescSize,
+              size_t untypedBufferDescSize,
               uint32_t numPalDevices>
     static void WriteDescriptorSets(
         const Device*                pDevice,

@@ -29,6 +29,7 @@
 #include "include/vk_shader.h"
 #include "include/vk_device.h"
 #include "include/vk_instance.h"
+#include "include/vk_pipeline_binary.h"
 #include "include/vk_pipeline_cache.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_memory.h"
@@ -112,6 +113,8 @@ VkResult ComputePipeline::CreatePipelineBinaries(
     const RuntimeSettings& settings           = pDevice->GetRuntimeSettings();
     PipelineCompiler*      pDefaultCompiler   = pDevice->GetCompiler(DefaultDeviceIndex);
     bool                   storeBinaryToCache = true;
+
+    storeBinaryToCache = (flags & VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR) == 0;
 
     // Load or create the pipeline binary
     PipelineBinaryCache* pPipelineBinaryCache = (pPipelineCache != nullptr) ? pPipelineCache->GetPipelineCache()
@@ -319,6 +322,7 @@ ComputePipeline::ComputePipeline(
     Device* const                        pDevice,
     Pal::IPipeline**                     pPalPipeline,
     const PipelineLayout*                pPipelineLayout,
+    PipelineBinaryStorage*               pBinaryStorage,
     const ImmedInfo&                     immedInfo,
 #if VKI_RAY_TRACING
     bool                                 hasRayTracing,
@@ -340,6 +344,7 @@ ComputePipeline::ComputePipeline(
     Pipeline::Init(
         pPalPipeline,
         pPipelineLayout,
+        pBinaryStorage,
         staticStateMask,
 #if VKI_RAY_TRACING
         dispatchRaysUserDataOffset,
@@ -388,12 +393,45 @@ VkResult ComputePipeline::Create(
 
     HandleExtensionStructs(pCreateInfo, &extStructs);
 
+    auto pPipelineBinaryInfoKHR = extStructs.pPipelineBinaryInfoKHR;
+
+    if (pPipelineBinaryInfoKHR != nullptr)
+    {
+        if (pPipelineBinaryInfoKHR->binaryCount > 0)
+        {
+            VK_ASSERT(pPipelineBinaryInfoKHR->binaryCount == pDevice->NumPalDevices());
+            binariesProvided = true;
+        }
+
+        for (uint32_t deviceIdx = 0;
+            (deviceIdx < pPipelineBinaryInfoKHR->binaryCount) && (result == VK_SUCCESS);
+            ++deviceIdx)
+        {
+            const auto pBinary = PipelineBinary::ObjectFromHandle(
+                pPipelineBinaryInfoKHR->pPipelineBinaries[deviceIdx]);
+
+            cacheId[deviceIdx]          = pBinary->BinaryKey();
+            pipelineBinaries[deviceIdx] = pBinary->BinaryData();
+
+            if (deviceIdx == DefaultDeviceIndex)
+            {
+                pDefaultCompiler->ReadBinaryMetadata(
+                    pDevice,
+                    pipelineBinaries[deviceIdx],
+                    &binaryMetadata);
+            }
+        }
+    }
+
     ComputePipelineShaderStageInfo shaderInfo = {};
     uint64_t                       apiPsoHash = {};
 
     auto pPipelineCreationFeedbackCreateInfo = extStructs.pPipelineCreationFeedbackCreateInfoEXT;
 
     PipelineCompiler::InitPipelineCreationFeedback(pPipelineCreationFeedbackCreateInfo);
+
+    PipelineBinaryStorage binaryStorage = {};
+    bool storeBinaryToPipeline = (flags & VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR) != 0;
 
     if ((result == VK_SUCCESS) && (binariesProvided == false))
     {
@@ -429,6 +467,37 @@ VkResult ComputePipeline::Create(
                 &binaryMetadata);
         }
 
+        // 3. Store created binaries for pipeline_binary
+        if ((result == VK_SUCCESS) && storeBinaryToPipeline)
+        {
+            for (uint32_t deviceIdx = 0; (deviceIdx < pDevice->NumPalDevices()) && (result == VK_SUCCESS); ++deviceIdx)
+            {
+                void* pMemory = pAllocator->pfnAllocation(
+                    pAllocator->pUserData,
+                    pipelineBinaries[deviceIdx].codeSize,
+                    VK_DEFAULT_MEM_ALIGN,
+                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);     // retained in the pipeline object
+
+                if (pMemory != nullptr)
+                {
+                    memcpy(
+                        pMemory,
+                        pipelineBinaries[deviceIdx].pCode,
+                        pipelineBinaries[deviceIdx].codeSize);
+
+                    InsertBinaryData(
+                        &binaryStorage,
+                        deviceIdx,
+                        cacheId[deviceIdx],
+                        pipelineBinaries[deviceIdx].codeSize,
+                        pMemory);
+                }
+                else
+                {
+                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
+            }
+        }
     }
 
     CreateInfo localPipelineInfo = {};
@@ -445,6 +514,7 @@ VkResult ComputePipeline::Create(
 
     // Get the pipeline and shader size from PAL and allocate memory.
     size_t pipelineSize = 0;
+    PipelineBinaryStorage* pPermBinaryStorage = nullptr;
     void* pSystemMem = nullptr;
 
     Pal::Result palResult = Pal::Result::Success;
@@ -460,6 +530,10 @@ VkResult ComputePipeline::Create(
         VK_ASSERT(palResult == Pal::Result::Success);
 
         size_t allocationSize = sizeof(ComputePipeline) + (pipelineSize * pDevice->NumPalDevices());
+        if (storeBinaryToPipeline)
+        {
+            allocationSize += sizeof(PipelineBinaryStorage);
+        }
 
         pSystemMem = pDevice->AllocApiObject(
             pAllocator,
@@ -534,6 +608,15 @@ VkResult ComputePipeline::Create(
 
         result = PalToVkResult(palResult);
 
+        if ((result == VK_SUCCESS) && storeBinaryToPipeline)
+        {
+            size_t pipelineBinaryOffset = sizeof(ComputePipeline) + (pipelineSize * pDevice->NumPalDevices());
+            pPermBinaryStorage = static_cast<PipelineBinaryStorage*>(Util::VoidPtrInc(pSystemMem,
+                                                                                      pipelineBinaryOffset));
+
+            // Simply copy the existing allocations to the new struct.
+            *pPermBinaryStorage = binaryStorage;
+        }
     }
 
     if (result == VK_SUCCESS)
@@ -552,6 +635,7 @@ VkResult ComputePipeline::Create(
         VK_PLACEMENT_NEW(pSystemMem) ComputePipeline(pDevice,
             pPalPipeline,
             localPipelineInfo.pLayout,
+            pPermBinaryStorage,
             localPipelineInfo.immedInfo,
 #if VKI_RAY_TRACING
             hasRayTracing,
@@ -563,7 +647,7 @@ VkResult ComputePipeline::Create(
             apiPsoHash);
 
         *pPipeline = ComputePipeline::HandleFromVoidPointer(pSystemMem);
-        if (settings.enableDebugPrintf)
+        if (pDevice->GetEnabledFeatures().enableDebugPrintf)
         {
             ComputePipeline* pComputePipeline = static_cast<ComputePipeline*>(pSystemMem);
             pComputePipeline->ClearFormatString();
@@ -577,6 +661,8 @@ VkResult ComputePipeline::Create(
     }
     else
     {
+        // Free the binaries only if we failed to create the pipeline.
+        FreeBinaryStorage(&binaryStorage, pAllocator);
 
         for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
         {

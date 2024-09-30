@@ -1142,12 +1142,12 @@ void SqttCmdBufferState::DebugMarkerInsert(
 void SqttCmdBufferState::DebugLabelBegin(
     const VkDebugUtilsLabelEXT* pMarkerInfo)
 {
-    DevUserMarkerString userMarkerString;
+    DevUserMarkerString userMarkerString = {};
     userMarkerString.length = static_cast<uint32>(strlen(pMarkerInfo->pLabelName)) + 1;
     Util::Strncpy(userMarkerString.string, pMarkerInfo->pLabelName, sizeof(userMarkerString.string));
     m_userMarkerStrings.PushBack(userMarkerString);
 
-    Pal::Developer::UserMarkerOpInfo opInfo;
+    Pal::Developer::UserMarkerOpInfo opInfo = {};
     opInfo.opType   = static_cast<uint8_t>(Pal::Developer::UserMarkerOpType::Push);
     opInfo.strIndex = static_cast<uint32_t>(m_userMarkerStrings.size());
     m_userMarkerOpHistory.PushBack(opInfo.u32All);
@@ -1158,7 +1158,7 @@ void SqttCmdBufferState::DebugLabelBegin(
 // =====================================================================================================================
 void SqttCmdBufferState::DebugLabelEnd()
 {
-    Pal::Developer::UserMarkerOpInfo opInfo;
+    Pal::Developer::UserMarkerOpInfo opInfo = {};
     opInfo.opType = static_cast<uint8_t>(Pal::Developer::UserMarkerOpType::Pop);
     m_userMarkerOpHistory.PushBack(opInfo.u32All);
 
@@ -1471,6 +1471,50 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirectCountKHR(
     pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdDrawIndexedIndirectCountKHR);
 
     SQTT_CALL_NEXT_LAYER(vkCmdDrawIndexedIndirectCountKHR)(cmdBuffer, buffer, offset, countBuffer, countOffset,
+        maxDrawCount, stride);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirectCount(
+    VkCommandBuffer                             cmdBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    VkBuffer                                    countBuffer,
+    VkDeviceSize                                countOffset,
+    uint32_t                                    maxDrawCount,
+    uint32_t                                    stride)
+{
+    SQTT_SETUP();
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDrawIndirectCount);
+    pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdDrawIndirectCount);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdDrawIndirectCount)(cmdBuffer, buffer, offset, countBuffer, countOffset, maxDrawCount,
+        stride);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirectCount(
+    VkCommandBuffer                             cmdBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    VkBuffer                                    countBuffer,
+    VkDeviceSize                                countOffset,
+    uint32_t                                    maxDrawCount,
+    uint32_t                                    stride)
+{
+    SQTT_SETUP();
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDrawIndexedIndirectCount);
+    pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdDrawIndexedIndirectCount);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdDrawIndexedIndirectCount)(cmdBuffer, buffer, offset, countBuffer, countOffset,
         maxDrawCount, stride);
 
     pSqtt->EndEventMarkers();
@@ -2924,6 +2968,8 @@ void SqttOverrideDispatchTable(
     SQTT_OVERRIDE_ENTRY(vkCmdDrawIndexedIndirectCountAMD);
     SQTT_OVERRIDE_ENTRY(vkCmdDrawIndirectCountKHR);
     SQTT_OVERRIDE_ENTRY(vkCmdDrawIndexedIndirectCountKHR);
+    SQTT_OVERRIDE_ENTRY(vkCmdDrawIndirectCount);
+    SQTT_OVERRIDE_ENTRY(vkCmdDrawIndexedIndirectCount);
     SQTT_OVERRIDE_ENTRY(vkCmdDrawMeshTasksEXT);
     SQTT_OVERRIDE_ENTRY(vkCmdDrawMeshTasksIndirectCountEXT);
     SQTT_OVERRIDE_ENTRY(vkCmdDrawMeshTasksIndirectEXT);

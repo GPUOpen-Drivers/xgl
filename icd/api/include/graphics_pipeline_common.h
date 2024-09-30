@@ -284,6 +284,12 @@ public:
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
         GraphicsPipelineExtStructs*         pExtStructs);
 
+    // Gets the color attachment count from either the renderpass or the pipeline rendering
+    static uint32_t GetColorAttachmentCount(
+        const RenderPass*                    pRenderPass,
+        const uint32_t                       subpassIndex,
+        const VkPipelineRenderingCreateInfo* pPipelineRenderingCreateInfo);
+
 protected:
     // Convert API information into internal create info used to create internal pipeline object
     static void BuildPipelineObjectCreateInfo(

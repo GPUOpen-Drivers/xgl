@@ -196,11 +196,11 @@ static void ApplyProfileOptions(
 static bool SupportInternalModuleCache(
     const PhysicalDevice*           pDevice,
     const uint32_t                  compilerMask,
-    const VkShaderModuleCreateFlags internalShaderFlags)
+    const ShaderModuleFlags         flags)
 {
     bool supportInternalModuleCache = false;
 
-    if (Util::TestAnyFlagSet(internalShaderFlags, VK_INTERNAL_SHADER_FLAGS_FORCE_UNCACHED_BIT))
+    if (Util::TestAnyFlagSet(flags, ShaderModuleForceUncached))
     {
         supportInternalModuleCache = false;
     }
@@ -330,12 +330,10 @@ VkResult PipelineCompiler::Initialize()
         m_gfxIp.major = 10;
         m_gfxIp.minor = 3;
         break;
-#if VKI_BUILD_GFX11
     case Pal::GfxIpLevel::GfxIp11_0:
         m_gfxIp.major = 11;
         m_gfxIp.minor = 0;
         break;
-#endif
 #if VKI_BUILD_GFX115
     case Pal::GfxIpLevel::GfxIp11_5:
         m_gfxIp.major = 11;
@@ -481,15 +479,24 @@ bool PipelineCompiler::LoadReplaceShaderBinary(
 // =====================================================================================================================
 // Generates shader module cache hash ID
 Util::MetroHash::Hash PipelineCompiler::GetShaderModuleCacheHash(
-    const VkShaderModuleCreateFlags flags,
+    const ShaderModuleFlags         flags,
     const uint32_t                  compilerMask,
     const Util::MetroHash::Hash&    uniqueHash)
 {
+    // None of the internal flags require hashing, but any new API provided one might.
+    constexpr ShaderModuleFlags AllInternalFlags =
+#if VKI_RAY_TRACING
+        ShaderModuleInternalRayTracingShader |
+#endif
+        ShaderModuleInternalShader           |
+        ShaderModuleAllowDelayConversion     |
+        ShaderModuleForceUncached;
+    VK_ASSERT(Util::TestAnyFlagSet(flags, ~AllInternalFlags) == false);
+
     Util::MetroHash128 hasher;
     Util::MetroHash::Hash hash;
     hasher.Update(compilerMask);
     hasher.Update(uniqueHash);
-    hasher.Update(flags);
     hasher.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
     hasher.Finalize(hash.bytes);
     return hash;
@@ -498,8 +505,7 @@ Util::MetroHash::Hash PipelineCompiler::GetShaderModuleCacheHash(
 // =====================================================================================================================
 // Loads shader module from cache, include both run-time cache and binary cache
 VkResult PipelineCompiler::LoadShaderModuleFromCache(
-    const VkShaderModuleCreateFlags flags,
-    const VkShaderModuleCreateFlags internalShaderFlags,
+    const ShaderModuleFlags         flags,
     const uint32_t                  compilerMask,
     const Util::MetroHash::Hash&    uniqueHash,
     ShaderModuleHandle*             pShaderModule)
@@ -507,7 +513,7 @@ VkResult PipelineCompiler::LoadShaderModuleFromCache(
     VkResult result = VK_ERROR_INITIALIZATION_FAILED;
 
     const bool supportInternalModuleCache =
-        SupportInternalModuleCache(m_pPhysicalDevice, compilerMask, internalShaderFlags);
+        SupportInternalModuleCache(m_pPhysicalDevice, compilerMask, flags);
     const bool delayConversion = false;
 
     VK_ASSERT(pShaderModule->pRefCount == nullptr);
@@ -585,8 +591,7 @@ VkResult PipelineCompiler::LoadShaderModuleFromCache(
 // =====================================================================================================================
 // Stores shader module to cache, include both run-time cache and binary cache
 void PipelineCompiler::StoreShaderModuleToCache(
-    const VkShaderModuleCreateFlags flags,
-    const VkShaderModuleCreateFlags internalShaderFlags,
+    const ShaderModuleFlags         flags,
     const uint32_t                  compilerMask,
     const Util::MetroHash::Hash&    uniqueHash,
     ShaderModuleHandle*             pShaderModule)
@@ -594,7 +599,7 @@ void PipelineCompiler::StoreShaderModuleToCache(
     VK_ASSERT(pShaderModule->pRefCount == nullptr);
 
     const bool supportInternalModuleCache =
-        SupportInternalModuleCache(m_pPhysicalDevice, compilerMask, internalShaderFlags);
+        SupportInternalModuleCache(m_pPhysicalDevice, compilerMask, flags);
 
     if (supportInternalModuleCache)
     {
@@ -633,8 +638,7 @@ void PipelineCompiler::StoreShaderModuleToCache(
 // Builds shader module from SPIR-V binary code.
 VkResult PipelineCompiler::BuildShaderModule(
     const Device*                   pDevice,
-    const VkShaderModuleCreateFlags flags,
-    const VkShaderModuleCreateFlags internalShaderFlags,
+    const ShaderModuleFlags         flags,
     const Vkgc::BinaryData&         shaderBinary,
     ShaderModuleHandle*             pShaderModule)
 {
@@ -652,6 +656,8 @@ VkResult PipelineCompiler::BuildShaderModule(
 
     bool findReplaceShader = false;
 
+    ShaderModuleFlags shaderFlags = flags;
+
     Vkgc::BinaryData finalData = shaderBinary;
     if ((pSettings->shaderReplaceMode == ShaderReplaceShaderHash) ||
         (pSettings->shaderReplaceMode == ShaderReplaceShaderHashPipelineBinaryHash))
@@ -664,11 +670,11 @@ VkResult PipelineCompiler::BuildShaderModule(
             finalData = replaceBinary;
             Util::MetroHash64::Hash(
                 reinterpret_cast<const uint8_t*>(replaceBinary.pCode), replaceBinary.codeSize, uniqueHash.bytes);
+
         }
     }
 
-    result = LoadShaderModuleFromCache(
-        flags, internalShaderFlags, compilerMask, uniqueHash, pShaderModule);
+    result = LoadShaderModuleFromCache(shaderFlags, compilerMask, uniqueHash, pShaderModule);
 
     if (result != VK_SUCCESS)
     {
@@ -676,15 +682,14 @@ VkResult PipelineCompiler::BuildShaderModule(
         {
             result = m_compilerSolutionLlpc.BuildShaderModule(
                 pDevice,
-                flags,
-                internalShaderFlags,
+                shaderFlags,
                 finalData,
                 pShaderModule,
                 PipelineOptimizerKey{});
 
         }
 
-        StoreShaderModuleToCache(flags, internalShaderFlags, compilerMask, uniqueHash, pShaderModule);
+        StoreShaderModuleToCache(shaderFlags, compilerMask, uniqueHash, pShaderModule);
     }
     else if ((pSettings->enablePipelineDump)
         )
@@ -800,7 +805,7 @@ bool PipelineCompiler::ReplacePipelineShaderModule(
         if (LoadReplaceShaderBinary(hash64, &shaderBinary))
         {
             VkResult result =
-                BuildShaderModule(pDevice, 0, 0, shaderBinary, pShaderModule);
+                BuildShaderModule(pDevice, 0, shaderBinary, pShaderModule);
 
             if (result == VK_SUCCESS)
             {
@@ -1194,6 +1199,8 @@ VkResult PipelineCompiler::CreateGraphicsShaderBinary(
     PipelineCache*                    pPipelineCache,
     GraphicsLibraryType               gplType,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    const Vkgc::BinaryData*           pProvidedBinary,
+    const Util::MetroHash::Hash*      pProvidedBinaryHash,
     GplModuleState*                   pModuleState)
 {
     VkResult result = VK_SUCCESS;
@@ -1226,6 +1233,8 @@ VkResult PipelineCompiler::CreateGraphicsShaderBinary(
                 pPipelineCache,
                 gplType,
                 pCreateInfo,
+                pProvidedBinary,
+                pProvidedBinaryHash,
                 pPipelineDumpHandle,
                 pModuleState);
 
@@ -1655,7 +1664,6 @@ void BuildLlpcVertexInputDescriptors(
 {
     VK_ASSERT(pVbInfo != nullptr);
 
-    const uint32_t srdDwSize = pDevice->GetProperties().descriptorSizes.bufferView / sizeof(uint32_t);
     uint32_t activeBindings = 0;
 
     // Sort the strides by binding slot
@@ -1823,9 +1831,7 @@ static void MergePipelineOptions(
     pDst->extendedRobustness.nullDescriptor     |= src.extendedRobustness.nullDescriptor;
     pDst->extendedRobustness.robustBufferAccess |= src.extendedRobustness.robustBufferAccess;
     pDst->extendedRobustness.robustImageAccess  |= src.extendedRobustness.robustImageAccess;
-#if VKI_BUILD_GFX11
     pDst->optimizeTessFactor                    |= src.optimizeTessFactor;
-#endif
     pDst->enableInterpModePatch                 |= src.enableInterpModePatch;
     pDst->pageMigrationEnabled                  |= src.pageMigrationEnabled;
     pDst->optimizationLevel                     |= src.optimizationLevel;
@@ -2079,11 +2085,11 @@ void PipelineCompiler::BuildNggState(
 
     // NOTE: To support unrestrict dynamic primtive topology, we need full disable NGG on gfx10.
     bool disallowNgg = unrestrictedPrimitiveTopology;
-#if VKI_BUILD_GFX11
+
     // On gfx11, we needn't program GS output primitive type on VsPs pipeline, so we can support unrestrict dynamic
     // primtive topology with NGG.
     disallowNgg = (disallowNgg && (deviceProp.gfxLevel < Pal::GfxIpLevel::GfxIp11_0));
-#endif
+
     if (disallowNgg)
     {
         pCreateInfo->pipelineInfo.nggState.enableNgg = false;
@@ -2399,11 +2405,18 @@ static void BuildColorBlendState(
 {
     auto pRendering = extStructs.pPipelineRenderingCreateInfo;
 
+    const uint32 numColorTargets = GraphicsPipelineCommon::GetColorAttachmentCount(pRenderPass, subpass, pRendering);
     if ((pCb != nullptr) || (pRendering != nullptr))
     {
-        const uint32_t numColorTargets = (pRendering != nullptr) ?
-            Util::Min(pRendering->colorAttachmentCount, Pal::MaxColorTargets) :
-            Util::Min(pCb->attachmentCount, Pal::MaxColorTargets);
+        bool useBlendAttachments = false;
+        // If the pipeline is created with these 3 states as dynamic, the attachmentCount from the
+        // VkPipelineColorBlendStateCreateInfo is ignored.
+        if ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable) == false) ||
+            (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation) == false) ||
+            (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorWriteMask) == false))
+        {
+            useBlendAttachments = true;
+        }
 
         if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation) ||
             IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable))
@@ -2458,7 +2471,7 @@ static void BuildColorBlendState(
                                                        VK_COLOR_COMPONENT_B_BIT |
                                                        VK_COLOR_COMPONENT_A_BIT;
 
-                if ((pCb != nullptr) && (i < pCb->attachmentCount))
+                if (useBlendAttachments && (i < pCb->attachmentCount))
                 {
                     const VkPipelineColorBlendAttachmentState& src = pCb->pAttachments[i];
                     if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorWriteMask) == false)
@@ -3066,6 +3079,12 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
             result = BuildPipelineResourceMapping(pDevice, pPipelineLayout, availableStageMask, pCreateInfo);
         }
+
+        // Primitive Generated Query is only used for traditional shaders, disable it for mesh shader.
+        if (pCreateInfo->pipelineInfo.mesh.pModuleData != nullptr)
+        {
+            pCreateInfo->pipelineInfo.options.enablePrimGeneratedQuery = false;
+        }
     }
 
     if (result == VK_SUCCESS)
@@ -3295,9 +3314,7 @@ void PipelineCompiler::ApplyPipelineOptions(
 
     pOptions->enableRelocatableShaderElf = settings.enableRelocatableShaders;
     pOptions->disableImageResourceCheck  = settings.disableImageResourceTypeCheck;
-#if VKI_BUILD_GFX11
     pOptions->optimizeTessFactor         = settings.optimizeTessFactor != OptimizeTessFactorDisable;
-#endif
     pOptions->forceCsThreadIdSwizzling   = settings.forceCsThreadIdSwizzling;
     pOptions->overrideThreadGroupSizeX   = settings.overrideThreadGroupSizeX;
     pOptions->overrideThreadGroupSizeY   = settings.overrideThreadGroupSizeY;
@@ -4322,9 +4339,7 @@ void PipelineCompiler::SetRayTracingState(
         bvhInfo.boxSortHeuristic         = Pal::BoxSortHeuristic::ClosestFirst;
         bvhInfo.flags.useZeroOffset      = 1;
         bvhInfo.flags.returnBarycentrics = 1;
-#if VKI_BUILD_GFX11
         bvhInfo.flags.pointerFlags       = settings.rtEnableNodePointerFlags;
-#endif
 
         // Bypass Mall cache read/write if no alloc policy is set for SRDs.
         // This global setting applies to every BVH SRD.
@@ -4409,7 +4424,6 @@ void PipelineCompiler::SetRayTracingState(
     auto rtCounterMode = pDevice->RayTrace()->TraceRayCounterMode(DefaultDeviceIndex);
     pRtState->enableRayTracingCounters = (rtCounterMode != GpuRt::TraceRayCounterMode::TraceRayCounterDisable);
 
-#if VKI_BUILD_GFX11
     // Enable hardware traversal stack on RTIP 2.0+
     if (settings.emulatedRtIpLevel > EmulatedRtIpLevel1_1)
     {
@@ -4427,7 +4441,6 @@ void PipelineCompiler::SetRayTracingState(
             pRtState->enableRayTracingHwTraversalStack = 1;
         }
     }
-#endif
 
     Pal::RayTracingIpLevel rayTracingIp =
         pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.rayTracingIp;
@@ -4441,11 +4454,9 @@ void PipelineCompiler::SetRayTracingState(
     case EmulatedRtIpLevel1_1:
         rayTracingIp = Pal::RayTracingIpLevel::RtIp1_1;
         break;
-#if VKI_BUILD_GFX11
     case EmulatedRtIpLevel2_0:
         rayTracingIp = Pal::RayTracingIpLevel::RtIp2_0;
         break;
-#endif
     default:
         VK_ASSERT(false);
         break;
@@ -4460,11 +4471,9 @@ void PipelineCompiler::SetRayTracingState(
     case Pal::RayTracingIpLevel::RtIp1_1:
         pRtState->rtIpVersion = Vkgc::RtIpVersion({ 1, 1 });
         break;
-#if VKI_BUILD_GFX11
     case Pal::RayTracingIpLevel::RtIp2_0:
         pRtState->rtIpVersion = Vkgc::RtIpVersion({ 2, 0 });
         break;
-#endif
     default:
         VK_NEVER_CALLED();
         break;
@@ -4472,7 +4481,7 @@ void PipelineCompiler::SetRayTracingState(
 
     pRtState->gpurtFeatureFlags = GpuRtShaderLibraryFlags(pDevice);
 
-    const GpuRt::PipelineShaderCode codePatch = GpuRt::GetShaderLibraryCode(pRtState->gpurtFeatureFlags);
+    const GpuRt::PipelineShaderCode codePatch = GpuRt::GetShaderLibraryCode(rayTracingIp, pRtState->gpurtFeatureFlags);
     VK_ASSERT(codePatch.dxilSize > 0);
 
     pRtState->gpurtShaderLibrary.pCode = codePatch.pSpvCode;
@@ -4810,94 +4819,6 @@ static VkPipelineCreateFlags2KHR GetCacheIdControlFlags(
 }
 
 // =====================================================================================================================
-// The pipeline cache ID contains additional inputs outside the shader creation information for pipeline executable
-// properties as well as options to avoid user error when changing performance tuning, compiler, or any other settings.
-static void GetCommonPipelineCacheId(
-    uint32_t                         deviceIdx,
-    VkPipelineCreateFlags2KHR        flags,
-    const PipelineOptimizerKey*      pPipelineProfileKey,
-    PipelineCompilerType             compilerType,
-    uint64_t                         pipelineHash,
-    const Util::MetroHash::Hash&     settingsHash,
-    Util::MetroHash128*              pHash)
-{
-    pHash->Update(pipelineHash);
-    pHash->Update(deviceIdx);
-    pHash->Update(GetCacheIdControlFlags(flags));
-    pHash->Update(compilerType);
-    pHash->Update(settingsHash);
-    pHash->Update(pPipelineProfileKey->shaderCount);
-
-    for (uint32_t shaderIdx = 0; shaderIdx < pPipelineProfileKey->shaderCount; ++shaderIdx)
-    {
-        pHash->Update(pPipelineProfileKey->pShaders[shaderIdx]);
-    }
-}
-
-// =====================================================================================================================
-void PipelineCompiler::GetComputePipelineCacheId(
-    uint32_t                         deviceIdx,
-    ComputePipelineBinaryCreateInfo* pCreateInfo,
-    uint64_t                         pipelineHash,
-    const Util::MetroHash::Hash&     settingsHash,
-    Util::MetroHash::Hash*           pCacheId)
-{
-    Util::MetroHash128 hash = {};
-
-    GetCommonPipelineCacheId(
-        deviceIdx,
-        pCreateInfo->flags,
-        pCreateInfo->pPipelineProfileKey,
-        pCreateInfo->compilerType,
-        pipelineHash,
-        settingsHash,
-        &hash);
-
-    hash.Update(pCreateInfo->pipelineInfo.cs.options);
-    hash.Update(pCreateInfo->pipelineInfo.options);
-
-    hash.Finalize(pCacheId->bytes);
-}
-
-// =====================================================================================================================
-void PipelineCompiler::GetGraphicsPipelineCacheId(
-    uint32_t                          deviceIdx,
-    GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-    uint64_t                          pipelineHash,
-    const Util::MetroHash::Hash&      settingsHash,
-    Util::MetroHash::Hash*            pCacheId)
-{
-    Util::MetroHash128 hash = {};
-
-    GetCommonPipelineCacheId(
-        deviceIdx,
-        pCreateInfo->flags,
-        pCreateInfo->pPipelineProfileKey,
-        pCreateInfo->compilerType,
-        pipelineHash,
-        settingsHash,
-        &hash);
-
-    hash.Update(pCreateInfo->pipelineInfo.task.options);
-    hash.Update(pCreateInfo->pipelineInfo.vs.options);
-    hash.Update(pCreateInfo->pipelineInfo.tes.options);
-    hash.Update(pCreateInfo->pipelineInfo.tcs.options);
-    hash.Update(pCreateInfo->pipelineInfo.gs.options);
-    hash.Update(pCreateInfo->pipelineInfo.mesh.options);
-    hash.Update(pCreateInfo->pipelineInfo.fs.options);
-    hash.Update(pCreateInfo->pipelineInfo.options);
-    hash.Update(pCreateInfo->pipelineInfo.nggState);
-    hash.Update(pCreateInfo->dbFormat);
-    hash.Update(pCreateInfo->pipelineInfo.dynamicVertexStride);
-    hash.Update(pCreateInfo->pipelineInfo.enableUberFetchShader);
-    hash.Update(pCreateInfo->pipelineInfo.rsState);
-
-    hash.Update(pCreateInfo->pBinaryMetadata->pointSizeUsed);
-
-    hash.Finalize(pCacheId->bytes);
-}
-
-// =====================================================================================================================
 void PipelineCompiler::GetColorExportShaderCacheId(
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
     Util::MetroHash::Hash*            pCacheId)
@@ -4914,34 +4835,6 @@ void PipelineCompiler::GetColorExportShaderCacheId(
                                             pCreateInfo->pBinaryMetadata->fsOutputMetaDataSize);
     hash.Finalize(pCacheId->bytes);
 }
-
-#if VKI_RAY_TRACING
-// =====================================================================================================================
-void PipelineCompiler::GetRayTracingPipelineCacheId(
-    uint32_t                            deviceIdx,
-    uint32_t                            numDevices,
-    RayTracingPipelineBinaryCreateInfo* pCreateInfo,
-    uint64_t                            pipelineHash,
-    const Util::MetroHash::Hash&        settingsHash,
-    Util::MetroHash::Hash*              pCacheId)
-{
-    Util::MetroHash128 hash = {};
-
-    GetCommonPipelineCacheId(
-        deviceIdx,
-        pCreateInfo->flags,
-        pCreateInfo->pPipelineProfileKey,
-        pCreateInfo->compilerType,
-        pipelineHash,
-        settingsHash,
-        &hash);
-
-    hash.Update(numDevices);
-    hash.Update(pCreateInfo->pipelineInfo.options);
-
-    hash.Finalize(pCacheId->bytes);
-}
-#endif
 
 // =====================================================================================================================
 void PipelineCompiler::BuildPipelineInternalBufferData(

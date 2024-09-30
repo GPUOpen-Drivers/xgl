@@ -72,6 +72,20 @@ struct PipelineBinaryInfo
     Util::MetroHash::Hash binaryHash;
 };
 
+constexpr uint32 MaxPipelineBinaryInfoCount = Util::Max(MaxPalDevices, static_cast<uint32>(GraphicsLibraryCount));
+
+// If a pipeline is created with VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR set, it must retain its binaries so that we
+// can create VkPipelineBinaryKHR objects from it at any time. We can't rely on our in-memory cache, because it can be
+// disabled or have its entries evicted.  This struct lets the pipeline store up to MaxPalDevices binaries and retrieve
+// them by key or device index.
+struct PipelineBinaryStorage
+{
+    // For monolithic pipelines this stores a single packed blob per device (same as how caching works).  For graphics
+    // pipeline libraries, this stores an elf binary blob per graphics library type.
+    PipelineBinaryInfo binaryInfo[MaxPipelineBinaryInfoCount];
+    uint32             binaryCount;
+};
+
 enum class DynamicStatesInternal : uint32_t
 {
     Viewport = 0,
@@ -133,6 +147,7 @@ enum class DynamicStatesInternal : uint32_t
 struct PipelineExtStructs
 {
     const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfoEXT;
+    const VkPipelineBinaryInfoKHR* pPipelineBinaryInfoKHR;
 };
 
 // =====================================================================================================================
@@ -243,6 +258,24 @@ public:
         Util::MetroHash::Hash*       pCacheId
     );
 
+    const PipelineBinaryStorage* GetBinaryStorage() const
+        { return m_pBinaryStorage; }
+
+    // See the implementation note about memory ownership behavior.
+    static void InsertBinaryData(
+        PipelineBinaryStorage*          pBinaryStorage,
+        const uint32                    binaryIndex,
+        const Util::MetroHash::Hash&    key,
+        const size_t                    dataSize,
+        const void*                     pData);
+
+    VkResult FreeBinaryStorage(
+        const VkAllocationCallbacks*    pAllocator);
+
+    static void FreeBinaryStorage(
+        PipelineBinaryStorage*          pBinaryStorage,
+        const VkAllocationCallbacks*    pAllocator);
+
     static void FreeTempModules(
         const Device*       pDevice,
         const uint32_t      maxStageCount,
@@ -259,6 +292,7 @@ protected:
     void Init(
         Pal::IPipeline**            pPalPipeline,
         const PipelineLayout*       pLayout,
+        PipelineBinaryStorage*      pBinaryStorage,
         uint64_t                    staticStateMask,
 #if VKI_RAY_TRACING
         uint32_t                     dispatchRaysUserDataOffset,
@@ -310,6 +344,7 @@ protected:
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Pipeline);
 
+    PipelineBinaryStorage*              m_pBinaryStorage;
     PrintfFormatMap*                    m_pFormatStrings;
 };
 

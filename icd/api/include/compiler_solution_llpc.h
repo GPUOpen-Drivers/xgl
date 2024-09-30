@@ -86,8 +86,7 @@ public:
 
     virtual VkResult BuildShaderModule(
         const Device*                pDevice,
-        VkShaderModuleCreateFlags    flags,
-        VkShaderModuleCreateFlags    internalShaderFlags,
+        ShaderModuleFlags            flags,
         const Vkgc::BinaryData&      shaderBinary,
         ShaderModuleHandle*          pShaderModule,
         const PipelineOptimizerKey&  profileKey) override;
@@ -111,6 +110,8 @@ public:
         PipelineCache*                    pPipelineCache,
         GraphicsLibraryType               gplType,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        const Vkgc::BinaryData*           pProvidedBinary,
+        const Util::MetroHash::Hash*      pProvidedBinaryHash,
         void*                             pPipelineDumpHandle,
         GplModuleState*                   pModuleState) override;
 

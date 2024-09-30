@@ -102,6 +102,69 @@ static_assert(VK_ARRAY_SIZE(HwStageNames) == static_cast<uint32_t>(Util::Abi::Ha
 static constexpr uint32_t ExecutableStatisticsCount = 5;
 
 // =====================================================================================================================
+// Add binary data to this storage.
+// To avoid redundant copies and memory allocation, it's expected that the calling code will allocate and prepare
+// the binary. A Vulkan allocator must be used to allocate the memory at pData pointer.
+// PipelineBinaryStorage will take ownership of the pointer and later free it in Free() call.
+void Pipeline::InsertBinaryData(
+    PipelineBinaryStorage*          pBinaryStorage,
+    const uint32                    binaryIndex,
+    const Util::MetroHash::Hash&    key,
+    const size_t                    dataSize,
+    const void*                     pData)
+{
+    VK_ASSERT(pBinaryStorage != nullptr);
+    VK_ASSERT(binaryIndex < VK_ARRAY_SIZE(pBinaryStorage->binaryInfo));
+    // Expect that each entry is added only once
+    VK_ASSERT((pBinaryStorage->binaryInfo[binaryIndex].binaryHash.qwords[0] == 0) &&
+              (pBinaryStorage->binaryInfo[binaryIndex].binaryHash.qwords[1] == 0));
+
+    pBinaryStorage->binaryInfo[binaryIndex].binaryHash              = key;
+    pBinaryStorage->binaryInfo[binaryIndex].pipelineBinary.codeSize = dataSize;
+    pBinaryStorage->binaryInfo[binaryIndex].pipelineBinary.pCode    = pData;
+
+    ++pBinaryStorage->binaryCount;
+}
+
+// =====================================================================================================================
+// Frees the previously inserted pipeline binaries.
+VkResult Pipeline::FreeBinaryStorage(
+    const VkAllocationCallbacks*    pAllocator)
+{
+    VkResult result = VK_SUCCESS;
+
+    if (m_pBinaryStorage != nullptr)
+    {
+        Pipeline::FreeBinaryStorage(m_pBinaryStorage, pAllocator);
+        m_pBinaryStorage = nullptr;
+    }
+    else
+    {
+        result = VK_ERROR_UNKNOWN;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Frees the pipeline binaries.
+void Pipeline::FreeBinaryStorage(
+    PipelineBinaryStorage*          pBinaryStorage,
+    const VkAllocationCallbacks*    pAllocator)
+{
+    VK_ASSERT(pBinaryStorage != nullptr);
+
+    for (uint32_t binaryIndex = 0; binaryIndex < VK_ARRAY_SIZE(pBinaryStorage->binaryInfo); ++binaryIndex)
+    {
+        if (pBinaryStorage->binaryInfo[binaryIndex].pipelineBinary.pCode != nullptr)
+        {
+            auto pMemory = const_cast<void*>(pBinaryStorage->binaryInfo[binaryIndex].pipelineBinary.pCode);
+            pAllocator->pfnFree(pAllocator->pUserData, pMemory);
+        }
+    }
+}
+
+// =====================================================================================================================
 // Filter VkPipelineCreateFlags2KHR to only values used for pipeline caching
 VkPipelineCreateFlags2KHR Pipeline::GetCacheIdControlFlags(
     VkPipelineCreateFlags2KHR in)
@@ -317,7 +380,7 @@ VkResult Pipeline::BuildShaderStageInfo(
             // creation of pipeline.
             VK_ASSERT(pTempModules != nullptr);
 
-            VkShaderModuleCreateFlags flags           = 0;
+            ShaderModuleFlags         flags           = 0;
             Vkgc::BinaryData          shaderBinary    = {};
             Pal::ShaderHash           codeHash        = {};
             PipelineCreationFeedback* pShaderFeedback = (pFeedbacks == nullptr) ? nullptr : pFeedbacks + outIdx;
@@ -335,7 +398,7 @@ VkResult Pipeline::BuildShaderStageInfo(
 
             if (pShaderModuleCreateInfo != nullptr)
             {
-                flags                 = pShaderModuleCreateInfo->flags;
+                flags                 = ShaderModule::ConvertVkShaderModuleCreateFlags(pShaderModuleCreateInfo->flags);
                 shaderBinary.codeSize = pShaderModuleCreateInfo->codeSize;
                 shaderBinary.pCode    = pShaderModuleCreateInfo->pCode;
 
@@ -347,8 +410,7 @@ VkResult Pipeline::BuildShaderStageInfo(
                 {
                     result = pCompiler->BuildShaderModule(
                         pDevice,
-                        flags,
-                        VK_INTERNAL_SHADER_FLAGS_FORCE_UNCACHED_BIT,
+                        flags | ShaderModuleForceUncached,
                         shaderBinary,
                         &pTempModules[outIdx]);
 
@@ -435,6 +497,11 @@ void Pipeline::HandleExtensionStructs(
                 static_cast<const VkPipelineCreationFeedbackCreateInfoEXT*>(pNext);
             break;
         }
+        case VK_STRUCTURE_TYPE_PIPELINE_BINARY_INFO_KHR:
+        {
+            pExtStructs->pPipelineBinaryInfoKHR = static_cast<const VkPipelineBinaryInfoKHR*>(pNext);
+            break;
+        }
         default:
             break;
         }
@@ -460,6 +527,7 @@ Pipeline::Pipeline(
     m_hasRayTracing(hasRayTracing),
     m_dispatchRaysUserDataOffset(0),
 #endif
+    m_pBinaryStorage(nullptr),
     m_pFormatStrings(nullptr)
 {
     memset(m_pPalPipeline, 0, sizeof(m_pPalPipeline));
@@ -468,6 +536,7 @@ Pipeline::Pipeline(
 void Pipeline::Init(
     Pal::IPipeline**             pPalPipeline,
     const PipelineLayout*        pLayout,
+    PipelineBinaryStorage*       pBinaryStorage,
     uint64_t                     staticStateMask,
 #if VKI_RAY_TRACING
     uint32_t                     dispatchRaysUserDataOffset,
@@ -475,6 +544,7 @@ void Pipeline::Init(
     const Util::MetroHash::Hash& cacheHash,
     uint64_t                     apiHash)
 {
+    m_pBinaryStorage             = pBinaryStorage;
     m_staticStateMask            = staticStateMask;
     m_cacheHash                  = cacheHash;
     m_apiHash                    = apiHash;
@@ -521,6 +591,11 @@ VkResult Pipeline::Destroy(
          deviceIdx++)
     {
         m_pPalPipeline[deviceIdx]->Destroy();
+    }
+
+    if (m_pBinaryStorage != nullptr)
+    {
+        FreeBinaryStorage(m_pBinaryStorage, pAllocator);
     }
 
     if (m_pFormatStrings != nullptr)

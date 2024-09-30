@@ -49,43 +49,23 @@ macro(xgl_set_compile_definitions)
         target_compile_definitions(xgl PRIVATE ICD_BUILD_LLPC)
     endif()
 
+#if VKI_ENABLE_DEBUG_BARRIERS
+    if(VKI_ENABLE_DEBUG_BARRIERS)
+        target_compile_definitions(xgl PRIVATE VKI_ENABLE_DEBUG_BARRIERS)
+    endif()
+#endif
+#if VKI_RUNTIME_APP_PROFILE
+    if(VKI_RUNTIME_APP_PROFILE)
+        target_compile_definitions(xgl PRIVATE VKI_RUNTIME_APP_PROFILE)
+    endif()
+#endif
+#if VKI_DEVMODE_COMPILER_SETTINGS
+    if(VKI_DEVMODE_COMPILER_SETTINGS)
+        target_compile_definitions(xgl PRIVATE VKI_DEVMODE_COMPILER_SETTINGS)
+    endif()
+#endif
+
     target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX9=1)
-
-    if(XGL_BUILD_NAVI12)
-        target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI12=1)
-    endif()
-
-#if VKI_BUILD_GFX11
-    if(XGL_BUILD_GFX11)
-        target_compile_definitions(xgl PRIVATE VKI_BUILD_GFX11=1)
-    endif()
-#endif
-
-#if VKI_BUILD_NAVI31
-    if(XGL_BUILD_NAVI31)
-        target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI31=1)
-    endif()
-#endif
-
-#if VKI_BUILD_NAVI32
-    if(XGL_BUILD_NAVI32)
-        target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI32=1)
-    endif()
-#endif
-
-#if VKI_BUILD_NAVI33
-    if(XGL_BUILD_NAVI33)
-        target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI33=1)
-    endif()
-#endif
-
-    if(XGL_BUILD_PHOENIX1)
-        target_compile_definitions(xgl PRIVATE VKI_BUILD_PHOENIX1=1)
-    endif()
-
-    if(XGL_BUILD_PHOENIX2)
-        target_compile_definitions(xgl PRIVATE VKI_BUILD_PHOENIX2=1)
-    endif()
 
 #if VKI_BUILD_GFX115
     if(XGL_BUILD_GFX115)
@@ -99,29 +79,11 @@ macro(xgl_set_compile_definitions)
     endif()
 #endif
 
-    if(XGL_BUILD_REMBRANDT)
-        target_compile_definitions(xgl PRIVATE VKI_BUILD_REMBRANDT=1)
-    endif()
-
-    if(XGL_BUILD_RAPHAEL)
-        target_compile_definitions(xgl PRIVATE VKI_BUILD_RAPHAEL=1)
-    endif()
-
-    if(XGL_BUILD_MENDOCINO)
-        target_compile_definitions(xgl PRIVATE VKI_BUILD_MENDOCINO=1)
-    endif()
-
 #if VKI_RAY_TRACING
     if (VKI_RAY_TRACING)
         target_compile_definitions(xgl PRIVATE VKI_RAY_TRACING=1)
         target_compile_definitions(xgl PRIVATE GPURT_CLIENT_CONVERT_BUILD_PARAMS=1)
         target_compile_definitions(xgl PRIVATE GPURT_CLIENT_API_VULKAN=1)
-    endif()
-#endif
-
-#if VKI_KHR_DISPLAY
-    if(VKI_KHR_DISPLAY)
-        target_compile_definitions(xgl PRIVATE VKI_KHR_DISPLAY)
     endif()
 #endif
 

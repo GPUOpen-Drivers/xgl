@@ -227,6 +227,7 @@ protected:
         Device* const                          pDevice,
         Pal::IPipeline**                       pPalPipeline,
         const PipelineLayout*                  pLayout,
+        PipelineBinaryStorage*                 pBinaryStorage,
         const GraphicsPipelineObjectImmedInfo& immedInfo,
         uint64_t                               staticStateMask,
         GraphicsPipelineObjectFlags            flags,
@@ -277,6 +278,7 @@ protected:
         PipelineCache*                      pPipelineCache,
         const Util::MetroHash::Hash*        pCacheIds,
         uint64_t                            apiPsoHash,
+        const PipelineBinaryStorage&        binaryStorage,
         GraphicsPipelineObjectCreateInfo*   pObjectCreateInfo,
         VkPipeline*                         pPipeline);
 

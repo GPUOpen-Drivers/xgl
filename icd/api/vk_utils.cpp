@@ -41,7 +41,10 @@ namespace utils
 // Get driver build time hash
 uint32_t GetBuildTimeHash()
 {
-    return Util::HashLiteralString(__DATE__ __TIME__);
+    Util::BuildId buildId;
+    Util::GetCurrentLibraryBuildId(&buildId);
+
+    return Util::HashString((const char*)(buildId.data), sizeof(buildId.data));
 }
 
 // =====================================================================================================================

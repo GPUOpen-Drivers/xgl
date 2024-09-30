@@ -34,17 +34,6 @@
 
 namespace Pal { enum class ResourceMappingNodeType : Pal::uint32; }
 
-#if VKI_RAY_TRACING
-#define VK_INTERNAL_SHADER_FLAGS_RAY_TRACING_INTERNAL_SHADER_BIT 0x80000000u
-#endif
-
-// To support delayed conversion using this flag, DelayedBuildShaderModule must be called for each shader module
-// after pipeline cache lookup and if missed, before pipeline creation.
-#define VK_INTERNAL_SHADER_FLAGS_ALLOW_DELAY_CONVERSION_BIT       0x40000000u
-
-#define VK_INTERNAL_SHADER_FLAGS_INTERNAL_SHADER_BIT              0x20000000u
-#define VK_INTERNAL_SHADER_FLAGS_FORCE_UNCACHED_BIT               0x10000000u
-
 namespace vk
 {
 
@@ -55,6 +44,19 @@ class Instance;
 typedef void* (VKAPI_CALL *BilShaderAllocFun)(Instance* pInstance, void* pUserData, size_t size);
 
 extern void* VKAPI_CALL AllocateShaderOutput(void* pInstance, void* pUserData, size_t size);
+
+/// Flag enum to handle any VkShaderModuleCreateFlags in addition to driver internal flags.
+enum ShaderModuleFlag : uint32
+{
+    ShaderModuleForceUncached            = 0x1, //< Don't allow caching for this shader module.
+    ShaderModuleAllowDelayConversion     = 0x2, //< Skip conversion unless the pipeline cache lookup has missed where
+                                                //  DelayedBuildShaderModule is called before pipeline creation.
+    ShaderModuleInternalShader           = 0x4, //< Shader module is not app-owned but from the driver itself.
+#if VKI_RAY_TRACING
+    ShaderModuleInternalRayTracingShader = 0x8, //< RT shader module is not app-owned but from the driver itself.
+#endif
+};
+typedef uint32_t ShaderModuleFlags;
 
 // =====================================================================================================================
 // Implementation of a Vulkan shader module
@@ -97,6 +99,13 @@ public:
 
     static void* GetFirstValidShaderData(const ShaderModuleHandle* pHandle);
 
+    static ShaderModuleFlags ConvertVkShaderModuleCreateFlags(VkShaderModuleCreateFlags flags)
+    {
+        // There aren't any VkShaderModuleCreateFlags yet, but this function should be implemented when one is added.
+        VK_ASSERT(flags == 0);
+        return 0;
+    }
+
 protected:
     ShaderModule(size_t codeSize, const void* pCode, VkShaderModuleCreateFlags flags);
     VkResult Init(Device* pDevice);
@@ -105,7 +114,7 @@ protected:
     const void*                m_pCode;
     ShaderModuleHandle         m_handle;
     Pal::ShaderHash            m_codeHash;
-    VkShaderModuleCreateFlags  m_flags;
+    ShaderModuleFlags          m_flags;
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(ShaderModule);

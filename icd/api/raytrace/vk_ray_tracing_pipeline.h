@@ -30,6 +30,7 @@
 
 #include "include/vk_pipeline.h"
 #include "include/internal_mem_mgr.h"
+#include "include/vk_pipeline_binary.h"
 
 #include "palPipeline.h"
 #include "palVector.h"
@@ -256,12 +257,7 @@ public:
                                            uint32_t  pipelineFlags
 );
 
-    void GetDispatchSize(uint32_t* pDispatchSizeX,
-                         uint32_t* pDispatchSizeY,
-                         uint32_t* pDispatchSizeZ,
-                         uint32_t  width,
-                         uint32_t  height,
-                         uint32_t  depth) const;
+    Pal::DispatchDims GetDispatchSize(Pal::DispatchDims) const;
 
     uint32_t GetTotalShaderCount() const
         { return m_totalShaderCount; }
@@ -289,6 +285,7 @@ protected:
         uint32_t                             shaderLibraryCount,
         Pal::IShaderLibrary**                ppPalShaderLibrary,
         const PipelineLayout*                pPipelineLayout,
+        PipelineBinaryStorage*               pBinaryStorage,
         const ShaderOptimizerKey*            pShaderOptKeys,
         const ImmedInfo&                     immedInfo,
         uint64_t                             staticStateMask,

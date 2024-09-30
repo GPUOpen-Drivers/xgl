@@ -188,6 +188,9 @@ namespace vk
     // The maximum number of sets that can appear in a pipeline layout
     static const uint32_t MaxDescriptorSets = 32;
 
+    // The maximum size of a buffer SRD
+    static const uint32_t MaxBufferSrdSize = 8;
+
     // The maximum size of push constants in bytes
     static const uint32_t MaxPushConstants = 256;
 

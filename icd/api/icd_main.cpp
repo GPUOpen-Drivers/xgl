@@ -29,6 +29,8 @@
 ************************************************************************************************************************
 */
 
+#include <dd_settings_blob.h>
+
 #if defined(__unix__) & (__GNUC__ == 5)
 
 #include <ostream>
@@ -73,3 +75,10 @@ namespace std {
 }
 
 #endif
+
+extern "C" unsigned int GetSettingsBlobsAll(
+    unsigned char* pBuffer,
+    size_t         bufferSize)
+{
+    return DevDriver::SettingsBlobNode::GetAllSettingsBlobs(pBuffer, bufferSize);
+}

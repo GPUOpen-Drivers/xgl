@@ -445,7 +445,9 @@ VkResult TimestampQueryPool::Create(
 
     // Allocate system memory
     size_t apiSize   = sizeof(TimestampQueryPool);
-    size_t viewSize  = pDevice->GetProperties().descriptorSizes.bufferView;
+    size_t viewSize  = pDevice->UseStridedCopyQueryResults() ?
+                       pDevice->GetProperties().descriptorSizes.untypedBufferView :
+                       pDevice->GetProperties().descriptorSizes.typedBufferView;
     size_t totalSize = apiSize + (viewSize * pDevice->NumPalDevices());
     void*  pMemory   = nullptr;
     const uint32_t slotSize = pDevice->GetProperties().timestampQueryPoolSlotSize;
@@ -642,7 +644,7 @@ VkResult QueryPoolWithStorageView::Initialize(
         }
         else
         {
-            memset(pViewMem, 0, m_pDevice->GetProperties().descriptorSizes.bufferView);
+            memset(pViewMem, 0, viewSize * m_pDevice->NumPalDevices());
         }
     }
 
@@ -822,7 +824,9 @@ VkResult AccelerationStructureQueryPool::Create(
 
     // Allocate system memory
     size_t apiSize   = sizeof(AccelerationStructureQueryPool);
-    size_t viewSize  = pDevice->GetProperties().descriptorSizes.bufferView;
+    size_t viewSize = pDevice->UseStridedCopyQueryResults() ?
+                      pDevice->GetProperties().descriptorSizes.untypedBufferView :
+                      pDevice->GetProperties().descriptorSizes.typedBufferView;
     size_t totalSize = apiSize + (viewSize * pDevice->NumPalDevices());
     void*  pMemory   = nullptr;
 

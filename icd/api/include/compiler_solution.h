@@ -57,6 +57,8 @@ struct GraphicsPipelineLibraryInfo;
 struct DeferredWorkload;
 #endif
 
+typedef uint32_t ShaderModuleFlags;
+
 enum FreeCompilerBinary : uint32_t
 {
     FreeWithCompiler          = 0,
@@ -279,8 +281,7 @@ public:
 
     virtual VkResult BuildShaderModule(
         const Device*                pDevice,
-        VkShaderModuleCreateFlags    flags,
-        VkShaderModuleCreateFlags    internalShaderFlags,
+        ShaderModuleFlags            flags,
         const Vkgc::BinaryData&      shaderBinary,
         ShaderModuleHandle*          pShaderModule,
         const PipelineOptimizerKey&  profileKey) = 0;
@@ -304,6 +305,8 @@ public:
         PipelineCache*                    pPipelineCache,
         GraphicsLibraryType               gplType,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        const Vkgc::BinaryData*           pProvidedBinary,
+        const Util::MetroHash::Hash*      pProvidedBinaryHash,
         void*                             pPipelineDumpHandle,
         GplModuleState*                   pModuleState) = 0;
 
@@ -388,6 +391,10 @@ protected:
         bool                           hitCache,
         bool                           hitAppCache,
         Vkgc::BinaryData*              pCacheBinary);
+
+    bool ClonePipelineBinary(
+        const Vkgc::BinaryData* pProvidedBinary,
+        Vkgc::BinaryData*       pNewBinary);
 
     PhysicalDevice*      m_pPhysicalDevice;      // Vulkan physical device object
     Vkgc::GfxIpVersion   m_gfxIp;                // Graphics IP version info, used by Vkgc

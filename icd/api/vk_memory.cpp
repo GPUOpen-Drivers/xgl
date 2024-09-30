@@ -304,7 +304,8 @@ VkResult Memory::Create(
         pNext = pHeader->pNext;
     }
 
-    // For the descriptor table VA range for descriptor buffers
+    // Use the descriptor table VA range for descriptor buffers because we need to program descriptors
+    // with a single (32-bit) user data entry and there is no such guarentee with the default VA range.
     if (pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMaskForDescriptorBuffers() &
         (1 << pAllocInfo->memoryTypeIndex))
     {

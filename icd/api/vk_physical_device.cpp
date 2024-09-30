@@ -726,7 +726,7 @@ void PhysicalDevice::InitializePlatformKey(
 // - Be a valid UUID generated using normal means
 //
 // Settings:
-// - markPipelineCacheWithBuildTimestamp: decides whether to mix in __DATE__ __TIME__ from compiler to UUID
+// - markPipelineCacheWithBuildTimestamp: decides whether to mix in current library BuildId from compiler to UUID
 // - useGlobalCacheId                   : decides if UUID should be portable between machines
 //
 static void GenerateCacheUuid(
@@ -1667,14 +1667,7 @@ size_t PhysicalDevice::GetFeatures(
         pFeatures->shaderInt64                              =
             (PalProperties().gfxipProperties.flags.support64BitInstructions ? VK_TRUE : VK_FALSE);
 
-        if (Is16BitInstructionsSupported())
-        {
-            pFeatures->shaderInt16 = VK_TRUE;
-        }
-        else
-        {
-            pFeatures->shaderInt16 = VK_FALSE;
-        }
+        pFeatures->shaderInt16 = VK_TRUE;
 
         if (settings.optEnablePrt)
         {
@@ -4399,12 +4392,10 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_BORDER_COLOR_SWIZZLE));
     }
 
-#if VKI_BUILD_GFX11
     if ((pPhysicalDevice == nullptr) || (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp11_0))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PRIMITIVES_GENERATED_QUERY));
     }
-#endif
 
     if (IsKhrCooperativeMatrixSupported(pPhysicalDevice))
     {
@@ -4461,6 +4452,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
      availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_NON_SEAMLESS_CUBE_MAP));
      availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_MODULE_IDENTIFIER));
+
+     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PIPELINE_BINARY));
 
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_MAXIMAL_RECONVERGENCE));
 
@@ -5138,14 +5131,12 @@ void PhysicalDevice::GetPhysicalDeviceDotProduct8Properties(
     *pIntegerDotProductAccumulatingSaturating8BitUnsignedAccelerated        = int8DotSupport;
     *pIntegerDotProductAccumulatingSaturating8BitSignedAccelerated          = int8DotSupport;
 
-#if VKI_BUILD_GFX11
     if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
     {
         *pIntegerDotProduct8BitMixedSignednessAccelerated = VK_TRUE;
         *pIntegerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated = VK_TRUE;
     }
     else
-#endif
     {
         *pIntegerDotProduct8BitMixedSignednessAccelerated = VK_FALSE;
         *pIntegerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated = VK_FALSE;
@@ -5170,14 +5161,12 @@ void PhysicalDevice::GetPhysicalDeviceDotProduct4x8Properties(
     *pIntegerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated        = int8DotSupport;
     *pIntegerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated          = int8DotSupport;
 
-#if VKI_BUILD_GFX11
-    if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
+    if (PalProperties().gfxipProperties.flags.supportMixedSignIntDot)
     {
         *pIntegerDotProduct4x8BitPackedMixedSignednessAccelerated = VK_TRUE;
         *pIntegerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated = VK_TRUE;
     }
     else
-#endif
     {
         *pIntegerDotProduct4x8BitPackedMixedSignednessAccelerated = VK_FALSE;
         *pIntegerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated = VK_FALSE;
@@ -5195,9 +5184,7 @@ void PhysicalDevice::GetPhysicalDeviceDotProduct16Properties(
 ) const
 {
     const VkBool32 int16DotSupport = (Is16BitInstructionsSupported()
-#if VKI_BUILD_GFX11
         && (PalProperties().gfxLevel < Pal::GfxIpLevel::GfxIp11_0)
-#endif
 #if VKI_BUILD_GFX115
         && (PalProperties().gfxLevel < Pal::GfxIpLevel::GfxIp11_5)
 #endif
@@ -5267,6 +5254,54 @@ void PhysicalDevice::GetDevicePropertiesMaxBufferSize(
 ) const
 {
     *pMaxBufferSize = 2u * 1024u * 1024u * 1024u; // TODO: replace with actual size
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceLineSubPixelPrecisionBits(
+    uint32_t* pLineSubPixelPrecisionBits
+) const
+{
+    *pLineSubPixelPrecisionBits = Pal::SubPixelBits;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceVertexAttributeDivisorProperties(
+    uint32_t* pMaxVertexAttribDivisor,
+    VkBool32* pSupportsNonZeroFirstInstance
+) const
+{
+    *pMaxVertexAttribDivisor       = UINT32_MAX;
+    *pSupportsNonZeroFirstInstance = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceMaintenance5Properties(
+    VkBool32* pEarlyFragmentMultisampleCoverageAfterSampleCounting,
+    VkBool32* pEarlyFragmentSampleMaskTestBeforeSampleCounting,
+    VkBool32* pDepthStencilSwizzleOneSupport,
+    VkBool32* pPolygonModePointSize,
+    VkBool32* pNonStrictSinglePixelWideLinesUseParallelogram,
+    VkBool32* pNonStrictWideLinesUseParallelogram
+) const
+{
+    *pEarlyFragmentMultisampleCoverageAfterSampleCounting = VK_TRUE;
+    *pEarlyFragmentSampleMaskTestBeforeSampleCounting     = VK_TRUE;
+    *pDepthStencilSwizzleOneSupport                       = VK_TRUE;
+    *pPolygonModePointSize                                = VK_TRUE;
+    *pNonStrictSinglePixelWideLinesUseParallelogram       = VK_TRUE;
+    *pNonStrictWideLinesUseParallelogram                  = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceMaintenance6Properties(
+    VkBool32* pBlockTexelViewCompatibleMultipleLayers,
+    uint32_t* pMaxCombinedImageSamplerDescriptorCount,
+    VkBool32* pFragmentShadingRateClampCombinerInputs
+) const
+{
+    *pBlockTexelViewCompatibleMultipleLayers = VK_TRUE;
+    *pMaxCombinedImageSamplerDescriptorCount = MaxCombinedImageSamplerDescriptorCount;
+    *pFragmentShadingRateClampCombinerInputs = VK_TRUE;
 }
 
 // =====================================================================================================================
@@ -5544,14 +5579,7 @@ void PhysicalDevice::GetPhysicalDeviceSamplerYcbcrConversionFeatures(
     VkBool32* pSamplerYcbcrConversion
     ) const
 {
-    if (IsExtensionSupported(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION))
-    {
-        *pSamplerYcbcrConversion = VK_TRUE;
-    }
-    else
-    {
-        *pSamplerYcbcrConversion = VK_FALSE;
-    }
+    *pSamplerYcbcrConversion = VK_TRUE;
 }
 
 // =====================================================================================================================
@@ -5721,6 +5749,23 @@ void PhysicalDevice::GetPhysicalDeviceVulkanMemoryModelFeatures(
     *pVulkanMemoryModelDeviceScope                  = VK_TRUE;
     *pVulkanMemoryModelAvailabilityVisibilityChains = VK_FALSE;
 
+}
+
+void PhysicalDevice::GetPhysicalDeviceLineRasterizationFeatures(
+    VkBool32* pRectangularLines,
+    VkBool32* pBresenhamLines,
+    VkBool32* pSmoothLines,
+    VkBool32* pStippledRectangularLines,
+    VkBool32* pStippledBresenhamLines,
+    VkBool32* pStippledSmoothLines
+) const
+{
+    *pRectangularLines         = VK_FALSE;
+    *pBresenhamLines           = VK_TRUE;
+    *pSmoothLines              = VK_FALSE;
+    *pStippledRectangularLines = VK_FALSE;
+    *pStippledBresenhamLines   = VK_TRUE;
+    *pStippledSmoothLines      = VK_FALSE;
 }
 
 // =====================================================================================================================
@@ -6230,13 +6275,12 @@ size_t PhysicalDevice::GetFeatures2(
 
                 if (updateFeatures)
                 {
-                    pExtInfo->rectangularLines = VK_FALSE;
-                    pExtInfo->bresenhamLines   = VK_TRUE;
-                    pExtInfo->smoothLines      = VK_FALSE;
-
-                    pExtInfo->stippledRectangularLines = VK_FALSE;
-                    pExtInfo->stippledBresenhamLines   = VK_TRUE;
-                    pExtInfo->stippledSmoothLines      = VK_FALSE;
+                    GetPhysicalDeviceLineRasterizationFeatures(&pExtInfo->rectangularLines,
+                                                               &pExtInfo->bresenhamLines,
+                                                               &pExtInfo->smoothLines,
+                                                               &pExtInfo->stippledRectangularLines,
+                                                               &pExtInfo->stippledBresenhamLines,
+                                                               &pExtInfo->stippledSmoothLines);
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6851,7 +6895,6 @@ size_t PhysicalDevice::GetFeatures2(
                 structSize = sizeof(*pExtInfo);
                 break;
             }
-
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT*>(pHeader);
@@ -7470,6 +7513,19 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePipelineBinaryFeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->pipelineBinaries = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures
@@ -7973,7 +8029,8 @@ void PhysicalDevice::GetDeviceProperties2(
         {
             auto* pProps = static_cast<VkPhysicalDeviceLineRasterizationPropertiesEXT*>(pNext);
 
-            pProps->lineSubPixelPrecisionBits = Pal::SubPixelBits;
+            GetPhysicalDeviceLineSubPixelPrecisionBits(
+                &pProps->lineSubPixelPrecisionBits);
             break;
         }
 
@@ -8264,25 +8321,26 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->samplerCaptureReplayDescriptorDataSize               = sizeof(uint32_t);
             pProps->accelerationStructureCaptureReplayDescriptorDataSize = sizeof(uint32_t);
 
-            VK_ASSERT(palProps.gfxipProperties.srdSizes.sampler    <= 32);
-            VK_ASSERT(palProps.gfxipProperties.srdSizes.imageView  <= 64);
-            VK_ASSERT(palProps.gfxipProperties.srdSizes.bufferView <= 64);
+            VK_ASSERT(palProps.gfxipProperties.srdSizes.sampler           <= 32);
+            VK_ASSERT(palProps.gfxipProperties.srdSizes.imageView         <= 64);
+            VK_ASSERT(palProps.gfxipProperties.srdSizes.typedBufferView   <= 64);
+            VK_ASSERT(palProps.gfxipProperties.srdSizes.untypedBufferView <= 64);
 
             pProps->samplerDescriptorSize                    = palProps.gfxipProperties.srdSizes.sampler;
             pProps->combinedImageSamplerDescriptorSize       = palProps.gfxipProperties.srdSizes.sampler +
                                                                palProps.gfxipProperties.srdSizes.imageView;
             pProps->sampledImageDescriptorSize               = palProps.gfxipProperties.srdSizes.imageView;
             pProps->storageImageDescriptorSize               = palProps.gfxipProperties.srdSizes.imageView;
-            pProps->uniformTexelBufferDescriptorSize         = palProps.gfxipProperties.srdSizes.bufferView;
-            pProps->robustUniformTexelBufferDescriptorSize   = palProps.gfxipProperties.srdSizes.bufferView;
-            pProps->storageTexelBufferDescriptorSize         = palProps.gfxipProperties.srdSizes.bufferView;
-            pProps->robustStorageTexelBufferDescriptorSize   = palProps.gfxipProperties.srdSizes.bufferView;
-            pProps->uniformBufferDescriptorSize              = palProps.gfxipProperties.srdSizes.bufferView;
-            pProps->robustUniformBufferDescriptorSize        = palProps.gfxipProperties.srdSizes.bufferView;
-            pProps->storageBufferDescriptorSize              = palProps.gfxipProperties.srdSizes.bufferView;
-            pProps->robustStorageBufferDescriptorSize        = palProps.gfxipProperties.srdSizes.bufferView;
+            pProps->uniformTexelBufferDescriptorSize         = palProps.gfxipProperties.srdSizes.typedBufferView;
+            pProps->robustUniformTexelBufferDescriptorSize   = palProps.gfxipProperties.srdSizes.typedBufferView;
+            pProps->storageTexelBufferDescriptorSize         = palProps.gfxipProperties.srdSizes.typedBufferView;
+            pProps->robustStorageTexelBufferDescriptorSize   = palProps.gfxipProperties.srdSizes.typedBufferView;
+            pProps->uniformBufferDescriptorSize              = palProps.gfxipProperties.srdSizes.untypedBufferView;
+            pProps->robustUniformBufferDescriptorSize        = palProps.gfxipProperties.srdSizes.untypedBufferView;
+            pProps->storageBufferDescriptorSize              = palProps.gfxipProperties.srdSizes.untypedBufferView;
+            pProps->robustStorageBufferDescriptorSize        = palProps.gfxipProperties.srdSizes.untypedBufferView;
             pProps->inputAttachmentDescriptorSize            = palProps.gfxipProperties.srdSizes.imageView;
-            pProps->accelerationStructureDescriptorSize      = palProps.gfxipProperties.srdSizes.bufferView;
+            pProps->accelerationStructureDescriptorSize      = palProps.gfxipProperties.srdSizes.untypedBufferView;
             pProps->maxSamplerDescriptorBufferRange          = UINT_MAX;
             pProps->maxResourceDescriptorBufferRange         = UINT_MAX;
             pProps->resourceDescriptorBufferAddressSpaceSize = UINT_MAX;
@@ -8334,9 +8392,9 @@ void PhysicalDevice::GetDeviceProperties2(
         {
             auto* pProps = static_cast<VkPhysicalDeviceMaintenance6PropertiesKHR*>(pNext);
 
-            pProps->blockTexelViewCompatibleMultipleLayers = VK_TRUE;
-            pProps->maxCombinedImageSamplerDescriptorCount = MaxCombinedImageSamplerDescriptorCount;
-            pProps->fragmentShadingRateClampCombinerInputs = VK_TRUE;
+            GetPhysicalDeviceMaintenance6Properties(&pProps->blockTexelViewCompatibleMultipleLayers,
+                                                    &pProps->maxCombinedImageSamplerDescriptorCount,
+                                                    &pProps->fragmentShadingRateClampCombinerInputs);
             break;
         }
 
@@ -8424,13 +8482,11 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->maxMeshOutputVertices                 = 256;
             pProps->maxMeshOutputPrimitives               = 256;
 
- #if VKI_BUILD_GFX11
             if (palProps.gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
             {
                 pProps->maxMeshOutputLayers               = m_limits.maxFramebufferLayers;
             }
             else
-#endif
             {
                 pProps->maxMeshOutputLayers               = 8;
             }
@@ -8487,8 +8543,8 @@ void PhysicalDevice::GetDeviceProperties2(
         {
             auto* pProps = static_cast<VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR*>(pNext);
 
-            pProps->maxVertexAttribDivisor       = UINT32_MAX;
-            pProps->supportsNonZeroFirstInstance = VK_TRUE;
+            GetPhysicalDeviceVertexAttributeDivisorProperties(&pProps->maxVertexAttribDivisor,
+                                                              &pProps->supportsNonZeroFirstInstance);
             break;
         }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT:
@@ -8512,6 +8568,27 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 #endif
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_PROPERTIES_KHR:
+        {
+            auto* pProps = static_cast<VkPhysicalDevicePipelineBinaryPropertiesKHR*>(pNext);
+            pProps->pipelineBinaryInternalCache            = VK_TRUE;
+            pProps->pipelineBinaryInternalCacheControl     = VK_FALSE;
+            pProps->pipelineBinaryPrefersInternalCache     = VK_FALSE;
+            pProps->pipelineBinaryCompressedData           = VK_FALSE;
+
+            if ((getenv(PipelineBinaryCache::EnvVarPath)             != nullptr) ||
+                (getenv(PipelineBinaryCache::EnvVarReadOnlyFileName) != nullptr))
+            {
+                pProps->pipelineBinaryPrecompiledInternalCache = VK_TRUE;
+            }
+            else
+            {
+                pProps->pipelineBinaryPrecompiledInternalCache = VK_FALSE;
+            }
+
+            break;
+        }
 
 #if VKI_COPY_MEMORY_INDIRECT
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_KHR:
@@ -8816,21 +8893,9 @@ static void VerifyLimits(
     VK_ASSERT(limits.maxImageDimension3D                   >= 256);
     VK_ASSERT(limits.maxImageDimensionCube                 >= 4096);
     VK_ASSERT(limits.maxImageArrayLayers                   >= 256);
-    VK_ASSERT(limits.maxTexelBufferElements                >= 65536);
     VK_ASSERT(limits.maxUniformBufferRange                 >= 16384);
-    VK_ASSERT(limits.maxStorageBufferRange                 >= (1UL << 27));
-    VK_ASSERT(limits.maxPushConstantsSize                  >= 128);
-    VK_ASSERT(limits.maxMemoryAllocationCount              >= 4096);
-    VK_ASSERT(limits.maxSamplerAllocationCount             >= 4000);
     VK_ASSERT(limits.bufferImageGranularity                <= 131072);
-    VK_ASSERT(limits.sparseAddressSpaceSize                >= (features.sparseBinding ? (1ULL << 31) : 0));
-    VK_ASSERT(limits.maxBoundDescriptorSets                >= 4);
-    VK_ASSERT(limits.maxPerStageDescriptorSamplers         >= 16);
     VK_ASSERT(limits.maxPerStageDescriptorUniformBuffers   >= 12);
-    VK_ASSERT(limits.maxPerStageDescriptorStorageBuffers   >= 4);
-    VK_ASSERT(limits.maxPerStageDescriptorSampledImages    >= 16);
-    VK_ASSERT(limits.maxPerStageDescriptorStorageImages    >= 4);
-    VK_ASSERT(limits.maxPerStageDescriptorInputAttachments >= 4);
 
     const uint64_t reqMaxPerStageResources = Util::Min(
         static_cast<uint64_t>(limits.maxPerStageDescriptorUniformBuffers) +
@@ -8841,14 +8906,59 @@ static void VerifyLimits(
         static_cast<uint64_t>(limits.maxColorAttachments),
         static_cast<uint64_t>(128));
 
+    VK_ASSERT(limits.maxDescriptorSetUniformBuffers        >= 72);
+    VK_ASSERT(limits.maxDescriptorSetStorageBuffers        >= 24);
+    VK_ASSERT(limits.maxDescriptorSetStorageImages         >= 24);
+    VK_ASSERT(limits.maxFragmentCombinedOutputResources    >= 4);
+    VK_ASSERT(limits.maxComputeWorkGroupInvocations        >= 128);
+    VK_ASSERT(limits.maxComputeWorkGroupSize[0]            >= 128);
+    VK_ASSERT(limits.maxComputeWorkGroupSize[1]            >= 128);
+    VK_ASSERT(limits.maxComputeWorkGroupSize[2]            >= 64);
+    VK_ASSERT(limits.subTexelPrecisionBits                 >= 4);
+    VK_ASSERT(limits.mipmapPrecisionBits                   >= 4);
+    VK_ASSERT(limits.maxSamplerLodBias                     >= 2);
+    VK_ASSERT(limits.maxBoundDescriptorSets                >= 4);
+    VK_ASSERT(limits.maxColorAttachments                   >= 4);
+    VK_ASSERT(limits.maxPushConstantsSize                  >= 128);
+
+    if (features.largePoints)
+    {
+        VK_ASSERT(limits.pointSizeRange[0]    <= 1.0f);
+        VK_ASSERT(limits.pointSizeRange[1]    >= 64.0f - limits.pointSizeGranularity);
+
+        VK_ASSERT(limits.pointSizeGranularity <= 1.0f);
+    }
+    else
+    {
+        VK_ASSERT(limits.pointSizeRange[0]    == 1.0f);
+        VK_ASSERT(limits.pointSizeRange[1]    == 1.0f);
+        VK_ASSERT(limits.pointSizeGranularity == 0.0f);
+    }
+
+    if (features.wideLines)
+    {
+        VK_ASSERT(limits.lineWidthGranularity <= 1.0f);
+    }
+    else
+    {
+        VK_ASSERT(limits.lineWidthGranularity == 0.0f);
+    }
+    VK_ASSERT(limits.maxTexelBufferElements                >= 65536);
+    VK_ASSERT(limits.maxStorageBufferRange                 >= (1UL << 27));
+    VK_ASSERT(limits.maxMemoryAllocationCount              >= 4096);
+    VK_ASSERT(limits.maxSamplerAllocationCount             >= 4000);
+    VK_ASSERT(limits.sparseAddressSpaceSize                >= (features.sparseBinding ? (1ULL << 31) : 0));
+    VK_ASSERT(limits.maxPerStageDescriptorSamplers         >= 16);
+    VK_ASSERT(limits.maxPerStageDescriptorStorageBuffers   >= 4);
+    VK_ASSERT(limits.maxPerStageDescriptorSampledImages    >= 16);
+    VK_ASSERT(limits.maxPerStageDescriptorStorageImages    >= 4);
+    VK_ASSERT(limits.maxPerStageDescriptorInputAttachments >= 4);
+
     VK_ASSERT(limits.maxPerStageResources                  >= reqMaxPerStageResources);
     VK_ASSERT(limits.maxDescriptorSetSamplers              >= 96);
-    VK_ASSERT(limits.maxDescriptorSetUniformBuffers        >= 72);
     VK_ASSERT(limits.maxDescriptorSetUniformBuffersDynamic >= 8);
-    VK_ASSERT(limits.maxDescriptorSetStorageBuffers        >= 24);
     VK_ASSERT(limits.maxDescriptorSetStorageBuffersDynamic >= 4);
     VK_ASSERT(limits.maxDescriptorSetSampledImages         >= 96);
-    VK_ASSERT(limits.maxDescriptorSetStorageImages         >= 24);
     VK_ASSERT(limits.maxDescriptorSetInputAttachments      >= 4);
     VK_ASSERT(limits.maxVertexInputAttributes              >= 16);
     VK_ASSERT(limits.maxVertexInputBindings                >= 16);
@@ -8914,18 +9024,11 @@ static void VerifyLimits(
         VK_ASSERT(limits.maxFragmentDualSrcAttachments == 0);
     }
 
-    VK_ASSERT(limits.maxFragmentCombinedOutputResources >= 4);
     VK_ASSERT(limits.maxComputeSharedMemorySize         >= 16384);
     VK_ASSERT(limits.maxComputeWorkGroupCount[0]        >= 65535);
     VK_ASSERT(limits.maxComputeWorkGroupCount[1]        >= 65535);
     VK_ASSERT(limits.maxComputeWorkGroupCount[2]        >= 65535);
-    VK_ASSERT(limits.maxComputeWorkGroupInvocations     >= 128);
-    VK_ASSERT(limits.maxComputeWorkGroupSize[0]         >= 128);
-    VK_ASSERT(limits.maxComputeWorkGroupSize[1]         >= 128);
-    VK_ASSERT(limits.maxComputeWorkGroupSize[2]         >= 64);
     VK_ASSERT(limits.subPixelPrecisionBits              >= 4);
-    VK_ASSERT(limits.subTexelPrecisionBits              >= 4);
-    VK_ASSERT(limits.mipmapPrecisionBits                >= 4);
 
     VK_ASSERT(features.fullDrawIndexUint32);
 
@@ -8946,8 +9049,6 @@ static void VerifyLimits(
     {
         VK_ASSERT(limits.maxDrawIndirectCount == 1);
     }
-
-    VK_ASSERT(limits.maxSamplerLodBias >= 2);
 
     VK_ASSERT(features.samplerAnisotropy);
 
@@ -9030,7 +9131,6 @@ static void VerifyLimits(
     VK_ASSERT(limits.framebufferStencilSampleCounts       & VK_SAMPLE_COUNT_4_BIT);
     VK_ASSERT(limits.framebufferNoAttachmentsSampleCounts & VK_SAMPLE_COUNT_1_BIT);
     VK_ASSERT(limits.framebufferNoAttachmentsSampleCounts & VK_SAMPLE_COUNT_4_BIT);
-    VK_ASSERT(limits.maxColorAttachments                  >= 4);
     VK_ASSERT(limits.sampledImageColorSampleCounts        & VK_SAMPLE_COUNT_1_BIT);
     VK_ASSERT(limits.sampledImageColorSampleCounts        & VK_SAMPLE_COUNT_4_BIT);
     VK_ASSERT(limits.sampledImageIntegerSampleCounts      & VK_SAMPLE_COUNT_1_BIT);
@@ -9079,21 +9179,6 @@ static void VerifyLimits(
 
     VK_ASSERT(limits.discreteQueuePriorities >= 2);
 
-    VK_ASSERT(features.largePoints);
-
-    if (features.largePoints)
-    {
-        const float ULP = limits.pointSizeGranularity;
-
-        VK_ASSERT(limits.pointSizeRange[0] <= 1.0f);
-        VK_ASSERT(limits.pointSizeRange[1] >= 64.0f - limits.pointSizeGranularity);
-    }
-    else
-    {
-        VK_ASSERT(limits.pointSizeRange[0] == 1.0f);
-        VK_ASSERT(limits.pointSizeRange[1] == 1.0f);
-    }
-
     VK_ASSERT(features.wideLines);
 
     if (features.wideLines)
@@ -9107,24 +9192,6 @@ static void VerifyLimits(
     {
         VK_ASSERT(limits.lineWidthRange[0] == 0.0f);
         VK_ASSERT(limits.lineWidthRange[1] == 1.0f);
-    }
-
-    if (features.largePoints)
-    {
-        VK_ASSERT(limits.pointSizeGranularity <= 1.0f);
-    }
-    else
-    {
-        VK_ASSERT(limits.pointSizeGranularity == 0.0f);
-    }
-
-    if (features.wideLines)
-    {
-        VK_ASSERT(limits.lineWidthGranularity <= 1.0f);
-    }
-    else
-    {
-        VK_ASSERT(limits.lineWidthGranularity == 0.0f);
     }
 
     VK_ASSERT(limits.nonCoherentAtomSize >= 128);
@@ -9322,6 +9389,7 @@ static void VerifyExtensions(
                && dev.IsExtensionSupported(DeviceExtensions::KHR_SYNCHRONIZATION2)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY));
     }
+
 }
 
 // =====================================================================================================================
@@ -9482,10 +9550,14 @@ VkResult PhysicalDevice::GetDisplayModeProperties(
         properties[i].displayMode = reinterpret_cast<VkDisplayModeKHR>(pDisplayMode);
         properties[i].parameters.visibleRegion.width  = pScreenMode[i]->extent.width;
         properties[i].parameters.visibleRegion.height = pScreenMode[i]->extent.height;
-        // The refresh rate returned by pal is HZ.
         // Spec requires refresh rate to be "the number of times the display is refreshed each second
         // multiplied by 1000", in other words, HZ * 1000
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 894
         properties[i].parameters.refreshRate = pScreenMode[i]->refreshRate * 1000;
+#else
+        properties[i].parameters.refreshRate =
+            pScreenMode[i]->refreshRate.numerator * 1000 / pScreenMode[i]->refreshRate.denominator;
+#endif
     }
 
     *pPropertyCount = loopCount;
@@ -9549,7 +9621,12 @@ VkResult PhysicalDevice::CreateDisplayMode(
         // The modes are considered as identical if the dimension as well as the refresh rate are the same.
         if ((pCreateInfo->parameters.visibleRegion.width  == pScreenMode[i]->extent.width) &&
             (pCreateInfo->parameters.visibleRegion.height == pScreenMode[i]->extent.height) &&
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 894
             (pCreateInfo->parameters.refreshRate          == pScreenMode[i]->refreshRate * 1000))
+#else
+            (pCreateInfo->parameters.refreshRate ==
+             pScreenMode[i]->refreshRate.numerator * 1000 / pScreenMode[i]->refreshRate.denominator))
+#endif
         {
             isValidMode = true;
             break;
@@ -9580,7 +9657,12 @@ VkResult PhysicalDevice::CreateDisplayMode(
         {
             pNewMode->palScreenMode.extent.width  = pCreateInfo->parameters.visibleRegion.width;
             pNewMode->palScreenMode.extent.height = pCreateInfo->parameters.visibleRegion.height;
-            pNewMode->palScreenMode.refreshRate   = pCreateInfo->parameters.refreshRate;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 894
+            pNewMode->palScreenMode.refreshRate   = pCreateInfo->parameters.refreshRate / 1000;
+#else
+            pNewMode->palScreenMode.refreshRate.numerator   = pCreateInfo->parameters.refreshRate;
+            pNewMode->palScreenMode.refreshRate.denominator = 1000;
+#endif
             pNewMode->palScreenMode.flags.u32All  = 0;
             pNewMode->pScreen                     = pScreen;
             *pMode = reinterpret_cast<VkDisplayModeKHR>(pNewMode);
@@ -9781,8 +9863,8 @@ VkResult PhysicalDevice::GetPhysicalDeviceCooperativeMatrixPropertiesKHR(
 
     if (IsKhrCooperativeMatrixSupported(this))
     {
-        constexpr uint32_t totalCount = CooperativeMatrixTypesCount + CooperativeMatrixSaturatingTypesCount;
-
+        const uint32_t basicTypeCount = CooperativeMatrixTypesCount + CooperativeMatrixSaturatingTypesCount;
+        uint32_t totalCount = basicTypeCount;
         if (pProperties == nullptr)
         {
             *pPropertyCount = totalCount;
@@ -9798,17 +9880,24 @@ VkResult PhysicalDevice::GetPhysicalDeviceCooperativeMatrixPropertiesKHR(
 
             for (uint32_t i = 0; i < *pPropertyCount; ++i)
             {
-                const bool sat = (i >= CooperativeMatrixTypesCount);
-                const uint32_t n = sat ? i - CooperativeMatrixTypesCount : i;
-                const CooperativeMatrixType* types = sat ? CooperativeMatrixSaturatingTypes : CooperativeMatrixTypes;
-
+                bool sat = false;
+                const CooperativeMatrixType* pType = nullptr;
+                if (i < CooperativeMatrixTypesCount)
+                {
+                    pType = CooperativeMatrixTypes + i;
+                }
+                else if (i < basicTypeCount)
+                {
+                    sat = true;
+                    pType = CooperativeMatrixSaturatingTypes + i - CooperativeMatrixTypesCount;
+                }
                 pProperties[i].MSize                  = CooperativeMatrixDimension;
                 pProperties[i].NSize                  = CooperativeMatrixDimension;
                 pProperties[i].KSize                  = CooperativeMatrixDimension;
-                pProperties[i].AType                  = types[n].a;
-                pProperties[i].BType                  = types[n].b;
-                pProperties[i].CType                  = types[n].c;
-                pProperties[i].ResultType             = types[n].c;
+                pProperties[i].AType                  = pType->a;
+                pProperties[i].BType                  = pType->b;
+                pProperties[i].CType                  = pType->c;
+                pProperties[i].ResultType             = pType->c;
                 pProperties[i].scope                  = VK_SCOPE_SUBGROUP_KHR;
                 pProperties[i].saturatingAccumulation = sat ? VK_TRUE : VK_FALSE;
             }

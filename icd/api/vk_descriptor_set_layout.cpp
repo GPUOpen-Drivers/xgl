@@ -171,12 +171,14 @@ uint32_t DescriptorSetLayout::GetSingleDescStaticSize(
 
     case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
     case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+        size = props.descriptorSizes.typedBufferView;
+        break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
 #if VKI_RAY_TRACING
     case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
 #endif
-        size = props.descriptorSizes.bufferView;
+        size = props.descriptorSizes.untypedBufferView;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
@@ -268,7 +270,7 @@ uint32_t DescriptorSetLayout::GetDynamicBufferDescDwSize(
     }
     else
     {
-        size = pDevice->GetProperties().descriptorSizes.bufferView;
+        size = pDevice->GetProperties().descriptorSizes.untypedBufferView;
     }
 
     VK_ASSERT(Util::IsPow2Aligned(size, sizeof(uint32_t)));

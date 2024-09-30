@@ -747,8 +747,8 @@ void CmdBuffer::CopyQueryPoolResults(
 // ===================================================================================================================
 // Command to write a timestamp value to a location in a Timestamp query pool
 void CmdBuffer::QueryCopy(
-    const QueryPool* pBasePool,
-    const Buffer* pDestBuffer,
+    const QueryPool*   pBasePool,
+    const Buffer*      pDestBuffer,
     uint32_t           firstQuery,
     uint32_t           queryCount,
     VkDeviceSize       destOffset,
@@ -799,19 +799,23 @@ void CmdBuffer::QueryCopy(
     uint32_t userData[16];
 
     // Figure out which user data registers should contain what compute constants
-    const uint32_t storageViewSize = m_pDevice->GetProperties().descriptorSizes.bufferView;
+    const uint32_t untypedViewSize = m_pDevice->GetProperties().descriptorSizes.untypedBufferView;
+    const uint32_t typedViewSize   = m_pDevice->GetProperties().descriptorSizes.typedBufferView;
+
+    const uint32_t storageViewSize   = m_pDevice->UseStridedCopyQueryResults() ? untypedViewSize : typedViewSize;
     const uint32_t storageViewDwSize = storageViewSize / sizeof(uint32_t);
-    const uint32_t viewOffset = 0;
-    const uint32_t bufferViewOffset = storageViewDwSize;
-    const uint32_t queryCountOffset = bufferViewOffset + storageViewDwSize;
-    const uint32_t copyFlagsOffset = queryCountOffset + 1;
-    const uint32_t copyStrideOffset = copyFlagsOffset + 1;
-    const uint32_t firstQueryOffset = copyStrideOffset + 1;
-    const uint32_t ptrQueryOffset = firstQueryOffset + 1;
-    const uint32_t userDataCount = ptrQueryOffset + 1;
+    const uint32_t bufferViewDwSize  = untypedViewSize / sizeof(uint32_t);
+    const uint32_t viewOffset        = 0;
+    const uint32_t bufferViewOffset  = storageViewDwSize;
+    const uint32_t queryCountOffset  = bufferViewOffset + bufferViewDwSize;
+    const uint32_t copyFlagsOffset   = queryCountOffset + 1;
+    const uint32_t copyStrideOffset  = copyFlagsOffset + 1;
+    const uint32_t firstQueryOffset  = copyStrideOffset + 1;
+    const uint32_t ptrQueryOffset    = firstQueryOffset + 1;
+    const uint32_t userDataCount     = ptrQueryOffset + 1;
 
     // Make sure they agree with pipeline mapping
-    VK_ASSERT(viewOffset == pipeline.userDataNodeOffsets[0]);
+    VK_ASSERT(viewOffset       == pipeline.userDataNodeOffsets[0]);
     VK_ASSERT(bufferViewOffset == pipeline.userDataNodeOffsets[1]);
     VK_ASSERT(queryCountOffset == pipeline.userDataNodeOffsets[2]);
     VK_ASSERT(userDataCount <= VK_ARRAY_SIZE(userData));

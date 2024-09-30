@@ -77,7 +77,8 @@
       },
       "action": {
         "ps": {
-          "useSiScheduler": true
+          "useSiScheduler": true,
+          "vgprLimit": 48
         }
       }
     },

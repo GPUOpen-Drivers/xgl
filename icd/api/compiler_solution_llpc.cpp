@@ -131,8 +131,7 @@ void CompilerSolutionLlpc::Destroy()
 // Builds shader module from SPIR-V binary code.
 VkResult CompilerSolutionLlpc::BuildShaderModule(
     const Device*                pDevice,
-    VkShaderModuleCreateFlags    flags,
-    VkShaderModuleCreateFlags    internalShaderFlags,
+    ShaderModuleFlags            flags,
     const Vkgc::BinaryData&      shaderBinary,
     ShaderModuleHandle*          pShaderModule,
     const PipelineOptimizerKey&  profileKey)
@@ -155,7 +154,7 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     );
 
 #if VKI_RAY_TRACING
-    if ((internalShaderFlags & VK_INTERNAL_SHADER_FLAGS_RAY_TRACING_INTERNAL_SHADER_BIT) != 0)
+    if ((flags & ShaderModuleInternalRayTracingShader) != 0)
     {
         moduleInfo.options.pipelineOptions.internalRtShaders = true;
     }
@@ -442,6 +441,8 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
     PipelineCache*                    pPipelineCache,
     GraphicsLibraryType               gplType,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    const Vkgc::BinaryData*           pProvidedBinary,
+    const Util::MetroHash::Hash*      pProvidedBinaryHash,
     void*                             pPipelineDumpHandle,
     GplModuleState*                   pModuleState)
 {
@@ -458,6 +459,8 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
         int64_t                         startTime      = Util::GetPerfCpuTime();
         bool                            binaryProvided = false;
 
+        binaryProvided = (pProvidedBinary != nullptr) && (pProvidedBinary->codeSize > 0);
+
         if (binaryProvided == false)
         {
             Util::MetroHash128 hasher;
@@ -465,6 +468,10 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
             hasher.Update(PipelineCompilerTypeLlpc);
             hasher.Update(m_pPhysicalDevice->GetSettingsLoader()->GetSettingsHash());
             hasher.Finalize(cacheId.bytes);
+        }
+        else
+        {
+            cacheId = *pProvidedBinaryHash;
         }
 
         Vkgc::BinaryData finalBinary = {};
@@ -501,6 +508,18 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
             if (binaryProvided == false)
             {
                 LoadShaderBinaryFromCache(pPipelineCache, &cacheId, &shaderLibraryBinary, &hitCache, &hitAppCache);
+            }
+            else
+            {
+                if (ClonePipelineBinary(pProvidedBinary, &shaderLibraryBinary))
+                {
+                    hitCache    = true;
+                    hitAppCache = true;
+                }
+                else
+                {
+                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
             }
 
             if (pPipelineCache != nullptr)
@@ -981,7 +1000,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
     const uint32_t         MaxLlpcOptions   = 32;
     Llpc::ICompiler*       pCompiler        = nullptr;
     const RuntimeSettings& settings         = m_pPhysicalDevice->GetRuntimeSettings();
-    AppProfile             appProfile       = m_pPhysicalDevice->GetAppProfile();
     // Get the executable name and path
     char  executableNameBuffer[PATH_MAX];
     char* pExecutablePtr;
@@ -1046,26 +1064,9 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
 
     // NOTE: For testing consistency, these options should be kept the same as those of
     // "amdllpc" (Init()).
-    // WARNING: Do not conditionally add options based on GFXIP version as these will
-    // break support for systems with a mixture of ASICs. GFXIP dependent options
-    // should be subtarget features or handled in LLVM backend.
-
-    if ((appProfile == AppProfile::SeriousSamFusion) ||
-        (appProfile == AppProfile::Talos))
-    {
-        llpcOptions[numOptions++] = "-unroll-partial-threshold=700";
-    }
-
-    ShaderCacheMode shaderCacheMode = settings.shaderCacheMode;
-    if ((appProfile == AppProfile::MadMax) ||
-        (appProfile == AppProfile::SedpEngine) ||
-        (appProfile == AppProfile::ThronesOfBritannia))
-    {
-        llpcOptions[numOptions++] = "-enable-si-scheduler";
-        // si-scheduler interacts badly with SIFormMemoryClauses pass, so
-        // disable the effect of that pass by limiting clause length to 1.
-        llpcOptions[numOptions++] = "-amdgpu-max-memory-clause=1";
-    }
+    // WARNING: Do not conditionally add options!
+    // GFXIP or AppProfile dependent options should be set via pipeline options structure in LLPC
+    // or subtarget features handled in LLVM backend.
 
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 66
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-executable-name=%s", pExecutablePtr);
@@ -1081,6 +1082,7 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
     pOptionBuffer += optionLength;
     bufSize -= optionLength;
 
+    ShaderCacheMode shaderCacheMode = settings.shaderCacheMode;
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-shader-cache-mode=%d", shaderCacheMode);
     ++optionLength;
     llpcOptions[numOptions++] = pOptionBuffer;

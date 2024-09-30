@@ -71,7 +71,7 @@ HEADER_INCLUDES = """
 #include \"utils/json_writer.h\"
 #include \"palJsonWriter.h\"
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
 #include \"utils/json_reader.h\"
 #endif
 """
@@ -2762,16 +2762,7 @@ ValidKeysForEntity = {
 
 BuildTypesTemplate = {
     "llpc": "ICD_BUILD_LLPC",
-#if VKI_BUILD_NAVI31
-    "Navi31": "VKI_BUILD_NAVI31",
-#endif
-#if VKI_BUILD_NAVI33
-    "Navi33": "VKI_BUILD_NAVI33",
-#endif
-#if VKI_BUILD_GFX11
-    "gfxIp11_0": "VKI_BUILD_GFX11",
-#endif
-    "icdRuntimeAppProfile": "ICD_RUNTIME_APP_PROFILE"
+    "icdRuntimeAppProfile": "VKI_RUNTIME_APP_PROFILE"
 }
 
 ###################################################################################################################

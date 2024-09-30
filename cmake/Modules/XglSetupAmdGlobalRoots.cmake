@@ -23,18 +23,6 @@
  #
  #######################################################################################################################
 
-# find_dk_root must be available
-if(NOT DEFINED GLOBAL_ROOT_DK_DIR)
-    execute_process(
-        COMMAND find_dk_root
-        OUTPUT_VARIABLE GLOBAL_ROOT_DK_DIR
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if(NOT ("${GLOBAL_ROOT_DK_DIR}" STREQUAL ""))
-        set(GLOBAL_ROOT_DK_DIR ${GLOBAL_ROOT_DK_DIR} CACHE PATH "Global root dk directory..")
-    endif()
-endif()
-
 if(NOT DEFINED GLOBAL_ROOT_SRC_DIR)
     if(EXISTS ${PROJECT_SOURCE_DIR}/../../drivers)
         get_filename_component(GLOBAL_ROOT_SRC_DIR ${PROJECT_SOURCE_DIR}/../.. ABSOLUTE)

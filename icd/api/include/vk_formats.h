@@ -283,13 +283,19 @@ bool Formats::IsEtc2Format(
 // Returns true if the given format is a valid RT Vertex Buffer format.
 bool Formats::IsRTVertexFormat(VkFormat format)
 {
-    return (VK_FORMAT_R32G32_SFLOAT       == format) ||
-           (VK_FORMAT_R32G32B32_SFLOAT    == format) ||
-           (VK_FORMAT_R16G16_SFLOAT       == format) ||
-           (VK_FORMAT_R16G16B16A16_SFLOAT == format) ||
-           (VK_FORMAT_R16G16_SNORM        == format) ||
-           (VK_FORMAT_R16G16B16A16_SNORM  == format) ||
-           (VK_FORMAT_R16G16B16A16_UNORM  == format);
+    return (VK_FORMAT_R32G32_SFLOAT             == format) ||
+           (VK_FORMAT_R32G32B32_SFLOAT          == format) ||
+           (VK_FORMAT_R16G16_SFLOAT             == format) ||
+           (VK_FORMAT_R16G16B16A16_SFLOAT       == format) ||
+           (VK_FORMAT_R16G16_SNORM              == format) ||
+           (VK_FORMAT_R16G16B16A16_SNORM        == format) ||
+           (VK_FORMAT_R16G16B16A16_UNORM        == format) ||
+           (VK_FORMAT_R16G16_UNORM              == format) ||
+           (VK_FORMAT_A2B10G10R10_UNORM_PACK32  == format) ||
+           (VK_FORMAT_R8G8B8A8_UNORM            == format) ||
+           (VK_FORMAT_R8G8_UNORM                == format) ||
+           (VK_FORMAT_R8G8B8A8_SNORM            == format) ||
+           (VK_FORMAT_R8G8_SNORM                == format);
 }
 
 // =====================================================================================================================

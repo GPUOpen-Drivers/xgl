@@ -173,8 +173,7 @@ union SubpassStateFlags
         uint32_t hasExternalIncoming     :  1; // True if an explicit VkSubpassDependency exists with src =
                                                // VK_SUBPASS_EXTERNAL and dst = this.
         uint32_t hasExternalOutgoing     :  1; // Same as above, but src and dst reversed.
-        uint32_t reserved1               :  2;
-        uint32_t reserved                : 26;
+        uint32_t reserved                : 28;
     };
     uint32_t u32All;
 };

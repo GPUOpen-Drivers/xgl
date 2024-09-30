@@ -185,7 +185,7 @@ private:
     void BuildTuningProfile();
     void BuildAppProfile();
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     void BuildRuntimeProfile();
 #endif
 
@@ -195,7 +195,7 @@ private:
     ResourceProfile        m_tuningProfile;
     ResourceProfile        m_appProfile;
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     ResourceProfile        m_runtimeProfile;
 #endif
 

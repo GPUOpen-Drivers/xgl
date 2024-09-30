@@ -39,7 +39,7 @@
 #include "palDbgPrint.h"
 #include "palFile.h"
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
 #include "utils/json_reader.h"
 #endif
 
@@ -68,7 +68,7 @@ void ShaderOptimizer::Init()
         m_appShaderProfile.PipelineProfileToJson(m_tuningProfile, m_settings.pipelineProfileDumpFile);
     }
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     BuildRuntimeProfile();
 #endif
 }
@@ -136,7 +136,7 @@ bool ShaderOptimizer::HasMatchingProfileEntry(
         foundMatch = HasMatchingProfileEntry(m_tuningProfile, pipelineKey);
     }
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     if (foundMatch == false)
     {
         foundMatch = HasMatchingProfileEntry(m_runtimeProfile, pipelineKey);
@@ -192,7 +192,7 @@ void ShaderOptimizer::CalculateMatchingProfileEntriesHash(
 {
     CalculateMatchingProfileEntriesHash(m_appProfile, pipelineKey, pHasher);
     CalculateMatchingProfileEntriesHash(m_tuningProfile, pipelineKey, pHasher);
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     CalculateMatchingProfileEntriesHash(m_runtimeProfile, pipelineKey, pHasher);
 #endif
 }
@@ -393,7 +393,7 @@ void ShaderOptimizer::OverrideShaderCreateInfo(
 
     ApplyProfileToShaderCreateInfo(m_tuningProfile, pipelineKey, shaderIndex, options);
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     ApplyProfileToShaderCreateInfo(m_runtimeProfile, pipelineKey, shaderIndex, options);
 #endif
 }
@@ -534,7 +534,7 @@ void ShaderOptimizer::OverrideGraphicsPipelineCreateInfo(
     ApplyProfileToGraphicsPipelineCreateInfo(
         m_tuningProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsShaderInfos);
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     ApplyProfileToGraphicsPipelineCreateInfo(
         m_runtimeProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsShaderInfos);
 #endif
@@ -549,7 +549,7 @@ void ShaderOptimizer::OverrideComputePipelineCreateInfo(
 
     ApplyProfileToComputePipelineCreateInfo(m_tuningProfile, pipelineKey, pDynamicCompueShaderInfo);
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     ApplyProfileToComputePipelineCreateInfo(m_runtimeProfile, pipelineKey, pDynamicCompueShaderInfo);
 #endif
 }
@@ -567,7 +567,7 @@ ShaderOptimizer::~ShaderOptimizer()
     {
         pAllocCB->pfnFree(pAllocCB->pUserData, m_tuningProfile.pEntries);
     }
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     if (m_runtimeProfile.pEntries != nullptr)
     {
         pAllocCB->pfnFree(pAllocCB->pUserData, m_runtimeProfile.pEntries);
@@ -1182,6 +1182,20 @@ void ShaderOptimizer::BuildAppProfileLlpc()
 
     m_appShaderProfile.BuildAppProfileLlpc(appProfile, gfxIpLevel, asicRevision, &m_appProfile);
 
+    if ((appProfile == AppProfile::MadMax) ||
+        (appProfile == AppProfile::SedpEngine) ||
+        (appProfile == AppProfile::ThronesOfBritannia))
+    {
+        i = m_appProfile.entryCount++;
+        PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
+        pEntry->pattern.match.always = true;
+        for (uint32_t stage = 0; stage < ShaderStageCount; ++stage)
+        {
+            pEntry->action.shaders[stage].shaderCreate.apply.useSiScheduler = true;
+            pEntry->action.shaders[stage].shaderCreate.tuningOptions.useSiScheduler = true;
+        }
+    }
+
     if (appProfile == AppProfile::ShadowOfTheTombRaider)
     {
         i = m_appProfile.entryCount++;
@@ -1224,6 +1238,14 @@ void ShaderOptimizer::BuildAppProfileLlpc()
         pEntry->action.shaders[ShaderStage::ShaderStageCompute].shaderCreate.apply.workaroundStorageImageFormats = true;
     }
 
+    if (appProfile == AppProfile::Houdini)
+    {
+        i = m_appProfile.entryCount++;
+        PipelineProfileEntry *pEntry = &m_appProfile.pEntries[i];
+        pEntry->pattern.match.always = true;
+        pEntry->action.shaders[ShaderStage::ShaderStageCompute].shaderCreate.apply.workaroundStorageImageFormats = true;
+    }
+
     if (appProfile == AppProfile::ELEX2)
     {
         i = m_appProfile.entryCount++;
@@ -1250,7 +1272,7 @@ void ShaderOptimizer::PrintProfileEntryMatch(
     {
         pProfile = "Application";
     }
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
     else if (&profile == &m_runtimeProfile)
     {
         pProfile = "Runtime";
@@ -1310,7 +1332,7 @@ void ShaderOptimizer::PrintProfileEntryMatch(
 }
 #endif
 
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
 // =====================================================================================================================
 void ShaderOptimizer::RuntimeProfileParseError()
 {

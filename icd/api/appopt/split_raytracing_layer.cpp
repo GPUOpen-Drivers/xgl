@@ -50,63 +50,92 @@ void SplitRaytracingLayer::TraceRaysDispatchPerDevice(
     const RuntimeSettings& settings     = pCmdBuffer->VkDevice()->GetRuntimeSettings();
     const RayTracingPipeline* pPipeline = pCmdBuffer->RenderState()->pRayTracingPipeline;
 
+    const Pal::DispatchDims traceSize =
+    {
+        .x = width,
+        .y = height,
+        .z = depth
+    };
+
     const uint32_t splitX = settings.rtDispatchSplitX;
     const uint32_t splitY = settings.rtDispatchSplitY;
     const uint32_t splitZ = settings.rtDispatchSplitZ;
 
-    const uint32_t blockW = (width + splitX - 1)  / splitX;
-    const uint32_t blockH = (height + splitY - 1) / splitY;
-    const uint32_t blockD = (depth + splitZ - 1)  / splitZ;
-
-    uint32_t dispatchSizeX = 0;
-    uint32_t dispatchSizeY = 0;
-    uint32_t dispatchSizeZ = 0;
-
-    pPipeline->GetDispatchSize(&dispatchSizeX, &dispatchSizeY, &dispatchSizeZ, blockW, blockH, blockD);
-
-    for (uint32_t z = 0; z < splitZ; z++)
+    const Pal::DispatchDims blockSize =
     {
-        uint32_t zOffset = z * blockD;
-        for (uint32_t x = 0; x < splitX; x++)
+        .x = (traceSize.x + splitX - 1) / splitX,
+        .y = (traceSize.y + splitY - 1) / splitY,
+        .z = (traceSize.z + splitZ - 1) / splitZ
+    };
+
+    const Pal::DispatchDims blockDispatchSize = pPipeline->GetDispatchSize(blockSize);
+
+    // Lambda function used to help dispatch.
+    auto dispatch = [pCmdBuffer, deviceIdx](Pal::DispatchDims offset, Pal::DispatchDims size)
         {
-            uint32_t xOffset = x * blockW;
-            for (uint32_t y = 0; y < splitY; y++)
+            pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdDispatchOffset(
+                offset,
+                size,
+                size);
+
+            // To avoid TDR, the large dispatch is split into mulitple smaller sub-dispatches. However,
+            // when a MCBP event arrives, PFP may have already processed all dispatch commands, so mulitple
+            // smaller sub-dispatches cannot be interrupted by MCBP in this case.
+            // The Barrier below is used to stall the PFP and allow MCBP to happen between dispatches.
+            Pal::BarrierTransition transition = {};
+            transition.srcCacheMask = Pal::CoherShaderRead;
+            transition.dstCacheMask = Pal::CoherShaderRead;
+            const Pal::HwPipePoint postCs = Pal::HwPipePostCs;
+            Pal::BarrierInfo barrierInfo = {};
+            barrierInfo.pipePointWaitCount = 1;
+            barrierInfo.pPipePoints = &postCs;
+            barrierInfo.waitPoint = Pal::HwPipeTop;
+            pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdBarrier(barrierInfo);
+        };
+
+    // Lambda function used to help splitting.
+    auto split = [](uint32_t size, uint32_t incSize, auto&& fun)
+        {
+            uint32_t i = 0;
+            for (; i <= size - incSize; i += incSize)
             {
-                uint32_t yOffset = y * blockH;
-
-                uint32_t dispatchOffsetX = 0;
-                uint32_t dispatchOffsetY = 0;
-                uint32_t dispatchOffsetZ = 0;
-
-                pPipeline->GetDispatchSize(&dispatchOffsetX,
-                                           &dispatchOffsetY,
-                                           &dispatchOffsetZ,
-                                           xOffset,
-                                           yOffset,
-                                           zOffset);
-
-                pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdDispatchOffset(
-                    { dispatchOffsetX, dispatchOffsetY, dispatchOffsetZ },
-                    { dispatchSizeX,   dispatchSizeY,   dispatchSizeZ },
-                    { dispatchSizeX,   dispatchSizeY,   dispatchSizeZ });
-
-                // To avoid TDR, the large dispatch is split into mulitple smaller sub-dispatches. However,
-                // when a MCBP event arrives, PFP may have already processed all dispatch commands, so mulitple
-                // smaller sub-dispatches cannot be interrupted by MCBP in this case.
-                // The Barrier below is used to stall the PFP and allow MCBP to happen between dispatches.
-                Pal::BarrierTransition transition   = {};
-                transition.srcCacheMask             = Pal::CoherShaderRead;
-                transition.dstCacheMask             = Pal::CoherShaderRead;
-                const Pal::HwPipePoint postCs       = Pal::HwPipePostCs;
-                Pal::BarrierInfo barrierInfo        = {};
-                barrierInfo.pipePointWaitCount      = 1;
-                barrierInfo.pPipePoints             = &postCs;
-                barrierInfo.waitPoint               = Pal::HwPipeTop;
-                pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdBarrier(barrierInfo);
-
+                fun(i, incSize);
             }
+            if (i < size)
+            {
+                fun(i, size - i);
+            }
+        };
+
+    // Split Z axis.
+    split(traceSize.z, blockDispatchSize.z,
+        [split, traceSize, blockDispatchSize, &dispatch](uint32_t offsetZ, uint32_t sizeZ)
+        {
+            // Split Y axis.
+            split(traceSize.y, blockDispatchSize.y,
+                [split, traceSize, blockDispatchSize, &dispatch, offsetZ, sizeZ](uint32_t offsetY, uint32_t sizeY)
+                {
+                    //Split X axis.
+                    split(traceSize.x, blockDispatchSize.x,
+                        [&dispatch, offsetZ, sizeZ, offsetY, sizeY](uint32_t offsetX, uint32_t sizeX)
+                        {
+                            Pal::DispatchDims offset =
+                            {
+                                .x = offsetX,
+                                .y = offsetY,
+                                .z = offsetZ
+                            };
+                            Pal::DispatchDims size =
+                            {
+                                .x = sizeX,
+                                .y = sizeY,
+                                .z = sizeZ
+                            };
+                            dispatch(offset, size);
+                        });
+                });
         }
-    }
+        );
 }
 
 // =====================================================================================================================

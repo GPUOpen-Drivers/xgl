@@ -124,7 +124,8 @@ VkResult DescriptorUpdateTemplate::Create(
 template <size_t imageDescSize,
           size_t fmaskDescSize,
           size_t samplerDescSize,
-          size_t bufferDescSize,
+          size_t typedBufferDescSize,
+          size_t untypedBufferDescSize,
           uint32_t numPalDevices>
 DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntryFunc(
     VkDescriptorType                        descriptorType,
@@ -165,22 +166,22 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
         pFunc = &UpdateEntrySampledImage<imageDescSize, fmaskDescSize, true, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-        pFunc = &UpdateEntryTexelBuffer<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, numPalDevices>;
+        pFunc = &UpdateEntryTexelBuffer<typedBufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-        pFunc = &UpdateEntryTexelBuffer<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, numPalDevices>;
+        pFunc = &UpdateEntryTexelBuffer<typedBufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-        pFunc = &UpdateEntryBuffer<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, numPalDevices>;
+        pFunc = &UpdateEntryBuffer<untypedBufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-        pFunc = &UpdateEntryBuffer<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, numPalDevices>;
+        pFunc = &UpdateEntryBuffer<untypedBufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-        pFunc = &UpdateEntryBuffer<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, numPalDevices>;
+        pFunc = &UpdateEntryBuffer<untypedBufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-        pFunc = &UpdateEntryBuffer<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, numPalDevices>;
+        pFunc = &UpdateEntryBuffer<untypedBufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
         pFunc = &UpdateEntryInlineUniformBlock<numPalDevices>;
@@ -205,41 +206,74 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
     VkDescriptorType                        descriptorType,
     const DescriptorSetLayout::BindingInfo& dstBinding)
 {
-    const size_t imageDescSize      = pDevice->GetProperties().descriptorSizes.imageView;
-    const size_t fmaskDescSize      = pDevice->GetProperties().descriptorSizes.fmaskView;
-    const size_t samplerDescSize    = pDevice->GetProperties().descriptorSizes.sampler;
-    const size_t bufferDescSize     = pDevice->GetProperties().descriptorSizes.bufferView;
+    const size_t imageDescSize         = pDevice->GetProperties().descriptorSizes.imageView;
+    const size_t fmaskDescSize         = pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead ?
+                                         pDevice->GetProperties().descriptorSizes.fmaskView : 0;
+    const size_t samplerDescSize       = pDevice->GetProperties().descriptorSizes.sampler;
+    const size_t typedBufferDescSize   = pDevice->GetProperties().descriptorSizes.typedBufferView;
+    const size_t untypedBufferDescSize = pDevice->GetProperties().descriptorSizes.untypedBufferView;
 
     DescriptorUpdateTemplate::PfnUpdateEntry pFunc = nullptr;
 
-    if ((imageDescSize == 32) &&
-        (samplerDescSize == 16) &&
-        (bufferDescSize == 16))
+    if ((imageDescSize         == 32) &&
+        (fmaskDescSize         == 0) &&
+        (samplerDescSize       == 16) &&
+        (typedBufferDescSize   == 16) &&
+        (untypedBufferDescSize == 16))
 
     {
-        if ((pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead == false) || (fmaskDescSize == 0))
-        {
+        pFunc = GetUpdateEntryFunc<
+            32,
+            0,
+            16,
+            16,
+            16,
+            numPalDevices>(descriptorType, dstBinding);
+    }
+    else if ((imageDescSize         == 32) &&
+             (fmaskDescSize         == 32) &&
+             (samplerDescSize       == 16) &&
+             (typedBufferDescSize   == 16) &&
+             (untypedBufferDescSize == 16))
+
+    {
+            pFunc = GetUpdateEntryFunc<
+                32,
+                32,
+                16,
+                16,
+                16,
+                numPalDevices>(descriptorType, dstBinding);
+    }
+    else if ((imageDescSize         == 32) &&
+             (fmaskDescSize         == 0) &&
+             (samplerDescSize       == 16) &&
+             (typedBufferDescSize   == 24) &&
+             (untypedBufferDescSize == 16))
+
+    {
             pFunc = GetUpdateEntryFunc<
                 32,
                 0,
                 16,
+                24,
                 16,
                 numPalDevices>(descriptorType, dstBinding);
-        }
-        else if (fmaskDescSize == 32)
-        {
+    }
+    else if ((imageDescSize         == 32) &&
+             (fmaskDescSize         == 32) &&
+             (samplerDescSize       == 16) &&
+             (typedBufferDescSize   == 24) &&
+             (untypedBufferDescSize == 16))
+
+    {
             pFunc = GetUpdateEntryFunc<
                 32,
                 32,
                 16,
+                24,
                 16,
                 numPalDevices>(descriptorType, dstBinding);
-        }
-        else
-        {
-            VK_NEVER_CALLED();
-            pFunc = nullptr;
-        }
     }
     else
     {

@@ -387,6 +387,26 @@ public:
     void GetDevicePropertiesMaxBufferSize(
         VkDeviceSize* pMaxBufferSize) const;
 
+    void GetPhysicalDeviceLineSubPixelPrecisionBits(
+        uint32_t* pLineSubPixelPrecisionBits) const;
+
+    void GetPhysicalDeviceVertexAttributeDivisorProperties(
+        uint32_t* pMaxVertexAttribDivisor,
+        VkBool32* pSupportsNonZeroFirstInstance) const;
+
+    void GetPhysicalDeviceMaintenance5Properties(
+        VkBool32* pEarlyFragmentMultisampleCoverageAfterSampleCounting,
+        VkBool32* pEarlyFragmentSampleMaskTestBeforeSampleCounting,
+        VkBool32* pDepthStencilSwizzleOneSupport,
+        VkBool32* pPolygonModePointSize,
+        VkBool32* pNonStrictSinglePixelWideLinesUseParallelogram,
+        VkBool32* pNonStrictWideLinesUseParallelogram) const;
+
+    void GetPhysicalDeviceMaintenance6Properties(
+        VkBool32* pBlockTexelViewCompatibleMultipleLayers,
+        uint32_t* pMaxCombinedImageSamplerDescriptorCount,
+        VkBool32* pFragmentShadingRateClampCombinerInputs) const;
+
     void GetPhysicalDeviceDriverProperties(
         VkDriverId*              pDriverID,
         char*                    pDriverName,
@@ -521,6 +541,14 @@ template <typename ModifierPropertiesList_T>
         VkBool32* pVulkanMemoryModel,
         VkBool32* pVulkanMemoryModelDeviceScope,
         VkBool32* pVulkanMemoryModelAvailabilityVisibilityChains) const;
+
+    void GetPhysicalDeviceLineRasterizationFeatures(
+        VkBool32* pRectangularLines,
+        VkBool32* pBresenhamLines,
+        VkBool32* pSmoothLines,
+        VkBool32* pStippledRectangularLines,
+        VkBool32* pStippledBresenhamLines,
+        VkBool32* pStippledSmoothLines) const;
 
     VkResult GetPhysicalDeviceCalibrateableTimeDomainsEXT(
         uint32_t*                           pTimeDomainCount,

@@ -1,0 +1,54 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xdf44ae88f263605d 6d21f3936125b78b"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableLoopUnrolls": true,
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x4dab409a1cee9aee 2b8c1d18f83bc11d"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x5df94d2774fadfee 941f5d1b215994fc"
+        }
+      },
+      "action": {
+        "ps": {
+          "allowReZ": 1,
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x295d1b6cd2aff9c4 9a96d6ffac16b5e9"
+        }
+      },
+      "action": {
+        "ps": {
+          "aggressiveInvariantLoads": "EnableOptimization"
+        }
+      }
+    }
+  ]
+}

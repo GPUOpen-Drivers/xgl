@@ -387,6 +387,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetQueryPoolResults                           );
     INIT_DISPATCH_ENTRY(vkGetRenderAreaGranularity                      );
     INIT_DISPATCH_ENTRY(vkGetRenderingAreaGranularityKHR                );
+
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceCapabilitiesKHR       );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceCapabilities2KHR      );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceFormatsKHR            );
@@ -625,7 +626,6 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdSetLineStippleEXT                          );
     INIT_DISPATCH_ALIAS(vkCmdSetLineStippleKHR                          ,
                         vkCmdSetLineStippleEXT                          );
-
     INIT_DISPATCH_ENTRY(vkSetDeviceMemoryPriorityEXT                    );
     INIT_DISPATCH_ENTRY(vkGetDeviceFaultInfoEXT                         );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT  );
@@ -771,6 +771,7 @@ void DispatchTable::Init()
                         vkCmdResolveImage2                              );
     INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSetKHR                       );
     INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSetWithTemplateKHR           );
+
     INIT_DISPATCH_ENTRY(vkGetDeviceBufferMemoryRequirements             );
     INIT_DISPATCH_ENTRY(vkGetDeviceImageMemoryRequirements              );
     INIT_DISPATCH_ENTRY(vkGetDeviceImageSparseMemoryRequirements        );
@@ -840,11 +841,18 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdPushConstants2KHR                          );
     INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSet2KHR                      );
     INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSetWithTemplate2KHR          );
+
     INIT_DISPATCH_ENTRY(vkCmdSetDescriptorBufferOffsets2EXT             );
     INIT_DISPATCH_ENTRY(vkCmdBindDescriptorBufferEmbeddedSamplers2EXT   );
 
     INIT_DISPATCH_ENTRY(vkCmdSetRenderingAttachmentLocationsKHR         );
     INIT_DISPATCH_ENTRY(vkCmdSetRenderingInputAttachmentIndicesKHR      );
+
+    INIT_DISPATCH_ENTRY(vkCreatePipelineBinariesKHR                     );
+    INIT_DISPATCH_ENTRY(vkDestroyPipelineBinaryKHR                      );
+    INIT_DISPATCH_ENTRY(vkGetPipelineKeyKHR                             );
+    INIT_DISPATCH_ENTRY(vkGetPipelineBinaryDataKHR                      );
+    INIT_DISPATCH_ENTRY(vkReleaseCapturedPipelineDataKHR                );
 
     INIT_DISPATCH_ENTRY(vkCmdSetDepthBias2EXT                           );
 

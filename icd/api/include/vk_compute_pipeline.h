@@ -112,6 +112,7 @@ protected:
         Device* const                        pDevice,
         Pal::IPipeline**                     pPalPipeline,
         const PipelineLayout*                pPipelineLayout,
+        PipelineBinaryStorage*               pBinaryStorage,
         const ImmedInfo&                     immedInfo,
 #if VKI_RAY_TRACING
         bool                                 hasRayTracing,

@@ -135,6 +135,7 @@ target_sources(xgl PRIVATE
     api/vk_instance.cpp
     api/vk_memory.cpp
     api/vk_pipeline.cpp
+    api/vk_pipeline_binary.cpp
     api/vk_pipeline_layout.cpp
     api/vk_pipeline_cache.cpp
     api/vk_private_data_slot.cpp
@@ -188,15 +189,6 @@ if(ICD_BUILD_LLPC)
         api/compiler_solution_llpc.cpp
     )
 endif()
-
-# vk_utils.cpp uses the __DATE__ and __TIME__ macros to generate a pipelineCacheUUID. The following
-# rule forces vk_utils.cpp to be re-compiled on every build, so that an up-to-date time/date
-# is always used regardless of which files were touched since the last build.
-add_custom_command(
-    TARGET xgl PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_SOURCE_DIR}/api/vk_utils.cpp
-    COMMENT "Touching vk_utils.cpp"
-)
 
 ### ICD Auto-generated Shader Profiles Files ##################################
 # ICD_GENDIR Path to the code generation tools

@@ -792,6 +792,12 @@ constexpr AppProfilePatternEntry AppEngineXenon =
     "xenonengine"
 };
 
+constexpr AppProfilePatternEntry AppNameHoudini =
+{
+    PatternAppNameLower,
+    "houdini"
+};
+
 // Section END of AppProfilePatternEntry for all games
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -1398,14 +1404,6 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
-        AppProfile::Source2Engine,
-        {
-            AppEngineSource2,
-            PatternEnd
-        }
-    },
-
-    {
         AppProfile::DxvkGodOfWar,
         {
             AppNameGodOfWar,
@@ -1616,6 +1614,14 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::Source2Engine,
+        {
+            AppEngineSource2,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::WindowKill,
         {
             AppNameWindowKill,
@@ -1631,7 +1637,16 @@ AppProfilePattern AppPatternTable[] =
             AppEngineXenon,
             PatternEnd
         }
-    }
+    },
+
+    {
+        AppProfile::Houdini,
+        {
+            AppNameHoudini,
+            PatternEnd
+        }
+    },
+
 };
 
 static char* GetExecutableName(size_t* pLength, bool includeExtension = false);

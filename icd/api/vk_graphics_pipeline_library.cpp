@@ -24,6 +24,7 @@
  **********************************************************************************************************************/
 
 #include "include/vk_graphics_pipeline_library.h"
+#include "include/vk_pipeline_binary.h"
 #include "include/vk_pipeline_layout.h"
 #include "palVectorImpl.h"
 
@@ -335,6 +336,26 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
         &pBinaryCreateInfo->pipelineInfo.fs,
     };
 
+    auto               pPipelineBinaryInfoKHR                 = extStructs.pPipelineBinaryInfoKHR;
+    PipelineBinaryInfo providedBinaries[GraphicsLibraryCount] = {};
+
+    if (pPipelineBinaryInfoKHR != nullptr)
+    {
+        for (uint32_t binaryIndex = 0; (binaryIndex < pPipelineBinaryInfoKHR->binaryCount); ++binaryIndex)
+        {
+            const auto pBinary = PipelineBinary::ObjectFromHandle(
+                pPipelineBinaryInfoKHR->pPipelineBinaries[binaryIndex]);
+
+            // Retrieve the GraphicsLibraryType identifier from the binary
+            GraphicsLibraryType gplType = *static_cast<const GraphicsLibraryType*>(pBinary->BinaryData().pCode);
+
+            providedBinaries[gplType].binaryHash              = pBinary->BinaryKey();
+            providedBinaries[gplType].pipelineBinary.codeSize = pBinary->BinaryData().codeSize;
+            providedBinaries[gplType].pipelineBinary.pCode    =
+                Util::VoidPtrInc(pBinary->BinaryData().pCode, sizeof(GraphicsLibraryType));
+        }
+    }
+
     uint32_t gplMask = 0;
     for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
     {
@@ -364,6 +385,8 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
                     pPipelineCache,
                     gplType,
                     pBinaryCreateInfo,
+                    &providedBinaries[gplType].pipelineBinary,
+                    &providedBinaries[gplType].binaryHash,
                     &pTempModuleStages[i]);
                 gplMask |= (1 << gplType);
             }
@@ -393,6 +416,8 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
                 pPipelineCache,
                 GraphicsLibraryPreRaster,
                 pBinaryCreateInfo,
+                nullptr,
+                nullptr,
                 &pTempModuleStages[TempIdx]);
         }
 
@@ -409,6 +434,8 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
                 pPipelineCache,
                 GraphicsLibraryFragment,
                 pBinaryCreateInfo,
+                nullptr,
+                nullptr,
                 &pTempModuleStages[TempIdx]);
         }
     }
@@ -551,6 +578,9 @@ VkResult GraphicsPipelineLibrary::Create(
             &binaryCreateInfo);
     }
 
+    PipelineBinaryStorage binaryStorage         = {};
+    const bool            storeBinaryToPipeline = (flags & VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR) != 0;
+
     if (result == VK_SUCCESS)
     {
         // 5. Create partial pipeline binary for fast-link
@@ -564,6 +594,53 @@ VkResult GraphicsPipelineLibrary::Create(
             &binaryCreateInfo,
             pAllocator,
             tempModuleStates);
+
+        // 6. Store created binaries for pipeline_binary
+        if ((result == VK_SUCCESS) && storeBinaryToPipeline)
+        {
+            uint32 binaryIndex = 0;
+
+            for (uint32_t gplType = 0; gplType < GraphicsLibraryCount; ++gplType)
+            {
+                if ((binaryCreateInfo.earlyElfPackage[gplType].codeSize != 0)       &&
+                    (binaryCreateInfo.earlyElfPackage[gplType].pCode    != nullptr) &&
+                    (result == VK_SUCCESS))
+                {
+                    const size_t storageSize = sizeof(GraphicsLibraryType) +
+                        binaryCreateInfo.earlyElfPackage[gplType].codeSize;
+
+                    void* pMemory = pAllocator->pfnAllocation(
+                        pAllocator->pUserData,
+                        storageSize,
+                        VK_DEFAULT_MEM_ALIGN,
+                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);     // retained in the GPL pipeline object
+
+                    if (pMemory != nullptr)
+                    {
+                        // Store the GraphicsLibraryType identifier with the binary
+                        *static_cast<GraphicsLibraryType*>(pMemory) = static_cast<GraphicsLibraryType>(gplType);
+
+                        memcpy(
+                            Util::VoidPtrInc(pMemory, sizeof(GraphicsLibraryType)),
+                            binaryCreateInfo.earlyElfPackage[gplType].pCode,
+                            binaryCreateInfo.earlyElfPackage[gplType].codeSize);
+
+                        InsertBinaryData(
+                            &binaryStorage,
+                            binaryIndex,
+                            binaryCreateInfo.earlyElfPackageHash[gplType],
+                            storageSize,
+                            pMemory);
+
+                        ++binaryIndex;
+                    }
+                    else
+                    {
+                        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                    }
+                }
+            }
+        }
 
         // Clean up temporary storage
         for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
@@ -585,6 +662,7 @@ VkResult GraphicsPipelineLibrary::Create(
 
     GraphicsPipelineObjectCreateInfo objectCreateInfo   = {};
     size_t                           auxiliarySize      = 0;
+    PipelineBinaryStorage*           pPermBinaryStorage = nullptr;
 
     if (result == VK_SUCCESS)
     {
@@ -607,6 +685,11 @@ VkResult GraphicsPipelineLibrary::Create(
 
         size_t objSize = apiSize + auxiliarySize;
 
+        if (storeBinaryToPipeline)
+        {
+            objSize += sizeof(PipelineBinaryStorage);
+        }
+
         // Allocate memory
         pSysMem = pDevice->AllocApiObject(pAllocator, objSize);
 
@@ -621,6 +704,17 @@ VkResult GraphicsPipelineLibrary::Create(
         GraphicsPipelineBinaryCreateInfo* pBinInfo =
             DumpGraphicsPipelineBinaryCreateInfo(&binaryCreateInfo, Util::VoidPtrInc(pSysMem, apiSize), nullptr);
 
+        if (storeBinaryToPipeline)
+        {
+            size_t pipelineBinaryOffset = apiSize + auxiliarySize;
+
+            pPermBinaryStorage = static_cast<PipelineBinaryStorage*>(Util::VoidPtrInc(pSysMem,
+                                                                                      pipelineBinaryOffset));
+
+            // Simply copy the existing allocations to the new struct.
+            memcpy(pPermBinaryStorage, &binaryStorage, sizeof(PipelineBinaryStorage));
+        }
+
         VK_PLACEMENT_NEW(pSysMem) GraphicsPipelineLibrary(
             pDevice,
             objectCreateInfo,
@@ -629,6 +723,7 @@ VkResult GraphicsPipelineLibrary::Create(
             elfHash,
             apiPsoHash,
             tempModuleStates,
+            pPermBinaryStorage,
             pPipelineLayout);
 
         *pPipeline = GraphicsPipelineLibrary::HandleFromVoidPointer(pSysMem);
@@ -773,6 +868,7 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
     const Util::MetroHash::Hash&            elfHash,
     const uint64_t                          apiHash,
     const GplModuleState*                   pGplModuleStates,
+    PipelineBinaryStorage*                  pBinaryStorage,
     const PipelineLayout*                   pPipelineLayout)
     : GraphicsPipelineCommon(
 #if VKI_RAY_TRACING
@@ -789,6 +885,7 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
     Pipeline::Init(
         nullptr,
         pPipelineLayout,
+        pBinaryStorage,
         objectInfo.staticStateMask,
 #if VKI_RAY_TRACING
         0,

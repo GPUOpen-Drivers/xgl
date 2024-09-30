@@ -203,7 +203,7 @@ void VulkanSettingsLoader::OverrideSettingsBySystemInfo()
                          pRootPath, m_settings.appProfileDumpDir);
         MakeAbsolutePath(m_settings.pipelineProfileDumpFile, sizeof(m_settings.pipelineProfileDumpFile),
                          pRootPath, m_settings.pipelineProfileDumpFile);
-#if ICD_RUNTIME_APP_PROFILE
+#if VKI_RUNTIME_APP_PROFILE
         MakeAbsolutePath(m_settings.pipelineProfileRuntimeFile, sizeof(m_settings.pipelineProfileRuntimeFile),
                          pRootPath, m_settings.pipelineProfileRuntimeFile);
 #endif
@@ -224,6 +224,8 @@ void VulkanSettingsLoader::OverrideDefaultsExperimentInfo()
 #if VKI_RAY_TRACING
     VK_SET_VAL_IF_EXPERIMENT_ENABLED(RayTracingSupport, enableRaytracingSupport, false);
 #endif
+
+    VK_SET_VAL_IF_EXPERIMENT_ENABLED(VariableRateShadingSupport, enableVariableRateShading, false);
 
     VK_SET_VAL_IF_EXPERIMENT_ENABLED(Native16BitTypesSupport, enableNative16BitTypes, false);
 
@@ -247,7 +249,6 @@ void VulkanSettingsLoader::OverrideDefaultsExperimentInfo()
     {
         m_settings.rtEnableTreeRebraid            = RebraidTypeOff;
         m_settings.rtEnableTriangleSplitting      = false;
-        m_settings.rtEnableTopDownBuild           = false;
         m_settings.rtBvhBuildModeFastBuild        = BvhBuildModeLinear;
         m_settings.enablePairCompressionCostCheck = true;
     }
@@ -455,7 +456,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     {
         m_settings.maxUnifiedNonRayGenShaders = static_cast<uint32_t>(atoi(pMaxInlinedShadersEnvVar));
     }
-#if VKI_BUILD_GFX11
+
     // Default optimized RT settings for Navi31 / 32,
     // which has physical VGPR 1536 per SIMD
     if (pInfo->gfxipProperties.shaderCore.vgprsPerSimd == 1536)
@@ -467,7 +468,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.indirectCallTargetOccupancyPerSimd = 0.75;
     }
 #endif
-#endif
+
+    {
+        m_settings.disableImplicitInvariantExports = false;
+    }
 
     if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
     {
@@ -479,13 +483,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.nggCompactVertex = false;
 
     }
-
-    {
-        m_settings.disableImplicitInvariantExports = false;
-    }
-
-#if VKI_BUILD_GFX11
-    if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+    else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
     {
         // Enable NGG compactionless mode for Navi3x
         m_settings.nggCompactVertex = false;
@@ -493,18 +491,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         // Hardcode wave sizes per shader stage until the ML model is trained and perf lab testing is done
         m_settings.csWaveSize = 64;
         m_settings.fsWaveSize = 64;
-    }
-#endif
-    switch (pInfo->revision)
-    {
-#if VKI_BUILD_STRIX1
-    case Pal::AsicRevision::Strix1:
-        // Remove this when displayDcc corruption issue is fixed on Strix.
-        m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
-        break;
-#endif
-    default:
-        break;
     }
 
     // Put command buffers in local for large/resizable BAR systems with > 7 GBs of local heap
@@ -608,11 +594,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
             }
         }
-#if VKI_BUILD_GFX11
         else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
-
-#if VKI_BUILD_NAVI31
             if (pInfo->revision == Pal::AsicRevision::Navi31)
             {
                 {
@@ -620,9 +603,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                     m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
                 }
             }
-#endif
         }
-#endif
     }
 
     if ((appProfile == AppProfile::WolfensteinII) ||
@@ -722,12 +703,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
-#if VKI_BUILD_GFX11
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
             m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::SkipDstCacheInv;
         }
-#endif
 
         m_settings.implicitExternalSynchronization = false;
     }
@@ -800,7 +779,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
-#if VKI_BUILD_GFX11
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
             m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
@@ -812,28 +790,21 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                                     RpmViewBypassMall::RpmViewBypassMallOnRead;
             }
 
-#if VKI_BUILD_NAVI31
             if (pInfo->revision == Pal::AsicRevision::Navi31)
             {
                 m_settings.mallNoAllocCtPolicy = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
             }
-#endif
 
-#if VKI_BUILD_NAVI32
             if (pInfo->revision == Pal::AsicRevision::Navi32)
             {
                 m_settings.mallNoAllocCtPolicy = MallNoAllocCtPolicy::MallNoAllocCtAsSnsr;
             }
-#endif
 
-#if VKI_BUILD_NAVI33
             if (pInfo->revision == Pal::AsicRevision::Navi33)
             {
                 m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrPolicy::MallNoAllocCtSsrAsSnsr;
             }
-#endif
         }
-#endif
 
         m_settings.enableUberFetchShader  = true;
     }
@@ -859,6 +830,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.forceDepthClampBasedOnZExport = true;
 
         m_settings.clampMaxImageSize = 16384u;
+
+        m_settings.ac01WaNotNeeded = true;
     }
 
     if (appProfile == AppProfile::SeriousSamFusion)
@@ -868,6 +841,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.anisoThreshold = 1.0f;
 
         m_settings.clampMaxImageSize = 16384u;
+
+        m_settings.ac01WaNotNeeded = true;
     }
 
     if ((appProfile == AppProfile::TalosVR) ||
@@ -943,13 +918,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         // Originally applied to QuakeRemastered - this setting applies to QuakeEnhanced now since it's an update
         // to the same game.
         m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
-
-#if VKI_BUILD_GFX11
-        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-        {
-            m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
-        }
-#endif
     }
 
     if (appProfile == AppProfile::SedpEngine)
@@ -989,18 +957,15 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                          ForceDccForColorAttachments |
                                          ForceDccFor32BppShaderStorage);
         }
-#if VKI_BUILD_GFX11
+
         else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
-#if VKI_BUILD_NAVI31
             if (pInfo->revision == Pal::AsicRevision::Navi31)
             {
                 m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
                 m_settings.pipelineBinningMode = PipelineBinningModeEnable;
             }
-#endif
         }
-#endif
     }
 
     if (appProfile == AppProfile::ZombieArmy4)
@@ -1108,19 +1073,34 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     if (appProfile == AppProfile::RainbowSixExtraction)
     {
-#if VKI_BUILD_GFX11
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
-            m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
-                                         ForceDccForColorAttachments |
-                                         ForceDccForNonColorAttachmentShaderStorage |
-                                         ForceDccFor32BppShaderStorage |
-                                         ForceDccFor64BppShaderStorage);
+            if (pInfo->revision == Pal::AsicRevision::Navi31)
+            {
+                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                    ForceDccForColorAttachments |
+                    ForceDccForNonColorAttachmentShaderStorage |
+                    ForceDccFor32BppShaderStorage |
+                    ForceDccFor64BppShaderStorage);
 
-            m_settings.disableLoopUnrolls = true;
-            m_settings.forceCsThreadIdSwizzling = true;
+                m_settings.disableLoopUnrolls = true;
+                m_settings.forceCsThreadIdSwizzling = true;
+            }
+            else if (pInfo->revision == Pal::AsicRevision::Navi33)
+            {
+                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                    ForceDccFor3DShaderStorage |
+                    ForceDccForColorAttachments |
+                    ForceDccForNonColorAttachmentShaderStorage |
+                    ForceDccFor64BppShaderStorage);
+
+                m_settings.pipelineBinningMode = PipelineBinningModeDisable;
+                m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+                m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
+                m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+            }
         }
-#endif
     }
 
     if (appProfile == AppProfile::Rage2)
@@ -1169,8 +1149,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.fsWaveSize = 64;
             }
         }
-
-#if VKI_BUILD_GFX11
         else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
             m_settings.pipelineBinningMode = PipelineBinningModeDisable;
@@ -1183,7 +1161,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                          ForceDccFor32BppShaderStorage |
                                          ForceDccFor64BppShaderStorage);
         }
-#endif
     }
 
     if (appProfile == AppProfile::RedDeadRedemption2)
@@ -1212,12 +1189,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                                ForceDccForColorAttachments |
                                                ForceDccFor64BppShaderStorage);
 
-#if VKI_BUILD_GFX11
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
             {
                 m_settings.forceEnableDcc      |= ForceDccForNonColorAttachmentShaderStorage;
             }
-#endif
+
         }
 
         m_settings.ac01WaNotNeeded = true;
@@ -1284,12 +1260,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
-#if VKI_BUILD_GFX11
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
-            m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
         }
-#endif
     }
 
 #if VKI_RAY_TRACING
@@ -1314,13 +1287,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         }
 
-#if VKI_BUILD_GFX11
         if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
         {
             // Gives ~0.5% gain at 4k
             m_settings.enableAceShaderPrefetch = false;
         }
-#endif
     }
 
     if (appProfile == AppProfile::ControlDX12)
@@ -1330,17 +1301,17 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.rtEnableCompilePipelineLibrary = false;
         }
 
-#if VKI_BUILD_GFX11
         if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
         {
             // Gives ~2.22% gain at 1080p
             m_settings.enableAceShaderPrefetch = false;
         }
-#endif
     }
 
     if (appProfile == AppProfile::RayTracingWeekends)
     {
+        m_settings.rtEnableTopDownBuild = true;
+
         if (pInfo->gfxipProperties.shaderCore.vgprsPerSimd == 1024)
         {
             {
@@ -1388,7 +1359,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
 #if VKI_RAY_TRACING
             m_settings.rtBvhBuildModeFastTrace = BvhBuildModeLinear;
-            m_settings.rtEnableTopDownBuild    = false;
             m_settings.plocRadius              = 4;
 
             // 13% Gain @ 4k - Allows overlapping builds
@@ -1425,15 +1395,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             m_settings.csWaveSize = 64;
         }
-#if VKI_BUILD_GFX11
         else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
             // Navi31 Mall and Tiling Settings
-            if ((pInfo->revision == Pal::AsicRevision::Navi31)
-#if VKI_BUILD_NAVI32
-                || (pInfo->revision == Pal::AsicRevision::Navi32)
-#endif
-                )
+            if ((pInfo->revision == Pal::AsicRevision::Navi31) || (pInfo->revision == Pal::AsicRevision::Navi32))
             {
                 // Mall no alloc settings give a ~1% gain
                 m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
@@ -1444,7 +1409,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
             }
         }
-#endif
     }
 
     if (appProfile == AppProfile::IdTechLauncher)
@@ -1512,13 +1476,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         // A larger minImageCount can get a performance gain for game Metro Exodus.
         m_settings.forceMinImageCount = 3;
 
-#if VKI_BUILD_GFX11
         if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp11_0)
         {
             // Gives ~0.9% gain at 1080p
             m_settings.enableAceShaderPrefetch = false;
         }
-#endif
     }
 
     if (appProfile == AppProfile::X4Foundations)
@@ -1594,27 +1556,22 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
             }
         }
-#if VKI_BUILD_GFX11
         else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
         {
-#if VKI_BUILD_NAVI31
             if (pInfo->revision == Pal::AsicRevision::Navi31)
             {
                 // This provides ~4.2% gain at 4k
                 m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
                 m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
             }
-#endif
-#if VKI_BUILD_NAVI33
+
             if (pInfo->revision == Pal::AsicRevision::Navi33)
             {
                 {
                     m_settings.forceCsThreadIdSwizzling = true;
                 }
             }
-#endif
         }
-#endif
     }
 
     if (appProfile == AppProfile::MetalGearSolid5)
@@ -1660,27 +1617,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     }
 
-    if ((appProfile == AppProfile::HalfLifeAlyx) ||
-        (appProfile == AppProfile::Satisfactory))
-    {
-#if VKI_BUILD_GFX11
-        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-        {
-            m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
-        }
-#endif
-    }
-
-    if (appProfile == AppProfile::RomeRemastered)
-    {
-#if VKI_BUILD_GFX11
-        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-        {
-            m_settings.forcePwsMode = PwsMode::NoLateAcquirePoint;
-        }
-#endif
-    }
-
     if (appProfile == AppProfile::SpidermanRemastered)
     {
         m_settings.supportMutableDescriptors = false;
@@ -1695,7 +1631,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 #if VKI_RAY_TRACING
         m_settings.plocRadius              = 4;
         m_settings.rtBvhBuildModeFastTrace = BvhBuildModeLinear;
-        m_settings.rtEnableTopDownBuild    = false;
 
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
         {
@@ -1715,7 +1650,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     {
         OverrideVkd3dCommonSettings(&m_settings);
 
-#if VKI_BUILD_GFX11
         if ((pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
 #if VKI_BUILD_GFX115
             || (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_5)
@@ -1724,7 +1658,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             m_settings.fsWaveSize = 32;
         }
-#endif
     }
 
     if (appProfile == AppProfile::Vkd3dEngine)
@@ -1969,11 +1902,9 @@ void VulkanSettingsLoader::ValidateSettings()
         m_settings.enableRaytracingSupport = false;
     }
 
-#if VKI_BUILD_GFX11
     // RTIP 2.0+ is always expected to support hardware traversal stack
     VK_ASSERT((rayTracingIpLevel <= Pal::RayTracingIpLevel::RtIp1_1) ||
         (deviceProps.gfxipProperties.flags.supportRayTraversalStack == 1));
-#endif
 
     // Clamp target occupancy to [0.0, 1.0]
     m_settings.indirectCallTargetOccupancyPerSimd = Util::Clamp(m_settings.indirectCallTargetOccupancyPerSimd, 0.0f, 1.0f);

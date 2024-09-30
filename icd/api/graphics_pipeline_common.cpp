@@ -380,18 +380,6 @@ static VkFormat GetDepthFormat(
 }
 
 // =====================================================================================================================
-static uint32_t GetColorAttachmentCount(
-    const RenderPass*                    pRenderPass,
-    const uint32_t                       subpassIndex,
-    const VkPipelineRenderingCreateInfo* pPipelineRenderingCreateInfo
-)
-{
-    return (pRenderPass != nullptr) ? pRenderPass->GetSubpassColorReferenceCount(subpassIndex) :
-           (pPipelineRenderingCreateInfo != nullptr) ? pPipelineRenderingCreateInfo->colorAttachmentCount :
-           0u;
-}
-
-// =====================================================================================================================
 static VkShaderStageFlagBits GetLibraryActiveShaderStages(
     const VkGraphicsPipelineLibraryFlagsEXT libFlags)
 {
@@ -1518,7 +1506,7 @@ static void BuildMultisampleState(
         pInfo->immedInfo.msaaCreateInfo.shaderExportMaskSamples = subpassCoverageSampleCount;
         pInfo->immedInfo.msaaCreateInfo.sampleMask = (pMs->pSampleMask != nullptr)
                                     ? pMs->pSampleMask[0]
-                                    : 0xffffffff;
+                                    : 0xffff;
         pInfo->immedInfo.msaaCreateInfo.sampleClusters         = subpassCoverageSampleCount;
         pInfo->immedInfo.msaaCreateInfo.alphaToCoverageSamples = subpassCoverageSampleCount;
         pInfo->immedInfo.msaaCreateInfo.occlusionQuerySamples  = subpassDepthSampleCount;
@@ -1705,7 +1693,8 @@ static void BuildColorBlendState(
         pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::LogicOpEnable);
     }
 
-    if (GetColorAttachmentCount(pRenderPass, subpass, pRendering) != 0)
+    const uint32 numColorTargets = GraphicsPipelineCommon::GetColorAttachmentCount(pRenderPass, subpass, pRendering);
+    if (numColorTargets != 0)
     {
         if (pCb != nullptr)
         {
@@ -1713,11 +1702,18 @@ static void BuildColorBlendState(
             pInfo->immedInfo.logicOpEnable = pCb->logicOpEnable;
         }
 
-        uint32_t numColorTargets = 0;
+        bool useBlendAttachments = false;
         const VkPipelineColorWriteCreateInfoEXT* pColorWriteCreateInfo = nullptr;
         if (pCb != nullptr)
         {
-            numColorTargets = Min(pCb->attachmentCount, Pal::MaxColorTargets);
+            // If the pipeline is created with these 3 states as dynamic, the attachmentCount from the
+            // VkPipelineColorBlendStateCreateInfo is ignored.
+            if ((IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEnable) == false) ||
+                (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorBlendEquation) == false) ||
+                (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::ColorWriteMask) == false))
+            {
+                useBlendAttachments = true;
+            }
 
             const void* pNext = static_cast<const VkStructHeader*>(pCb->pNext);
 
@@ -1744,11 +1740,6 @@ static void BuildColorBlendState(
 
                 pNext = pHeader->pNext;
             }
-        }
-
-        if (pRendering != nullptr)
-        {
-            numColorTargets = Min(pRendering->colorAttachmentCount, Pal::MaxColorTargets);
         }
 
         pInfo->immedInfo.colorWriteEnable = 0;
@@ -1788,8 +1779,13 @@ static void BuildColorBlendState(
                 // disable shader writes through that target.
                 if (pCbDst->swizzledFormat.format != Pal::ChNumFormat::Undefined)
                 {
-                    const VkPipelineColorBlendAttachmentState* pSrc =
-                        (pCb != nullptr) ? &pCb->pAttachments[i] : nullptr;
+                    const VkPipelineColorBlendAttachmentState* pSrc = nullptr;
+
+                    if (useBlendAttachments && (i < pCb->attachmentCount))
+                    {
+                        pSrc = &pCb->pAttachments[i];
+                    }
+
                     VkColorComponentFlags colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
                                                            VK_COLOR_COMPONENT_G_BIT |
                                                            VK_COLOR_COMPONENT_B_BIT |
@@ -1945,14 +1941,15 @@ static void BuildPreRasterizationShaderState(
 #endif
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
-    if (pIn->pTessellationState != nullptr)
+    // Set patch control points only if tessellation shader is enabled.
+    pInfo->immedInfo.inputAssemblyState.patchControlPoints = 0;
+    if (pInfo->activeStages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
     {
-        pInfo->immedInfo.inputAssemblyState.patchControlPoints = static_cast<uint8>(
-                                                                    pIn->pTessellationState->patchControlPoints);
-    }
-    else
-    {
-        pInfo->immedInfo.inputAssemblyState.patchControlPoints = 0;
+        if (pIn->pTessellationState != nullptr)
+        {
+            pInfo->immedInfo.inputAssemblyState.patchControlPoints = static_cast<uint8>(
+                                                                         pIn->pTessellationState->patchControlPoints);
+        }
     }
 
     // Build states via VkPipelineRasterizationStateCreateInfo
@@ -3238,6 +3235,17 @@ void GraphicsPipelineCommon::HandleExtensionStructs(
         }
         pNext = pHeader->pNext;
     }
+}
+
+// =====================================================================================================================
+uint32_t GraphicsPipelineCommon::GetColorAttachmentCount(
+    const RenderPass*                    pRenderPass,
+    const uint32_t                       subpassIndex,
+    const VkPipelineRenderingCreateInfo* pPipelineRenderingCreateInfo)
+{
+    return (pRenderPass != nullptr) ? pRenderPass->GetSubpassColorReferenceCount(subpassIndex) :
+        (pPipelineRenderingCreateInfo != nullptr) ? pPipelineRenderingCreateInfo->colorAttachmentCount :
+        0u;
 }
 
 }

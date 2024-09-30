@@ -56,7 +56,6 @@ public:
         const Pal::gpusize*               bufferAddress,
         const VkFormat                    format,
         const uint32_t                    deviceNum,
-        const size_t                      srdSize,
         void*                             pSrdMemory);
 
     VkResult Destroy(

@@ -1074,7 +1074,7 @@
     },
     {
       "Name": "PipelineProfileRuntimeFile",
-      "Description": "Relative Path to a JSON file that describes a shader app profile that is parsed at runtime. This setting only triggers on debug builds or builds made with the ICD_RUNTIME_APP_PROFILE=1 option. This file has the same format as the JSON files used to build production shader app profiles. Root directory is determined by AMD_DEBUG_DIR environment variable",
+      "Description": "Relative Path to a JSON file that describes a shader app profile that is parsed at runtime. This setting only triggers on debug builds or builds made with the VKI_RUNTIME_APP_PROFILE=1 option. This file has the same format as the JSON files used to build production shader app profiles. Root directory is determined by AMD_DEBUG_DIR environment variable",
       "Tags": [
         "Pipeline Options"
       ],
@@ -1128,9 +1128,6 @@
       "Description": "Enable image MSAA load optimization on Gfx11.",
       "Tags": [
         "Pipeline Options"
-      ],
-      "BuildTypes": [
-        "VKI_BUILD_GFX11"
       ],
       "Defaults": {
         "Default": false
@@ -3184,7 +3181,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": true
+        "Default": false
       },
       "Type": "bool",
       "Name": "RtEnableTopDownBuild",
@@ -3332,6 +3329,36 @@
       "Scope": "Driver"
     },
     {
+      "Name": "RtCheckBufferOverlapsInBatch",
+      "Description": "Check for scratch and result buffer overlaps in a batch of BVH builds/updates.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "RtDisableAccelStructCompaction",
+      "Description": "Disables compaction of the Acceleration Structure build and performs a copy instead.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Name": "RtEnableMortonCode30",
       "Description": "Enable Morton Code 30 bits",
       "Tags": [
@@ -3341,7 +3368,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": true
+        "Default": false
       },
       "Type": "bool",
       "Scope": "Driver"
@@ -4625,7 +4652,7 @@
     },
     {
       "Name": "DbgBarrierPostCmdEnable",
-      "Description": "Triggers a CmdBarrier call after any command in the given mask.  The barrier behavior is controlled by the other DbgBarrierPost* settings in this category.  Requires VK_ENABLE_DEBUG_BARRIERS=1 to take effect. 0x8FFFFFFF: All commands (heavyweight option)",
+      "Description": "Triggers a CmdBarrier call after any command in the given mask.  The barrier behavior is controlled by the other DbgBarrierPost* settings in this category.  Requires VKI_ENABLE_DEBUG_BARRIERS=1 to take effect. 0x8FFFFFFF: All commands (heavyweight option)",
       "Tags": [
         "Debugging"
       ],
@@ -4905,7 +4932,7 @@
       "Name": "DbgBarrierPostCacheDstMask"
     },
     {
-      "Description": "Triggers a CmdBarrier call before any command in the given mask.  The barrier behavior is controlled by the other DbgBarrierPre* settings in this category.  Requires VK_ENABLE_DEBUG_BARRIERS=1 to take effect. For further documentation, consult the corresponding DbgBarrierPostCmdEnable command.",
+      "Description": "Triggers a CmdBarrier call before any command in the given mask.  The barrier behavior is controlled by the other DbgBarrierPre* settings in this category.  Requires VKI_ENABLE_DEBUG_BARRIERS=1 to take effect. For further documentation, consult the corresponding DbgBarrierPostCmdEnable command.",
       "Tags": [
         "Debugging"
       ],
@@ -5372,21 +5399,6 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Fast BVH Build with no Morton Code sorting. Applies to BVHs with up to a wave size number of primitives.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": 0
-      },
-      "Type": "uint32",
-      "Name": "FastBuildThreshold",
-      "Scope": "Driver"
-    },
-    {
       "Description": "Enable pair compression in early build stage, i.e., During Encode phase.",
       "Tags": [
         "RayTracing"
@@ -5640,7 +5652,7 @@
         "General"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Scope": "Driver",
       "Type": "bool"

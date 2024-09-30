@@ -235,22 +235,22 @@ void IndirectCommandsLayoutNV::BuildPalCreateInfo(
     Pal::IndirectParam*                             pIndirectParams,
     Pal::IndirectCmdGeneratorCreateInfo*            pPalCreateInfo)
 {
-    uint32_t paramCount = 0;
-    uint32_t expectedOffset = 0;
-    uint32_t bindingArgsSize = 0;
+    uint32_t paramCount      = 0u;
+    uint32_t expectedOffset  = 0u;
+    uint32_t bindingArgsSize = 0u;
 
     bool useNativeIndexType = true;
 
-    const bool isDispatch = (pCreateInfo->pTokens[pCreateInfo->tokenCount - 1].tokenType
-                                == VK_INDIRECT_COMMANDS_TOKEN_TYPE_DISPATCH_NV);
+    const bool isDispatch = (pCreateInfo->pTokens[pCreateInfo->tokenCount - 1].tokenType ==
+                             VK_INDIRECT_COMMANDS_TOKEN_TYPE_DISPATCH_NV);
 
     for (uint32_t i = 0; i < pCreateInfo->tokenCount; ++i)
     {
         const VkIndirectCommandsLayoutTokenNV& token = pCreateInfo->pTokens[i];
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 889
         // Set a padding operation to handle non tightly packed indirect arguments buffers
         VK_ASSERT(token.offset >= expectedOffset);
+
         if (token.offset > expectedOffset)
         {
             pIndirectParams[paramCount].type        = Pal::IndirectParamType::Padding;
@@ -259,7 +259,6 @@ void IndirectCommandsLayoutNV::BuildPalCreateInfo(
             bindingArgsSize += pIndirectParams[paramCount].sizeInBytes;
             paramCount++;
         }
-#endif
 
         switch (token.tokenType)
         {
@@ -359,9 +358,12 @@ void IndirectCommandsLayoutNV::BuildPalCreateInfo(
     constexpr uint32_t DxgiIndexTypeUint16 = 57;
     constexpr uint32_t DxgiIndexTypeUint32 = 42;
 
-    pPalCreateInfo->indexTypeTokens[0] = useNativeIndexType ? VK_INDEX_TYPE_UINT8_KHR : DxgiIndexTypeUint8;
-    pPalCreateInfo->indexTypeTokens[1] = useNativeIndexType ? VK_INDEX_TYPE_UINT16    : DxgiIndexTypeUint16;
-    pPalCreateInfo->indexTypeTokens[2] = useNativeIndexType ? VK_INDEX_TYPE_UINT32    : DxgiIndexTypeUint32;
+    pPalCreateInfo->indexTypeTokens[0] = useNativeIndexType ?
+        static_cast<uint32_t>(VK_INDEX_TYPE_UINT8_KHR) : DxgiIndexTypeUint8;
+    pPalCreateInfo->indexTypeTokens[1] = useNativeIndexType ?
+        static_cast<uint32_t>(VK_INDEX_TYPE_UINT16)    : DxgiIndexTypeUint16;
+    pPalCreateInfo->indexTypeTokens[2] = useNativeIndexType ?
+        static_cast<uint32_t>(VK_INDEX_TYPE_UINT32)    : DxgiIndexTypeUint32;
 }
 
 // =====================================================================================================================

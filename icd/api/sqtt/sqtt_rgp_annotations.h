@@ -217,6 +217,8 @@ enum class RgpSqttMarkerEventType : uint32_t
     CmdDrawMeshTasksEXT                         = 41,       // vkCmdDrawMeshTasksEXT
     CmdDrawMeshTasksIndirectCountEXT            = 42,       // vkCmdDrawMeshTasksIndirectCountEXT
     CmdDrawMeshTasksIndirectEXT                 = 43,       // vkCmdDrawMeshTasksIndirectEXT
+    CmdDrawIndirectCount                        = 44,       // vkCmdDrawIndirectCount
+    CmdDrawIndexedIndirectCount                 = 45,       // vkCmdDrawIndexedIndirectCount
 #if VKI_RAY_TRACING
     ShaderIndirectModeMask                      = 0x800000, // Used to mark whether the shader is compiled in indirect mode or not
                                                             // This mask can only be used with CmdTraceRaysKHR and CmdTraceRaysIndirectKHR
@@ -509,6 +511,8 @@ enum class RgpSqttMarkerGeneralApiType : uint32_t
     CmdDrawMeshTasksEXT                 = 47,
     CmdDrawMeshTasksIndirectCountEXT    = 48,
     CmdDrawMeshTasksIndirectEXT         = 49,
+    CmdDrawIndirectCount                = 50,
+    CmdDrawIndexedIndirectCount         = 51,
 
     Invalid = 0xffffffff
 };

@@ -30,6 +30,7 @@
 #include "include/vk_shader.h"
 #include "include/vk_device.h"
 #include "include/vk_instance.h"
+#include "include/vk_pipeline_binary.h"
 #include "include/vk_pipeline_cache.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_memory.h"
@@ -330,6 +331,7 @@ void RayTracingPipeline::Init(
     uint32_t                             shaderLibraryCount,
     Pal::IShaderLibrary**                ppPalShaderLibrary,
     const PipelineLayout*                pPipelineLayout,
+    PipelineBinaryStorage*               pBinaryStorage,
     const ShaderOptimizerKey*            pShaderOptKeys,
     const ImmedInfo&                     immedInfo,
     uint64_t                             staticStateMask,
@@ -350,6 +352,7 @@ void RayTracingPipeline::Init(
     Pipeline::Init(
         ppPalPipeline,
         pPipelineLayout,
+        pBinaryStorage,
         staticStateMask,
         dispatchRaysUserDataOffset,
         cacheHash,
@@ -482,6 +485,29 @@ VkResult RayTracingPipeline::CreateImpl(
         PipelineCompiler::InitPipelineCreationFeedback(pPipelineCreationFeedbackCreateInfo);
         bool                     binariesProvided                = false;
         Util::MetroHash::Hash    cacheId[MaxPalDevices]          = {};
+        Vkgc::BinaryData         providedBinaries[MaxPalDevices] = {};
+
+        auto pPipelineBinaryInfoKHR = extStructs.pPipelineBinaryInfoKHR;
+
+        if (pPipelineBinaryInfoKHR != nullptr)
+        {
+            if (pPipelineBinaryInfoKHR->binaryCount > 0)
+            {
+                VK_ASSERT(pPipelineBinaryInfoKHR->binaryCount == m_pDevice->NumPalDevices());
+                binariesProvided = true;
+            }
+
+            for (uint32_t binaryIndex = 0;
+                (binaryIndex < pPipelineBinaryInfoKHR->binaryCount) && (result == VK_SUCCESS);
+                ++binaryIndex)
+            {
+                const auto pBinary = PipelineBinary::ObjectFromHandle(
+                    pPipelineBinaryInfoKHR->pPipelineBinaries[binaryIndex]);
+
+                cacheId[binaryIndex]          = pBinary->BinaryKey();
+                providedBinaries[binaryIndex] = pBinary->BinaryData();
+            }
+        }
 
         RayTracingPipelineShaderStageInfo shaderInfo        = {};
         PipelineOptimizerKey              optimizerKey      = {};
@@ -693,6 +719,10 @@ VkResult RayTracingPipeline::CreateImpl(
 
         bool                  storeBinaryToPipeline = false;
         bool                  storeBinaryToCache    = true;
+        PipelineBinaryStorage binaryStorage         = {};
+
+        storeBinaryToPipeline = (flags & VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR) != 0;
+        storeBinaryToCache    = (flags & VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR) == 0;
 
         for (uint32_t deviceIdx = 0; (result == VK_SUCCESS) && (deviceIdx < m_pDevice->NumPalDevices()); deviceIdx++)
         {
@@ -732,10 +762,40 @@ VkResult RayTracingPipeline::CreateImpl(
                                 isInternalCacheHit);
                         }
 
+                        if (storeBinaryToPipeline)
+                        {
+                            // Store single packed blob of binaries from cache instead of separate binaries.
+                            void* pMemory = pAllocator->pfnAllocation(
+                                pAllocator->pUserData,
+                                cachedBinData.codeSize,
+                                VK_DEFAULT_MEM_ALIGN,
+                                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);     // retained in the pipeline object
+
+                            if (pMemory != nullptr)
+                            {
+                                memcpy(
+                                    pMemory,
+                                    cachedBinData.pCode,
+                                    cachedBinData.codeSize);
+
+                                InsertBinaryData(
+                                    &binaryStorage,
+                                    deviceIdx,
+                                    cacheId[deviceIdx],
+                                    cachedBinData.codeSize,
+                                    pMemory);
+                            }
+                            else
+                            {
+                                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                            }
+                        }
                     }
                 }
                 else
                 {
+                    cachedBinData = providedBinaries[deviceIdx];
+                    cacheResult   = Util::Result::Success;
                 }
 
                 if (cacheResult == Util::Result::Success)
@@ -836,6 +896,35 @@ VkResult RayTracingPipeline::CreateImpl(
                                 isInternalCacheHit);
                         }
 
+                        if (storeBinaryToPipeline)
+                        {
+                            // Store compiled binaries packed into a single blob instead of separately.
+                            void* pMemory = pAllocator->pfnAllocation(
+                                pAllocator->pUserData,
+                                cachedBinData.codeSize,
+                                VK_DEFAULT_MEM_ALIGN,
+                                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);     // retained in the pipeline object
+
+                            if (pMemory != nullptr)
+                            {
+                                memcpy(
+                                    pMemory,
+                                    cachedBinData.pCode,
+                                    cachedBinData.codeSize);
+
+                                InsertBinaryData(
+                                    &binaryStorage,
+                                    deviceIdx,
+                                    cacheId[deviceIdx],
+                                    cachedBinData.codeSize,
+                                    pMemory);
+                            }
+                            else
+                            {
+                                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                            }
+                        }
+                        else
                         {
                             m_pDevice->VkInstance()->FreeMem(const_cast<void*>(cachedBinData.pCode));
                         }
@@ -925,6 +1014,7 @@ VkResult RayTracingPipeline::CreateImpl(
         // Create the PAL pipeline object.
         Pal::IShaderLibrary**   ppShaderLibraries                     = nullptr;
         ShaderGroupInfo*        pShaderGroupInfos                     = nullptr;
+        PipelineBinaryStorage*  pPermBinaryStorage                    = nullptr;
         Pal::IPipeline*         pPalPipeline          [MaxPalDevices] = {};
         ShaderGroupStackSizes*  pShaderGroupStackSizes[MaxPalDevices] = {};
         gpusize                 traceRayGpuVas        [MaxPalDevices] = {};
@@ -934,6 +1024,7 @@ VkResult RayTracingPipeline::CreateImpl(
         size_t shaderLibraryPalMemSize      = 0;
         size_t shaderGroupStackSizesMemSize = 0;
         size_t shaderGroupInfosMemSize      = 0;
+        size_t binaryStorageSize            = 0;
 
         const size_t shaderOptKeysSize = optimizerKey.shaderCount * sizeof(ShaderOptimizerKey);
 
@@ -966,6 +1057,7 @@ VkResult RayTracingPipeline::CreateImpl(
             shaderGroupInfosMemSize      = sizeof(ShaderGroupInfo) * totalGroupCount;
             shaderGroupStackSizesMemSize = (((funcCount > 0) || hasLibraries) ? 1 : 0) *
                                            sizeof(ShaderGroupStackSizes) * totalGroupCount * m_pDevice->NumPalDevices();
+            binaryStorageSize            = (storeBinaryToPipeline ? 1 : 0 ) * sizeof(PipelineBinaryStorage);
 
             const size_t totalSize =
                 pipelineMemSize +
@@ -973,6 +1065,7 @@ VkResult RayTracingPipeline::CreateImpl(
                 shaderLibraryPalMemSize +
                 shaderGroupStackSizesMemSize +
                 shaderGroupInfosMemSize +
+                binaryStorageSize +
                 shaderOptKeysSize;
 
             pSystemMem = pAllocator->pfnAllocation(
@@ -1006,6 +1099,15 @@ VkResult RayTracingPipeline::CreateImpl(
             void* pShaderGroupsStackSizesMem = Util::VoidPtrInc(pPalShaderLibraryMem, shaderLibraryPalMemSize);
 
             PopulateShaderGroupInfos(pCreateInfo, pShaderGroupInfos, totalGroupCount);
+
+            if (storeBinaryToPipeline)
+            {
+                pPermBinaryStorage = static_cast<PipelineBinaryStorage*>(
+                    Util::VoidPtrInc(pShaderGroupsStackSizesMem, shaderGroupStackSizesMemSize));
+
+                // Simply copy the existing allocations to the new struct.
+                *pPermBinaryStorage = binaryStorage;
+            }
 
             // Transfer shader optimizer keys to permanent storage.
             memcpy(pShaderOptKeys, optimizerKey.pShaders, shaderOptKeysSize);
@@ -1526,6 +1628,7 @@ VkResult RayTracingPipeline::CreateImpl(
                  funcCount * m_pDevice->NumPalDevices(),
                  ppShaderLibraries,
                  localPipelineInfo.pLayout,
+                 pPermBinaryStorage,
                  optimizerKey.pShaders,
                  localPipelineInfo.immedInfo,
                  localPipelineInfo.staticStateMask,
@@ -1542,7 +1645,7 @@ VkResult RayTracingPipeline::CreateImpl(
                  cacheId[DefaultDeviceIndex],
                  apiPsoHash,
                  elfHash);
-            if (settings.enableDebugPrintf)
+            if (m_pDevice->GetEnabledFeatures().enableDebugPrintf)
             {
                 ClearFormatString();
                 for (uint32_t i = 0; i < pipelineBinaries[DefaultDeviceIndex].pipelineBinCount; ++i)
@@ -1557,6 +1660,8 @@ VkResult RayTracingPipeline::CreateImpl(
         }
         else
         {
+            // Free the binaries only if we failed to create the pipeline.
+            FreeBinaryStorage(&binaryStorage, pAllocator);
 
             for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
             {
@@ -2262,15 +2367,10 @@ uint32_t RayTracingPipeline::UpdateShaderGroupIndex(
 }
 
 // =====================================================================================================================
-void RayTracingPipeline::GetDispatchSize(
-    uint32_t* pDispatchSizeX,
-    uint32_t* pDispatchSizeY,
-    uint32_t* pDispatchSizeZ,
-    uint32_t  width,
-    uint32_t  height,
-    uint32_t  depth) const
+Pal::DispatchDims RayTracingPipeline::GetDispatchSize(
+    Pal::DispatchDims size) const
 {
-    VK_ASSERT((pDispatchSizeX != nullptr) && (pDispatchSizeY != nullptr) && (pDispatchSizeZ != nullptr));
+    Pal::DispatchDims dispatchSize = {};
 
     const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
@@ -2280,31 +2380,33 @@ void RayTracingPipeline::GetDispatchSize(
 
     if (flattenThreadGroupSize == 0)
     {
-        *pDispatchSizeX = Util::RoundUpQuotient(width,  settings.rtThreadGroupSizeX);
-        *pDispatchSizeY = Util::RoundUpQuotient(height, settings.rtThreadGroupSizeY);
-        *pDispatchSizeZ = Util::RoundUpQuotient(depth,  settings.rtThreadGroupSizeZ);
+        dispatchSize.x = Util::RoundUpQuotient(size.x, settings.rtThreadGroupSizeX);
+        dispatchSize.y = Util::RoundUpQuotient(size.y, settings.rtThreadGroupSizeY);
+        dispatchSize.z = Util::RoundUpQuotient(size.z, settings.rtThreadGroupSizeZ);
     }
     else
     {
-        uint32_t dispatchSize = 0;
+        uint32_t x = 0;
 
-        if ((width > 1) && (height > 1))
+        if ((size.x > 1) && (size.y > 1))
         {
             const uint32_t tileHeight = flattenThreadGroupSize / RayTracingTileWidth;
-            const uint32_t paddedWidth = Util::Pow2Align(width, RayTracingTileWidth);
-            const uint32_t paddedHeight = Util::Pow2Align(height, tileHeight);
+            const uint32_t paddedWidth = Util::Pow2Align(size.x, RayTracingTileWidth);
+            const uint32_t paddedHeight = Util::Pow2Align(size.y, tileHeight);
 
-            dispatchSize = Util::RoundUpQuotient(paddedWidth * paddedHeight, flattenThreadGroupSize);
+            x = Util::RoundUpQuotient(paddedWidth * paddedHeight, flattenThreadGroupSize);
         }
         else
         {
-            dispatchSize = Util::RoundUpQuotient(width * height, flattenThreadGroupSize);
+            x = Util::RoundUpQuotient(size.x * size.y, flattenThreadGroupSize);
         }
 
-        *pDispatchSizeX = dispatchSize;
-        *pDispatchSizeY = depth;
-        *pDispatchSizeZ = 1;
+        dispatchSize.x = x;
+        dispatchSize.y = size.z;
+        dispatchSize.z = 1;
     }
+
+    return dispatchSize;
 }
 
 // =====================================================================================================================

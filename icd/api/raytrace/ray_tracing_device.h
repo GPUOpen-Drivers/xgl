@@ -132,16 +132,6 @@ public:
         void*                                  pConstants);
 
 private:
-    Device*                         m_pDevice;
-
-    GpuRt::IDevice*                 m_pGpuRtDevice[MaxPalDevices];
-    GpuRt::DeviceSettings           m_gpurtDeviceSettings;
-    GpurtOptions                    m_gpurtOptions;
-
-    uint32_t                        m_profileRayFlags;           // Ray flag override for profiling
-    uint32_t                        m_profileMaxIterations;      // Max traversal iterations
-
-    CmdContext                      m_cmdContext[MaxPalDevices];
 
     // GPURT Callback Functions
     static Pal::Result ClientAllocateGpuMemory(
@@ -210,6 +200,17 @@ private:
         GpuRt::RtDispatchInfo*                 pDispatchInfo) const;
 
     void CollectGpurtOptions(GpurtOptions* const pGpurtOptions) const;
+
+    Device*                         m_pDevice;
+
+    GpuRt::IDevice*                 m_pGpuRtDevice[MaxPalDevices];
+    GpuRt::DeviceSettings           m_gpurtDeviceSettings;
+    GpurtOptions                    m_gpurtOptions;
+
+    uint32_t                        m_profileRayFlags;           // Ray flag override for profiling
+    uint32_t                        m_profileMaxIterations;      // Max traversal iterations
+
+    CmdContext                      m_cmdContext[MaxPalDevices];
 
     BvhBatchLayer*                  m_pBvhBatchLayer;
     SplitRaytracingLayer*           m_pSplitRaytracingLayer;

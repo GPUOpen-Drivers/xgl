@@ -168,7 +168,9 @@ public:
             uint32                reserved2                            : 1;
             uint32                deviceGeneratedCommands              : 1;
             uint32                robustVertexBufferExtend             : 1;
-            uint32                reserved                             : 11;
+            uint32                enableDebugPrintf                    : 1;
+            uint32                reserved3                            : 1;
+            uint32                reserved                             : 9;
         };
 
         uint32 u32All;
@@ -193,7 +195,8 @@ public:
 
         struct
         {
-            uint32_t bufferView;
+            uint32_t typedBufferView;
+            uint32_t untypedBufferView;
             uint32_t imageView;
             uint32_t fmaskView;
             uint32_t sampler;
@@ -809,7 +812,7 @@ public:
         const uint8_t*                 pCode,
         uint32_t                       numUserDataNodes,
         Vkgc::ResourceMappingRootNode* pUserDataNodes,
-        VkShaderModuleCreateFlags      internalShaderFlags,
+        ShaderModuleFlags              flags,
         bool                           forceWave64,
         const VkSpecializationInfo*    pSpecializationInfo,
         InternalPipeline*              pInternalPipeline);
@@ -1443,6 +1446,34 @@ VKAPI_ATTR void VKAPI_CALL vkGetGeneratedCommandsMemoryRequirementsNV(
     VkDevice                                            device,
     const VkGeneratedCommandsMemoryRequirementsInfoNV*  pInfo,
     VkMemoryRequirements2*                              pMemoryRequirements);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineBinariesKHR(
+    VkDevice                                    device,
+    const VkPipelineBinaryCreateInfoKHR*        pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkPipelineBinaryHandlesInfoKHR*             pBinaries);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyPipelineBinaryKHR(
+    VkDevice                                    device,
+    VkPipelineBinaryKHR                         pipelineBinary,
+    const VkAllocationCallbacks*                pAllocator);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineKeyKHR(
+    VkDevice                                    device,
+    const VkPipelineCreateInfoKHR*              pPipelineCreateInfo,
+    VkPipelineBinaryKeyKHR*                     pPipelineBinaryKey);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineBinaryDataKHR(
+    VkDevice                                    device,
+    const VkPipelineBinaryDataInfoKHR*          pInfo,
+    VkPipelineBinaryKeyKHR*                     pPipelineBinaryKey,
+    size_t*                                     pPipelineBinaryDataSize,
+    void*                                       pPipelineBinaryData);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkReleaseCapturedPipelineDataKHR(
+    VkDevice                                    device,
+    const VkReleaseCapturedPipelineDataInfoKHR* pInfo,
+    const VkAllocationCallbacks*                pAllocator);
 
 } // namespace entry
 
