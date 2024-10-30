@@ -36,6 +36,7 @@
 #include "include/vk_pipeline_cache.h"
 #if VKI_RAY_TRACING
 #include "raytrace/ray_tracing_device.h"
+#include "raytrace/vk_ray_tracing_pipeline.h"
 #endif
 
 #include "palAutoBuffer.h"
@@ -93,6 +94,7 @@ static constexpr struct
 
 static constexpr char shaderPreNameIntermediate[] = "Intermediate";
 static constexpr char shaderPreNameISA[]          = "ISA";
+static constexpr char shaderPreNameELF[]          = "ELF";
 
 static_assert(VK_ARRAY_SIZE(HwStageNames) == static_cast<uint32_t>(Util::Abi::HardwareStage::Count),
     "Number of HwStageNames and PAL HW stages should match.");
@@ -274,6 +276,18 @@ void Pipeline::GenerateHashFromShaderStageCreateInfo(
                 }
                 break;
             }
+            case VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO_EXT:
+            {
+                const auto* pPipelineRobustnessCreateInfoEXT =
+                    static_cast<const VkPipelineRobustnessCreateInfoEXT*>(pNext);
+                pHasher->Update(pPipelineRobustnessCreateInfoEXT->sType);
+                pHasher->Update(pPipelineRobustnessCreateInfoEXT->storageBuffers);
+                pHasher->Update(pPipelineRobustnessCreateInfoEXT->uniformBuffers);
+                pHasher->Update(pPipelineRobustnessCreateInfoEXT->vertexInputs);
+                pHasher->Update(pPipelineRobustnessCreateInfoEXT->images);
+
+                break;
+            }
             default:
                 break;
             }
@@ -351,16 +365,14 @@ VkResult Pipeline::BuildShaderStageInfo(
 
         maxOutIdx = Util::Max(maxOutIdx, outIdx + 1);
 
-        EXTRACT_VK_STRUCTURES_0(
-            requiredSubgroupSize,
-            PipelineShaderStageRequiredSubgroupSizeCreateInfo,
-            static_cast<const VkPipelineShaderStageRequiredSubgroupSizeCreateInfo*>(stageInfo.pNext),
-            PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO);
+        PipelineShaderStageExtStructs extStructs = {};
 
-        if (pPipelineShaderStageRequiredSubgroupSizeCreateInfo != nullptr)
+        HandleShaderStageExtensionStructs(stageInfo.pNext, &extStructs);
+
+        if (extStructs.pPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT != nullptr)
         {
             pShaderStageInfo[outIdx].waveSize =
-                pPipelineShaderStageRequiredSubgroupSizeCreateInfo->requiredSubgroupSize;
+                extStructs.pPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT->requiredSubgroupSize;
         }
 
         if (stageInfo.module != VK_NULL_HANDLE)
@@ -385,22 +397,15 @@ VkResult Pipeline::BuildShaderStageInfo(
             Pal::ShaderHash           codeHash        = {};
             PipelineCreationFeedback* pShaderFeedback = (pFeedbacks == nullptr) ? nullptr : pFeedbacks + outIdx;
 
-            EXTRACT_VK_STRUCTURES_1(
-                shaderModule,
-                ShaderModuleCreateInfo,
-                PipelineShaderStageModuleIdentifierCreateInfoEXT,
-                static_cast<const VkShaderModuleCreateInfo*>(stageInfo.pNext),
-                SHADER_MODULE_CREATE_INFO,
-                PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT);
+            VK_ASSERT((extStructs.pShaderModuleCreateInfo != nullptr) ||
+                      (extStructs.pPipelineShaderStageModuleIdentifierCreateInfoEXT != nullptr));
 
-            VK_ASSERT((pShaderModuleCreateInfo != nullptr) ||
-                      (pPipelineShaderStageModuleIdentifierCreateInfoEXT != nullptr));
-
-            if (pShaderModuleCreateInfo != nullptr)
+            if (extStructs.pShaderModuleCreateInfo != nullptr)
             {
-                flags                 = ShaderModule::ConvertVkShaderModuleCreateFlags(pShaderModuleCreateInfo->flags);
-                shaderBinary.codeSize = pShaderModuleCreateInfo->codeSize;
-                shaderBinary.pCode    = pShaderModuleCreateInfo->pCode;
+                flags                 = ShaderModule::ConvertVkShaderModuleCreateFlags(
+                    extStructs.pShaderModuleCreateInfo->flags);
+                shaderBinary.codeSize = extStructs.pShaderModuleCreateInfo->codeSize;
+                shaderBinary.pCode    = extStructs.pShaderModuleCreateInfo->pCode;
 
                 codeHash = ShaderModule::BuildCodeHash(
                     shaderBinary.pCode,
@@ -420,20 +425,20 @@ VkResult Pipeline::BuildShaderStageInfo(
                 }
             }
 
-            if (pPipelineShaderStageModuleIdentifierCreateInfoEXT != nullptr)
+            if (extStructs.pPipelineShaderStageModuleIdentifierCreateInfoEXT != nullptr)
             {
                 // Get the 128 bit ShaderModule Hash
-                VK_ASSERT(pPipelineShaderStageModuleIdentifierCreateInfoEXT->identifierSize ==
+                VK_ASSERT(extStructs.pPipelineShaderStageModuleIdentifierCreateInfoEXT->identifierSize ==
                           sizeof(codeHash));
 
                 memcpy(&codeHash.lower,
-                       (pPipelineShaderStageModuleIdentifierCreateInfoEXT->pIdentifier),
+                       (extStructs.pPipelineShaderStageModuleIdentifierCreateInfoEXT->pIdentifier),
                        sizeof(codeHash.lower));
 
                 memcpy(&codeHash.upper,
-                       (pPipelineShaderStageModuleIdentifierCreateInfoEXT->pIdentifier +
-                           sizeof(codeHash.lower)),
-                        sizeof(codeHash.upper));
+                       (extStructs.pPipelineShaderStageModuleIdentifierCreateInfoEXT->pIdentifier +
+                       sizeof(codeHash.lower)),
+                       sizeof(codeHash.upper));
             }
 
             if (result != VK_SUCCESS)
@@ -502,11 +507,149 @@ void Pipeline::HandleExtensionStructs(
             pExtStructs->pPipelineBinaryInfoKHR = static_cast<const VkPipelineBinaryInfoKHR*>(pNext);
             break;
         }
+        case VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO_EXT:
+        {
+            pExtStructs->pPipelineRobustnessCreateInfoEXT =
+                static_cast<const VkPipelineRobustnessCreateInfoEXT*>(pNext);
+            break;
+        }
         default:
             break;
         }
         pNext = pHeader->pNext;
     }
+}
+
+// =====================================================================================================================
+void Pipeline::HandleShaderStageExtensionStructs(
+    const void*                         pNext,
+    PipelineShaderStageExtStructs*      pExtStructs)
+{
+    while (pNext != nullptr)
+    {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<int32>(pHeader->sType))
+        {
+            // Handle extension specific structures
+
+        case VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO_EXT:
+        {
+            pExtStructs->pPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT =
+                static_cast<const VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT*>(pNext);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO:
+        {
+            pExtStructs->pShaderModuleCreateInfo = static_cast<const VkShaderModuleCreateInfo*>(pNext);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT:
+        {
+            pExtStructs->pPipelineShaderStageModuleIdentifierCreateInfoEXT =
+                static_cast<const VkPipelineShaderStageModuleIdentifierCreateInfoEXT*>(pNext);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO_EXT:
+        {
+            pExtStructs->pPipelineRobustnessCreateInfoEXT =
+                static_cast<const VkPipelineRobustnessCreateInfoEXT*>(pNext);
+            break;
+        }
+        default:
+            break;
+        }
+        pNext = pHeader->pNext;
+    }
+}
+
+// =====================================================================================================================
+bool Pipeline::InitPipelineRobustness(
+    const VkPipelineRobustnessCreateInfoEXT* pIncomingRobustness,
+    VkPipelineRobustnessCreateInfoEXT*       pCurrentRobustness)
+{
+    bool result = false;
+
+    if (pIncomingRobustness != nullptr)
+    {
+        *pCurrentRobustness = *(pIncomingRobustness);
+        result = true;
+    }
+    else
+    {
+        // the DEFAULT enums tell the pipeline to use the robustness settings from the device.
+        // if we receive a VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO_EXT during creation,
+        // use those enums instead
+        *pCurrentRobustness = { .sType          = VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO_EXT,
+                                .pNext          = nullptr,
+                                .storageBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DEVICE_DEFAULT_EXT,
+                                .uniformBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DEVICE_DEFAULT_EXT,
+                                .vertexInputs   = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DEVICE_DEFAULT_EXT,
+                                .images         = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DEVICE_DEFAULT_EXT };
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+void Pipeline::UpdatePipelineRobustnessBufferBehavior(
+    const VkPipelineRobustnessBufferBehaviorEXT incomingRobustness,
+    VkPipelineRobustnessBufferBehaviorEXT*      pCurrentRobustness)
+{
+    if ((incomingRobustness == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DEVICE_DEFAULT_EXT) &&
+        (*pCurrentRobustness == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT))
+    {
+        *pCurrentRobustness = incomingRobustness;
+    }
+    if ((incomingRobustness == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT) &&
+        ((*pCurrentRobustness == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT) ||
+         (*pCurrentRobustness == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DEVICE_DEFAULT_EXT)))
+    {
+        *pCurrentRobustness = incomingRobustness;
+    }
+    if ((incomingRobustness == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT) &&
+        ((*pCurrentRobustness == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT) ||
+         (*pCurrentRobustness == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DEVICE_DEFAULT_EXT) ||
+         (*pCurrentRobustness == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT)))
+    {
+        *pCurrentRobustness = incomingRobustness;
+    }
+}
+
+// =====================================================================================================================
+void Pipeline::UpdatePipelineRobustnessImageBehavior(
+    const VkPipelineRobustnessImageBehaviorEXT incomingRobustness,
+    VkPipelineRobustnessImageBehaviorEXT*      pCurrentRobustness)
+{
+    if ((incomingRobustness == VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DEVICE_DEFAULT_EXT) &&
+        (*pCurrentRobustness == VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT))
+    {
+        *pCurrentRobustness = incomingRobustness;
+    }
+    if ((incomingRobustness == VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_EXT) &&
+        ((*pCurrentRobustness == VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT) ||
+         (*pCurrentRobustness == VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DEVICE_DEFAULT_EXT)))
+    {
+        *pCurrentRobustness = incomingRobustness;
+    }
+    if ((incomingRobustness == VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2_EXT) &&
+        ((*pCurrentRobustness == VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT) ||
+         (*pCurrentRobustness == VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DEVICE_DEFAULT_EXT) ||
+         (*pCurrentRobustness == VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_EXT)))
+    {
+        *pCurrentRobustness = incomingRobustness;
+    }
+}
+
+// =====================================================================================================================
+void Pipeline::UpdatePipelineRobustness(
+    const VkPipelineRobustnessCreateInfoEXT* pIncomingRobustness,
+    VkPipelineRobustnessCreateInfoEXT*       pCurrentRobustness)
+{
+    UpdatePipelineRobustnessBufferBehavior(pIncomingRobustness->storageBuffers, &(pCurrentRobustness->storageBuffers));
+    UpdatePipelineRobustnessBufferBehavior(pIncomingRobustness->uniformBuffers, &(pCurrentRobustness->uniformBuffers));
+    UpdatePipelineRobustnessBufferBehavior(pIncomingRobustness->vertexInputs, &(pCurrentRobustness->vertexInputs));
+    UpdatePipelineRobustnessImageBehavior(pIncomingRobustness->images, &(pCurrentRobustness->images));
 }
 
 // =====================================================================================================================
@@ -946,6 +1089,7 @@ void Pipeline::ElfHashToCacheId(
     hasher.Update(pDevice->GetEnabledFeatures().robustBufferAccessExtended);
     hasher.Update(pDevice->GetEnabledFeatures().robustImageAccessExtended);
     hasher.Update(pDevice->GetEnabledFeatures().nullDescriptorExtended);
+    hasher.Update(pDevice->GetEnabledFeatures().pipelineRobustness);
 
 #if VKI_RAY_TRACING
     if (pDevice->RayTrace() != nullptr)
@@ -1184,6 +1328,9 @@ static Pal::ShaderType GetApiShaderFromHwShader(
             case Util::Abi::ApiShaderType::Cs:
                 apiShaderType = Pal::ShaderType::Compute;
                 break;
+            case Util::Abi::ApiShaderType::Task:
+                apiShaderType = Pal::ShaderType::Task;
+                break;
             case Util::Abi::ApiShaderType::Vs:
                 apiShaderType = Pal::ShaderType::Vertex;
                 break;
@@ -1195,6 +1342,9 @@ static Pal::ShaderType GetApiShaderFromHwShader(
                 break;
             case Util::Abi::ApiShaderType::Gs:
                 apiShaderType = Pal::ShaderType::Geometry;
+                break;
+            case Util::Abi::ApiShaderType::Mesh:
+                apiShaderType = Pal::ShaderType::Mesh;
                 break;
             case Util::Abi::ApiShaderType::Ps:
                 apiShaderType = Pal::ShaderType::Pixel;
@@ -1221,6 +1371,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutablePropertiesKHR(
     const Pipeline*                     pPipeline     = Pipeline::BaseObjectFromHandle(pPipelineInfo->pipeline);
     const Pal::IPipeline*               pPalPipeline  = pPipeline->PalPipeline(DefaultDeviceIndex);
     const Util::Abi::ApiHwShaderMapping apiToHwShader = pPalPipeline->ApiHwShaderMapping();
+
+#if VKI_RAY_TRACING
+    if (pPipeline->GetType() == VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR)
+    {
+        const RayTracingPipeline* pRayTracingPipeline = static_cast<const RayTracingPipeline*>(pPipeline);
+
+        return pRayTracingPipeline->GetPipelineExecutableProperties(pPipelineInfo,
+                                                                pExecutableCount,
+                                                                pProperties);
+    }
+#endif
 
     // Count the number of hardware stages that are used in this pipeline
     uint32_t hwStageMask = 0;
@@ -1386,6 +1547,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
     const Pal::IPipeline*               pPalPipeline  = pPipeline->PalPipeline(DefaultDeviceIndex);
     const Util::Abi::ApiHwShaderMapping apiToHwShader = pPalPipeline->ApiHwShaderMapping();
 
+#if VKI_RAY_TRACING
+    if (pPipeline->GetType() == VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR)
+    {
+        const RayTracingPipeline* pRayTracingPipeline = static_cast<const RayTracingPipeline*>(pPipeline);
+
+        return pRayTracingPipeline->GetPipelineExecutableInternalRepresentations(pExecutableInfo,
+                                                                        pInternalRepresentationCount,
+                                                                        pInternalRepresentations);
+    }
+#endif
+
     // Count the number of hardware stages that are used in this pipeline
     uint32_t hwStageMask = 0;
     uint32_t numHWStages = CountNumberOfHWStages(&hwStageMask, apiToHwShader);
@@ -1406,7 +1578,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
 
     if (pInternalRepresentations == nullptr)
     {
-        *pInternalRepresentationCount = numberOfInternalRepresentations;
+        // +1 for elf binary output
+        *pInternalRepresentationCount = numberOfInternalRepresentations + 1;
         return VK_SUCCESS;
     }
 
@@ -1474,6 +1647,62 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
             (pInternalRepresentations[outputCount].dataSize > 0) ? VK_TRUE : VK_FALSE;
 
         outputCount++;
+    }
+
+    // Add 1 for ELF internal representaion and output the elf binary
+    numberOfInternalRepresentations++;
+    if (*pInternalRepresentationCount == numberOfInternalRepresentations)
+    {
+        PipelineBinaryInfo binaryInfo = {};
+        const char* pApiString = HwStageNames[static_cast<uint32_t>(hwStage)];
+
+        bool hasPipelineBinary = pPipeline->GetBinary(apiShaderType, &binaryInfo);
+
+        if (hasPipelineBinary == true)
+        {
+            VkResult tempResult = VK_ERROR_UNKNOWN;
+
+            if ((pInternalRepresentations[outputCount].dataSize == 0)
+                || (pInternalRepresentations[outputCount].pData == nullptr))
+            {
+                pInternalRepresentations[outputCount].dataSize = binaryInfo.pipelineBinary.codeSize + 1;
+                tempResult = VK_SUCCESS;
+            }
+            else
+            {
+                VK_ASSERT(binaryInfo.pipelineBinary.pCode != nullptr);
+                memcpy(pInternalRepresentations[outputCount].pData,
+                        binaryInfo.pipelineBinary.pCode,
+                        Util::Min(pInternalRepresentations[outputCount].dataSize, binaryInfo.pipelineBinary.codeSize));
+
+                if (pInternalRepresentations[outputCount].dataSize > binaryInfo.pipelineBinary.codeSize)
+                {
+                    char *pBuffer = static_cast<char*>(pInternalRepresentations[outputCount].pData);
+                    pBuffer[binaryInfo.pipelineBinary.codeSize] = '\0';
+                    tempResult = VK_SUCCESS;
+                }
+            }
+
+            BuildPipelineNameDescription(
+                shaderPreNameELF,
+                pApiString,
+                pInternalRepresentations[outputCount].name,
+                pInternalRepresentations[outputCount].description,
+                static_cast<Util::Abi::HardwareStage>(hwStage),
+                palStats.shaderStageMask);
+
+            if (tempResult == VK_SUCCESS)
+            {
+                outputCount++;
+            }
+        }
+        else
+        {
+            Util::Strncpy(pInternalRepresentations[outputCount].name, "ELF", VK_MAX_DESCRIPTION_SIZE);
+            Util::Strncat(pInternalRepresentations[outputCount].name, VK_MAX_DESCRIPTION_SIZE, pApiString);
+            Util::Strncpy(pInternalRepresentations[outputCount].description,
+                                            "elf shader binary not ready", VK_MAX_DESCRIPTION_SIZE);
+        }
     }
 
     // Write out the number of shader ouputs.

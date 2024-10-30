@@ -124,6 +124,7 @@ static void OverrideVkd3dCommonSettings(
     pSettings->exportNvDeviceGeneratedCommands  = true;
     pSettings->exportImageCompressionControl    = true;
     pSettings->disableSingleMipAnisoOverride    = false;
+    pSettings->exportImageAlignmentControl      = true;
 }
 
 // =====================================================================================================================
@@ -303,7 +304,7 @@ void VulkanSettingsLoader::OverrideDefaultsExperimentInfo()
         m_settings.allowExternalPipelineCacheObject = false;
     }
 
-    VK_SET_VAL_IF_EXPERIMENT_ENABLED(TextureColorCompression, forceEnableDcc, ForceDisableDcc);
+    VK_SET_VAL_IF_EXPERIMENT_ENABLED(TextureColorCompression, forceEnableDcc, ForceDisableCompressionForColor);
 
     PAL_SET_VAL_IF_EXPERIMENT_ENABLED(ZeroUnboundDescriptors, zeroUnboundDescDebugSrd, true);
 
@@ -370,7 +371,7 @@ void VulkanSettingsLoader::FinalizeExperiments()
     pExpSettings->expRayTracingPipelineCompilationMode = (m_settings.rtCompileMode == RtCompileModeIndirect);
 #endif
 
-    pExpSettings->expTextureColorCompression = m_settings.forceEnableDcc == ForceDisableDcc;
+    pExpSettings->expTextureColorCompression = m_settings.forceEnableDcc == ForceDisableCompressionForColor;
 
     pExpSettings->expZeroUnboundDescriptors = pPalSettings->zeroUnboundDescDebugSrd;
 
@@ -438,8 +439,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     {
         // In general, DCC is very beneficial for color attachments, 2D, 3D shader storage resources that have BPP>=32.
-        // If this is completely offset, maybe by increased shader read latency or partial writes of DCC blocks, it should
-        // be debugged on a case by case basis.
+        // If this is completely offset, maybe by increased shader read latency or partial writes of DCC blocks, it
+        // should be debugged on a case by case basis.
         m_settings.forceEnableDcc = (ForceDccForColorAttachments   |
                                      ForceDccFor2DShaderStorage    |
                                      ForceDccFor3DShaderStorage    |
@@ -832,6 +833,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.clampMaxImageSize = 16384u;
 
         m_settings.ac01WaNotNeeded = true;
+
+#if defined(__unix__)
+        m_settings.useExtentFromWindowSystem = true;
+#endif
     }
 
     if (appProfile == AppProfile::SeriousSamFusion)
@@ -843,6 +848,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.clampMaxImageSize = 16384u;
 
         m_settings.ac01WaNotNeeded = true;
+
+#if defined(__unix__)
+        m_settings.useExtentFromWindowSystem = true;
+#endif
     }
 
     if ((appProfile == AppProfile::TalosVR) ||
@@ -850,6 +859,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         (appProfile == AppProfile::SedpEngine))
     {
         m_settings.clampMaxImageSize = 16384u;
+
+#if defined(__unix__)
+        m_settings.useExtentFromWindowSystem = true;
+#endif
     }
 
     if (appProfile == AppProfile::SeriousSam4)
@@ -1677,6 +1690,16 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         }
     }
 
+    if (appProfile == AppProfile::GgmlVulkan)
+    {
+        m_settings.memoryDeviceOverallocationAllowed = true;
+    }
+
+    if (appProfile == AppProfile::SevenDaysToDie)
+    {
+        m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
+    }
+
     return result;
 }
 
@@ -1729,7 +1752,7 @@ VkResult VulkanSettingsLoader::ProcessSettings(
                                                        &m_settings.forceAppProfileEnable);
     static_cast<Pal::IDevice*>(m_pDevice)->ReadSetting(pForceAppProfileValueHashStr,
                                                        Pal::SettingScope::Driver,
-                                                       Util::ValueType::Uint,
+                                                       Util::ValueType::Uint32,
                                                        &m_settings.forceAppProfileValue);
 
     // Check for forced application profile
@@ -1786,7 +1809,7 @@ void VulkanSettingsLoader::ReadPublicSettings()
     uint32_t appGpuID = 0;
     if (m_pDevice->ReadSetting("AppGpuId",
         Pal::SettingScope::Global,
-        Util::ValueType::Uint,
+        Util::ValueType::Uint32,
         &appGpuID,
         sizeof(appGpuID)))
     {
@@ -1797,7 +1820,7 @@ void VulkanSettingsLoader::ReadPublicSettings()
     uint32_t texFilterQuality = TextureFilterOptimizationsEnabled;
     if (m_pDevice->ReadSetting("TFQ",
                                 Pal::SettingScope::Global,
-                                Util::ValueType::Uint,
+                                Util::ValueType::Uint32,
                                 &texFilterQuality,
                                 sizeof(texFilterQuality)))
     {
@@ -1810,7 +1833,7 @@ void VulkanSettingsLoader::ReadPublicSettings()
     uint32_t vSyncControl = static_cast<uint32_t>(VSyncControl::VSyncControlOffOrAppSpecify);
     if (m_pDevice->ReadSetting("VSyncControl",
                                 Pal::SettingScope::Global,
-                                Util::ValueType::Uint,
+                                Util::ValueType::Uint32,
                                 &vSyncControl,
                                 sizeof(uint32_t)))
     {
@@ -2008,6 +2031,10 @@ void VulkanSettingsLoader::UpdatePalSettings()
         pPalSettings->expandHiZRangeForResummarize = true;
     }
 
+    const char* pCompilerModeString =
+        "Compiler Mode: LLPC";
+
+    Util::Strncpy(pPalSettings->miscellaneousDebugString, pCompilerModeString, Pal::MaxMiscStrLen);
 }
 
 // =====================================================================================================================
@@ -2036,10 +2063,11 @@ void VulkanSettingsLoader::GenerateSettingHash()
 // Completes the initialization of the settings by overriding values from the registry and validating the final settings
 // struct
 void VulkanSettingsLoader::FinalizeSettings(
-    const DeviceExtensions::Enabled& enabledExtensions)
+    const DeviceExtensions::Enabled& enabledExtensions,
+    const bool                       pushDescriptorsEnabled)
 {
-    if (enabledExtensions.IsExtensionEnabled(DeviceExtensions::KHR_PUSH_DESCRIPTOR)
-    || enabledExtensions.IsExtensionEnabled(DeviceExtensions::EXT_DESCRIPTOR_BUFFER))
+    if (enabledExtensions.IsExtensionEnabled(DeviceExtensions::EXT_DESCRIPTOR_BUFFER)
+    || pushDescriptorsEnabled)
     {
         m_settings.enableFmaskBasedMsaaRead = false;
     }
@@ -2064,5 +2092,4 @@ bool VulkanSettingsLoader::ReadSetting(
         pValue,
         bufferSize);
 }
-
 };

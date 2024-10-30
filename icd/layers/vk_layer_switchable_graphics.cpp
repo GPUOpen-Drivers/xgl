@@ -173,14 +173,20 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance_SG(
     return result;
 }
 
+// =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkDestroyInstance_SG(
     VkInstance                                  instance,
     const VkAllocationCallbacks*                pAllocator)
 {
     Util::MutexAuto lock(&g_traceMutex);
-    NextLinkFuncPointers nextLinkFuncs = *g_pDispatchTables->FindKey(instance);
-    nextLinkFuncs.pfnDestroyInstance(instance, pAllocator);
-    g_pDispatchTables->Erase(instance);
+
+    NextLinkFuncPointers* pNextLinkFuncs = g_pDispatchTables->FindKey(instance);
+    if (pNextLinkFuncs != nullptr)
+    {
+        NextLinkFuncPointers nextLinkFuncs = *pNextLinkFuncs;
+        nextLinkFuncs.pfnDestroyInstance(instance, pAllocator);
+        g_pDispatchTables->Erase(instance);
+    }
 }
 
 // =====================================================================================================================

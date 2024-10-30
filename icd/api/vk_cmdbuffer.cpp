@@ -615,6 +615,9 @@ CmdBuffer::CmdBuffer(
 {
     m_flags.wasBegun = false;
 
+    m_perCmdBufDrawCallCounter     = 0;
+    m_perCmdBufDispatchCallCounter = 0;
+
     const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
     m_optimizeCmdbufMode             = settings.optimizeCmdbufMode;
@@ -631,19 +634,17 @@ CmdBuffer::CmdBuffer(
     m_flags.disableResetReleaseResources        = settings.disableResetReleaseResources;
     m_flags.subpassLoadOpClearsBoundAttachments = settings.subpassLoadOpClearsBoundAttachments;
     m_flags.preBindDefaultState                 = settings.preBindDefaultState;
-    m_flags.offsetMode                          = pDevice->GetEnabledFeatures().robustVertexBufferExtend;
+    m_flags.offsetMode                          = pDevice->GetEnabledFeatures().robustVertexBufferExtend ||
+                                                  pDevice->GetEnabledFeatures().pipelineRobustness;
 
     const Pal::DeviceProperties& info = m_pDevice->GetPalProperties();
 
     m_flags.useBackupBuffer = false;
     memset(m_pBackupPalCmdBuffers, 0, sizeof(Pal::ICmdBuffer*) * MaxPalDevices);
 
-        // If supportReleaseAcquireInterface is true, the ASIC provides new barrier interface CmdReleaseThenAcquire()
-        // designed for Acquire/Release-based driver. This flag is currently enabled for gfx9 and above.
         // If supportSplitReleaseAcquire is true, the ASIC provides split CmdRelease() and CmdAcquire() to express barrier,
         // and CmdReleaseThenAcquire() is still valid. This flag is currently enabled for gfx10 and above.
-        m_flags.useReleaseAcquire       = info.gfxipProperties.flags.supportReleaseAcquireInterface &&
-                                          settings.useAcquireReleaseInterface;
+        m_flags.useReleaseAcquire       = settings.useAcquireReleaseInterface;
         m_flags.useSplitReleaseAcquire  = m_flags.useReleaseAcquire &&
                                           info.queueProperties[m_palQueueType].flags.supportSplitReleaseAcquire;
 }
@@ -1740,6 +1741,9 @@ void CmdBuffer::ResetPipelineState()
 
     memset(&m_allGpuState.samplePattern, 0u, sizeof(m_allGpuState.samplePattern));
 
+    m_allGpuState.depthClampOverride.minDepthClamp = 1.0f;
+    m_allGpuState.depthClampOverride.maxDepthClamp = 0.0f;
+
     uint32_t bindIdx = 0;
 
     do
@@ -1822,6 +1826,10 @@ void CmdBuffer::ResetState()
     ResetPipelineState();
 
     m_curDeviceMask = InvalidPalDeviceMask;
+
+    // Reset local draw call counter
+    m_perCmdBufDrawCallCounter     = 0;
+    m_perCmdBufDispatchCallCounter = 0;
 
     m_renderPassInstance.pExecuteInfo = nullptr;
     m_renderPassInstance.subpass      = VK_SUBPASS_EXTERNAL;
@@ -2298,6 +2306,10 @@ void CmdBuffer::ExecuteCommands(
     for (uint32_t i = 0; i < cmdBufferCount; i++)
     {
         CmdBuffer* pInteralCmdBuf = ApiCmdBuffer::ObjectFromHandle(pCmdBuffers[i]);
+
+        // Increment per command list draw call counter
+        m_perCmdBufDrawCallCounter += pInteralCmdBuf->GetDrawCallCount();
+        m_perCmdBufDispatchCallCounter += pInteralCmdBuf->GetDispatchCallCount();
 
 #if VKI_RAY_TRACING
         m_flags.hasRayTracing |= pInteralCmdBuf->HasRayTracing();
@@ -3232,6 +3244,8 @@ void CmdBuffer::Draw(
 {
     DbgBarrierPreCmd(DbgBarrierDrawNonIndexed);
 
+    m_perCmdBufDrawCallCounter++; // Increment per command buffer draw call counter
+
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
@@ -3258,6 +3272,8 @@ void CmdBuffer::DrawIndexed(
     uint32_t instanceCount)
 {
     DbgBarrierPreCmd(DbgBarrierDrawIndexed);
+
+    m_perCmdBufDrawCallCounter++; // Increment per command buffer draw call counter
 
     ValidateGraphicsStates();
 
@@ -3288,6 +3304,8 @@ void CmdBuffer::DrawIndirect(
     VkDeviceSize countOffset)
 {
     DbgBarrierPreCmd((indexed ? DbgBarrierDrawIndexed : DbgBarrierDrawNonIndexed) | DbgBarrierDrawIndirect);
+
+    m_perCmdBufDrawCallCounter++; // Increment per command buffer draw call counter
 
     ValidateGraphicsStates();
 
@@ -3351,6 +3369,8 @@ void CmdBuffer::DrawIndirect(
 {
     DbgBarrierPreCmd((indexed ? DbgBarrierDrawIndexed : DbgBarrierDrawNonIndexed) | DbgBarrierDrawIndirect);
 
+    m_perCmdBufDrawCallCounter++; // Increment per command buffer draw call counter
+
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
@@ -3395,6 +3415,8 @@ void CmdBuffer::DrawMeshTasks(
     {
         DbgBarrierPreCmd(DbgBarrierDrawMeshTasks);
 
+        m_perCmdBufDrawCallCounter++; // Increment per command buffer draw call counter
+
         ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
@@ -3419,6 +3441,8 @@ void CmdBuffer::DrawMeshTasksIndirect(
 {
     DbgBarrierPreCmd(DbgBarrierDrawMeshTasksIndirect);
 
+    m_perCmdBufDrawCallCounter++; // Increment per command buffer draw call counter
+
     ValidateGraphicsStates();
 
 #if VKI_RAY_TRACING
@@ -3440,6 +3464,8 @@ void CmdBuffer::DrawMeshTasksIndirect(
     VkDeviceSize countBufferVa)
 {
     DbgBarrierPreCmd(DbgBarrierDrawMeshTasksIndirect);
+
+    m_perCmdBufDrawCallCounter++; // Increment per command buffer draw call counter
 
     ValidateGraphicsStates();
 
@@ -3472,6 +3498,8 @@ void CmdBuffer::Dispatch(
 {
     DbgBarrierPreCmd(DbgBarrierDispatch);
 
+    m_perCmdBufDispatchCallCounter++; // Increment per command buffer dispatch call counter
+
     if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute) == false)
     {
         RebindPipeline<PipelineBindCompute, false>();
@@ -3502,6 +3530,8 @@ void CmdBuffer::DispatchOffset(
 {
     DbgBarrierPreCmd(DbgBarrierDispatch);
 
+    m_perCmdBufDispatchCallCounter++; // Increment per command buffer dispatch call counter
+
     if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute) == false)
     {
         RebindPipeline<PipelineBindCompute, false>();
@@ -3523,6 +3553,8 @@ void CmdBuffer::DispatchIndirect(
     VkDeviceSize    offset)
 {
     DbgBarrierPreCmd(DbgBarrierDispatchIndirect);
+
+    m_perCmdBufDispatchCallCounter++; // Increment per command buffer dispatch call counter
 
     if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute) == false)
     {
@@ -3553,6 +3585,8 @@ void CmdBuffer::DispatchIndirect(
 {
     DbgBarrierPreCmd(DbgBarrierDispatchIndirect);
 
+    m_perCmdBufDispatchCallCounter++; // Increment per command buffer dispatch call counter
+
     if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute) == false)
     {
         RebindPipeline<PipelineBindCompute, false>();
@@ -3580,7 +3614,7 @@ void CmdBuffer::ExecuteIndirect(
     const VkGeneratedCommandsInfoNV*    pInfo)
 {
     IndirectCommandsLayoutNV* pLayout = IndirectCommandsLayoutNV::ObjectFromHandle(pInfo->indirectCommandsLayout);
-    IndirectCommandsInfo    info      = pLayout->GetIndirectCommandsInfo();
+    IndirectCommandsInfo      info    = pLayout->GetIndirectCommandsInfo();
 
     uint64_t barrierCmd = 0;
 
@@ -3602,6 +3636,8 @@ void CmdBuffer::ExecuteIndirect(
 
         DbgBarrierPreCmd(barrierCmd);
 
+        m_perCmdBufDrawCallCounter++; // Increment per command buffer draw call counter
+
         ValidateGraphicsStates();
     }
     else if (info.actionType == IndirectCommandsActionType::Dispatch)
@@ -3609,6 +3645,8 @@ void CmdBuffer::ExecuteIndirect(
         barrierCmd = DbgBarrierDispatchIndirect;
 
         DbgBarrierPreCmd(barrierCmd);
+
+        m_perCmdBufDispatchCallCounter++; // Increment per command buffer dispatch call counter
 
         if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute) == false)
         {
@@ -3642,6 +3680,119 @@ void CmdBuffer::ExecuteIndirect(
             (pCountBuffer == nullptr) ? 0 : pCountBuffer->GpuVirtAddr(deviceIdx) + countOffset);
     }
     while (deviceGroup.IterateNext());
+
+    DbgBarrierPostCmd(barrierCmd);
+}
+
+// =====================================================================================================================
+void CmdBuffer::ExecuteIndirect(
+    VkBool32                            isPreprocessed,
+    const VkGeneratedCommandsInfoEXT*   pInfo)
+{
+    IndirectCommandsLayout* pLayout = IndirectCommandsLayout::ObjectFromHandle(pInfo->indirectCommandsLayout);
+    IndirectCommandsInfo    info    = pLayout->GetIndirectCommandsInfo();
+
+    uint64_t barrierCmd = 0;
+
+    if ((info.actionType == IndirectCommandsActionType::Draw) ||
+        (info.actionType == IndirectCommandsActionType::DrawIndexed) ||
+        (info.actionType == IndirectCommandsActionType::DrawMeshTask))
+    {
+        const bool isMeshTask = (info.actionType == IndirectCommandsActionType::DrawMeshTask);
+        const bool isIndexed  = (info.actionType == IndirectCommandsActionType::DrawIndexed);
+
+        if (isMeshTask)
+        {
+            barrierCmd = DbgBarrierDrawMeshTasksIndirect;
+        }
+        else
+        {
+            barrierCmd = (isIndexed ? DbgBarrierDrawIndexed : DbgBarrierDrawNonIndexed) | DbgBarrierDrawIndirect;
+        }
+
+        DbgBarrierPreCmd(barrierCmd);
+
+        m_perCmdBufDrawCallCounter++; // Increment per command buffer draw call counter
+
+        ValidateGraphicsStates();
+
+#if VKI_RAY_TRACING
+        BindRayQueryConstants(
+            m_allGpuState.pGraphicsPipeline, Pal::PipelineBindPoint::Graphics, 0, 0, 0, nullptr, 0, 0);
+#endif
+    }
+    else if (info.actionType == IndirectCommandsActionType::Dispatch)
+    {
+        barrierCmd = DbgBarrierDispatchIndirect;
+
+        DbgBarrierPreCmd(barrierCmd);
+
+        m_perCmdBufDispatchCallCounter++; // Increment per command buffer dispatch call counter
+
+        if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute) == false)
+        {
+            RebindPipeline<PipelineBindCompute, false>();
+        }
+
+#if VKI_RAY_TRACING
+        BindRayQueryConstants(
+            m_allGpuState.pComputePipeline, Pal::PipelineBindPoint::Compute, 0, 0, 0, nullptr, 0, 0);
+#endif
+    }
+#if VKI_RAY_TRACING
+    else if (info.actionType == IndirectCommandsActionType::TraceRay)
+    {
+        barrierCmd = DbgTraceRays;
+        DbgBarrierPreCmd(barrierCmd);
+    }
+#endif
+    else
+    {
+        VK_NEVER_CALLED();
+    }
+
+#if VKI_RAY_TRACING
+    if (info.actionType == IndirectCommandsActionType::TraceRay)
+    {
+        utils::IterateMask deviceGroup(m_curDeviceMask);
+        do
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
+
+            constexpr VkStridedDeviceAddressRegionKHR EmptyShaderBindingTable = {};
+
+            for (uint32_t cmdId = 0; cmdId < pInfo->maxSequenceCount; cmdId++)
+            {
+                TraceRaysIndirectPerDevice(
+                    deviceIdx,
+                    GpuRt::ExecuteIndirectArgType::DispatchDimenionsAndShaderTable,
+                    EmptyShaderBindingTable,
+                    EmptyShaderBindingTable,
+                    EmptyShaderBindingTable,
+                    EmptyShaderBindingTable,
+                    pInfo->indirectAddress + cmdId * info.strideInBytes,
+                    pLayout,
+                    GetUserMarkerContextValue());
+            }
+        }
+        while (deviceGroup.IterateNext());
+    }
+    else
+#endif
+    {
+        utils::IterateMask deviceGroup(m_curDeviceMask);
+        do
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
+
+            PalCmdBuffer(deviceIdx)->CmdExecuteIndirectCmds(
+                *pLayout->PalIndirectCmdGenerator(deviceIdx),
+                pInfo->indirectAddress,
+                pInfo->maxSequenceCount,
+                pInfo->sequenceCountAddress);
+        }
+        while (deviceGroup.IterateNext());
+    }
 
     DbgBarrierPostCmd(barrierCmd);
 }
@@ -4329,14 +4480,14 @@ void CmdBuffer::PalCmdClearDepthStencil(
 // =====================================================================================================================
 void CmdBuffer::PalCmdResetEvent(
     Event*           pEvent,
-    Pal::HwPipePoint resetPoint)
+    uint32           stageMask)
 {
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
-        PalCmdBuffer(deviceIdx)->CmdResetEvent(*pEvent->PalEvent(deviceIdx), resetPoint);
+        PalCmdBuffer(deviceIdx)->CmdResetEvent(*pEvent->PalEvent(deviceIdx), stageMask);
     }
     while (deviceGroup.IterateNext());
 }
@@ -4344,14 +4495,14 @@ void CmdBuffer::PalCmdResetEvent(
 // =====================================================================================================================
 void CmdBuffer::PalCmdSetEvent(
     Event*           pEvent,
-    Pal::HwPipePoint setPoint)
+    uint32           stageMask)
 {
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
-        PalCmdBuffer(deviceIdx)->CmdSetEvent(*pEvent->PalEvent(deviceIdx), setPoint);
+        PalCmdBuffer(deviceIdx)->CmdSetEvent(*pEvent->PalEvent(deviceIdx), stageMask);
     }
     while (deviceGroup.IterateNext());
 }
@@ -4641,7 +4792,7 @@ void CmdBuffer::SetEvent(
 {
     DbgBarrierPreCmd(DbgBarrierSetResetEvent);
 
-    PalCmdSetEvent(Event::ObjectFromHandle(event), VkToPalSrcPipePoint(stageMask));
+    PalCmdSetEvent(Event::ObjectFromHandle(event), VkToPalPipelineStageFlags(stageMask, true));
 
     DbgBarrierPostCmd(DbgBarrierSetResetEvent);
 }
@@ -4681,7 +4832,7 @@ void CmdBuffer::SetEvent2(
             stageMask |= pDependencyInfo->pImageMemoryBarriers[i].srcStageMask;
         }
 
-        PalCmdSetEvent(Event::ObjectFromHandle(event), VkToPalSrcPipePoint(stageMask));
+        PalCmdSetEvent(Event::ObjectFromHandle(event), VkToPalPipelineStageFlags(stageMask, true));
     }
 
     DbgBarrierPostCmd(DbgBarrierSetResetEvent);
@@ -5359,7 +5510,7 @@ void CmdBuffer::ResetEvent(
     }
     else
     {
-        PalCmdResetEvent(pEvent, VkToPalSrcPipePoint(stageMask));
+        PalCmdResetEvent(pEvent, VkToPalPipelineStageFlags(stageMask, true));
     }
 
     DbgBarrierPostCmd(DbgBarrierSetResetEvent);
@@ -7515,7 +7666,7 @@ void CmdBuffer::WriteTimestamp(
         const uint32_t deviceIdx = deviceGroup.Index();
 
         PalCmdBuffer(deviceIdx)->CmdWriteTimestamp(
-            VkToPalSrcPipePointForTimestampWrite(pipelineStage),
+            VkToPalSrcPipeStageFlagForTimestampWrite(pipelineStage),
             pQueryPool->PalMemory(deviceIdx),
             pQueryPool->GetSlotOffset(query));
 
@@ -9727,6 +9878,26 @@ void CmdBuffer::SetAllViewports(
 }
 
 // =====================================================================================================================
+void CmdBuffer::CmdSetDepthClampRangeEXT(
+    VkDepthClampModeEXT                         depthClampMode,
+    const VkDepthClampRangeEXT*                 pDepthClampRange)
+{
+    switch (depthClampMode)
+    {
+    case VK_DEPTH_CLAMP_MODE_VIEWPORT_RANGE_EXT:
+        m_allGpuState.depthClampOverride.minDepthClamp = 1.0f;
+        m_allGpuState.depthClampOverride.maxDepthClamp = 0.0f;
+        break;
+    case VK_DEPTH_CLAMP_MODE_USER_DEFINED_RANGE_EXT:
+        m_allGpuState.depthClampOverride = *pDepthClampRange;
+        break;
+    default:
+        VK_ASSERT(!"Unexpected depthClampMode");
+        break;
+    }
+}
+
+// =====================================================================================================================
 void CmdBuffer::SetScissor(
     uint32_t            firstScissor,
     uint32_t            scissorCount,
@@ -10270,8 +10441,8 @@ void CmdBuffer::WriteBufferMarker(
     VkDeviceSize            dstOffset,
     uint32_t                marker)
 {
-    const Buffer* pDestBuffer        = Buffer::ObjectFromHandle(dstBuffer);
-    const Pal::HwPipePoint pipePoint = VkToPalSrcPipePointForMarkers(pipelineStage, m_palEngineType);
+    const Buffer*                pDestBuffer = Buffer::ObjectFromHandle(dstBuffer);
+    const Pal::PipelineStageFlag pipePoint   = VkToPalSrcPipeStageFlagForMarkers(pipelineStage, m_palEngineType);
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
 
@@ -11163,6 +11334,7 @@ void CmdBuffer::TraceRaysIndirect(
             hitShaderBindingTable,
             callableShaderBindingTable,
             indirectDeviceAddress,
+            nullptr,
             GetUserMarkerContextValue());
     }
     while (deviceGroup.IterateNext());
@@ -11233,6 +11405,7 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
     const VkStridedDeviceAddressRegionKHR& hitShaderBindingTable,
     const VkStridedDeviceAddressRegionKHR& callableShaderBindingTable,
     VkDeviceAddress                        indirectDeviceAddress,
+    const IndirectCommandsLayout*          pLayout,
     uint64_t                               userMarkerContext)
 {
     const RuntimeSettings& settings     = m_pDevice->GetRuntimeSettings();
@@ -11252,8 +11425,9 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
 
     // Pre-pass
     gpusize initConstantsVa = 0;
-
-    const gpusize scratchBufferSize =
+    // Allocate extra space in scratch buffer to accommodate pre-action arguments (if any)
+    const gpusize scratchBufferSize = (pLayout != nullptr) ?
+        sizeof(VkTraceRaysIndirectCommandKHR) + pLayout->GetIndirectCommandsInfo().preActionArgSizeInBytes :
         sizeof(VkTraceRaysIndirectCommandKHR);
 
     InternalMemory* pScratchMemory  = nullptr;
@@ -11294,7 +11468,9 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
         pInitConstants->rtThreadGroupSizeZ     = 1;
     }
 
-    pInitConstants->bindingArgsSize =
+    // Instruct InitExecuteIndirect shader to dump pre-action arguments (if any) to the scratch buffer
+    pInitConstants->bindingArgsSize = (pLayout != nullptr) ?
+        pLayout->GetIndirectCommandsInfo().preActionArgSizeInBytes :
         0;
 
     pInitConstants->inputBytesPerDispatch  = 0;
@@ -11359,6 +11535,15 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
                                             1,
                                             &constGpuAddrLow);
 
+    if (pLayout != nullptr)
+    {
+        PalCmdBuffer(deviceIdx)->CmdExecuteIndirectCmds(
+            *pLayout->PalIndirectCmdGenerator(deviceIdx),
+            pScratchMemory->GpuVirtAddr(deviceIdx),
+            1, // Single dispatch here
+            0);
+    }
+    else
     {
         PalCmdBuffer(deviceIdx)->CmdDispatchIndirect(pScratchMemory->GpuVirtAddr(deviceIdx));
     }
@@ -12047,6 +12232,15 @@ void CmdBuffer::ValidateGraphicsStates()
                     // Values more than 1.0f enable guardband.
                     viewportParams.horzDiscardRatio = 10.0f;
                     viewportParams.vertDiscardRatio = 10.0f;
+                }
+                if (m_allGpuState.depthClampOverride.minDepthClamp <= m_allGpuState.depthClampOverride.maxDepthClamp)
+                {
+                    for (uint32_t i = 0; i < viewportParams.count; ++i)
+                    {
+                        auto* const pViewport = &viewportParams.viewports[i];
+                        pViewport->minDepth = m_allGpuState.depthClampOverride.minDepthClamp;
+                        pViewport->maxDepth = m_allGpuState.depthClampOverride.maxDepthClamp;
+                    }
                 }
                 PalCmdBuffer(deviceIdx)->CmdSetViewports(viewportParams);
 

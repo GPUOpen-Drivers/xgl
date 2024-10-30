@@ -686,6 +686,11 @@ void ShaderOptimizer::ApplyProfileToGraphicsPipelineCreateInfo(
                 pPalCreateInfo->rsState.binningOverride = createInfo.binningOverride;
             }
 
+            if (createInfo.apply.ldsPsGroupSizeOverride)
+            {
+                pPalCreateInfo->ldsPsGroupSizeOverride = createInfo.ldsPsGroupSizeOverride;
+            }
+
 #if PAL_ENABLE_PRINTS_ASSERTS
             if (m_settings.pipelineProfileDbgPrintProfileMatch)
             {

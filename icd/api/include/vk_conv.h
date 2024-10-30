@@ -2034,117 +2034,23 @@ inline Pal::ScreenColorSpace VkToPalScreenSpace(VkSurfaceFormatKHR colorFormat)
 }
 
 // =====================================================================================================================
-// Converts Vulkan source pipeline stage flags to PAL HW pipe point.
-// Selects a source pipe point that matches all stage flags to use for setting/resetting events.
-inline Pal::HwPipePoint VkToPalSrcPipePoint(
-    PipelineStageFlags flags)
-{
-    // Flags that only require signaling at top-of-pipe.
-    static const PipelineStageFlags srcTopOfPipeFlags =
-        VK_PIPELINE_STAGE_HOST_BIT                           |
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-
-    // Flags that only require signaling post-index-fetch.
-    static const PipelineStageFlags srcPostIndexFetchFlags =
-        srcTopOfPipeFlags                                    |
-        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT                  |
-        VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT_KHR              |
-        VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT;
-
-    // Flags that only require signaling pre-rasterization.
-    static const PipelineStageFlags srcPreRasterizationFlags =
-        srcPostIndexFetchFlags                               |
-        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT                   |
-        VK_PIPELINE_STAGE_VERTEX_SHADER_BIT                  |
-        VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT    |
-        VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT |
-        VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT_KHR   |
-        VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT                |
-        VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT         |
-        VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR;
-
-    // Flags that only require signaling post-PS.
-    static const PipelineStageFlags srcPostPsFlags =
-        srcPreRasterizationFlags                             |
-        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT           |
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT                |
-        VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
-
-    // Flags that only require signaling post-CS.
-    static const PipelineStageFlags srcPostCsFlags =
-#if VKI_RAY_TRACING
-        VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR           |
-        VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
-#endif
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-
-    // Flags that only require signaling post-BLT operations.
-    static const PipelineStageFlags srcPostBltFlags =
-        VK_PIPELINE_STAGE_2_COPY_BIT_KHR                     |
-        VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR                  |
-        VK_PIPELINE_STAGE_2_BLIT_BIT_KHR                     |
-        VK_PIPELINE_STAGE_2_CLEAR_BIT_KHR                    |
-        VK_PIPELINE_STAGE_TRANSFER_BIT;
-
-    Pal::HwPipePoint srcPipePoint;
-
-    // Check if top-of-pipe signaling is enough.
-    if ((flags & ~srcTopOfPipeFlags) == 0)
-    {
-        srcPipePoint = Pal::HwPipeTop;
-    }
-    // Otherwise see if post-index-fetch signaling is enough.
-    else if ((flags & ~srcPostIndexFetchFlags) == 0)
-    {
-        srcPipePoint = Pal::HwPipePostPrefetch;
-    }
-    // Otherwise see if pre-rasterization signaling is enough.
-    else if ((flags & ~srcPreRasterizationFlags) == 0)
-    {
-        srcPipePoint = Pal::HwPipePreRasterization;
-    }
-    // Otherwise see if post-PS signaling is enough.
-    else if ((flags & ~srcPostPsFlags) == 0)
-    {
-        srcPipePoint = Pal::HwPipePostPs;
-    }
-    // Otherwise see if post-CS signaling is enough.
-    else if ((flags & ~srcPostCsFlags) == 0)
-    {
-        srcPipePoint = Pal::HwPipePostCs;
-    }
-    // Otherwise we have to resort to post Blt signaling.
-    else if ((flags & ~srcPostBltFlags) == 0)
-    {
-        srcPipePoint = Pal::HwPipePostBlt;
-    }
-    // Otherwise we have to resort to bottom-of-pipe signaling.
-    else
-    {
-        srcPipePoint = Pal::HwPipeBottom;
-    }
-
-    return srcPipePoint;
-}
-
-// =====================================================================================================================
 // Converts Vulkan source pipeline stage flags to PAL HW top or bottom pipe point.
-inline Pal::HwPipePoint VkToPalSrcPipePointForTimestampWrite(
+inline Pal::PipelineStageFlag VkToPalSrcPipeStageFlagForTimestampWrite(
     PipelineStageFlags flags)
 {
     // Flags that require signaling at top-of-pipe.
     static const PipelineStageFlags srcTopOfPipeFlags =
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
 
-    Pal::HwPipePoint srcPipePoint;
+    Pal::PipelineStageFlag srcPipePoint;
 
     if ((flags & srcTopOfPipeFlags) != 0)
     {
-        srcPipePoint = Pal::HwPipePostPrefetch;
+        srcPipePoint = Pal::PipelineStagePostPrefetch;
     }
     else
     {
-        srcPipePoint = Pal::HwPipeBottom;
+        srcPipePoint = Pal::PipelineStageBottomOfPipe;
     }
 
     return srcPipePoint;
@@ -2152,7 +2058,7 @@ inline Pal::HwPipePoint VkToPalSrcPipePointForTimestampWrite(
 
 // =====================================================================================================================
 // Converts Vulkan source pipeline stage flags to PAL buffer marker writes (top/bottom only)
-inline Pal::HwPipePoint VkToPalSrcPipePointForMarkers(
+inline Pal::PipelineStageFlag VkToPalSrcPipeStageFlagForMarkers(
     PipelineStageFlags   flags,
     Pal::EngineType      engineType)
 {
@@ -2166,16 +2072,16 @@ inline Pal::HwPipePoint VkToPalSrcPipePointForMarkers(
     constexpr PipelineStageFlags SrcTopOfPipeFlags =
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
-    Pal::HwPipePoint srcPipePoint;
+    Pal::PipelineStageFlag srcPipePoint;
 
     if (((flags & ~SrcTopOfPipeFlags) == 0) &&
         (engineType != Pal::EngineTypeDma)) // SDMA engines only support bottom of pipe writes
     {
-        srcPipePoint = Pal::HwPipeTop;
+        srcPipePoint = Pal::PipelineStageTopOfPipe;
     }
     else
     {
-        srcPipePoint = Pal::HwPipeBottom;
+        srcPipePoint = Pal::PipelineStageBottomOfPipe;
     }
 
     return srcPipePoint;

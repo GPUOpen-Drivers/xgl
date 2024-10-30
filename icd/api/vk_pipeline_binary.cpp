@@ -504,14 +504,13 @@ VkResult PipelineBinary::GetPipelineBinaryData(
         }
         else
         {
-            WriteToPipelineBinaryKey(&m_binaryKey, sizeof(m_binaryKey), pPipelineBinaryKey);
-
             memcpy(pPipelineBinaryData, m_binaryData.pCode, m_binaryData.codeSize);
         }
     }
 
     // Must be written in all cases
     *pPipelineBinaryDataSize = m_binaryData.codeSize;
+    WriteToPipelineBinaryKey(&m_binaryKey, sizeof(m_binaryKey), pPipelineBinaryKey);
 
     return result;
 }

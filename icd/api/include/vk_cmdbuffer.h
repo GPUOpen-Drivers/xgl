@@ -89,6 +89,7 @@ class RenderPass;
 class TimestampQueryPool;
 class SqttCmdBufferState;
 class QueryPool;
+class IndirectCommandsLayout;
 
 #if VKI_RAY_TRACING
 class RayTracingPipeline;
@@ -319,6 +320,9 @@ struct AllGpuRenderState
         uint32_t fragmentShadingRate;
     } staticTokens;
 
+    // min > max means that the override is not active
+    VkDepthClampRangeEXT depthClampOverride;
+
     // Which Vulkan PipelineBindPoint currently owns the state of each PAL pipeline bind point.  This is
     // relevant because e.g. multiple Vulkan pipeline bind points are implemented as compute pipelines and used through
     // the same PAL pipeline bind point.
@@ -526,6 +530,10 @@ public:
         VkBool32                                    isPreprocessed,
         const VkGeneratedCommandsInfoNV*            pInfo);
 
+    void ExecuteIndirect(
+        VkBool32                                    isPreprocessed,
+        const VkGeneratedCommandsInfoEXT*           pInfo);
+
     template<typename BufferCopyType>
     void CopyBuffer(
         VkBuffer                                    srcBuffer,
@@ -646,6 +654,10 @@ public:
     void SetAllViewports(
         const Pal::ViewportParams&                  params,
         uint32_t                                    staticToken);
+
+    void CmdSetDepthClampRangeEXT(
+        VkDepthClampModeEXT                         depthClampMode,
+        const VkDepthClampRangeEXT*                 pDepthClampRange);
 
     void SetScissor(
         uint32_t                                    firstScissor,
@@ -1255,11 +1267,11 @@ public:
 
     void PalCmdResetEvent(
         Event*           pEvent,
-        Pal::HwPipePoint resetPoint);
+        Pal::uint32      stageMask);
 
     void PalCmdSetEvent(
         Event*           pEvent,
-        Pal::HwPipePoint resetPoint);
+        Pal::uint32      stageMask);
 
     void PalCmdResolveImage(
         const Image&                   srcImage,
@@ -1339,6 +1351,12 @@ public:
         { return m_pSqttState; }
 
     uint64_t GetUserMarkerContextValue() const;
+
+    // Get local draw call counter
+    uint32_t GetDrawCallCount() const { return m_perCmdBufDrawCallCounter; }
+
+    // Get local dispatch call counter
+    uint32_t GetDispatchCallCount() const { return m_perCmdBufDispatchCallCounter; }
 
     static bool IsStaticStateDifferent(
         uint32_t currentToken,
@@ -1891,6 +1909,7 @@ private:
         const VkStridedDeviceAddressRegionKHR& hitShaderBindingTable,
         const VkStridedDeviceAddressRegionKHR& callableShaderBindingTable,
         VkDeviceAddress                        indirectDeviceAddress,
+        const IndirectCommandsLayout*          pLayout,
         uint64_t                               userMarkerContext);
 
     void GetRayTracingDispatchArgs(
@@ -2005,6 +2024,9 @@ private:
 
     RenderPassInstanceState       m_renderPassInstance;
     TransformFeedbackState*       m_pTransformFeedbackState;
+
+    uint32_t                      m_perCmdBufDrawCallCounter;     // Local per command buffer draw call counter
+    uint32_t                      m_perCmdBufDispatchCallCounter; // Local per command buffer draw call counter
 
 #if VKI_ENABLE_DEBUG_BARRIERS
     uint64_t                      m_dbgBarrierPreCmdMask;
@@ -2332,6 +2354,16 @@ VKAPI_ATTR void VKAPI_CALL vkCmdExecuteGeneratedCommandsNV(
     VkCommandBuffer                             commandBuffer,
     VkBool32                                    isPreprocessed,
     const VkGeneratedCommandsInfoNV*            pGeneratedCommandsInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdPreprocessGeneratedCommandsEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkGeneratedCommandsInfoEXT*           pGeneratedCommandsInfo,
+    VkCommandBuffer                             stateCommandBuffer);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdExecuteGeneratedCommandsEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    isPreprocessed,
+    const VkGeneratedCommandsInfoEXT*           pGeneratedCommandsInfo);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdBindPipelineShaderGroupNV(
     VkCommandBuffer                             commandBuffer,
@@ -2846,6 +2878,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetLogicOpEXT(
 VKAPI_ATTR void VKAPI_CALL vkCmdSetPatchControlPointsEXT(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    patchControlPoints);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthClampRangeEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkDepthClampModeEXT                         depthClampMode,
+    const VkDepthClampRangeEXT*                 pDepthClampRange);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage2(
     VkCommandBuffer                             commandBuffer,

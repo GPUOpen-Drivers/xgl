@@ -34,9 +34,12 @@
 
 #pragma once
 
-#include <atomic>
 #include "devmode/devmode_mgr.h"
+
+#include "palHashMap.h"
 #include "palTraceSession.h"
+
+#include <atomic>
 
 // GPUOpen forward declarations
 namespace DevDriver
@@ -50,6 +53,7 @@ class CodeObjectTraceSource;
 class QueueTimingsTraceSource;
 class StringTableTraceSource;
 class UserMarkerHistoryTraceSource;
+class RenderOpTraceController;
 }
 
 namespace vk
@@ -89,6 +93,12 @@ public:
     virtual bool IsCrashAnalysisEnabled() const override { return m_crashAnalysisEnabled; }
     virtual bool IsQueueTimingActive(const Device* pDevice) const override;
     virtual bool IsTraceRunning() const override;
+
+    virtual void RecordRenderOps(
+        uint32_t deviceIdx,
+        Queue*   pQueue,
+        uint32_t drawCallCount,
+        uint32_t dispatchCallCount) override;
 
     virtual Pal::Result TimedQueueSubmit(
         uint32_t               deviceIdx,
@@ -136,6 +146,17 @@ public:
         uint32        markerStringDataSize,
         const char*   pMarkerStringData) override;
 
+    virtual void LabelAccelStruct(
+        uint64_t    deviceAddress,
+        const char* pString) override;
+
+    using AccelStructUserMarkerTable = Util::HashMap<uint64_t, AccelStructUserMarkerString, PalAllocator>;
+    const AccelStructUserMarkerTable& GetAccelStructUserMarkerTable() const
+        { return m_accelStructNames; }
+
+    uint32_t AcquireStringTableId()
+        { return ++m_stringTableId; }
+
 private:
     DevModeUberTrace(Instance* pInstance);
 
@@ -144,18 +165,22 @@ private:
 
     Pal::Result RegisterQueuesForDevice(Device* pDevice);
 
-    Instance*                           m_pInstance;
-    DevDriver::DevDriverServer*         m_pDevDriverServer;
-    bool                                m_finalized;
-    bool                                m_crashAnalysisEnabled;
-    uint32_t                            m_globalFrameIndex;
+    Instance*                              m_pInstance;
+    DevDriver::DevDriverServer*            m_pDevDriverServer;
+    bool                                   m_finalized;
+    bool                                   m_crashAnalysisEnabled;
+    uint32_t                               m_globalFrameIndex;
 
-    GpuUtil::TraceSession*              m_pTraceSession;
-    GpuUtil::CodeObjectTraceSource*     m_pCodeObjectTraceSource;
-    GpuUtil::QueueTimingsTraceSource*   m_pQueueTimingsTraceSource;
-    GpuUtil::StringTableTraceSource*    m_pStringTableTraceSource;
+    GpuUtil::TraceSession*                 m_pTraceSession;
+    GpuUtil::CodeObjectTraceSource*        m_pCodeObjectTraceSource;
+    GpuUtil::QueueTimingsTraceSource*      m_pQueueTimingsTraceSource;
+    GpuUtil::StringTableTraceSource*       m_pStringTableTraceSource;
     GpuUtil::UserMarkerHistoryTraceSource* m_pUserMarkerHistoryTraceSource;
-    std::atomic<uint32_t>               m_stringTableId;
+    GpuUtil::RenderOpTraceController*      m_pRenderOpTraceController;
+    std::atomic<uint32_t>                  m_stringTableId;
+
+    AccelStructUserMarkerTable             m_accelStructNames;
+    Util::Mutex                            m_mutex;
 #endif
 };
 

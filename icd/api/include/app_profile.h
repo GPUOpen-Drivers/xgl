@@ -69,7 +69,6 @@ enum class AppProfile : uint32_t
     DawnOfWarIII,            // Dawn of War III by Feral3D
     WarHammerII,             // Total War: WarHammer II by Feral3D
     WarHammerIII,            // Total War: WarHammer III by Feral3D
-    RomeRemastered,          // Total War Rome Remastered
     AshesOfTheSingularity,   // Ashes Of The Singularity
     StrangeBrigade,          // Strange Brigade
     WorldWarZ,               // WorldWarZ
@@ -113,6 +112,7 @@ enum class AppProfile : uint32_t
     BaldursGate3,            // Baldur's Gate by Larian Studios
     Enshrouded,              // Enshrouded by Keen Games
     HolisticEngine,          // Holistic Engine by Keen Games
+    GravityMark,             // Tellusim GravityMark
     IdTechEngine,            // id Tech Engine (Default)
 #if VKI_RAY_TRACING
     ControlDX12,             // VKD3D Control Ultimate Edition
@@ -134,8 +134,6 @@ enum class AppProfile : uint32_t
     DDraceNetwork,           // DDrace Network
     SaintsRowV,              // Saints Row V by Volition
     VolitionEngine,          // Volition Engine
-    HalfLifeAlyx,            // Half Life Alyx VR by Valve
-    Satisfactory,            // Satisfactory by Coffee Stain Studios
     QuakeEnhanced,           // Quake Enhanced by id Software
     Zink,                    // Zink
     SOTTR,                   // Shadow of the tomb raider steam version
@@ -149,6 +147,8 @@ enum class AppProfile : uint32_t
     WindowKill,              // Windowkill by torcado
     Archean,                 // Archean by batcholi
     Houdini,                 // Houdini
+    SevenDaysToDie,          // 7 Days to Die
+    GgmlVulkan               // ggml-vulkan
 };
 
 struct ProfileSettings

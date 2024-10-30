@@ -54,7 +54,11 @@ class PipelineCompiler;
 struct PipelineInternalBufferInfo;
 struct ShaderModuleHandle;
 struct GraphicsPipelineLibraryInfo;
+struct PipelineExtStructs;
 struct GraphicsPipelineExtStructs;
+struct ComputePipelineExtStructs;
+struct RayTracingPipelineExtStructs;
+struct ExecutionGraphPipelineExtStructs;
 
 class PipelineBinaryCache;
 
@@ -152,7 +156,8 @@ public:
     void ApplyPipelineOptions(
         const Device*             pDevice,
         VkPipelineCreateFlags2KHR flags,
-        Vkgc::PipelineOptions*    pOptions
+        Vkgc::PipelineOptions*    pOptions,
+        const PipelineExtStructs* pExtStructs
     );
 
     VkResult BuildShaderModule(
@@ -247,6 +252,7 @@ public:
     VkResult ConvertComputePipelineInfo(
         const Device*                                   pDevice,
         const VkComputePipelineCreateInfo*              pIn,
+        const ComputePipelineExtStructs&                extStructs,
         const ComputePipelineShaderStageInfo*           pShaderInfo,
         const PipelineOptimizerKey*                     pPipelineProfileKey,
         PipelineMetadata*                               pBinaryMetadata,
@@ -274,6 +280,7 @@ public:
     VkResult ConvertRayTracingPipelineInfo(
         const Device*                            pDevice,
         const VkRayTracingPipelineCreateInfoKHR* pIn,
+        const RayTracingPipelineExtStructs&      extStructs,
         VkPipelineCreateFlags2KHR                flags,
         const RayTracingPipelineShaderStageInfo* pShaderInfo,
         const PipelineOptimizerKey*              pPipelineProfileKey,

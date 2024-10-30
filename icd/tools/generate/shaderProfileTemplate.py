@@ -2258,6 +2258,53 @@ PIPELINE_ACTION = {
         "jsonReaderTemplate":
             "    pAction->createInfo.apply.lateAllocVsLimit = true;\n" +
             "    pAction->createInfo.lateAllocVsLimit       = static_cast<uint32_t>(pItem->integerValue);"
+    },
+
+    "ldsPsGroupSizeOverride": {
+        "type": [int],
+        "entityInfo": [
+            {
+                "parent": "createInfo.anonStruct",
+                "entity": "bitField",
+                "varName": "ldsPsGroupSizeOverride",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "buildTypes": {},
+            },
+            {
+                "parent": "createInfo",
+                "entity": "var",
+                "varName": "ldsPsGroupSizeOverride",
+                "dataType": "Pal::LdsPsGroupSizeOverride",
+                "defaultValue": "",
+                "buildTypes": {},
+            },
+        ],
+        "validValues": {
+            0: "Pal::LdsPsGroupSizeOverride::Default",
+            1: "Pal::LdsPsGroupSizeOverride::SingleWave",
+            2: "Pal::LdsPsGroupSizeOverride::DoubleWaves"
+        },
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.createInfo.apply.ldsPsGroupSizeOverride = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.createInfo.ldsPsGroupSizeOverride = %EnumValue%;\n""",
+        "jsonWriterTemplate":
+            """    pWriter->Key("ldsPsGroupSizeOverride");\n""" +
+            "    if (action.createInfo.ldsPsGroupSizeOverride == Pal::LdsPsGroupSizeOverride::Default)\n    {\n" +
+            "        pWriter->Value(0u);\n    }\n" +
+            "    else if (action.createInfo.ldsPsGroupSizeOverride == Pal::LdsPsGroupSizeOverride::SingleWave)\n    {\n" +
+            "        pWriter->Value(1u);\n    }\n" +
+            "    else if (action.createInfo.ldsPsGroupSizeOverride == Pal::LdsPsGroupSizeOverride::DoubleWaves)\n    {\n" +
+            "        pWriter->Value(2u);\n    }",
+        "jsonReaderTemplate":
+            "    pAction->createInfo.apply.ldsPsGroupSizeOverride = true;\n" +
+            "    uint32_t ldsPsGroupSizeOverride                  = static_cast<uint32_t>(pItem->integerValue);\n"
+            "    if (ldsPsGroupSizeOverride == 0u)\n    {\n" +
+            "        pAction->createInfo.ldsPsGroupSizeOverride = Pal::LdsPsGroupSizeOverride::Default;\n    }\n" +
+            "    else if (ldsPsGroupSizeOverride == 1u)\n    {\n" +
+            "        pAction->createInfo.ldsPsGroupSizeOverride = Pal::LdsPsGroupSizeOverride::SingleWave;\n    }\n" +
+            "    else if (ldsPsGroupSizeOverride == 2u)\n    {\n" +
+            "        pAction->createInfo.ldsPsGroupSizeOverride = Pal::LdsPsGroupSizeOverride::DoubleWaves;\n    }",
     }
 }
 

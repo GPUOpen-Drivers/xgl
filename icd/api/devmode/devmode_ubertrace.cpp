@@ -46,10 +46,14 @@
 
 // PAL headers
 #include "pal.h"
+#include "palAutoBuffer.h"
+#include "palRenderOpTraceController.h"
 #include "palCodeObjectTraceSource.h"
+#include "palHashMapImpl.h"
 #include "palQueueTimingsTraceSource.h"
 #include "palStringTableTraceSource.h"
 #include "palUserMarkerHistoryTraceSource.h"
+#include "palVectorImpl.h"
 
 // gpuopen headers
 #include "devDriverServer.h"
@@ -66,6 +70,65 @@
 namespace vk
 {
 
+class DevModeUberTraceStringTableTraceSource : public GpuUtil::StringTableTraceSource
+{
+public:
+    DevModeUberTraceStringTableTraceSource(Pal::IPlatform* pPlatform, DevModeUberTrace* pDevMode)
+        : StringTableTraceSource(pPlatform), m_pDevMode(pDevMode) {}
+    virtual ~DevModeUberTraceStringTableTraceSource() {}
+
+    virtual void OnTraceFinished() override
+    {
+        const auto& accelStructNames = m_pDevMode->GetAccelStructUserMarkerTable();
+        const uint32_t numStrings = accelStructNames.GetNumEntries();
+
+        if (numStrings > 0)
+        {
+            // Calculate the size of the string data for accelStruct names
+            uint32_t stringDataSizeInBytes = 0;
+            for (auto it = accelStructNames.Begin(); it.Get() != nullptr; it.Next())
+            {
+                stringDataSizeInBytes += it.Get()->value.length;
+            }
+
+            const uint32_t baseOffset = sizeof(uint32_t) * numStrings;
+            AutoBuffer<uint32_t, 16, Pal::IPlatform> stringOffsets(numStrings, m_pPlatform);
+            Vector<char, 128, Pal::IPlatform> stringData(m_pPlatform);
+            constexpr uint32_t ExtraBytesPerString = 18;    // To host "RRA_RA:<address>:"
+            // Reserve more space because we are storing strings in the format of "RRA_AS:<address>:<label>"
+            stringData.Reserve(stringDataSizeInBytes + numStrings * ExtraBytesPerString);
+
+            // Filling stringData and stringOffsets
+            static constexpr char AsPatternStr[] = "RRA_AS:%llu:%s";
+            constexpr uint32_t MaxStringLength = 128;
+            char formatedString[MaxStringLength];
+            uint32_t stringIdx = 0;
+            uint32_t offset = 0;
+            for (auto it = accelStructNames.Begin(); it.Get() != nullptr; it.Next())
+            {
+                uint64_t acAddr = it.Get()->key;
+                const char* pAcLabel = it.Get()->value.string;
+
+                uint32_t len = Util::Snprintf(formatedString, sizeof(formatedString),
+                    AsPatternStr, acAddr, pAcLabel) + 1;
+                stringData.Resize(stringData.size() + len);
+                memcpy(stringData.Data() + offset, formatedString, len);
+                stringOffsets[stringIdx] = offset + baseOffset;
+                offset += len;
+                stringIdx++;
+            }
+
+            uint32_t tableId = m_pDevMode->AcquireStringTableId();
+            AddStringTable(tableId, numStrings, stringOffsets.Data(), stringData.Data(), stringData.size());
+        }
+
+        StringTableTraceSource::OnTraceFinished();
+    }
+
+private:
+    DevModeUberTrace* m_pDevMode;
+};
+
 // =====================================================================================================================
 DevModeUberTrace::DevModeUberTrace(
     Instance* pInstance)
@@ -80,8 +143,11 @@ DevModeUberTrace::DevModeUberTrace(
     m_pQueueTimingsTraceSource(nullptr),
     m_pStringTableTraceSource(nullptr),
     m_pUserMarkerHistoryTraceSource(nullptr),
-    m_stringTableId(0)
+    m_pRenderOpTraceController(nullptr),
+    m_stringTableId(0),
+    m_accelStructNames(64, m_pInstance->Allocator())
 {
+    m_accelStructNames.Init();
 }
 
 // =====================================================================================================================
@@ -367,6 +433,26 @@ bool DevModeUberTrace::IsTracingEnabled() const
 }
 
 // =====================================================================================================================
+void DevModeUberTrace::RecordRenderOps(
+    uint32_t deviceIdx,
+    Queue*   pQueue,
+    uint32_t drawCallCount,
+    uint32_t dispatchCallCount)
+{
+    if (m_pInstance->PalPlatform()->GetTraceSession()->GetActiveController() == m_pRenderOpTraceController)
+    {
+        Pal::IQueue* pPalQueue = pQueue->PalQueue(deviceIdx);
+
+        GpuUtil::RenderOpCounts opCounts = {
+            .drawCount     = drawCallCount,
+            .dispatchCount = dispatchCallCount,
+        };
+
+        m_pRenderOpTraceController->RecordRenderOps(pPalQueue, opCounts);
+    }
+}
+
+// =====================================================================================================================
 Pal::Result DevModeUberTrace::TimedQueueSubmit(
     uint32_t               deviceIdx,
     Queue*                 pQueue,
@@ -526,15 +612,17 @@ Pal::Result DevModeUberTrace::InitUberTraceResources(
 {
     Pal::Result result = Pal::Result::ErrorOutOfMemory;
 
-    const size_t traceSourcesAllocSize = sizeof(GpuUtil::CodeObjectTraceSource) +
+    const size_t traceObjectsAllocSize = sizeof(GpuUtil::CodeObjectTraceSource) +
                                          sizeof(GpuUtil::QueueTimingsTraceSource) +
-                                         sizeof(GpuUtil::StringTableTraceSource) +
-                                         sizeof(GpuUtil::UserMarkerHistoryTraceSource);
+                                         sizeof(DevModeUberTraceStringTableTraceSource) +
+                                         sizeof(GpuUtil::UserMarkerHistoryTraceSource) +
+                                         sizeof(GpuUtil::RenderOpTraceController);
 
-    void* pStorage = m_pInstance->AllocMem(traceSourcesAllocSize, VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+    void* pStorage = m_pInstance->AllocMem(traceObjectsAllocSize, VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
 
     if (pStorage != nullptr)
     {
+        // Emplace trace objects into the memory raft
         void* pObjStorage = pStorage;
 
         m_pCodeObjectTraceSource = VK_PLACEMENT_NEW(pObjStorage)
@@ -548,13 +636,19 @@ Pal::Result DevModeUberTrace::InitUberTraceResources(
         pObjStorage = VoidPtrInc(pObjStorage, sizeof(GpuUtil::QueueTimingsTraceSource));
 
         m_pStringTableTraceSource = VK_PLACEMENT_NEW(pObjStorage)
-                                    GpuUtil::StringTableTraceSource(m_pInstance->PalPlatform());
+                                    DevModeUberTraceStringTableTraceSource(m_pInstance->PalPlatform(), this);
 
-        pObjStorage = VoidPtrInc(pObjStorage, sizeof(GpuUtil::StringTableTraceSource));
+        pObjStorage = VoidPtrInc(pObjStorage, sizeof(DevModeUberTraceStringTableTraceSource));
 
         m_pUserMarkerHistoryTraceSource = VK_PLACEMENT_NEW(pObjStorage)
                                           GpuUtil::UserMarkerHistoryTraceSource(m_pInstance->PalPlatform());
 
+        pObjStorage = VoidPtrInc(pObjStorage, sizeof(GpuUtil::UserMarkerHistoryTraceSource));
+
+        m_pRenderOpTraceController = VK_PLACEMENT_NEW(pObjStorage)
+                                     GpuUtil::RenderOpTraceController(m_pInstance->PalPlatform(), pPalDevice);
+
+        // Register and initialize created trace objects
         result = m_pTraceSession->RegisterSource(m_pCodeObjectTraceSource);
 
         if (result == Pal::Result::Success)
@@ -573,6 +667,10 @@ Pal::Result DevModeUberTrace::InitUberTraceResources(
         {
             result = m_pTraceSession->RegisterSource(m_pUserMarkerHistoryTraceSource);
         }
+        if (result == Pal::Result::Success)
+        {
+            result = m_pTraceSession->RegisterController(m_pRenderOpTraceController);
+        }
 
         if (result != Pal::Result::Success)
         {
@@ -589,26 +687,33 @@ void DevModeUberTrace::DestroyUberTraceResources()
     if (m_pUserMarkerHistoryTraceSource != nullptr)
     {
         m_pTraceSession->UnregisterSource(m_pUserMarkerHistoryTraceSource);
-        m_pUserMarkerHistoryTraceSource = nullptr;
     }
     if (m_pStringTableTraceSource != nullptr)
     {
         m_pTraceSession->UnregisterSource(m_pStringTableTraceSource);
-        m_pStringTableTraceSource = nullptr;
     }
     if (m_pQueueTimingsTraceSource != nullptr)
     {
         m_pTraceSession->UnregisterSource(m_pQueueTimingsTraceSource);
-        m_pQueueTimingsTraceSource = nullptr;
     }
     if (m_pCodeObjectTraceSource != nullptr)
     {
         m_pTraceSession->UnregisterSource(m_pCodeObjectTraceSource);
-        m_pCodeObjectTraceSource = nullptr;
+    }
+    if (m_pRenderOpTraceController != nullptr)
+    {
+        m_pTraceSession->UnregisterController(m_pRenderOpTraceController);
     }
 
-    // The 4 trace sources are allocated  in a single memory allocation
+    // The trace objects are allocated in a single memory allocation
+    // Free the 'head' of this allocation to free all of them
     m_pInstance->FreeMem(m_pCodeObjectTraceSource);
+
+    m_pUserMarkerHistoryTraceSource = nullptr;
+    m_pStringTableTraceSource = nullptr;
+    m_pQueueTimingsTraceSource = nullptr;
+    m_pCodeObjectTraceSource = nullptr;
+    m_pRenderOpTraceController = nullptr;
 }
 
 // =====================================================================================================================
@@ -621,12 +726,37 @@ void DevModeUberTrace::ProcessMarkerTable(
     uint32        markerStringDataSize,
     const char*   pMarkerStringData)
 {
-    uint32_t tableId = ++m_stringTableId;
+    uint32_t tableId = AcquireStringTableId();
 
     m_pStringTableTraceSource->AddStringTable(tableId,
                                               numMarkerStrings, pMarkerStringOffsets,
                                               pMarkerStringData, markerStringDataSize);
     m_pUserMarkerHistoryTraceSource->AddUserMarkerHistory(sqttCbId, tableId, numOps, pUserMarkerOpHistory);
+}
+
+// =====================================================================================================================
+void DevModeUberTrace::LabelAccelStruct(
+    uint64_t    deviceAddress,
+    const char* pString)
+{
+    if (pString != nullptr)
+    {
+        bool existed = false;
+        AccelStructUserMarkerString* pUserMarker = nullptr;
+
+        Pal::Result result = Pal::Result::Success;
+        {
+            Util::MutexAuto lock(&m_mutex);
+            result = m_accelStructNames.FindAllocate(deviceAddress, &existed, &pUserMarker);
+        }
+
+        if (result == Pal::Result::Success)
+        {
+            VK_ASSERT(pUserMarker != nullptr);
+            Strncpy(pUserMarker->string, pString, sizeof(pUserMarker->string));
+            pUserMarker->length = strlen(pUserMarker->string);
+        }
+    }
 }
 
 } // namespace vk

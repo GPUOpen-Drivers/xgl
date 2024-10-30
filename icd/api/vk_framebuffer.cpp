@@ -142,6 +142,19 @@ Framebuffer::Framebuffer(const VkFramebufferCreateInfo& info,
     m_globalScissorParams.scissorRegion.extent.width  = info.width;
     m_globalScissorParams.scissorRegion.extent.height = info.height;
 
+    // Only for swapchain image.
+    if (runTimeSettings.useExtentFromWindowSystem && (info.attachmentCount > 0))
+    {
+        const Pal::ImageCreateInfo& imageInfo = ImageView::ObjectFromHandle(info.pAttachments[0])->GetImage()->
+                                                    PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
+
+        if (imageInfo.flags.presentable)
+        {
+            m_globalScissorParams.scissorRegion.extent.width  = imageInfo.extent.width;
+            m_globalScissorParams.scissorRegion.extent.height = imageInfo.extent.height;
+        }
+    }
+
     // If Imageless framebuffer don't process attachments
     if (info.flags & VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT)
         return;

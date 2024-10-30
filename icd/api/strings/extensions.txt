@@ -173,6 +173,7 @@ VK_KHR_format_feature_flags2
 VK_EXT_extended_dynamic_state2
 VK_EXT_descriptor_buffer
 VK_NV_compute_shader_derivatives
+VK_KHR_compute_shader_derivatives
 VK_EXT_graphics_pipeline_library
 VK_KHR_copy_commands2
 VK_EXT_ycbcr_image_arrays
@@ -194,6 +195,7 @@ VK_EXT_provoking_vertex
 VK_KHR_workgroup_memory_explicit_layout
 VK_EXT_image_2d_view_of_3d
 VK_EXT_depth_clamp_zero_one
+VK_EXT_depth_clamp_control
 VK_EXT_primitives_generated_query
 VK_EXT_non_seamless_cube_map
 VK_KHR_pipeline_binary
@@ -211,6 +213,7 @@ VK_KHR_cooperative_matrix
 VK_EXT_texture_compression_astc_hdr
 VK_NV_device_generated_commands
 VK_NV_device_generated_commands_compute
+VK_EXT_device_generated_commands
 VK_EXT_image_drm_format_modifier
 VK_KHR_shader_expect_assume
 VK_KHR_shader_subgroup_rotate
@@ -223,3 +226,6 @@ VK_EXT_image_compression_control
 #if VKI_RAY_TRACING
 #endif
 VK_EXT_depth_bias_control
+VK_MESA_image_alignment_control
+VK_EXT_pipeline_protected_access
+VK_EXT_pipeline_robustness

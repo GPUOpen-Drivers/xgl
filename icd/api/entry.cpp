@@ -410,6 +410,24 @@ VKAPI_ATTR void VKAPI_CALL vkCmdUpdatePipelineIndirectBufferNV(
 }
 
 // =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdPreprocessGeneratedCommandsEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkGeneratedCommandsInfoEXT*           pGeneratedCommandsInfo,
+    VkCommandBuffer                             stateCommandBuffer)
+{
+
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdExecuteGeneratedCommandsEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    isPreprocessed,
+    const VkGeneratedCommandsInfoEXT*           pGeneratedCommandsInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->ExecuteIndirect(isPreprocessed, pGeneratedCommandsInfo);
+}
+
+// =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer(
     VkCommandBuffer                             cmdBuffer,
     VkBuffer                                    srcBuffer,
@@ -1524,6 +1542,17 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetPatchControlPointsEXT(
     uint32_t                                    patchControlPoints)
 {
     VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthClampRangeEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkDepthClampModeEXT                         depthClampMode,
+    const VkDepthClampRangeEXT*                 pDepthClampRange)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CmdSetDepthClampRangeEXT(
+        depthClampMode,
+        pDepthClampRange);
 }
 
 // =====================================================================================================================

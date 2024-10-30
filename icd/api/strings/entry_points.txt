@@ -505,6 +505,8 @@ vkCmdSetDepthBiasEnableEXT                          @device       @dext(EXT_exte
 vkCmdSetLogicOpEXT                                  @device       @dext(EXT_extended_dynamic_state2)
 vkCmdSetPatchControlPointsEXT                       @device       @dext(EXT_extended_dynamic_state2)
 
+vkCmdSetDepthClampRangeEXT                          @device       @dext(EXT_depth_clamp_control)
+
 vkCmdBlitImage2KHR                                  @device       @dext(KHR_copy_commands2)
 vkCmdCopyBuffer2KHR                                 @device       @dext(KHR_copy_commands2)
 vkCmdCopyBufferToImage2KHR                          @device       @dext(KHR_copy_commands2)
@@ -542,6 +544,16 @@ vkCmdUpdatePipelineIndirectBufferNV                 @device       @dext(NV_devic
 vkGetPipelineIndirectDeviceAddressNV                @device       @dext(NV_device_generated_commands_compute)
 vkGetPipelineIndirectMemoryRequirementsNV           @device       @dext(NV_device_generated_commands_compute)
 
+vkCmdExecuteGeneratedCommandsEXT                    @device       @dext(EXT_device_generated_commands)
+vkCmdPreprocessGeneratedCommandsEXT                 @device       @dext(EXT_device_generated_commands)
+vkCreateIndirectCommandsLayoutEXT                   @device       @dext(EXT_device_generated_commands)
+vkCreateIndirectExecutionSetEXT                     @device       @dext(EXT_device_generated_commands)
+vkDestroyIndirectCommandsLayoutEXT                  @device       @dext(EXT_device_generated_commands)
+vkDestroyIndirectExecutionSetEXT                    @device       @dext(EXT_device_generated_commands)
+vkGetGeneratedCommandsMemoryRequirementsEXT         @device       @dext(EXT_device_generated_commands)
+vkUpdateIndirectExecutionSetPipelineEXT             @device       @dext(EXT_device_generated_commands)
+vkUpdateIndirectExecutionSetShaderEXT               @device       @dext(EXT_device_generated_commands)
+
 vkCmdSetTessellationDomainOriginEXT                 @device       @dext(EXT_extended_dynamic_state3)
 vkCmdSetDepthClampEnableEXT                         @device       @dext(EXT_extended_dynamic_state3)
 vkCmdSetPolygonModeEXT                              @device       @dext(EXT_extended_dynamic_state3)
@@ -575,8 +587,8 @@ vkCmdBindIndexBuffer2KHR                            @device       @dext(KHR_main
 
 vkCmdBindDescriptorSets2KHR                         @device       @dext(KHR_maintenance6)
 vkCmdPushConstants2KHR                              @device       @dext(KHR_maintenance6)
-vkCmdPushDescriptorSet2KHR                          @device       @dext(KHR_maintenance6)
-vkCmdPushDescriptorSetWithTemplate2KHR              @device       @dext(KHR_maintenance6)
+vkCmdPushDescriptorSet2KHR                          @device       @dext(KHR_maintenance6) && @dext(KHR_push_descriptor)
+vkCmdPushDescriptorSetWithTemplate2KHR              @device       @dext(KHR_maintenance6) && @dext(KHR_push_descriptor)
 vkCmdSetDescriptorBufferOffsets2EXT                 @device       @dext(KHR_maintenance6)
 vkCmdBindDescriptorBufferEmbeddedSamplers2EXT       @device       @dext(KHR_maintenance6)
 

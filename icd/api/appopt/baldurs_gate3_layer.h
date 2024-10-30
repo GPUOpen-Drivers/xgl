@@ -22,34 +22,36 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+/**
+***********************************************************************************************************************
+* @file  baldurs_gate3_layer.h
+* @brief Contains shadowed entry points related to baldur's gate 3.
+***********************************************************************************************************************
+*/
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
+#ifndef __BALDURS_GATE3_LAYER_H__
+#define __BALDURS_GATE3_LAYER_H__
 
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
+#pragma once
 
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
+#include "opt_layer.h"
 
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
+namespace vk
+{
+// =====================================================================================================================
+// Class for the Baldur's Gate 3 Layer to simplify calls to the overriden dispatch table from the layer's entrypoints
+class BaldursGate3Layer final : public OptLayer
+{
+public:
+    BaldursGate3Layer() {}
+    virtual ~BaldursGate3Layer() {}
 
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   325
+    virtual void OverrideDispatchTable(DispatchTable* pDispatchTable) override;
 
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(BaldursGate3Layer);
+};
 
-// These values specify the driver ID and driver info string
-#define VULKAN_DRIVER_ID            VK_DRIVER_ID_AMD_OPEN_SOURCE_KHR  // "AMDOPEN"
-#define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
-#define VULKAN_DRIVER_INFO_STR      "2024.Q4.1"
-#define VULKAN_DRIVER_INFO_STR_LLPC "(LLPC)"
+}; // namespace vk
 
-// These values tell which version of the conformance test the driver is compliant against
-#define CTS_VERSION_MAJOR           1
-#define CTS_VERSION_MINOR           3
-#define CTS_VERSION_SUBMINOR        5
-#define CTS_VERSION_PATCH           2
+#endif /* __BALDURS_GATE3_LAYER_H__ */

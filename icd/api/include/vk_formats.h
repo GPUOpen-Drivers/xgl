@@ -90,9 +90,10 @@ struct Formats
         uint32_t planeIndex);
 
     static VkFormatFeatureFlags GetExtendedFeatureFlags(
-        const PhysicalDevice* pPhysicalDevice,
-        VkFormat format,
-        VkImageTiling tiling,
+        const PhysicalDevice*  pPhysicalDevice,
+        VkFormat               format,
+        VkImageTiling          tiling,
+        const bool             isBlockTexelViewCompatible,
         const RuntimeSettings& settings);
 };
 

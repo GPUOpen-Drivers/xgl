@@ -41,6 +41,7 @@
 #include "raytrace/ray_tracing_device.h"
 #include "ray_tracing_util.h"
 
+#include "palPipelineAbiReader.h"
 #include "palShaderLibrary.h"
 #include "palPipeline.h"
 #include "palMetroHash.h"
@@ -70,29 +71,19 @@ static void PopulateShaderGroupInfos(
         {
         case VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR:
             VK_ASSERT(apiGroupInfo.generalShader != VK_SHADER_UNUSED_KHR);
-            VK_ASSERT((pCreateInfo->pStages[apiGroupInfo.generalShader].stage &
-                       (VK_SHADER_STAGE_RAYGEN_BIT_KHR |
-                        VK_SHADER_STAGE_MISS_BIT_KHR |
-                        VK_SHADER_STAGE_CALLABLE_BIT_KHR)) != 0);
             stages |= pCreateInfo->pStages[apiGroupInfo.generalShader].stage;
             break;
         case VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR:
             VK_ASSERT(apiGroupInfo.intersectionShader != VK_SHADER_UNUSED_KHR);
-            VK_ASSERT(pCreateInfo->pStages[apiGroupInfo.intersectionShader].stage ==
-                      VK_SHADER_STAGE_INTERSECTION_BIT_KHR);
             stages |= VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
             // falls through
         case VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR:
             if (apiGroupInfo.closestHitShader != VK_SHADER_UNUSED_KHR)
             {
-                VK_ASSERT(pCreateInfo->pStages[apiGroupInfo.closestHitShader].stage ==
-                          VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
                 stages |= VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
             }
             if (apiGroupInfo.anyHitShader != VK_SHADER_UNUSED_KHR)
             {
-                VK_ASSERT(pCreateInfo->pStages[apiGroupInfo.anyHitShader].stage ==
-                          VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
                 stages |= VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
             }
             break;
@@ -267,10 +258,10 @@ void RayTracingPipeline::ConvertRayTracingPipelineInfo(
 PipelineImplCreateInfo::PipelineImplCreateInfo(
     Device* const   pDevice)
     : m_stageCount(0),
-        m_stageList(pDevice->VkInstance()->Allocator()),
-        m_groupCount(0),
-        m_groupList(pDevice->VkInstance()->Allocator()),
-        m_maxRecursionDepth(0)
+      m_stageList(pDevice->VkInstance()->Allocator()),
+      m_groupCount(0),
+      m_groupList(pDevice->VkInstance()->Allocator()),
+      m_maxRecursionDepth(0)
 {
 }
 
@@ -316,7 +307,18 @@ RayTracingPipeline::RayTracingPipeline(
     m_hasTraceRay(false),
     m_isCps(false),
     m_elfHash{},
-    m_captureReplayVaMappingBufferInfo{}
+    m_captureReplayVaMappingBufferInfo{},
+    m_pShaderProperty(nullptr),
+    m_compiledShaderCount(0),
+    m_shaderStageVirtAddrList
+    {
+        pDevice->VkInstance()->Allocator(),
+#if VKI_BUILD_MAX_NUM_GPUS > 1
+        pDevice->VkInstance()->Allocator(),
+        pDevice->VkInstance()->Allocator(),
+        pDevice->VkInstance()->Allocator()
+#endif
+    }
 {
     memset(m_pShaderGroupHandles, 0, sizeof(Vkgc::RayTracingShaderIdentifier*) * MaxPalDevices);
     memset(m_pShaderGroupStackSizes, 0, sizeof(ShaderGroupStackSizes*) * MaxPalDevices);
@@ -380,6 +382,11 @@ VkResult RayTracingPipeline::Destroy(
     Device*                      pDevice,
     const VkAllocationCallbacks* pAllocator)
 {
+    if (m_pShaderProperty != nullptr)
+    {
+        pAllocator->pfnFree(pAllocator->pUserData, m_pShaderProperty);
+    }
+
     for (uint32_t i = 0; i < m_shaderLibraryCount; ++i)
     {
         m_ppShaderLibraries[i]->Destroy();
@@ -435,8 +442,33 @@ VkResult RayTracingPipeline::CreateImpl(
     VkResult                           result                 = VkResult::VK_SUCCESS;
     const RuntimeSettings&             settings               = m_pDevice->GetRuntimeSettings();
     RayTracingPipelineExtStructs       extStructs             = {};
+    VkPipelineRobustnessCreateInfoEXT  pipelineRobustness     = {};
 
     HandleExtensionStructs(pCreateInfo, &extStructs);
+
+    bool usePipelineRobustness = InitPipelineRobustness(
+        extStructs.pPipelineRobustnessCreateInfoEXT,
+        &pipelineRobustness);
+
+    // If VkPipelineRobustnessCreateInfoEXT is specified for both a pipeline and a shader stage,
+    // the VkPipelineRobustnessCreateInfoEXT specified for the shader stage will take precedence.
+    for (uint32_t stageIdx = 0; stageIdx < pCreateInfo->stageCount; ++stageIdx)
+    {
+        PipelineShaderStageExtStructs shaderStageExtStructs = {};
+        HandleShaderStageExtensionStructs(pCreateInfo->pStages[stageIdx].pNext, &shaderStageExtStructs);
+
+        if (shaderStageExtStructs.pPipelineRobustnessCreateInfoEXT != nullptr)
+        {
+            UpdatePipelineRobustness(shaderStageExtStructs.pPipelineRobustnessCreateInfoEXT, &pipelineRobustness);
+            usePipelineRobustness = true;
+        }
+    }
+
+    if (usePipelineRobustness)
+    {
+        extStructs.pPipelineRobustnessCreateInfoEXT =
+            static_cast<const VkPipelineRobustnessCreateInfoEXT*>(&pipelineRobustness);
+    }
 
     UpdatePipelineImplCreateInfo(pCreateInfo);
 
@@ -574,13 +606,16 @@ VkResult RayTracingPipeline::CreateImpl(
                         continue;
                     }
 
-                    const auto pImportedShaderLibrary = pPipelineLib->PalShaderLibrary(deviceIdx);
-                    const auto pImportedFuncInfoList  = pImportedShaderLibrary->GetShaderLibFunctionInfos().Data();
-                    const auto numFunctions           = pImportedShaderLibrary->
-                                                        GetShaderLibFunctionInfos().NumElements();
+                    if (pPipelineLib->GetShaderLibraryCount() > 0)
+                    {
+                        const auto pImportedShaderLibrary = pPipelineLib->PalShaderLibrary(deviceIdx);
+                        const auto pImportedFuncInfoList  = pImportedShaderLibrary->GetShaderLibFunctionInfos().Data();
+                        const auto numFunctions           = pImportedShaderLibrary->
+                                                            GetShaderLibFunctionInfos().NumElements();
 
-                    // We only use one shader library per collection function
-                    VK_ASSERT((pImportedFuncInfoList != nullptr) && (numFunctions == 1));
+                        // We only use one shader library per collection function
+                        VK_ASSERT((pImportedFuncInfoList != nullptr) && (numFunctions == 1));
+                    }
 
                     // update group count
                     pipelineLibGroupCount += pPipelineLib->GetShaderGroupCount();
@@ -604,6 +639,7 @@ VkResult RayTracingPipeline::CreateImpl(
                     shaderGroupArraySize * m_pDevice->NumPalDevices(),
                     VK_DEFAULT_MEM_ALIGN,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+            memset(pShaderGroups[0], 0, shaderGroupArraySize * m_pDevice->NumPalDevices());
 
             if (pShaderGroups[0] == nullptr)
             {
@@ -826,6 +862,7 @@ VkResult RayTracingPipeline::CreateImpl(
                 convertResult = pDefaultCompiler->ConvertRayTracingPipelineInfo(
                     m_pDevice,
                     &pipelineCreateInfo,
+                    extStructs,
                     flags,
                     &shaderInfo,
                     &optimizerKey,
@@ -948,6 +985,7 @@ VkResult RayTracingPipeline::CreateImpl(
 
         m_hasTraceRay = pipelineBinaries[DefaultDeviceIndex].hasTraceRay;
         m_isCps = pipelineBinaries[DefaultDeviceIndex].isCps;
+        bool hasKernelEntry = pipelineBinaries[DefaultDeviceIndex].hasKernelEntry;
 
         uint32_t funcCount = 0;
         if (result == VK_SUCCESS)
@@ -959,6 +997,38 @@ VkResult RayTracingPipeline::CreateImpl(
                 if (pShaderProp[i].shaderId != RayTracingInvalidShaderId)
                 {
                     ++funcCount;
+                }
+            }
+
+            // Inline pipelines have only one shader. Indirect pipelines have +1 for launch shader
+            m_compiledShaderCount = 1 + funcCount;
+            m_pShaderProperty = static_cast<Vkgc::RayTracingShaderProperty*>(pAllocator->pfnAllocation(
+                                                    pAllocator->pUserData,
+                                                    sizeof(Vkgc::RayTracingShaderProperty) * m_compiledShaderCount,
+                                                    VK_DEFAULT_MEM_ALIGN,
+                                                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+            if (m_pShaderProperty == nullptr)
+            {
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+            else
+            {
+                memset(m_pShaderProperty, 0, sizeof(Vkgc::RayTracingShaderProperty) * m_compiledShaderCount);
+                if (funcCount > 1) // Indirect call
+                {
+                    Util::Strncpy(m_pShaderProperty[0].name, "launchRay", Vkgc::RayTracingMaxShaderNameLength);
+                    for (uint32_t i = 0; i < funcCount; i++)
+                    {
+                        if (pShaderProp[i].shaderId != RayTracingInvalidShaderId)
+                        {
+                            Util::Strncpy(m_pShaderProperty[i+1].name, pShaderProp[i].name,
+                                                Vkgc::RayTracingMaxShaderNameLength);
+                        }
+                    }
+                }
+                else
+                {
+                    Util::Strncpy(m_pShaderProperty[0].name, "ray-gen", Vkgc::RayTracingMaxShaderNameLength);
                 }
             }
 
@@ -1122,6 +1192,19 @@ VkResult RayTracingPipeline::CreateImpl(
                 void*      pDeviceShaderLibraryMem = Util::VoidPtrInc(pPalShaderLibraryMem,
                                                                       deviceIdx * funcCount * shaderLibrarySize);
 
+                VK_ASSERT(pipelineSize ==
+                    m_pDevice->PalDevice(deviceIdx)->GetComputePipelineSize(localPipelineInfo.pipeline, nullptr));
+
+                // If pPipelineBinaries[DefaultDeviceIndex] is sufficient for all devices, the other pipeline binaries
+                // won't be created.  Otherwise, like if gl_DeviceIndex is used, they will be.
+                if (hasKernelEntry)
+                {
+                    localPipelineInfo.pipeline.flags.clientInternal = false;
+                    localPipelineInfo.pipeline.pipelineBinarySize   = pBinaries[0].codeSize;
+                    localPipelineInfo.pipeline.pPipelineBinary      = pBinaries[0].pCode;
+                    localPipelineInfo.pipeline.maxFunctionCallDepth = pipelineBinaries[deviceIdx].maxFunctionCallDepth;
+                }
+
                 // Copy indirect function info
                 uint32_t       funcIndex           = 0;
                 const auto     pShaderProp         = &pipelineBinaries[deviceIdx].shaderPropSet.shaderProps[0];
@@ -1139,7 +1222,7 @@ VkResult RayTracingPipeline::CreateImpl(
                 }
                 VK_ASSERT(funcIndex == funcCount);
 
-                if (result == VK_SUCCESS)
+                if ((result == VK_SUCCESS) && hasKernelEntry)
                 {
                     palResult = m_pDevice->PalDevice(deviceIdx)->CreateComputePipeline(
                         localPipelineInfo.pipeline,
@@ -1149,8 +1232,8 @@ VkResult RayTracingPipeline::CreateImpl(
 
                 // The size of stack is per native thread. So that stack size have to be multiplied by 2
                 // if a Wave64 shader that needs scratch buffer is used.
-                uint32_t stackSizeFactor = 0;
-                if (palResult == Util::Result::Success)
+                uint32_t stackSizeFactor = 1;
+                if ((palResult == Util::Result::Success) && hasKernelEntry)
                 {
                     Pal::ShaderStats shaderStats = {};
                     palResult = pPalPipeline[deviceIdx]->GetShaderStats(Pal::ShaderType::Compute,
@@ -1162,12 +1245,14 @@ VkResult RayTracingPipeline::CreateImpl(
                 // Create shader library and remap shader ID to indirect function GPU Va
                 if (palResult == Util::Result::Success)
                 {
+                    uint32_t binaryOffset = hasKernelEntry ? 1 : 0;
                     for (uint32_t i = 0; (i < funcCount) && (palResult == Util::Result::Success); ++i)
                     {
-                        VK_ASSERT((pBinaries[i + 1].pCode != nullptr) && (pBinaries[i + 1].codeSize != 0));
+                        VK_ASSERT((pBinaries[i + binaryOffset].pCode != nullptr) &&
+                                  (pBinaries[i + binaryOffset].codeSize != 0));
                         Pal::ShaderLibraryCreateInfo shaderLibraryCreateInfo = {};
-                        shaderLibraryCreateInfo.pCodeObject = pBinaries[i + 1].pCode;
-                        shaderLibraryCreateInfo.codeObjectSize = pBinaries[i + 1].codeSize;
+                        shaderLibraryCreateInfo.pCodeObject = pBinaries[i + binaryOffset].pCode;
+                        shaderLibraryCreateInfo.codeObjectSize = pBinaries[i + binaryOffset].codeSize;
 
                         palResult = m_pDevice->PalDevice(deviceIdx)->CreateShaderLibrary(
                             shaderLibraryCreateInfo,
@@ -1182,7 +1267,7 @@ VkResult RayTracingPipeline::CreateImpl(
                         }
                     }
 
-                    if (palResult == Util::Result::Success)
+                    if ((palResult == Util::Result::Success) && hasKernelEntry)
                     {
                         palResult = pPalPipeline[deviceIdx]->LinkWithLibraries(ppDeviceShaderLibraries, funcCount);
                     }
@@ -1379,28 +1464,37 @@ VkResult RayTracingPipeline::CreateImpl(
                         }
                     }
 
-                    if (funcCount > 0)
+                    // Store addresses of stage shaders into m_shaderStageVirtAddrList, they will be used by shader groups.
+                    m_shaderStageVirtAddrList[deviceIdx].Reserve(totalShaderCount);
+                    const uint32_t stageShaderCount = pipelineCreateInfo.stageCount;
+                    for (uint32_t sIdx = 0; sIdx < shaderCount; ++sIdx)
                     {
-                        for (uint32_t i = 0; i < pipelineCreateInfo.groupCount; ++i)
+                        if (pShaderProp[sIdx].shaderId != RayTracingInvalidShaderId)
                         {
-                            const auto pGroup = &pShaderGroups[deviceIdx][i];
-                            bool       found = false;
-                            found |= MapShaderIdToShaderHandle(pIndirectFuncInfo,
-                                                               pShaderNameMap,
-                                                               shaderCount,
-                                                               pShaderProp,
-                                                               &pGroup->shaderId);
-                            found |= MapShaderIdToShaderHandle(pIndirectFuncInfo,
-                                                               pShaderNameMap,
-                                                               shaderCount,
-                                                               pShaderProp,
-                                                               &pGroup->intersectionId);
-                            found |= MapShaderIdToShaderHandle(pIndirectFuncInfo,
-                                                               pShaderNameMap,
-                                                               shaderCount,
-                                                               pShaderProp,
-                                                               &pGroup->anyHitId);
-                            VK_ASSERT(found && "Failed to map shader to gpu address");
+                            uint32_t shaderIdx = pShaderNameMap[sIdx];
+                            auto pIndirectFunc = &pIndirectFuncInfo[shaderIdx];
+                            if (shaderIdx < stageShaderCount)
+                            {
+                                VK_ASSERT(strncmp(pIndirectFunc->symbolName.Data(),
+                                                &pShaderProp[sIdx].name[0],
+                                                pIndirectFunc->symbolName.Length()) == 0);
+
+                                uint64_t gpuVirtAddr = pIndirectFunc->gpuVirtAddr;
+                                if (pShaderProp[sIdx].onlyGpuVaLo)
+                                {
+                                    gpuVirtAddr = gpuVirtAddr & 0xffffffff;
+                                }
+                                const uint64_t shaderVirtAddr = gpuVirtAddr | pShaderProp[sIdx].shaderIdExtraBits;
+                                m_shaderStageVirtAddrList[deviceIdx].PushBack(shaderVirtAddr);
+                            }
+                            else
+                            {
+                                // It must be the internal raytracing shader.
+                                VK_ASSERT_MSG(strncmp(pIndirectFunc->symbolName.Data(),
+                                                      "_cs_",
+                                                      pIndirectFunc->symbolName.Length()) == 0,
+                                              "symbolName:%s\n", pIndirectFunc->symbolName.Data());
+                            }
                         }
                     }
 
@@ -1429,8 +1523,11 @@ VkResult RayTracingPipeline::CreateImpl(
                             const auto ppImportedDeviceShaderLibraries =
                                 ppImortedShaderLibraries + deviceIdx * importedLibraryCount;
 
-                            palResult = pPalPipeline[deviceIdx]->LinkWithLibraries(ppImportedDeviceShaderLibraries,
-                                                                                   importedLibraryCount);
+                            if (hasKernelEntry)
+                            {
+                                palResult = pPalPipeline[deviceIdx]->LinkWithLibraries(ppImportedDeviceShaderLibraries,
+                                                                                       importedLibraryCount);
+                            }
 
                             if (palResult == Util::Result::Success)
                             {
@@ -1534,6 +1631,34 @@ VkResult RayTracingPipeline::CreateImpl(
 
                                 mixedGroupCount = mixedGroupCount + pipelineGroupCount;
                             }
+
+                            const auto& libShaderVirtAddrList = pPipelineLib->GetShaderStageVirtAddrList(deviceIdx);
+                            for (uint32_t lsIdx = 0; lsIdx < libShaderVirtAddrList.NumElements(); ++lsIdx)
+                            {
+                                m_shaderStageVirtAddrList[deviceIdx].PushBack(libShaderVirtAddrList.At(lsIdx));
+                            }
+                        }
+                    }
+
+                    // When NumElements() == 0, the pipeline could be compiled inline.
+                    if (m_shaderStageVirtAddrList[deviceIdx].NumElements() > 0)
+                    {
+                        for (uint32_t grpIdx = 0; grpIdx < pipelineCreateInfo.groupCount; ++grpIdx)
+                        {
+                            const auto pGroup = &pShaderGroups[deviceIdx][grpIdx];
+                            pGroup->padding = 0;
+
+                            uint64_t* pGroupShaderIds[] = { &pGroup->shaderId, &pGroup->intersectionId, &pGroup->anyHitId };
+                            for (uint32_t idx = 0; idx < sizeof(pGroupShaderIds) / sizeof(uint64_t*); ++idx)
+                            {
+                                if (*pGroupShaderIds[idx] != RayTracingInvalidShaderId)
+                                {
+                                    const uint64_t groupShaderId = *pGroupShaderIds[idx] - 1;
+
+                                    VK_ASSERT(groupShaderId < m_shaderStageVirtAddrList[deviceIdx].NumElements());
+                                    *pGroupShaderIds[idx] = m_shaderStageVirtAddrList[deviceIdx].At(groupShaderId);
+                                }
+                            }
                         }
                     }
 
@@ -1624,7 +1749,7 @@ VkResult RayTracingPipeline::CreateImpl(
         {
             uint32_t dispatchRaysUserDataOffset = localPipelineInfo.pLayout->GetDispatchRaysUserData();
 
-            Init(pPalPipeline,
+            Init(hasKernelEntry ? pPalPipeline : nullptr,
                  funcCount * m_pDevice->NumPalDevices(),
                  ppShaderLibraries,
                  localPipelineInfo.pLayout,
@@ -1848,8 +1973,7 @@ static int32_t DeferredCreateRayTracingPipelineCallback(
             {
                 VkResult                                 localResult = VK_SUCCESS;
                 const VkRayTracingPipelineCreateInfoKHR* pCreateInfo = &pState->pInfos[index];
-                VkPipelineCreateFlags2KHR                flags       =
-                    Device::GetPipelineCreateFlags(pCreateInfo);
+                VkPipelineCreateFlags2KHR                flags       = Device::GetPipelineCreateFlags(pCreateInfo);
 
                 if (pState->skipRemaining == VK_FALSE)
                 {
@@ -1885,7 +2009,7 @@ static int32_t DeferredCreateRayTracingPipelineCallback(
                                                static_cast<uint32_t>(VK_SUCCESS),
                                                static_cast<uint32_t>(localResult));
 
-                    if (pCreateInfo->flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT)
+                    if (flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT)
                     {
                         Util::AtomicCompareAndSwap(&pState->skipRemaining,
                                                    VK_FALSE,
@@ -1978,6 +2102,351 @@ static int32_t DeferredCreateRayTracingPipelineCallback(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+// Gets the code object binary according to binary index
+void RayTracingPipeline::GetPipelineBinaryByIndex(
+    uint32_t        index,
+    void*           pBinary,
+    uint32_t*       pSize
+    ) const
+{
+    if (index < m_compiledShaderCount)
+    {
+        if (index == 0)
+        {
+            m_pPalPipeline[0]->GetCodeObject(pSize, pBinary);
+        }
+        else
+        {
+            m_ppShaderLibraries[index - 1]->GetCodeObject(pSize, pBinary);
+        }
+    }
+}
+
+// =====================================================================================================================
+void RayTracingPipeline::GetShaderDescriptionByStage(
+    char*              pDescription,
+    const uint32_t     index,
+    const uint32_t     binaryCount
+    ) const
+{
+    // Beginning of the description
+    Util::Strncpy(pDescription, "Executable handles following Vulkan stages: ", VK_MAX_DESCRIPTION_SIZE);
+
+    if (index == 0) // First shader is the compute launch shader
+    {
+        if (binaryCount == 1) // Inline shader
+        {
+            Util::Strncat(pDescription, VK_MAX_DESCRIPTION_SIZE, "Inline Raygen Shader");
+        }
+        else
+        {
+            Util::Strncat(pDescription, VK_MAX_DESCRIPTION_SIZE, "Internal Launch Shader");
+        }
+    }
+    else if (index == (binaryCount - 1)) // Last shader is the internal traceray shader
+    {
+        Util::Strncat(pDescription, VK_MAX_DESCRIPTION_SIZE, "Internal Intersection Shader");
+    }
+    else
+    {
+        const ShaderGroupInfo* pShaderGroupInfo = GetShaderGroupInfos();
+        VkShaderStageFlags shaderStage = pShaderGroupInfo[index - 1].stages;
+
+        switch (shaderStage)
+        {
+        case VK_SHADER_STAGE_RAYGEN_BIT_KHR:
+            Util::Strncat(pDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_RAYGEN_BIT_KHR ");
+            break;
+        case VK_SHADER_STAGE_MISS_BIT_KHR:
+            Util::Strncat(pDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_MISS_BIT_KHR ");
+            break;
+        case VK_SHADER_STAGE_ANY_HIT_BIT_KHR:
+            Util::Strncat(pDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_ANY_HIT_BIT_KHR ");
+            break;
+        case VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR:
+            Util::Strncat(pDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR ");
+            break;
+        case VK_SHADER_STAGE_INTERSECTION_BIT_KHR:
+            Util::Strncat(pDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_INTERSECTION_BIT_KHR ");
+            break;
+        case VK_SHADER_STAGE_CALLABLE_BIT_KHR:
+            Util::Strncat(pDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_CALLABLE_BIT_KHR ");
+            break;
+        default:
+            Util::Strncat(pDescription, VK_MAX_DESCRIPTION_SIZE, " unsupported shader ");
+            break;
+        }
+    }
+}
+
+// =====================================================================================================================
+// Gets the shader property information
+VkResult RayTracingPipeline::GetPipelineExecutableProperties(
+    const VkPipelineInfoKHR*                    pPipelineInfo,
+    uint32_t*                                   pExecutableCount,
+    VkPipelineExecutablePropertiesKHR*          pProperties
+    ) const
+{
+    const uint32_t numHWStages = GetPipelineBinaryCount();
+
+    if (pProperties == nullptr)
+    {
+        *pExecutableCount = numHWStages;
+    }
+    else
+    {
+        const ShaderGroupInfo* pShaderGroupInfo = GetShaderGroupInfos();
+
+        if (*pExecutableCount > numHWStages)
+        {
+            *pExecutableCount = numHWStages;
+        }
+
+        if ((*pExecutableCount == 1) && (numHWStages == 1)) //Inline shader
+        {
+            pProperties[0].stages = pShaderGroupInfo[0].stages;
+            Util::Strncpy(pProperties[0].name, "ShaderProperties.ray-gen", VK_MAX_DESCRIPTION_SIZE);
+            Util::Strncpy(pProperties[0].description,
+                          "Executable handles following Vulkan stages: Raygen Shader",
+                          VK_MAX_DESCRIPTION_SIZE);
+        }
+        else
+        {
+            for (uint32_t i = 0; i < *pExecutableCount; i++)
+            {
+                const Vkgc::RayTracingShaderProperty* pProperty = GetPipelineBinaryPropset(i);
+                Util::Strncpy(pProperties[i].name, "ShaderProperties.", VK_MAX_DESCRIPTION_SIZE);
+                Util::Strncat(pProperties[i].name, VK_MAX_DESCRIPTION_SIZE, pProperty->name);
+
+                if (i == 0) // First shader is the compute launch shader
+                {
+                    pProperties[i].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+                }
+                else if (i == (numHWStages - 1)) // Last shader is the internal traceray shader
+                {
+                    pProperties[i].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+                }
+                else
+                {
+                    pProperties[i].stages = pShaderGroupInfo[i-1].stages;
+                }
+                GetShaderDescriptionByStage(pProperties[i].description, i, numHWStages);
+            }
+        }
+    }
+
+    return (*pExecutableCount < numHWStages) ? VK_INCOMPLETE : VK_SUCCESS;
+}
+
+// =====================================================================================================================
+VkResult RayTracingPipeline::GetRayTracingShaderDisassembly(
+    Util::Abi::PipelineSymbolType pipelineSymbolType,
+    const void*                   pBinaryCode,
+    size_t*                       pBufferSize,
+    void*                         pBuffer
+    ) const
+{
+    // To extract the shader code, we can re-parse the saved ELF binary and lookup the shader's program
+    // instructions by examining the symbol table entry for that shader's entrypoint.
+    Util::Abi::PipelineAbiReader abiReader(m_pDevice->VkInstance()->Allocator(), pBinaryCode);
+
+    VkResult    result    = VK_SUCCESS;
+    Pal::Result palResult = abiReader.Init();
+
+    if (palResult == Pal::Result::Success)
+    {
+        bool symbolValid = false;
+
+        // Support returing AMDIL/LLVM-IR and ISA
+        VK_ASSERT((pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderDisassembly) ||
+                  (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderAmdIl));
+
+        const Util::Elf::SymbolTableEntry* pSymbolEntry = nullptr;
+        const char* pSectionName = nullptr;
+
+        if (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderDisassembly)
+        {
+            pSymbolEntry = abiReader.GetPipelineSymbol(
+                Util::Abi::GetSymbolForStage(
+                    Util::Abi::PipelineSymbolType::ShaderDisassembly,
+                    Util::Abi::HardwareStage::Cs));
+            pSectionName = Util::Abi::AmdGpuDisassemblyName;
+        }
+        else if (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderAmdIl)
+        {
+            pSymbolEntry = abiReader.GetPipelineSymbol(
+                Util::Abi::GetSymbolForStage(
+                    Util::Abi::PipelineSymbolType::ShaderAmdIl,
+                    Util::Abi::ApiShaderType::Cs));
+            pSectionName = Util::Abi::AmdGpuCommentLlvmIrName;
+        }
+
+        if (pSymbolEntry != nullptr)
+        {
+            palResult = abiReader.GetElfReader().CopySymbol(*pSymbolEntry, pBufferSize, pBuffer);
+            symbolValid = palResult == Util::Result::Success;
+        }
+        else if (pSectionName != nullptr)
+        {
+            const auto& elfReader = abiReader.GetElfReader();
+            Util::ElfReader::SectionId disassemblySectionId = elfReader.FindSection(pSectionName);
+
+            if (disassemblySectionId != 0)
+            {
+                const char* pDisassemblySection = static_cast<const char*>(
+                    elfReader.GetSectionData(disassemblySectionId));
+                size_t disassemblySectionLen = static_cast<size_t>(
+                    elfReader.GetSection(disassemblySectionId).sh_size);
+
+                symbolValid = true;
+
+                // Fill output
+                if (pBufferSize != nullptr)
+                {
+                    *pBufferSize = disassemblySectionLen + 1;
+                }
+
+                if (pBuffer != nullptr)
+                {
+                    memcpy(pBuffer, pDisassemblySection,
+                            Util::Min(*pBufferSize, disassemblySectionLen));
+                    if (*pBufferSize > disassemblySectionLen)
+                    {
+                        // Add null terminator
+                        static_cast<char*>(pBuffer)[disassemblySectionLen] = '\0';
+                    }
+                }
+
+                if (*pBufferSize < disassemblySectionLen)
+                {
+                    symbolValid = false;
+                }
+            }
+        }
+
+        result = symbolValid ? VK_SUCCESS : VK_INCOMPLETE;
+    }
+    else
+    {
+        VK_ASSERT(palResult == Pal::Result::ErrorInvalidMemorySize);
+
+        result = VK_INCOMPLETE;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Gets the shader binary/disassembler info
+VkResult RayTracingPipeline::GetPipelineExecutableInternalRepresentations(
+    const VkPipelineExecutableInfoKHR*             pExecutableInfo,
+    uint32_t*                                      pInternalRepresentationCount,
+    VkPipelineExecutableInternalRepresentationKHR* pInternalRepresentations
+    ) const
+{
+    constexpr uint32_t NumberOfInternalRepresentations = 2; // ELF binary and ISA disassembly
+    const uint32_t index = pExecutableInfo->executableIndex;
+    const uint32_t binaryCount = GetPipelineBinaryCount();
+
+    if (pInternalRepresentations == nullptr)
+    {
+        *pInternalRepresentationCount = NumberOfInternalRepresentations;
+    }
+    else // Output the shader
+    {
+        if ((index < binaryCount) && (*pInternalRepresentationCount > 0))
+        {
+            uint32_t binarySize = 0;
+            uint32_t entry = 0;
+            void* pBinaryCode = nullptr;
+            const Vkgc::RayTracingShaderProperty* pProperty = GetPipelineBinaryPropset(index);
+
+            // ELF format binary back
+            GetPipelineBinaryByIndex(index, nullptr, &binarySize);
+            if ((pInternalRepresentations[entry].dataSize == 0) ||
+                (pInternalRepresentations[entry].pData == nullptr))
+            {
+                pInternalRepresentations[entry].dataSize = binarySize + 1;
+            }
+            else
+            {
+                if (pInternalRepresentations[entry].dataSize >= binarySize)
+                {
+                    pBinaryCode = pInternalRepresentations[entry].pData;
+                    GetPipelineBinaryByIndex(index, pBinaryCode, &binarySize);
+                    // Add null terminator
+                    if (pInternalRepresentations[entry].dataSize > binarySize)
+                    {
+                        static_cast<char*>(pInternalRepresentations[entry].pData)[binarySize] = '\0';
+                    }
+
+                    GetShaderDescriptionByStage(pInternalRepresentations[entry].description,
+                                                index, binaryCount);
+                    Util::Strncpy(pInternalRepresentations[entry].name, "ELF.", VK_MAX_DESCRIPTION_SIZE);
+                    Util::Strncat(pInternalRepresentations[entry].name,
+                                    VK_MAX_DESCRIPTION_SIZE, pProperty->name);
+                }
+                else
+                {
+                    *pInternalRepresentationCount = 0; // ELF binary is incompleted
+                }
+            }
+            entry++;
+
+            // If the first entry is incomplete/invalid, we will ginore the second internal representation
+            // and return VK_INCOMPLETE with pInternalRepresentationCount = 0 directly
+            // If the first entry is valid, and the second internal representation is incomplete/invalid
+            // return VK_INCOMPLETE with pInternalRepresentationCount--
+            if ((*pInternalRepresentationCount == NumberOfInternalRepresentations) &&
+                    (pBinaryCode != nullptr))
+            {
+                // Get the text based ISA disassembly of the shader
+                VkResult result = GetRayTracingShaderDisassembly(
+                                        Util::Abi::PipelineSymbolType::ShaderDisassembly,
+                                        pBinaryCode,
+                                        &(pInternalRepresentations[entry].dataSize),
+                                        pInternalRepresentations[entry].pData);
+
+                if (result == VK_SUCCESS)
+                {
+                    GetShaderDescriptionByStage(pInternalRepresentations[entry].description,
+                                                    index, binaryCount);
+                    Util::Strncpy(pInternalRepresentations[entry].name, "ISA.", VK_MAX_DESCRIPTION_SIZE);
+                    Util::Strncat(pInternalRepresentations[entry].name, VK_MAX_DESCRIPTION_SIZE, pProperty->name);
+                }
+                else
+                {
+                    *pInternalRepresentationCount -= 1; // ISA disassembly is incompleted
+                }
+            }
+        }
+        else
+        {
+            *pInternalRepresentationCount = 0;
+        }
+    }
+
+    // If the requested number of executables was less than the available number of hw stages, return Incomplete
+    return (*pInternalRepresentationCount < NumberOfInternalRepresentations) ? VK_INCOMPLETE : VK_SUCCESS;
+}
+
+// =====================================================================================================================
+// Gets the code object prop according to binary index
+const Vkgc::RayTracingShaderProperty* RayTracingPipeline::GetPipelineBinaryPropset(
+    uint32_t    index
+    ) const
+{
+    const Vkgc::RayTracingShaderProperty* pRayTracingShaderProperty = nullptr;
+
+    if ((m_pShaderProperty != nullptr) && (index < m_compiledShaderCount))
+    {
+        pRayTracingShaderProperty = &(m_pShaderProperty[index]);
+    }
+
+    return pRayTracingShaderProperty;
 }
 
 // =====================================================================================================================
@@ -2149,39 +2618,6 @@ void RayTracingPipeline::BindToCmdBuffer(
                                        reinterpret_cast<uint32_t*>(&gpuAddress));
         }
     }
-}
-
-// =====================================================================================================================
-bool RayTracingPipeline::MapShaderIdToShaderHandle(
-    Pal::ShaderLibraryFunctionInfo*   pIndirectFuncList,
-    uint32_t*                         pShaderNameMap,
-    uint32_t                          shaderPropCount,
-    Vkgc::RayTracingShaderProperty*   pShaderProp,
-    uint64_t*                         pShaderId)
-{
-    bool found = false;
-    if (*pShaderId != RayTracingInvalidShaderId)
-    {
-        for (uint32_t i = 0; i < shaderPropCount; i++)
-        {
-            if (pShaderProp[i].shaderId == *pShaderId)
-            {
-                auto pIndirectFunc = &pIndirectFuncList[pShaderNameMap[i]];
-                VK_ASSERT(strncmp(pIndirectFunc->symbolName.Data(),
-                                  &pShaderProp[i].name[0],
-                                  pIndirectFunc->symbolName.Length()) == 0);
-                uint64_t gpuVirtAddr = pIndirectFunc->gpuVirtAddr;
-                if (pShaderProp[i].onlyGpuVaLo)
-                {
-                    gpuVirtAddr = gpuVirtAddr & 0xffffffff;
-                }
-                *pShaderId = gpuVirtAddr | pShaderProp[i].shaderIdExtraBits;
-                found = true;
-                break;
-            }
-        }
-    }
-    return found;
 }
 
 // =====================================================================================================================

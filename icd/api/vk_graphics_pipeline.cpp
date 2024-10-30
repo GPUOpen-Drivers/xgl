@@ -1669,6 +1669,11 @@ void GraphicsPipeline::BindToCmdBuffer(
         }
     }
 
+    if (ContainsStaticState(DynamicStatesInternal::DepthClampControl))
+    {
+        pRenderState->depthClampOverride = m_info.depthClampOverride;
+    }
+
     if (ContainsStaticState(DynamicStatesInternal::Scissor))
     {
         if (CmdBuffer::IsStaticStateDifferent(oldTokens.scissorRect, newTokens.scissorRect))

@@ -1413,8 +1413,13 @@ UberFetchShaderFormatInfo GetUberFetchShaderFormatInfo(
         formatInfo = *pFormatInfo;
         if (isOffsetMode)
         {
-            formatInfo.bufferFormat = formatInfo.bufferFormat | pFormatInfoMap->GetBufferFormatMask();
-            formatInfo.unpackedBufferFormat = formatInfo.unpackedBufferFormat | pFormatInfoMap->GetBufferFormatMask();
+            formatInfo.bufferFormat |= pFormatInfoMap->GetBufferFormatMask();
+            if (formatInfo.unpackedBufferFormat != 0)
+            {
+                // unpackedBufferFormat will be used to check whether to require per-component load
+                // in PipelineCompiler::BuildUberFetchShaderInternalDataImp, if it is 0, it can't be modified.
+                formatInfo.unpackedBufferFormat |= pFormatInfoMap->GetBufferFormatMask();
+            }
         }
         else if (isZeroStride)
         {

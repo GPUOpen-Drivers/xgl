@@ -1015,6 +1015,7 @@ void ImageBarrierPolicy::InitImageCachePolicy(
     if (usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT)
     {
         supportedOutputCacheMask |= Pal::CoherCopyDst | Pal::CoherResolveDst | Pal::CoherClear;
+        supportedInputCacheMask  |= Pal::CoherCopyDst | Pal::CoherResolveDst | Pal::CoherClear;
     }
 
     constexpr VkImageUsageFlags shaderReadFlags = VK_IMAGE_USAGE_SAMPLED_BIT
@@ -1163,9 +1164,12 @@ void ImageBarrierPolicy::ApplyImageMemoryBarrier(
     bool                                skipMatchingLayouts) const
 {
     // Determine effective queue family indices.
-    uint32_t srcQueueFamilyIndex = (barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+    // Note that matching source and destination families also means don't transfer queue family ownership.
+    uint32_t srcQueueFamilyIndex = ((barrier.srcQueueFamilyIndex == barrier.dstQueueFamilyIndex) ||
+                                    (barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED))
                                    ? currentQueueFamilyIndex : barrier.srcQueueFamilyIndex;
-    uint32_t dstQueueFamilyIndex = (barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+    uint32_t dstQueueFamilyIndex =  ((barrier.dstQueueFamilyIndex == barrier.srcQueueFamilyIndex) ||
+                                     (barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED))
                                    ? currentQueueFamilyIndex : barrier.dstQueueFamilyIndex;
 
     // Either the source or the destination queue family has to match the current queue family.
@@ -1301,6 +1305,7 @@ void BufferBarrierPolicy::InitBufferCachePolicy(
         // Also need Pal::CoherShaderWrite here as vkCmdCopyQueryPoolResults uses a compute shader defined in the
         // Vulkan API layer when used with timestamp queries.
         supportedOutputCacheMask |= Pal::CoherCopyDst | Pal::CoherShaderWrite;
+        supportedInputCacheMask  |= Pal::CoherCopyDst | Pal::CoherShaderWrite;
 
         // Buffer markers fall under the same PAL coherency rules as timestamp writes
         if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_BUFFER_MARKER))
@@ -1370,10 +1375,13 @@ void BufferBarrierPolicy::ApplyBufferMemoryBarrier(
     Pal::BarrierTransition*             pPalBarrier) const
 {
     // Determine effective queue family indices.
-    uint32_t srcQueueFamilyIndex = (barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
-        ? currentQueueFamilyIndex : barrier.srcQueueFamilyIndex;
-    uint32_t dstQueueFamilyIndex = (barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
-        ? currentQueueFamilyIndex : barrier.dstQueueFamilyIndex;
+    // Note that matching source and destination families also means don't transfer queue family ownership.
+    uint32_t srcQueueFamilyIndex = ((barrier.srcQueueFamilyIndex == barrier.dstQueueFamilyIndex) ||
+                                    (barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED))
+                                   ? currentQueueFamilyIndex : barrier.srcQueueFamilyIndex;
+    uint32_t dstQueueFamilyIndex =  ((barrier.dstQueueFamilyIndex == barrier.srcQueueFamilyIndex) ||
+                                     (barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED))
+                                   ? currentQueueFamilyIndex : barrier.dstQueueFamilyIndex;
 
     // Either the source or the destination queue family has to match the current queue family.
     VK_ASSERT((srcQueueFamilyIndex == currentQueueFamilyIndex) || (dstQueueFamilyIndex == currentQueueFamilyIndex));

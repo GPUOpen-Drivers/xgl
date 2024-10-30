@@ -44,7 +44,6 @@ macro(xgl_options)
     option(XGL_ENABLE_LTO "Build with LTO enabled?" ON)
 
     option(XGL_ENABLE_GCOV "Build with gcov source code coverage?" OFF)
-
 #if VKI_BUILD_GFX115
     option(XGL_BUILD_GFX115 "Build vulkan for GFX115" ON)
 #endif

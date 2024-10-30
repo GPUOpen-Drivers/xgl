@@ -283,8 +283,8 @@ VkResult GpaSession::CmdBeginSample(
     sampleConfig.sqtt.seMask                         = UINT32_MAX;
     sampleConfig.sqtt.gpuMemoryLimit                 = pGpaSampleBeginInfo->sqThreadTraceDeviceMemoryLimit;
 
-    sampleConfig.timing.preSample  = VkToPalSrcPipePointForTimestampWrite(pGpaSampleBeginInfo->timingPreSample);
-    sampleConfig.timing.postSample = VkToPalSrcPipePointForTimestampWrite(pGpaSampleBeginInfo->timingPostSample);
+    sampleConfig.timing.preSample  = VkToPalSrcPipeStageFlagForTimestampWrite(pGpaSampleBeginInfo->timingPreSample);
+    sampleConfig.timing.postSample = VkToPalSrcPipeStageFlagForTimestampWrite(pGpaSampleBeginInfo->timingPostSample);
 
     if (result == VK_SUCCESS)
     {

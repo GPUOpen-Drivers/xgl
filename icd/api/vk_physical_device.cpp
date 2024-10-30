@@ -2099,6 +2099,9 @@ VkResult PhysicalDevice::GetImageFormatProperties(
     // of image and the format compatibility classes.
     if (Util::TestAnyFlagSet(flags, VK_IMAGE_CREATE_EXTENDED_USAGE_BIT))
     {
+        const bool isBlockTexelViewCompatible =
+            Util::TestAnyFlagSet(flags, VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT);
+
         if (Formats::IsYuvFormat(format) && (Formats::GetYuvPlaneCounts(format) > 1))
         {
             VkFormat singlePlaneFormat = VK_FORMAT_UNDEFINED;
@@ -2107,12 +2110,20 @@ VkResult PhysicalDevice::GetImageFormatProperties(
             {
                 singlePlaneFormat = Formats::GetCompatibleSinglePlaneFormat(format, i);
 
-                supportedFeatures |= Formats::GetExtendedFeatureFlags(this, singlePlaneFormat, tiling, settings);
+                supportedFeatures |= Formats::GetExtendedFeatureFlags(this,
+                                                                      singlePlaneFormat,
+                                                                      tiling,
+                                                                      isBlockTexelViewCompatible,
+                                                                      settings);
             }
         }
         else
         {
-            supportedFeatures |= Formats::GetExtendedFeatureFlags(this, format, tiling, settings);
+            supportedFeatures |= Formats::GetExtendedFeatureFlags(this,
+                                                                  format,
+                                                                  tiling,
+                                                                  isBlockTexelViewCompatible,
+                                                                  settings);
         }
     }
 
@@ -3791,7 +3802,7 @@ VkResult PhysicalDevice::GetSurfaceFormats(
         VK_ASSERT(palResult == Pal::Result::Success);
     }
 
-    bool needsWorkaround = pScreen == nullptr ? isWindowed :
+    bool needsWorkaround = (pScreen == nullptr) ||
                            (palColorCaps.supportedColorSpaces == Pal::ScreenColorSpace::TfUndefined);
 
     if (needsWorkaround)
@@ -3996,6 +4007,7 @@ VkResult PhysicalDevice::GetSurfaceFormats(
     VkSurfaceFormat2KHR* pSurfaceFormats) const
 {
     VkResult result = VK_SUCCESS;
+
     if (pSurfaceFormats == nullptr)
     {
         result = GetSurfaceFormats(
@@ -4004,7 +4016,7 @@ VkResult PhysicalDevice::GetSurfaceFormats(
             pSurfaceFormatCount,
             static_cast<VkSurfaceFormatKHR*>(nullptr));
     }
-    else
+    else if (*pSurfaceFormatCount > 0)
     {
         VkSurfaceFormatKHR* pTempSurfaceFormats = static_cast<VkSurfaceFormatKHR*>(Manager()->VkInstance()->AllocMem(
                 sizeof(VkSurfaceFormatKHR) * *pSurfaceFormatCount,
@@ -4024,6 +4036,10 @@ VkResult PhysicalDevice::GetSurfaceFormats(
         }
 
         Manager()->VkInstance()->FreeMem(pTempSurfaceFormats);
+    }
+    else
+    {
+        result = VK_INCOMPLETE;
     }
 
     return result;
@@ -4280,6 +4296,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_CLAMP_CONTROL));
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PIPELINE_CREATION_CACHE_CONTROL));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_ROBUSTNESS));
@@ -4386,6 +4404,22 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_LOAD_STORE_OP_NONE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_YCBCR_IMAGE_ARRAYS));
 
+    VkBool32 exposePipelineProtectedAccess = VK_FALSE;
+
+    if (pPhysicalDevice == nullptr)
+    {
+        exposePipelineProtectedAccess = VK_TRUE;
+    }
+    else
+    {
+        pPhysicalDevice->GetPhysicalDeviceProtectedMemoryFeatures(&exposePipelineProtectedAccess);
+    }
+
+    if (exposePipelineProtectedAccess)
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PIPELINE_PROTECTED_ACCESS));
+    }
+
     if ((pPhysicalDevice == nullptr) ||
         (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportBorderColorSwizzle))
     {
@@ -4459,7 +4493,10 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE3));
 
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_INPUT_DYNAMIC_STATE));
+        if ((pPhysicalDevice == nullptr) || (pPhysicalDevice->GetRuntimeSettings().enableVertexInputDynamicState))
+        {
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_INPUT_DYNAMIC_STATE));
+        }
 
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_EXPECT_ASSUME));
 
@@ -4477,6 +4514,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_INDEX_TYPE_UINT8));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_LINE_RASTERIZATION));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_LOAD_STORE_OP_NONE));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_FRAGMENT_SHADER_INTERLOCK));
 
     bool disableAMDVendorExtensions = false;
     if (pPhysicalDevice != nullptr)
@@ -4579,8 +4617,14 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     if ((pPhysicalDevice == nullptr) || pPhysicalDevice->GetRuntimeSettings().exportImageCompressionControl)
     {
-        // exporting for vkd3d/ vkd3d-proton
+        // exporting for vkd3d / vkd3d-proton
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_COMPRESSION_CONTROL));
+    }
+
+    if ((pPhysicalDevice == nullptr) || pPhysicalDevice->GetRuntimeSettings().exportImageAlignmentControl)
+    {
+        // exporting for vkd3d / vkd3d-proton
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(MESA_IMAGE_ALIGNMENT_CONTROL));
     }
 
     return availableExtensions;
@@ -5036,6 +5080,62 @@ void PhysicalDevice::GetPhysicalDeviceProtectedMemoryProperties(
 }
 
 // =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceDeviceGeneratedCommandsProperties(
+    uint32_t*                            pMaxIndirectPipelineCount,
+    uint32_t*                            pMaxIndirectShaderObjectCount,
+    uint32_t*                            pMaxIndirectSequenceCount,
+    uint32_t*                            pMaxIndirectCommandsTokenCount,
+    uint32_t*                            pMaxIndirectCommandsTokenOffset,
+    uint32_t*                            pMaxIndirectCommandsIndirectStride,
+    VkIndirectCommandsInputModeFlagsEXT* pSupportedIndirectCommandsInputModes,
+    VkShaderStageFlags*                  pSupportedIndirectCommandsShaderStages,
+    VkShaderStageFlags*                  supportedIndirectCommandsShaderStagesPipelineBinding,
+    VkShaderStageFlags*                  supportedIndirectCommandsShaderStagesShaderBinding,
+    VkBool32*                            pDeviceGeneratedCommandsTransformFeedback,
+    VkBool32*                            pDeviceGeneratedCommandsMultiDrawIndirectCount
+    ) const
+{
+    *pMaxIndirectPipelineCount                      = 1 << 12;
+    *pMaxIndirectShaderObjectCount                  = 1 << 12;
+    *pMaxIndirectSequenceCount                      = UINT32_MAX >> 1;
+    *pMaxIndirectCommandsTokenCount                 = MaxIndirectTokenCount;
+    *pMaxIndirectCommandsTokenOffset                = MaxIndirectTokenOffset;
+    *pMaxIndirectCommandsIndirectStride             = MaxIndirectCommandsStride;
+    *pSupportedIndirectCommandsInputModes           = VK_INDIRECT_COMMANDS_INPUT_MODE_VULKAN_INDEX_BUFFER_EXT |
+                                                      VK_INDIRECT_COMMANDS_INPUT_MODE_DXGI_INDEX_BUFFER_EXT;
+    *pDeviceGeneratedCommandsMultiDrawIndirectCount = false;
+    *pSupportedIndirectCommandsShaderStages         = VK_SHADER_STAGE_COMPUTE_BIT |
+                                                      VK_SHADER_STAGE_ALL_GRAPHICS;
+
+    // Indirect Execution Set is NOT supported
+    *supportedIndirectCommandsShaderStagesPipelineBinding = 0;
+    *supportedIndirectCommandsShaderStagesShaderBinding   = 0;
+
+    *pDeviceGeneratedCommandsTransformFeedback = IsExtensionSupported(DeviceExtensions::EXT_TRANSFORM_FEEDBACK);
+
+    if (IsExtensionSupported(DeviceExtensions::EXT_MESH_SHADER))
+    {
+        if (PalProperties().gfxipProperties.flags.supportMeshShader)
+        {
+            *pSupportedIndirectCommandsShaderStages |= VK_SHADER_STAGE_MESH_BIT_EXT;
+        }
+
+        if (IsTaskShaderSupported())
+        {
+            *pSupportedIndirectCommandsShaderStages |= VK_SHADER_STAGE_TASK_BIT_EXT;
+        }
+    }
+
+#if VKI_RAY_TRACING
+    if (IsExtensionSupported(DeviceExtensions::KHR_RAY_TRACING_PIPELINE) &&
+        IsExtensionSupported(DeviceExtensions::KHR_RAY_TRACING_MAINTENANCE1))
+    {
+        *pSupportedIndirectCommandsShaderStages |= RayTraceShaderStages;
+    }
+#endif
+}
+
+// =====================================================================================================================
 void PhysicalDevice::GetPhysicalDeviceSubgroupProperties(
     uint32_t*               pSubgroupSize,
     VkShaderStageFlags*     pSupportedStages,
@@ -5061,8 +5161,12 @@ void PhysicalDevice::GetPhysicalDeviceSubgroupProperties(
 
     if (IsExtensionSupported(DeviceExtensions::EXT_MESH_SHADER))
     {
-        *pSupportedStages |= VK_SHADER_STAGE_TASK_BIT_EXT |
-                             VK_SHADER_STAGE_MESH_BIT_EXT;
+        *pSupportedStages |= VK_SHADER_STAGE_MESH_BIT_EXT;
+
+        if (IsTaskShaderSupported())
+        {
+            *pSupportedStages |= VK_SHADER_STAGE_TASK_BIT_EXT;
+        }
     }
 
     *pSupportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
@@ -5911,6 +6015,7 @@ size_t PhysicalDevice::GetFeatures2(
                 structSize = sizeof(*pExtInfo);
                 break;
             }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceProtectedMemoryFeatures*>(pHeader);
@@ -5918,6 +6023,20 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     GetPhysicalDeviceProtectedMemoryFeatures(&pExtInfo->protectedMemory);
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_PROTECTED_ACCESS_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePipelineProtectedAccessFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    // Advertise pipelineProtectedAccess when protectedMemory is supported
+                    GetPhysicalDeviceProtectedMemoryFeatures(&pExtInfo->pipelineProtectedAccess);
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6622,6 +6741,19 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_CONTROL_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDepthClampControlFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->depthClampControl = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceConditionalRenderingFeaturesEXT*>(pHeader);
@@ -6668,6 +6800,20 @@ size_t PhysicalDevice::GetFeatures2(
                     pExtInfo->robustImageAccess2  = VK_TRUE;
                     pExtInfo->robustBufferAccess2 = VK_TRUE;
                     pExtInfo->nullDescriptor      = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePipelineRobustnessFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->pipelineRobustness = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -6882,9 +7028,9 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
-            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_NV:
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR:
             {
-                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceComputeShaderDerivativesFeaturesNV*>(pHeader);
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR*>(pHeader);
 
                 if (updateFeatures)
                 {
@@ -6895,6 +7041,7 @@ size_t PhysicalDevice::GetFeatures2(
                 structSize = sizeof(*pExtInfo);
                 break;
             }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT*>(pHeader);
@@ -7191,8 +7338,7 @@ size_t PhysicalDevice::GetFeatures2(
 
                 if (updateFeatures)
                 {
-                    // Task and Mesh stages share the same flag in gfxProperties
-                    pExtInfo->taskShader = PalProperties().gfxipProperties.flags.supportTaskShader;
+                    pExtInfo->taskShader = IsTaskShaderSupported();
                     pExtInfo->meshShader = PalProperties().gfxipProperties.flags.supportMeshShader;
 
                     pExtInfo->multiviewMeshShader                    = VK_TRUE;
@@ -7487,6 +7633,19 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->deviceGeneratedCommands           = VK_TRUE;
+                    pExtInfo->dynamicGeneratedPipelineLayout    = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceNestedCommandBufferFeaturesEXT*>(pHeader);
@@ -7520,6 +7679,32 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     pExtInfo->pipelineBinaries = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceImageCompressionControlFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->imageCompressionControl = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_FEATURES_MESA:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceImageAlignmentControlFeaturesMESA*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->imageAlignmentControl = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -7670,16 +7855,15 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
     {
         pImageCompressionProps->imageCompressionFixedRateFlags = VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
 
-        if (Formats::IsDepthStencilFormat(createInfoFormat))
-        {
-            pImageCompressionProps->imageCompressionFlags = VK_IMAGE_COMPRESSION_DEFAULT_EXT;
-        }
-        else
-        {
-            pImageCompressionProps->imageCompressionFlags = (GetRuntimeSettings().forceEnableDcc == ForceDisableDcc)
-                                                                ? VK_IMAGE_COMPRESSION_DISABLED_EXT
-                                                                : VK_IMAGE_COMPRESSION_DEFAULT_EXT;
-        }
+        const uint32_t disableBits =
+            ForceDisableCompression |
+            ((Formats::IsColorFormat(createInfoFormat)) ? ForceDisableCompressionForColor : 0) |
+            ((Formats::IsDepthStencilFormat(createInfoFormat)) ? ForceDisableCompressionForDepthStencil : 0);
+
+        pImageCompressionProps->imageCompressionFlags =
+            ((GetRuntimeSettings().forceEnableDcc & disableBits) == 0) ?
+            VK_IMAGE_COMPRESSION_DEFAULT_EXT :
+            VK_IMAGE_COMPRESSION_DISABLED_EXT;
     }
 
     return result;
@@ -8291,6 +8475,17 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_PROPERTIES_EXT:
+        {
+            auto* pProps = static_cast<VkPhysicalDevicePipelineRobustnessPropertiesEXT*>(pNext);
+
+            pProps->defaultRobustnessStorageBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT;
+            pProps->defaultRobustnessUniformBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT;
+            pProps->defaultRobustnessVertexInputs = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT;
+            pProps->defaultRobustnessImages = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT;
+            break;
+        }
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT:
         {
             auto* pProps = static_cast<VkPhysicalDeviceCustomBorderColorPropertiesEXT *>(pNext);
@@ -8532,6 +8727,25 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_EXT:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceDeviceGeneratedCommandsPropertiesEXT*>(pNext);
+            GetPhysicalDeviceDeviceGeneratedCommandsProperties(
+                &pProps->maxIndirectPipelineCount,
+                &pProps->maxIndirectShaderObjectCount,
+                &pProps->maxIndirectSequenceCount,
+                &pProps->maxIndirectCommandsTokenCount,
+                &pProps->maxIndirectCommandsTokenOffset,
+                &pProps->maxIndirectCommandsIndirectStride,
+                &pProps->supportedIndirectCommandsInputModes,
+                &pProps->supportedIndirectCommandsShaderStages,
+                &pProps->supportedIndirectCommandsShaderStagesPipelineBinding,
+                &pProps->supportedIndirectCommandsShaderStagesShaderBinding,
+                &pProps->deviceGeneratedCommandsTransformFeedback,
+                &pProps->deviceGeneratedCommandsMultiDrawIndirectCount);
+            break;
+        }
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_PROPERTIES_EXT:
         {
             auto* pProps = static_cast<VkPhysicalDeviceNestedCommandBufferPropertiesEXT*>(pNext);
@@ -8590,6 +8804,13 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_PROPERTIES_KHR:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceComputeShaderDerivativesPropertiesKHR*>(pNext);
+            pProps->meshAndTaskShaderDerivatives = VK_TRUE;
+            break;
+        }
+
 #if VKI_COPY_MEMORY_INDIRECT
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_KHR:
         {
@@ -8598,6 +8819,13 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 #endif
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_PROPERTIES_MESA:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceImageAlignmentControlPropertiesMESA*>(pNext);
+            pProps->supportedImageAlignmentMask = 256 | (4 * 1024) | (64 * 1024) | (256 * 1024);
+            break;
+        }
 
         default:
             break;
@@ -9552,12 +9780,8 @@ VkResult PhysicalDevice::GetDisplayModeProperties(
         properties[i].parameters.visibleRegion.height = pScreenMode[i]->extent.height;
         // Spec requires refresh rate to be "the number of times the display is refreshed each second
         // multiplied by 1000", in other words, HZ * 1000
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 894
-        properties[i].parameters.refreshRate = pScreenMode[i]->refreshRate * 1000;
-#else
         properties[i].parameters.refreshRate =
             pScreenMode[i]->refreshRate.numerator * 1000 / pScreenMode[i]->refreshRate.denominator;
-#endif
     }
 
     *pPropertyCount = loopCount;
@@ -9621,12 +9845,8 @@ VkResult PhysicalDevice::CreateDisplayMode(
         // The modes are considered as identical if the dimension as well as the refresh rate are the same.
         if ((pCreateInfo->parameters.visibleRegion.width  == pScreenMode[i]->extent.width) &&
             (pCreateInfo->parameters.visibleRegion.height == pScreenMode[i]->extent.height) &&
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 894
-            (pCreateInfo->parameters.refreshRate          == pScreenMode[i]->refreshRate * 1000))
-#else
-            (pCreateInfo->parameters.refreshRate ==
+            (pCreateInfo->parameters.refreshRate          ==
              pScreenMode[i]->refreshRate.numerator * 1000 / pScreenMode[i]->refreshRate.denominator))
-#endif
         {
             isValidMode = true;
             break;
@@ -9655,16 +9875,12 @@ VkResult PhysicalDevice::CreateDisplayMode(
 
         if (pNewMode)
         {
-            pNewMode->palScreenMode.extent.width  = pCreateInfo->parameters.visibleRegion.width;
-            pNewMode->palScreenMode.extent.height = pCreateInfo->parameters.visibleRegion.height;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 894
-            pNewMode->palScreenMode.refreshRate   = pCreateInfo->parameters.refreshRate / 1000;
-#else
+            pNewMode->palScreenMode.extent.width            = pCreateInfo->parameters.visibleRegion.width;
+            pNewMode->palScreenMode.extent.height           = pCreateInfo->parameters.visibleRegion.height;
             pNewMode->palScreenMode.refreshRate.numerator   = pCreateInfo->parameters.refreshRate;
             pNewMode->palScreenMode.refreshRate.denominator = 1000;
-#endif
-            pNewMode->palScreenMode.flags.u32All  = 0;
-            pNewMode->pScreen                     = pScreen;
+            pNewMode->palScreenMode.flags.u32All            = 0;
+            pNewMode->pScreen                               = pScreen;
             *pMode = reinterpret_cast<VkDisplayModeKHR>(pNewMode);
         }
         else

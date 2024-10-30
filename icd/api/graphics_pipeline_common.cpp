@@ -73,6 +73,7 @@ constexpr uint64_t ViiDynamicStatesMask = 0
 // - VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE
 // - VK_DYNAMIC_STATE_TESSELLATION_DOMAIN_ORIGIN_EXT (not available)
 // - VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT (not available)
+// - VK_DYNAMIC_STATE_DEPTH_CLAMP_CONTROL_EXT
 // - VK_DYNAMIC_STATE_POLYGON_MODE_EXT (not available)
 // - VK_DYNAMIC_STATE_RASTERIZATION_STREAM_EXT (not available)
 // - VK_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT (not available)
@@ -96,6 +97,7 @@ constexpr uint64_t PrsDynamicStatesMask = 0
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthBiasEnable))
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::TessellationDomainOrigin))
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthClampEnable))
+    | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthClampControl))
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::PolygonMode))
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::RasterizationStream))
     | (1ULL << static_cast<uint32_t>(DynamicStatesInternal::ConservativeRasterizationMode))
@@ -581,6 +583,9 @@ uint64_t GraphicsPipelineCommon::GetDynamicStateFlags(
             case VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT:
                 dynamicState |= prsMask & (1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthClampEnable));
                 break;
+            case VK_DYNAMIC_STATE_DEPTH_CLAMP_RANGE_EXT:
+                dynamicState |= prsMask & (1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthClampControl));
+                break;
             case VK_DYNAMIC_STATE_POLYGON_MODE_EXT:
                 dynamicState |= prsMask & (1ULL << static_cast<uint32_t>(DynamicStatesInternal::PolygonMode));
                 break;
@@ -859,9 +864,34 @@ VkResult GraphicsPipelineCommon::Create(
 
     UpdatePipelineCreateFlags(pDevice, &flags);
 
+    VkPipelineRobustnessCreateInfoEXT pipelineRobustness = {};
     GraphicsPipelineExtStructs extStructs = {};
 
     HandleExtensionStructs(pCreateInfo, &extStructs);
+
+    bool usePipelineRobustness = InitPipelineRobustness(
+        extStructs.pPipelineRobustnessCreateInfoEXT,
+        &pipelineRobustness);
+
+    // If VkPipelineRobustnessCreateInfoEXT is specified for both a pipeline and a shader stage,
+    // the VkPipelineRobustnessCreateInfoEXT specified for the shader stage will take precedence.
+    for (uint32_t stageIdx = 0; stageIdx < pCreateInfo->stageCount; ++stageIdx)
+    {
+        PipelineShaderStageExtStructs shaderStageExtStructs = {};
+        HandleShaderStageExtensionStructs(pCreateInfo->pStages[stageIdx].pNext, &shaderStageExtStructs);
+
+        if (shaderStageExtStructs.pPipelineRobustnessCreateInfoEXT != nullptr)
+        {
+            UpdatePipelineRobustness(shaderStageExtStructs.pPipelineRobustnessCreateInfoEXT, &pipelineRobustness);
+            usePipelineRobustness = true;
+        }
+    }
+
+    if (usePipelineRobustness)
+    {
+        extStructs.pPipelineRobustnessCreateInfoEXT =
+            static_cast<const VkPipelineRobustnessCreateInfoEXT*>(&pipelineRobustness);
+    }
 
     if ((flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) != 0)
     {
@@ -996,6 +1026,7 @@ static void CopyPreRasterizationShaderState(
     pInfo->immedInfo.graphicsShaderInfos.ms    = libInfo.immedInfo.graphicsShaderInfos.ms;
     pInfo->immedInfo.dynamicGraphicsState      = libInfo.immedInfo.dynamicGraphicsState;
     pInfo->immedInfo.viewportParams            = libInfo.immedInfo.viewportParams;
+    pInfo->immedInfo.depthClampOverride        = libInfo.immedInfo.depthClampOverride;
     pInfo->immedInfo.scissorRectParams         = libInfo.immedInfo.scissorRectParams;
     pInfo->immedInfo.rasterizerDiscardEnable   = libInfo.immedInfo.rasterizerDiscardEnable;
 
@@ -1041,17 +1072,7 @@ static void CopyFragmentOutputInterfaceState(
     GraphicsPipelineObjectCreateInfo* pInfo)
 {
     const GraphicsPipelineObjectCreateInfo& libInfo = pLibrary->GetPipelineObjectCreateInfo();
-
-    pInfo->pipeline.cbState.dualSourceBlendEnable     = libInfo.pipeline.cbState.dualSourceBlendEnable;
-    pInfo->pipeline.cbState.logicOp                   = libInfo.pipeline.cbState.logicOp;
-    pInfo->pipeline.cbState.uavExportSingleDraw       = libInfo.pipeline.cbState.uavExportSingleDraw;
-    pInfo->pipeline.cbState.target[0].forceAlphaToOne = libInfo.pipeline.cbState.target[0].forceAlphaToOne;
-    pInfo->pipeline.cbState.alphaToCoverageEnable     = libInfo.pipeline.cbState.alphaToCoverageEnable;
-    for (uint32_t i = 0; i < MaxColorTargets; ++i)
-    {
-        pInfo->pipeline.cbState.target[i].swizzledFormat = libInfo.pipeline.cbState.target[i].swizzledFormat;
-        pInfo->pipeline.cbState.target[i].channelWriteMask = libInfo.pipeline.cbState.target[i].channelWriteMask;
-    }
+    pInfo->pipeline.cbState            = libInfo.pipeline.cbState;
     pInfo->pipeline.viewInstancingDesc = libInfo.pipeline.viewInstancingDesc;
 
     for (uint32_t i = 0; i < Pal::MaxColorTargets; ++i)
@@ -1334,6 +1355,41 @@ static void BuildViewportState(
 {
     if (pVp != nullptr)
     {
+        if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthClampControl) == false)
+        {
+            pInfo->staticStateMask |= 1ULL << static_cast<uint32_t>(DynamicStatesInternal::DepthClampControl);
+
+            EXTRACT_VK_STRUCTURES_0(
+                viewportDepthClampControl,
+                PipelineViewportDepthClampControlCreateInfoEXT,
+                static_cast<const VkPipelineViewportDepthClampControlCreateInfoEXT*>(pVp->pNext),
+                PIPELINE_VIEWPORT_DEPTH_CLAMP_CONTROL_CREATE_INFO_EXT);
+
+            const auto* pClampControl = pPipelineViewportDepthClampControlCreateInfoEXT;
+            if (pClampControl != nullptr)
+            {
+                switch (pClampControl->depthClampMode)
+                {
+                case VK_DEPTH_CLAMP_MODE_VIEWPORT_RANGE_EXT:
+                    // set min > max to disable the override
+                    pInfo->immedInfo.depthClampOverride.minDepthClamp = 1.0f;
+                    pInfo->immedInfo.depthClampOverride.maxDepthClamp = 0.0f;
+                    break;
+                case VK_DEPTH_CLAMP_MODE_USER_DEFINED_RANGE_EXT:
+                    pInfo->immedInfo.depthClampOverride = *pClampControl->pDepthClampRange;
+                    break;
+                default:
+                    VK_ASSERT(!"Unexpected depthClampMode");
+                    break;
+                }
+            }
+            else
+            {
+                // set min > max to disable the override
+                pInfo->immedInfo.depthClampOverride.minDepthClamp = 1.0f;
+                pInfo->immedInfo.depthClampOverride.maxDepthClamp = 0.0f;
+            }
+        }
 
         EXTRACT_VK_STRUCTURES_0(
             viewportDepthClipControl,
@@ -2884,6 +2940,7 @@ static void GenerateHashFromColorBlendStateCreateInfo(
 // =====================================================================================================================
 void GraphicsPipelineCommon::GenerateHashForVertexInputInterfaceState(
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    const GraphicsPipelineExtStructs&   extStructs,
     Util::MetroHash128*                 pElfHasher,
     Util::MetroHash128*                 pApiHasher)
 {
@@ -2895,6 +2952,11 @@ void GraphicsPipelineCommon::GenerateHashForVertexInputInterfaceState(
     if (pCreateInfo->pInputAssemblyState != nullptr)
     {
         GenerateHashFromInputAssemblyStateCreateInfo(*pCreateInfo->pInputAssemblyState, pElfHasher, pApiHasher);
+    }
+
+    if (extStructs.pPipelineRobustnessCreateInfoEXT != nullptr)
+    {
+        GenerateHashForPipelineRobustnessState(extStructs.pPipelineRobustnessCreateInfoEXT, pApiHasher);
     }
 }
 
@@ -2953,6 +3015,11 @@ void GraphicsPipelineCommon::GenerateHashForPreRasterizationShadersState(
             }
         }
     }
+
+    if (extStructs.pPipelineRobustnessCreateInfoEXT != nullptr)
+    {
+        GenerateHashForPipelineRobustnessState(extStructs.pPipelineRobustnessCreateInfoEXT, pApiHasher);
+    }
 }
 
 // =====================================================================================================================
@@ -2984,6 +3051,11 @@ void GraphicsPipelineCommon::GenerateHashForFragmentShaderState(
         pApiHasher->Update(pPipelineFragmentShadingRateStateCreateInfoKHR->fragmentSize.height);
         pApiHasher->Update(pPipelineFragmentShadingRateStateCreateInfoKHR->combinerOps[0]);
         pApiHasher->Update(pPipelineFragmentShadingRateStateCreateInfoKHR->combinerOps[1]);
+    }
+
+    if (extStructs.pPipelineRobustnessCreateInfoEXT != nullptr)
+    {
+        GenerateHashForPipelineRobustnessState(extStructs.pPipelineRobustnessCreateInfoEXT, pApiHasher);
     }
 }
 
@@ -3037,6 +3109,23 @@ void GraphicsPipelineCommon::GenerateHashForFragmentOutputInterfaceState(
     {
         GenerateHashFromMultisampleStateCreateInfo(*pCreateInfo->pMultisampleState, pElfHasher, pApiHasher);
     }
+
+    if (extStructs.pPipelineRobustnessCreateInfoEXT != nullptr)
+    {
+        GenerateHashForPipelineRobustnessState(extStructs.pPipelineRobustnessCreateInfoEXT, pApiHasher);
+    }
+}
+
+// =====================================================================================================================
+void GraphicsPipelineCommon::GenerateHashForPipelineRobustnessState(
+    const VkPipelineRobustnessCreateInfoEXT* pPipelineRobustnessCreateInfoEXT,
+    Util::MetroHash128* pApiHasher)
+{
+    pApiHasher->Update(pPipelineRobustnessCreateInfoEXT->sType);
+    pApiHasher->Update(pPipelineRobustnessCreateInfoEXT->storageBuffers);
+    pApiHasher->Update(pPipelineRobustnessCreateInfoEXT->uniformBuffers);
+    pApiHasher->Update(pPipelineRobustnessCreateInfoEXT->vertexInputs);
+    pApiHasher->Update(pPipelineRobustnessCreateInfoEXT->images);
 }
 
 // =====================================================================================================================
@@ -3111,7 +3200,7 @@ void GraphicsPipelineCommon::BuildApiHash(
 
     if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT)
     {
-        GenerateHashForVertexInputInterfaceState(pCreateInfo, &elfHasher, &apiHasher);
+        GenerateHashForVertexInputInterfaceState(pCreateInfo, extStructs, &elfHasher, &apiHasher);
     }
     else if (libInfo.pVertexInputInterfaceLib != nullptr)
     {

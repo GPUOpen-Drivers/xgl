@@ -444,9 +444,9 @@ void Image::ConvertImageCreateInfo(
             const uint32_t bpp         = Pal::Formats::BitsPerPixel(pPalCreateInfo->swizzledFormat.format);
             const bool isShaderStorage = (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT);
 
-            if (isShaderStorage &&
-                ((forceEnableDccMask & ForceDccDefault) == 0) &&
-                ((forceEnableDccMask & ForceDisableDcc) == 0))
+            if (isShaderStorage && ((forceEnableDccMask & (ForceDccDefault |
+                                                           ForceDisableCompression |
+                                                           ForceDisableCompressionForColor)) == 0))
             {
                 const bool isColorAttachment = (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
 
@@ -454,8 +454,8 @@ void Image::ConvertImageCreateInfo(
                 const bool is3DShaderStorageImage = (pCreateInfo->imageType & VK_IMAGE_TYPE_3D);
 
                 // Enable DCC beyond what PAL does by default for color attachments
-                const bool shouldForceDccForCA = Util::TestAnyFlagSet(forceEnableDccMask, ForceDccForColorAttachments) &&
-                    isColorAttachment;
+                const bool shouldForceDccForCA =
+                    Util::TestAnyFlagSet(forceEnableDccMask, ForceDccForColorAttachments) && isColorAttachment;
                 const bool shouldForceDccForNonCAShaderStorage =
                     Util::TestAnyFlagSet(forceEnableDccMask, ForceDccForNonColorAttachmentShaderStorage) &&
                     (!isColorAttachment);
@@ -520,18 +520,16 @@ void Image::ConvertImageCreateInfo(
         pPalCreateInfo->metadataTcCompatMode = Pal::MetadataTcCompatMode::Disabled;
     }
 
-    // We must not use any metadata if sparse aliasing is enabled or
-    // settings.forceEnableDcc is equal to ForceDisableDcc.
-    if ((pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT) ||
-        ((settings.forceEnableDcc & ForceDisableDcc) != 0))
-    {
-        pPalCreateInfo->metadataMode = Pal::MetadataMode::Disabled;
-    }
+    const uint32_t disableBits =
+        ForceDisableCompression |
+        ((Formats::IsColorFormat(createInfoFormat)) ? ForceDisableCompressionForColor : 0) |
+        ((Formats::IsDepthStencilFormat(createInfoFormat)) ? ForceDisableCompressionForDepthStencil : 0) |
+        (externalFlags.externallyShareable ? ForceDisableCompressionForSharedImages : 0);
 
-    // Disable metadata for sharable images if the ForceDisableDccForSharedImages
-    // flag is set in settings.forceEnableDcc
-    if (externalFlags.externallyShareable &&
-        ((settings.forceEnableDcc & ForceDisableDccForSharedImages) != 0))
+    // We must not use any metadata if sparse aliasing is enabled or
+    // settings.forceEnableDcc matches any of the disableBits.
+    if ((pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT) ||
+        ((settings.forceEnableDcc & disableBits) != 0))
     {
         pPalCreateInfo->metadataMode = Pal::MetadataMode::Disabled;
     }
@@ -604,6 +602,15 @@ void Image::ConvertImageCreateInfo(
                   (extStructs.pModifierExplicitCreateInfo == nullptr));
     }
 #endif
+
+    if ((extStructs.pImageAlignmentControlCreateInfo != nullptr) &&
+        (extStructs.pImageAlignmentControlCreateInfo->maximumRequestedAlignment != 0))
+    {
+        if (pCreateInfo->tiling == VK_IMAGE_TILING_OPTIMAL)
+        {
+            pPalCreateInfo->maxBaseAlign = extStructs.pImageAlignmentControlCreateInfo->maximumRequestedAlignment;
+        }
+    }
 }
 
 // =====================================================================================================================
@@ -820,6 +827,13 @@ void Image::HandleExtensionStructs(
                 static_cast<const VkImageCompressionControlEXT*>(pNext);
             break;
         }
+        case VK_STRUCTURE_TYPE_IMAGE_ALIGNMENT_CONTROL_CREATE_INFO_MESA:
+        {
+            pExtStructs->pImageAlignmentControlCreateInfo =
+                static_cast<const VkImageAlignmentControlCreateInfoMESA*>(pNext);
+            break;
+        }
+
         default:
             // Skip any unknown extension structures
             break;
@@ -1067,6 +1081,23 @@ VkResult Image::Create(
                     palCreateInfo,
                     Util::VoidPtrInc(pPalImgAddr, palImgOffset),
                     &pPalImages[deviceIdx]);
+
+                // If failing with the requested alignment, retry without requested alignment.
+                if ((palResult != Pal::Result::Success) && (palCreateInfo.maxBaseAlign != 0))
+                {
+                    if (pPalImages[deviceIdx] != nullptr)
+                    {
+                        pPalImages[deviceIdx]->Destroy();
+                    }
+
+                    palCreateInfo.maxBaseAlign = 0;
+
+                    palResult = pDevice->PalDevice(deviceIdx)->CreateImage(
+                        palCreateInfo,
+                        Util::VoidPtrInc(pPalImgAddr, palImgOffset),
+                        &pPalImages[deviceIdx]);
+                }
+
                 VK_ASSERT(palResult == Pal::Result::Success);
 
                 if (palResult != Pal::Result::Success)
@@ -2048,6 +2079,23 @@ void Image::GetPalImageMemoryRequirements(
                     palCreateInfo,
                     Util::VoidPtrInc(pMemory, palImgOffset),
                     &pPalImages[deviceIdx]);
+
+                // If failing with the requested alignment, retry without requested alignment.
+                if ((palResult != Pal::Result::Success) && (palCreateInfo.maxBaseAlign != 0))
+                {
+                    if (pPalImages[deviceIdx] != nullptr)
+                    {
+                        pPalImages[deviceIdx]->Destroy();
+                    }
+
+                    palCreateInfo.maxBaseAlign = 0;
+
+                    palResult = pDevice->PalDevice(deviceIdx)->CreateImage(
+                        palCreateInfo,
+                        Util::VoidPtrInc(pMemory, palImgOffset),
+                        &pPalImages[deviceIdx]);
+                }
+
                 VK_ASSERT(palResult == Pal::Result::Success);
                 VK_ASSERT(pPalImages[deviceIdx] != nullptr);
 

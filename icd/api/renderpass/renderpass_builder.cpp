@@ -768,7 +768,7 @@ Pal::Result RenderPassBuilder::BuildResolveAttachmentReferences(
                     result = pSubpass->resolves.PushBack(resolve);
 
                     VK_ASSERT(Formats::IsColorFormat(m_pAttachments[resolve.src.attachment].pDesc->format));
-                    pSubpass->syncPreResolve.barrier.flags.preColorResolveSync = 1;
+                    pSubpass->syncPreResolve.barrier.flags.preResolveSync = 1;
 
                     m_pAttachments[resolve.src.attachment].resolvesInFlight = true;
                     m_pAttachments[resolve.dst.attachment].resolvesInFlight = true;
@@ -831,7 +831,7 @@ Pal::Result RenderPassBuilder::BuildResolveAttachmentReferences(
                 result = pSubpass->resolves.PushBack(resolve);
 
                 VK_ASSERT(Formats::IsDepthStencilFormat(m_pAttachments[resolve.src.attachment].pDesc->format));
-                pSubpass->syncPreResolve.barrier.flags.preDsResolveSync = 1;
+                pSubpass->syncPreResolve.barrier.flags.preResolveSync = 1;
 
                 m_pAttachments[resolve.src.attachment].resolvesInFlight = true;
                 m_pAttachments[resolve.dst.attachment].resolvesInFlight = true;
@@ -930,16 +930,13 @@ static void ConvertImplicitSyncsLegacy(
     pBarrier->implicitDstCacheMask = 0;
 
     // Similarly augment the waiting if we need to wait for prior color rendering to finish
-    if (pBarrier->flags.preColorResolveSync ||
-        pBarrier->flags.preDsResolveSync)
+    if (pBarrier->flags.preResolveSync)
     {
         // If we're waiting prior a resolve, make sure the wait point waits early enough.
         IncludePipePoint(pBarrier, Pal::HwPipeBottom);
         IncludeWaitPoint(pBarrier, Pal::HwPipePreBlt);
 
-        pBarrier->implicitSrcCacheMask |= pBarrier->flags.preColorResolveSync ?
-                                          Pal::CoherColorTarget :
-                                          Pal::CoherDepthStencilTarget;
+        pBarrier->implicitSrcCacheMask |= Pal::CoherColorTarget | Pal::CoherDepthStencilTarget;
         pBarrier->implicitDstCacheMask |= Pal::CoherResolveDst;
     }
 
@@ -985,14 +982,12 @@ static void ConvertImplicitSyncs(
     pBarrier->implicitDstCacheMask = 0;
 
     // Similarly augment the waiting if we need to wait for prior color rendering to finish
-    if (pBarrier->flags.preColorResolveSync ||
-        pBarrier->flags.preDsResolveSync)
+    if (pBarrier->flags.preResolveSync)
     {
         pBarrier->srcStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR;
         pBarrier->dstStageMask |= VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR;
 
-        // It's possible that color and DS are both included in a single barrier for resolves. As a result of that we
-        // cannot rely on preColorResolveSync and preDsResolveSync to determine the cache mask here. Instead, include
+        // It's possible that color and DS are both included in a single barrier for resolves. Include
         // both here and then in RPSyncPoint we use excludeAccessMask to filter out unnecessary mask.
         pBarrier->implicitSrcCacheMask |= Pal::CoherColorTarget | Pal::CoherDepthStencilTarget;
 
@@ -1042,8 +1037,7 @@ void RenderPassBuilder::PostProcessSyncPoint(
 {
     const RuntimeSettings& settings = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings();
 
-    if (m_pDevice->GetPalProperties().gfxipProperties.flags.supportReleaseAcquireInterface &&
-        settings.useAcquireReleaseInterface)
+    if (settings.useAcquireReleaseInterface)
     {
         // Include implicit waiting and cache access
         ConvertImplicitSyncs(&pSyncPoint->barrier, settings);

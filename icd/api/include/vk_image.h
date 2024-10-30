@@ -316,6 +316,7 @@ private:
         const VkImageDrmFormatModifierExplicitCreateInfoEXT* pModifierExplicitCreateInfo;
 #endif
         const VkImageCompressionControlEXT*                  pImageCompressionControl;
+        const VkImageAlignmentControlCreateInfoMESA*         pImageAlignmentControlCreateInfo;
     };
 
     union ExternalMemoryFlags

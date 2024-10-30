@@ -89,6 +89,8 @@
 
 #include "appopt/barrier_filter_layer.h"
 #include "appopt/strange_brigade_layer.h"
+#include "appopt/gravity_mark_layer.h"
+#include "appopt/baldurs_gate3_layer.h"
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
@@ -336,10 +338,10 @@ VkResult Device::Create(
     const VkAllocationCallbacks*    pAllocator,
     ApiDevice**                     ppDevice)
 {
-    Pal::Result    palResult                            = Pal::Result::Success;
-    DeviceFeatures deviceFeatures                       = {};
-    uint32_t       queueCounts[Queue::MaxQueueFamilies] = {};
-    uint32_t       queueFlags[Queue::MaxQueueFamilies]  = {};
+    Pal::Result    palResult                                                      = Pal::Result::Success;
+    DeviceFeatures deviceFeatures                                                 = {};
+    uint32_t       queueCounts[Queue::MaxQueueFamilies]                           = {};
+    uint32_t       queueFlags[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
 
     // initialize queue priority with the default value VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR.
     VkQueueGlobalPriorityKHR queuePriority[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
@@ -396,6 +398,12 @@ VkResult Device::Create(
     bool                              bufferDeviceAddressMultiDeviceEnabled = false;
     bool                              maintenance4Enabled                   = false;
     bool                              globalPriorityQueryEnabled            = false;
+    bool                              pushDescriptorsEnabled                = false;
+
+    if (enabledDeviceExtensions.IsExtensionEnabled(DeviceExtensions::KHR_PUSH_DESCRIPTOR))
+    {
+        pushDescriptorsEnabled = true;
+    }
 
     const VkStructHeader* pHeader = nullptr;
 
@@ -553,9 +561,8 @@ VkResult Device::Create(
                 if (reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->robustBufferAccess2)
                 {
                     deviceFeatures.robustBufferAccessExtended = true;
-                    {
-                        deviceFeatures.robustVertexBufferExtend = true;
-                    }
+
+                    deviceFeatures.robustVertexBufferExtend = true;
                 }
 
                 if (reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->robustImageAccess2)
@@ -585,7 +592,17 @@ VkResult Device::Create(
             {
                 if (reinterpret_cast<const VkPhysicalDeviceImageRobustnessFeaturesEXT*>(pHeader)->robustImageAccess)
                 {
-                    deviceFeatures.robustImageAccessExtended= true;
+                    deviceFeatures.robustImageAccessExtended = true;
+                }
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_FEATURES_EXT:
+            {
+                if (reinterpret_cast<const VkPhysicalDevicePipelineRobustnessFeaturesEXT*>(pHeader)->pipelineRobustness)
+                {
+                    deviceFeatures.pipelineRobustness = true;
                 }
 
                 break;
@@ -673,6 +690,16 @@ VkResult Device::Create(
                 if (pFeaturesExt->primitivesGeneratedQuery)
                 {
                     deviceFeatures.primitivesGeneratedQuery = true;
+                }
+                break;
+            }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_EXT:
+            {
+                const VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT* pFeaturesExt =
+                    reinterpret_cast<const VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT*>(pHeader);
+                if (pFeaturesExt->deviceGeneratedCommands)
+                {
+                    deviceFeatures.deviceGeneratedCommands = true;
                 }
                 break;
             }
@@ -783,10 +810,15 @@ VkResult Device::Create(
     {
         const VkDeviceQueueCreateInfo* pQueueInfo = &pCreateInfo->pQueueCreateInfos[i];
 
-        queueCounts[pQueueInfo->queueFamilyIndex] = pQueueInfo->queueCount;
+        queueCounts[pQueueInfo->queueFamilyIndex] += pQueueInfo->queueCount;
         totalQueues += pQueueInfo->queueCount;
 
-        queueFlags[pQueueInfo->queueFamilyIndex]  = pQueueInfo->flags;
+        for (uint32 queueId = (queueCounts[pQueueInfo->queueFamilyIndex] - pQueueInfo->queueCount);
+            queueId < queueCounts[pQueueInfo->queueFamilyIndex];
+            ++queueId)
+        {
+            queueFlags[pQueueInfo->queueFamilyIndex][queueId] = pQueueInfo->flags;
+        }
 
         // handle global priority
         for (const VkStructHeader* pSubHeader = static_cast<const VkStructHeader*>(pQueueInfo->pNext);
@@ -944,7 +976,8 @@ VkResult Device::Create(
         vkResult = VK_SUCCESS;
 
         // Finalize the physical device settings before they are cached in the device
-        pPhysicalDevices[DefaultDeviceIndex]->GetSettingsLoader()->FinalizeSettings(enabledDeviceExtensions);
+        pPhysicalDevices[DefaultDeviceIndex]->GetSettingsLoader()->FinalizeSettings(enabledDeviceExtensions,
+                                                                                    pushDescriptorsEnabled);
 
         if (settings.simulateExtDeviceMemoryReport)
         {
@@ -1028,7 +1061,7 @@ VkResult Device::Create(
                 VkQueue vkQueue;
                 vkResult = Queue::Create(*pDispatchableDevice,
                               pAllocator,
-                              queueFlags[queueFamilyIndex],
+                              queueFlags[queueFamilyIndex][queueIndex],
                               queueFamilyIndex,
                               queueIndex,
                               queuePriority[queueFamilyIndex][queueIndex],
@@ -1278,6 +1311,36 @@ VkResult Device::Initialize(
 
             break;
         }
+        case AppProfile::GravityMark:
+        {
+            void* pMemory = VkInstance()->AllocMem(sizeof(GravityMarkLayer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+            if (pMemory != nullptr)
+            {
+                m_pAppOptLayer = VK_PLACEMENT_NEW(pMemory) GravityMarkLayer();
+            }
+            else
+            {
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+
+            break;
+        }
+        case AppProfile::BaldursGate3:
+        {
+            void* pMemory = VkInstance()->AllocMem(sizeof(BaldursGate3Layer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+            if (pMemory != nullptr)
+            {
+                m_pAppOptLayer = VK_PLACEMENT_NEW(pMemory) BaldursGate3Layer();
+            }
+            else
+            {
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+
+            break;
+        }
         default:
             break;
         }
@@ -1463,8 +1526,12 @@ void Device::InitDispatchTable()
     if (m_enabledExtensions.IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE6))
     {
         ep->vkCmdBindDescriptorSets2KHR            = CmdBuffer::GetCmdBindDescriptorSets2KHRFunc(this);
-        ep->vkCmdPushDescriptorSet2KHR             = CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(this);
-        ep->vkCmdPushDescriptorSetWithTemplate2KHR = CmdBuffer::GetCmdPushDescriptorSetWithTemplate2KHRFunc(this);
+
+        if (m_enabledExtensions.IsExtensionEnabled(DeviceExtensions::KHR_PUSH_DESCRIPTOR))
+        {
+            ep->vkCmdPushDescriptorSet2KHR             = CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(this);
+            ep->vkCmdPushDescriptorSetWithTemplate2KHR = CmdBuffer::GetCmdPushDescriptorSetWithTemplate2KHRFunc(this);
+        }
     }
 
     // =================================================================================================================
@@ -1875,7 +1942,7 @@ VkResult Device::CreateInternalComputePipeline(
 
     ComputePipelineBinaryCreateInfo pipelineBuildInfo = {};
 
-    pCompiler->ApplyPipelineOptions(this, 0, &pipelineBuildInfo.pipelineInfo.options
+    pCompiler->ApplyPipelineOptions(this, 0, &pipelineBuildInfo.pipelineInfo.options, nullptr
     );
 
     shaderOptimizerKey.stage              = ShaderStage::ShaderStageCompute;
@@ -3089,8 +3156,6 @@ VkResult Device::BindImageMemory(
 }
 
 // =====================================================================================================================
-
-// =====================================================================================================================
 VkResult Device::GetCalibratedTimestamps(
     uint32_t                            timestampCount,
     const VkCalibratedTimestampInfoEXT* pTimestampInfos,
@@ -3686,6 +3751,15 @@ VkResult Device::CreateIndirectCommandsLayout(
     VkIndirectCommandsLayoutNV*                 pIndirectCommandsLayout)
 {
     return IndirectCommandsLayoutNV::Create(this, pCreateInfo, pAllocator, pIndirectCommandsLayout);
+}
+
+// =================================================================================================================
+VkResult Device::CreateIndirectCommandsLayout(
+    const VkIndirectCommandsLayoutCreateInfoEXT* pCreateInfo,
+    const VkAllocationCallbacks*                 pAllocator,
+    VkIndirectCommandsLayoutEXT*                 pIndirectCommandsLayout)
+{
+    return IndirectCommandsLayout::Create(this, pCreateInfo, pAllocator, pIndirectCommandsLayout);
 }
 
 // =====================================================================================================================
@@ -5123,8 +5197,6 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupport(
 }
 
 // =====================================================================================================================
-
-// =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkGetCalibratedTimestampsEXT(
     VkDevice                                    device,
     uint32_t                                    timestampCount,
@@ -5543,6 +5615,87 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyIndirectCommandsLayoutNV(
 
         IndirectCommandsLayoutNV::ObjectFromHandle(indirectCommandsLayout)->Destroy(pDevice, pAllocCB);
     }
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateIndirectCommandsLayoutEXT(
+    VkDevice                                        device,
+    const VkIndirectCommandsLayoutCreateInfoEXT*    pCreateInfo,
+    const VkAllocationCallbacks*                    pAllocator,
+    VkIndirectCommandsLayoutEXT*                    pIndirectCommandsLayout)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    const VkAllocationCallbacks* pAllocCB = (pAllocator != nullptr) ? pAllocator :
+                                                                      pDevice->VkInstance()->GetAllocCallbacks();
+
+    return pDevice->CreateIndirectCommandsLayout(pCreateInfo, pAllocCB, pIndirectCommandsLayout);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateIndirectExecutionSetEXT(
+    VkDevice                                    device,
+    const VkIndirectExecutionSetCreateInfoEXT*  pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkIndirectExecutionSetEXT*                  pIndirectExecutionSet)
+{
+    return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkDestroyIndirectCommandsLayoutEXT(
+    VkDevice                                    device,
+    VkIndirectCommandsLayoutEXT                 indirectCommandsLayout,
+    const VkAllocationCallbacks*                pAllocator)
+{
+    if (indirectCommandsLayout != VK_NULL_HANDLE)
+    {
+        Device* pDevice = ApiDevice::ObjectFromHandle(device);
+        const VkAllocationCallbacks* pAllocCB = (pAllocator != nullptr) ? pAllocator :
+                                                                          pDevice->VkInstance()->GetAllocCallbacks();
+
+        IndirectCommandsLayout::ObjectFromHandle(indirectCommandsLayout)->Destroy(pDevice, pAllocCB);
+    }
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkDestroyIndirectExecutionSetEXT(
+    VkDevice                                    device,
+    VkIndirectExecutionSetEXT                   indirectExecutionSet,
+    const VkAllocationCallbacks*                pAllocator)
+{
+
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetGeneratedCommandsMemoryRequirementsEXT(
+    VkDevice                                            device,
+    const VkGeneratedCommandsMemoryRequirementsInfoEXT* pInfo,
+    VkMemoryRequirements2*                              pMemoryRequirements)
+{
+    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    const IndirectCommandsLayout* pLayout = IndirectCommandsLayout::ObjectFromHandle(pInfo->indirectCommandsLayout);
+
+    pLayout->CalculateMemoryRequirements(pDevice, pMemoryRequirements);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkUpdateIndirectExecutionSetPipelineEXT(
+    VkDevice                                        device,
+    VkIndirectExecutionSetEXT                       indirectExecutionSet,
+    uint32_t                                        executionSetWriteCount,
+    const VkWriteIndirectExecutionSetPipelineEXT*   pExecutionSetWrites)
+{
+
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkUpdateIndirectExecutionSetShaderEXT(
+    VkDevice                                    device,
+    VkIndirectExecutionSetEXT                   indirectExecutionSet,
+    uint32_t                                    executionSetWriteCount,
+    const VkWriteIndirectExecutionSetShaderEXT* pExecutionSetWrites)
+{
+
 }
 
 } // entry

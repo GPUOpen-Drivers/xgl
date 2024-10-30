@@ -69,6 +69,7 @@ void SplitRaytracingLayer::TraceRaysDispatchPerDevice(
     };
 
     const Pal::DispatchDims blockDispatchSize = pPipeline->GetDispatchSize(blockSize);
+    const Pal::DispatchDims traceDispatchSize = pPipeline->GetDispatchSize(traceSize);
 
     // Lambda function used to help dispatch.
     auto dispatch = [pCmdBuffer, deviceIdx](Pal::DispatchDims offset, Pal::DispatchDims size)
@@ -108,16 +109,19 @@ void SplitRaytracingLayer::TraceRaysDispatchPerDevice(
         };
 
     // Split Z axis.
-    split(traceSize.z, blockDispatchSize.z,
-        [split, traceSize, blockDispatchSize, &dispatch](uint32_t offsetZ, uint32_t sizeZ)
+    split(traceDispatchSize.z, blockDispatchSize.z,
+        [split, traceDispatchSize, blockDispatchSize, &dispatch]
+        (uint32_t offsetZ, uint32_t sizeZ)
         {
             // Split Y axis.
-            split(traceSize.y, blockDispatchSize.y,
-                [split, traceSize, blockDispatchSize, &dispatch, offsetZ, sizeZ](uint32_t offsetY, uint32_t sizeY)
+            split(traceDispatchSize.y, blockDispatchSize.y,
+                [split, traceDispatchSize, blockDispatchSize, &dispatch, offsetZ, sizeZ]
+                (uint32_t offsetY, uint32_t sizeY)
                 {
                     //Split X axis.
-                    split(traceSize.x, blockDispatchSize.x,
-                        [&dispatch, offsetZ, sizeZ, offsetY, sizeY](uint32_t offsetX, uint32_t sizeX)
+                    split(traceDispatchSize.x, blockDispatchSize.x,
+                        [&dispatch, offsetZ, sizeZ, offsetY, sizeY]
+                        (uint32_t offsetX, uint32_t sizeX)
                         {
                             Pal::DispatchDims offset =
                             {

@@ -82,7 +82,7 @@ void ComputePipeline::BuildApiHash(
     // Hash flags not accounted for in the elf hash
     apiHasher.Update(flags);
 
-    if (((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) != 0) &&
+    if (((flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) != 0) &&
         (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
     {
         apiHasher.Update(ComputePipeline::ObjectFromHandle(pCreateInfo->basePipelineHandle)->GetApiHash());
@@ -166,6 +166,7 @@ VkResult ComputePipeline::CreatePipelineBinaries(
             convertResult = pDefaultCompiler->ConvertComputePipelineInfo(
                 pDevice,
                 pCreateInfo,
+                extStructs,
                 pShaderInfo,
                 pPipelineOptimizerKey,
                 pBinaryMetadata,
@@ -378,20 +379,40 @@ VkResult ComputePipeline::Create(
     uint64 startTimeTicks = Util::GetPerfCpuTime();
 
     // Setup PAL create info from Vulkan inputs
-    Vkgc::BinaryData                pipelineBinaries[MaxPalDevices]  = {};
-    Util::MetroHash::Hash           cacheId[MaxPalDevices]           = {};
-    PipelineCompiler*               pDefaultCompiler                 = pDevice->GetCompiler(DefaultDeviceIndex);
-    const RuntimeSettings&          settings                         = pDevice->GetRuntimeSettings();
-    ComputePipelineBinaryCreateInfo binaryCreateInfo                 = {};
-    PipelineOptimizerKey            pipelineOptimizerKey             = {};
-    ShaderOptimizerKey              shaderOptimizerKey               = {};
-    ShaderModuleHandle              tempModule                       = {};
-    VkResult                        result                           = VK_SUCCESS;
-    PipelineMetadata                binaryMetadata                   = {};
-    ComputePipelineExtStructs       extStructs                       = {};
-    bool                            binariesProvided                 = false;
+    Vkgc::BinaryData                  pipelineBinaries[MaxPalDevices] = {};
+    Util::MetroHash::Hash             cacheId[MaxPalDevices]          = {};
+    PipelineCompiler*                 pDefaultCompiler                = pDevice->GetCompiler(DefaultDeviceIndex);
+    const RuntimeSettings&            settings                        = pDevice->GetRuntimeSettings();
+    ComputePipelineBinaryCreateInfo   binaryCreateInfo                = {};
+    PipelineOptimizerKey              pipelineOptimizerKey            = {};
+    ShaderOptimizerKey                shaderOptimizerKey              = {};
+    ShaderModuleHandle                tempModule                      = {};
+    VkResult                          result                          = VK_SUCCESS;
+    PipelineMetadata                  binaryMetadata                  = {};
+    ComputePipelineExtStructs         extStructs                      = {};
+    bool                              binariesProvided                = false;
+    VkPipelineRobustnessCreateInfoEXT pipelineRobustness              = {};
 
     HandleExtensionStructs(pCreateInfo, &extStructs);
+
+    bool usePipelineRobustness = InitPipelineRobustness(
+        extStructs.pPipelineRobustnessCreateInfoEXT,
+        &pipelineRobustness);
+
+    PipelineShaderStageExtStructs shaderStageExtStructs = {};
+    HandleShaderStageExtensionStructs(pCreateInfo->stage.pNext, &shaderStageExtStructs);
+
+    if (shaderStageExtStructs.pPipelineRobustnessCreateInfoEXT != nullptr)
+    {
+        UpdatePipelineRobustness(shaderStageExtStructs.pPipelineRobustnessCreateInfoEXT, &pipelineRobustness);
+        usePipelineRobustness = true;
+    }
+
+    if (usePipelineRobustness)
+    {
+        extStructs.pPipelineRobustnessCreateInfoEXT =
+            static_cast<const VkPipelineRobustnessCreateInfoEXT*>(&pipelineRobustness);
+    }
 
     auto pPipelineBinaryInfoKHR = extStructs.pPipelineBinaryInfoKHR;
 

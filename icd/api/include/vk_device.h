@@ -127,14 +127,6 @@ class Device
 {
 public:
 
-    // Represent features in VK_EXT_robustness2
-    struct ExtendedRobustness
-    {
-        bool robustBufferAccess;
-        bool robustImageAccess;
-        bool nullDescriptor;
-    };
-
     union DeviceFeatures
     {
         struct
@@ -170,7 +162,8 @@ public:
             uint32                robustVertexBufferExtend             : 1;
             uint32                enableDebugPrintf                    : 1;
             uint32                reserved3                            : 1;
-            uint32                reserved                             : 9;
+            uint32                pipelineRobustness                   : 1;
+            uint32                reserved                             : 8;
         };
 
         uint32 u32All;
@@ -390,6 +383,11 @@ public:
         const VkIndirectCommandsLayoutCreateInfoNV* pCreateInfo,
         const VkAllocationCallbacks*                pAllocator,
         VkIndirectCommandsLayoutNV*                 pIndirectCommandsLayout);
+
+    VkResult CreateIndirectCommandsLayout(
+        const VkIndirectCommandsLayoutCreateInfoEXT* pCreateInfo,
+        const VkAllocationCallbacks*                 pAllocator,
+        VkIndirectCommandsLayoutEXT*                 pIndirectCommandsLayout);
 
     VkResult ImportSemaphore(
         VkSemaphore                semaphore,
@@ -662,8 +660,9 @@ public:
     bool UseCompactDynamicDescriptors() const
     {
         return (
-                !GetRuntimeSettings().enableRelocatableShaders &&
-                !GetEnabledFeatures().robustBufferAccess);
+                (GetRuntimeSettings().enableRelocatableShaders == false)&&
+                (GetEnabledFeatures().robustBufferAccess == false) &&
+                (GetEnabledFeatures().pipelineRobustness == false));
     }
 
     bool MustWriteImmutableSamplers() const
@@ -1446,6 +1445,45 @@ VKAPI_ATTR void VKAPI_CALL vkGetGeneratedCommandsMemoryRequirementsNV(
     VkDevice                                            device,
     const VkGeneratedCommandsMemoryRequirementsInfoNV*  pInfo,
     VkMemoryRequirements2*                              pMemoryRequirements);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateIndirectCommandsLayoutEXT(
+    VkDevice                                        device,
+    const VkIndirectCommandsLayoutCreateInfoEXT*    pCreateInfo,
+    const VkAllocationCallbacks*                    pAllocator,
+    VkIndirectCommandsLayoutEXT*                    pIndirectCommandsLayout);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateIndirectExecutionSetEXT(
+    VkDevice                                    device,
+    const VkIndirectExecutionSetCreateInfoEXT*  pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkIndirectExecutionSetEXT*                  pIndirectExecutionSet);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyIndirectCommandsLayoutEXT(
+    VkDevice                                    device,
+    VkIndirectCommandsLayoutEXT                 indirectCommandsLayout,
+    const VkAllocationCallbacks*                pAllocator);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyIndirectExecutionSetEXT(
+    VkDevice                                    device,
+    VkIndirectExecutionSetEXT                   indirectExecutionSet,
+    const VkAllocationCallbacks*                pAllocator);
+
+VKAPI_ATTR void VKAPI_CALL vkGetGeneratedCommandsMemoryRequirementsEXT(
+    VkDevice                                            device,
+    const VkGeneratedCommandsMemoryRequirementsInfoEXT* pInfo,
+    VkMemoryRequirements2*                              pMemoryRequirements);
+
+VKAPI_ATTR void VKAPI_CALL vkUpdateIndirectExecutionSetPipelineEXT(
+    VkDevice                                        device,
+    VkIndirectExecutionSetEXT                       indirectExecutionSet,
+    uint32_t                                        executionSetWriteCount,
+    const VkWriteIndirectExecutionSetPipelineEXT*   pExecutionSetWrites);
+
+VKAPI_ATTR void VKAPI_CALL vkUpdateIndirectExecutionSetShaderEXT(
+    VkDevice                                    device,
+    VkIndirectExecutionSetEXT                   indirectExecutionSet,
+    uint32_t                                    executionSetWriteCount,
+    const VkWriteIndirectExecutionSetShaderEXT* pExecutionSetWrites);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineBinariesKHR(
     VkDevice                                    device,

@@ -61,6 +61,7 @@ static constexpr uint64_t RayTracingInvalidShaderId = 0;
 
 typedef Util::Vector<VkPipelineShaderStageCreateInfo, 16, PalAllocator>       ShaderStageList;
 typedef Util::Vector<VkRayTracingShaderGroupCreateInfoKHR, 16, PalAllocator>  ShaderGroupList;
+typedef Util::Vector<uint64_t, 16, PalAllocator>                              ShaderStageVirtAddrList;
 
 struct ShaderGroupStackSizes
 {
@@ -262,6 +263,44 @@ public:
     uint32_t GetTotalShaderCount() const
         { return m_totalShaderCount; }
 
+    void GetPipelineBinaryByIndex(
+        uint32_t        index,
+        void*           pBinary,
+        uint32_t*       pSize
+        ) const;
+
+    const Vkgc::RayTracingShaderProperty* GetPipelineBinaryPropset(
+        uint32_t    index
+        ) const;
+
+    uint32_t GetPipelineBinaryCount() const
+        { return m_compiledShaderCount; }
+
+    void GetShaderDescriptionByStage(
+        char*              pDescription,
+        const uint32_t     index,
+        const uint32_t     binaryCount
+        ) const;
+
+    VkResult GetPipelineExecutableProperties(
+        const VkPipelineInfoKHR*                    pPipelineInfo,
+        uint32_t*                                   pExecutableCount,
+        VkPipelineExecutablePropertiesKHR*          pProperties
+        ) const;
+
+    VkResult GetPipelineExecutableInternalRepresentations(
+        const VkPipelineExecutableInfoKHR*             pExecutableInfo,
+        uint32_t*                                      pInternalRepresentationCount,
+        VkPipelineExecutableInternalRepresentationKHR* pInternalRepresentations
+        ) const;
+
+    VkResult GetRayTracingShaderDisassembly(
+        Util::Abi::PipelineSymbolType pipelineSymbolType,
+        const void*                   pBinaryCode,
+        size_t*                       pBufferSize,
+        void*                         pBuffer
+        ) const;
+
 protected:
     // Make sure that this value should be equal to Bil::RayTracingTileWidth defined in bilInstructionRayTracing.h
     // and the value used to calculate dispatch dim in InitExecuteIndirect.hlsl
@@ -321,6 +360,9 @@ protected:
     uint32_t GetNativeShaderCount() const
         { return m_nativeShaderCount; }
 
+    const ShaderStageVirtAddrList& GetShaderStageVirtAddrList(uint32_t deviceIdx) const
+        { return m_shaderStageVirtAddrList[deviceIdx]; }
+
     // Converted creation info parameters of the Vulkan ray tracing pipeline
     struct CreateInfo
     {
@@ -351,14 +393,6 @@ protected:
         VkPipelineCreateFlags2KHR                flags,
         Util::MetroHash::Hash*                   pElfHash,
         uint64_t*                                pApiHash);
-
-    // Return true if the shader id was found and mapped to a shader handle with gpu address.
-    static bool MapShaderIdToShaderHandle(
-        Pal::ShaderLibraryFunctionInfo*   pIndirectFuncList,
-        uint32_t*                         pShaderNameMap,
-        uint32_t                          shaderPropsCount,
-        Vkgc::RayTracingShaderProperty*   pShaderProp,
-        uint64_t*                         pShaderId);
 
     // Extracts extension structs from VkRayTracingPipelineCreateInfoKHR
     static void HandleExtensionStructs(
@@ -393,6 +427,11 @@ private:
     Util::MetroHash::Hash             m_elfHash;
 
     CaptureReplayVaMappingBufferInfo  m_captureReplayVaMappingBufferInfo;
+
+    Vkgc::RayTracingShaderProperty*   m_pShaderProperty;
+    uint32_t                          m_compiledShaderCount; // Shader returned from compiler
+
+    ShaderStageVirtAddrList           m_shaderStageVirtAddrList[MaxPalDevices];
 };
 
 } // namespace vk

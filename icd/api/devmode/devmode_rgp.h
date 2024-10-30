@@ -37,6 +37,7 @@
 #include "devmode/devmode_mgr.h"
 
 // PAL headers
+#include "palHashMap.h"
 #include "palVector.h"
 
 // gpuutil headers
@@ -119,6 +120,12 @@ public:
     virtual bool IsTracingEnabled() const override;
     virtual bool IsCrashAnalysisEnabled() const override { return m_crashAnalysisEnabled; }
 
+    virtual void RecordRenderOps(
+        uint32_t deviceIdx,
+        Queue*   pQueue,
+        uint32_t drawCallCount,
+        uint32_t dispatchCallCount) override { /* does nothing */ };
+
     virtual Pal::Result TimedQueueSubmit(
         uint32_t               deviceIdx,
         Queue*                 pQueue,
@@ -162,11 +169,21 @@ public:
         uint32        markerStringDataSize,
         const char*   pMarkerStringData) override;
 
+    virtual void LabelAccelStruct(
+        uint64_t    deviceAddress,
+        const char* pString) override;
+
     Util::ListIterator<PipelineBinaryCache*, PalAllocator> GetPipelineCacheListIterator()
         { return m_pipelineCaches.Begin(); }
 
     Util::RWLock* GetPipelineReinjectionLock()
         { return &m_pipelineReinjectionLock; }
+
+    using AccelStructUserMarkerTable = Util::HashMap<uint64_t, AccelStructUserMarkerString, PalAllocator>;
+    const AccelStructUserMarkerTable& GetAccelStructUserMarkerTable() const
+        { return m_accelStructNames; }
+
+    uint32_t AcquireStringTableId() { return ++m_stringTableId; }
 
 private:
     static constexpr uint32_t MaxTraceQueueFamilies = Queue::MaxQueueFamilies;
@@ -338,6 +355,9 @@ private:
     std::atomic<uint32_t>               m_stringTableId;
     GpuUtil::StringTableTraceSource*    m_pStringTableTraceSource;
     GpuUtil::UserMarkerHistoryTraceSource* m_pUserMarkerHistoryTraceSource;
+
+    AccelStructUserMarkerTable          m_accelStructNames;
+    Util::Mutex                         m_mutex;
 #endif
 };
 

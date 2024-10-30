@@ -319,6 +319,20 @@ public:
     void GetPhysicalDeviceProtectedMemoryProperties(
         VkBool32*                pProtectedNoFault) const;
 
+    void GetPhysicalDeviceDeviceGeneratedCommandsProperties(
+        uint32_t*                            pMaxIndirectPipelineCount,
+        uint32_t*                            pMaxIndirectShaderObjectCount,
+        uint32_t*                            pMaxIndirectSequenceCount,
+        uint32_t*                            pMaxIndirectCommandsTokenCount,
+        uint32_t*                            pMaxIndirectCommandsTokenOffset,
+        uint32_t*                            pMaxIndirectCommandsIndirectStride,
+        VkIndirectCommandsInputModeFlagsEXT* pSupportedIndirectCommandsInputModes,
+        VkShaderStageFlags*                  pSupportedIndirectCommandsShaderStages,
+        VkShaderStageFlags*                  supportedIndirectCommandsShaderStagesPipelineBinding,
+        VkShaderStageFlags*                  supportedIndirectCommandsShaderStagesShaderBinding,
+        VkBool32*                            pDeviceGeneratedCommandsTransformFeedback,
+        VkBool32*                            pDeviceGeneratedCommandsMultiDrawIndirectCount) const;
+
     void GetPhysicalDeviceSubgroupProperties(
         uint32_t*                pSubgroupSize,
         VkShaderStageFlags*      pSupportedStages,
@@ -880,6 +894,11 @@ template <typename ModifierPropertiesList_T>
     bool IsWorkstationStereoEnabled() const;
 
     bool IsAutoStereoEnabled() const;
+
+    bool IsTaskShaderSupported() const
+    {
+        return PalProperties().gfxipProperties.flags.supportTaskShader && GetRuntimeSettings().enableTaskShaders;
+    }
 
 protected:
     PhysicalDevice(PhysicalDeviceManager* pPhysicalDeviceManager,

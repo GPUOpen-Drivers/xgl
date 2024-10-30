@@ -46,10 +46,11 @@
 
 // PAL headers
 #include "pal.h"
+#include "palAutoBuffer.h"
 #include "palCmdAllocator.h"
 #include "palFence.h"
 #include "palQueueSemaphore.h"
-#include "palHashBaseImpl.h"
+#include "palHashMapImpl.h"
 #include "palListImpl.h"
 #include "palVectorImpl.h"
 #include "palStringTableTraceSource.h"
@@ -70,6 +71,66 @@
 
 namespace vk
 {
+
+class DevModeRgpStringTableTraceSource : public GpuUtil::StringTableTraceSource
+{
+public:
+    DevModeRgpStringTableTraceSource(Pal::IPlatform* pPlatform, DevModeRgp* pDevMode)
+        : StringTableTraceSource(pPlatform), m_pDevMode(pDevMode) {}
+    virtual ~DevModeRgpStringTableTraceSource() {}
+
+    virtual void OnTraceFinished() override
+    {
+        const auto& accelStructNames = m_pDevMode->GetAccelStructUserMarkerTable();
+        const uint32_t numStrings = accelStructNames.GetNumEntries();
+
+        if (numStrings > 0)
+        {
+            // Calculate the size of the string data for accelStruct names
+            uint32_t stringDataSizeInBytes = 0;
+            for (auto it = accelStructNames.Begin(); it.Get() != nullptr; it.Next())
+            {
+                stringDataSizeInBytes += it.Get()->value.length;
+            }
+
+            const uint32_t baseOffset = sizeof(uint32_t) * numStrings;
+            AutoBuffer<uint32_t, 16, Pal::IPlatform> stringOffsets(
+                numStrings, m_pPlatform);
+            Vector<char, 128, Pal::IPlatform> stringData(m_pPlatform);
+            constexpr uint32_t ExtraBytesPerString = 18;    // To host "RRA_RA:<address>:"
+            // Reserve more space because we are storing strings in the format of "RRA_AS:<address>:<label>"
+            stringData.Reserve(stringDataSizeInBytes + numStrings * ExtraBytesPerString);
+
+            // Filling stringData and stringOffsets
+            static constexpr char AsPatternStr[] = "RRA_AS:%llu:%s";
+            constexpr uint32_t MaxStringLength = 128;
+            char formatedString[MaxStringLength];
+            uint32_t stringIdx = 0;
+            uint32_t offset = 0;
+            for (auto it = accelStructNames.Begin(); it.Get() != nullptr; it.Next())
+            {
+                uint64_t acAddr = it.Get()->key;
+                const char* pAcLabel = it.Get()->value.string;
+
+                uint32_t len = Util::Snprintf(formatedString, sizeof(formatedString),
+                    AsPatternStr, acAddr, pAcLabel) + 1;
+                stringData.Resize(stringData.size() + len);
+                memcpy(stringData.Data() + offset, formatedString, len);
+                stringOffsets[stringIdx] = offset + baseOffset;
+                offset += len;
+                stringIdx++;
+            }
+
+            uint32_t tableId = m_pDevMode->AcquireStringTableId();
+            AddStringTable(tableId, numStrings, stringOffsets.Data(), stringData.Data(), stringData.size());
+        }
+
+        StringTableTraceSource::OnTraceFinished();
+    }
+
+private:
+    DevModeRgp* m_pDevMode;
+};
 
 // =====================================================================================================================
 // Translates a DevDriver result to a VkResult.
@@ -342,9 +403,12 @@ DevModeRgp::DevModeRgp(
     m_pipelineCaches(pInstance->Allocator()),
     m_stringTableId(0),
     m_pStringTableTraceSource(nullptr),
-    m_pUserMarkerHistoryTraceSource(nullptr)
+    m_pUserMarkerHistoryTraceSource(nullptr),
+    m_accelStructNames(64, m_pInstance->Allocator())
 {
     memset(&m_trace, 0, sizeof(m_trace));
+
+    m_accelStructNames.Init();
 }
 
 // =====================================================================================================================
@@ -2265,7 +2329,7 @@ Pal::Result DevModeRgp::InitUserMarkerTraceSources()
 
     GpuUtil::TraceSession* pTraceSession = m_pInstance->PalPlatform()->GetTraceSession();
 
-    const size_t traceSourcesAllocSize = sizeof(GpuUtil::StringTableTraceSource) +
+    const size_t traceSourcesAllocSize = sizeof(DevModeRgpStringTableTraceSource) +
                                          sizeof(GpuUtil::UserMarkerHistoryTraceSource);
 
     void* pStorage = m_pInstance->AllocMem(traceSourcesAllocSize,
@@ -2276,9 +2340,9 @@ Pal::Result DevModeRgp::InitUserMarkerTraceSources()
         void* pObjStorage = pStorage;
 
         m_pStringTableTraceSource = VK_PLACEMENT_NEW(pObjStorage)
-            GpuUtil::StringTableTraceSource(m_pInstance->PalPlatform());
+            DevModeRgpStringTableTraceSource(m_pInstance->PalPlatform(), this);
 
-        pObjStorage = VoidPtrInc(pObjStorage, sizeof(GpuUtil::StringTableTraceSource));
+        pObjStorage = VoidPtrInc(pObjStorage, sizeof(DevModeRgpStringTableTraceSource));
 
         m_pUserMarkerHistoryTraceSource = VK_PLACEMENT_NEW(pObjStorage)
             GpuUtil::UserMarkerHistoryTraceSource(m_pInstance->PalPlatform());
@@ -2308,16 +2372,17 @@ void DevModeRgp::DestroyUserMarkerTraceSources()
     if (m_pUserMarkerHistoryTraceSource != nullptr)
     {
         pTraceSession->UnregisterSource(m_pUserMarkerHistoryTraceSource);
-        m_pUserMarkerHistoryTraceSource = nullptr;
     }
     if (m_pStringTableTraceSource != nullptr)
     {
         pTraceSession->UnregisterSource(m_pStringTableTraceSource);
-        m_pStringTableTraceSource = nullptr;
     }
 
     // The 2 trace sources are allocated in a single memory allocation
     m_pInstance->FreeMem(m_pStringTableTraceSource);
+
+    m_pUserMarkerHistoryTraceSource = nullptr;
+    m_pStringTableTraceSource = nullptr;
 }
 
 // =====================================================================================================================
@@ -2864,12 +2929,37 @@ void DevModeRgp::ProcessMarkerTable(
     uint32        markerStringDataSize,
     const char*   pMarkerStringData)
 {
-    uint32_t tableId = ++m_stringTableId;
+    uint32_t tableId = AcquireStringTableId();
 
     m_pStringTableTraceSource->AddStringTable(tableId,
                                               numMarkerStrings, pMarkerStringOffsets,
                                               pMarkerStringData, markerStringDataSize);
     m_pUserMarkerHistoryTraceSource->AddUserMarkerHistory(sqttCbId, tableId, numOps, pUserMarkerOpHistory);
+}
+
+// =====================================================================================================================
+void DevModeRgp::LabelAccelStruct(
+    uint64_t    deviceAddress,
+    const char* pString)
+{
+    if (pString != nullptr)
+    {
+        bool existed = false;
+        AccelStructUserMarkerString* pUserMarker = nullptr;
+
+        Pal::Result result = Pal::Result::Success;
+        {
+            Util::MutexAuto lock(&m_mutex);
+            result = m_accelStructNames.FindAllocate(deviceAddress, &existed, &pUserMarker);
+        }
+
+        if (result == Pal::Result::Success)
+        {
+            VK_ASSERT(pUserMarker != nullptr);
+            Strncpy(pUserMarker->string, pString, sizeof(pUserMarker->string));
+            pUserMarker->length = strlen(pUserMarker->string);
+        }
+    }
 }
 
 }; // namespace vk

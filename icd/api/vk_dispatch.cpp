@@ -751,6 +751,8 @@ void DispatchTable::Init()
     INIT_DISPATCH_ALIAS(vkCmdSetDepthBiasEnableEXT,
                         vkCmdSetDepthBiasEnable                         );
 
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthClampRangeEXT                      );
+
     INIT_DISPATCH_ENTRY(vkCmdBlitImage2                                 );
     INIT_DISPATCH_ENTRY(vkCmdCopyBuffer2                                );
     INIT_DISPATCH_ENTRY(vkCmdCopyBufferToImage2                         );
@@ -802,6 +804,16 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetPipelineIndirectDeviceAddressNV            );
     INIT_DISPATCH_ENTRY(vkGetPipelineIndirectMemoryRequirementsNV       );
     INIT_DISPATCH_ENTRY(vkCmdUpdatePipelineIndirectBufferNV             );
+
+    INIT_DISPATCH_ENTRY(vkCmdExecuteGeneratedCommandsEXT                );
+    INIT_DISPATCH_ENTRY(vkCmdPreprocessGeneratedCommandsEXT             );
+    INIT_DISPATCH_ENTRY(vkCreateIndirectCommandsLayoutEXT               );
+    INIT_DISPATCH_ENTRY(vkCreateIndirectExecutionSetEXT                 );
+    INIT_DISPATCH_ENTRY(vkDestroyIndirectCommandsLayoutEXT              );
+    INIT_DISPATCH_ENTRY(vkDestroyIndirectExecutionSetEXT                );
+    INIT_DISPATCH_ENTRY(vkGetGeneratedCommandsMemoryRequirementsEXT     );
+    INIT_DISPATCH_ENTRY(vkUpdateIndirectExecutionSetPipelineEXT         );
+    INIT_DISPATCH_ENTRY(vkUpdateIndirectExecutionSetShaderEXT           );
 
     INIT_DISPATCH_ENTRY(vkCmdSetTessellationDomainOriginEXT             );
     INIT_DISPATCH_ENTRY(vkCmdSetDepthClampEnableEXT                     );

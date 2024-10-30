@@ -53,25 +53,20 @@ struct IndirectParam;
 namespace vk
 {
 
-enum IndirectCommandsLayoutType
-{
-    Standalone = 0,
-    GeneratedCommands
-};
-
 enum IndirectCommandsActionType
 {
     Draw = 0,
     DrawIndexed,
     Dispatch,
     DrawMeshTask,
+#if VKI_RAY_TRACING
     TraceRay
+#endif
 };
 
 struct IndirectCommandsInfo
 {
     IndirectCommandsActionType  actionType;
-    IndirectCommandsLayoutType  layoutType;
     uint32_t                    strideInBytes;
     uint32_t                    preActionArgSizeInBytes;
 };
@@ -131,6 +126,62 @@ private:
     Pal::IndirectCmdGeneratorCreateInfo             m_palCreateInfo;
     Pal::IIndirectCmdGenerator*                     m_pPalGenerator[MaxPalDevices];
     InternalMemory                                  m_internalMem;
+};
+
+// =====================================================================================================================
+// API implementation of Vulkan indirect commands layout
+//
+// Indirect commands layout objects describe the information of indirect commands, as well as how to interpret and
+// process indirect buffers.
+class IndirectCommandsLayout final : public NonDispatchable<VkIndirectCommandsLayoutEXT, IndirectCommandsLayout>
+{
+public:
+    static VkResult Create(
+        Device*                                         pDevice,
+        const VkIndirectCommandsLayoutCreateInfoEXT*    pCreateInfo,
+        const VkAllocationCallbacks*                    pAllocator,
+        VkIndirectCommandsLayoutEXT*                    pLayout);
+
+    void CalculateMemoryRequirements(
+        const Device*                                   pDevice,
+        VkMemoryRequirements2*                          pMemoryRequirements) const;
+
+    VkResult Destroy(
+        Device*                                         pDevice,
+        const VkAllocationCallbacks*                    pAllocator);
+
+    const Pal::IIndirectCmdGenerator* PalIndirectCmdGenerator(uint32_t deviceIdx) const
+    {
+        return m_pPalGenerator[deviceIdx];
+    }
+
+    IndirectCommandsInfo GetIndirectCommandsInfo() const
+    {
+        return m_info;
+    }
+
+private:
+
+    PAL_DISALLOW_COPY_AND_ASSIGN(IndirectCommandsLayout);
+
+    IndirectCommandsLayout(
+        const Device*                                   pDevice,
+        const IndirectCommandsInfo&                     info,
+        Pal::IIndirectCmdGenerator**                    ppPalGenerator);
+
+    VkResult Initialize(
+        Device*                                         pDevice);
+
+    static void BuildPalCreateInfo(
+        const Device*                                   pDevice,
+        const VkIndirectCommandsLayoutCreateInfoEXT*    pCreateInfo,
+        const UserDataLayout&                           userDataLayout,
+        Pal::IndirectParam*                             pIndirectParams,
+        Pal::IndirectCmdGeneratorCreateInfo*            pPalCreateInfo);
+
+    IndirectCommandsInfo                                m_info;
+    Pal::IIndirectCmdGenerator*                         m_pPalGenerator[MaxPalDevices];
+    InternalMemory                                      m_internalMem;
 };
 
 // Max usage is the situation where indirect commands layout drains push constants size plus uses indirect index & vertex

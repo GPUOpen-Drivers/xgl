@@ -258,6 +258,7 @@ struct RayTracingPipelineBinary
     uint32_t                            maxFunctionCallDepth;
     bool                                hasTraceRay;
     bool                                isCps;
+    bool                                hasKernelEntry;
     uint32_t                            pipelineBinCount;
     Vkgc::BinaryData*                   pPipelineBins;
     Vkgc::RayTracingShaderGroupHandle   shaderGroupHandle;

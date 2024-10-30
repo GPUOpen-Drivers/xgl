@@ -377,7 +377,6 @@ bool RayTracingDevice::AccelStructTrackerEnabled(
     uint32_t deviceIdx
     ) const
 {
-
     // Enable tracking when forced on in the panel or the GPURT trace source is enabled.
     return ((GetAccelStructTracker(deviceIdx) != nullptr) && (
             m_pGpuRtDevice[deviceIdx]->AccelStructTraceEnabled()));
@@ -834,6 +833,9 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
         const uint32_t untypedBufferSrdSizeDw =
             pDevice->GetProperties().descriptorSizes.untypedBufferView / sizeof(uint32_t);
 
+        const uint32_t imageBufferSrdSizeDw = pDevice->GetProperties().descriptorSizes.imageView / sizeof(uint32_t);
+        const uint32_t maxBufferTableSize = Util::Pow2AlignDown(UINT_MAX, imageBufferSrdSizeDw);
+
         for (uint32_t nodeIndex = 0; nodeIndex < buildInfo.nodeCount; ++nodeIndex)
         {
             // Make sure we haven't exceeded our maximum number of nodes.
@@ -894,8 +896,7 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
                      (node.type == GpuRt::NodeType::TypedSrvTable))
             {
                 Vkgc::ResourceMappingNode* pSubNode      = &subNodes[subNodeIndex++];
-                nodes[nodeIndex].node.type               =
-                    Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
+                nodes[nodeIndex].node.type               = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
                 nodes[nodeIndex].node.sizeInDwords       = 1;
                 nodes[nodeIndex].node.offsetInDwords     = node.dwOffset;
                 nodes[nodeIndex].node.tablePtr.nodeCount = 1;
@@ -905,23 +906,16 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
                 {
                 case GpuRt::NodeType::UavTable:
                     pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
-                    pSubNode->sizeInDwords = untypedBufferSrdSizeDw;
                     break;
                 case GpuRt::NodeType::TypedUavTable:
                     pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
-                    pSubNode->sizeInDwords = typedBufferSrdSizeDw;
                     break;
                 case GpuRt::NodeType::ConstantBufferTable:
                     pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
-                    pSubNode->sizeInDwords = untypedBufferSrdSizeDw;
                     break;
                 case GpuRt::NodeType::SrvTable:
-                    pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorResource;
-                    pSubNode->sizeInDwords = untypedBufferSrdSizeDw;
-                    break;
                 case GpuRt::NodeType::TypedSrvTable:
                     pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorResource;
-                    pSubNode->sizeInDwords = typedBufferSrdSizeDw;
                     break;
                 default:
                     VK_NEVER_CALLED();
@@ -929,6 +923,7 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
                 pSubNode->offsetInDwords    = 0;
                 pSubNode->srdRange.set      = node.descSet;
                 pSubNode->srdRange.binding  = node.binding;
+                pSubNode->sizeInDwords      = maxBufferTableSize;
             }
             else
             {

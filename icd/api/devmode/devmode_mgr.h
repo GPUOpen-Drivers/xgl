@@ -56,6 +56,14 @@ class PipelineBinaryCache;
 namespace vk
 {
 
+struct AccelStructUserMarkerString
+{
+    static constexpr size_t MaxAccelStructLabelSize = 64;
+
+    uint32_t length;
+    char     string[MaxAccelStructLabelSize];
+};
+
 // =====================================================================================================================
 // This class provides functionality to interact with the GPU Open Developer Mode message passing service and the rest
 // of the driver.
@@ -100,6 +108,12 @@ public:
     virtual bool IsTracingEnabled() const = 0;
     virtual bool IsCrashAnalysisEnabled() const = 0;
 
+    virtual void RecordRenderOps(
+        uint32_t deviceIdx,
+        Queue*   pQueue,
+        uint32_t drawCallCount,
+        uint32_t dispatchCallCount) = 0;
+
     virtual Pal::Result TimedQueueSubmit(
         uint32_t               deviceIdx,
         Queue*                 pQueue,
@@ -142,6 +156,10 @@ public:
         const uint32* pMarkerStringOffsets,
         uint32        markerStringDataSize,
         const char*   pMarkerStringData) {}
+
+    virtual void LabelAccelStruct(
+        uint64_t    deviceAddress,
+        const char* pString) {}
 
 #endif
 };

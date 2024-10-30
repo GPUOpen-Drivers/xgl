@@ -136,12 +136,6 @@ constexpr AppProfilePatternEntry AppNameDota2 =
     "dota"
 };
 
-constexpr AppProfilePatternEntry AppNameHalfLifeAlyx =
-{
-    PatternAppNameLower,
-    "hlvr"
-};
-
 constexpr AppProfilePatternEntry AppEngineSource2 =
 {
     PatternEngineNameLower,
@@ -212,12 +206,6 @@ constexpr AppProfilePatternEntry AppNameSeriousSam4Win =
 {
     PatternAppNameLower,
     "serious sam 4 - 64bit"
-};
-
-constexpr AppProfilePatternEntry AppNameRomeRemasteredLinux =
-{
-    PatternAppNameLower,
-    "rome"
 };
 
 constexpr AppProfilePatternEntry AppNameEnscape =
@@ -702,12 +690,6 @@ constexpr AppProfilePatternEntry AppNameSeriousSamVr =
     "serious sam vr: the last hope - 64bit- vr"
 };
 
-constexpr AppProfilePatternEntry AppNameSatisfactory =
-{
-    PatternAppNameLower,
-    "factorygame"
-};
-
 constexpr AppProfilePatternEntry AppNameQuakeEnhanced =
 {
     PatternAppNameLower,
@@ -798,6 +780,24 @@ constexpr AppProfilePatternEntry AppNameHoudini =
     "houdini"
 };
 
+constexpr AppProfilePatternEntry AppNameGravityMark =
+{
+    PatternAppNameLower,
+    "clayapp"
+};
+
+constexpr AppProfilePatternEntry AppNameSevenDaysToDie =
+{
+    PatternAppNameLower,
+    "7 days to die"
+};
+
+constexpr AppProfilePatternEntry AppNameGgmlVulkan =
+{
+    PatternAppNameLower,
+    "ggml-vulkan"
+};
+
 // Section END of AppProfilePatternEntry for all games
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -873,15 +873,6 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::Dota2,
         {
             AppNameDota2,
-            AppEngineSource2,
-            PatternEnd
-        }
-    },
-
-    {
-        AppProfile::HalfLifeAlyx,
-        {
-            AppNameHalfLifeAlyx,
             AppEngineSource2,
             PatternEnd
         }
@@ -1043,15 +1034,6 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::WarHammerIII,
         {
             AppNameWarHammerIII,
-            AppEngineFeral3D,
-            PatternEnd
-        }
-    },
-
-    {
-        AppProfile::RomeRemastered,
-        {
-            AppNameRomeRemasteredLinux,
             AppEngineFeral3D,
             PatternEnd
         }
@@ -1301,6 +1283,15 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::SevenDaysToDie,
+        {
+            AppNameSevenDaysToDie,
+            AppEngineUnity,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::UnityEngine,
         {
             AppEngineUnity,
@@ -1331,6 +1322,14 @@ AppProfilePattern AppPatternTable[] =
         {
             AppNameDetroit,
             AppEngineQuanticDream,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::GravityMark,
+        {
+            AppNameGravityMark,
             PatternEnd
         }
     },
@@ -1524,14 +1523,6 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
-        AppProfile::Satisfactory,
-        {
-            AppNameSatisfactory,
-            PatternEnd
-        }
-    },
-
-    {
         AppProfile::QuakeEnhanced,
         {
             AppNameQuakeEnhanced,
@@ -1643,6 +1634,14 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::Houdini,
         {
             AppNameHoudini,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::GgmlVulkan,
+        {
+            AppNameGgmlVulkan,
             PatternEnd
         }
     },

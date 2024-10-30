@@ -150,7 +150,7 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     moduleInfo.shaderBin      = shaderBinary;
 
     auto pPipelineCompiler = m_pPhysicalDevice->GetCompiler();
-    pPipelineCompiler->ApplyPipelineOptions(pDevice, 0, &moduleInfo.options.pipelineOptions
+    pPipelineCompiler->ApplyPipelineOptions(pDevice, 0, &moduleInfo.options.pipelineOptions, nullptr
     );
 
 #if VKI_RAY_TRACING
@@ -954,6 +954,7 @@ VkResult CompilerSolutionLlpc::CreateRayTracingPipelineBinary(
 
         pPipelineBinary->librarySummary = pipelineOut.librarySummary;
         pPipelineBinary->isCps = pipelineOut.isCps;
+        pPipelineBinary->hasKernelEntry = pipelineOut.hasKernelEntry;
     }
     *pCompileTime = Util::GetPerfCpuTime() - startTime;
 

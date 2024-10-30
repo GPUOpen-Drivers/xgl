@@ -138,6 +138,7 @@ enum class DynamicStatesInternal : uint32_t
     LineRasterizationMode,
     LineStippleEnable,
     DepthClipNegativeOneToOne,
+    DepthClampControl,
 
     DynamicStatesInternalCount
 };
@@ -148,6 +149,17 @@ struct PipelineExtStructs
 {
     const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeedbackCreateInfoEXT;
     const VkPipelineBinaryInfoKHR* pPipelineBinaryInfoKHR;
+    const VkPipelineRobustnessCreateInfoEXT* pPipelineRobustnessCreateInfoEXT;
+};
+
+// =====================================================================================================================
+// Common extension structures for pipeline shader stage creation
+struct PipelineShaderStageExtStructs
+{
+    const VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT* pPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT;
+    const VkShaderModuleCreateInfo* pShaderModuleCreateInfo;
+    const VkPipelineShaderStageModuleIdentifierCreateInfoEXT* pPipelineShaderStageModuleIdentifierCreateInfoEXT;
+    const VkPipelineRobustnessCreateInfoEXT* pPipelineRobustnessCreateInfoEXT;
 };
 
 // =====================================================================================================================
@@ -325,6 +337,31 @@ protected:
     static void HandleExtensionStructs(
         const void*                         pNext,
         PipelineExtStructs*                 pExtStructs);
+
+    // Extract extension structs that are common between pipeline types from their respective Vk*PipelineCreateInfo
+    static void HandleShaderStageExtensionStructs(
+        const void*                            pNext,
+        PipelineShaderStageExtStructs*         pExtStructs);
+
+    // Initialize the VkPipelineRobustnessCreateInfoEXT struct based on the pipeline's extStruct
+    static bool InitPipelineRobustness(
+        const VkPipelineRobustnessCreateInfoEXT* incomingRobustness,
+        VkPipelineRobustnessCreateInfoEXT*       pCurrentRobustness);
+
+    // Update the VkPipelineRobustnessCreateInfoEXT struct based on the pipeline's shader stage or pipeline library
+    static void UpdatePipelineRobustness(
+        const VkPipelineRobustnessCreateInfoEXT* incomingRobustness,
+        VkPipelineRobustnessCreateInfoEXT*       pCurrentRobustness);
+
+    // Update the VkPipelineRobustnessBufferBehaviorEXT struct based on the pipeline's shader stage or pipeline library
+    static void UpdatePipelineRobustnessBufferBehavior(
+        const VkPipelineRobustnessBufferBehaviorEXT incomingRobustness,
+        VkPipelineRobustnessBufferBehaviorEXT*      pCurrentRobustness);
+
+    // Update the VkPipelineRobustnessImageBehaviorEXT struct based on the pipeline's shader stage or pipeline library
+    static void UpdatePipelineRobustnessImageBehavior(
+        const VkPipelineRobustnessImageBehaviorEXT incomingRobustness,
+        VkPipelineRobustnessImageBehaviorEXT*      pCurrentRobustness);
 
     Device* const                      m_pDevice;
     UserDataLayout                     m_userDataLayout;

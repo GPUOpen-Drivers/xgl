@@ -154,6 +154,8 @@ target_sources(xgl PRIVATE
     api/vk_indirect_commands_layout.cpp
     api/appopt/barrier_filter_layer.cpp
     api/appopt/strange_brigade_layer.cpp
+    api/appopt/baldurs_gate3_layer.cpp
+    api/appopt/gravity_mark_layer.cpp
     api/appopt/g_shader_profile.cpp
     api/render_state_cache.cpp
     api/renderpass/renderpass_builder.cpp

@@ -5736,6 +5736,18 @@
       "Type": "bool"
     },
     {
+      "Name": "EnableVertexInputDynamicState",
+      "Description": "Controls whether support for vertex input dynamic state should be enabled",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
       "Name": "EnableNative16BitTypes",
       "Description": "Enable true 16-bit float and integer types",
       "Tags": [
@@ -6486,6 +6498,18 @@
       "Name": "IgnorePreferredPresentMode"
     },
     {
+      "Description": "Use extent queried from window system instead of the one of VkSwapchainCreateInfoKHR and VkFramebufferCreateInfo.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "UseExtentFromWindowSystem"
+    },
+    {
       "ValidValues": {
         "IsEnum": true,
         "Values": [
@@ -7026,7 +7050,7 @@
     },
     {
       "Name": "ForceEnableDcc",
-      "Description": "If not default, force enables DCC on the basis of resource and/or BPP. NOTE: To force enable shader storage DCC, at least one of 2D/3D and one of CA/non-CA need to be set",
+      "Description": "If not default, force enables/disables compression on the basis of resource and/or BPP. NOTE: To force enable shader storage DCC, at least one of 2D/3D and one of CA/non-CA need to be set",
       "Tags": [
         "Optimization"
       ],
@@ -7072,14 +7096,24 @@
             "Description": "Force enable DCC for shader storage resources with 64 BPP or deeper."
           },
           {
-            "Name": "ForceDisableDcc",
+            "Name": "ForceDisableCompression",
             "Value": 64,
-            "Description": "Force disable DCC for every resource irrespective of PAL heuristics."
+            "Description": "Force disable compression for every resource irrespective of PAL heuristics."
           },
           {
-            "Name": "ForceDisableDccForSharedImages",
+            "Name": "ForceDisableCompressionForSharedImages",
             "Value": 128,
-            "Description": "Force disable DCC for externally sharable resources."
+            "Description": "Force disable compression for externally sharable resources."
+          },
+          {
+            "Name": "ForceDisableCompressionForColor",
+            "Value": 256,
+            "Description": "Force disable compression for all color format images."
+          },
+          {
+            "Name": "ForceDisableCompressionForDepthStencil",
+            "Value": 512,
+            "Description": "Force disable compression for all depth and stencil format images."
           }
         ],
         "Name": "ForceEnableDcc"
@@ -9221,6 +9255,18 @@
       "Scope": "Driver"
     },
     {
+      "Name": "ExportImageAlignmentControl",
+      "Description": "Export extension VK_MESA_image_alignment_control",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Description": "[GFX10+ only] MALL RPM Views policy.",
       "Tags": [
         "Memory"
@@ -9321,6 +9367,18 @@
       },
       "Type": "uint32",
       "Scope": "Driver"
+    },
+    {
+      "Description": "Enable task shader support in VK_EXT_mesh_shader.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "EnableTaskShaders"
     }
   ]
 }

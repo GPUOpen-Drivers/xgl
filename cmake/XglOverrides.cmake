@@ -88,7 +88,6 @@ endmacro()
 
 macro(xgl_overrides_pal)
 ### For PAL ###########################################################################################################
-
     set(PAL_BUILD_JEMALLOC OFF CACHE BOOL "Force jemalloc off" FORCE)
 
     set(PAL_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_PAL_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)

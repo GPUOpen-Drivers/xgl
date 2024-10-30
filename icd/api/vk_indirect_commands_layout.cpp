@@ -416,4 +416,412 @@ VkResult IndirectCommandsLayoutNV::Destroy(
     return VK_SUCCESS;
 }
 
+// =====================================================================================================================
+VkResult IndirectCommandsLayout::Create(
+    Device*                                         pDevice,
+    const VkIndirectCommandsLayoutCreateInfoEXT*    pCreateInfo,
+    const VkAllocationCallbacks*                    pAllocator,
+    VkIndirectCommandsLayoutEXT*                    pLayout)
+{
+    VkResult result = VK_SUCCESS;
+    Pal::Result palResult;
+
+    IndirectCommandsLayout* pObject = nullptr;
+
+    Pal::IndirectCmdGeneratorCreateInfo createInfo = {};
+    Pal::IndirectParam indirectParams[MaxIndirectTokenCount] = {};
+    createInfo.pParams = &indirectParams[0];
+
+    Pal::IIndirectCmdGenerator* pPalGenerator[MaxPalDevices] = {};
+
+    UserDataLayout userDataLayout = {};
+
+    const size_t apiSize = sizeof(IndirectCommandsLayout);
+    size_t totalSize     = apiSize;
+    size_t palSize       = 0;
+
+    void* pMemory = nullptr;
+
+    VK_ASSERT(pCreateInfo->tokenCount > 0);
+    VK_ASSERT(pCreateInfo->tokenCount <= MaxIndirectTokenCount);
+
+    IndirectCommandsInfo info = {};
+
+    const VkIndirectCommandsLayoutTokenEXT lastToken = pCreateInfo->pTokens[pCreateInfo->tokenCount - 1];
+
+    switch (lastToken.type)
+    {
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_EXT:
+        info.actionType = IndirectCommandsActionType::Draw;
+        break;
+
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_INDEXED_EXT:
+        info.actionType = IndirectCommandsActionType::DrawIndexed;
+        break;
+
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DISPATCH_EXT:
+        info.actionType = IndirectCommandsActionType::Dispatch;
+        break;
+
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_MESH_TASKS_EXT:
+        info.actionType = IndirectCommandsActionType::DrawMeshTask;
+        VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_MESH_SHADER));
+        break;
+
+#if VKI_RAY_TRACING
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_TRACE_RAYS2_EXT:
+        info.actionType = IndirectCommandsActionType::TraceRay;
+        VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::KHR_RAY_TRACING_PIPELINE));
+        VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::KHR_RAY_TRACING_MAINTENANCE1));
+        break;
+#endif
+
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+
+    info.strideInBytes           = pCreateInfo->indirectStride;
+    info.preActionArgSizeInBytes = lastToken.offset;
+
+    if ((pCreateInfo->pNext != nullptr) &&
+        (static_cast<const VkStructHeader*>(pCreateInfo->pNext)->sType ==
+         VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO))
+    {
+        const VkPipelineLayoutCreateInfo* pPipelineLayoutCreateInfo =
+            reinterpret_cast<const VkPipelineLayoutCreateInfo*>(pCreateInfo->pNext);
+
+        result = PipelineLayout::GenerateUserDataLayout(
+            pDevice,
+            pPipelineLayoutCreateInfo,
+            pAllocator,
+            &userDataLayout);
+    }
+    else if (pCreateInfo->pipelineLayout != VK_NULL_HANDLE)
+    {
+        const PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->pipelineLayout);
+        userDataLayout = pPipelineLayout->GetInfo().userDataLayout;
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        BuildPalCreateInfo(
+            pDevice,
+            pCreateInfo,
+            userDataLayout,
+            &indirectParams[0],
+            &createInfo);
+
+        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+        {
+            const size_t size = pDevice->PalDevice(deviceIdx)->GetIndirectCmdGeneratorSize(createInfo,
+                                                                                           &palResult);
+            if (palResult == Pal::Result::Success)
+            {
+                palSize += size;
+            }
+            else
+            {
+                result = PalToVkResult(palResult);
+                break;
+            }
+        }
+
+        totalSize += palSize;
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        pMemory = pDevice->AllocApiObject(pAllocator, totalSize);
+
+        if (pMemory == nullptr)
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        void* pPalMemory = Util::VoidPtrInc(pMemory, apiSize);
+
+        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+        {
+            const size_t size = pDevice->PalDevice(deviceIdx)->GetIndirectCmdGeneratorSize(createInfo,
+                                                                                           &palResult);
+
+            if (palResult == Pal::Result::Success)
+            {
+                palResult = pDevice->PalDevice(deviceIdx)->CreateIndirectCmdGenerator(createInfo,
+                                                                                      pPalMemory,
+                                                                                      &pPalGenerator[deviceIdx]);
+            }
+
+            if (palResult == Pal::Result::Success)
+            {
+                pPalMemory = Util::VoidPtrInc(pPalMemory, size);
+            }
+            else
+            {
+                result = PalToVkResult(palResult);
+                break;
+            }
+        }
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        pObject = VK_PLACEMENT_NEW(pMemory) IndirectCommandsLayout(
+            pDevice,
+            info,
+            pPalGenerator);
+
+        result = pObject->Initialize(pDevice);
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        *pLayout = IndirectCommandsLayout::HandleFromVoidPointer(pMemory);
+    }
+    else
+    {
+        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+        {
+            if (pPalGenerator[deviceIdx] != nullptr)
+            {
+                pPalGenerator[deviceIdx]->Destroy();
+            }
+        }
+
+        Util::Destructor(pObject);
+
+        pDevice->FreeApiObject(pAllocator, pMemory);
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+IndirectCommandsLayout::IndirectCommandsLayout(
+    const Device*                                   pDevice,
+    const IndirectCommandsInfo&                     info,
+    Pal::IIndirectCmdGenerator**                    ppPalGenerator)
+    :
+    m_info(info),
+    m_internalMem()
+{
+    memcpy(m_pPalGenerator, ppPalGenerator, sizeof(m_pPalGenerator));
+}
+
+// =====================================================================================================================
+VkResult IndirectCommandsLayout::Initialize(
+    Device*                                         pDevice)
+{
+    VkResult result = VK_SUCCESS;
+
+    constexpr bool ReadOnly            = false;
+    constexpr bool RemoveInvisibleHeap = true;
+    constexpr bool PersistentMapped    = false;
+
+    // Allocate and bind GPU memory for the object
+    result = pDevice->MemMgr()->AllocAndBindGpuMem(
+        pDevice->NumPalDevices(),
+        reinterpret_cast<Pal::IGpuMemoryBindable**>(&m_pPalGenerator),
+        ReadOnly,
+        &m_internalMem,
+        pDevice->GetPalDeviceMask(),
+        RemoveInvisibleHeap,
+        PersistentMapped,
+        VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_EXT,
+        IndirectCommandsLayout::IntValueFromHandle(IndirectCommandsLayout::HandleFromObject(this)));
+
+    return result;
+}
+
+// =====================================================================================================================
+void IndirectCommandsLayout::BuildPalCreateInfo(
+    const Device*                                   pDevice,
+    const VkIndirectCommandsLayoutCreateInfoEXT*    pCreateInfo,
+    const UserDataLayout&                           userDataLayout,
+    Pal::IndirectParam*                             pIndirectParams,
+    Pal::IndirectCmdGeneratorCreateInfo*            pPalCreateInfo)
+{
+    uint32_t paramCount      = 0;
+    uint32_t expectedOffset  = 0;
+
+    bool useNativeIndexType = true;
+
+    const bool isDispatch = (pCreateInfo->pTokens[pCreateInfo->tokenCount - 1].type ==
+                             VK_INDIRECT_COMMANDS_TOKEN_TYPE_DISPATCH_EXT);
+#if VKI_RAY_TRACING
+    const bool isTraceRay = (pCreateInfo->pTokens[pCreateInfo->tokenCount - 1].type ==
+                             VK_INDIRECT_COMMANDS_TOKEN_TYPE_TRACE_RAYS2_EXT);
+#endif
+    for (uint32_t i = 0; i < pCreateInfo->tokenCount; ++i)
+    {
+        const VkIndirectCommandsLayoutTokenEXT& token = pCreateInfo->pTokens[i];
+
+        // Set a padding operation to handle non tightly packed indirect arguments buffers
+        VK_ASSERT(token.offset >= expectedOffset);
+
+        if (token.offset > expectedOffset)
+        {
+            pIndirectParams[paramCount].type        = Pal::IndirectParamType::Padding;
+            pIndirectParams[paramCount].sizeInBytes = token.offset - expectedOffset;
+
+            paramCount++;
+        }
+
+        switch (token.type)
+        {
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_EXT:
+            pIndirectParams[paramCount].type        = Pal::IndirectParamType::Draw;
+            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::DrawIndirectArgs);
+            static_assert(sizeof(Pal::DrawIndirectArgs) == sizeof(VkDrawIndirectCommand));
+            break;
+
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_INDEXED_EXT:
+            pIndirectParams[paramCount].type        = Pal::IndirectParamType::DrawIndexed;
+            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::DrawIndexedIndirectArgs);
+            static_assert(sizeof(Pal::DrawIndexedIndirectArgs) == sizeof(VkDrawIndexedIndirectCommand));
+            break;
+
+#if VKI_RAY_TRACING
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_TRACE_RAYS2_EXT:
+            pIndirectParams[paramCount].type        = Pal::IndirectParamType::Dispatch;
+            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::DispatchIndirectArgs);
+            static_assert(sizeof(Pal::DispatchIndirectArgs) == sizeof(VkTraceRaysIndirectCommandKHR));
+            break;
+#endif
+
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DISPATCH_EXT:
+            pIndirectParams[paramCount].type        = Pal::IndirectParamType::Dispatch;
+            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::DispatchIndirectArgs);
+            static_assert(sizeof(Pal::DispatchIndirectArgs) == sizeof(VkDispatchIndirectCommand));
+            break;
+
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_MESH_TASKS_EXT:
+            pIndirectParams[paramCount].type        = Pal::IndirectParamType::DispatchMesh;
+            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::DispatchMeshIndirectArgs);
+            static_assert(sizeof(Pal::DispatchMeshIndirectArgs) == sizeof(VkDrawMeshTasksIndirectCommandEXT));
+            break;
+
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_INDEX_BUFFER_EXT:
+        {
+            const VkIndirectCommandsIndexBufferTokenEXT* tokenData = token.data.pIndexBuffer;
+            useNativeIndexType = ((tokenData->mode & VK_INDIRECT_COMMANDS_INPUT_MODE_VULKAN_INDEX_BUFFER_EXT) != 0);
+
+            pIndirectParams[paramCount].type        = Pal::IndirectParamType::BindIndexData;
+            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::BindIndexDataIndirectArgs);
+            static_assert(sizeof(Pal::BindIndexDataIndirectArgs) == sizeof(VkBindIndexBufferIndirectCommandEXT));
+            break;
+        }
+
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_VERTEX_BUFFER_EXT:
+        {
+            const VkIndirectCommandsVertexBufferTokenEXT* tokenData = token.data.pVertexBuffer;
+
+            pIndirectParams[paramCount].type                = Pal::IndirectParamType::BindVertexData;
+            pIndirectParams[paramCount].sizeInBytes         = sizeof(Pal::BindVertexDataIndirectArgs);
+            pIndirectParams[paramCount].vertexData.bufferId = tokenData->vertexBindingUnit;
+            pIndirectParams[paramCount].userDataShaderUsage = Pal::ApiShaderStageVertex;
+            static_assert(sizeof(Pal::BindVertexDataIndirectArgs) == sizeof(VkBindVertexBufferIndirectCommandEXT));
+            break;
+        }
+
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_SEQUENCE_INDEX_EXT:
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT:
+        {
+            const VkIndirectCommandsPushConstantTokenEXT* tokenData = token.data.pPushConstant;
+
+            const bool isSeqIndex = (token.type == VK_INDIRECT_COMMANDS_TOKEN_TYPE_SEQUENCE_INDEX_EXT);
+
+            uint32_t pushConstRegBase = userDataLayout.common.pushConstRegBase;
+            VK_ASSERT((pushConstRegBase != 0) && (pushConstRegBase != PipelineLayout::InvalidReg));
+
+            uint32_t startInDwords  = tokenData->updateRange.offset / sizeof(uint32_t);
+            uint32_t lengthInDwords = PipelineLayout::GetPushConstantSizeInDword(tokenData->updateRange.size);
+
+            pIndirectParams[paramCount].type                = Pal::IndirectParamType::SetUserData;
+            pIndirectParams[paramCount].userData.entryCount = lengthInDwords;
+            pIndirectParams[paramCount].sizeInBytes         = sizeof(uint32_t) * lengthInDwords;
+            pIndirectParams[paramCount].userData.firstEntry = pushConstRegBase + startInDwords;
+            pIndirectParams[paramCount].userDataShaderUsage = VkToPalShaderStageMask(tokenData->updateRange.stageFlags);
+            pIndirectParams[paramCount].userData.isIncConst = isSeqIndex;
+            break;
+        }
+
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_EXECUTION_SET_EXT:
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_INDEXED_COUNT_EXT:
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_COUNT_EXT:
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_MESH_TASKS_COUNT_EXT:
+            VK_NOT_IMPLEMENTED;
+            break;
+
+        default:
+            VK_NEVER_CALLED();
+            break;
+        }
+
+        // Override userDataShaderUsage to compute shader only for dispatch or trace ray type
+        if (isDispatch
+#if VKI_RAY_TRACING
+            || isTraceRay
+#endif
+           )
+        {
+            pIndirectParams[paramCount].userDataShaderUsage = Pal::ShaderStageFlagBits::ApiShaderStageCompute;
+        }
+
+        // Calculate expected offset of the next token assuming indirect arguments buffers are tightly packed
+        expectedOffset = token.offset + pIndirectParams[paramCount].sizeInBytes;
+        paramCount++;
+    }
+
+    pPalCreateInfo->strideInBytes = pCreateInfo->indirectStride;
+    pPalCreateInfo->paramCount    = paramCount;
+
+    constexpr uint32_t DxgiIndexTypeUint8  = 62;
+    constexpr uint32_t DxgiIndexTypeUint16 = 57;
+    constexpr uint32_t DxgiIndexTypeUint32 = 42;
+
+    pPalCreateInfo->indexTypeTokens[0] = useNativeIndexType ?
+        static_cast<uint32_t>(VK_INDEX_TYPE_UINT8_KHR) : DxgiIndexTypeUint8;
+    pPalCreateInfo->indexTypeTokens[1] = useNativeIndexType ?
+        static_cast<uint32_t>(VK_INDEX_TYPE_UINT16)    : DxgiIndexTypeUint16;
+    pPalCreateInfo->indexTypeTokens[2] = useNativeIndexType ?
+        static_cast<uint32_t>(VK_INDEX_TYPE_UINT32)    : DxgiIndexTypeUint32;
+}
+
+// =====================================================================================================================
+void IndirectCommandsLayout::CalculateMemoryRequirements(
+    const Device*                                   pDevice,
+    VkMemoryRequirements2*                          pMemoryRequirements
+    ) const
+{
+    pMemoryRequirements->memoryRequirements.size           = 0;
+    pMemoryRequirements->memoryRequirements.alignment      = 0;
+    pMemoryRequirements->memoryRequirements.memoryTypeBits = 0;
+}
+
+// =====================================================================================================================
+VkResult IndirectCommandsLayout::Destroy(
+    Device*                                         pDevice,
+    const VkAllocationCallbacks*                    pAllocator)
+{
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+    {
+        if (m_pPalGenerator[deviceIdx] != nullptr)
+        {
+            m_pPalGenerator[deviceIdx]->Destroy();
+        }
+    }
+
+    pDevice->MemMgr()->FreeGpuMem(&m_internalMem);
+
+    Util::Destructor(this);
+
+    pDevice->FreeApiObject(pAllocator, this);
+
+    return VK_SUCCESS;
+}
 } // namespace vk

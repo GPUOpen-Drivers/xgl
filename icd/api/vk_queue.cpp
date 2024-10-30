@@ -1308,6 +1308,10 @@ VkResult Queue::Submit(
                                          m_pDevice->NumPalDevices() : 1;
             for (uint32_t deviceIdx = 0; (deviceIdx < deviceCount) && (result == VK_SUCCESS); deviceIdx++)
             {
+                // Accumulate this draw call counter and update device draw call count
+                uint32_t drawCallCount     = 0;
+                uint32_t dispatchCallCount = 0;
+
                 Pal::Result palResult = Pal::Result::Success;
 
                 // Get the PAL command buffer object from each Vulkan object and put it
@@ -1376,6 +1380,10 @@ VkResult Queue::Submit(
                             }
                         }
 #endif
+
+                        // Accumulate the draw count
+                        drawCallCount     += cmdBuf.GetDrawCallCount();
+                        dispatchCallCount += cmdBuf.GetDispatchCallCount();
 
                         (*pCommandBuffers[i])->GetDebugPrintf()->PreQueueSubmit(m_pDevice, deviceIdx);
                         pPalCmdBuffers[perSubQueueInfo.cmdBufferCount++] = cmdBuf.PalCmdBuffer(deviceIdx);
@@ -1454,6 +1462,11 @@ VkResult Queue::Submit(
                     {
                         VK_NEVER_CALLED();
                     }
+                }
+
+                if (pDevMode != nullptr)
+                {
+                    pDevMode->RecordRenderOps(deviceIdx, this, drawCallCount, dispatchCallCount);
                 }
 
                 Pal::IFence* iFence[2] = {nullptr, nullptr};

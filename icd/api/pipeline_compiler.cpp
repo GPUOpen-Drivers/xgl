@@ -32,6 +32,7 @@
 #include "include/vk_device.h"
 #include "include/vk_physical_device.h"
 #include "include/vk_shader.h"
+#include "include/vk_compute_pipeline.h"
 #include "include/vk_pipeline_cache.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_render_pass.h"
@@ -2957,11 +2958,12 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->flags = flags;
         pDevice->GetCompiler(DefaultDeviceIndex)->ApplyPipelineOptions(pDevice,
                                                                        flags,
-                                                                       &pCreateInfo->pipelineInfo.options
+                                                                       &pCreateInfo->pipelineInfo.options,
+                                                                       &extStructs
         );
 
         pCreateInfo->pipelineInfo.useSoftwareVertexBufferDescriptors =
-            pDevice->GetEnabledFeatures().robustVertexBufferExtend;
+            pDevice->GetEnabledFeatures().robustVertexBufferExtend || pDevice->GetEnabledFeatures().pipelineRobustness;
 
     }
 
@@ -3139,10 +3141,11 @@ VkResult PipelineCompiler::BuildGplFastLinkCreateInfo(
     VkShaderStageFlagBits activeStages = GraphicsPipelineCommon::GetActiveShaderStages(pIn, &libInfo);
     uint64_t dynamicStateFlags = GraphicsPipelineCommon::GetDynamicStateFlags(pIn->pDynamicState, &libInfo);
 
-    pCreateInfo->flags = pIn->flags;
+    pCreateInfo->flags = flags;
     ApplyPipelineOptions(pDevice,
-                         pIn->flags,
-                         &pCreateInfo->pipelineInfo.options
+                         flags,
+                         &pCreateInfo->pipelineInfo.options,
+                         &extStructs
     );
 
     // Copy parameters
@@ -3257,7 +3260,8 @@ uint32_t PipelineCompiler::GetCompilerCollectionMask()
 void PipelineCompiler::ApplyPipelineOptions(
     const Device*             pDevice,
     VkPipelineCreateFlags2KHR flags,
-    Vkgc::PipelineOptions*    pOptions
+    Vkgc::PipelineOptions*    pOptions,
+    const PipelineExtStructs* pExtStructs
 )
 {
     // Provide necessary runtime settings and PAL device properties
@@ -3343,10 +3347,34 @@ void PipelineCompiler::ApplyPipelineOptions(
     {
         pOptions->extendedRobustness.nullDescriptor = true;
     }
+
     if (pDevice->GetEnabledFeatures().primitivesGeneratedQuery
         )
     {
         pOptions->enablePrimGeneratedQuery = true;
+    }
+
+    if ((pExtStructs != nullptr) && (pExtStructs->pPipelineRobustnessCreateInfoEXT != nullptr))
+    {
+        VkPipelineRobustnessBufferBehaviorEXT storageBuffers =
+            pExtStructs->pPipelineRobustnessCreateInfoEXT->storageBuffers;
+        VkPipelineRobustnessBufferBehaviorEXT uniformBuffers =
+            pExtStructs->pPipelineRobustnessCreateInfoEXT->uniformBuffers;
+        VkPipelineRobustnessImageBehaviorEXT  images         =
+            pExtStructs->pPipelineRobustnessCreateInfoEXT->images;
+
+        if ((storageBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT) ||
+            (storageBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT) ||
+            (uniformBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT) ||
+            (uniformBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT))
+        {
+            pOptions->extendedRobustness.robustBufferAccess = true;
+        }
+        if ((images == VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_EXT) ||
+            (images == VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2_EXT))
+        {
+            pOptions->extendedRobustness.robustImageAccess = true;
+        }
     }
 }
 
@@ -3355,6 +3383,7 @@ void PipelineCompiler::ApplyPipelineOptions(
 VkResult PipelineCompiler::ConvertComputePipelineInfo(
     const Device*                                   pDevice,
     const VkComputePipelineCreateInfo*              pIn,
+    const ComputePipelineExtStructs&                extStructs,
     const ComputePipelineShaderStageInfo*           pShaderInfo,
     const PipelineOptimizerKey*                     pPipelineProfileKey,
     PipelineMetadata*                               pBinaryMetadata,
@@ -3382,7 +3411,8 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 
         ApplyPipelineOptions(pDevice,
                              flags,
-                             &pCreateInfo->pipelineInfo.options
+                             &pCreateInfo->pipelineInfo.options,
+                             &extStructs
         );
 
         pCreateInfo->pipelineInfo.cs.pModuleData =
@@ -3718,6 +3748,7 @@ void PipelineCompiler::FreeGraphicsPipelineCreateInfo(
 VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
     const Device*                                   pDevice,
     const VkRayTracingPipelineCreateInfoKHR*        pIn,
+    const RayTracingPipelineExtStructs&             extStructs,
     VkPipelineCreateFlags2KHR                       flags,
     const RayTracingPipelineShaderStageInfo*        pShaderInfo,
     const PipelineOptimizerKey*                     pPipelineProfileKey,
@@ -3803,7 +3834,7 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
             }
         }
 
-        ApplyPipelineOptions(pDevice, flags, &pCreateInfo->pipelineInfo.options
+        ApplyPipelineOptions(pDevice, flags, &pCreateInfo->pipelineInfo.options, &extStructs
         );
 
         pCreateInfo->pipelineInfo.options.disableImageResourceCheck = settings.disableRayTracingImageResourceTypeCheck;

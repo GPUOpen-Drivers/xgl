@@ -402,6 +402,7 @@ VkFormatFeatureFlags Formats::GetExtendedFeatureFlags(
     const PhysicalDevice*  pPhysicalDevice,
     VkFormat               format,
     VkImageTiling          tiling,
+    const bool             isBlockTexelViewCompatible,
     const RuntimeSettings& settings)
 {
     VkFormatFeatureFlags extendedFeatures = 0;
@@ -582,10 +583,12 @@ VkFormatFeatureFlags Formats::GetExtendedFeatureFlags(
     // Depth images have no extended usage.
     // YUV single and multiplanar images by themselves have no extended usage. To compute extended usage
     // of a single plane of a multiplanar image call GetCompatibleSinglePlaneFormat and pass that format in.
-    // BC images allow conversion between UNORM|SRGB but there shouldn't be any difference in features.
+    // BC images allow conversion between UNORM|SRGB but there shouldn't be any difference in features
+    // unless they are created with VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT.
     bool noCompatibleExtendedUsage = Formats::IsDepthStencilFormat(format) ||
                                      Formats::IsYuvFormat(format) ||
-                                     Pal::Formats::IsBlockCompressed(palFormat.format) ||
+                                     (Pal::Formats::IsBlockCompressed(palFormat.format) &&
+                                      (isBlockTexelViewCompatible == false)) ||
                                      (format == VK_FORMAT_UNDEFINED);
 
     if (noCompatibleExtendedUsage == false)
@@ -644,6 +647,15 @@ VkFormatFeatureFlags Formats::GetExtendedFeatureFlags(
             for (uint32_t i = 0; i < extendedFormatCount; ++i)
             {
                 VkFormat extendedFormat = pExtendedFormats[i];
+
+                // Color formats with the same texel block size are considered size-compatible
+                // as long as neither or both are alpha formats.
+                if (Pal::Formats::IsBlockCompressed(palFormat.format) &&
+                    (Pal::Formats::HasAlpha(palFormat) !=
+                     Pal::Formats::HasAlpha(VkToPalFormat(extendedFormat, settings))))
+                {
+                    continue;
+                }
 
                 VkFormatProperties extendedFormatProperties = {};
 

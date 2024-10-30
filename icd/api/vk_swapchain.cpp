@@ -143,6 +143,17 @@ VkResult SwapChain::Create(
 
     result = PhysicalDevice::UnpackDisplayableSurface(pSurface, &properties.displayableInfo);
 
+    Pal::SwapChainProperties swapChainProperties = {};
+
+    if (result == VK_SUCCESS)
+    {
+        result = PalToVkResult(pPalDevice->GetSwapChainInfo(
+                properties.displayableInfo.displayHandle,
+                properties.displayableInfo.windowHandle,
+                properties.displayableInfo.palPlatform,
+                &swapChainProperties));
+    }
+
     // The swap chain is stereo if imageArraySize is 2
     properties.flags.stereo                       = (pCreateInfo->imageArrayLayers == 2) ? 1 : 0;
 
@@ -162,7 +173,8 @@ VkResult SwapChain::Create(
                                                                  1,
                                                                  (VkImageUsageFlags)(0),
                                                                  (VkImageUsageFlags)(0));
-    properties.imageCreateInfo.extent   = VkToPalExtent2d(pCreateInfo->imageExtent);
+    properties.imageCreateInfo.extent   = settings.useExtentFromWindowSystem ?
+        swapChainProperties.currentExtent : VkToPalExtent2d(pCreateInfo->imageExtent);
     properties.imageCreateInfo.hDisplay = properties.displayableInfo.displayHandle;
     properties.imageCreateInfo.hWindow  = properties.displayableInfo.windowHandle;
     properties.pFullscreenSurface       = pSurface;
@@ -269,7 +281,8 @@ VkResult SwapChain::Create(
     swapChainCreateInfo.wsiPlatform         = properties.displayableInfo.palPlatform;
     swapChainCreateInfo.imageCount          = swapImageCount;
     swapChainCreateInfo.imageSwizzledFormat = properties.imageCreateInfo.swizzledFormat;
-    swapChainCreateInfo.imageExtent         = VkToPalExtent2d(pCreateInfo->imageExtent);
+    swapChainCreateInfo.imageExtent         = settings.useExtentFromWindowSystem ?
+        swapChainProperties.currentExtent : VkToPalExtent2d(pCreateInfo->imageExtent);
     swapChainCreateInfo.imageUsageFlags     = VkToPalImageUsageFlags(pCreateInfo->imageUsage,
                                                                      1,
                                                                      (VkImageUsageFlags)(0),
@@ -364,15 +377,7 @@ VkResult SwapChain::Create(
 
     if (result == VK_SUCCESS && (pDevice->GetRuntimeSettings().ignorePreferredPresentMode == false))
     {
-        Pal::SwapChainProperties swapChainProperties = {};
-
-        result = PalToVkResult(pPalDevice->GetSwapChainInfo(
-                properties.displayableInfo.displayHandle,
-                properties.displayableInfo.windowHandle,
-                properties.displayableInfo.palPlatform,
-                &swapChainProperties));
-
-            isPreferWindowedModeOnly =
+        isPreferWindowedModeOnly =
                 (swapChainProperties.preferredPresentModes ==
                 static_cast<uint32_t>(Pal::PreferredPresentModeFlags::PreferWindowedPresentMode)) ?
                 true : false;

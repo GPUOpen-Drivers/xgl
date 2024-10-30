@@ -46,6 +46,7 @@
 #if VKI_RAY_TRACING
 #include "raytrace/vk_ray_tracing_pipeline.h"
 #include "raytrace/ray_tracing_device.h"
+#include "raytrace/vk_acceleration_structure.h"
 #endif
 #include "sqtt/sqtt_layer.h"
 #include "sqtt/sqtt_mgr.h"
@@ -2763,6 +2764,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
             }
         }
     }
+
+#if VKI_RAY_TRACING
+    if ((pNameInfo->sType == VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT) &&
+        (pNameInfo->objectType == VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR))
+    {
+        auto asHandle = VkAccelerationStructureKHR(pNameInfo->objectHandle);
+        VkDeviceAddress dstAddress = AccelerationStructure::ObjectFromHandle(asHandle)->GetDeviceAddress(0);
+
+        pDevice->VkInstance()->GetDevModeMgr()->LabelAccelStruct(dstAddress, pNameInfo->pObjectName);
+    }
+#endif
 
     return SQTT_CALL_NEXT_LAYER(vkSetDebugUtilsObjectNameEXT)(device, pNameInfo);
 }

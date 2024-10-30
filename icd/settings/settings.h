@@ -76,7 +76,8 @@ public:
     void UpdatePalSettings();
 
     void FinalizeSettings(
-        const DeviceExtensions::Enabled& enabledExtensions);
+        const DeviceExtensions::Enabled& enabledExtensions,
+        const bool                       pushDescriptorsEnabled);
 
     Util::MetroHash::Hash GetSettingsHash() const { return m_settingsHash; }
 
@@ -127,7 +128,6 @@ private:
     RuntimeSettings       m_settings;
     Util::MetroHash::Hash m_settingsHash;
 };
-
 } //vk
 
 #endif

@@ -66,6 +66,8 @@ struct GraphicsPipelineObjectImmedInfo
     Pal::PointLineRasterStateParams       pointLineRasterParams;
     Pal::LineStippleStateParams           lineStippleParams;
     Pal::ViewportParams                   viewportParams;
+    // min > max means that the override is not active
+    VkDepthClampRangeEXT                  depthClampOverride;
     Pal::ScissorRectParams                scissorRectParams;
     Pal::StencilRefMaskParams             stencilRefMasks;
     SamplePattern                         samplePattern;
@@ -327,6 +329,7 @@ protected:
     // Generate API PSO hash for state of vertex input interface section
     static void GenerateHashForVertexInputInterfaceState(
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        const GraphicsPipelineExtStructs&   extStructs,
         Util::MetroHash128*                 pBaseHasher,
         Util::MetroHash128*                 pApiHasher);
 
@@ -352,6 +355,11 @@ protected:
         const GraphicsPipelineExtStructs&   extStructs,
         Util::MetroHash128*                 pBaseHasher,
         Util::MetroHash128*                 pApiHasher);
+
+    // Generate API PSO hash for state of pipeline robustness extension
+    static void GenerateHashForPipelineRobustnessState(
+        const VkPipelineRobustnessCreateInfoEXT* pPipelineRobustnessCreateInfoEXT,
+        Util::MetroHash128*                      pApiHasher);
 
     // Checks if rasterization is dynamically disabled
     static bool IsRasterizationDisabled(

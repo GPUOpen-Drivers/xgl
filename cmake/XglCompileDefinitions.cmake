@@ -109,12 +109,6 @@ macro(xgl_set_compile_definitions)
 #if VKI_RAY_TRACING
 #endif
 
-#if VKI_RAY_TRACING
-#endif
-
-#if VKI_RAY_TRACING
-#endif
-
     if(BUILD_WAYLAND_SUPPORT)
         target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
     endif()
