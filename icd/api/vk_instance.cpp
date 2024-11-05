@@ -697,6 +697,7 @@ VkResult Instance::Destroy(void)
     for (uint32_t i = 0; i < m_screenCount; ++i)
     {
         m_screens[i].pPalScreen->Destroy();
+        FreeMem(m_screens[i].pModeList);
     }
 
     FreeMem(m_pScreenStorage);
@@ -865,6 +866,8 @@ VkResult Instance::EnumerateExtensionProperties(
 
 // =====================================================================================================================
 // Get mode list for specific screen.
+// NOTE: this function modifies the *ppModeList to make it point to the internal ScreenMode array of instance, instead
+// filling in the input array.
 VkResult Instance::GetScreenModeList(
     const Pal::IScreen*     pScreen,
     uint32_t*               pModeCount,
@@ -877,51 +880,29 @@ VkResult Instance::GetScreenModeList(
     {
         if (m_screens[screenIdx].pPalScreen == pScreen)
         {
-            if (ppModeList == nullptr)
+            if (m_screens[screenIdx].pModeList == nullptr)
             {
-                palResult = pScreen->GetScreenModeList(pModeCount, nullptr);
+                uint32_t modeCount = 0;
+                palResult = pScreen->GetScreenModeList(&modeCount, nullptr);
                 VK_ASSERT(palResult == Pal::Result::Success);
+
+                m_screens[screenIdx].pModeList = reinterpret_cast<Pal::ScreenMode*>(
+                        AllocMem(modeCount * sizeof(Pal::ScreenMode), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE));
+                if (m_screens[screenIdx].pModeList == nullptr)
+                {
+                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                    break;
+                }
+
+                palResult = pScreen->GetScreenModeList(&modeCount, m_screens[screenIdx].pModeList);
+                VK_ASSERT(palResult == Pal::Result::Success);
+
+                m_screens[screenIdx].modeCount = modeCount;
             }
-            else
-            {
-                if (m_screens[screenIdx].pModeList[0] == nullptr)
-                {
-                    uint32_t modeCount = 0;
-                    palResult = pScreen->GetScreenModeList(&modeCount, nullptr);
-                    VK_ASSERT(palResult == Pal::Result::Success);
 
-                    m_screens[screenIdx].pModeList[0] = reinterpret_cast<Pal::ScreenMode*>(
-                            AllocMem(modeCount * sizeof(Pal::ScreenMode), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE));
-
-                    for (uint32_t i = 1; i < modeCount; ++i)
-                    {
-                        m_screens[screenIdx].pModeList[i] = reinterpret_cast<Pal::ScreenMode*>(Util::VoidPtrInc(
-                                                                            m_screens[screenIdx].pModeList[0],
-                                                                            i * sizeof(Pal::ScreenMode)));
-                    }
-
-                    palResult = pScreen->GetScreenModeList(&modeCount, m_screens[screenIdx].pModeList[0]);
-                    VK_ASSERT(palResult == Pal::Result::Success);
-
-                    m_screens[screenIdx].modeCount = modeCount;
-                }
-
-                uint32_t loopCount = m_screens[screenIdx].modeCount;
-
-                if (*pModeCount < m_screens[screenIdx].modeCount)
-                {
-                    result = VK_INCOMPLETE;
-                    loopCount = *pModeCount;
-                }
-
-                for (uint32_t i = 0; i < loopCount; i++)
-                {
-                    ppModeList[i] = m_screens[screenIdx].pModeList[i];
-                }
-
-                *pModeCount = loopCount;
-                break;
-            }
+            *pModeCount = m_screens[screenIdx].modeCount;
+            *ppModeList = m_screens[screenIdx].pModeList;
+            break;
         }
     }
 

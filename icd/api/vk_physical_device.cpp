@@ -9754,37 +9754,44 @@ VkResult PhysicalDevice::GetDisplayModeProperties(
     Pal::IScreen* pScreen = reinterpret_cast<Pal::IScreen*>(display);
     VK_ASSERT(pScreen != nullptr);
 
-    if (properties.IsNull())
+    Pal::ScreenMode* pScreenMode = nullptr;
+    uint32_t propertyCount = 0;
+    result = VkInstance()->GetScreenModeList(pScreen, &propertyCount, &pScreenMode);
+    if (result == VK_SUCCESS)
     {
-        return VkInstance()->GetScreenModeList(pScreen, pPropertyCount, nullptr);
+        if (properties.IsNull())
+        {
+            *pPropertyCount = propertyCount;
+        }
+        else
+        {
+            if (*pPropertyCount < propertyCount)
+            {
+                result = VK_INCOMPLETE;
+            }
+
+            uint32_t loopCount = Util::Min(*pPropertyCount, propertyCount);
+
+            for (uint32_t i = 0; i < loopCount; i++)
+            {
+                DisplayModeObject* pDisplayMode =
+                    reinterpret_cast<DisplayModeObject*>(VkInstance()->AllocMem(sizeof(DisplayModeObject),
+                                                                                VK_DEFAULT_MEM_ALIGN,
+                                                                                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+                pDisplayMode->pScreen = pScreen;
+                memcpy(&pDisplayMode->palScreenMode, &pScreenMode[i], sizeof(Pal::ScreenMode));
+                properties[i].displayMode = reinterpret_cast<VkDisplayModeKHR>(pDisplayMode);
+                properties[i].parameters.visibleRegion.width  = pScreenMode[i].extent.width;
+                properties[i].parameters.visibleRegion.height = pScreenMode[i].extent.height;
+                // Spec requires refresh rate to be "the number of times the display is refreshed each second
+                // multiplied by 1000", in other words, HZ * 1000
+                properties[i].parameters.refreshRate =
+                    pScreenMode[i].refreshRate.numerator * 1000 / pScreenMode[i].refreshRate.denominator;
+            }
+
+            *pPropertyCount = loopCount;
+        }
     }
-
-    Pal::ScreenMode* pScreenMode[Pal::MaxModePerScreen];
-
-    uint32_t propertyCount = *pPropertyCount;
-
-    result = VkInstance()->GetScreenModeList(pScreen, &propertyCount, pScreenMode);
-
-    uint32_t loopCount = Util::Min(*pPropertyCount, propertyCount);
-
-    for (uint32_t i = 0; i < loopCount; i++)
-    {
-        DisplayModeObject* pDisplayMode =
-            reinterpret_cast<DisplayModeObject*>(VkInstance()->AllocMem(sizeof(DisplayModeObject),
-                                                                        VK_DEFAULT_MEM_ALIGN,
-                                                                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
-        pDisplayMode->pScreen = pScreen;
-        memcpy(&pDisplayMode->palScreenMode, pScreenMode[i], sizeof(Pal::ScreenMode));
-        properties[i].displayMode = reinterpret_cast<VkDisplayModeKHR>(pDisplayMode);
-        properties[i].parameters.visibleRegion.width  = pScreenMode[i]->extent.width;
-        properties[i].parameters.visibleRegion.height = pScreenMode[i]->extent.height;
-        // Spec requires refresh rate to be "the number of times the display is refreshed each second
-        // multiplied by 1000", in other words, HZ * 1000
-        properties[i].parameters.refreshRate =
-            pScreenMode[i]->refreshRate.numerator * 1000 / pScreenMode[i]->refreshRate.denominator;
-    }
-
-    *pPropertyCount = loopCount;
 
     return result;
 }
@@ -9833,20 +9840,19 @@ VkResult PhysicalDevice::CreateDisplayMode(
 
     VkResult result = VK_SUCCESS;
 
-    Pal::ScreenMode* pScreenMode[Pal::MaxModePerScreen];
-    uint32_t propertyCount = Pal::MaxModePerScreen;
-
-    VkInstance()->GetScreenModeList(pScreen, &propertyCount, pScreenMode);
-
+    Pal::ScreenMode* pScreenMode = nullptr;
+    uint32_t propertyCount = 0;
+    result = VkInstance()->GetScreenModeList(pScreen, &propertyCount, &pScreenMode);
+    VK_ASSERT(result == VK_SUCCESS);
     bool isValidMode = false;
 
     for (uint32_t i = 0; i < propertyCount; i++)
     {
         // The modes are considered as identical if the dimension as well as the refresh rate are the same.
-        if ((pCreateInfo->parameters.visibleRegion.width  == pScreenMode[i]->extent.width) &&
-            (pCreateInfo->parameters.visibleRegion.height == pScreenMode[i]->extent.height) &&
+        if ((pCreateInfo->parameters.visibleRegion.width  == pScreenMode[i].extent.width) &&
+            (pCreateInfo->parameters.visibleRegion.height == pScreenMode[i].extent.height) &&
             (pCreateInfo->parameters.refreshRate          ==
-             pScreenMode[i]->refreshRate.numerator * 1000 / pScreenMode[i]->refreshRate.denominator))
+             pScreenMode[i].refreshRate.numerator * 1000 / pScreenMode[i].refreshRate.denominator))
         {
             isValidMode = true;
             break;
