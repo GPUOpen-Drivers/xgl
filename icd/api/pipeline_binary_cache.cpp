@@ -39,11 +39,8 @@
 #include "palHashMapImpl.h"
 #include "palFile.h"
 #include "palLiterals.h"
-
-#if ICD_GPUOPEN_DEVMODE_BUILD
 #include "palPipelineAbiReader.h"
 #include "devmode/devmode_mgr.h"
-#endif
 #include <string.h>
 
 using namespace Util::Literals;
@@ -62,9 +59,7 @@ static constexpr size_t ElfTypeStringLen     = sizeof(ElfTypeString);
 const uint32_t PipelineBinaryCache::ArchiveType = Util::HashString(ArchiveTypeString, ArchiveTypeStringLen);
 const uint32_t PipelineBinaryCache::ElfType     = Util::HashString(ElfTypeString, ElfTypeStringLen);
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
 static Util::Hash128 ParseHash128(const char* str);
-#endif
 
 bool PipelineBinaryCache::IsValidBlob(
     VkAllocationCallbacks* pAllocationCallbacks,
@@ -108,9 +103,7 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
     const Vkgc::GfxIpVersion& gfxIp,
     const RuntimeSettings&    settings,
     const char*               pDefaultCacheFilePath,
-#if ICD_GPUOPEN_DEVMODE_BUILD
     vk::IDevMode*             pDevMode,
-#endif
     uint32_t                  expectedEntries,
     size_t                    initDataSize,
     const void*               pInitData,
@@ -127,10 +120,7 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
     if (pMem != nullptr)
     {
         pObj = VK_PLACEMENT_NEW(pMem) PipelineBinaryCache(pAllocationCallbacks, gfxIp, expectedEntries);
-
-#if ICD_GPUOPEN_DEVMODE_BUILD
         pObj->m_pDevMode = pDevMode;
-#endif
 
         if (pObj->Initialize(settings, createArchiveLayers, pDefaultCacheFilePath, pKey) != VK_SUCCESS)
         {
@@ -192,11 +182,9 @@ PipelineBinaryCache::PipelineBinaryCache(
     m_palAllocator         { pAllocationCallbacks },
     m_pPlatformKey         { nullptr },
     m_pTopLayer            { nullptr },
-#if ICD_GPUOPEN_DEVMODE_BUILD
     m_pDevMode             { nullptr },
     m_pReinjectionLayer    { nullptr },
     m_hashMapping          { 32, &m_palAllocator },
-#endif
     m_pMemoryLayer         { nullptr },
     m_pCompressingLayer    { nullptr },
     m_expectedEntries      { expectedEntries },
@@ -247,12 +235,10 @@ PipelineBinaryCache::~PipelineBinaryCache()
         FreeMem(m_pCompressingLayer);
     }
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     if (m_pReinjectionLayer != nullptr)
     {
         m_pReinjectionLayer->Destroy();
     }
-#endif
 }
 
 // =====================================================================================================================
@@ -405,7 +391,6 @@ Util::Result PipelineBinaryCache::GetPipelineBinary(
     return m_pTopLayer->Load(pQeuryId, pPipelineBinary);
 }
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
 // =====================================================================================================================
 // Introduces a mapping from an internal pipeline hash to a cache ID
 void PipelineBinaryCache::RegisterHashMapping(
@@ -495,7 +480,8 @@ Util::Result PipelineBinaryCache::StoreReinjectionBinary(
         uint32_t gfxIpMinor = 0u;
         uint32_t gfxIpStepping = 0u;
 
-        Util::Abi::PipelineAbiReader reader(&m_palAllocator, pPipelineBinary);
+        Util::Abi::PipelineAbiReader reader(&m_palAllocator,
+                                            Util::Span<const void>{ pPipelineBinary, pipelineBinarySize});
         reader.GetGfxIpVersion(&gfxIpMajor, &gfxIpMinor, &gfxIpStepping);
 
         if (gfxIpMajor == m_gfxIp.major &&
@@ -516,7 +502,6 @@ Util::Result PipelineBinaryCache::StoreReinjectionBinary(
     return result;
 }
 
-#endif
 // =====================================================================================================================
 // Free memory allocated by our allocator
 void PipelineBinaryCache::FreePipelineBinary(
@@ -529,12 +514,10 @@ void PipelineBinaryCache::FreePipelineBinary(
 // Destroy PipelineBinaryCache itself
 void PipelineBinaryCache::Destroy()
 {
-#if ICD_GPUOPEN_DEVMODE_BUILD
     if (m_pDevMode != nullptr)
     {
         m_pDevMode->DeregisterPipelineCache(this);
     }
-#endif
 
     VkAllocationCallbacks* pAllocationCallbacks = m_pAllocationCallbacks;
     void* pMem = this;
@@ -571,7 +554,6 @@ VkResult PipelineBinaryCache::Initialize(
         result = OrderLayers(settings);
     }
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     if ((result == VK_SUCCESS) &&
         (m_pReinjectionLayer != nullptr))
     {
@@ -593,7 +575,6 @@ VkResult PipelineBinaryCache::Initialize(
             PAL_ASSERT_ALWAYS();
         }
     }
-#endif
 
     if (result == VK_SUCCESS)
     {
@@ -604,7 +585,6 @@ VkResult PipelineBinaryCache::Initialize(
     return result;
 }
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
 // =====================================================================================================================
 // Initialize reinjection cache layer
 VkResult PipelineBinaryCache::InitReinjectionLayer(
@@ -805,7 +785,6 @@ Util::Result PipelineBinaryCache::InjectBinariesFromDirectory(
 
     return result;
 }
-#endif
 
 // =====================================================================================================================
 // Initialize memory layer
@@ -825,7 +804,7 @@ VkResult PipelineBinaryCache::InitMemoryCacheLayer(
 
     // Reason: CTS generates a large number of cache applications and cause insufficient memory in 32-bit system.
     // Purpose: To limit the maximun value of MemorySize in 32-bit system.
-#ifdef ICD_X86_BUILD
+#ifdef VKI_X86_BUILD
     createInfo.maxMemorySize       = 192_MiB;
 #else
     createInfo.maxMemorySize       = 4_GiB;
@@ -929,14 +908,7 @@ Util::IArchiveFile* PipelineBinaryCache::OpenReadOnlyArchive(
     {
         Util::Result openResult = Util::OpenArchiveFile(&info, pMem, &pFile);
 
-        if (openResult == Util::Result::Success)
-        {
-            if (info.useBufferedReadMemory)
-            {
-                pFile->Preload(0, info.maxReadBufferMem);
-            }
-        }
-        else
+        if (openResult != Util::Result::Success)
         {
             FreeMem(pMem);
             pFile = nullptr;
@@ -992,14 +964,7 @@ Util::IArchiveFile* PipelineBinaryCache::OpenWritableArchive(
             }
         }
 
-        if (openResult == Util::Result::Success)
-        {
-            if (info.useBufferedReadMemory)
-            {
-                pFile->Preload(0, info.maxReadBufferMem);
-            }
-        }
-        else
+        if (openResult != Util::Result::Success)
         {
             FreeMem(pMem);
             pFile = nullptr;
@@ -1275,11 +1240,7 @@ VkResult PipelineBinaryCache::InitLayers(
     bool                   createArchiveLayers,
     const RuntimeSettings& settings)
 {
-#if ICD_GPUOPEN_DEVMODE_BUILD
     bool injectionLayerOnline = (InitReinjectionLayer(settings) >= VK_SUCCESS);
-#else
-    bool injectionLayerOnline = false;
-#endif
 
     bool memoryLayerOnline = (InitMemoryCacheLayer(settings) >= VK_SUCCESS);
 

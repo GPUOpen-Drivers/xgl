@@ -129,9 +129,7 @@ VkResult PipelineCache::Create(
                 pDevice->GetCompiler(DefaultDeviceIndex)->GetGfxIp(),
                 pDefaultPhysicalDevice->GetRuntimeSettings(),
                 pDefaultPhysicalDevice->PalDevice()->GetCacheFilePath(),
-#if ICD_GPUOPEN_DEVMODE_BUILD
                 pDefaultPhysicalDevice->VkInstance()->GetDevModeMgr(),
-#endif
                 expectedEntries,
                 initialDataSize,
                 pInitialData,

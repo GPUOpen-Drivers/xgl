@@ -89,12 +89,9 @@
 
 #include "appopt/barrier_filter_layer.h"
 #include "appopt/strange_brigade_layer.h"
-#include "appopt/gravity_mark_layer.h"
 #include "appopt/baldurs_gate3_layer.h"
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
-#endif
 
 #include "palCmdBuffer.h"
 #include "palCmdAllocator.h"
@@ -354,8 +351,7 @@ VkResult Device::Create(
     }
 
     // Dedicated Compute Units
-    static constexpr uint32_t MaxEngineCount = 8;
-    uint32_t dedicatedComputeUnits[Queue::MaxQueueFamilies][MaxEngineCount] = {};
+    uint32_t dedicatedComputeUnits[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
 
     VkResult vkResult = VK_SUCCESS;
     void*    pMemory  = nullptr;
@@ -1311,21 +1307,6 @@ VkResult Device::Initialize(
 
             break;
         }
-        case AppProfile::GravityMark:
-        {
-            void* pMemory = VkInstance()->AllocMem(sizeof(GravityMarkLayer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-
-            if (pMemory != nullptr)
-            {
-                m_pAppOptLayer = VK_PLACEMENT_NEW(pMemory) GravityMarkLayer();
-            }
-            else
-            {
-                result = VK_ERROR_OUT_OF_HOST_MEMORY;
-            }
-
-            break;
-        }
         case AppProfile::BaldursGate3:
         {
             void* pMemory = VkInstance()->AllocMem(sizeof(BaldursGate3Layer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
@@ -1453,12 +1434,10 @@ VkResult Device::Initialize(
         }
     }
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     if ((result == VK_SUCCESS) && (VkInstance()->GetDevModeMgr() != nullptr))
     {
         VkInstance()->GetDevModeMgr()->PostDeviceCreate(this);
     }
-#endif
 
     if (result == VK_SUCCESS)
     {
@@ -1766,12 +1745,10 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
         VK_ALERT(powerRes != VK_SUCCESS);
     }
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     if (VkInstance()->GetDevModeMgr() != nullptr)
     {
         VkInstance()->GetDevModeMgr()->PreDeviceDestroy(this);
     }
-#endif
 
 #if VKI_RAY_TRACING
     if (m_pRayTrace != nullptr)
@@ -1924,7 +1901,7 @@ VkResult Device::CreateInternalComputePipeline(
     uint32_t                       numUserDataNodes,
     Vkgc::ResourceMappingRootNode* pUserDataNodes,
     ShaderModuleFlags              flags,
-    bool                           forceWave64,
+    ShaderWaveSize                 waveSize,
     const VkSpecializationInfo*    pSpecializationInfo,
     InternalPipeline*              pInternalPipeline)
 {
@@ -1979,14 +1956,30 @@ VkResult Device::CreateInternalComputePipeline(
         pCompiler->ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute, 0, &pShaderInfo->options);
 
         // forceWave64 is currently true for only GpuRT shaders and shouldForceWave32 should not affect GpuRT shaders
-        bool shouldForceWave32 = (((GetRuntimeSettings().deprecateWave64 & DeprecateWave64::DeprecateWave64Cs)   ||
-                                   (GetRuntimeSettings().deprecateWave64 & DeprecateWave64::DeprecateWave64All)) &&
-                                  (forceWave64 == false));
+        bool shouldForceWave32 = ((GetRuntimeSettings().deprecateWave64 & DeprecateWave64::DeprecateWave64Cs) ||
+                                  (GetRuntimeSettings().deprecateWave64 & DeprecateWave64::DeprecateWave64All));
 
-        if (forceWave64)
+        switch (waveSize)
         {
+        case ShaderWaveSize::WaveSizeAuto:
+            pShaderInfo->options.allowVaryWaveSize = true;
+
+            // Only apply if the wave size was not already specified.
+            if (shouldForceWave32)
+            {
+                pShaderInfo->options.waveSize = 32;
+            }
+            break;
+        case ShaderWaveSize::WaveSize32:
+            pShaderInfo->options.waveSize     = 32;
+            pShaderInfo->options.subgroupSize = 32;
+            break;
+        case ShaderWaveSize::WaveSize64:
             pShaderInfo->options.waveSize     = 64;
             pShaderInfo->options.subgroupSize = 64;
+            break;
+        default:
+            VK_NEVER_CALLED();
         }
 
         Pal::ShaderHash codeHash = ShaderModule::GetCodeHash(
@@ -2011,8 +2004,6 @@ VkResult Device::CreateInternalComputePipeline(
             pipelineOptimizerKey,
             0,
             options);
-
-        options.pOptions->waveSize = (shouldForceWave32) ? 32 : options.pOptions->waveSize;
 
         // PAL Pipeline caching
         Util::Result          cacheResult = Util::Result::NotFound;
@@ -2215,7 +2206,7 @@ VkResult Device::CreateInternalPipelines()
         VK_ARRAY_SIZE(userDataNodes),
         userDataNodes,
         0,
-        false,
+        ShaderWaveSize::WaveSizeAuto,
         nullptr,
         &m_timestampQueryCopyPipeline);
 
@@ -2230,7 +2221,7 @@ VkResult Device::CreateInternalPipelines()
             VK_ARRAY_SIZE(userDataNodes),
             userDataNodes,
             0,
-            false,
+            ShaderWaveSize::WaveSizeAuto,
             nullptr,
             &m_accelerationStructureQueryCopyPipeline);
     }
@@ -2478,54 +2469,77 @@ VkResult Device::WaitForFences(
     VkBool32       waitAll,
     uint64_t       timeout)
 {
-    Pal::Result palResult = Pal::Result::Success;
+    VirtualStackAllocator* pStackAllocator = nullptr;
 
-    Pal::IFence** ppPalFences = static_cast<Pal::IFence**>(VK_ALLOC_A(sizeof(Pal::IFence*) * fenceCount));
+    Pal::Result palResult = m_pInstance->StackMgr()->AcquireAllocator(&pStackAllocator);
 
-    if (IsMultiGpu() == false)
+    if (palResult == Pal::Result::Success)
     {
-        for (uint32_t i = 0; i < fenceCount; ++i)
+        VirtualStackFrame virtStackFrame(pStackAllocator);
+
+        Pal::IFence** ppPalFences = virtStackFrame.AllocArray<Pal::IFence*>(fenceCount);
+
+        if (ppPalFences == nullptr)
         {
-            ppPalFences[i] = Fence::ObjectFromHandle(pFences[i])->PalFence(DefaultDeviceIndex);
+            palResult = Pal::Result::ErrorOutOfMemory;
         }
 
-        palResult = PalDevice(DefaultDeviceIndex)->WaitForFences(fenceCount,
-                                                                 ppPalFences,
-                                                                 waitAll != VK_FALSE,
-                                                                 Uint64ToChronoNano(timeout));
-    }
-    else
-    {
-        for (uint32_t deviceIdx = 0;
-             (deviceIdx < NumPalDevices()) && (palResult == Pal::Result::Success);
-             deviceIdx++)
+        if (IsMultiGpu() == false)
         {
-            const uint32_t currentDeviceMask = 1 << deviceIdx;
-
-            uint32_t perDeviceFenceCount = 0;
-            for (uint32_t i = 0; i < fenceCount; ++i)
+            if (palResult == Pal::Result::Success)
             {
-                Fence* pFence = Fence::ObjectFromHandle(pFences[i]);
-
-                // Some conformance tests will wait on fences that were never submitted, so use only the first device
-                // for these cases.
-                const bool forceWait = (pFence->GetActiveDeviceMask() == 0) && (deviceIdx == DefaultDeviceIndex);
-
-                if (forceWait || ((currentDeviceMask & pFence->GetActiveDeviceMask()) != 0))
+                for (uint32_t i = 0; i < fenceCount; ++i)
                 {
-                    ppPalFences[perDeviceFenceCount++] = pFence->PalFence(deviceIdx);
+                    ppPalFences[i] = Fence::ObjectFromHandle(pFences[i])->PalFence(DefaultDeviceIndex);
+                }
+
+                palResult = PalDevice(DefaultDeviceIndex)->WaitForFences(fenceCount,
+                                                                         ppPalFences,
+                                                                         waitAll != VK_FALSE,
+                                                                         Uint64ToChronoNano(timeout));
+            }
+        }
+        else
+        {
+            for (uint32_t deviceIdx = 0;
+                    (deviceIdx < NumPalDevices()) && (palResult == Pal::Result::Success);
+                    deviceIdx++)
+            {
+                const uint32_t currentDeviceMask = 1 << deviceIdx;
+
+                uint32_t perDeviceFenceCount = 0;
+                for (uint32_t i = 0; i < fenceCount; ++i)
+                {
+                    Fence* pFence = Fence::ObjectFromHandle(pFences[i]);
+
+                    // Some conformance tests will wait on fences that were never submitted, so use only the first
+                    // device for these cases.
+                    const bool forceWait = (pFence->GetActiveDeviceMask() == 0) && (deviceIdx == DefaultDeviceIndex);
+
+                    if (forceWait || ((currentDeviceMask & pFence->GetActiveDeviceMask()) != 0))
+                    {
+                        ppPalFences[perDeviceFenceCount++] = pFence->PalFence(deviceIdx);
+                    }
+                }
+
+                if (perDeviceFenceCount > 0)
+                {
+                    palResult = PalDevice(deviceIdx)->WaitForFences(perDeviceFenceCount,
+                                                                    ppPalFences,
+                                                                    waitAll != VK_FALSE,
+                                                                    Uint64ToChronoNano(timeout));
                 }
             }
-
-            if (perDeviceFenceCount > 0)
-            {
-                palResult = PalDevice(deviceIdx)->WaitForFences(perDeviceFenceCount,
-                                                                ppPalFences,
-                                                                waitAll != VK_FALSE,
-                                                                Uint64ToChronoNano(timeout));
-            }
         }
+
+        virtStackFrame.FreeArray(ppPalFences);
     }
+
+    if (pStackAllocator != nullptr)
+    {
+        m_pInstance->StackMgr()->ReleaseAllocator(pStackAllocator);
+    }
+
     return PalToVkResult(palResult);
 }
 
@@ -2535,28 +2549,52 @@ VkResult Device::ResetFences(
     uint32_t       fenceCount,
     const VkFence* pFences)
 {
-    Pal::IFence** ppPalFences = static_cast<Pal::IFence**>(VK_ALLOC_A(sizeof(Pal::IFence*) * fenceCount));
+    VirtualStackAllocator* pStackAllocator = nullptr;
 
-    Pal::Result palResult = Pal::Result::Success;
+    Pal::Result palResult = m_pInstance->StackMgr()->AcquireAllocator(&pStackAllocator);
 
-    // Clear the wait masks for each fence
-    for (uint32_t i = 0; i < fenceCount; ++i)
+    if (palResult == Pal::Result::Success)
     {
-        Fence::ObjectFromHandle(pFences[i])->ClearActiveDeviceMask();
-        Fence::ObjectFromHandle(pFences[i])->RestoreFence(this);
-    }
+        VirtualStackFrame virtStackFrame(pStackAllocator);
 
-    for (uint32_t deviceIdx = 0;
-        (deviceIdx < NumPalDevices()) && (palResult == Pal::Result::Success);
-        deviceIdx++)
-    {
-        for (uint32_t i = 0; i < fenceCount; ++i)
+        Pal::IFence** ppPalFences = virtStackFrame.AllocArray<Pal::IFence*>(fenceCount);
+
+        if (ppPalFences == nullptr)
         {
-            Fence* pFence = Fence::ObjectFromHandle(pFences[i]);
-            ppPalFences[i] = pFence->PalFence(deviceIdx);
+            palResult = Pal::Result::ErrorOutOfMemory;
+        }
+        else
+        {
+            // Clear the wait masks for each fence
+            for (uint32_t i = 0; i < fenceCount; ++i)
+            {
+                Fence::ObjectFromHandle(pFences[i])->ClearActiveDeviceMask();
+                Fence::ObjectFromHandle(pFences[i])->RestoreFence(this);
+            }
         }
 
-        palResult = PalDevice(deviceIdx)->ResetFences(fenceCount, ppPalFences);
+        for (uint32_t deviceIdx = 0;
+            (deviceIdx < NumPalDevices()) && (palResult == Pal::Result::Success);
+            deviceIdx++)
+        {
+            for (uint32_t i = 0; i < fenceCount; ++i)
+            {
+                Fence* pFence = Fence::ObjectFromHandle(pFences[i]);
+                ppPalFences[i] = pFence->PalFence(deviceIdx);
+            }
+
+            palResult = PalDevice(deviceIdx)->ResetFences(fenceCount, ppPalFences);
+        }
+
+        if (ppPalFences != nullptr)
+        {
+            virtStackFrame.FreeArray<Pal::IFence*>(ppPalFences);
+        }
+    }
+
+    if (pStackAllocator != nullptr)
+    {
+        m_pInstance->StackMgr()->ReleaseAllocator(pStackAllocator);
     }
 
     return PalToVkResult(palResult);
@@ -3251,26 +3289,46 @@ VkResult Device::WaitSemaphores(
     const VkSemaphoreWaitInfo*                  pWaitInfo,
     uint64_t                                    timeout)
 {
-    Pal::Result palResult = Pal::Result::Success;
-    uint32_t flags = 0;
+    VirtualStackAllocator* pStackAllocator = nullptr;
 
-    Pal::IQueueSemaphore** ppPalSemaphores = static_cast<Pal::IQueueSemaphore**>(VK_ALLOC_A(
-                sizeof(Pal::IQueueSemaphore*) * pWaitInfo->semaphoreCount));
+    Pal::Result palResult = m_pInstance->StackMgr()->AcquireAllocator(&pStackAllocator);
 
-    for (uint32_t i = 0; i < pWaitInfo->semaphoreCount; ++i)
+    if (palResult == Pal::Result::Success)
     {
-        Semaphore* currentSemaphore = Semaphore::ObjectFromHandle(pWaitInfo->pSemaphores[i]);
-        ppPalSemaphores[i] = currentSemaphore->PalSemaphore(DefaultDeviceIndex);
-        currentSemaphore->RestoreSemaphore();
+        VirtualStackFrame virtStackFrame(pStackAllocator);
+
+        Pal::IQueueSemaphore** ppPalSemaphores =
+            virtStackFrame.AllocArray<Pal::IQueueSemaphore*>(pWaitInfo->semaphoreCount);
+
+        if (ppPalSemaphores == nullptr)
+        {
+            palResult = Pal::Result::ErrorOutOfMemory;
+        }
+        else
+        {
+            for (uint32_t i = 0; i < pWaitInfo->semaphoreCount; ++i)
+            {
+                Semaphore* currentSemaphore = Semaphore::ObjectFromHandle(pWaitInfo->pSemaphores[i]);
+                ppPalSemaphores[i] = currentSemaphore->PalSemaphore(DefaultDeviceIndex);
+                currentSemaphore->RestoreSemaphore();
+            }
+
+            const uint32 flags = (pWaitInfo->flags == VK_SEMAPHORE_WAIT_ANY_BIT) ? Pal::HostWaitFlags::HostWaitAny : 0;
+
+            palResult = PalDevice(DefaultDeviceIndex)->WaitForSemaphores(pWaitInfo->semaphoreCount, ppPalSemaphores,
+                    pWaitInfo->pValues, flags, Uint64ToChronoNano(timeout));
+        }
+
+        if (ppPalSemaphores != nullptr)
+        {
+            virtStackFrame.FreeArray<Pal::IQueueSemaphore*>(ppPalSemaphores);
+        }
     }
 
-    if (pWaitInfo->flags == VK_SEMAPHORE_WAIT_ANY_BIT)
+    if (pStackAllocator != nullptr)
     {
-        flags |= Pal::HostWaitFlags::HostWaitAny;
+        m_pInstance->StackMgr()->ReleaseAllocator(pStackAllocator);
     }
-
-    palResult = PalDevice(DefaultDeviceIndex)->WaitForSemaphores(pWaitInfo->semaphoreCount, ppPalSemaphores,
-            pWaitInfo->pValues, flags, Uint64ToChronoNano(timeout));
 
     return PalToVkResult(palResult);
 }

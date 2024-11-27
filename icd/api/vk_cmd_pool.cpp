@@ -40,9 +40,7 @@
 #include "palIntrusiveListImpl.h"
 #include "palVectorImpl.h"
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
-#endif
 
 namespace vk
 {

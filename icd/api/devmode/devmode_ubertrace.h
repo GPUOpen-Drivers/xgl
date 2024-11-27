@@ -64,7 +64,6 @@ namespace vk
 // of the driver.
 class DevModeUberTrace final : public IDevMode
 {
-#if ICD_GPUOPEN_DEVMODE_BUILD
 public:
     ~DevModeUberTrace();
 
@@ -154,9 +153,6 @@ public:
     const AccelStructUserMarkerTable& GetAccelStructUserMarkerTable() const
         { return m_accelStructNames; }
 
-    uint32_t AcquireStringTableId()
-        { return ++m_stringTableId; }
-
 private:
     DevModeUberTrace(Instance* pInstance);
 
@@ -177,11 +173,9 @@ private:
     GpuUtil::StringTableTraceSource*       m_pStringTableTraceSource;
     GpuUtil::UserMarkerHistoryTraceSource* m_pUserMarkerHistoryTraceSource;
     GpuUtil::RenderOpTraceController*      m_pRenderOpTraceController;
-    std::atomic<uint32_t>                  m_stringTableId;
 
     AccelStructUserMarkerTable             m_accelStructNames;
     Util::Mutex                            m_mutex;
-#endif
 };
 
 }

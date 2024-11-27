@@ -118,7 +118,7 @@ VkResult BvhBatchLayer::CreateLayer(
         }
     }
 
-    if (result == VK_SUCCESS)
+    if ((result == VK_SUCCESS) && (pLayer != nullptr))
     {
         result = pLayer->Init(pDevice);
     }

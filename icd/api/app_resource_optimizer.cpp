@@ -115,6 +115,7 @@ void ResourceOptimizer::ApplyProfileToImageViewCreateInfo(
                 pViewInfo->flags.bypassMallRead = 1;
                 pViewInfo->flags.bypassMallWrite = 1;
             }
+
         }
     }
 }

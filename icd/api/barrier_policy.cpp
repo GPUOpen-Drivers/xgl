@@ -110,11 +110,15 @@ public:
         InitEntry(VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL,
             Pal::LayoutDepthStencilTarget | Pal::LayoutShaderRead);
 
+        // Disable metadata for avoiding corruption if one image is sampled and rendered
+        // in the same draw.
         InitEntry(VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT,
-                  Pal::LayoutShaderRead | Pal::LayoutShaderWrite);
+                  Pal::LayoutShaderRead | Pal::LayoutShaderWrite| Pal::LayoutUncompressed);
 
+        // Disable metadata for avoiding corruption if one image is read and rendered
+        // in the same draw.
         InitEntry(VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR,
-            Pal::LayoutShaderRead);
+            Pal::LayoutShaderRead | Pal::LayoutShaderWrite | Pal::LayoutUncompressed);
     }
 
     // Return layout usage index corresponding to the specified layout.
@@ -918,6 +922,11 @@ void ImageBarrierPolicy::InitImageLayoutUsagePolicy(
         m_supportedLayoutUsageMask |= Pal::LayoutSampleRate;
     }
 
+    if (usage & VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT)
+    {
+        m_supportedLayoutUsageMask |= Pal::LayoutUncompressed;
+    }
+
     // We don't do anything special in case of transient attachment images
 }
 
@@ -1086,7 +1095,7 @@ Pal::ImageLayout ImageBarrierPolicy::GetTransferLayout(
 
     // Mask determined layout usage flags by the supported layout usage mask on the given queue family index.
     result.usages = g_LayoutUsageHelper.GetLayoutUsage(0, usageIndex)
-                  & GetSupportedLayoutUsageMask(queueFamilyIndex);
+                  & GetSupportedLayoutUsageMask(queueFamilyIndex, layout);
 
     // If the layout usage is 0, it likely means that an application is trying to transition to an image layout that
     // is not supported by that image's usage flags.
@@ -1112,7 +1121,7 @@ Pal::ImageLayout ImageBarrierPolicy::GetAspectLayout(
 
     // Mask determined layout usage flags by the supported layout usage mask on the given queue family index.
     result.usages = g_LayoutUsageHelper.GetLayoutUsage(plane, usageIndex)
-                  & GetSupportedLayoutUsageMask(queueFamilyIndex);
+                  & GetSupportedLayoutUsageMask(queueFamilyIndex, layout);
 
     // If the layout usage is 0, it likely means that an application is trying to transition to an image layout that
     // is not supported by that image's usage flags.
@@ -1135,7 +1144,7 @@ void ImageBarrierPolicy::GetLayouts(
     uint32_t usageIndex = g_LayoutUsageHelper.GetLayoutUsageIndex(layout, format);
 
     // Mask determined layout usage flags by the supported layout usage mask on the corresponding queue family index.
-    const uint32_t supportedLayoutUsageMask = GetSupportedLayoutUsageMask(queueFamilyIndex);
+    const uint32_t supportedLayoutUsageMask = GetSupportedLayoutUsageMask(queueFamilyIndex, layout);
     results[0].usages = g_LayoutUsageHelper.GetLayoutUsage(0, usageIndex) & supportedLayoutUsageMask;
     results[1].usages = g_LayoutUsageHelper.GetLayoutUsage(1, usageIndex) & supportedLayoutUsageMask;
     results[2].usages = g_LayoutUsageHelper.GetLayoutUsage(2, usageIndex) & supportedLayoutUsageMask;

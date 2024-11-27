@@ -796,7 +796,8 @@ VkResult Pipeline::GetShaderDisassembly(
 
     // To extract the shader code, we can re-parse the saved ELF binary and lookup the shader's program
     // instructions by examining the symbol table entry for that shader's entrypoint.
-    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(), binaryInfo.pipelineBinary.pCode);
+    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(),
+        Util::Span<const void>{binaryInfo.pipelineBinary.pCode, binaryInfo.pipelineBinary.codeSize});
 
     VkResult    result    = VK_SUCCESS;
     Pal::Result palResult = abiReader.Init();
@@ -846,32 +847,34 @@ VkResult Pipeline::GetShaderDisassembly(
         uint32_t hwStage = 0;
         if (Util::BitMaskScanForward(&hwStage, apiToHwShader.apiShaders[static_cast<uint32_t>(apiShaderType)]))
         {
-            const Util::Elf::SymbolTableEntry* pSymbolEntry = nullptr;
             const char* pSectionName = nullptr;
 
             if (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderDisassembly)
             {
-                pSymbolEntry = abiReader.GetPipelineSymbol(
-                    Util::Abi::GetSymbolForStage(
-                        Util::Abi::PipelineSymbolType::ShaderDisassembly,
-                        static_cast<Util::Abi::HardwareStage>(hwStage)));
+                palResult = abiReader.CopySymbol(
+                                Util::Abi::GetSymbolForStage(
+                                    Util::Abi::PipelineSymbolType::ShaderDisassembly,
+                                    static_cast<Util::Abi::HardwareStage>(hwStage)),
+                                pBufferSize,
+                                pBuffer);
+
                 pSectionName = Util::Abi::AmdGpuDisassemblyName;
+                symbolValid  = palResult == Util::Result::Success;
             }
             else if (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderAmdIl)
             {
-                pSymbolEntry = abiReader.GetPipelineSymbol(
-                    Util::Abi::GetSymbolForStage(
-                        Util::Abi::PipelineSymbolType::ShaderAmdIl,
-                        apiShaderType));
+                palResult = abiReader.CopySymbol(
+                                Util::Abi::GetSymbolForStage(
+                                    Util::Abi::PipelineSymbolType::ShaderAmdIl,
+                                    apiShaderType),
+                                pBufferSize,
+                                pBuffer);
+
                 pSectionName = Util::Abi::AmdGpuCommentLlvmIrName;
+                symbolValid  = palResult == Util::Result::Success;
             }
 
-            if (pSymbolEntry != nullptr)
-            {
-                palResult = abiReader.GetElfReader().CopySymbol(*pSymbolEntry, pBufferSize, pBuffer);
-                symbolValid = palResult == Util::Result::Success;
-            }
-            else if (pSectionName != nullptr)
+            if ((symbolValid == false) && (pSectionName != nullptr))
             {
                 // NOTE: LLVM doesn't add disassemble symbol in ELF disassemble section, instead, it contains
                 // the entry name in disassemble section. so we have to search the entry name to split per
@@ -1016,7 +1019,8 @@ uint32_t Pipeline::GetAvailableAmdIlSymbol(
     bool hasBinary = GetBinary(shaderType, &binaryInfo);
     if (hasBinary)
     {
-        Util::Abi::PipelineAbiReader abiReader(m_pDevice->VkInstance()->Allocator(), binaryInfo.pipelineBinary.pCode);
+        Util::Abi::PipelineAbiReader abiReader(m_pDevice->VkInstance()->Allocator(),
+            Util::Span<const void>{binaryInfo.pipelineBinary.pCode, binaryInfo.pipelineBinary.codeSize});
         Pal::Result result = abiReader.Init();
 
         if (result == Pal::Result::Success)
@@ -1036,7 +1040,7 @@ uint32_t Pipeline::GetAvailableAmdIlSymbol(
                     const Util::Elf::SymbolTableEntry* pSymbolEntry = nullptr;
                     const char* pSectionName                        = nullptr;
 
-                    pSymbolEntry = abiReader.GetPipelineSymbol(
+                    pSymbolEntry = abiReader.GetSymbolHeader(
                         Util::Abi::GetSymbolForStage(
                             Util::Abi::PipelineSymbolType::ShaderAmdIl,
                             abiShaderType));

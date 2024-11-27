@@ -41,9 +41,7 @@ namespace Util
 {
 class IPlatformKey;
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
 class IDevMode;
-#endif
 } // namespace Util
 
 namespace vk
@@ -63,9 +61,7 @@ public:
         const Vkgc::GfxIpVersion&  gfxIp,
         const vk::RuntimeSettings& settings,
         const char*                pDefaultCacheFilePath,
-#if ICD_GPUOPEN_DEVMODE_BUILD
         vk::IDevMode*              pDevMode,
-#endif
         uint32_t                   expectedEntries,
         size_t                     initDataSize,
         const void*                pInitData,
@@ -128,7 +124,6 @@ public:
         uint32_t                    srcCacheCount,
         const PipelineBinaryCache** ppSrcCaches);
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     Util::Result LoadReinjectionBinary(
         const CacheId*           pInternalPipelineHash,
         size_t*                  pPipelineBinarySize,
@@ -153,7 +148,6 @@ public:
 
     Util::RWLock* GetHashMappingLock()
         { return &m_hashMappingLock; }
-#endif
 
     void FreePipelineBinary(const void* pPipelineBinary);
 
@@ -198,13 +192,11 @@ private:
         bool                   createArchiveLayers,
         const RuntimeSettings& settings);
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     VkResult InitReinjectionLayer(
         const RuntimeSettings& settings);
 
     Util::Result InjectBinariesFromDirectory(
         const RuntimeSettings& settings);
-#endif
 
     VkResult InitMemoryCacheLayer(
         const RuntimeSettings& settings);
@@ -237,13 +229,11 @@ private:
 
     Util::ICacheLayer*        m_pTopLayer;                // Top layer of the cache chain where queries are submitted
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     vk::IDevMode*             m_pDevMode;
     Util::ICacheLayer*        m_pReinjectionLayer;        // Reinjection interface layer
 
     HashMapping               m_hashMapping;              // Maps the internalPipelineHash to the appropriate CacheId
     Util::RWLock              m_hashMappingLock;          // Prevents collisions during writes to the map
-#endif
 
     Util::ICacheLayer*        m_pMemoryLayer;
 

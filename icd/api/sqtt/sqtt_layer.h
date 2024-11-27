@@ -187,6 +187,11 @@ public:
 
     void WriteUserEventMarker(RgpSqttMarkerUserEventType eventType, const char* pString) const;
 
+    static void WritePalInternalEventMarker(
+        Pal::ICmdBuffer*            pPalCmdBuffer,
+        Pal::DispatchInfoFlags      infoFlags,
+        Pal::RgpMarkerSubQueueFlags subQueueFlags);
+
     void AddDebugTag(uint64_t tag);
     bool HasDebugTag(uint64_t tag) const;
 
@@ -200,6 +205,11 @@ private:
     void WriteCbEndMarker() const;
     void WritePipelineBindMarker(const Pal::Developer::BindPipelineData& data) const;
     void WriteMarker(const void* pData, size_t dataSize, Pal::RgpMarkerSubQueueFlags subQueueFlags) const;
+    static void WriteMarker(
+        Pal::ICmdBuffer*            pPalCmdBuffer,
+        const void*                 pData,
+        size_t                      dataSize,
+        Pal::RgpMarkerSubQueueFlags subQueueFlags);
     void WriteBeginGeneralApiMarker(RgpSqttMarkerGeneralApiType apiType) const;
     void WriteEndGeneralApiMarker(RgpSqttMarkerGeneralApiType apiType) const;
     void WriteBarrierStartMarker(const Pal::Developer::BarrierData& data) const;
@@ -233,14 +243,12 @@ private:
     RgpSqttMarkerEventType      m_currentEventType;  // Current API type for pre-draw/dispatch event markers
     uint32_t                    m_enabledMarkers;
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     struct
     {
         bool                started;    // True if a pipeline is currently being traced
         uint64_t            targetHash; // Determines target pipeline used to trigger instruction tracing
         VkPipelineBindPoint bindPoint;  // Bind point of the target pipeline
     } m_instructionTrace;
-#endif
 
     RgpSqttMarkerUserEventWithString* m_pUserEvent;
 

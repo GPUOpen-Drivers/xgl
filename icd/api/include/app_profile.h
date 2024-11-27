@@ -112,7 +112,6 @@ enum class AppProfile : uint32_t
     BaldursGate3,            // Baldur's Gate by Larian Studios
     Enshrouded,              // Enshrouded by Keen Games
     HolisticEngine,          // Holistic Engine by Keen Games
-    GravityMark,             // Tellusim GravityMark
     IdTechEngine,            // id Tech Engine (Default)
 #if VKI_RAY_TRACING
     ControlDX12,             // VKD3D Control Ultimate Edition
@@ -148,7 +147,8 @@ enum class AppProfile : uint32_t
     Archean,                 // Archean by batcholi
     Houdini,                 // Houdini
     SevenDaysToDie,          // 7 Days to Die
-    GgmlVulkan               // ggml-vulkan
+    GgmlVulkan,              // ggml-vulkan
+    Blender                  // Blender
 };
 
 struct ProfileSettings

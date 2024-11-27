@@ -52,7 +52,7 @@ from shaderProfileTemplate import SHADER_PATTERN, ENTRIES_TEMPLATE, SHADER_ACTIO
     FUN_DEC_CLASS_SHADER_PROFILE_PUBLIC, FUNC_DEC_PARSE_JSON_PROFILE, FUNC_DEC_BUILD_APP_PROFILE_LLPC, \
     BUILD_APP_PROFILE_LLPC_FUNC, JSON_WRITER_GENERIC_DEF, JSON_READER_GENERIC_DEF, NAMESPACE_VK, CPP_INCLUDE, \
     CopyrightAndWarning, CONDITION_DYNAMIC_SHADER_INFO_APPLY, CLASS_TEMPLATE, ShaderTuningStructsAndVars, \
-    HEADER_INCLUDES, PARSE_DWORD_ARRAY_FUNC, CONDITION_SHADER_CREATE_TUNING_OPTION_FLAGS
+    HEADER_INCLUDES, PARSE_DWORD_ARRAY_FUNC, CONDITION_SHADER_CREATE_TUNING_OPTION_FLAGS, CONDITION_GFX_IP_11
 
 OUTPUT_FILE = "g_shader_profile"
 CONFIG_FILE_NAME = "profile.json"
@@ -341,6 +341,8 @@ def gen_profile(input_json, compiler):
                 if not success:
                     raise ValueError("JSON parsing failed")
                 action_result, cpp_action = parse_json_profile_entry_action(action)
+                if not action_result['success']:
+                    raise ValueError("JSON parsing failed")
                 for branch, result in action_result.items():
                     if result:
                         result_ret[branch] = True
@@ -1186,7 +1188,11 @@ def main():
                         if_gfxip_body = indent(if_asic_group_dict[title] + if_asic_generic_dict[title])
                     else:
                         if_gfxip_body = indent(if_asic_group_dict[title])
-                    if_gfxip = CONDITION_GFX_IP.replace("%Gfxip%", gfxip[0].upper() + gfxip[1:])
+                    if gfxip == "gfxIp11_0":
+                        # Use the IsGfx11 method instead of the explicit CONDITION_GFX_IP.
+                        if_gfxip = CONDITION_GFX_IP_11
+                    else:
+                        if_gfxip = CONDITION_GFX_IP.replace("%Gfxip%", gfxip[0].upper() + gfxip[1:])
                     if_gfxip = if_gfxip.replace("%Defs%", if_gfxip_body)
                     if gfxip in BuildTypesTemplate:
                         if_gfxip = wrap_with_directive(if_gfxip, BuildTypesTemplate[gfxip])

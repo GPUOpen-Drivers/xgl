@@ -279,9 +279,10 @@ struct AllGpuRenderState
     // changed for all GPUs if it is changed for any GPU. Put DirtyGraphicsState management here will be easier to manage.
     DirtyGraphicsState dirtyGraphics;
 
-    // Value of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
-    // defined by the last bound GraphicsPipeline, which was not nullptr.
-    bool viewIndexFromDeviceIndex;
+    // A bit mask determining if the shader stages are making use of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT.
+    // 1: pre-raster stages
+    // 2: fragment stage
+    uint32_t viewIndexFromDeviceIndex;
 
     DynamicRenderingInstance         dynamicRenderingInstance;
 
@@ -1118,7 +1119,8 @@ public:
 
     void PalCmdAcquire(
         Pal::AcquireReleaseInfo* pAcquireReleaseInfo,
-        const VkEvent            event,
+        uint32_t                 eventCount,
+        const VkEvent*           pEvents,
         Pal::MemBarrier* const   pBufferBarriers,
         const Buffer** const     ppBuffers,
         Pal::ImgBarrier* const   pImageBarriers,
@@ -1602,7 +1604,21 @@ private:
         const VkImageMemoryBarrier*  pImageMemoryBarriers,
         Pal::BarrierInfo*            pBarrier);
 
-    void ExecuteReleaseThenAcquire(
+    void FlushAcquireReleaseBarriers(
+        Pal::AcquireReleaseInfo*     pAcquireReleaseInfo,
+        uint32_t                     eventCount,
+        const VkEvent*               pEvents,
+        Pal::MemBarrier* const       pBufferBarriers,
+        const Buffer** const         ppBuffers,
+        Pal::ImgBarrier* const       pImageBarriers,
+        const Image** const          ppImages,
+        VirtualStackFrame*           pVirtStackFrame,
+        const AcquireReleaseMode     acquireReleaseMode,
+        uint32_t                     deviceMask);
+
+    void ExecuteAcquireRelease(
+        uint32_t                     eventCount,
+        const VkEvent*               pEvents,
         PipelineStageFlags           srcStageMask,
         PipelineStageFlags           dstStageMask,
         uint32_t                     memBarrierCount,
@@ -1610,13 +1626,15 @@ private:
         uint32_t                     bufferMemoryBarrierCount,
         const VkBufferMemoryBarrier* pBufferMemoryBarriers,
         uint32_t                     imageMemoryBarrierCount,
-        const VkImageMemoryBarrier*  pImageMemoryBarriers);
+        const VkImageMemoryBarrier*  pImageMemoryBarriers,
+        const AcquireReleaseMode     acquireReleaseMode,
+        uint32_t                     rgpBarrierReasonType);
 
-    void ExecuteAcquireRelease(
+    void ExecuteAcquireRelease2(
         uint32_t                     dependencyCount,
         const VkEvent*               pEvents,
         const VkDependencyInfoKHR*   pDependencyInfos,
-        AcquireReleaseMode           acquireReleaseMode,
+        const AcquireReleaseMode     acquireReleaseMode,
         uint32_t                     rgpBarrierReasonType);
 
     enum RebindUserDataFlag : uint32_t

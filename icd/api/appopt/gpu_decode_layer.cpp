@@ -122,7 +122,7 @@ Pal::Result ClientCreateInternalComputePipeline(
         rootNodeCount,
         &rootNode[0],
         0,
-        false, // forceWave64,
+        vk::ShaderWaveSize::WaveSizeAuto,
         &specializationInfo,
         &pDevice->GetInternalTexDecodePipeline());
 

@@ -39,7 +39,6 @@ class Buffer;
 class DeferredHostOperation;
 class Device;
 struct GeometryConvertHelper;
-class VirtualStackFrame;
 
 // =====================================================================================================================
 // VkAccelerationStructureKHR (VK_KHR_acceleration_structure)

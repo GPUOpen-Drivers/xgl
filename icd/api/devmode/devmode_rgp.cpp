@@ -29,7 +29,6 @@
  ***********************************************************************************************************************
  */
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
 // Vulkan headers
 #include "devmode/devmode_rgp.h"
 #include "include/vk_cmdbuffer.h"
@@ -121,7 +120,7 @@ public:
                 stringIdx++;
             }
 
-            uint32_t tableId = m_pDevMode->AcquireStringTableId();
+            uint32_t tableId = AcquireTableId();
             AddStringTable(tableId, numStrings, stringOffsets.Data(), stringData.Data(), stringData.size());
         }
 
@@ -401,7 +400,6 @@ DevModeRgp::DevModeRgp(
     m_crashAnalysisEnabled(false),
     m_perfCounterIds(pInstance->Allocator()),
     m_pipelineCaches(pInstance->Allocator()),
-    m_stringTableId(0),
     m_pStringTableTraceSource(nullptr),
     m_pUserMarkerHistoryTraceSource(nullptr),
     m_accelStructNames(64, m_pInstance->Allocator())
@@ -2929,7 +2927,7 @@ void DevModeRgp::ProcessMarkerTable(
     uint32        markerStringDataSize,
     const char*   pMarkerStringData)
 {
-    uint32_t tableId = AcquireStringTableId();
+    uint32_t tableId = m_pStringTableTraceSource->AcquireTableId();
 
     m_pStringTableTraceSource->AddStringTable(tableId,
                                               numMarkerStrings, pMarkerStringOffsets,
@@ -2963,5 +2961,3 @@ void DevModeRgp::LabelAccelStruct(
 }
 
 }; // namespace vk
-
-#endif

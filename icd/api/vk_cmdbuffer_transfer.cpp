@@ -279,7 +279,7 @@ void CmdBuffer::CopyBuffer(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
-    const auto maxRegions  = EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions));
+    const auto maxRegions  = EstimateMaxObjectsOnVirtualStack(sizeof(Pal::MemoryCopyRegion));
     auto       regionBatch = Util::Min(regionCount, maxRegions);
 
     // Allocate space to store memory copy regions
@@ -332,7 +332,8 @@ void CmdBuffer::CopyImage(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
-    const auto maxRegions  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions)), MaxPalAspectsPerMask);
+    const auto maxRegions  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(Pal::ImageCopyRegion)),
+                                       MaxPalAspectsPerMask);
     auto       regionBatch = Util::Min(regionCount * MaxPalAspectsPerMask, maxRegions);
 
     Pal::ImageCopyRegion* pPalRegions =
@@ -392,7 +393,8 @@ void CmdBuffer::BlitImage(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
-    const auto maxRegions  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions)), MaxPalAspectsPerMask);
+    const auto maxRegions  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(Pal::ImageScaledCopyRegion)),
+                                       MaxPalAspectsPerMask);
     auto       regionBatch = Util::Min(regionCount * MaxPalAspectsPerMask, maxRegions);
 
     // Allocate space to store scaled image copy regions (we need a separate region per PAL aspect)
@@ -521,7 +523,7 @@ void CmdBuffer::CopyBufferToImage(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
-    const auto maxRegions  = EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions));
+    const auto maxRegions  = EstimateMaxObjectsOnVirtualStack(sizeof(Pal::MemoryImageCopyRegion));
     auto       regionBatch = Util::Min(regionCount, maxRegions);
 
     // Allocate space to store memory image copy regions
@@ -587,7 +589,7 @@ void CmdBuffer::CopyImageToBuffer(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
-    const auto maxRegions  = EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions));
+    const auto maxRegions  = EstimateMaxObjectsOnVirtualStack(sizeof(Pal::MemoryImageCopyRegion));
     auto       regionBatch = Util::Min(regionCount, maxRegions);
 
     // Allocate space to store memory image copy regions
@@ -889,7 +891,7 @@ void CmdBuffer::QueryCopy(
 
         uint32_t threadGroupCount = Util::Max(1U, (queryCount + ThreadsPerGroup - 1) / ThreadsPerGroup);
 
-        PalCmdBuffer(deviceIdx)->CmdDispatch({ threadGroupCount, 1, 1 });
+        PalCmdBuffer(deviceIdx)->CmdDispatch({ threadGroupCount, 1, 1 }, {});
 
         // Restore compute state
         PalCmdBuffer(deviceIdx)->CmdRestoreComputeState(Pal::ComputeStatePipelineAndUserData);

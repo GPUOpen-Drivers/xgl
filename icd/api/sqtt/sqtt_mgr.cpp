@@ -199,6 +199,17 @@ void SqttMgr::PalDeveloperCallback(
                     pSqtt->PalDrawDispatchCallback(drawDispatch);
                 }
             }
+            else if (drawDispatch.dispatch.infoFlags.u32All != 0)
+            {
+                // Handle a dispatch initiated by PAL.
+                // For this this dispatch we have a command buffer created by PAL
+                // so we depend on the PAL-provided context and information
+                // to instrument the dispatch.
+                SqttCmdBufferState::WritePalInternalEventMarker(
+                    drawDispatch.pCmdBuffer,
+                    drawDispatch.dispatch.infoFlags,
+                    drawDispatch.subQueueFlags);
+            }
         }
         break;
 

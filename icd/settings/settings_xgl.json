@@ -886,6 +886,18 @@
       "Type": "bool"
     },
     {
+      "Name": "SyncPreviousDrawForTransferStage",
+      "Description": "Whether sync the previous draw for pipeline transfer stage barrier",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
       "Name": "PipelineBinningMode",
       "Description": "Specifies whether to override binning setting for pipeline.",
       "Tags": [
@@ -930,19 +942,19 @@
         "IsEnum": true,
         "Values": [
           {
-            "Name": "DisableBinningPsKillDisable",
+            "Name": "DisableBinningPsKillDefault",
             "Value": 0,
+            "Description": "Default PAL values"
+          },
+          {
+            "Name": "DisableBinningPsKillFalse",
+            "Value": 1,
             "Description": "Enable Binning."
           },
           {
-            "Name": "DisableBinningPsKillEnable",
-            "Value": 1,
-            "Description": "Disable Binning"
-          },
-          {
-            "Name": "DisableBinningPsKillDefault",
+            "Name": "DisableBinningPsKillTrue",
             "Value": 2,
-            "Description": "Default PAL values"
+            "Description": "Disable Binning"
           }
         ],
         "Name": "DisableBinningPsKill"
@@ -3095,7 +3107,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": "Fp16BoxNodesInBlasModeNone"
+        "Default": "Fp16BoxNodesInBlasModeMixed"
       },
       "ValidValues": {
         "IsEnum": true,
@@ -3166,7 +3178,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": 0.0
+        "Default": 1.1
       },
       "Type": "float",
       "Name": "RtFp16BoxNodesInBlasModeMixedThreshold",
@@ -3277,7 +3289,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": 0
+        "Default": 4
       },
       "Type": "uint32",
       "Name": "RtTriangleSplittingBudgetPerTriangle",
@@ -3382,7 +3394,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Type": "bool",
       "Name": "EnableVariableBitsMortonCodes",
@@ -3398,7 +3410,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Type": "bool",
       "Scope": "Driver"
@@ -3742,7 +3754,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": true
+        "Default": false
       },
       "Type": "bool",
       "Name": "EnablePairCompressionCostCheck",
@@ -4081,7 +4093,7 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Type": "bool",
       "Name": "RtEnableFastLBVH",
@@ -4100,21 +4112,6 @@
       },
       "Type": "uint32",
       "Name": "BuildParallelWavesPerSimd",
-      "Scope": "Driver"
-    },
-    {
-      "Name": "RtEnableAcquireReleaseInterface",
-      "Description": "Enable Acquire/release-based barrier interface if PAL reports the ASIC supports it.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
       "Scope": "Driver"
     },
     {
@@ -4142,6 +4139,18 @@
       ],
       "Defaults": {
         "Default": 32
+      }
+    },
+    {
+      "Name": "RtPersistentDispatchRaysFactor",
+      "Type": "float",
+      "Description": "Controls the number of groups launched for a persistent DispatchRays or 0.0 to disable persistent launch",
+      "Scope": "Driver",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "Defaults": {
+        "Default": 0.0
       }
     },
     {
@@ -5401,7 +5410,7 @@
     {
       "Description": "Enable pair compression in early build stage, i.e., During Encode phase.",
       "Tags": [
-        "RayTracing"
+        "Ray Tracing"
       ],
       "BuildTypes": [
         "VKI_RAY_TRACING"
@@ -5416,7 +5425,7 @@
     {
       "Description": "Triangle pair search radius during EarlyPairCompression.",
       "Tags": [
-        "RayTracing"
+        "Ray Tracing"
       ],
       "BuildTypes": [
         "VKI_RAY_TRACING"
@@ -5580,16 +5589,25 @@
       "Type": "uint32"
     },
     {
-      "Name": "AsyncComputeQueueLimit",
-      "Description": "Limit the number of async compute queues that are reported.",
+      "Name": "ForceGraphicsQueueCount",
+      "Description": "Sets the number of graphics/universal queues reported by the driver. If set to UINT32_MAX, this setting will not be used. The maximum allowable queue count is currently 8, as defined by 'MaxQueuesPerFamily' in the driver.",
       "Tags": [
         "General"
       ],
       "Defaults": {
         "Default": 4294967295
       },
-      "Flags": {
-        "IsHex": true
+      "Scope": "Driver",
+      "Type": "uint32"
+    },
+    {
+      "Name": "ForceComputeQueueCount",
+      "Description": "Sets the number of compute queues reported by the driver. If set to UINT32_MAX, this setting will not be used. The maximum allowable queue count is currently 8, as defined by 'MaxQueuesPerFamily' in the driver.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": 4294967295
       },
       "Scope": "Driver",
       "Type": "uint32"
@@ -7050,7 +7068,7 @@
     },
     {
       "Name": "ForceEnableDcc",
-      "Description": "If not default, force enables/disables compression on the basis of resource and/or BPP. NOTE: To force enable shader storage DCC, at least one of 2D/3D and one of CA/non-CA need to be set",
+      "Description": "If not default, force enables compression on the basis of resource and/or BPP. NOTE: To force enable shader storage DCC, at least one of 2D/3D and one of CA/non-CA need to be set",
       "Tags": [
         "Optimization"
       ],
@@ -7094,29 +7112,51 @@
             "Name": "ForceDccFor64BppShaderStorage",
             "Value": 32,
             "Description": "Force enable DCC for shader storage resources with 64 BPP or deeper."
-          },
-          {
-            "Name": "ForceDisableCompression",
-            "Value": 64,
-            "Description": "Force disable compression for every resource irrespective of PAL heuristics."
-          },
-          {
-            "Name": "ForceDisableCompressionForSharedImages",
-            "Value": 128,
-            "Description": "Force disable compression for externally sharable resources."
-          },
-          {
-            "Name": "ForceDisableCompressionForColor",
-            "Value": 256,
-            "Description": "Force disable compression for all color format images."
-          },
-          {
-            "Name": "ForceDisableCompressionForDepthStencil",
-            "Value": 512,
-            "Description": "Force disable compression for all depth and stencil format images."
           }
         ],
         "Name": "ForceEnableDcc"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Scope": "Driver",
+      "Type": "uint32"
+    },
+    {
+      "Name": "ForceDisableCompression",
+      "Description": "If not default, force disables metadata and compression for appropriate resource types",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "DisableCompressionDefault"
+      },
+      "ValidValues": {
+        "Name": "ForceDisableCompression",
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "DisableCompressionDefault",
+            "Value": 0,
+            "Description": "Don't force anything. Let PAL heuristics decide what's best."
+          },
+          {
+            "Name": "DisableCompressionForSharedImages",
+            "Value": 1,
+            "Description": "Force disable compression for externally sharable resources."
+          },
+          {
+            "Name": "DisableCompressionForColor",
+            "Value": 2,
+            "Description": "Force disable compression for all color format images."
+          },
+          {
+            "Name": "DisableCompressionForDepthStencil",
+            "Value": 4,
+            "Description": "Force disable compression for all depth and stencil format images."
+          }
+        ]
       },
       "Flags": {
         "IsHex": true,

@@ -427,6 +427,8 @@ PhysicalDevice::PhysicalDevice(
     memset(&m_limits, 0, sizeof(m_limits));
     memset(m_formatFeatureMsaaTarget, 0, sizeof(m_formatFeatureMsaaTarget));
     memset(&m_queueFamilies, 0, sizeof(m_queueFamilies));
+    memset(&m_compQueueEnginesNdx, 0, sizeof(m_compQueueEnginesNdx));
+    memset(&m_universalQueueEnginesNdx, 0, sizeof(m_universalQueueEnginesNdx));
     memset(&m_memoryProperties, 0, sizeof(m_memoryProperties));
     memset(&m_gpaProps, 0, sizeof(m_gpaProps));
 
@@ -2569,6 +2571,20 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 }
 
 // =====================================================================================================================
+void PhysicalDevice::GetPhysicalDevicePipelineRobustnessProperties(
+    VkPipelineRobustnessBufferBehaviorEXT* defaultRobustnessStorageBuffers,
+    VkPipelineRobustnessBufferBehaviorEXT* defaultRobustnessUniformBuffers,
+    VkPipelineRobustnessBufferBehaviorEXT* defaultRobustnessVertexInputs,
+    VkPipelineRobustnessImageBehaviorEXT*  defaultRobustnessImages
+) const
+{
+    *defaultRobustnessStorageBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT;
+    *defaultRobustnessUniformBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT;
+    *defaultRobustnessVertexInputs = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT;
+    *defaultRobustnessImages = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT;
+}
+
+// =====================================================================================================================
 VkResult PhysicalDevice::GetPhysicalDeviceCalibrateableTimeDomainsEXT(
     uint32_t*                           pTimeDomainCount,
     VkTimeDomainEXT*                    pTimeDomains)
@@ -4436,6 +4452,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COOPERATIVE_MATRIX));
     }
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COMPUTE_SHADER_DERIVATIVES));
+
     bool exposeNvComputeShaderDerivatives  = false;
     if ((pPhysicalDevice == nullptr) || (pPhysicalDevice->GetRuntimeSettings().exportNvComputeShaderDerivatives))
     {
@@ -4677,7 +4695,7 @@ void PhysicalDevice::PopulateQueueFamilies()
         enabledQueueFlags                      |= VK_QUEUE_PROTECTED_BIT;
     }
 
-    // find out the sub engine index of VrHighPriority and indices for compute engines that aren't exclusive.
+    // find out the sub engine index of VrHighPriority and indices for compute engines that are exclusive.
     {
         const auto& computeProps = m_properties.engineProperties[Pal::EngineTypeCompute];
         uint32_t engineIndex = 0u;
@@ -4703,23 +4721,6 @@ void PhysicalDevice::PopulateQueueFamilies()
                 {
                     m_vrHighPrioritySubEngineIndex = subEngineIndex;
                 }
-            }
-            else if (IsNormalQueue(computeProps.capabilities[subEngineIndex]))
-            {
-                m_compQueueEnginesNdx[engineIndex++] = subEngineIndex;
-            }
-        }
-    }
-
-    // find out universal engines that aren't exclusive.
-    {
-        const auto& universalProps = m_properties.engineProperties[Pal::EngineTypeUniversal];
-        uint32_t engineIndex = 0u;
-        for (uint32_t subEngineIndex = 0; subEngineIndex < universalProps.engineCount; subEngineIndex++)
-        {
-            if (IsNormalQueue(universalProps.capabilities[subEngineIndex]))
-            {
-                m_universalQueueEnginesNdx[engineIndex++] = subEngineIndex;
             }
         }
     }
@@ -4808,9 +4809,64 @@ void PhysicalDevice::PopulateQueueFamilies()
                     pQueueFamilyProps->queueCount++;
                 }
             }
-            pQueueFamilyProps->queueCount = (engineType == Pal::EngineTypeCompute)
-                ? Util::Min(settings.asyncComputeQueueLimit, pQueueFamilyProps->queueCount)
-                : pQueueFamilyProps->queueCount;
+
+            // if the engineType is Universal or Compute, adjust the queue count based on the settings.
+            // and find pal engine indices for the queues
+            if (pQueueFamilyProps->queueCount != 0)
+            {
+                switch (engineType)
+                {
+                case Pal::EngineTypeUniversal:
+                {
+                    if (settings.forceGraphicsQueueCount != UINT32_MAX)
+                    {
+                        VK_ASSERT(settings.forceGraphicsQueueCount <= Queue::MaxQueuesPerFamily);
+                        pQueueFamilyProps->queueCount = settings.forceGraphicsQueueCount;
+                    }
+
+                    // find out pal engine indices for universal queues that aren't exclusive.
+                    uint32_t index = 0;
+                    while (index < pQueueFamilyProps->queueCount)
+                    {
+                        for (uint32_t engineIndex = 0u; engineIndex < engineProps.engineCount; ++engineIndex)
+                        {
+                            if (IsNormalQueue(engineProps.capabilities[engineIndex]))
+                            {
+                                m_universalQueueEnginesNdx[index] = engineIndex;
+                                index++;
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case Pal::EngineTypeCompute:
+                {
+                    if (settings.forceComputeQueueCount != UINT32_MAX)
+                    {
+                        VK_ASSERT(settings.forceComputeQueueCount <= Queue::MaxQueuesPerFamily);
+                        pQueueFamilyProps->queueCount = settings.forceComputeQueueCount;
+                    }
+
+                    // find out pal engine indices for compute queues that aren't exclusive.
+                    uint32_t index = 0;
+                    while (index < pQueueFamilyProps->queueCount)
+                    {
+                        for (uint32_t engineIndex = 0u; engineIndex < engineProps.engineCount; ++engineIndex)
+                        {
+                            if (IsNormalQueue(engineProps.capabilities[engineIndex]))
+                            {
+                                m_compQueueEnginesNdx[index] = engineIndex;
+                                index++;
+                            }
+                        }
+                    }
+                    break;
+                }
+                default:
+                    break; // no-op
+                }
+            }
 
             pQueueFamilyProps->timestampValidBits          = (engineProps.flags.supportsTimestamps != 0) ? 64 : 0;
             pQueueFamilyProps->minImageTransferGranularity = PalToVkExtent3d(engineProps.minTiledImageCopyAlignment);
@@ -6949,9 +7005,8 @@ size_t PhysicalDevice::GetFeatures2(
 
                 if (updateFeatures)
                 {
-                    const bool captureReplay = PalProperties().gfxipProperties.flags.supportCaptureReplay;
                     pExtInfo->descriptorBuffer                   = VK_TRUE;
-                    pExtInfo->descriptorBufferCaptureReplay      = captureReplay ? VK_TRUE : VK_FALSE;
+                    pExtInfo->descriptorBufferCaptureReplay      = VK_FALSE;
                     pExtInfo->descriptorBufferImageLayoutIgnored = VK_FALSE;
                     pExtInfo->descriptorBufferPushDescriptors    = VK_TRUE;
                 }
@@ -7711,6 +7766,18 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_REPLICATED_COMPOSITES_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderReplicatedComposites = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures
@@ -7856,12 +7923,11 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
         pImageCompressionProps->imageCompressionFixedRateFlags = VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
 
         const uint32_t disableBits =
-            ForceDisableCompression |
-            ((Formats::IsColorFormat(createInfoFormat)) ? ForceDisableCompressionForColor : 0) |
-            ((Formats::IsDepthStencilFormat(createInfoFormat)) ? ForceDisableCompressionForDepthStencil : 0);
+            ((Formats::IsColorFormat(createInfoFormat))        ? DisableCompressionForColor : 0) |
+            ((Formats::IsDepthStencilFormat(createInfoFormat)) ? DisableCompressionForDepthStencil : 0);
 
         pImageCompressionProps->imageCompressionFlags =
-            ((GetRuntimeSettings().forceEnableDcc & disableBits) == 0) ?
+            ((GetRuntimeSettings().forceDisableCompression & disableBits) == 0) ?
             VK_IMAGE_COMPRESSION_DEFAULT_EXT :
             VK_IMAGE_COMPRESSION_DISABLED_EXT;
     }
@@ -8479,10 +8545,11 @@ void PhysicalDevice::GetDeviceProperties2(
         {
             auto* pProps = static_cast<VkPhysicalDevicePipelineRobustnessPropertiesEXT*>(pNext);
 
-            pProps->defaultRobustnessStorageBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT;
-            pProps->defaultRobustnessUniformBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT;
-            pProps->defaultRobustnessVertexInputs = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT;
-            pProps->defaultRobustnessImages = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT;
+            GetPhysicalDevicePipelineRobustnessProperties(&pProps->defaultRobustnessStorageBuffers,
+                                                          &pProps->defaultRobustnessUniformBuffers,
+                                                          &pProps->defaultRobustnessVertexInputs,
+                                                          &pProps->defaultRobustnessImages);
+
             break;
         }
 

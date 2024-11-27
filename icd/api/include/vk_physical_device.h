@@ -481,6 +481,12 @@ template <typename ModifierPropertiesList_T>
         uint32_t*                                       pPropertyCount,
         utils::ArrayView<VkSparseImageFormatProperties> properties) const;
 
+    void GetPhysicalDevicePipelineRobustnessProperties(
+        VkPipelineRobustnessBufferBehaviorEXT* defaultRobustnessStorageBuffers,
+        VkPipelineRobustnessBufferBehaviorEXT* defaultRobustnessUniformBuffers,
+        VkPipelineRobustnessBufferBehaviorEXT* defaultRobustnessVertexInputs,
+        VkPipelineRobustnessImageBehaviorEXT*  defaultRobustnessImages) const;
+
     void GetPhysicalDevice16BitStorageFeatures(
         VkBool32* pStorageBuffer16BitAccess,
         VkBool32* pUniformAndStorageBuffer16BitAccess,

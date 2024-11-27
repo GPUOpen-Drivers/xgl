@@ -38,10 +38,7 @@
 #include "palArchiveFile.h"
 #include "gpurt/gpurtLib.h"
 #include "g_gpurtOptions.h"
-
-#if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
-#endif
 
 namespace vk
 {
@@ -233,7 +230,6 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->enableParallelUpdate              = settings.rtEnableUpdateParallel;
     pDeviceSettings->enableParallelBuild               = settings.rtEnableBuildParallel;
     pDeviceSettings->parallelBuildWavesPerSimd         = settings.buildParallelWavesPerSimd;
-    pDeviceSettings->enableAcquireReleaseInterface     = settings.rtEnableAcquireReleaseInterface;
     pDeviceSettings->bvhCpuBuildModeFastTrace          = static_cast<GpuRt::BvhCpuBuildMode>(settings.rtBvhCpuBuildMode);
     pDeviceSettings->bvhCpuBuildModeDefault            = static_cast<GpuRt::BvhCpuBuildMode>(settings.rtBvhCpuBuildMode);
     pDeviceSettings->bvhCpuBuildModeFastBuild          = static_cast<GpuRt::BvhCpuBuildMode>(settings.rtBvhCpuBuildMode);
@@ -257,6 +253,7 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->enableInsertBarriersInBuildAS     = settings.enableInsertBarriersInBuildAs;
     pDeviceSettings->numMortonSizeBits                 = settings.numMortonSizeBits;
     pDeviceSettings->allowFp16BoxNodesInUpdatableBvh   = settings.rtAllowFp16BoxNodesInUpdatableBvh;
+    pDeviceSettings->fp16BoxNodesRequireCompaction     = settings.fp16BoxNodesRequireCompactionFlag;
 
     // Enable AS stats based on panel setting
     pDeviceSettings->enableBuildAccelStructStats        = settings.rtEnableBuildAccelStructStats;
@@ -307,6 +304,9 @@ void RayTracingDevice::CollectGpurtOptions(
         threadTraceEnabled = 1;
     }
     *optionMap.FindKey(GpuRt::ThreadTraceEnabledOptionNameHash) = threadTraceEnabled;
+
+    *optionMap.FindKey(GpuRt::PersistentLaunchEnabledOptionNameHash) =
+        (settings.rtPersistentDispatchRaysFactor > 0.0f) ? 1 : 0;
 
     pGpurtOptions->Clear();
     for (auto it = optionMap.Begin(); it.Get() != nullptr; it.Next())
@@ -574,6 +574,15 @@ Pal::Result RayTracingDevice::InitCmdContext(
         cmdBufInfo.queueType  = Pal::QueueTypeUniversal;
 
         queueHandle = m_pDevice->GetQueue(cmdBufInfo.engineType, cmdBufInfo.queueType);
+
+        if (queueHandle == VK_NULL_HANDLE)
+        {
+            // Could not find a universal queue, try transfer
+            cmdBufInfo.engineType = Pal::EngineTypeDma;
+            cmdBufInfo.queueType  = Pal::QueueTypeDma;
+
+            queueHandle = m_pDevice->GetQueue(cmdBufInfo.engineType, cmdBufInfo.queueType);
+        }
     }
 
     Pal::Result result = (queueHandle != VK_NULL_HANDLE) ? Pal::Result::Success : Pal::Result::ErrorUnknown;
@@ -914,8 +923,12 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
                     pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
                     break;
                 case GpuRt::NodeType::SrvTable:
+                    pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorResource;
+                    pSubNode->srdRange.strideInDwords = untypedBufferSrdSizeDw;
+                    break;
                 case GpuRt::NodeType::TypedSrvTable:
                     pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorResource;
+                    pSubNode->srdRange.strideInDwords = typedBufferSrdSizeDw;
                     break;
                 default:
                     VK_NEVER_CALLED();
@@ -952,15 +965,31 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
             compileConstants.pConstants
         };
 
-        bool forceWave64 = false;
+        constexpr uint32_t CompilerOptionWaveSize      = Util::HashLiteralString("waveSize");
+        constexpr uint32_t CompilerOptionValueWave32   = Util::HashLiteralString("Wave32");
+        constexpr uint32_t CompilerOptionValueWave64   = Util::HashLiteralString("Wave64");
 
-        // Overide wave size for these GpuRT shader types
-        if (((buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildBVHTD) ||
-             (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildBVHTDTR) ||
-             (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildParallel) ||
-             (buildInfo.shaderType == GpuRt::InternalRayTracingCsType::BuildQBVH)))
+        ShaderWaveSize waveSize = ShaderWaveSize::WaveSizeAuto;
+
+        for (uint32_t i = 0; i < buildInfo.hashedCompilerOptionCount; ++i)
         {
-            forceWave64 = true;
+            const GpuRt::PipelineCompilerOption& compilerOption = buildInfo.pHashedCompilerOptions[i];
+
+            switch (compilerOption.hashedOptionName)
+            {
+            case CompilerOptionWaveSize:
+                if (compilerOption.value == CompilerOptionValueWave32)
+                {
+                    waveSize = ShaderWaveSize::WaveSize32;
+                }
+                else if (compilerOption.value == CompilerOptionValueWave64)
+                {
+                    waveSize = ShaderWaveSize::WaveSize64;
+                }
+            break;
+            default:
+                VK_ASSERT_ALWAYS_MSG("Unknown GPURT setting! Handle it!");
+            }
         }
 
         result = pDevice->CreateInternalComputePipeline(spvBin.codeSize,
@@ -968,7 +997,7 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
                                                         buildInfo.nodeCount,
                                                         nodes,
                                                         ShaderModuleInternalRayTracingShader,
-                                                        forceWave64,
+                                                        waveSize,
                                                         &specializationInfo,
                                                         &pDevice->GetInternalRayTracingPipeline());
 

@@ -156,7 +156,7 @@ macro(xgl_set_compiler)
     endif()
 
     # Assertions
-    if(XGL_ENABLE_ASSERTIONS)
+    if(VKI_ENABLE_ASSERTIONS)
         # MSVC doesn't like _DEBUG on release builds.
         if(NOT MSVC)
             add_definitions(-D_DEBUG)
@@ -221,7 +221,7 @@ function(xgl_compiler_options TARGET)
             -Wno-unused-parameter
         )
 
-        if(ICD_ANALYSIS_WARNINGS_AS_ERRORS)
+        if(VKI_ANALYSIS_WARNINGS_AS_ERRORS)
             target_compile_options(${TARGET} PRIVATE
                 -Werror
                 -Wno-error=comment
@@ -304,7 +304,7 @@ function(xgl_compiler_options TARGET)
 
         if(CMAKE_BUILD_TYPE_RELEASE)
             target_compile_options(${TARGET} PRIVATE -O3)
-            if(XGL_ENABLE_LTO)
+            if(VKI_ENABLE_LTO)
                 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
                     execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
                     if(GCC_VERSION VERSION_GREATER 5.3 OR GCC_VERSION VERSION_EQUAL 5.3)

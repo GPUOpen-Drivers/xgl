@@ -417,6 +417,12 @@ CONDITION_GFX_IP = """if (gfxIpLevel == Pal::GfxIpLevel::%Gfxip%)
 }
 """
 
+CONDITION_GFX_IP_11 = """if (IsGfx11(gfxIpLevel))
+{
+%Defs%\
+}
+"""
+
 CONDITION_ASIC = """if (asicRevision == Pal::AsicRevision::%Asic%)
 {
     SetAppProfile%FuncName%(pPipelineProfile);

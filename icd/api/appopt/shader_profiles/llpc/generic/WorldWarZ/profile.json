@@ -6,17 +6,18 @@
       },
       "action": {
         "cs": {
+          "nsaThreshold": 3,
           "unrollThreshold": 5000
-        }
-      }
-    },
-    {
-      "pattern": {
-        "always": true
-      },
-      "action": {
+        },
         "gs": {
+          "nsaThreshold": 3,
           "unrollThreshold": 5000
+        },
+        "vs": {
+          "nsaThreshold": 3
+        },
+        "ps": {
+          "nsaThreshold": 3
         }
       }
     },

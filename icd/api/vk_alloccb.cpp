@@ -189,7 +189,7 @@ void PAL_STDCALL PalFreeFuncDelegator(
 PalAllocator::PalAllocator(
     VkAllocationCallbacks* pCallbacks)
     :
-#if PAL_MEMTRACK
+#if VKI_MEMTRACK
     m_memTrackerAlloc(pCallbacks),
     m_memTracker(&m_memTrackerAlloc),
 #endif
@@ -200,7 +200,7 @@ PalAllocator::PalAllocator(
 // =====================================================================================================================
 void PalAllocator::Init()
 {
-#if PAL_MEMTRACK
+#if VKI_MEMTRACK
     m_memTracker.Init();
 #endif
 }
@@ -211,7 +211,7 @@ void* PalAllocator::Alloc(
 {
     void* pMem = nullptr;
 
-#if PAL_MEMTRACK
+#if VKI_MEMTRACK
     pMem = m_memTracker.Alloc(allocInfo);
 #else
     pMem = allocator::PalAllocFuncDelegator(
@@ -234,7 +234,7 @@ void PalAllocator::Free(
 {
     if (freeInfo.pClientMem != nullptr)
     {
-#if PAL_MEMTRACK
+#if VKI_MEMTRACK
         m_memTracker.Free(freeInfo);
 #else
         allocator::PalFreeFuncDelegator(m_pCallbacks, freeInfo.pClientMem);
@@ -242,7 +242,7 @@ void PalAllocator::Free(
     }
 }
 
-#if PAL_MEMTRACK
+#if VKI_MEMTRACK
 // =====================================================================================================================
 void PalAllocator::MemTrackerAllocator::Free(
     const Util::FreeInfo& freeInfo)

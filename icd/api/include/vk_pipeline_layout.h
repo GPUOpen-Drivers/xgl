@@ -66,6 +66,15 @@ struct UserDataLayout
         // Number of user data registers used for push constants
         uint32_t pushConstRegCount;
 
+#if VKI_RAY_TRACING
+        // Base user data register index to use for buffer storing ray tracing dispatch arguments
+        // The number of user data registers used is always 1
+        uint32_t dispatchRaysArgsPtrRegBase;
+
+        // Base user data register index to use for ray tracing capture replay VA mapping internal buffer
+        uint32_t rtCaptureReplayConstBufRegBase;
+#endif
+
     } common;
 
     union
@@ -90,11 +99,6 @@ struct UserDataLayout
             // Base use data register for debug printf
             uint32_t debugPrintfRegBase;
 
-#if VKI_RAY_TRACING
-            // Base user data register index to use for ray tracing capture replay VA mapping internal buffer
-            uint32_t rtCaptureReplayConstBufRegBase;
-#endif
-
             // Base user data register index to use for thread group order reversal state
             uint32_t threadGroupReversalRegBase;
 
@@ -115,20 +119,9 @@ struct UserDataLayout
             // Base use data register for debug printf
             uint32_t debugPrintfRegBase;
 
-#if VKI_RAY_TRACING
-            // Base user data register index to use for buffer storing ray tracing dispatch arguments
-            // The number of user data registers used is always 1
-            uint32_t dispatchRaysArgsPtrRegBase;
-#endif
-
             // Base user data register index to use for the constant buffer used in uber-fetch shader
             // The number of user data register used is always 2
             uint32_t uberFetchConstBufRegBase;
-
-#if VKI_RAY_TRACING
-            // Base user data register index to use for ray tracing capture replay VA mapping internal buffer
-            uint32_t rtCaptureReplayConstBufRegBase;
-#endif
 
             // Base user data register index to use for thread group order reversal state
             uint32_t threadGroupReversalRegBase;

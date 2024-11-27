@@ -1,0 +1,23 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "cs": {
+          "nsaThreshold": 3
+        },
+        "gs": {
+          "nsaThreshold": 3
+        },
+        "vs": {
+          "nsaThreshold": 3
+        },
+        "ps": {
+          "nsaThreshold": 3
+        }
+      }
+    }
+  ]
+}

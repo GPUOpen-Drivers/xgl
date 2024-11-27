@@ -279,7 +279,7 @@ public:
 
     inline static uint64_t IntValueFromHandle(const ApiType& handle)
     {
-#ifdef ICD_X64_BUILD
+#ifdef VKI_X64_BUILD
         return reinterpret_cast<uint64_t>(handle);
 #else
         return handle;

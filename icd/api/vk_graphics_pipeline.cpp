@@ -311,7 +311,6 @@ VkResult GraphicsPipeline::CreatePalPipelineObjects(
                 Util::VoidPtrInc(pSystemMem, palOffset),
                 &pPalPipeline[deviceIdx]);
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
             // Temporarily reinject post Pal pipeline creation (when the internal pipeline hash is available).
             // The reinjection cache layer can be linked back into the pipeline cache chain once the
             // Vulkan pipeline cache key can be stored (and read back) inside the ELF as metadata.
@@ -342,7 +341,6 @@ VkResult GraphicsPipeline::CreatePalPipelineObjects(
                     palResult = Util::Result::Success;
                 }
             }
-#endif
 
             VK_ASSERT(palSize == pPalDevice->GetGraphicsPipelineSize(pObjectCreateInfo->pipeline, nullptr));
             palOffset += palSize;
@@ -444,10 +442,9 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
                     const auto& palProperties = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
                     const auto& info          = pPalPipeline[deviceIdx]->GetInfo();
 
-                    if ((info.ps.flags.perSampleShading == 1) ||
-                        (info.ps.flags.enablePops == 1))
+                    if (info.ps.flags.perSampleShading == 1)
                     {
-                        // Override the shader rate to 1x1 if SampleId used in shader, or POPS is enabled.
+                        // Override the shader rate to 1x1 if SampleId used in shader.
                         Device::SetDefaultVrsRateParams(&pObjectCreateInfo->immedInfo.vrsRateParams);
 
                         pObjectCreateInfo->flags.force1x1ShaderRate = true;
@@ -479,6 +476,14 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
 
                         pObjectCreateInfo->flags.force1x1ShaderRate = true;
                         pObjectCreateInfo->immedInfo.msaaCreateInfo.pixelShaderSamples = 1;
+                    }
+                    else if (info.ps.flags.enablePops == 1)
+                    {
+                        // Override the shader rate to 1x1 if POPS is enabled and
+                        // fragmentShadingRateWithFragmentShaderInterlock is not supported.
+                        Device::SetDefaultVrsRateParams(&pObjectCreateInfo->immedInfo.vrsRateParams);
+
+                        pObjectCreateInfo->flags.force1x1ShaderRate = true;
                     }
                 }
 
@@ -1051,8 +1056,30 @@ VkResult GraphicsPipeline::Create(
 #endif
             objectCreateInfo.flags.isPointSizeUsed = binaryMetadata.pointSizeUsed;
             objectCreateInfo.flags.shadingRateUsedInShader = binaryMetadata.shadingRateUsedInShader;
-            objectCreateInfo.flags.viewIndexFromDeviceIndex = Util::TestAnyFlagSet(flags,
-                VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT);
+
+            if (libInfo.pPreRasterizationShaderLib != nullptr)
+            {
+                if (libInfo.pPreRasterizationShaderLib->GetPipelineBinaryCreateInfo().flags &
+                    VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT)
+                {
+                    objectCreateInfo.flags.viewIndexFromDeviceIndex |= 1 << GraphicsLibraryPreRaster;
+                }
+            }
+
+            if (libInfo.pFragmentShaderLib != nullptr)
+            {
+                if (libInfo.pFragmentShaderLib->GetPipelineBinaryCreateInfo().flags &
+                    VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT)
+                {
+                    objectCreateInfo.flags.viewIndexFromDeviceIndex |= 1 << GraphicsLibraryFragment;
+                }
+            }
+
+            if (Util::TestAnyFlagSet(flags, VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT))
+            {
+                objectCreateInfo.flags.viewIndexFromDeviceIndex |=
+                    ((1 << GraphicsLibraryPreRaster) | (1 << GraphicsLibraryFragment));
+            }
 
 #if VKI_RAY_TRACING
             objectCreateInfo.dispatchRaysUserDataOffset = pPipelineLayout->GetDispatchRaysUserData();
@@ -2232,8 +2259,8 @@ void GraphicsPipeline::BindToCmdBuffer(
     // because when VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT is specified
     // ViewMask for each VkPhysicalDevice is defined by DeviceIndex
     // not by current subpass during a render pass instance.
-    const bool oldViewIndexFromDeviceIndex = pRenderState->viewIndexFromDeviceIndex;
-    const bool newViewIndexFromDeviceIndex = ViewIndexFromDeviceIndex();
+    const uint32_t oldViewIndexFromDeviceIndex = pRenderState->viewIndexFromDeviceIndex;
+    const uint32_t newViewIndexFromDeviceIndex = StageMaskForViewIndexUseDeviceIndex();
 
     if (oldViewIndexFromDeviceIndex != newViewIndexFromDeviceIndex)
     {

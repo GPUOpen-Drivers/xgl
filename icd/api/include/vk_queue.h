@@ -209,15 +209,9 @@ public:
     VkResult CreateSqttState(
         void* pMemory);
 
-    enum
-    {
-        MaxQueueFamilies   = Pal::QueueTypeCount // Maximum number of queue families
-        ,
-        MaxQueuesPerFamily = 8,                    // Maximum number of queues per family
-        MaxMultiQueues     = 4,
-
-        MaxSubQueuesInGroup = MaxQueueFamilies * MaxQueuesPerFamily  // Maximum number of queues per group
-    };
+    static constexpr uint32_t MaxQueueFamilies   = Pal::QueueTypeCount   // Maximum number of queue families
+    ;
+    static constexpr uint32_t MaxQueuesPerFamily = 8;                     // Maximum number of queues per family
 
     VK_FORCEINLINE Pal::IQueue* PalQueue(int32_t idx) const
     {

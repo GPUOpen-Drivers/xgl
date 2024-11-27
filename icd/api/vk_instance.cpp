@@ -44,11 +44,9 @@
 
 #include "include/internal_layer_hooks.h"
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
 #include "devmode/devmode_rgp.h"
 #include "devmode/devmode_ubertrace.h"
-#endif
 
 #include "res/ver.h"
 
@@ -374,9 +372,7 @@ VkResult Instance::Init(
             m_nullGpuId                       = createInfo.nullGpuId;
         }
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
         createInfo.flags.supportRgpTraces = 1;
-#endif
 
         //Check the KHR_DISPALY extension, and then determine whether to open the primaryNode.
         if (IsExtensionEnabled(InstanceExtensions::KHR_DISPLAY) == false)
@@ -628,13 +624,11 @@ VkResult Instance::LoadAndCommitSettings(
         }
     }
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     // Inform developer mode manager of settings.  This also finalizes the developer mode manager.
     if (m_pDevMode != nullptr)
     {
         m_pDevMode->Finalize(deviceCount, settingsLoaders);
     }
-#endif
 
     // After all of the settings have been finalized, initialize each device
     for (uint32_t deviceIdx = 0; ((deviceIdx < deviceCount) && (result == VK_SUCCESS)); ++deviceIdx)
@@ -670,7 +664,6 @@ VkResult Instance::Destroy(void)
 {
     AmdvlkLog(m_logTagIdMask, GeneralPrint, "%s End ********\n", GetApplicationName());
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     // Pipeline binary cache is required to be freed before destroying DevMode
     // because DevMode manages the state of pipeline binary cache.
     uint32_t deviceCount = PhysicalDeviceManager::MaxPhysicalDevices;
@@ -685,7 +678,6 @@ VkResult Instance::Destroy(void)
     {
         m_pDevMode->Destroy();
     }
-#endif
 
     // Destroy physical device manager
     if (m_pPhysicalDeviceManager != nullptr)
@@ -783,6 +775,8 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_MEMORY_CAPABILITIES));
 
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_GET_SURFACE_CAPABILITIES2));
+
+        supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_SWAPCHAIN_COLORSPACE));
 
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_DEVICE_GROUP_CREATION));
 
@@ -1028,7 +1022,6 @@ void Instance::EnableCrashAnalysisSupport()
 // PAL devices (before physical device manager is created).
 void Instance::DevModeEarlyInitialize()
 {
-#if ICD_GPUOPEN_DEVMODE_BUILD
     VK_ASSERT(m_pPhysicalDeviceManager == nullptr);
     VK_ASSERT(m_pDevMode == nullptr);
 
@@ -1051,7 +1044,6 @@ void Instance::DevModeEarlyInitialize()
 
         VK_ASSERT(result == VK_SUCCESS);
     }
-#endif
 }
 
 // =====================================================================================================================
@@ -1059,7 +1051,6 @@ void Instance::DevModeEarlyInitialize()
 // PAL devices (after physical device manager is created).
 void Instance::DevModeLateInitialize()
 {
-#if ICD_GPUOPEN_DEVMODE_BUILD
     VK_ASSERT(m_pPhysicalDeviceManager != nullptr);
     VK_ASSERT(m_pDevMode != nullptr);
 
@@ -1074,7 +1065,6 @@ void Instance::DevModeLateInitialize()
     {
         EnableCrashAnalysisSupport();
     }
-#endif
 }
 
 // =====================================================================================================================

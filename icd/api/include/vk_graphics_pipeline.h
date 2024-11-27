@@ -215,9 +215,7 @@ public:
     bool IsPointSizeUsed() const
         { return m_flags.isPointSizeUsed; }
 
-    // Returns value of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
-    // defined by flags member of VkGraphicsPipelineCreateInfo.
-    bool ViewIndexFromDeviceIndex() const
+    uint32_t StageMaskForViewIndexUseDeviceIndex() const
         { return m_flags.viewIndexFromDeviceIndex; }
 
     GraphicsPipelineObjectFlags GetPipelineFlags() const

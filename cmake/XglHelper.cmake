@@ -28,19 +28,19 @@ include_guard()
 macro(xgl_append_common_sanitizer_flags)
     if(NOT MSVC)
         # Append -fno-omit-frame-pointer and turn on debug info to get better stack traces.
-        string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fno-omit-frame-pointer")
+        string(APPEND VKI_SANITIZER_COMPILE_FLAGS " -fno-omit-frame-pointer")
         if (NOT CMAKE_BUILD_TYPE_DEBUG)
-            string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -gline-tables-only")
+            string(APPEND VKI_SANITIZER_COMPILE_FLAGS " -gline-tables-only")
         else()
             # Use -O1 even in debug mode, otherwise sanitizers slowdown is too large.
-            string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -O1")
+            string(APPEND VKI_SANITIZER_COMPILE_FLAGS " -O1")
         endif()
     elseif(CLANG_CL)
         # Keep frame pointers around.
-        string(APPEND ICD_SANITIZER_COMPILE_FLAGS " /Oy-")
+        string(APPEND VKI_SANITIZER_COMPILE_FLAGS " /Oy-")
         # Always ask the linker to produce symbols with asan.
-        string(APPEND ICD_SANITIZER_COMPILE_FLAGS " /Z7")
-        string(APPEND ICD_SANITIZER_LINK_FLAGS " -debug")
+        string(APPEND VKI_SANITIZER_COMPILE_FLAGS " /Z7")
+        string(APPEND VKI_SANITIZER_LINK_FLAGS " -debug")
     endif()
 endmacro()
 
@@ -49,18 +49,18 @@ macro(xgl_append_gcov_coverage_flags)
         # This option is used to compile and link code instrumented for coverage analysis.
         # The option --coverage is a synonym for -fprofile-arcs -ftest-coverage (when compiling) and -lgcov (when linking)
         # Ref link: https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html#Instrumentation-Options
-        string(APPEND ICD_GCOV_COMPILE_FLAGS " --coverage")
-        string(APPEND ICD_GCOV_LINK_FLAGS    " --coverage")
+        string(APPEND VKI_GCOV_COMPILE_FLAGS " --coverage")
+        string(APPEND VKI_GCOV_LINK_FLAGS    " --coverage")
 
         if (NOT CMAKE_BUILD_TYPE_DEBUG)
             # Use -O0 even in not debug mode, otherwise code coverage is not accurate.
-            string(APPEND ICD_GCOV_COMPILE_FLAGS " -O0")
+            string(APPEND VKI_GCOV_COMPILE_FLAGS " -O0")
         endif()
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-            string(APPEND ICD_GCOV_COMPILE_FLAGS " -Xclang -coverage-cfg-checksum")
-            string(APPEND ICD_GCOV_COMPILE_FLAGS " -Xclang -coverage-no-function-names-in-data")
-            string(APPEND ICD_GCOV_COMPILE_FLAGS " -Xclang -coverage-version='408*'")
+            string(APPEND VKI_GCOV_COMPILE_FLAGS " -Xclang -coverage-cfg-checksum")
+            string(APPEND VKI_GCOV_COMPILE_FLAGS " -Xclang -coverage-no-function-names-in-data")
+            string(APPEND VKI_GCOV_COMPILE_FLAGS " -Xclang -coverage-version='408*'")
         endif()
     else()
         message(FATAL_ERROR "Unknown compiler ID: ${CMAKE_CXX_COMPILER_ID}")

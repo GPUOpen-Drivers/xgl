@@ -1708,7 +1708,6 @@ VkResult RayTracingPipeline::CreateImpl(
                                                              pAllocator);
                     }
                 }
-#if ICD_GPUOPEN_DEVMODE_BUILD
                 // Temporarily reinject post Pal pipeline creation (when the internal pipeline hash is available).
                 // The reinjection cache layer can be linked back into the pipeline cache chain once the
                 // Vulkan pipeline cache key can be stored (and read back) inside the ELF as metadata.
@@ -1739,7 +1738,6 @@ VkResult RayTracingPipeline::CreateImpl(
                         palResult = Util::Result::Success;
                     }
                 }
-#endif
             }
 
             result = PalToVkResult(palResult);
@@ -1985,7 +1983,6 @@ static int32_t DeferredCreateRayTracingPipelineCallback(
                                                         pState->pAllocator,
                                                         pOperation->Workload(index));
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
                     if (localResult == VK_SUCCESS)
                     {
                         IDevMode* pDevMode = pDevice->VkInstance()->GetDevModeMgr();
@@ -2000,7 +1997,6 @@ static int32_t DeferredCreateRayTracingPipelineCallback(
                             }
                         }
                     }
-#endif
                 }
 
                 if (localResult != VK_SUCCESS)
@@ -2244,6 +2240,7 @@ VkResult RayTracingPipeline::GetPipelineExecutableProperties(
 // =====================================================================================================================
 VkResult RayTracingPipeline::GetRayTracingShaderDisassembly(
     Util::Abi::PipelineSymbolType pipelineSymbolType,
+    size_t                        binarySize,
     const void*                   pBinaryCode,
     size_t*                       pBufferSize,
     void*                         pBuffer
@@ -2251,7 +2248,8 @@ VkResult RayTracingPipeline::GetRayTracingShaderDisassembly(
 {
     // To extract the shader code, we can re-parse the saved ELF binary and lookup the shader's program
     // instructions by examining the symbol table entry for that shader's entrypoint.
-    Util::Abi::PipelineAbiReader abiReader(m_pDevice->VkInstance()->Allocator(), pBinaryCode);
+    Util::Abi::PipelineAbiReader abiReader(m_pDevice->VkInstance()->Allocator(),
+                                           Util::Span<const void>{pBinaryCode, binarySize});
 
     VkResult    result    = VK_SUCCESS;
     Pal::Result palResult = abiReader.Init();
@@ -2264,32 +2262,34 @@ VkResult RayTracingPipeline::GetRayTracingShaderDisassembly(
         VK_ASSERT((pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderDisassembly) ||
                   (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderAmdIl));
 
-        const Util::Elf::SymbolTableEntry* pSymbolEntry = nullptr;
         const char* pSectionName = nullptr;
 
         if (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderDisassembly)
         {
-            pSymbolEntry = abiReader.GetPipelineSymbol(
-                Util::Abi::GetSymbolForStage(
-                    Util::Abi::PipelineSymbolType::ShaderDisassembly,
-                    Util::Abi::HardwareStage::Cs));
+            palResult = abiReader.CopySymbol(
+                            Util::Abi::GetSymbolForStage(
+                                Util::Abi::PipelineSymbolType::ShaderDisassembly,
+                                Util::Abi::HardwareStage::Cs),
+                            pBufferSize,
+                            pBuffer);
+
             pSectionName = Util::Abi::AmdGpuDisassemblyName;
+            symbolValid  = palResult == Util::Result::Success;
         }
         else if (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderAmdIl)
         {
-            pSymbolEntry = abiReader.GetPipelineSymbol(
-                Util::Abi::GetSymbolForStage(
-                    Util::Abi::PipelineSymbolType::ShaderAmdIl,
-                    Util::Abi::ApiShaderType::Cs));
+            palResult = abiReader.CopySymbol(
+                            Util::Abi::GetSymbolForStage(
+                                Util::Abi::PipelineSymbolType::ShaderAmdIl,
+                                Util::Abi::ApiShaderType::Cs),
+                            pBufferSize,
+                            pBuffer);
+
             pSectionName = Util::Abi::AmdGpuCommentLlvmIrName;
+            symbolValid  = palResult == Util::Result::Success;
         }
 
-        if (pSymbolEntry != nullptr)
-        {
-            palResult = abiReader.GetElfReader().CopySymbol(*pSymbolEntry, pBufferSize, pBuffer);
-            symbolValid = palResult == Util::Result::Success;
-        }
-        else if (pSectionName != nullptr)
+        if ((symbolValid == false) && (pSectionName != nullptr))
         {
             const auto& elfReader = abiReader.GetElfReader();
             Util::ElfReader::SectionId disassemblySectionId = elfReader.FindSection(pSectionName);
@@ -2406,6 +2406,7 @@ VkResult RayTracingPipeline::GetPipelineExecutableInternalRepresentations(
                 // Get the text based ISA disassembly of the shader
                 VkResult result = GetRayTracingShaderDisassembly(
                                         Util::Abi::PipelineSymbolType::ShaderDisassembly,
+                                        static_cast<size_t>(binarySize),
                                         pBinaryCode,
                                         &(pInternalRepresentations[entry].dataSize),
                                         pInternalRepresentations[entry].pData);
@@ -2608,9 +2609,7 @@ void RayTracingPipeline::BindToCmdBuffer(
             uint32_t* pCpuAddr = pPalCmdBuf->CmdAllocateEmbeddedData(dwordSize, 1, &gpuAddress);
             memcpy(pCpuAddr, m_captureReplayVaMappingBufferInfo.pData, m_captureReplayVaMappingBufferInfo.dataSize);
 
-            uint32_t rtCaptureReplayConstBufRegBase = (m_userDataLayout.scheme == PipelineLayoutScheme::Compact) ?
-                m_userDataLayout.compact.rtCaptureReplayConstBufRegBase :
-                m_userDataLayout.indirect.rtCaptureReplayConstBufRegBase;
+            const uint32_t rtCaptureReplayConstBufRegBase = m_userDataLayout.common.rtCaptureReplayConstBufRegBase;
 
             pPalCmdBuf->CmdSetUserData(Pal::PipelineBindPoint::Compute,
                                        rtCaptureReplayConstBufRegBase,
@@ -2800,6 +2799,29 @@ uint32_t RayTracingPipeline::UpdateShaderGroupIndex(
     uint32_t idx)
 {
     return  (shader == VK_SHADER_UNUSED_KHR) ? VK_SHADER_UNUSED_KHR : idx;
+}
+
+// =====================================================================================================================
+uint32_t RayTracingPipeline::PersistentDispatchSize(
+    uint32_t width,
+    uint32_t height,
+    uint32_t depth
+    ) const
+{
+    const Pal::DispatchDims dispatchSize = GetDispatchSize({ .x = width, .y = height, .z = depth });
+
+    // Groups needed to cover the x, y, and z dimension of a persistent dispatch
+    // For large dispatches, this will be limited by the size of the GPU because we want just enough groups to fill it
+    // For small dispatches, there will be even fewer groups; don't launch groups that will have nothing to do
+    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+    const Pal::DeviceProperties& deviceProp = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
+    const auto& props = deviceProp.gfxipProperties.shaderCore;
+    const uint32 rayDispatchMaxGroups = settings.rtPersistentDispatchRaysFactor *
+        (props.numAvailableCus * props.numSimdsPerCu * props.numWavefrontsPerSimd);
+    const uint32 persistentDispatchSize = Util::Min(rayDispatchMaxGroups,
+                                                    (dispatchSize.x * dispatchSize.y * dispatchSize.z));
+
+    return persistentDispatchSize;
 }
 
 // =====================================================================================================================

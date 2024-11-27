@@ -120,15 +120,15 @@ union GraphicsPipelineObjectFlags
         uint32_t   isPointSizeUsed           : 1;
         uint32_t   bindColorBlendObject      : 1;
         uint32_t   bindMsaaObject            : 1;
-        uint32_t   viewIndexFromDeviceIndex  : 1;
         uint32_t   perpLineEndCapsEnable     : 1;
         uint32_t   shadingRateUsedInShader   : 1;
         uint32_t   fragmentShadingRateEnable : 1;
+        uint32_t   viewIndexFromDeviceIndex  : 2;
 #if VKI_RAY_TRACING
         uint32_t   hasRayTracing             : 1;
-        uint32_t   reserved                  : 15;
+        uint32_t   reserved                  : 14;
 #else
-        uint32_t   reserved                  : 16;
+        uint32_t   reserved                  : 15;
 #endif
     };
     uint32_t value;

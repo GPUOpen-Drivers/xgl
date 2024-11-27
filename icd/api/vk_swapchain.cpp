@@ -668,7 +668,7 @@ VkResult SwapChain::SetupAutoStereo(
                                                       3,
                                                       userDataNodes,
                                                       0,
-                                                      false,
+                                                      ShaderWaveSize::WaveSizeAuto,
                                                       nullptr,
                                                       &m_pAutoStereoPipeline);
 
@@ -963,7 +963,6 @@ bool SwapChain::BuildPostProcessingCommands(
         imageViewInfo[0].subresRange.startSubres.plane      = 0;
         imageViewInfo[0].possibleLayouts.usages             = Pal::LayoutShaderRead | Pal::LayoutShaderWrite;
         imageViewInfo[0].possibleLayouts.engines            = Pal::ImageLayoutEngineFlags::LayoutUniversalEngine;
-
         // Update array slice for right eye SRD
         imageViewInfo[1]                                    = imageViewInfo[0];
         imageViewInfo[1].subresRange.startSubres.arraySlice = 1;
@@ -1009,7 +1008,7 @@ bool SwapChain::BuildPostProcessingCommands(
         dispatchDimensions.y = Util::RoundUpToMultiple(imageCreateInfo.extent.width, workGroupSize[1]) / workGroupSize[1];
         dispatchDimensions.z = 1;
 
-        pCmdBuf->CmdDispatch(dispatchDimensions);
+        pCmdBuf->CmdDispatch(dispatchDimensions, {});
 
         Pal::AcquireReleaseInfo acquireRelInfo = {};
 

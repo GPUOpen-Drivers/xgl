@@ -26,8 +26,8 @@
 ### Create XGL Library #################################################################################################
 add_library(xgl SHARED)
 
-set(ICD_TARGET amdvlk${TARGET_ARCHITECTURE_BITS})
-set_target_properties(xgl PROPERTIES OUTPUT_NAME ${ICD_TARGET})
+set(VKI_TARGET amdvlk${TARGET_ARCHITECTURE_BITS})
+set_target_properties(xgl PROPERTIES OUTPUT_NAME ${VKI_TARGET})
 set_target_properties(xgl PROPERTIES PREFIX "")
 
 install(TARGETS xgl DESTINATION ${CMAKE_SOURCE_DIR}/lib/${CMAKE_BUILD_TYPE})
@@ -44,7 +44,7 @@ endif()
 xgl_set_compile_definitions()
 
 ### Include Directories ################################################################################################
-if (BUILD_WAYLAND_SUPPORT)
+if (VKI_BUILD_WAYLAND)
     target_include_directories(xgl PUBLIC ${WAYLAND_INCLUDE_DIRS})
 endif()
 
@@ -155,7 +155,6 @@ target_sources(xgl PRIVATE
     api/appopt/barrier_filter_layer.cpp
     api/appopt/strange_brigade_layer.cpp
     api/appopt/baldurs_gate3_layer.cpp
-    api/appopt/gravity_mark_layer.cpp
     api/appopt/g_shader_profile.cpp
     api/render_state_cache.cpp
     api/renderpass/renderpass_builder.cpp
@@ -193,65 +192,65 @@ if(ICD_BUILD_LLPC)
 endif()
 
 ### ICD Auto-generated Shader Profiles Files ##################################
-# ICD_GENDIR Path to the code generation tools
-set(ICD_GENDIR ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate)
+# VKI_GENDIR Path to the code generation tools
+set(VKI_GENDIR ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate)
 
 # ICD shader profile code generation main script
-set(ICD_GEN_SHADER_PROFILE_SCRIPTS ${ICD_GENDIR}/genShaderProfile.py ${ICD_GENDIR}/shaderProfileTemplate.py)
+set(VKI_GEN_SHADER_PROFILE_SCRIPTS ${VKI_GENDIR}/genShaderProfile.py ${VKI_GENDIR}/shaderProfileTemplate.py)
 
-set(ICD_SHADER_PROFILE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/appopt)
+set(VKI_SHADER_PROFILE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/appopt)
 
-file(GLOB_RECURSE ICD_ALL_SHADER_PROFILE_FILES
-    ${ICD_SHADER_PROFILE_DIR}/shader_profiles/profile.json
+file(GLOB_RECURSE VKI_ALL_SHADER_PROFILE_FILES
+    ${VKI_SHADER_PROFILE_DIR}/shader_profiles/profile.json
 )
 
 add_custom_command(
-    OUTPUT ${ICD_SHADER_PROFILE_DIR}/g_shader_profile.cpp ${ICD_SHADER_PROFILE_DIR}/g_shader_profile.h
-    COMMAND ${PYTHON_CMD} ${ICD_GENDIR}/genShaderProfile.py ${ICD_SHADER_PROFILE_DIR}/shader_profiles
-    DEPENDS ${ICD_GEN_SHADER_PROFILE_SCRIPTS} ${ICD_ALL_SHADER_PROFILE_FILES}
+    OUTPUT ${VKI_SHADER_PROFILE_DIR}/g_shader_profile.cpp ${VKI_SHADER_PROFILE_DIR}/g_shader_profile.h
+    COMMAND ${PYTHON_CMD} ${VKI_GENDIR}/genShaderProfile.py ${VKI_SHADER_PROFILE_DIR}/shader_profiles
+    DEPENDS ${VKI_GEN_SHADER_PROFILE_SCRIPTS} ${VKI_ALL_SHADER_PROFILE_FILES}
     COMMENT "Generating shader profiles code from all profile.json files"
 )
 
 add_custom_target(
     GenerateShaderProfiles
-    DEPENDS ${ICD_GEN_SHADER_PROFILE_SCRIPTS} ${ICD_ALL_SHADER_PROFILE_FILES}
+    DEPENDS ${VKI_GEN_SHADER_PROFILE_SCRIPTS} ${VKI_ALL_SHADER_PROFILE_FILES}
     COMMENT "Checking if re-generation is required for shader profiles"
 )
 
 add_dependencies(xgl GenerateShaderProfiles)
 
 ### ICD Auto-generated String Files ###########################################
-set(ICD_STRING_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/strings)
+set(VKI_STRING_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/strings)
 # ICD settings code generation main script
-set(ICD_GEN_STRINGS ${ICD_STRING_DIR}/generate_strings.py)
+set(VKI_GEN_STRINGS ${VKI_STRING_DIR}/generate_strings.py)
 
-set(ICD_GEN_STRINGS_FILES ${ICD_GEN_STRINGS} ${ICD_STRING_DIR}/func_table_template.py)
+set(VKI_GEN_STRINGS_FILES ${VKI_GEN_STRINGS} ${VKI_STRING_DIR}/func_table_template.py)
 
-set(ICD_STRING_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/api/strings)
+set(VKI_STRING_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/api/strings)
 
-set(ICD_GEN_STRINGS_OPT -w ${ICD_STRING_DIR} -d ${ICD_STRING_OUTPUT_DIR})
+set(VKI_GEN_STRINGS_OPT -w ${VKI_STRING_DIR} -d ${VKI_STRING_OUTPUT_DIR})
 
-set(ICD_STRING_OUTPUT_FILES ${ICD_STRING_OUTPUT_DIR}/g_entry_points_decl.h
-                            ${ICD_STRING_OUTPUT_DIR}/g_entry_points_impl.h
-                            ${ICD_STRING_OUTPUT_DIR}/g_extensions_decl.h
-                            ${ICD_STRING_OUTPUT_DIR}/g_extensions_impl.h
-                            ${ICD_STRING_OUTPUT_DIR}/g_func_table.h
+set(VKI_STRING_OUTPUT_FILES ${VKI_STRING_OUTPUT_DIR}/g_entry_points_decl.h
+                            ${VKI_STRING_OUTPUT_DIR}/g_entry_points_impl.h
+                            ${VKI_STRING_OUTPUT_DIR}/g_extensions_decl.h
+                            ${VKI_STRING_OUTPUT_DIR}/g_extensions_impl.h
+                            ${VKI_STRING_OUTPUT_DIR}/g_func_table.h
 )
 
-set(ICD_STRING_SOURCE_FILES ${ICD_STRING_DIR}/entry_points.txt
-                            ${ICD_STRING_DIR}/extensions.txt
+set(VKI_STRING_SOURCE_FILES ${VKI_STRING_DIR}/entry_points.txt
+                            ${VKI_STRING_DIR}/extensions.txt
 )
 
 add_custom_command(
-    OUTPUT ${ICD_STRING_OUTPUT_FILES}
-    COMMAND ${PYTHON_CMD} ${ICD_GEN_STRINGS} ${ICD_GEN_STRINGS_OPT}
-    DEPENDS ${ICD_GEN_STRINGS_FILES} ${ICD_STRING_SOURCE_FILES}
-    COMMENT "Generating Vulkan api strings ${ICD_GEN_STRINGS_OPT}"
+    OUTPUT ${VKI_STRING_OUTPUT_FILES}
+    COMMAND ${PYTHON_CMD} ${VKI_GEN_STRINGS} ${VKI_GEN_STRINGS_OPT}
+    DEPENDS ${VKI_GEN_STRINGS_FILES} ${VKI_STRING_SOURCE_FILES}
+    COMMENT "Generating Vulkan api strings ${VKI_GEN_STRINGS_OPT}"
 )
 
 add_custom_target(
     RunVKStringsGenerator
-    DEPENDS ${ICD_STRING_OUTPUT_FILES}
+    DEPENDS ${VKI_STRING_OUTPUT_FILES}
     COMMENT "Checking if re-generation is required for strings"
 )
 
@@ -263,31 +262,31 @@ target_sources(xgl PRIVATE api/strings/strings.cpp)
 # ICD settings code generation main script
 
 set(XGL_DEVDRIVER_PATH ${XGL_PAL_PATH}/shared/devdriver)
-set(ICD_DD_GENDIR ${XGL_DEVDRIVER_PATH}/apis/settings/codegen)
+set(VKI_DD_GENDIR ${XGL_DEVDRIVER_PATH}/apis/settings/codegen)
 
-set(ICD_GEN_SETTINGS ${ICD_DD_GENDIR}/settings_codegen.py)
+set(VKI_GEN_SETTINGS ${VKI_DD_GENDIR}/settings_codegen.py)
 
-set(ICD_GEN_SETTINGS_FILES ${ICD_GEN_SETTINGS})
+set(VKI_GEN_SETTINGS_FILES ${VKI_GEN_SETTINGS})
 
-set(ICD_SETTINGS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/settings)
+set(VKI_SETTINGS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/settings)
 
 add_custom_command(
-    OUTPUT ${ICD_SETTINGS_DIR}/g_settings.cpp ${ICD_SETTINGS_DIR}/g_settings.h
-    COMMAND ${PYTHON_CMD} ${ICD_GEN_SETTINGS}
-        -i ${ICD_SETTINGS_DIR}/settings_xgl.json
-        -o ${ICD_SETTINGS_DIR}
+    OUTPUT ${VKI_SETTINGS_DIR}/g_settings.cpp ${VKI_SETTINGS_DIR}/g_settings.h
+    COMMAND ${PYTHON_CMD} ${VKI_GEN_SETTINGS}
+        -i ${VKI_SETTINGS_DIR}/settings_xgl.json
+        -o ${VKI_SETTINGS_DIR}
         -g settings
         -s settings/settings.h
         --namespaces vk
         --settings-struct-name RuntimeSettings
         --include-headers pal.h palImage.h
-    DEPENDS ${ICD_GEN_SETTINGS_FILES} ${ICD_SETTINGS_DIR}/settings_xgl.json
+    DEPENDS ${VKI_GEN_SETTINGS_FILES} ${VKI_SETTINGS_DIR}/settings_xgl.json
     COMMENT "Generating Vulkan settings code from settings_xgl.json"
 )
 
 add_custom_target(
     RunVKSettingsGenerator
-    DEPENDS ${ICD_GEN_SETTINGS_FILES} ${ICD_SETTINGS_DIR}/settings_xgl.json
+    DEPENDS ${VKI_GEN_SETTINGS_FILES} ${VKI_SETTINGS_DIR}/settings_xgl.json
     COMMENT "Checking if re-generation is required for settings"
 )
 
@@ -300,22 +299,22 @@ target_sources(xgl PRIVATE
 )
 
 add_custom_command(
-    OUTPUT ${ICD_SETTINGS_DIR}/g_experiments.cpp ${ICD_SETTINGS_DIR}/g_experiments.h
-    COMMAND ${PYTHON_CMD} ${ICD_GEN_SETTINGS}
-        -i ${ICD_SETTINGS_DIR}/experiments_settings_xgl.json
-        -o ${ICD_SETTINGS_DIR}
+    OUTPUT ${VKI_SETTINGS_DIR}/g_experiments.cpp ${VKI_SETTINGS_DIR}/g_experiments.h
+    COMMAND ${PYTHON_CMD} ${VKI_GEN_SETTINGS}
+        -i ${VKI_SETTINGS_DIR}/experiments_settings_xgl.json
+        -o ${VKI_SETTINGS_DIR}
         -g experiments
         -s settings/experimentsLoader.h
         --namespaces vk
         --settings-struct-name ExpSettings
         --classname ExperimentsLoader
-    DEPENDS ${ICD_GEN_SETTINGS_FILES} ${ICD_SETTINGS_DIR}/experiments_settings_xgl.json
+    DEPENDS ${VKI_GEN_SETTINGS_FILES} ${VKI_SETTINGS_DIR}/experiments_settings_xgl.json
     COMMENT "Generating Vulkan settings code from experiments_settings_xgl.json"
 )
 
 add_custom_target(
     RunVKExperimentsGenerator
-    DEPENDS ${ICD_GEN_SETTINGS_FILES} ${ICD_SETTINGS_DIR}/experiments_settings_xgl.json
+    DEPENDS ${VKI_GEN_SETTINGS_FILES} ${VKI_SETTINGS_DIR}/experiments_settings_xgl.json
     COMMENT "Checking if re-generation is required for settings"
 )
 
@@ -335,12 +334,10 @@ target_sources(xgl PRIVATE
 )
 
 ### ICD api/devmode ###########################################################
-if(ICD_GPUOPEN_DEVMODE_BUILD)
-    target_sources(xgl PRIVATE
-        api/devmode/devmode_rgp.cpp
-        api/devmode/devmode_ubertrace.cpp
-    )
-endif()
+target_sources(xgl PRIVATE
+    api/devmode/devmode_rgp.cpp
+    api/devmode/devmode_ubertrace.cpp
+)
 
 ### ICD layer ##################################################################
     target_sources(xgl PRIVATE
@@ -362,7 +359,7 @@ if (UNIX)
         target_link_libraries(xgl PRIVATE -fabi-version=0 -static-intel)
     endif()
 
-    if(CMAKE_BUILD_TYPE_RELEASE AND XGL_ENABLE_LTO)
+    if(CMAKE_BUILD_TYPE_RELEASE AND VKI_ENABLE_LTO)
         if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
             target_link_options(xgl PRIVATE -Wno-stringop-overflow)
             execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
@@ -379,8 +376,8 @@ if (UNIX)
     target_link_options(xgl PRIVATE
         -Wl,-Bdynamic
         -Wl,-z,noexecstack
-        -Wl,-Map=$<TARGET_FILE_DIR:xgl>/${ICD_TARGET}.map
-        -Wl,-soname=${ICD_TARGET}.so.1
+        -Wl,-Map=$<TARGET_FILE_DIR:xgl>/${VKI_TARGET}.map
+        -Wl,-soname=${VKI_TARGET}.so.1
     )
 
     target_link_options(xgl PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/make/amdicd.so.def)
@@ -390,7 +387,7 @@ if (UNIX)
         target_link_options(xgl PRIVATE -static-libgcc -static-libstdc++)
     endif()
 
-    if(NOT XGL_USE_SANITIZER)
+    if(NOT VKI_USE_SANITIZER)
         # -Wl,--no-undefined is incompatible with asan
         target_link_libraries(xgl PRIVATE
             -Wl,--no-undefined
@@ -440,9 +437,9 @@ if(UNIX)
             endif()
             add_custom_command(
                 TARGET xgl POST_BUILD
-                COMMAND ${TOOLCHAIN_TARGET_PREFIX}objcopy --only-keep-debug ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so.debug
-                COMMAND ${TOOLCHAIN_TARGET_PREFIX}strip  ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so
-                COMMAND ${TOOLCHAIN_TARGET_PREFIX}objcopy --add-gnu-debuglink=${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so.debug ${CMAKE_CURRENT_BINARY_DIR}/${ICD_TARGET}.so
+                COMMAND ${TOOLCHAIN_TARGET_PREFIX}objcopy --only-keep-debug ${CMAKE_CURRENT_BINARY_DIR}/${VKI_TARGET}.so ${CMAKE_CURRENT_BINARY_DIR}/${VKI_TARGET}.so.debug
+                COMMAND ${TOOLCHAIN_TARGET_PREFIX}strip  ${CMAKE_CURRENT_BINARY_DIR}/${VKI_TARGET}.so
+                COMMAND ${TOOLCHAIN_TARGET_PREFIX}objcopy --add-gnu-debuglink=${CMAKE_CURRENT_BINARY_DIR}/${VKI_TARGET}.so.debug ${CMAKE_CURRENT_BINARY_DIR}/${VKI_TARGET}.so
             )
         endif()
 endif()

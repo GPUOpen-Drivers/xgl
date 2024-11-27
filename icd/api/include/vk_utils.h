@@ -59,6 +59,7 @@
 // Reuse some PAL macros here
 #define VK_ASSERT PAL_ASSERT
 #define VK_ASSERT_MSG PAL_ASSERT_MSG
+#define VK_ASSERT_ALWAYS_MSG PAL_ASSERT_ALWAYS_MSG
 #define VK_DEBUG_BUILD_ONLY_ASSERT PAL_DEBUG_BUILD_ONLY_ASSERT
 #define VK_ALERT PAL_ALERT
 #define VK_ALERT_ALWAYS_MSG PAL_ALERT_ALWAYS_MSG
@@ -84,9 +85,6 @@
 #else
 #define VK_FORCEINLINE inline
 #endif
-
-// Wrap _malloca and _freea for compilers other than MSVS
-#define VK_ALLOC_A(_numBytes) alloca(_numBytes)
 
 // Default alignment for memory allocation
 #define VK_DEFAULT_MEM_ALIGN 16
@@ -130,6 +128,17 @@ constexpr uint32_t RayTraceShaderStages =
 
 typedef VkPipelineStageFlags2KHR PipelineStageFlags;
 typedef VkAccessFlags2KHR        AccessFlags;
+
+// =====================================================================================================================
+constexpr bool IsGfx11(
+    Pal::GfxIpLevel gfxLevel)
+{
+    return ((gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+#if VKI_BUILD_GFX115
+        || (gfxLevel == Pal::GfxIpLevel::GfxIp11_5)
+#endif
+        );
+}
 
 namespace utils
 {

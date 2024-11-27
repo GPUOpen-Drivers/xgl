@@ -229,3 +229,4 @@ VK_EXT_depth_bias_control
 VK_MESA_image_alignment_control
 VK_EXT_pipeline_protected_access
 VK_EXT_pipeline_robustness
+VK_EXT_shader_replicated_composites

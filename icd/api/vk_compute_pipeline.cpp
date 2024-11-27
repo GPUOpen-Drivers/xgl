@@ -266,9 +266,10 @@ void ComputePipeline::ConvertComputePipelineInfo(
 void ComputePipeline::FetchPalMetadata(
     PalAllocator* pAllocator,
     const void*   pBinary,
+    size_t        binarySize,
     uint32_t*     pOrigThreadgroupDims)
 {
-    Util::Abi::PipelineAbiReader abiReader(pAllocator, pBinary);
+    Util::Abi::PipelineAbiReader abiReader(pAllocator, Util::Span<const void>{pBinary, binarySize});
 
     Util::Result result = abiReader.Init();
     if (result == Util::Result::Success)
@@ -593,7 +594,6 @@ VkResult ComputePipeline::Create(
                 Util::VoidPtrInc(pPalMem, deviceIdx * pipelineSize),
                 &pPalPipeline[deviceIdx]);
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
             // Temporarily reinject post Pal pipeline creation (when the internal pipeline hash is available).
             // The reinjection cache layer can be linked back into the pipeline cache chain once the
             // Vulkan pipeline cache key can be stored (and read back) inside the ELF as metadata.
@@ -624,7 +624,6 @@ VkResult ComputePipeline::Create(
                     palResult = Util::Result::Success;
                 }
             }
-#endif
         }
 
         result = PalToVkResult(palResult);
@@ -650,6 +649,7 @@ VkResult ComputePipeline::Create(
         uint32_t origThreadgroupDims[3];
         FetchPalMetadata(pDevice->VkInstance()->Allocator(),
                          pipelineBinaries[DefaultDeviceIndex].pCode,
+                         pipelineBinaries[DefaultDeviceIndex].codeSize,
                          origThreadgroupDims);
 
         // On success, wrap it up in a Vulkan object and return.

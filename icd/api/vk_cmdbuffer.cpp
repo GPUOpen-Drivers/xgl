@@ -71,9 +71,7 @@
 
 #include <float.h>
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
-#endif
 
 namespace vk
 {
@@ -357,6 +355,10 @@ Pal::Result CreateClearSubresRanges(
         if (clearInfo.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT)
         {
             subresRange.startSubres.plane = 1;
+        }
+        else if (clearInfo.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT)
+        {
+            subresRange.startSubres.plane = 0;
         }
         else
         {
@@ -814,7 +816,6 @@ VkResult CmdBuffer::Initialize(
             VK_ASSERT(palSize == pPalDevice->GetCmdBufferSize(groupCreateInfo, &result));
             VK_ASSERT(result == Pal::Result::Success);
         }
-
     }
 
     if (result == Pal::Result::Success)
@@ -1267,7 +1268,7 @@ void CmdBuffer::PalCmdDispatch(
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
     {
-        PalCmdBuffer(deviceGroup.Index())->CmdDispatch({ x, y, z });
+        PalCmdBuffer(deviceGroup.Index())->CmdDispatch({ x, y, z }, {});
     }
     while (deviceGroup.IterateNext());
 }
@@ -2453,7 +2454,6 @@ void CmdBuffer::ReleaseResources()
 
         m_pStackAllocator = nullptr;
     }
-
 }
 
 // =====================================================================================================================
@@ -3081,70 +3081,60 @@ void CmdBuffer::BindVertexBuffers(
 {
     if (bindingCount > 0)
     {
+        VK_ASSERT((firstBinding + bindingCount) <= VK_ARRAY_SIZE(PerGpuRenderState::vbBindings));
         DbgBarrierPreCmd(DbgBarrierBindIndexVertexBuffer);
-
-        constexpr uint32_t MaxLowBindings = VK_ARRAY_SIZE(PerGpuRenderState::vbBindings);
-
-        const uint32_t lowBindingCount =
-            (firstBinding < MaxLowBindings) ? Util::Min(bindingCount, MaxLowBindings - firstBinding) : 0u;
 
         utils::IterateMask deviceGroup(GetDeviceMask());
         do
         {
             const uint32_t deviceIdx = deviceGroup.Index();
 
-            if (lowBindingCount > 0)
+            Pal::BufferViewInfo* const pBinding = &PerGpuState(deviceIdx)->vbBindings[firstBinding];
+
+            BindVertexBuffersUpdateBindingRange(
+                deviceIdx,
+                pBinding,
+                pBinding + bindingCount,
+                0,
+                pBuffers,
+                pOffsets,
+                pSizes,
+                pStrides);
+
+            if (m_flags.offsetMode)
             {
-                Pal::BufferViewInfo* const pBinding = &PerGpuState(deviceIdx)->vbBindings[firstBinding];
-
-                BindVertexBuffersUpdateBindingRange(
-                    deviceIdx,
-                    pBinding,
-                    pBinding + lowBindingCount,
-                    0,
-                    pBuffers,
-                    pOffsets,
-                    pSizes,
-                    pStrides);
-
-                if (m_flags.offsetMode)
+                Pal::VertexBufferView vertexViews[Pal::MaxVertexBuffers] = {};
+                for (uint32_t idx = 0; idx < bindingCount; idx++)
                 {
-                    Pal::VertexBufferView vertexViews[Pal::MaxVertexBuffers] = {};
-                    for (uint32_t idx = 0; idx < lowBindingCount; idx++)
-                    {
-                        vertexViews[idx].gpuva = pBinding[idx].gpuAddr;
-                        vertexViews[idx].sizeInBytes = pBinding[idx].range;
-                        vertexViews[idx].strideInBytes = pBinding[idx].stride;
-                    }
+                    vertexViews[idx].gpuva = pBinding[idx].gpuAddr;
+                    vertexViews[idx].sizeInBytes = pBinding[idx].range;
+                    vertexViews[idx].strideInBytes = pBinding[idx].stride;
+                }
 
-                    const Pal::VertexBufferViews bufferViews =
-                    {
-                        .firstBuffer = firstBinding,
-                        .bufferCount = lowBindingCount,
-                        .offsetMode = true,
-                        .pVertexBufferViews = vertexViews
-                    };
-                    PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
-                }
-                else
+                const Pal::VertexBufferViews bufferViews =
                 {
-                    const Pal::VertexBufferViews bufferViews =
-                    {
-                        .firstBuffer = firstBinding,
-                        .bufferCount = lowBindingCount,
-                        .offsetMode = false,
-                        .pBufferViewInfos = pBinding
-                    };
-                    PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
-                }
+                    .firstBuffer = firstBinding,
+                    .bufferCount = bindingCount,
+                    .offsetMode = true,
+                    .pVertexBufferViews = vertexViews
+                };
+                PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
             }
-
+            else
+            {
+                const Pal::VertexBufferViews bufferViews =
+                {
+                    .firstBuffer = firstBinding,
+                    .bufferCount = bindingCount,
+                    .offsetMode = false,
+                    .pBufferViewInfos = pBinding
+                };
+                PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(bufferViews);
+            }
         }
         while (deviceGroup.IterateNext());
 
-        m_vbWatermark = Util::Max(
-            m_vbWatermark,
-            Util::Min(firstBinding + bindingCount, MaxLowBindings));
+        m_vbWatermark = Util::Max(m_vbWatermark, firstBinding + bindingCount);
 
         DbgBarrierPostCmd(DbgBarrierBindIndexVertexBuffer);
     }
@@ -3822,7 +3812,8 @@ void CmdBuffer::ClearColorImage(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
-    const auto maxRanges  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRanges)), MaxPalColorAspectsPerMask);
+    const auto maxRanges  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(Pal::SubresRange)),
+                                      MaxPalColorAspectsPerMask);
     auto       rangeBatch = Util::Min(rangeCount * MaxPalColorAspectsPerMask, maxRanges);
 
     // Allocate space to store image subresource ranges
@@ -3890,7 +3881,8 @@ void CmdBuffer::ClearDepthStencilImage(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
-    const auto maxRanges  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRanges)), MaxPalDepthAspectsPerMask);
+    const auto maxRanges  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(Pal::SubresRange)),
+                                      MaxPalDepthAspectsPerMask);
     auto       rangeBatch = Util::Min(rangeCount * MaxPalDepthAspectsPerMask, maxRanges);
 
     // Allocate space to store image subresource ranges (we need a separate region per PAL aspect)
@@ -3992,7 +3984,7 @@ void CmdBuffer::ClearDynamicRenderingImages(
     // Note: Bound target clears are pipelined by the HW, so we do not have to insert any barriers
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
-    const auto maxRects = EstimateMaxObjectsOnVirtualStack(sizeof(*pRects));
+    constexpr uint32 MinRects = 8;
 
     for (uint32_t idx = 0; idx < attachmentCount; ++idx)
     {
@@ -4012,9 +4004,12 @@ void CmdBuffer::ClearDynamicRenderingImages(
                 const Pal::SwizzledFormat palFormat = VkToPalFormat(attachment.attachmentFormat,
                                                                     m_pDevice->GetRuntimeSettings());
 
-                Util::Vector<Pal::Box, 8, VirtualStackFrame> clearBoxes{ &virtStackFrame };
-                Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges{ &virtStackFrame };
+                Util::Vector<Pal::Box,         MinRects, VirtualStackFrame> clearBoxes       { &virtStackFrame };
+                Util::Vector<Pal::SubresRange, MinRects, VirtualStackFrame> clearSubresRanges{ &virtStackFrame };
 
+                const auto maxRects   = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(Pal::Box) +
+                                                                                   sizeof(Pal::SubresRange)),
+                                                  MinRects);
                 auto       rectBatch  = Util::Min(rectCount, maxRects);
                 const auto palResult1 = clearBoxes.Reserve(rectBatch);
                 const auto palResult2 = clearSubresRanges.Reserve(rectBatch);
@@ -4091,10 +4086,13 @@ void CmdBuffer::ClearDynamicRenderingImages(
             // Clear only if the referenced attachment index is active
             if (pDepthStencilView != nullptr)
             {
-                Util::Vector<Pal::Rect, 8, VirtualStackFrame> clearRects{ &virtStackFrame };
-                Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges{ &virtStackFrame };
+                Util::Vector<Pal::Rect,        MinRects, VirtualStackFrame> clearRects       { &virtStackFrame };
+                Util::Vector<Pal::SubresRange, MinRects, VirtualStackFrame> clearSubresRanges{ &virtStackFrame };
 
-                auto       rectBatch = Util::Min((rectCount * MaxPalDepthAspectsPerMask), maxRects);
+                const auto maxRects   = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(Pal::Rect) +
+                                                                                   sizeof(Pal::SubresRange)),
+                                                  MinRects);
+                auto       rectBatch  = Util::Min((rectCount * MaxPalDepthAspectsPerMask), maxRects);
                 const auto palResult1 = clearRects.Reserve(rectBatch);
                 const auto palResult2 = clearSubresRanges.Reserve(rectBatch);
 
@@ -4157,10 +4155,14 @@ void CmdBuffer::ClearDynamicRenderingBoundAttachments(
     // Note: Bound target clears are pipelined by the HW, so we do not have to insert any barriers
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
-    Util::Vector<Pal::ClearBoundTargetRegion, 8, VirtualStackFrame> clearRegions{ &virtStackFrame };
-    Util::Vector<Pal::BoundColorTarget, 8, VirtualStackFrame> colorTargets{ &virtStackFrame };
+    constexpr uint32 MinRects = 8;
 
-    const auto maxRects   = EstimateMaxObjectsOnVirtualStack(sizeof(*pRects));
+    Util::Vector<Pal::ClearBoundTargetRegion, MinRects, VirtualStackFrame> clearRegions{ &virtStackFrame };
+    Util::Vector<Pal::BoundColorTarget,       MinRects, VirtualStackFrame> colorTargets{ &virtStackFrame };
+
+    const auto maxRects   = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(Pal::ClearBoundTargetRegion) +
+                                                                       sizeof(Pal::BoundColorTarget)),
+                                      MinRects);
     auto       rectBatch  = Util::Min(rectCount, maxRects);
     const auto palResult1 = clearRegions.Reserve(rectBatch);
     const auto palResult2 = colorTargets.Reserve(attachmentCount);
@@ -4287,10 +4289,14 @@ void CmdBuffer::ClearBoundAttachments(
     const RenderPass* pRenderPass = m_allGpuState.pRenderPass;
     const uint32_t subpass        = m_renderPassInstance.subpass;
 
-    Util::Vector<Pal::ClearBoundTargetRegion, 8, VirtualStackFrame> clearRegions { &virtStackFrame };
-    Util::Vector<Pal::BoundColorTarget,       8, VirtualStackFrame> colorTargets { &virtStackFrame };
+    constexpr uint32 MinRects = 8;
 
-    const auto maxRects   = EstimateMaxObjectsOnVirtualStack(sizeof(*pRects));
+    Util::Vector<Pal::ClearBoundTargetRegion, MinRects, VirtualStackFrame> clearRegions { &virtStackFrame };
+    Util::Vector<Pal::BoundColorTarget,       MinRects, VirtualStackFrame> colorTargets { &virtStackFrame };
+
+    const auto maxRects   = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(Pal::ClearBoundTargetRegion) +
+                                                                       sizeof(Pal::BoundColorTarget)),
+                                      MinRects);
     auto       rectBatch  = Util::Min(rectCount, maxRects);
     const auto palResult1 = clearRegions.Reserve(rectBatch);
     const auto palResult2 = colorTargets.Reserve(attachmentCount);
@@ -4550,10 +4556,11 @@ void CmdBuffer::ClearImageAttachments(
 {
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
+    constexpr uint32 MinRects = 8;
+
     // Get the current renderpass and subpass
     const RenderPass* pRenderPass = m_allGpuState.pRenderPass;
     const uint32_t    subpass     = m_renderPassInstance.subpass;
-    const auto        maxRects    = EstimateMaxObjectsOnVirtualStack(sizeof(*pRects));
 
     // Go through each of the clear attachment infos
     for (uint32_t idx = 0; idx < attachmentCount; ++idx)
@@ -4581,9 +4588,12 @@ void CmdBuffer::ClearImageAttachments(
                 // Get the layout that this color attachment is currently in within the render pass
                 const Pal::ImageLayout targetLayout = RPGetAttachmentLayout(attachmentIdx, 0);
 
-                Util::Vector<Pal::Box,         8, VirtualStackFrame> clearBoxes        { &virtStackFrame };
-                Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges { &virtStackFrame };
+                Util::Vector<Pal::Box,         MinRects, VirtualStackFrame> clearBoxes        { &virtStackFrame };
+                Util::Vector<Pal::SubresRange, MinRects, VirtualStackFrame> clearSubresRanges { &virtStackFrame };
 
+                const auto maxRects   = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(Pal::Box) +
+                                                                                   sizeof(Pal::SubresRange)),
+                                                  MinRects);
                 auto       rectBatch  = Util::Min(rectCount, maxRects);
                 const auto palResult1 = clearBoxes.Reserve(rectBatch);
                 const auto palResult2 = clearSubresRanges.Reserve(rectBatch);
@@ -4652,9 +4662,12 @@ void CmdBuffer::ClearImageAttachments(
                 const Pal::ImageLayout depthLayout   = RPGetAttachmentLayout(attachmentIdx, 0);
                 const Pal::ImageLayout stencilLayout = RPGetAttachmentLayout(attachmentIdx, 1);
 
-                Util::Vector<Pal::Rect,        8, VirtualStackFrame> clearRects        { &virtStackFrame };
-                Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges { &virtStackFrame };
+                Util::Vector<Pal::Rect,        MinRects, VirtualStackFrame> clearRects        { &virtStackFrame };
+                Util::Vector<Pal::SubresRange, MinRects, VirtualStackFrame> clearSubresRanges { &virtStackFrame };
 
+                const auto maxRects   = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(Pal::Rect) +
+                                                                                   sizeof(Pal::SubresRange)),
+                                                  MinRects);
                 auto       rectBatch  = Util::Min(rectCount, maxRects);
                 const auto palResult1 = clearRects.Reserve(rectBatch);
                 const auto palResult2 = clearSubresRanges.Reserve(rectBatch);
@@ -4716,7 +4729,8 @@ void CmdBuffer::ResolveImage(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
-    const auto maxRects  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRects)), MaxRangePerAttachment);
+    const auto maxRects  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(Pal::ImageResolveRegion)),
+                                     MaxRangePerAttachment);
     auto       rectBatch = Util::Min(rectCount * MaxRangePerAttachment, maxRects);
 
     // Allocate space to store image resolve regions (we need a separate region per PAL aspect)
@@ -4807,17 +4821,17 @@ void CmdBuffer::SetEvent2(
 
     if (m_flags.useSplitReleaseAcquire)
     {
-        ExecuteAcquireRelease(1,
-                              &event,
-                              pDependencyInfo,
-                              Release,
-                              RgpBarrierExternalCmdWaitEvents);
+        ExecuteAcquireRelease2(1,
+                               &event,
+                               pDependencyInfo,
+                               Release,
+                               RgpBarrierExternalCmdWaitEvents);
     }
     else
     {
         PipelineStageFlags stageMask = 0;
 
-        for(uint32_t i = 0; i < pDependencyInfo->memoryBarrierCount; i++)
+        for (uint32_t i = 0; i < pDependencyInfo->memoryBarrierCount; i++)
         {
             stageMask |= pDependencyInfo->pMemoryBarriers[i].srcStageMask;
         }
@@ -5809,47 +5823,87 @@ void CmdBuffer::WaitEvents(
 {
     DbgBarrierPreCmd(DbgBarrierPipelineBarrierWaitEvents);
 
-    VirtualStackFrame virtStackFrame(m_pStackAllocator);
-
-    // Allocate space to store signaled event pointers (automatically rewound on unscope)
-    const Pal::IGpuEvent** ppGpuEvents = virtStackFrame.AllocArray<const Pal::IGpuEvent*>(NumDeviceEvents(eventCount));
-
-    if (ppGpuEvents != nullptr)
+    if (m_flags.useSplitReleaseAcquire)
     {
-        const uint32_t multiDeviceStride = eventCount;
+        uint32_t eventRangeCount = 0;
 
-        for (uint32_t i = 0; i < eventCount; ++i)
+        for (uint32_t i = 0; i < eventCount; i += eventRangeCount)
         {
-            const Event* pEvent = Event::ObjectFromHandle(pEvents[i]);
+            eventRangeCount = 1;
 
-            InsertDeviceEvents(ppGpuEvents, pEvent, i, multiDeviceStride);
+            bool usesToken = Event::ObjectFromHandle(pEvents[i])->IsUseToken();
+
+            for (uint32_t j = i + 1; j < eventCount; j++)
+            {
+                if (Event::ObjectFromHandle(pEvents[j])->IsUseToken() == usesToken)
+                {
+                    eventRangeCount++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            ExecuteAcquireRelease(eventRangeCount,
+                                  pEvents + i,
+                                  srcStageMask,
+                                  dstStageMask,
+                                  memoryBarrierCount,
+                                  pMemoryBarriers,
+                                  bufferMemoryBarrierCount,
+                                  pBufferMemoryBarriers,
+                                  imageMemoryBarrierCount,
+                                  pImageMemoryBarriers,
+                                  Acquire,
+                                  RgpBarrierExternalCmdWaitEvents);
         }
-
-        Pal::BarrierInfo barrier = {};
-
-        // Tell PAL to wait at a specific point until the given set of GpuEvent objects is signaled.
-        // We intentionally ignore the source stage flags (srcStagemask) as they are irrelevant in the
-        // presence of event objects
-
-        barrier.reason                = RgpBarrierExternalCmdWaitEvents;
-        barrier.waitPoint             = VkToPalWaitPipePoint(dstStageMask);
-        barrier.gpuEventWaitCount     = eventCount;
-        barrier.ppGpuEvents           = ppGpuEvents;
-
-        ExecuteBarriers(&virtStackFrame,
-                        memoryBarrierCount,
-                        pMemoryBarriers,
-                        bufferMemoryBarrierCount,
-                        pBufferMemoryBarriers,
-                        imageMemoryBarrierCount,
-                        pImageMemoryBarriers,
-                        &barrier);
-
-        virtStackFrame.FreeArray(ppGpuEvents);
     }
     else
     {
-        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+        VirtualStackFrame virtStackFrame(m_pStackAllocator);
+
+        // Allocate space to store signaled event pointers (automatically rewound on unscope)
+        const Pal::IGpuEvent** ppGpuEvents =
+            virtStackFrame.AllocArray<const Pal::IGpuEvent*>(NumDeviceEvents(eventCount));
+
+        if (ppGpuEvents != nullptr)
+        {
+            const uint32_t multiDeviceStride = eventCount;
+
+            for (uint32_t i = 0; i < eventCount; ++i)
+            {
+                const Event* pEvent = Event::ObjectFromHandle(pEvents[i]);
+
+                InsertDeviceEvents(ppGpuEvents, pEvent, i, multiDeviceStride);
+            }
+
+            Pal::BarrierInfo barrier = {};
+
+            // Tell PAL to wait at a specific point until the given set of GpuEvent objects is signaled.
+            // We intentionally ignore the source stage flags (srcStagemask) as they are irrelevant in the
+            // presence of event objects
+
+            barrier.reason            = RgpBarrierExternalCmdWaitEvents;
+            barrier.waitPoint         = VkToPalWaitPipePoint(dstStageMask);
+            barrier.gpuEventWaitCount = eventCount;
+            barrier.ppGpuEvents       = ppGpuEvents;
+
+            ExecuteBarriers(&virtStackFrame,
+                            memoryBarrierCount,
+                            pMemoryBarriers,
+                            bufferMemoryBarrierCount,
+                            pBufferMemoryBarriers,
+                            imageMemoryBarrierCount,
+                            pImageMemoryBarriers,
+                            &barrier);
+
+            virtStackFrame.FreeArray(ppGpuEvents);
+        }
+        else
+        {
+            m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
     }
 
     DbgBarrierPostCmd(DbgBarrierPipelineBarrierWaitEvents);
@@ -5877,40 +5931,25 @@ void CmdBuffer::WaitEvents2(
         {
             eventRangeCount = 1;
 
-            if (Event::ObjectFromHandle(pEvents[i])->IsUseToken())
+            bool usesToken = Event::ObjectFromHandle(pEvents[i])->IsUseToken();
+
+            for (uint32_t j = i + 1; j < eventCount; j++)
             {
-                for (uint32_t j = i + 1; j < eventCount; j++)
+                if (Event::ObjectFromHandle(pEvents[j])->IsUseToken() == usesToken)
                 {
-                    if (Event::ObjectFromHandle(pEvents[j])->IsUseToken())
-                    {
-                        eventRangeCount++;
-                    }
-                    else
-                    {
-                        break;
-                    }
+                    eventRangeCount++;
                 }
-            }
-            else
-            {
-                for (uint32_t j = i + 1; j < eventCount; j++)
+                else
                 {
-                    if (Event::ObjectFromHandle(pEvents[j])->IsUseToken())
-                    {
-                        break;
-                    }
-                    else
-                    {
-                        eventRangeCount++;
-                    }
+                    break;
                 }
             }
 
-            ExecuteAcquireRelease(eventRangeCount,
-                                  pEvents + i,
-                                  pDependencyInfos + i,
-                                  Acquire,
-                                  RgpBarrierExternalCmdWaitEvents);
+            ExecuteAcquireRelease2(eventRangeCount,
+                                   pEvents + i,
+                                   pDependencyInfos + i,
+                                   Acquire,
+                                   RgpBarrierExternalCmdWaitEvents);
         }
     }
     else
@@ -6058,12 +6097,106 @@ void CmdBuffer::WaitEventsSync2ToSync1(
 }
 
 // =====================================================================================================================
-// Based on Dependency Info, execute Acquire or Release according to the mode.
-void CmdBuffer::ExecuteAcquireRelease(
+// Helper function called from ExecuteAcquireRelease* to route barrier calls based on AcquireReleaseMode
+void CmdBuffer::FlushAcquireReleaseBarriers(
+    Pal::AcquireReleaseInfo* pAcquireReleaseInfo,
+    uint32_t                 eventCount,
+    const VkEvent*           pEvents,
+    Pal::MemBarrier* const   pBufferBarriers,
+    const Buffer** const     ppBuffers,
+    Pal::ImgBarrier* const   pImageBarriers,
+    const Image** const      ppImages,
+    VirtualStackFrame*       pVirtStackFrame,
+    const AcquireReleaseMode acquireReleaseMode,
+    uint32_t                 deviceMask)
+{
+    if (acquireReleaseMode == Release)
+    {
+        pAcquireReleaseInfo->dstGlobalStageMask = 0;
+        pAcquireReleaseInfo->dstGlobalAccessMask = 0;
+
+        // If memoryBarrierCount is 0, set srcStageMask to Pal::PipelineStageTopOfPipe.
+        if (pAcquireReleaseInfo->srcGlobalStageMask == 0)
+        {
+            pAcquireReleaseInfo->srcGlobalStageMask |= Pal::PipelineStageTopOfPipe;
+        }
+
+        for (uint32 i = 0; i < pAcquireReleaseInfo->memoryBarrierCount; i++)
+        {
+            pBufferBarriers[i].dstStageMask = 0;
+            pBufferBarriers[i].dstAccessMask = 0;
+        }
+
+        for (uint32 i = 0; i < pAcquireReleaseInfo->imageBarrierCount; i++)
+        {
+            pImageBarriers[i].dstStageMask = 0;
+            pImageBarriers[i].dstAccessMask = 0;
+        }
+
+        // The only possibility we are here would be as a result of vkCmdSetEvent2 in which case eventCount must be 1
+        VK_ASSERT(eventCount == 1);
+
+        PalCmdRelease(
+            pAcquireReleaseInfo,
+            pEvents[0],
+            pBufferBarriers,
+            ppBuffers,
+            pImageBarriers,
+            ppImages,
+            deviceMask);
+    }
+    else if (acquireReleaseMode == Acquire)
+    {
+        pAcquireReleaseInfo->srcGlobalStageMask = 0;
+        pAcquireReleaseInfo->srcGlobalAccessMask = 0;
+
+        for (uint32 i = 0; i < pAcquireReleaseInfo->memoryBarrierCount; i++)
+        {
+            pBufferBarriers[i].srcStageMask = 0;
+            pBufferBarriers[i].srcAccessMask = 0;
+        }
+
+        for (uint32 i = 0; i < pAcquireReleaseInfo->imageBarrierCount; i++)
+        {
+            pImageBarriers[i].srcStageMask = 0;
+            pImageBarriers[i].srcAccessMask = 0;
+        }
+
+        // The only possibility we are here would be as a result of vkCmdWaitEvents* in which case eventCount
+        // must be non-zero
+        VK_ASSERT(eventCount != 0);
+
+        PalCmdAcquire(
+            pAcquireReleaseInfo,
+            eventCount,
+            pEvents,
+            pBufferBarriers,
+            ppBuffers,
+            pImageBarriers,
+            ppImages,
+            pVirtStackFrame,
+            deviceMask);
+    }
+    else
+    {
+        PalCmdReleaseThenAcquire(
+            pAcquireReleaseInfo,
+            pBufferBarriers,
+            ppBuffers,
+            pImageBarriers,
+            ppImages,
+            deviceMask);
+    }
+}
+
+// =====================================================================================================================
+// Based on Dependency Info, execute Acquire or Release according to the mode. This funtion handles the
+// VK_KHR_synchronization2 barrier API calls
+void CmdBuffer::ExecuteAcquireRelease2(
     uint32_t                   dependencyCount,
     const VkEvent*             pEvents,
     const VkDependencyInfoKHR* pDependencyInfos,
-    AcquireReleaseMode         acquireReleaseMode,
+    const AcquireReleaseMode   acquireReleaseMode,
     uint32_t                   rgpBarrierReasonType)
 {
     VK_ASSERT((acquireReleaseMode == ReleaseThenAcquire) || (pEvents != nullptr));
@@ -6138,7 +6271,7 @@ void CmdBuffer::ExecuteAcquireRelease(
                 uint32_t bufferMemoryBarrierCount = pThisDependencyInfo->bufferMemoryBarrierCount;
                 uint32_t imageMemoryBarrierCount  = pThisDependencyInfo->imageMemoryBarrierCount;
 
-                while ((memoryBarrierIdx < memBarrierCount) ||
+                while ((memoryBarrierIdx < memBarrierCount)                ||
                        (bufferMemoryBarrierIdx < bufferMemoryBarrierCount) ||
                        (imageMemoryBarrierIdx < imageMemoryBarrierCount))
                 {
@@ -6213,8 +6346,8 @@ void CmdBuffer::ExecuteAcquireRelease(
                     // Accounting for the max sub ranges, if we do not have enough space left for another image,
                     // break from this loop. The info for remaining barriers will be passed to PAL in subsequent calls.
                     while (((MaxPalAspectsPerMask + acquireReleaseInfo.imageBarrierCount) < maxImageBarrierCount) &&
-                            (locationIndex < maxLocationCount) &&
-                            (imageMemoryBarrierIdx < imageMemoryBarrierCount))
+                           (locationIndex < maxLocationCount) &&
+                           (imageMemoryBarrierIdx < imageMemoryBarrierCount))
                     {
                         Pal::BarrierTransition tempTransition = {};
 
@@ -6317,7 +6450,7 @@ void CmdBuffer::ExecuteAcquireRelease(
                             else if (pLocations != nullptr)  // Could be null due to an OOM error
                             {
                                 VK_ASSERT(static_cast<uint32_t>(pSampleLocationsInfoEXT->sType) ==
-                                            VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT);
+                                    VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT);
                                 VK_ASSERT(pImage->IsSampleLocationsCompatibleDepth());
 
                                 ConvertToPalMsaaQuadSamplePattern(pSampleLocationsInfoEXT, &pLocations[locationIndex]);
@@ -6340,75 +6473,17 @@ void CmdBuffer::ExecuteAcquireRelease(
                         imageMemoryBarrierIdx++;
                     }
 
-                    if (acquireReleaseMode == Release)
-                    {
-                        acquireReleaseInfo.dstGlobalStageMask  = 0;
-                        acquireReleaseInfo.dstGlobalAccessMask = 0;
-
-                        // If memoryBarrierCount is 0, set srcStageMask to Pal::PipelineStageTopOfPipe.
-                        if (acquireReleaseInfo.srcGlobalStageMask == 0)
-                        {
-                            acquireReleaseInfo.srcGlobalStageMask |= Pal::PipelineStageTopOfPipe;
-                        }
-
-                        for (uint32 i = 0; i < acquireReleaseInfo.memoryBarrierCount; i++)
-                        {
-                            pPalBufferMemoryBarriers[i].dstStageMask  = 0;
-                            pPalBufferMemoryBarriers[i].dstAccessMask = 0;
-                        }
-
-                        for (uint32 i = 0; i < acquireReleaseInfo.imageBarrierCount; i++)
-                        {
-                            pPalImageBarriers[i].dstStageMask  = 0;
-                            pPalImageBarriers[i].dstAccessMask = 0;
-                        }
-
-                        PalCmdRelease(
-                            &acquireReleaseInfo,
-                            pEvents[j],
-                            pPalBufferMemoryBarriers,
-                            ppBuffers,
-                            pPalImageBarriers,
-                            ppImages,
-                            m_curDeviceMask);
-                    }
-                    else if (acquireReleaseMode == Acquire)
-                    {
-                        acquireReleaseInfo.srcGlobalStageMask  = 0;
-                        acquireReleaseInfo.srcGlobalAccessMask = 0;
-
-                        for (uint32 i = 0; i < acquireReleaseInfo.memoryBarrierCount; i++)
-                        {
-                            pPalBufferMemoryBarriers[i].srcStageMask  = 0;
-                            pPalBufferMemoryBarriers[i].srcAccessMask = 0;
-                        }
-
-                        for (uint32 i = 0; i < acquireReleaseInfo.imageBarrierCount; i++)
-                        {
-                            pPalImageBarriers[i].srcStageMask  = 0;
-                            pPalImageBarriers[i].srcAccessMask = 0;
-                        }
-
-                        PalCmdAcquire(
-                            &acquireReleaseInfo,
-                            pEvents[j],
-                            pPalBufferMemoryBarriers,
-                            ppBuffers,
-                            pPalImageBarriers,
-                            ppImages,
-                            &virtStackFrame,
-                            m_curDeviceMask);
-                    }
-                    else
-                    {
-                        PalCmdReleaseThenAcquire(
-                            &acquireReleaseInfo,
-                            pPalBufferMemoryBarriers,
-                            ppBuffers,
-                            pPalImageBarriers,
-                            ppImages,
-                            m_curDeviceMask);
-                    }
+                    FlushAcquireReleaseBarriers(
+                        &acquireReleaseInfo,
+                        ((pEvents != nullptr) ? 1u : 0u),
+                        ((pEvents != nullptr) ? &pEvents[j] : nullptr),
+                        pPalBufferMemoryBarriers,
+                        ppBuffers,
+                        pPalImageBarriers,
+                        ppImages,
+                        &virtStackFrame,
+                        acquireReleaseMode,
+                        m_curDeviceMask);
                 }
             }
         }
@@ -6445,8 +6520,11 @@ void CmdBuffer::ExecuteAcquireRelease(
 }
 
 // =====================================================================================================================
-// Execute Release then acquire mode
-void CmdBuffer::ExecuteReleaseThenAcquire(
+// Records acquire-release barriers into PAL structures and passes them to PAL. This funtion handles the
+// Synchronization_1 barrier API calls
+void CmdBuffer::ExecuteAcquireRelease(
+    uint32_t                     eventCount,
+    const VkEvent*               pEvents,
     PipelineStageFlags           srcStageMask,
     PipelineStageFlags           dstStageMask,
     uint32_t                     memBarrierCount,
@@ -6454,9 +6532,13 @@ void CmdBuffer::ExecuteReleaseThenAcquire(
     uint32_t                     bufferMemoryBarrierCount,
     const VkBufferMemoryBarrier* pBufferMemoryBarriers,
     uint32_t                     imageMemoryBarrierCount,
-    const VkImageMemoryBarrier*  pImageMemoryBarriers)
+    const VkImageMemoryBarrier*  pImageMemoryBarriers,
+    const AcquireReleaseMode     acquireReleaseMode,
+    uint32_t                     rgpBarrierReasonType)
 {
-    if ((memBarrierCount + bufferMemoryBarrierCount + imageMemoryBarrierCount) > 0)
+    VK_ASSERT((acquireReleaseMode == ReleaseThenAcquire) || (pEvents != nullptr));
+
+    if ((memBarrierCount + bufferMemoryBarrierCount + imageMemoryBarrierCount + eventCount) > 0)
     {
         VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
@@ -6471,6 +6553,7 @@ void CmdBuffer::ExecuteReleaseThenAcquire(
         uint32_t bufferMemoryBarrierIdx = 0;
         uint32_t imageMemoryBarrierIdx  = 0;
 
+        uint32_t gpuEventCount          = eventCount;
         uint32_t maxLocationCount       = Util::Min(imageMemoryBarrierCount, MaxSampleLocationCount);
         uint32_t maxBufferBarrierCount  = Util::Min(bufferMemoryBarrierCount, MaxTransitionCount);
         uint32_t maxImageBarrierCount   = Util::Min((MaxPalAspectsPerMask * imageMemoryBarrierCount) + 1,
@@ -6504,15 +6587,16 @@ void CmdBuffer::ExecuteReleaseThenAcquire(
 
         if (bufferAllocSuccess && imageAllocSuccess)
         {
-            while ((memoryBarrierIdx < memBarrierCount) ||
+            while ((memoryBarrierIdx < memBarrierCount)                ||
                    (bufferMemoryBarrierIdx < bufferMemoryBarrierCount) ||
-                   (imageMemoryBarrierIdx < imageMemoryBarrierCount))
+                   (imageMemoryBarrierIdx < imageMemoryBarrierCount)   ||
+                   (gpuEventCount > 0))
             {
                 Pal::AcquireReleaseInfo acquireReleaseInfo = {};
 
                 acquireReleaseInfo.pMemoryBarriers = pPalBufferMemoryBarriers;
                 acquireReleaseInfo.pImageBarriers  = pPalImageBarriers;
-                acquireReleaseInfo.reason          = RgpBarrierExternalCmdPipelineBarrier;
+                acquireReleaseInfo.reason          = rgpBarrierReasonType;
 
                 uint32_t palSrcStageMask = VkToPalPipelineStageFlags(srcStageMask, true);
                 uint32_t palDstStageMask = VkToPalPipelineStageFlags(dstStageMask, false);
@@ -6694,13 +6778,19 @@ void CmdBuffer::ExecuteReleaseThenAcquire(
                     imageMemoryBarrierIdx++;
                 }
 
-                PalCmdReleaseThenAcquire(
+                FlushAcquireReleaseBarriers(
                     &acquireReleaseInfo,
+                    gpuEventCount,
+                    pEvents,
                     pPalBufferMemoryBarriers,
                     ppBuffers,
                     pPalImageBarriers,
                     ppImages,
+                    &virtStackFrame,
+                    acquireReleaseMode,
                     m_curDeviceMask);
+
+                gpuEventCount = 0;
             }
         }
         else
@@ -6749,16 +6839,30 @@ void CmdBuffer::PipelineBarrier(
 {
     DbgBarrierPreCmd(DbgBarrierPipelineBarrierWaitEvents);
 
+    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+
+    if (settings.syncPreviousDrawForTransferStage         &&
+        (srcStageMask == VK_PIPELINE_STAGE_TRANSFER_BIT)  &&
+        (destStageMask == VK_PIPELINE_STAGE_TRANSFER_BIT))
+    {
+        srcStageMask |= (VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR |
+                         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR);
+    }
+
     if (m_flags.useReleaseAcquire)
     {
-        ExecuteReleaseThenAcquire(srcStageMask,
-                                  destStageMask,
-                                  memBarrierCount,
-                                  pMemoryBarriers,
-                                  bufferMemoryBarrierCount,
-                                  pBufferMemoryBarriers,
-                                  imageMemoryBarrierCount,
-                                  pImageMemoryBarriers);
+        ExecuteAcquireRelease(0,
+                              nullptr,
+                              srcStageMask,
+                              destStageMask,
+                              memBarrierCount,
+                              pMemoryBarriers,
+                              bufferMemoryBarrierCount,
+                              pBufferMemoryBarriers,
+                              imageMemoryBarrierCount,
+                              pImageMemoryBarriers,
+                              ReleaseThenAcquire,
+                              RgpBarrierExternalCmdPipelineBarrier);
     }
     else
     {
@@ -6798,11 +6902,11 @@ void CmdBuffer::PipelineBarrier2(
 
     if (m_flags.useReleaseAcquire)
     {
-        ExecuteAcquireRelease(1,
-                              nullptr,
-                              pDependencyInfo,
-                              ReleaseThenAcquire,
-                              RgpBarrierExternalCmdPipelineBarrier);
+        ExecuteAcquireRelease2(1,
+                               nullptr,
+                               pDependencyInfo,
+                               ReleaseThenAcquire,
+                               RgpBarrierExternalCmdPipelineBarrier);
     }
     else
     {
@@ -7509,7 +7613,8 @@ void CmdBuffer::PalCmdReleaseThenAcquire(
 // =====================================================================================================================
 void CmdBuffer::PalCmdAcquire(
     Pal::AcquireReleaseInfo* pAcquireReleaseInfo,
-    const VkEvent            event,
+    uint32_t                 eventCount,
+    const VkEvent*           pEvents,
     Pal::MemBarrier* const   pBufferBarriers,
     const Buffer**   const   ppBuffers,
     Pal::ImgBarrier* const   pImageBarriers,
@@ -7522,7 +7627,7 @@ void CmdBuffer::PalCmdAcquire(
     // in the header, but temporarily you may use the generic "unknown" reason so as not to block you.
     VK_ASSERT(pAcquireReleaseInfo->reason != 0);
 
-    Event* pEvent = Event::ObjectFromHandle(event);
+    Event* pEvent = Event::ObjectFromHandle(pEvents[0]);
 
     utils::IterateMask deviceGroup(deviceMask);
     do
@@ -7540,19 +7645,50 @@ void CmdBuffer::PalCmdAcquire(
         pAcquireReleaseInfo->pImageBarriers  = pImageBarriers;
         pAcquireReleaseInfo->pMemoryBarriers = pBufferBarriers;
 
+        // Whether syncToken is used or not is decided by the setting 'SyncTokenEnabled'
         if (pEvent->IsUseToken())
         {
-            Pal::ReleaseToken syncToken = {};
+            // Allocate space to store sync token values (automatically rewound on unscope)
+            Pal::ReleaseToken* pSyncTokens = (eventCount > 0) ?
+                pVirtStackFrame->AllocArray<Pal::ReleaseToken>(eventCount) : nullptr;
 
-            syncToken = pEvent->GetSyncToken();
-            PalCmdBuffer(deviceIdx)->CmdAcquire(*pAcquireReleaseInfo, 1u, &syncToken);
+            if (pSyncTokens != nullptr)
+            {
+                for (uint32_t i = 0; i < eventCount; ++i)
+                {
+                    pSyncTokens[i] = Event::ObjectFromHandle(pEvents[i])->GetSyncToken();
+                }
+
+                PalCmdBuffer(deviceIdx)->CmdAcquire(*pAcquireReleaseInfo, eventCount, pSyncTokens);
+
+                pVirtStackFrame->FreeArray(pSyncTokens);
+            }
+            else
+            {
+                m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
         }
         else
         {
-            const Pal::IGpuEvent* pGpuEvent = {};
+            // Allocate space to store signaled event pointers (automatically rewound on unscope)
+            const Pal::IGpuEvent** ppGpuEvents = (eventCount > 0) ?
+                pVirtStackFrame->AllocArray<const Pal::IGpuEvent*>(eventCount) : nullptr;
 
-            pGpuEvent = pEvent->PalEvent(deviceIdx);
-            PalCmdBuffer(deviceIdx)->CmdAcquireEvent(*pAcquireReleaseInfo, 1u, &pGpuEvent);
+            if (ppGpuEvents != nullptr)
+            {
+                for (uint32_t i = 0; i < eventCount; ++i)
+                {
+                    ppGpuEvents[i] = Event::ObjectFromHandle(pEvents[i])->PalEvent(deviceIdx);
+                }
+
+                PalCmdBuffer(deviceIdx)->CmdAcquireEvent(*pAcquireReleaseInfo, eventCount, ppGpuEvents);
+
+                pVirtStackFrame->FreeArray(ppGpuEvents);
+            }
+            else
+            {
+                m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
         }
     }
     while (deviceGroup.IterateNext());
@@ -8131,6 +8267,16 @@ void CmdBuffer::RPSyncPostLoadOpColorClear(
             pPalTransitions,
             ppImages,
             GetRpDeviceMask());
+
+        if (pPalTransitions != nullptr)
+        {
+            virtStack.FreeArray<Pal::ImgBarrier>(pPalTransitions);
+        }
+
+        if (ppImages != nullptr)
+        {
+            virtStack.FreeArray<const Image*>(ppImages);
+        }
     }
     else
     {
@@ -8630,9 +8776,11 @@ void CmdBuffer::RPLoadOpClearColor(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
-    Util::Vector<Pal::ClearBoundTargetRegion, 8, VirtualStackFrame> clearRegions{ &virtStackFrame };
+    constexpr uint32 MinRects = 8;
 
-    const auto maxRects  = EstimateMaxObjectsOnVirtualStack(sizeof(VkClearRect));
+    Util::Vector<Pal::ClearBoundTargetRegion, MinRects, VirtualStackFrame> clearRegions{ &virtStackFrame };
+
+    const auto maxRects  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(Pal::ClearBoundTargetRegion)), MinRects);
     auto       rectBatch = Util::Min(count, maxRects);
     const auto palResult = clearRegions.Reserve(rectBatch);
 
@@ -8779,9 +8927,11 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
-    Util::Vector<Pal::ClearBoundTargetRegion, 8, VirtualStackFrame> clearRegions{ &virtStackFrame };
+    constexpr uint32 MinRects = 8;
 
-    const auto maxRects  = EstimateMaxObjectsOnVirtualStack(sizeof(VkClearRect));
+    Util::Vector<Pal::ClearBoundTargetRegion, MinRects, VirtualStackFrame> clearRegions{ &virtStackFrame };
+
+    const auto maxRects  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(Pal::ClearBoundTargetRegion)), MinRects);
     auto       rectBatch = Util::Min(count, maxRects);
 
     for (uint32_t i = 0; i < count; ++i)
@@ -9237,8 +9387,7 @@ void CmdBuffer::SetViewInstanceMask(
         const uint32_t deviceViewMask = uint32_t { 0x1 } << deviceIdx;
 
         uint32_t viewMask = 0x0;
-
-        if (m_allGpuState.viewIndexFromDeviceIndex)
+        if (m_allGpuState.viewIndexFromDeviceIndex && (Util::CountSetBits(deviceMask) > 1))
         {
             // VK_KHR_multiview interaction with VK_KHR_device_group.
             // When GraphicsPipeline is created with flag
@@ -9266,7 +9415,6 @@ void CmdBuffer::SetViewInstanceMask(
             // Basically each device renders all views.
             viewMask = subpassViewMask;
         }
-
         PalCmdBuffer(deviceIdx)->CmdSetViewInstanceMask(viewMask);
     }
     while (deviceGroup.IterateNext());
@@ -11152,6 +11300,8 @@ void CmdBuffer::GetRayTracingDispatchArgs(
     pConstants->constData.rayDispatchWidth            = width;
     pConstants->constData.rayDispatchHeight           = height;
     pConstants->constData.rayDispatchDepth            = depth;
+    pConstants->constData.rayDispatchMaxGroups        = pPipeline->PersistentDispatchSize(width, height, depth);
+
     pConstants->constData.missTableBaseAddressLo     = Util::LowPart(missSbt.deviceAddress);
     pConstants->constData.missTableBaseAddressHi     = Util::HighPart(missSbt.deviceAddress);
     pConstants->constData.missTableStrideInBytes     = static_cast<uint32_t>(missSbt.stride);
@@ -11393,7 +11543,7 @@ void CmdBuffer::TraceRaysDispatchPerDevice(
 {
     const RayTracingPipeline* pPipeline = pCmdBuffer->m_allGpuState.pRayTracingPipeline;
     const Pal::DispatchDims dispatchSize = pPipeline->GetDispatchSize({ .x = width, .y = height, .z = depth });
-    pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdDispatch(dispatchSize);
+    pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdDispatch(dispatchSize, {});
 }
 
 // =====================================================================================================================
@@ -11791,7 +11941,6 @@ void CmdBuffer::InsertDebugMarker(
     const char* pLabelName,
     bool        isBegin)
 {
-#if ICD_GPUOPEN_DEVMODE_BUILD
     constexpr uint8 MarkerSourceApplication = 0;
 
     const IDevMode* pDevMode = m_pDevice->VkInstance()->GetDevModeMgr();
@@ -11806,7 +11955,6 @@ void CmdBuffer::InsertDebugMarker(
                                                                    Util::StringLength(pLabelName) :
                                                                    0);
     }
-#endif
 }
 
 // =====================================================================================================================

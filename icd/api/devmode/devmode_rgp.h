@@ -42,10 +42,8 @@
 
 // gpuutil headers
 #include "gpuUtil/palGpaSession.h"
-#if ICD_GPUOPEN_DEVMODE_BUILD
 // gpuopen headers
 #include "gpuopen.h"
-#endif
 
 #include <atomic>
 
@@ -84,7 +82,6 @@ namespace vk
 // of the driver.
 class DevModeRgp final : public IDevMode
 {
-#if ICD_GPUOPEN_DEVMODE_BUILD
 public:
     // Number of frames to wait before collecting a hardware trace.
     // Note: This will be replaced in the future by a remotely configurable value provided by the RGP server.
@@ -182,8 +179,6 @@ public:
     using AccelStructUserMarkerTable = Util::HashMap<uint64_t, AccelStructUserMarkerString, PalAllocator>;
     const AccelStructUserMarkerTable& GetAccelStructUserMarkerTable() const
         { return m_accelStructNames; }
-
-    uint32_t AcquireStringTableId() { return ++m_stringTableId; }
 
 private:
     static constexpr uint32_t MaxTraceQueueFamilies = Queue::MaxQueueFamilies;
@@ -352,13 +347,11 @@ private:
     PipelineCacheList                   m_pipelineCaches;
     Util::RWLock                        m_pipelineReinjectionLock;
 
-    std::atomic<uint32_t>               m_stringTableId;
     GpuUtil::StringTableTraceSource*    m_pStringTableTraceSource;
     GpuUtil::UserMarkerHistoryTraceSource* m_pUserMarkerHistoryTraceSource;
 
     AccelStructUserMarkerTable          m_accelStructNames;
     Util::Mutex                         m_mutex;
-#endif
 };
 
 }

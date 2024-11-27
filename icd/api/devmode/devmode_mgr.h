@@ -69,7 +69,6 @@ struct AccelStructUserMarkerString
 // of the driver.
 class IDevMode
 {
-#if ICD_GPUOPEN_DEVMODE_BUILD
 public:
     // Pipeline hash used for instruction tracing whenever no pipeline is being targetted.
     static constexpr uint64_t InvalidTargetPipelineHash = 0;
@@ -160,8 +159,6 @@ public:
     virtual void LabelAccelStruct(
         uint64_t    deviceAddress,
         const char* pString) {}
-
-#endif
 };
 
 }

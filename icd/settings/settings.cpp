@@ -232,7 +232,7 @@ void VulkanSettingsLoader::OverrideDefaultsExperimentInfo()
 
     VK_SET_VAL_IF_EXPERIMENT_ENABLED(AmdVendorExtensions, disableAmdVendorExtensions, true);
 
-    VK_SET_VAL_IF_EXPERIMENT_ENABLED(ComputeQueueSupport, asyncComputeQueueLimit, 0);
+    VK_SET_VAL_IF_EXPERIMENT_ENABLED(ComputeQueueSupport, forceComputeQueueCount, 0);
 
     if (pExpSettings->expBarrierOptimizations.ValueOr(false))
     {
@@ -304,7 +304,7 @@ void VulkanSettingsLoader::OverrideDefaultsExperimentInfo()
         m_settings.allowExternalPipelineCacheObject = false;
     }
 
-    VK_SET_VAL_IF_EXPERIMENT_ENABLED(TextureColorCompression, forceEnableDcc, ForceDisableCompressionForColor);
+    VK_SET_VAL_IF_EXPERIMENT_ENABLED(TextureColorCompression, forceDisableCompression, DisableCompressionForColor);
 
     PAL_SET_VAL_IF_EXPERIMENT_ENABLED(ZeroUnboundDescriptors, zeroUnboundDescDebugSrd, true);
 
@@ -348,7 +348,7 @@ void VulkanSettingsLoader::FinalizeExperiments()
 
     pExpSettings->expAmdVendorExtensions = m_settings.disableAmdVendorExtensions;
 
-    pExpSettings->expComputeQueueSupport = (m_settings.asyncComputeQueueLimit == 0);
+    pExpSettings->expComputeQueueSupport = (m_settings.forceComputeQueueCount == 0);
 
     pExpSettings->expBarrierOptimizations = ((pPalSettings->pwsMode == Pal::PwsMode::Disabled) &&
                                              (m_settings.useAcquireReleaseInterface == false));
@@ -371,7 +371,7 @@ void VulkanSettingsLoader::FinalizeExperiments()
     pExpSettings->expRayTracingPipelineCompilationMode = (m_settings.rtCompileMode == RtCompileModeIndirect);
 #endif
 
-    pExpSettings->expTextureColorCompression = m_settings.forceEnableDcc == ForceDisableCompressionForColor;
+    pExpSettings->expTextureColorCompression = m_settings.forceDisableCompression == DisableCompressionForColor;
 
     pExpSettings->expZeroUnboundDescriptors = pPalSettings->zeroUnboundDescDebugSrd;
 
@@ -484,7 +484,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.nggCompactVertex = false;
 
     }
-    else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+    else if (IsGfx11(pInfo->gfxLevel))
     {
         // Enable NGG compactionless mode for Navi3x
         m_settings.nggCompactVertex = false;
@@ -528,11 +528,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
 
         m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
-            SkipImageLayoutUndefined |
-            SkipDuplicateResourceBarriers;
+                                          SkipImageLayoutUndefined       |
+                                          SkipDuplicateResourceBarriers;
 
         m_settings.modifyResourceKeyForAppProfile = true;
         m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
+
+        m_settings.asyncComputeQueueMaxWavesPerCu = 20;
 
         // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
         // can't do any better than returning a non-null function pointer for them.
@@ -595,7 +597,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
             }
         }
-        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        else if (IsGfx11(pInfo->gfxLevel))
         {
             if (pInfo->revision == Pal::AsicRevision::Navi31)
             {
@@ -615,25 +617,26 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
 
         m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
-            SkipImageLayoutUndefined;
+                                          SkipImageLayoutUndefined;
 
         m_settings.modifyResourceKeyForAppProfile = true;
         m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
 
-        m_settings.asyncComputeQueueLimit = 1;
+        m_settings.forceComputeQueueCount = 1;
+
+        m_settings.asyncComputeQueueMaxWavesPerCu = 20;
 
         // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
         // can't do any better than returning a non-null function pointer for them.
         m_settings.lenientInstanceFuncQuery = true;
     }
 
-    if (((appProfile == AppProfile::WolfensteinII) ||
-            (appProfile == AppProfile::WolfensteinYoungblood) ||
-            (appProfile == AppProfile::Doom)) &&
+    if (((appProfile == AppProfile::WolfensteinII)         ||
+         (appProfile == AppProfile::WolfensteinYoungblood) ||
+         (appProfile == AppProfile::Doom)) &&
         ((pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1) ||
-            (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)))
+         (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)))
     {
-        m_settings.asyncComputeQueueMaxWavesPerCu = 20;
         m_settings.nggSubgroupSizing = NggSubgroupExplicit;
         m_settings.nggVertsPerSubgroup = 254;
         m_settings.nggPrimsPerSubgroup = 128;
@@ -704,7 +707,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
-        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        if (IsGfx11(pInfo->gfxLevel))
         {
             m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::SkipDstCacheInv;
         }
@@ -780,7 +783,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
-        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        if (IsGfx11(pInfo->gfxLevel))
         {
             m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrPolicy::MallNoAllocSsrAsSnsr;
             m_settings.ac01WaNotNeeded = true;
@@ -970,8 +973,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                          ForceDccForColorAttachments |
                                          ForceDccFor32BppShaderStorage);
         }
-
-        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        else if (IsGfx11(pInfo->gfxLevel))
         {
             if (pInfo->revision == Pal::AsicRevision::Navi31)
             {
@@ -1086,7 +1088,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     if (appProfile == AppProfile::RainbowSixExtraction)
     {
-        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        if (IsGfx11(pInfo->gfxLevel))
         {
             if (pInfo->revision == Pal::AsicRevision::Navi31)
             {
@@ -1162,7 +1164,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.fsWaveSize = 64;
             }
         }
-        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        else if (IsGfx11(pInfo->gfxLevel))
         {
             m_settings.pipelineBinningMode = PipelineBinningModeDisable;
             m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
@@ -1202,7 +1204,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                                ForceDccForColorAttachments |
                                                ForceDccFor64BppShaderStorage);
 
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+            if (IsGfx11(pInfo->gfxLevel))
             {
                 m_settings.forceEnableDcc      |= ForceDccForNonColorAttachmentShaderStorage;
             }
@@ -1273,7 +1275,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
-        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        if (IsGfx11(pInfo->gfxLevel))
         {
         }
     }
@@ -1331,6 +1333,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.rtUnifiedVgprLimit = 64;
             }
         }
+
+        // Turn off FP16 for this application to fix 5% perf drop
+        m_settings.rtFp16BoxNodesInBlasMode = Fp16BoxNodesInBlasMode::Fp16BoxNodesInBlasModeNone;
     }
 #endif
 
@@ -1355,6 +1360,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.implicitExternalSynchronization = false;
 
         m_settings.alwaysReportHdrFormats = true;
+
+        m_settings.asyncComputeQueueMaxWavesPerCu = 20;
 
         if (pInfo->gpuType == Pal::GpuType::Discrete)
         {
@@ -1389,15 +1396,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // triangle culling and there are no options in the game to turn it off making NGG somewhat redundant.
             m_settings.enableNgg = false;
 
-            m_settings.asyncComputeQueueMaxWavesPerCu = 20;
-
             m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
 
             m_settings.csWaveSize = 64;
         }
         else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
         {
-            m_settings.asyncComputeQueueMaxWavesPerCu = 20;
             m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
 
             if (pInfo->revision != Pal::AsicRevision::Navi21)
@@ -1408,7 +1412,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             m_settings.csWaveSize = 64;
         }
-        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        else if (IsGfx11(pInfo->gfxLevel))
         {
             // Navi31 Mall and Tiling Settings
             if ((pInfo->revision == Pal::AsicRevision::Navi31) || (pInfo->revision == Pal::AsicRevision::Navi32))
@@ -1436,7 +1440,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     if ((appProfile == AppProfile::DxvkHaloInfiniteLauncher) ||
         (appProfile == AppProfile::DxvkTf2)
-#ifndef ICD_X64_BUILD
+#ifndef VKI_X64_BUILD
     || (appProfile == AppProfile::DXVK)
 #endif
     )
@@ -1569,7 +1573,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
             }
         }
-        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
+        else if (IsGfx11(pInfo->gfxLevel))
         {
             if (pInfo->revision == Pal::AsicRevision::Navi31)
             {
@@ -1663,11 +1667,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     {
         OverrideVkd3dCommonSettings(&m_settings);
 
-        if ((pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-#if VKI_BUILD_GFX115
-            || (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_5)
-#endif
-            )
+        if (IsGfx11(pInfo->gfxLevel))
         {
             m_settings.fsWaveSize = 32;
         }
@@ -1693,6 +1693,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     if (appProfile == AppProfile::GgmlVulkan)
     {
         m_settings.memoryDeviceOverallocationAllowed = true;
+    }
+
+    if (appProfile == AppProfile::Blender)
+    {
+        m_settings.memoryDeviceOverallocationAllowed = true;
+        m_settings.syncPreviousDrawForTransferStage = true;
     }
 
     if (appProfile == AppProfile::SevenDaysToDie)
@@ -1762,7 +1768,7 @@ VkResult VulkanSettingsLoader::ProcessSettings(
         *pAppProfile = static_cast<AppProfile>(m_settings.forceAppProfileValue);
     }
 
-#if ICD_X86_BUILD
+#if VKI_X86_BUILD
     if (m_settings.shaderCacheMode == ShaderCacheEnableRuntimeOnly)
     {
         m_settings.shaderCacheMode = ShaderCacheDisable;
@@ -1966,10 +1972,10 @@ void VulkanSettingsLoader::UpdatePalSettings()
 
     switch (m_settings.disableBinningPsKill)
     {
-    case DisableBinningPsKillEnable:
+    case DisableBinningPsKillTrue:
         pPalSettings->disableBinningPsKill = Pal::OverrideMode::Enabled;
         break;
-    case DisableBinningPsKillDisable:
+    case DisableBinningPsKillFalse:
         pPalSettings->disableBinningPsKill = Pal::OverrideMode::Disabled;
         break;
     case DisableBinningPsKillDefault:

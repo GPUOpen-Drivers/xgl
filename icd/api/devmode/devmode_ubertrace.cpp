@@ -29,7 +29,6 @@
  ***********************************************************************************************************************
  */
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
 // Vulkan headers
 #include "devmode/devmode_ubertrace.h"
 #include "include/vk_cmdbuffer.h"
@@ -118,7 +117,7 @@ public:
                 stringIdx++;
             }
 
-            uint32_t tableId = m_pDevMode->AcquireStringTableId();
+            uint32_t tableId = AcquireTableId();
             AddStringTable(tableId, numStrings, stringOffsets.Data(), stringData.Data(), stringData.size());
         }
 
@@ -144,7 +143,6 @@ DevModeUberTrace::DevModeUberTrace(
     m_pStringTableTraceSource(nullptr),
     m_pUserMarkerHistoryTraceSource(nullptr),
     m_pRenderOpTraceController(nullptr),
-    m_stringTableId(0),
     m_accelStructNames(64, m_pInstance->Allocator())
 {
     m_accelStructNames.Init();
@@ -216,8 +214,6 @@ void DevModeUberTrace::NotifyFrameBegin(
 {
     // Wait for the driver to be resumed in case it's been paused.
     WaitForDriverResume();
-
-    m_pInstance->PalPlatform()->UpdateFrameTraceController(pQueue->PalQueue(DefaultDeviceIndex));
 }
 
 // =====================================================================================================================
@@ -726,7 +722,7 @@ void DevModeUberTrace::ProcessMarkerTable(
     uint32        markerStringDataSize,
     const char*   pMarkerStringData)
 {
-    uint32_t tableId = AcquireStringTableId();
+    uint32_t tableId = m_pStringTableTraceSource->AcquireTableId();
 
     m_pStringTableTraceSource->AddStringTable(tableId,
                                               numMarkerStrings, pMarkerStringOffsets,
@@ -760,5 +756,3 @@ void DevModeUberTrace::LabelAccelStruct(
 }
 
 } // namespace vk
-
-#endif

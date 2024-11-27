@@ -161,6 +161,7 @@ protected:
     static void FetchPalMetadata(
         PalAllocator* pAllocator,
         const void*   pBinary,
+        size_t        binarySize,
         uint32_t*     pOrigThreadgroupDims);
 
     // Extracts extension structs from VkComputePipelineCreateInfo

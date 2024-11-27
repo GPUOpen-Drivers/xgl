@@ -282,9 +282,7 @@ SqttCmdBufferState::SqttCmdBufferState(
     m_currentEntryPoint(RgpSqttMarkerGeneralApiType::Invalid),
     m_currentEventId(0),
     m_currentEventType(RgpSqttMarkerEventType::InternalUnknown),
-#if ICD_GPUOPEN_DEVMODE_BUILD
     m_instructionTrace({ false, IDevMode::InvalidTargetPipelineHash, VK_PIPELINE_BIND_POINT_MAX_ENUM }),
-#endif
     m_debugTags(pCmdBuf->VkInstance()->Allocator()),
     m_userMarkerOpHistory(pCmdBuf->VkInstance()->Allocator()),
     m_userMarkerStrings(pCmdBuf->VkInstance()->Allocator())
@@ -325,12 +323,10 @@ void SqttCmdBufferState::Begin(
     m_userMarkerOpHistory.Clear();
     m_userMarkerStrings.Clear();
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     if (m_pDevMode != nullptr)
     {
         m_instructionTrace.targetHash = m_pDevMode->GetInstructionTraceTargetHash();
     }
-#endif
 
     m_cbId = m_pSqttMgr->GetNextCmdBufID(m_pCmdBuf->GetQueueFamilyIndex(), pBeginInfo);
 
@@ -349,7 +345,6 @@ void SqttCmdBufferState::Begin(
 // Inserts a CbEnd marker when command buffer building has finished.
 void SqttCmdBufferState::End()
 {
-#if ICD_GPUOPEN_DEVMODE_BUILD
     // If instruction tracing was enabled for this Command List,
     // insert a barrier used to wait for all trace data to finish writing.
     if (m_instructionTrace.started && m_settings.rgpInstTraceBarrierEnabled)
@@ -378,18 +373,15 @@ void SqttCmdBufferState::End()
 
         m_pCmdBuf->PalCmdBuffer(DefaultDeviceIndex)->CmdBarrier(barrierInfo);
     }
-#endif
 
     WriteCbEndMarker();
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     if ((m_pDevMode != nullptr) &&
         (m_instructionTrace.started))
     {
         m_pDevMode->StopInstructionTrace(m_pCmdBuf);
         m_instructionTrace.started = false;
     }
-#endif
 }
 
 // =====================================================================================================================
@@ -415,10 +407,25 @@ void SqttCmdBufferState::WriteMarker(
     ) const
 {
     VK_ASSERT(m_enabledMarkers != 0);
+
+    WriteMarker(m_pCmdBuf->PalCmdBuffer(DefaultDeviceIndex),
+                pData,
+                dataSize,
+                subQueueFlags);
+}
+
+// =====================================================================================================================
+void SqttCmdBufferState::WriteMarker(
+    Pal::ICmdBuffer*            pPalCmdBuffer,
+    const void*                 pData,
+    size_t                      dataSize,
+    Pal::RgpMarkerSubQueueFlags subQueueFlags
+    )
+{
     VK_ASSERT((dataSize % sizeof(uint32_t)) == 0);
     VK_ASSERT((dataSize / sizeof(uint32_t)) > 0);
 
-    m_pCmdBuf->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertRgpTraceMarker(
+    pPalCmdBuffer->CmdInsertRgpTraceMarker(
         subQueueFlags,
         static_cast<uint32_t>(dataSize / sizeof(uint32_t)),
         pData);
@@ -552,6 +559,28 @@ void SqttCmdBufferState::WriteUserEventMarker(
 
         WriteMarker(m_pUserEvent, markerSize, subQueueFlags);
     }
+}
+
+// =====================================================================================================================
+// Insert an event marker for a PAL internal event such as a dispatch initiated from PAL.
+void SqttCmdBufferState::WritePalInternalEventMarker(
+    Pal::ICmdBuffer*            pPalCmdBuffer,
+    Pal::DispatchInfoFlags      infoFlags,
+    Pal::RgpMarkerSubQueueFlags subQueueFlags)
+{
+    RgpSqttMarkerEventType apiType = RgpSqttMarkerEventType::CmdUnknown;
+
+    if (infoFlags.devDriverOverlay)
+    {
+        apiType = RgpSqttMarkerEventType::CmdDispatchDevDriverOverlay;
+    }
+
+    RgpSqttMarkerEvent marker = {};
+
+    marker.identifier = RgpSqttMarkerIdentifierEvent;
+    marker.apiType    = static_cast<uint32_t>(apiType);
+
+    WriteMarker(pPalCmdBuffer, &marker, sizeof(marker), subQueueFlags);
 }
 
 // ====================================================================================================================
@@ -1055,7 +1084,6 @@ void SqttCmdBufferState::PipelineBound(
     {
         const Pipeline* pPipeline = Pipeline::BaseObjectFromHandle(pipeline);
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevMode != nullptr)
         {
             if ((m_instructionTrace.started == false) &&
@@ -1066,7 +1094,6 @@ void SqttCmdBufferState::PipelineBound(
                 m_instructionTrace.started = true;
             }
         }
-#endif
 
     }
 }
@@ -1143,27 +1170,33 @@ void SqttCmdBufferState::DebugMarkerInsert(
 void SqttCmdBufferState::DebugLabelBegin(
     const VkDebugUtilsLabelEXT* pMarkerInfo)
 {
-    DevUserMarkerString userMarkerString = {};
-    userMarkerString.length = static_cast<uint32>(strlen(pMarkerInfo->pLabelName)) + 1;
-    Util::Strncpy(userMarkerString.string, pMarkerInfo->pLabelName, sizeof(userMarkerString.string));
-    m_userMarkerStrings.PushBack(userMarkerString);
+    if (m_pDevMode->IsCrashAnalysisEnabled() == false)
+    {
+        DevUserMarkerString userMarkerString = {};
+        userMarkerString.length = static_cast<uint32>(strlen(pMarkerInfo->pLabelName)) + 1;
+        Util::Strncpy(userMarkerString.string, pMarkerInfo->pLabelName, sizeof(userMarkerString.string));
+        m_userMarkerStrings.PushBack(userMarkerString);
 
-    Pal::Developer::UserMarkerOpInfo opInfo = {};
-    opInfo.opType   = static_cast<uint8_t>(Pal::Developer::UserMarkerOpType::Push);
-    opInfo.strIndex = static_cast<uint32_t>(m_userMarkerStrings.size());
-    m_userMarkerOpHistory.PushBack(opInfo.u32All);
+        Pal::Developer::UserMarkerOpInfo opInfo = {};
+        opInfo.opType = static_cast<uint8_t>(Pal::Developer::UserMarkerOpType::Push);
+        opInfo.strIndex = static_cast<uint32_t>(m_userMarkerStrings.size());
+        m_userMarkerOpHistory.PushBack(opInfo.u32All);
 
-    WriteUserEventMarker(RgpSqttMarkerUserEventPush, pMarkerInfo->pLabelName);
+        WriteUserEventMarker(RgpSqttMarkerUserEventPush, pMarkerInfo->pLabelName);
+    }
 }
 
 // =====================================================================================================================
 void SqttCmdBufferState::DebugLabelEnd()
 {
-    Pal::Developer::UserMarkerOpInfo opInfo = {};
-    opInfo.opType = static_cast<uint8_t>(Pal::Developer::UserMarkerOpType::Pop);
-    m_userMarkerOpHistory.PushBack(opInfo.u32All);
+    if (m_pDevMode->IsCrashAnalysisEnabled() == false)
+    {
+        Pal::Developer::UserMarkerOpInfo opInfo = {};
+        opInfo.opType = static_cast<uint8_t>(Pal::Developer::UserMarkerOpType::Pop);
+        m_userMarkerOpHistory.PushBack(opInfo.u32All);
 
-    WriteUserEventMarker(RgpSqttMarkerUserEventPop, nullptr);
+        WriteUserEventMarker(RgpSqttMarkerUserEventPop, nullptr);
+    }
 }
 
 // =====================================================================================================================
@@ -2347,9 +2380,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(
                     }
                 }
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
                 pDevMode->PipelineCreated(pDevice, pPipeline);
-#endif
             }
         }
     }
@@ -2395,9 +2426,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(
                         pCreateInfos[i].stage.module;
                 }
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
                 pDevMode->PipelineCreated(pDevice, pPipeline);
-#endif
             }
         }
     }
@@ -2449,7 +2478,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRayTracingPipelinesKHR(
                     }
                 }
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
                 if (result != VK_OPERATION_DEFERRED_KHR)
                 {
                     pDevMode->PipelineCreated(pDevice, pPipeline);
@@ -2459,7 +2487,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRayTracingPipelinesKHR(
                         pDevMode->ShaderLibrariesCreated(pDevice, pPipeline);
                     }
                 }
-#endif
             }
         }
     }
@@ -2621,7 +2648,6 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(
     SqttMgr* pSqtt      = pDevice->GetSqttMgr();
     IDevMode* pDevMode  = pDevice->VkInstance()->GetDevModeMgr();
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     if (pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable && (pDevMode != nullptr))
     {
         if (VK_NULL_HANDLE != pipeline)
@@ -2643,7 +2669,6 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(
 #endif
         }
     }
-#endif
 
     return SQTT_CALL_NEXT_LAYER(vkDestroyPipeline)(device, pipeline, pAllocator);
 }
@@ -2799,7 +2824,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectTagEXT(
     return SQTT_CALL_NEXT_LAYER(vkSetDebugUtilsObjectTagEXT)(device, pTagInfo);
 }
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
 // =====================================================================================================================
 // This function looks for specific tags in a submit's command buffers to identify when to force an RGP trace start
 // rather than during it during vkQueuePresent().  This is done for applications that explicitly do not make present
@@ -2871,7 +2895,6 @@ static void CheckRGPFrameEnd(
         }
     }
 }
-#endif
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
@@ -2884,11 +2907,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
     SqttMgr* pSqtt       = pQueue->VkDevice()->GetSqttMgr();
     IDevMode* pDevMode   = pQueue->VkDevice()->VkInstance()->GetDevModeMgr();
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     pDevMode->NotifyPreSubmit();
 
     CheckRGPFrameBegin(pQueue, pDevMode, submitCount, pSubmits);
-#endif
 
     if (pDevMode->IsTraceRunning())
     {
@@ -2935,9 +2956,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
 
     VkResult result = SQTT_CALL_NEXT_LAYER(vkQueueSubmit)(queue, submitCount, pSubmits, fence);
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     CheckRGPFrameEnd(pQueue, pDevMode, submitCount, pSubmits);
-#endif
 
     return result;
 }

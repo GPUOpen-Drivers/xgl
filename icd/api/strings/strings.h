@@ -42,6 +42,7 @@ namespace vk
 
 namespace strings
 {
+
     namespace entry
     {
         #include "strings/g_entry_points_decl.h"

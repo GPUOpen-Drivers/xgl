@@ -673,108 +673,116 @@ const void* GetMetaData(
 // Retrieve the formatstring section from elf
 void DebugPrintf::DecodeFormatStringsFromElf(
     const Device*    pDevice,
-    uint32_t         code,
+    uint32_t         codeSize,
     const char*      pCode,
     PrintfFormatMap* pFormatStrings)
 {
-    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(), pCode);
-    auto& elfReader = abiReader.GetElfReader();
-    auto noteId = abiReader.GetElfReader().FindSection(".note");
-    auto& noteSection = abiReader.GetElfReader().GetSection(noteId);
-    VK_ASSERT(noteId != 0);
-    VK_ASSERT(noteSection.sh_type == static_cast<uint32_t>(Elf::SectionHeaderType::Note));
-    ElfReader::Notes notes(elfReader, noteId);
-    unsigned noteLength = 0;
-    auto noteData = GetMetaData(notes, Abi::MetadataNoteType, &noteLength);
-    MsgPackReader docReader;
-    Result result = docReader.InitFromBuffer(noteData, noteLength);
-    VK_ASSERT(docReader.Type() == CWP_ITEM_MAP);
-    const auto hashFormatStr = HashLiteralString("amdpal.format_strings");
-    const auto hashIndex = HashLiteralString(".index");
-    const auto hashString = HashLiteralString(".string");
-    const auto hashVarsCount = HashLiteralString(".argument_count");
-    const auto hashBitsPos = HashLiteralString(".64bit_arguments");
-    const auto hashStrings = HashLiteralString(".strings");
-
-    Util::StringView<char> key;
-    uint32_t palmetaSize = docReader.Get().as.map.size;
-    for (uint32 i = 0; i < palmetaSize; ++i)
+    // Elf code size is zero when graphics shader library is used, so early return.
+    if (codeSize == 0)
     {
-        result = docReader.Next(CWP_ITEM_STR);
-        const char* itemString = static_cast<const char*>(docReader.Get().as.str.start);
-        if (Util::HashString(itemString, docReader.Get().as.str.length) == hashFormatStr)
-        {
-            result = docReader.Next(CWP_ITEM_MAP);
-            VK_ASSERT(docReader.Get().as.map.size == 2);
-            uint32_t formatStringsMap = docReader.Get().as.map.size;
-            for (uint32 j = 0; j < formatStringsMap; ++j)
-            {
-                result = docReader.UnpackNext(&key);
-                itemString = static_cast<const char*>(docReader.Get().as.str.start);
-                if (Util::HashString(key) == hashStrings)
-                {
-                    result = docReader.Next(CWP_ITEM_ARRAY);
-                    uint32_t stringsSize = docReader.Get().as.array.size;
-                    for (uint32 k = 0; k < stringsSize; ++k)
-                    {
-                        result = docReader.Next(CWP_ITEM_MAP);
-                        uint64_t hashValue = 0;
-                        uint64_t outputCount = 0;
-                        StringView<char> formatString;
-                        Vector<uint64_t, 4, GenericAllocator> bitPos(nullptr);
-                        uint32_t stringMap = docReader.Get().as.map.size;
-                        for (uint32 l = 0; l < stringMap; ++l)
-                        {
-                            result = docReader.UnpackNext(&key);
-                            auto hashKey = Util::HashString(key);
-                            switch (hashKey)
-                            {
-                            case hashIndex:
-                                docReader.UnpackNext(&hashValue);
-                                break;
-                            case hashString:
-                                docReader.UnpackNext(&formatString);
-                                break;
-                            case hashVarsCount:
-                                docReader.UnpackNext(&outputCount);
-                                break;
-                            default:
-                            {
-                                VK_ASSERT(hashKey == hashBitsPos);
-                                docReader.UnpackNext(&bitPos);
-                                break;
-                            }
-                            }
-                        }
+        return;
+    }
 
-                        bool found = true;
-                        PrintfElfString* pElfString = nullptr;
-                        result = pFormatStrings->FindAllocate(hashValue, &found, &pElfString);
-                        if ((result == Pal::Result::Success) && (found == false))
+    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(),
+                                           Util::Span<const void>{ pCode, static_cast<size_t>(codeSize) });
+    if (abiReader.Init() == Result::Success)
+    {
+        auto& elfReader = abiReader.GetElfReader();
+        auto noteId = abiReader.GetElfReader().FindSection(".note");
+        auto& noteSection = abiReader.GetElfReader().GetSection(noteId);
+        VK_ASSERT(noteId != 0);
+        VK_ASSERT(noteSection.sh_type == static_cast<uint32_t>(Elf::SectionHeaderType::Note));
+        ElfReader::Notes notes(elfReader, noteId);
+        unsigned noteLength = 0;
+        auto noteData = GetMetaData(notes, Abi::MetadataNoteType, &noteLength);
+        MsgPackReader docReader;
+        Result result = docReader.InitFromBuffer(noteData, noteLength);
+        VK_ASSERT(docReader.Type() == CWP_ITEM_MAP);
+        const auto hashFormatStr = HashLiteralString("amdpal.format_strings");
+        const auto hashIndex = HashLiteralString(".index");
+        const auto hashString = HashLiteralString(".string");
+        const auto hashVarsCount = HashLiteralString(".argument_count");
+        const auto hashBitsPos = HashLiteralString(".64bit_arguments");
+        const auto hashStrings = HashLiteralString(".strings");
+
+        Util::StringView<char> key;
+        uint32_t palmetaSize = docReader.Get().as.map.size;
+        for (uint32 i = 0; i < palmetaSize; ++i)
+        {
+            result = docReader.Next(CWP_ITEM_STR);
+            const char* itemString = static_cast<const char*>(docReader.Get().as.str.start);
+            if (Util::HashString(itemString, docReader.Get().as.str.length) == hashFormatStr)
+            {
+                result = docReader.Next(CWP_ITEM_MAP);
+                VK_ASSERT(docReader.Get().as.map.size == 2);
+                uint32_t formatStringsMap = docReader.Get().as.map.size;
+                for (uint32 j = 0; j < formatStringsMap; ++j)
+                {
+                    result = docReader.UnpackNext(&key);
+                    itemString = static_cast<const char*>(docReader.Get().as.str.start);
+                    if (Util::HashString(key) == hashStrings)
+                    {
+                        result = docReader.Next(CWP_ITEM_ARRAY);
+                        uint32_t stringsSize = docReader.Get().as.array.size;
+                        for (uint32 k = 0; k < stringsSize; ++k)
                         {
-                            pElfString->printStr.Reserve(formatString.Length());
-                            for (auto& elem : formatString)
+                            result = docReader.Next(CWP_ITEM_MAP);
+                            uint64_t hashValue = 0;
+                            uint64_t outputCount = 0;
+                            StringView<char> formatString;
+                            Vector<uint64_t, 4, GenericAllocator> bitPos(nullptr);
+                            uint32_t stringMap = docReader.Get().as.map.size;
+                            for (uint32 l = 0; l < stringMap; ++l)
                             {
-                                pElfString->printStr.PushBack(elem);
+                                result = docReader.UnpackNext(&key);
+                                auto hashKey = Util::HashString(key);
+                                switch (hashKey)
+                                {
+                                case hashIndex:
+                                    docReader.UnpackNext(&hashValue);
+                                    break;
+                                case hashString:
+                                    docReader.UnpackNext(&formatString);
+                                    break;
+                                case hashVarsCount:
+                                    docReader.UnpackNext(&outputCount);
+                                    break;
+                                default:
+                                    VK_ASSERT(hashKey == hashBitsPos);
+                                    docReader.UnpackNext(&bitPos);
+                                    break;
+                                }
                             }
-                            pElfString->bit64s.Reserve(outputCount);
-                            for (uint32 bitIndex = 0; bitIndex < outputCount; ++bitIndex)
+
+                            bool found = true;
+                            PrintfElfString* pElfString = nullptr;
+                            result = pFormatStrings->FindAllocate(hashValue, &found, &pElfString);
+                            if ((result == Pal::Result::Success) && (found == false))
                             {
-                                bool bitValue = (bitPos[bitIndex / 64] >> (bitIndex % 64)) & 1;
-                                pElfString->bit64s.PushBack(bitValue);
+                                pElfString->printStr.Reserve(formatString.Length());
+                                for (auto& elem : formatString)
+                                {
+                                    pElfString->printStr.PushBack(elem);
+                                }
+                                pElfString->bit64s.Reserve(outputCount);
+                                for (uint32 bitIndex = 0; bitIndex < outputCount; ++bitIndex)
+                                {
+                                    bool bitValue = (bitPos[bitIndex / 64] >> (bitIndex % 64)) & 1;
+                                    pElfString->bit64s.PushBack(bitValue);
+                                }
                             }
                         }
                     }
-                }
-                else
-                {
-                    docReader.Skip(1);
+                    else
+                    {
+                        docReader.Skip(1);
+                    }
                 }
             }
-        }
-        else
-        {
-            docReader.Skip(1);
+            else
+            {
+                docReader.Skip(1);
+            }
         }
     }
 }

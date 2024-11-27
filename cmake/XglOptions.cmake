@@ -39,21 +39,18 @@ macro(xgl_options)
     option(VKI_DEVMODE_COMPILER_SETTINGS "Build with devmode compiler settings?" OFF)
 #endif
 
-    option(XGL_ENABLE_PRINTS_ASSERTS "Build with debug print enabled?" OFF)
+    option(VKI_ENABLE_PRINTS_ASSERTS "Build with debug print enabled?" OFF)
 
-    option(XGL_ENABLE_LTO "Build with LTO enabled?" ON)
+    option(VKI_ENABLE_LTO "Build with LTO enabled?" ON)
 
-    option(XGL_ENABLE_GCOV "Build with gcov source code coverage?" OFF)
-#if VKI_BUILD_GFX115
-    option(XGL_BUILD_GFX115 "Build vulkan for GFX115" ON)
-#endif
+    option(VKI_ENABLE_GCOV "Build with gcov source code coverage?" OFF)
 #if VKI_BUILD_STRIX1
-    option(XGL_BUILD_STRIX1 "Build vulkan for STRIX1" ON)
+    option(VKI_BUILD_STRIX1 "Build vulkan for STRIX1" ON)
 #endif
 
-    option(XGL_BUILD_TESTS "Build tests?" OFF)
+    option(VKI_BUILD_TESTS "Build tests?" OFF)
 
-    option(XGL_BUILD_TOOLS "Build tools?" OFF)
+    option(VKI_BUILD_TOOLS "Build tools?" OFF)
 
 #if VKI_RAY_TRACING
     option(VKI_RAY_TRACING "Build vulkan with RAY_TRACING" ON)
@@ -65,22 +62,16 @@ macro(xgl_options)
 
     option(ICD_BUILD_LLPC "Build LLPC?" ON)
 
-    option(XGL_LLVM_UPSTREAM "Build with upstreamed LLVM?" OFF)
+    option(VKI_ENABLE_ASSERTIONS "Enable assertions in release builds" OFF)
 
-    option(XGL_ENABLE_ASSERTIONS "Enable assertions in release builds" OFF)
-
-    option(XGL_ENABLE_LIBCXX "Use libc++. This is intended for MemorySanitizer support only." OFF)
-
-    option(ICD_GPUOPEN_DEVMODE_BUILD "Build ${PROJECT_NAME} with GPU Open Developer Mode driver support?" ON)
-
-    option(ICD_MEMTRACK "Turn on memory tracking?" ${CMAKE_BUILD_TYPE_DEBUG})
+    option(VKI_ENABLE_LIBCXX "Use libc++. This is intended for MemorySanitizer support only." OFF)
 
     if(UNIX AND (NOT ANDROID))
-        option(BUILD_WAYLAND_SUPPORT "Build XGL with Wayland support" ON)
+        option(VKI_BUILD_WAYLAND "Build XGL with Wayland support" ON)
 
-        option(BUILD_DRI3_SUPPORT "Build XGL with Dri3 support" ON)
+        option(VKI_BUILD_DRI3 "Build XGL with Dri3 support" ON)
     endif()
 
-    option(ICD_ANALYSIS_WARNINGS_AS_ERRORS "Warnings as errors?" OFF)
+    option(VKI_ANALYSIS_WARNINGS_AS_ERRORS "Warnings as errors?" OFF)
 
 endmacro()

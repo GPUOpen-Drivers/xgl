@@ -515,7 +515,7 @@ Pal::Result Device::GpuDecodeImage(
             const uint32 threadGroupsZ = Util::Max(pPalImageRegions[idx].extent.depth,
                 pPalImageRegions[idx].numSlices);
 
-            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, threadGroupsY, threadGroupsZ });
+            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, threadGroupsY, threadGroupsZ }, {});
         }
     }
     else if ((type == InternalTexConvertCsType::ConvertETC2ToRGBA8) ||
@@ -589,7 +589,7 @@ Pal::Result Device::GpuDecodeImage(
             const uint32 threadGroupsZ = Util::Max(pPalImageRegions[idx].extent.depth,
                 pPalImageRegions[idx].numSlices);
 
-            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, threadGroupsY, threadGroupsZ });
+            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, threadGroupsY, threadGroupsZ }, {});
         }
     }
     else
@@ -641,7 +641,7 @@ Pal::Result Device::GpuDecodeImage(
             uint32 height              = pPalImageRegions[idx].extent.height * 4;
             const uint32 threadGroupsX = (width * height + 63) / 64;
 
-            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, 1, 1 });
+            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, 1, 1 }, {});
         }
     }
 
@@ -743,7 +743,7 @@ Pal::Result Device::GpuDecodeBuffer(
             const uint32 threadGroupsZ = Util::Max(pPalBufferRegionsIn[idx].imageExtent.depth,
                 pPalBufferRegionsIn[idx].numSlices);
 
-            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, threadGroupsY, threadGroupsZ });
+            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, threadGroupsY, threadGroupsZ }, {});
         }
     }
     else
@@ -843,7 +843,7 @@ Pal::Result Device::GpuDecodeBuffer(
             const uint32 threadGroupsZ = Util::Max(pPalBufferRegionsIn[idx].imageExtent.depth,
                 pPalBufferRegionsIn[idx].numSlices);
 
-            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, threadGroupsY, threadGroupsZ });
+            m_pPalCmdBuffer->CmdDispatch({ threadGroupsX, threadGroupsY, threadGroupsZ }, {});
         }
     }
 

@@ -30,20 +30,13 @@ macro(xgl_set_compile_definitions)
     target_compile_definitions(xgl PRIVATE ${TARGET_ARCHITECTURE_ENDIANESS}ENDIAN_CPU)
 
     if(TARGET_ARCHITECTURE_BITS EQUAL 32)
-        target_compile_definitions(xgl PRIVATE ICD_X86_BUILD)
+        target_compile_definitions(xgl PRIVATE VKI_X86_BUILD)
     elseif(TARGET_ARCHITECTURE_BITS EQUAL 64)
-        target_compile_definitions(xgl PRIVATE ICD_X64_BUILD)
+        target_compile_definitions(xgl PRIVATE VKI_X64_BUILD)
     endif()
 
     # Turn on the memory tracker if enabled.
-    if(ICD_MEMTRACK)
-        target_compile_definitions(xgl PRIVATE ICD_MEMTRACK)
-    endif()
-
-    # Enable relevant GPUOpen preprocessor definitions
-    if(ICD_GPUOPEN_DEVMODE_BUILD)
-        target_compile_definitions(xgl PRIVATE ICD_GPUOPEN_DEVMODE_BUILD)
-    endif()
+    target_compile_definitions(xgl PRIVATE $<$<BOOL:${VKI_MEMTRACK}>:VKI_MEMTRACK>)
 
     if(ICD_BUILD_LLPC)
         target_compile_definitions(xgl PRIVATE ICD_BUILD_LLPC)
@@ -68,13 +61,13 @@ macro(xgl_set_compile_definitions)
     target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX9=1)
 
 #if VKI_BUILD_GFX115
-    if(XGL_BUILD_GFX115)
+    if(VKI_BUILD_GFX115)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_GFX115=1)
     endif()
 #endif
 
 #if VKI_BUILD_STRIX1
-    if(XGL_BUILD_STRIX1)
+    if(VKI_BUILD_STRIX1)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_STRIX1=1)
     endif()
 #endif
@@ -87,17 +80,11 @@ macro(xgl_set_compile_definitions)
     endif()
 #endif
 
-#if VKI_NORMALIZED_TRIG_FUNCTIONS
-    if(VKI_NORMALIZED_TRIG_FUNCTIONS)
-        target_compile_definitions(xgl PRIVATE VKI_NORMALIZED_TRIG_FUNCTIONS)
-    endif()
-#endif
-
 #if VKI_RAY_TRACING
 #endif
 
-    if (XGL_ENABLE_GCOV)
-        target_compile_definitions(xgl PRIVATE ICD_ENABLE_GCOV)
+    if (VKI_ENABLE_GCOV)
+        target_compile_definitions(xgl PRIVATE VKI_ENABLE_GCOV)
     endif()
 
 #if VKI_GPU_DECOMPRESS
@@ -109,7 +96,7 @@ macro(xgl_set_compile_definitions)
 #if VKI_RAY_TRACING
 #endif
 
-    if(BUILD_WAYLAND_SUPPORT)
+    if(VKI_BUILD_WAYLAND)
         target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
     endif()
 

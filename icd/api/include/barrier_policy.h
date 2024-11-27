@@ -261,13 +261,17 @@ public:
         { return m_supportedLayoutUsageMask; }
 
     VK_FORCEINLINE uint32_t GetSupportedLayoutUsageMask(
-        uint32_t                            queueFamilyIndex) const
+        uint32_t                            queueFamilyIndex,
+        VkImageLayout                       layout) const
     {
+        const uint32_t extraLayoutUsages = (layout == VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR) ?
+                                           Pal::LayoutUncompressed : 0u;
+
         // This version of the function returns the supported layout usage masks in the scope of the specified queue
         // family. Accordingly, the image's supported layout usage mask is limited to the layout usage mask that
         // is supported by the specified queue family or by other queue families that are allowed to concurrently
         // access the image.
-        return m_supportedLayoutUsageMask &
+        return (m_supportedLayoutUsageMask | extraLayoutUsages)&
                (GetQueueFamilyPolicy(queueFamilyIndex).supportedLayoutUsageMask | m_concurrentLayoutUsageMask);
     }
 

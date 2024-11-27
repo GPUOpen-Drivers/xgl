@@ -84,7 +84,7 @@ public:
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PalAllocator);
 
-#if PAL_MEMTRACK
+#if VKI_MEMTRACK
     // NOTE: Memory leak tracking requires an allocator in order to perform the actual allocations. We can't provide
     //       this platform because that would result in a stack overflow. Instead, we define this simple allocator
     //       structure which contains the necessary methods to allocate and free system memory.

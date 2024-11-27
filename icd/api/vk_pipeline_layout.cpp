@@ -361,9 +361,9 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
 
     // Reserve user data nodes for vertex buffer table
     pPipelineInfo->numUserDataNodes += 1;
-    pInfo->userDataRegCount += VbTablePtrRegCount;
+    pInfo->userDataRegCount         += VbTablePtrRegCount;
     // In case we need an internal vertex buffer table, add nodes required for its entries, and its set pointer.
-    pPipelineInfo->numRsrcMapNodes += Pal::MaxVertexBuffers;
+    pPipelineInfo->numRsrcMapNodes  += Pal::MaxVertexBuffers;
 
     // If uber-fetch shader is not enabled for early compile, the user data entries for uber-fetch shader const
     // buffer is appended at the bottom of user data table.  Just following vertex buffer table.
@@ -371,27 +371,27 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
     {
         VK_ASSERT(pUserDataLayout->uberFetchConstBufRegBase == InvalidReg);
 
-        pUserDataLayout->uberFetchConstBufRegBase = pInfo->userDataRegCount;
-        pInfo->userDataRegCount += 1;
-        pPipelineInfo->numUserDataNodes += 1;
-        pPipelineInfo->numRsrcMapNodes += 1;
+        pUserDataLayout->uberFetchConstBufRegBase   = pInfo->userDataRegCount;
+        pInfo->userDataRegCount                     += 1;
+        pPipelineInfo->numUserDataNodes             += 1;
+        pPipelineInfo->numRsrcMapNodes              += 1;
     }
 
     // Reserve an user-data to store the VA of buffer for transform feedback.
     if (ReserveXfbNode(pDevice))
     {
-        pUserDataLayout->transformFeedbackRegBase = pInfo->userDataRegCount;
-        pUserDataLayout->transformFeedbackRegCount = 1;
-        pInfo->userDataRegCount += pUserDataLayout->transformFeedbackRegCount;
-        pPipelineInfo->numUserDataNodes += 1;
+        pUserDataLayout->transformFeedbackRegBase   = pInfo->userDataRegCount;
+        pUserDataLayout->transformFeedbackRegCount  = 1;
+        pInfo->userDataRegCount                     += pUserDataLayout->transformFeedbackRegCount;
+        pPipelineInfo->numUserDataNodes             += 1;
     }
 
     if (pDevice->GetEnabledFeatures().enableDebugPrintf)
     {
-        pPipelineInfo->numUserDataNodes += 1;
-        pUserDataLayout->debugPrintfRegBase = pInfo->userDataRegCount;
-        pInfo->userDataRegCount += 1;
-        pPipelineInfo->numRsrcMapNodes += 1;
+        pPipelineInfo->numUserDataNodes         += 1;
+        pUserDataLayout->debugPrintfRegBase     = pInfo->userDataRegCount;
+        pInfo->userDataRegCount                 += 1;
+        pPipelineInfo->numRsrcMapNodes          += 1;
     }
 
     // Allocate user data for the thread group reversal state
@@ -402,28 +402,33 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
         &pInfo->userDataRegCount,
         &pUserDataLayout->threadGroupReversalRegBase);
 
+    // Allocate user data for push constants
+    pPipelineInfo->numUserDataNodes             += pushConstantsUserDataNodeCount;
+
+    pCommonUserDataLayout->pushConstRegBase     = pInfo->userDataRegCount;
+    pCommonUserDataLayout->pushConstRegCount    = pushConstRegCount;
+    pInfo->userDataRegCount                     += pushConstRegCount;
+
 #if VKI_RAY_TRACING
     if (HasRayTracing(pDevice, pIn))
     {
         // Reserve one node for indirect RT capture replay.
-        pPipelineInfo->numUserDataNodes += 1;
-        pUserDataLayout->rtCaptureReplayConstBufRegBase = pInfo->userDataRegCount;
-        pInfo->userDataRegCount += InternalConstBufferRegCount;
+        pPipelineInfo->numUserDataNodes                         += 1;
+        pCommonUserDataLayout->rtCaptureReplayConstBufRegBase   = pInfo->userDataRegCount;
+        pInfo->userDataRegCount                                 += InternalConstBufferRegCount;
 
-        // Dispatch ray args
-        pInfo->userDataRegCount += MaxTraceRayUserDataRegCount;
-        pPipelineInfo->numUserDataNodes += MaxTraceRayUserDataNodeCount;
-        pPipelineInfo->numRsrcMapNodes += MaxTraceRayResourceNodeCount;
-        pPipelineInfo->hasRayTracing = true;
+        // NOTE: In certain Proton games, the dispatchRaysArgsPtrRegBase must be positioned carefully within the user
+        // data entry list. Experimental results indicate that these games work without a GPU hang when
+        // dispatchRaysArgsPtrRegBase is placed after the pushConst user data entry. The root cause of this behavior is
+        // currently unknown and may be due to a potential bug in Proton. Exercise caution when changing the location of
+        // dispatchRaysArgsPtrRegBase.
+        pCommonUserDataLayout->dispatchRaysArgsPtrRegBase       = pInfo->userDataRegCount;
+        pInfo->userDataRegCount                                 += MaxTraceRayUserDataRegCount;
+        pPipelineInfo->numUserDataNodes                         += MaxTraceRayUserDataNodeCount;
+        pPipelineInfo->numRsrcMapNodes                          += MaxTraceRayResourceNodeCount;
+        pPipelineInfo->hasRayTracing                            = true;
     }
 #endif
-
-    // Allocate user data for push constants
-    pPipelineInfo->numUserDataNodes += pushConstantsUserDataNodeCount;
-
-    pCommonUserDataLayout->pushConstRegBase  = pInfo->userDataRegCount;
-    pCommonUserDataLayout->pushConstRegCount = pushConstRegCount;
-    pInfo->userDataRegCount += pushConstRegCount;
 
     // Populate user data layouts for each descriptor set that is active
     pUserDataLayout->setBindingRegBase = pInfo->userDataRegCount;
@@ -656,16 +661,16 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
 #if VKI_RAY_TRACING
     if (HasRayTracing(pDevice, pIn))
     {
-        pUserDataLayout->dispatchRaysArgsPtrRegBase = pInfo->userDataRegCount;
-        pPipelineInfo->numUserDataNodes            += MaxTraceRayUserDataNodeCount;
-        pPipelineInfo->numRsrcMapNodes             += MaxTraceRayResourceNodeCount;
-        pInfo->userDataRegCount                    += MaxTraceRayUserDataRegCount;
-        pPipelineInfo->hasRayTracing                = true;
+        pCommonUserDataLayout->dispatchRaysArgsPtrRegBase   = pInfo->userDataRegCount;
+        pPipelineInfo->numUserDataNodes                     += MaxTraceRayUserDataNodeCount;
+        pPipelineInfo->numRsrcMapNodes                      += MaxTraceRayResourceNodeCount;
+        pInfo->userDataRegCount                             += MaxTraceRayUserDataRegCount;
+        pPipelineInfo->hasRayTracing                        = true;
 
         // Reserve one node for indirect RT capture replay.
-        pUserDataLayout->rtCaptureReplayConstBufRegBase = pInfo->userDataRegCount;
-        pPipelineInfo->numUserDataNodes                += 1;
-        pInfo->userDataRegCount                        += InternalConstBufferRegCount;
+        pCommonUserDataLayout->rtCaptureReplayConstBufRegBase   = pInfo->userDataRegCount;
+        pPipelineInfo->numUserDataNodes                         += 1;
+        pInfo->userDataRegCount                                 += InternalConstBufferRegCount;
     }
 #endif
 
@@ -1191,21 +1196,7 @@ uint32_t PipelineLayout::GetDispatchRaysUserData() const
 
     if (m_pipelineInfo.hasRayTracing)
     {
-        if (userDataLayout.scheme == PipelineLayoutScheme::Compact)
-        {
-            // The dispatch rays args is always the last entry
-            // TODO #raytracing: This means it spills first.  Probably bad for perf.
-            dispatchRaysUserData = m_info.userDataRegCount;
-        }
-        else if (userDataLayout.scheme == PipelineLayoutScheme::Indirect)
-        {
-            dispatchRaysUserData = userDataLayout.indirect.dispatchRaysArgsPtrRegBase;
-        }
-        else
-        {
-            VK_NEVER_CALLED();
-            dispatchRaysUserData = 0;
-        }
+        dispatchRaysUserData = userDataLayout.common.dispatchRaysArgsPtrRegBase;
     }
 
     return dispatchRaysUserData;
@@ -1366,7 +1357,7 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
             {
                 BuildLlpcInternalConstantBufferMapping(
                     stageMask,
-                    userDataLayout.rtCaptureReplayConstBufRegBase,
+                    commonUserDataLayout.rtCaptureReplayConstBufRegBase,
                     Vkgc::RtCaptureReplayInternalBufferBinding,
                     &pUserDataNodes[userDataNodeCount],
                     &userDataNodeCount);
@@ -1374,7 +1365,7 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
 
             BuildLlpcRayTracingDispatchArgumentsMapping(
                 stageMask,
-                m_info.userDataRegCount,
+                commonUserDataLayout.dispatchRaysArgsPtrRegBase,
                 MaxTraceRayUserDataRegCount,
                 &pUserDataNodes[userDataNodeCount],
                 &userDataNodeCount,
@@ -1677,7 +1668,7 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
 
         if (appendRtCaptureReplayCb)
         {
-            VK_ASSERT(rtCaptureReplayCbRegBase == userDataLayout.rtCaptureReplayConstBufRegBase);
+            VK_ASSERT(rtCaptureReplayCbRegBase == commonUserDataLayout.rtCaptureReplayConstBufRegBase);
             BuildLlpcInternalConstantBufferMapping(
                 stageMask,
                 rtCaptureReplayCbRegBase,

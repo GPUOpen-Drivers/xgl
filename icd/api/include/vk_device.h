@@ -812,7 +812,7 @@ public:
         uint32_t                       numUserDataNodes,
         Vkgc::ResourceMappingRootNode* pUserDataNodes,
         ShaderModuleFlags              flags,
-        bool                           forceWave64,
+        ShaderWaveSize                 waveSize,
         const VkSpecializationInfo*    pSpecializationInfo,
         InternalPipeline*              pInternalPipeline);
 

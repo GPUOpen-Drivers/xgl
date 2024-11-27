@@ -206,7 +206,7 @@ static bool SupportInternalModuleCache(
         supportInternalModuleCache = false;
     }
 
-#if ICD_X86_BUILD
+#if VKI_X86_BUILD
     supportInternalModuleCache = false;
 #endif
 
@@ -363,9 +363,7 @@ VkResult PipelineCompiler::Initialize()
                 m_gfxIp,
                 settings,
                 m_pPhysicalDevice->PalDevice()->GetCacheFilePath(),
-#if ICD_GPUOPEN_DEVMODE_BUILD
                 m_pPhysicalDevice->VkInstance()->GetDevModeMgr(),
-#endif
                 0,
                 0,
                 nullptr,
@@ -890,7 +888,8 @@ void PipelineCompiler::ReplacePipelineIsaCode(
         return;
     }
 
-    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(), pipelineBinary.pCode);
+    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(),
+                                           Util::Span<const void>{ pipelineBinary.pCode, pipelineBinary.codeSize});
     Pal::Result palResult = abiReader.Init();
     if (palResult != Pal::Result::Success)
     {
@@ -919,7 +918,7 @@ void PipelineCompiler::ReplacePipelineIsaCode(
     };
     for (const auto& simbolTypeEntry : stageSymbolTypes)
     {
-        const Util::Elf::SymbolTableEntry* pEntry = abiReader.GetPipelineSymbol(simbolTypeEntry);
+        const Util::Elf::SymbolTableEntry* pEntry = abiReader.GetSymbolHeader(simbolTypeEntry);
         if (pEntry != nullptr)
         {
             shaderStageSymbols.push_back(pEntry);
@@ -1772,6 +1771,10 @@ static void CopyPipelineShadersInfo(
         if ((shaderMask & (1 << stage)) != 0)
         {
             *pShaderInfosDst[stage] = *pShaderInfosSrc[stage];
+            if (libInfo.flags & VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT)
+            {
+                pShaderInfosDst[stage]->options.viewIndexFromDeviceIndex = true;
+            }
         }
     }
 
@@ -1837,6 +1840,7 @@ static void MergePipelineOptions(
     pDst->pageMigrationEnabled                  |= src.pageMigrationEnabled;
     pDst->optimizationLevel                     |= src.optimizationLevel;
     pDst->glState.disableTruncCoordForGather    |= src.glState.disableTruncCoordForGather;
+    pDst->optimizePointSizeWrite                |= src.optimizePointSizeWrite;
     pDst->shadowDescriptorTableUsage   = src.shadowDescriptorTableUsage;
     pDst->shadowDescriptorTablePtrHigh = src.shadowDescriptorTablePtrHigh;
     pDst->overrideThreadGroupSizeX     = src.overrideThreadGroupSizeX;
@@ -1899,10 +1903,7 @@ static void CopyFragmentOutputInterfaceState(
 {
     const GraphicsPipelineBinaryCreateInfo& libInfo = pLibrary->GetPipelineBinaryCreateInfo();
 
-    for (uint32_t i = 0; i < Vkgc::MaxColorTargets; ++i)
-    {
-        pCreateInfo->pipelineInfo.cbState.target[i] = libInfo.pipelineInfo.cbState.target[i];
-    }
+    pCreateInfo->pipelineInfo.cbState = libInfo.pipelineInfo.cbState;
 
     pCreateInfo->pipelineInfo.rsState.perSampleShading   = libInfo.pipelineInfo.rsState.perSampleShading;
     pCreateInfo->pipelineInfo.rsState.dynamicSampleInfo  = libInfo.pipelineInfo.rsState.dynamicSampleInfo;
@@ -1911,9 +1912,6 @@ static void CopyFragmentOutputInterfaceState(
     pCreateInfo->pipelineInfo.rsState.pixelShaderSamples = libInfo.pipelineInfo.rsState.pixelShaderSamples;
 
     pCreateInfo->dbFormat                                    = libInfo.dbFormat;
-    pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable  = libInfo.pipelineInfo.cbState.alphaToCoverageEnable;
-    pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable  = libInfo.pipelineInfo.cbState.dualSourceBlendEnable;
-    pCreateInfo->pipelineInfo.cbState.dualSourceBlendDynamic = libInfo.pipelineInfo.cbState.dualSourceBlendDynamic;
     pCreateInfo->pipelineInfo.iaState.enableMultiView        = libInfo.pipelineInfo.iaState.enableMultiView;
     pCreateInfo->cbStateHash                                 = libInfo.cbStateHash;
 }
@@ -3319,6 +3317,7 @@ void PipelineCompiler::ApplyPipelineOptions(
     pOptions->enableRelocatableShaderElf = settings.enableRelocatableShaders;
     pOptions->disableImageResourceCheck  = settings.disableImageResourceTypeCheck;
     pOptions->optimizeTessFactor         = settings.optimizeTessFactor != OptimizeTessFactorDisable;
+    pOptions->optimizePointSizeWrite     = true;
     pOptions->forceCsThreadIdSwizzling   = settings.forceCsThreadIdSwizzling;
     pOptions->overrideThreadGroupSizeX   = settings.overrideThreadGroupSizeX;
     pOptions->overrideThreadGroupSizeY   = settings.overrideThreadGroupSizeY;
@@ -4444,6 +4443,7 @@ void PipelineCompiler::SetRayTracingState(
     pRtState->enableRayQueryCsSwizzle               = settings.rtEnableRayQueryCsSwizzle;
     pRtState->enableDispatchRaysInnerSwizzle        = settings.rtEnableDispatchRaysInnerSwizzle;
     pRtState->enableDispatchRaysOuterSwizzle        = settings.rtEnableDispatchRaysOuterSwizzle;
+    pRtState->forceInvalidAccelStruct               = settings.forceInvalidAccelStruct;
     pRtState->ldsStackSize                          = settings.ldsStackSize;
     pRtState->enableOptimalLdsStackSizeForIndirect  = settings.enableOptimalLdsStackSizeForIndirect;
     pRtState->enableOptimalLdsStackSizeForUnified   = settings.enableOptimalLdsStackSizeForUnified;
@@ -4788,7 +4788,6 @@ bool PipelineCompiler::BuildRayTracingPipelineBinary(
 #endif
 
 // =====================================================================================================================
-#if ICD_GPUOPEN_DEVMODE_BUILD
 Util::Result PipelineCompiler::RegisterAndLoadReinjectionBinary(
     const Pal::PipelineHash*     pInternalPipelineHash,
     const Util::MetroHash::Hash* pCacheId,
@@ -4829,7 +4828,6 @@ Util::Result PipelineCompiler::RegisterAndLoadReinjectionBinary(
 
     return result;
 }
-#endif
 
 // =====================================================================================================================
 // Filter VkPipelineCreateFlags2KHR to only values used for pipeline caching
@@ -5236,8 +5234,25 @@ uint32_t PipelineCompiler::BuildUberFetchShaderInternalDataImp(
             case VK_FORMAT_R8G8_SINT:
             case VK_FORMAT_R8G8B8A8_UINT:
             case VK_FORMAT_R8G8B8A8_SNORM:
+            case VK_FORMAT_R16G16_UNORM:
+            case VK_FORMAT_R16G16_SNORM:
+            case VK_FORMAT_R16G16_USCALED:
+            case VK_FORMAT_R16G16_SSCALED:
+            case VK_FORMAT_R16G16_UINT:
+            case VK_FORMAT_R16G16_SINT:
             case VK_FORMAT_R16G16_SFLOAT:
+            case VK_FORMAT_R16G16B16_UNORM:
+            case VK_FORMAT_R16G16B16_SNORM:
+            case VK_FORMAT_R16G16B16_USCALED:
+            case VK_FORMAT_R16G16B16_SSCALED:
+            case VK_FORMAT_R16G16B16_UINT:
+            case VK_FORMAT_R16G16B16_SINT:
+            case VK_FORMAT_R16G16B16A16_UNORM:
+            case VK_FORMAT_R16G16B16A16_SNORM:
             case VK_FORMAT_R16G16B16A16_USCALED:
+            case VK_FORMAT_R16G16B16A16_SSCALED:
+            case VK_FORMAT_R16G16B16A16_UINT:
+            case VK_FORMAT_R16G16B16A16_SINT:
                 stride = 1;
                 break;
             default:

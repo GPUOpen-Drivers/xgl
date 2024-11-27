@@ -43,9 +43,7 @@
 #include "include/vk_swapchain.h"
 #include "include/vk_utils.h"
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
-#endif
 
 #if VKI_RAY_TRACING
 #include "raytrace/ray_tracing_device.h"
@@ -1089,13 +1087,10 @@ VkResult Queue::Submit(
     const SubmitInfoType* pSubmits,
     VkFence               fence)
 {
-#if ICD_GPUOPEN_DEVMODE_BUILD
     IDevMode* pDevMode = m_pDevice->VkInstance()->GetDevModeMgr();
 
     bool timedQueueEvents = ((pDevMode != nullptr) && pDevMode->IsQueueTimingActive(m_pDevice));
-#else
-    bool timedQueueEvents = false;
-#endif
+
     Fence* pFence = Fence::ObjectFromHandle(fence);
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
@@ -1469,8 +1464,9 @@ VkResult Queue::Submit(
                     pDevMode->RecordRenderOps(deviceIdx, this, drawCallCount, dispatchCallCount);
                 }
 
-                Pal::IFence* iFence[2] = {nullptr, nullptr};
+                Pal::IFence* iFence[2] = { nullptr, nullptr };
                 palSubmitInfo.ppFences = iFence;
+                palSubmitInfo.fenceCount = 0;
 
 #if VKI_RAY_TRACING
                 if (pCpsMemFence != nullptr)
@@ -1573,7 +1569,6 @@ VkResult Queue::Submit(
                     }
                     else
                     {
-#if ICD_GPUOPEN_DEVMODE_BUILD
                         // TMZ is NOT supported for GPUOPEN path.
                         VK_ASSERT((*pCommandBuffers[0])->IsProtected() == false);
 
@@ -1584,9 +1579,6 @@ VkResult Queue::Submit(
                             pCmdBuffers,
                             palSubmitInfo,
                             &virtStackFrame);
-#else
-                        VK_NEVER_CALLED();
-#endif
                     }
 
                     result = PalToVkResult(palResult);
@@ -1696,14 +1688,10 @@ VkResult Queue::PalSignalSemaphores(
     const uint32_t      semaphoreDeviceIndicesCount,
     const uint32_t*     pSemaphoreDeviceIndices)
 {
-#if ICD_GPUOPEN_DEVMODE_BUILD
     IDevMode* pDevMode = m_pDevice->VkInstance()->GetDevModeMgr();
 
     bool timedQueueEvents = ((pDevMode != nullptr) &&
                              pDevMode->IsQueueTimingActive(m_pDevice));
-#else
-    bool timedQueueEvents = false;
-#endif
 
     Pal::Result palResult = Pal::Result::Success;
     uint32_t    deviceIdx = DefaultDeviceIndex;
@@ -1744,14 +1732,8 @@ VkResult Queue::PalSignalSemaphores(
             }
             else
             {
-#if ICD_GPUOPEN_DEVMODE_BUILD
                 palResult = pDevMode->TimedSignalQueueSemaphore(deviceIdx, this, pSemaphores[i], pointValue,
                                                                    pPalSemaphore);
-#else
-                VK_NEVER_CALLED();
-
-                palResult = Pal::Result::ErrorUnknown;
-#endif
             }
         }
     }
@@ -1773,14 +1755,10 @@ VkResult Queue::PalWaitSemaphores(
     Pal::Result palResult = Pal::Result::Success;
     uint32_t    deviceIdx = DefaultDeviceIndex;
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     IDevMode* pDevMode = m_pDevice->VkInstance()->GetDevModeMgr();
 
     bool timedQueueEvents = ((pDevMode != nullptr) &&
                              pDevMode->IsQueueTimingActive(m_pDevice));
-#else
-    bool timedQueueEvents = false;
-#endif
 
     for (uint32_t i = 0; (i < semaphoreCount) && (palResult == Pal::Result::Success); ++i)
     {
@@ -1823,14 +1801,8 @@ VkResult Queue::PalWaitSemaphores(
                 }
                 else
                 {
-#if ICD_GPUOPEN_DEVMODE_BUILD
                     palResult = pDevMode->TimedWaitQueueSemaphore(deviceIdx, this, pSemaphores[i], pointValue,
                                                                      pPalSemaphore);
-#else
-                    VK_NEVER_CALLED();
-
-                    palResult = Pal::Result::ErrorUnknown;
-#endif
                 }
             }
         }
@@ -1889,7 +1861,6 @@ VkResult Queue::Present(
 
     if (pPresentInfo == nullptr)
     {
-#if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this,
@@ -1897,7 +1868,6 @@ VkResult Queue::Present(
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this,
                                                                        IDevMode::FrameDelimiterType::QueuePresent);
         }
-#endif
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
@@ -2048,13 +2018,11 @@ VkResult Queue::Present(
         m_pDevice->VkInstance()->PalPlatform()->UpdateFrameTraceController(pPresentQueue);
 
         // Notify gpuopen developer mode that we're about to present (frame-end boundary)
-#if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this,
                                                                      IDevMode::FrameDelimiterType::QueuePresent);
         }
-#endif
 
         bool syncFlip = false;
         bool postFrameTimerSubmission = false;
@@ -2092,13 +2060,11 @@ VkResult Queue::Present(
         pSwapChain->PostPresent(presentInfo, &palResult);
 
         // Notify gpuopen developer mode that a present occurred (frame-begin boundary)
-#if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this,
                                                                        IDevMode::FrameDelimiterType::QueuePresent);
         }
-#endif
 
         VkResult curResult = PalToVkResult(palResult);
 
@@ -2736,7 +2702,6 @@ void Queue::InsertDebugUtilsLabel(
 
     if (strcmp(pLabelInfo->pLabelName, settings.devModeEndFrameDebugUtilsLabel) == 0)
     {
-#if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, IDevMode::FrameDelimiterType::QueueLabel);
@@ -2749,18 +2714,15 @@ void Queue::InsertDebugUtilsLabel(
                 VK_ASSERT(tempResult == VK_SUCCESS);
             }
         }
-#endif
 
     }
 
     if (strcmp(pLabelInfo->pLabelName, settings.devModeStartFrameDebugUtilsLabel) == 0)
     {
-#if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, IDevMode::FrameDelimiterType::QueueLabel);
         }
-#endif
     }
 }
 
@@ -2771,7 +2733,6 @@ void Queue::DevModeFrameBoundary(
     IDevMode*                 pDevMode,
     const VkFrameBoundaryEXT* pFrameBoundaryInfo)
 {
-#if ICD_GPUOPEN_DEVMODE_BUILD
     if ((pDevMode != nullptr) &&
         (pFrameBoundaryInfo != nullptr))
     {
@@ -2783,7 +2744,6 @@ void Queue::DevModeFrameBoundary(
                 IDevMode::FrameDelimiterType::QueuePresent);
         }
     }
-#endif
 }
 
 #if VKI_RAY_TRACING

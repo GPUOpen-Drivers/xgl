@@ -432,6 +432,9 @@ void Image::ConvertImageCreateInfo(
 
     const Pal::GfxIpLevel gfxLevel = palProperties.gfxLevel;
 
+    const uint32_t forceEnableDccMask          = settings.forceEnableDcc;
+    const uint32_t forceDisableCompressionMask = settings.forceDisableCompression;
+
     {
         // Don't force DCC to be enabled for performance reasons unless the image is larger than the minimum size set for
         // compression, another performance optimization.
@@ -439,14 +442,11 @@ void Image::ConvertImageCreateInfo(
             (settings.disableSmallSurfColorCompressionSize * settings.disableSmallSurfColorCompressionSize)) &&
             (Formats::IsColorFormat(createInfoFormat)))
         {
-            const uint32_t forceEnableDccMask = settings.forceEnableDcc;
-
             const uint32_t bpp         = Pal::Formats::BitsPerPixel(pPalCreateInfo->swizzledFormat.format);
             const bool isShaderStorage = (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT);
 
-            if (isShaderStorage && ((forceEnableDccMask & (ForceDccDefault |
-                                                           ForceDisableCompression |
-                                                           ForceDisableCompressionForColor)) == 0))
+            if (isShaderStorage && (forceEnableDccMask != 0) &&
+                ((forceDisableCompressionMask & DisableCompressionForColor) == 0))
             {
                 const bool isColorAttachment = (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
 
@@ -520,25 +520,20 @@ void Image::ConvertImageCreateInfo(
         pPalCreateInfo->metadataTcCompatMode = Pal::MetadataTcCompatMode::Disabled;
     }
 
-    const uint32_t disableBits =
-        ForceDisableCompression |
-        ((Formats::IsColorFormat(createInfoFormat)) ? ForceDisableCompressionForColor : 0) |
-        ((Formats::IsDepthStencilFormat(createInfoFormat)) ? ForceDisableCompressionForDepthStencil : 0) |
-        (externalFlags.externallyShareable ? ForceDisableCompressionForSharedImages : 0);
-
-    // We must not use any metadata if sparse aliasing is enabled or
-    // settings.forceEnableDcc matches any of the disableBits.
-    if ((pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT) ||
-        ((settings.forceEnableDcc & disableBits) != 0))
+    // We must not use any metadata if sparse aliasing is enabled
+    if ((pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT) != 0)
     {
         pPalCreateInfo->metadataMode = Pal::MetadataMode::Disabled;
     }
 
-    // Disable metadata for avoiding corruption if one image is sampled and rendered
-    // in the same draw.
-    if ((pCreateInfo->usage & VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT) != 0)
+    const uint32_t disableBits =
+        (externalFlags.externallyShareable ? DisableCompressionForSharedImages : 0)                 |
+        ((Formats::IsColorFormat(createInfoFormat))        ? DisableCompressionForColor : 0)        |
+        ((Formats::IsDepthStencilFormat(createInfoFormat)) ? DisableCompressionForDepthStencil : 0);
+
+    if ((forceDisableCompressionMask & disableBits) != 0)
     {
-        pPalCreateInfo->metadataMode = Pal::MetadataMode::Disabled;
+        pPalCreateInfo->metadataMode          = Pal::MetadataMode::Disabled;
     }
 
     // Apply per application (or run-time) options
@@ -550,12 +545,17 @@ void Image::ConvertImageCreateInfo(
         if ((extStructs.pImageCompressionControl->sType == VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT) &&
             (extStructs.pImageCompressionControl->flags == VK_IMAGE_COMPRESSION_DISABLED_EXT))
         {
-            pPalCreateInfo->metadataMode         = Pal::MetadataMode::Disabled;
-            pPalCreateInfo->metadataTcCompatMode = Pal::MetadataTcCompatMode::Disabled;
+            pPalCreateInfo->metadataMode          = Pal::MetadataMode::Disabled;
+            pPalCreateInfo->metadataTcCompatMode  = Pal::MetadataTcCompatMode::Disabled;
         }
     }
 
 #if defined(__unix__)
+    if (pPalCreateInfo->flags.optimalShareable && pPalCreateInfo->usageFlags.depthStencil)
+    {
+        pPalCreateInfo->metadataMode = Pal::MetadataMode::Disabled;
+    }
+
     pPalCreateInfo->modifier = DRM_FORMAT_MOD_INVALID;
 
     if (pCreateInfo->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT)

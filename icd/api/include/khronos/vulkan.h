@@ -61,9 +61,6 @@
 // Internal (under development) extension definitions
 
 #include "devext/vk_amd_gpa_interface.h"
-#if VKI_TEXEL_BUFFER_EXPLICIT_FORMAT_SUPPORT
-#include "devext/vk_amd_shader_texel_buffer_explicit_format.h"
-#endif
 
 #if VKI_RAY_TRACING
 #endif

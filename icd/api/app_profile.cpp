@@ -780,12 +780,6 @@ constexpr AppProfilePatternEntry AppNameHoudini =
     "houdini"
 };
 
-constexpr AppProfilePatternEntry AppNameGravityMark =
-{
-    PatternAppNameLower,
-    "clayapp"
-};
-
 constexpr AppProfilePatternEntry AppNameSevenDaysToDie =
 {
     PatternAppNameLower,
@@ -796,6 +790,12 @@ constexpr AppProfilePatternEntry AppNameGgmlVulkan =
 {
     PatternAppNameLower,
     "ggml-vulkan"
+};
+
+constexpr AppProfilePatternEntry AppNameBlender =
+{
+    PatternAppNameLower,
+    "blender"
 };
 
 // Section END of AppProfilePatternEntry for all games
@@ -1327,14 +1327,6 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
-        AppProfile::GravityMark,
-        {
-            AppNameGravityMark,
-            PatternEnd
-        }
-    },
-
-    {
         AppProfile::SOTTR,
         {
             AppNameSOTTR,
@@ -1642,6 +1634,14 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::GgmlVulkan,
         {
             AppNameGgmlVulkan,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Blender,
+        {
+            AppNameBlender,
             PatternEnd
         }
     },

@@ -315,14 +315,12 @@ public:
 
 #endif
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     Util::Result RegisterAndLoadReinjectionBinary(
         const Pal::PipelineHash*     pInternalPipelineHash,
         const Util::MetroHash::Hash* pCacheId,
         size_t*                      pBinarySize,
         const void**                 ppPipelineBinary,
         PipelineCache*               pPipelineCache = nullptr);
-#endif
 
     template<class PipelineBuildInfo>
     PipelineCompilerType CheckCompilerType(

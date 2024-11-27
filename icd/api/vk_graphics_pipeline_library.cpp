@@ -500,6 +500,21 @@ VkResult GraphicsPipelineLibrary::Create(
     GplModuleState                   tempModuleStates[ShaderStage::ShaderStageGfxCount] = {};
 
     binaryCreateInfo.pipelineInfo.iaState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    if (pCreateInfo->pInputAssemblyState != nullptr)
+    {
+        binaryCreateInfo.pipelineInfo.iaState.topology = pCreateInfo->pInputAssemblyState->topology;
+    }
+    else if (pCreateInfo->stageCount > 0)
+    {
+        for (uint32_t stage = 0; stage < pCreateInfo->stageCount; ++stage)
+        {
+            if ((pCreateInfo->pStages[stage].stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT) ||
+                (pCreateInfo->pStages[stage].stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
+            {
+                binaryCreateInfo.pipelineInfo.iaState.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+            }
+        }
+    }
 
     if ((internalFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FORCE_LLPC) != 0)
     {

@@ -39,6 +39,16 @@
 
 namespace vk
 {
+typedef int8_t   int8;     ///< 8-bit integer.
+typedef int16_t  int16;    ///< 16-bit integer.
+typedef int32_t  int32;    ///< 32-bit integer.
+typedef int64_t  int64;    ///< 64-bit integer.
+typedef uint8_t  uint8;    ///< Unsigned 8-bit integer.
+typedef uint16_t uint16;   ///< Unsigned 16-bit integer.
+typedef uint32_t uint32;   ///< Unsigned 32-bit integer.
+typedef uint64_t uint64;   ///< Unsigned 64-bit integer.
+typedef uint64_t gpusize;  ///< Used to specify GPU addresses and sizes of GPU allocations.  This differs from
+                           ///  size_t since the GPU still uses 64-bit addresses on a 32-bit OS.
 
 #define EXTRACT_VK_STRUCTURES_0(id, CoreType, pInit, CoreStructureType) \
     const Vk##CoreType*    p##CoreType   = nullptr; \
@@ -166,57 +176,57 @@ namespace vk
         } \
     }
 
-    static const uint32_t DefaultDeviceIndex = 0;
+    constexpr uint32 DefaultDeviceIndex = 0;
 
     // The default memory instance to use for multi-instance heaps
-    static const uint32_t DefaultMemoryInstanceIdx = 0;
+    constexpr uint32 DefaultMemoryInstanceIdx = 0;
 
     // Maximum number of Pal devices
 #ifndef VKI_BUILD_MAX_NUM_GPUS
 #define VKI_BUILD_MAX_NUM_GPUS 4
 #endif
-    static const uint32_t MaxPalDevices = VKI_BUILD_MAX_NUM_GPUS;
+    constexpr uint32 MaxPalDevices = VKI_BUILD_MAX_NUM_GPUS;
 
     // Invalid Mask
-    static const uint32_t InvalidPalDeviceMask = 1 << (MaxPalDevices+1);
+    constexpr uint32 InvalidPalDeviceMask = 1 << (MaxPalDevices+1);
 
     // Maximum number of dynamic descriptors
-    static const uint32_t MaxDynamicUniformDescriptors = 8;
-    static const uint32_t MaxDynamicStorageDescriptors = 8;
-    static const uint32_t MaxDynamicDescriptors = MaxDynamicUniformDescriptors + MaxDynamicStorageDescriptors;
+    constexpr uint32 MaxDynamicUniformDescriptors = 8;
+    constexpr uint32 MaxDynamicStorageDescriptors = 8;
+    constexpr uint32 MaxDynamicDescriptors = MaxDynamicUniformDescriptors + MaxDynamicStorageDescriptors;
 
     // The maximum number of sets that can appear in a pipeline layout
-    static const uint32_t MaxDescriptorSets = 32;
+    constexpr uint32 MaxDescriptorSets = 32;
 
     // The maximum size of a buffer SRD
-    static const uint32_t MaxBufferSrdSize = 8;
+    constexpr uint32 MaxBufferSrdSize = 8;
 
     // The maximum size of push constants in bytes
-    static const uint32_t MaxPushConstants = 256;
+    constexpr uint32 MaxPushConstants = 256;
 
     // The maximum number of push descriptors that can appear in a descriptor set
-    static const uint32_t MaxPushDescriptors = 32;
+    constexpr uint32 MaxPushDescriptors = 32;
 
     // The default, full stencil write mask
-    static const uint8_t StencilWriteMaskFull = 0xFF;
+    constexpr uint8 StencilWriteMaskFull = 0xFF;
 
     // The max palette size for CustomBorderColor.
-    static const uint32_t MaxBorderColorPaletteSize = 4096;
+    constexpr uint32 MaxBorderColorPaletteSize = 4096;
 
     // The max number of descriptors required for a single descriptor type.
     // This is currently 3 for YCbCr formats
-    static const uint32_t MaxCombinedImageSamplerDescriptorCount = 3;
+    constexpr uint32 MaxCombinedImageSamplerDescriptorCount = 3;
 
     // Enumerates the compiler types
-    enum PipelineCompilerType : uint32_t
+    enum PipelineCompilerType : uint32
     {
         PipelineCompilerTypeInvalid,  // shader compiler is unknown
         PipelineCompilerTypeLlpc,     // Use shader compiler provided by LLPC
     };
 
     // Point size must be set via gl_PointSize, otherwise it must be 1.0f
-    static const float DefaultPointSize = 1.0f;
-    static const float DefaultLineWidth = 1.0f;
+    constexpr float DefaultPointSize = 1.0f;
+    constexpr float DefaultLineWidth = 1.0f;
 }// namespace vk
 
 #endif

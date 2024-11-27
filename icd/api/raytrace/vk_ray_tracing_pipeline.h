@@ -296,10 +296,16 @@ public:
 
     VkResult GetRayTracingShaderDisassembly(
         Util::Abi::PipelineSymbolType pipelineSymbolType,
+        size_t                        binarySize,
         const void*                   pBinaryCode,
         size_t*                       pBufferSize,
         void*                         pBuffer
         ) const;
+
+    uint32_t PersistentDispatchSize(
+        uint32_t dispatchSizeX,
+        uint32_t dispatchSizeY,
+        uint32_t dispatchSizeZ) const;
 
 protected:
     // Make sure that this value should be equal to Bil::RayTracingTileWidth defined in bilInstructionRayTracing.h
