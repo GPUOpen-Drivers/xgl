@@ -1,0 +1,53 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x11a8701fc5491a46 dc51347ef1a62e1a"
+        }
+      },
+      "action": {
+        "cs": {
+          "disableLicm": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x0914c0d9eeef28eb 72d3c51c31adcc1a"
+        }
+      },
+      "action": {
+        "cs": {
+          "disableLicm": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x27ac7851f429556a b25778a8d9b44544"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x34244bc59807d4a9 3f7c1622d816d81f"
+        }
+      },
+      "action": {
+        "ps": {
+          "vgprLimit": 64,
+          "useSiScheduler": true
+        }
+      }
+    }
+  ]
+}

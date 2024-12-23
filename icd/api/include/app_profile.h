@@ -69,13 +69,11 @@ enum class AppProfile : uint32_t
     DawnOfWarIII,            // Dawn of War III by Feral3D
     WarHammerII,             // Total War: WarHammer II by Feral3D
     WarHammerIII,            // Total War: WarHammer III by Feral3D
-    AshesOfTheSingularity,   // Ashes Of The Singularity
     StrangeBrigade,          // Strange Brigade
     WorldWarZ,               // WorldWarZ
     ThreeKingdoms,           // Three Kingdoms by Feral3D
     DiRT4,                   // DiRT4 by Feral3D
     Rage2,                   // Rage2 by Avalanche Studios
-    RainbowSixSiege,         // Tom Clancy's Rainbow Six Siege: Operation Phantom by Ubisoft
     RainbowSixExtraction,    // Tom Clancy's Rainbow Six Extraction by Ubisoft
     WolfensteinYoungblood,   // Wolfenstein Youngblood by Machine Games
     RedDeadRedemption2,      // Red Dead Redemption 2 by Rockstar
@@ -112,6 +110,15 @@ enum class AppProfile : uint32_t
     BaldursGate3,            // Baldur's Gate by Larian Studios
     Enshrouded,              // Enshrouded by Keen Games
     HolisticEngine,          // Holistic Engine by Keen Games
+    SecondExtinction,        // Second Extinction by Avalanche Studios
+    ClayEngine,              // Clay Engine (Default)
+    Quake,                   // Quake Champions
+    HuskyEngine,             // Husky Engine (Default)
+    Victoria3,               // Victoria 3 by Paradox
+    AtlasFallen,             // Deck13 by Focus Entertainment
+    TheCrewMotorfest,        // CrewMotorfest by Ubisoft Ivory
+    Deadlock,                // Deadlock by Valve Software
+    IndianaJonesGC,          // Indiana Jones and the Great Circle by Machine Games
     IdTechEngine,            // id Tech Engine (Default)
 #if VKI_RAY_TRACING
     ControlDX12,             // VKD3D Control Ultimate Edition
@@ -148,7 +155,9 @@ enum class AppProfile : uint32_t
     Houdini,                 // Houdini
     SevenDaysToDie,          // 7 Days to Die
     GgmlVulkan,              // ggml-vulkan
-    Blender                  // Blender
+    Blender,                 // Blender
+    PortalPreludeRTX,        // Portal: Prelude RTX
+    Superposition            // Superposition
 };
 
 struct ProfileSettings

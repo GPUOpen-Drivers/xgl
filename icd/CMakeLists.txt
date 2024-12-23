@@ -170,6 +170,8 @@ if (VKI_RAY_TRACING)
         api/raytrace/vk_acceleration_structure.cpp
         api/raytrace/vk_ray_tracing_pipeline.cpp
         api/raytrace/ray_tracing_device.cpp
+        api/raytrace/cps_global_memory.cpp
+        api/raytrace/cps_cmdbuffer_util.cpp
         api/vk_deferred_operation.cpp
         api/appopt/bvh_batch_layer.cpp
         api/appopt/split_raytracing_layer.cpp
@@ -206,7 +208,7 @@ file(GLOB_RECURSE VKI_ALL_SHADER_PROFILE_FILES
 
 add_custom_command(
     OUTPUT ${VKI_SHADER_PROFILE_DIR}/g_shader_profile.cpp ${VKI_SHADER_PROFILE_DIR}/g_shader_profile.h
-    COMMAND ${PYTHON_CMD} ${VKI_GENDIR}/genShaderProfile.py ${VKI_SHADER_PROFILE_DIR}/shader_profiles
+    COMMAND ${PYTHON_CMD} ${VKI_GENDIR}/genShaderProfile.py ${VKI_SHADER_PROFILE_DIR}
     DEPENDS ${VKI_GEN_SHADER_PROFILE_SCRIPTS} ${VKI_ALL_SHADER_PROFILE_FILES}
     COMMENT "Generating shader profiles code from all profile.json files"
 )

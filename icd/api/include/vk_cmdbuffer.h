@@ -51,6 +51,10 @@
 
 #include "renderpass/renderpass_builder.h"
 
+#if VKI_RAY_TRACING
+#include "raytrace/cps_cmdbuffer_util.h"
+#endif
+
 #include "debug_printf.h"
 #include "palCmdBuffer.h"
 #include "palDequeImpl.h"
@@ -1023,6 +1027,21 @@ public:
         return m_curDeviceMask;
     }
 
+#if VKI_RAY_TRACING
+    uint64 GetCpsMemSize() const
+    {
+        return m_cpsCmdBufferUtil.GetCpsMemSize();
+    }
+
+    void ApplyPatchCpsRequests(
+        uint32_t               deviceIdx,
+        Device*                pDevice,
+        const Pal::IGpuMemory& cpsMem) const
+    {
+        m_cpsCmdBufferUtil.ApplyPatchCpsRequests(deviceIdx, pDevice, cpsMem);
+    }
+#endif
+
    void SetRpDeviceMask(uint32_t deviceMask)
     {
         VK_ASSERT(deviceMask != 0);
@@ -1486,11 +1505,6 @@ public:
     }
 
 #if VKI_RAY_TRACING
-    uint64 GetCpsMemSize() const { return m_maxCpsMemSize; }
-
-    void ApplyPatchCpsRequests(
-        uint32_t               deviceIdx,
-        const Pal::IGpuMemory& cpsMem) const;
 
     bool HasRayTracing() const { return m_flags.hasRayTracing; }
 
@@ -1966,13 +1980,6 @@ private:
         Buffer*                pIndirectBuffer,
         VkDeviceSize           indirectOffset,
         const Pal::gpusize     indirectBufferVa);
-
-    void AddPatchCpsRequest(
-        uint32_t                      deviceIdx,
-        GpuRt::DispatchRaysConstants* pConstsMem,
-        uint64_t                      bufSize);
-
-    void FreePatchCpsList();
 #endif
 
     void BindVertexBuffersUpdateBindingRange(
@@ -2064,14 +2071,8 @@ private:
 #if VKI_RAY_TRACING
     Util::Vector<InternalMemory*, 16, PalAllocator> m_scratchVidMemList; // Ray-tracing scratch memory
     BvhBatchState*                m_pBvhBatchState;
+    CpsCmdBufferUtil              m_cpsCmdBufferUtil;
 
-    uint64                        m_maxCpsMemSize; // max ray sorting memory requested
-
-    typedef Util::Vector<GpuRt::DispatchRaysConstants*, 1, PalAllocator> PatchCpsVector;
-    PatchCpsVector m_patchCpsList[MaxPalDevices];
-#endif
-
-#if VKI_RAY_TRACING
     PFN_traceRaysDispatchPerDevice m_pfnTraceRaysDispatchPerDevice;
 #endif
 };

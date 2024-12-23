@@ -84,14 +84,16 @@ VkResult Buffer::Create(
     Pal::IGpuMemory*         pGpuMemory[MaxPalDevices] = {};
     Pal::GpuMemoryCreateInfo gpuMemoryCreateInfo       = {};
 
-    VkResult result     = VK_SUCCESS;
-    size_t   apiSize    = ObjectSize(pDevice);
-    size_t   palMemSize = 0;
-    bool     isSparse   = (pCreateInfo->flags & SparseEnablingFlags) != 0;
+    VkResult   result     = VK_SUCCESS;
+    size_t     apiSize    = ObjectSize(pDevice);
+    size_t     palMemSize = 0ull;
+    const bool isSparse   = (pCreateInfo->flags & SparseEnablingFlags) != 0;
 
     BufferExtStructs bufferExtStructs = {};
+    BufferFlags      bufferFlags;
 
     HandleExtensionStructs(pCreateInfo, &bufferExtStructs);
+    CalculateBufferFlags(pDevice, pCreateInfo, bufferExtStructs, &bufferFlags);
 
     if (isSparse)
     {
@@ -112,6 +114,23 @@ VkResult Buffer::Create(
 
                     break;
                 }
+                case VK_STRUCTURE_TYPE_OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT:
+                {
+                    const auto* pOpaque = static_cast<const VkOpaqueCaptureDescriptorDataCreateInfoEXT*>(pNext);
+                    if (bufferFlags.usageDescriptor )
+                    {
+                        gpuMemoryCreateInfo.startVaHint           = *(static_cast<const Pal::gpusize*>(
+                                                                     pOpaque->opaqueCaptureDescriptorData));
+                        gpuMemoryCreateInfo.flags.startVaHintFlag = 1;
+                    }
+                    else
+                    {
+                        gpuMemoryCreateInfo.replayVirtAddr = *(static_cast<const Pal::gpusize*>(
+                                                              pOpaque->opaqueCaptureDescriptorData));
+                    }
+                    break;
+                }
+
             default:
                 break;
             }
@@ -129,14 +148,13 @@ VkResult Buffer::Create(
 
         // Use the descriptor table VA range for descriptor buffers because we need to program descriptors
         // with a single (32-bit) user data entry and there is no such guarentee with the default VA range.
-        if ((Device::GetBufferUsageFlagBits(pCreateInfo) &
-            (VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
-             VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT  |
-             VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT)) != 0)
+        if (bufferFlags.usageDescriptor)
         {
             gpuMemoryCreateInfo.vaRange = Pal::VaRange::DescriptorTable;
         }
-        else if ((pCreateInfo->flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT) != 0)
+        else if (Util::TestAnyFlagSet(pCreateInfo->flags,
+                                 (VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT |
+                                  VK_BUFFER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT)))
         {
             gpuMemoryCreateInfo.vaRange = Pal::VaRange::CaptureReplay;
         }
@@ -177,9 +195,9 @@ VkResult Buffer::Create(
         void*       pPalMemory = Util::VoidPtrInc(pMemory, apiSize);
         Pal::Result palResult  = Pal::Result::Success;
 
-        for (uint32_t deviceIdx = 0;
-            (deviceIdx < pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
-            deviceIdx++)
+        uint32_t deviceIdx = 0u;
+
+        for (;(deviceIdx < pDevice->NumPalDevices()) && (palResult == Pal::Result::Success); deviceIdx++)
         {
             if (deviceIdx != DefaultDeviceIndex)
             {
@@ -198,13 +216,21 @@ VkResult Buffer::Create(
         }
 
         result = PalToVkResult(palResult);
+
+        if (result != VK_SUCCESS)
+        {
+            for (uint32_t ndx = 0u; ndx < deviceIdx; ndx++)
+            {
+                pDevice->RemoveMemReference(pDevice->PalDevice(ndx), pGpuMemory[ndx]);
+                pGpuMemory[ndx]->Destroy();
+            }
+
+            pDevice->FreeApiObject(pAllocator, pMemory);
+        }
     }
 
     if (result == VK_SUCCESS)
     {
-        BufferFlags bufferFlags;
-        CalculateBufferFlags(pDevice, pCreateInfo, bufferExtStructs, &bufferFlags);
-
         // Construct API buffer object.
         VK_PLACEMENT_NEW (pMemory) Buffer (pDevice,
                                            pCreateInfo,
@@ -276,23 +302,19 @@ void Buffer::LogBufferCreate(
     static_assert(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT ==
         static_cast<uint32_t>(PalUsageFlag::ShaderDeviceAddress), "Usage Flag Mismatch");
 
+    Buffer* pBufferObj = Buffer::ObjectFromHandle(buffer);
+
     Pal::ResourceDescriptionBuffer desc = {};
     desc.size        = pCreateInfo->size;
     desc.createFlags = pCreateInfo->flags;
     desc.usageFlags  = pCreateInfo->usage;
 
 #if VKI_RAY_TRACING
-    const VkBufferUsageFlagBits2KHR rtBufferUsageFlags =
-        VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
-        VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
-        VK_BUFFER_USAGE_2_SHADER_BINDING_TABLE_BIT_KHR;
-    const bool isBufferUsedForRt = (Device::GetBufferUsageFlagBits(pCreateInfo) & rtBufferUsageFlags) != 0;
-    if (isBufferUsedForRt)
+    if (pBufferObj->RayTracingBuffer())
     {
         desc.usageFlags |= static_cast<uint32>(PalUsageFlag::RayTracing);
     }
 #endif
-    Buffer* pBufferObj = Buffer::ObjectFromHandle(buffer);
 
     Pal::ResourceCreateEventData data = {};
     data.type              = Pal::ResourceType::Buffer;
@@ -306,7 +328,7 @@ void Buffer::LogBufferCreate(
         sizeof(Pal::ResourceCreateEventData));
 
 #if VKI_RAY_TRACING
-    if (isBufferUsedForRt)
+    if (pBufferObj->RayTracingBuffer())
     {
         Pal::ResourceUpdateEventData updateData = {};
         updateData.pObj                         = pBufferObj;
@@ -366,21 +388,22 @@ VkResult Buffer::Destroy(
         &data,
         sizeof(Pal::ResourceDestroyEventData));
 
-    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+    if (m_internalFlags.internalMemBound == true)
     {
-        Pal::IGpuMemory* pMemoryObj = m_perGpu[deviceIdx].pGpuMemory;
-
-        if (m_internalFlags.internalMemBound == true)
+        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
         {
-            if (IsSparse() == false)
+            Pal::IGpuMemory* pMemoryObj = m_perGpu[deviceIdx].pGpuMemory;
             {
-                pDevice->RemoveMemReference(pDevice->PalDevice(deviceIdx), pMemoryObj);
+                if (IsSparse() == false)
+                {
+                    pDevice->RemoveMemReference(pDevice->PalDevice(deviceIdx), pMemoryObj);
+                }
+
+                // Destroy the memory object of the buffer only if it's a sparse buffer as that's when
+                // we created a private VA-only memory object.
+
+                pMemoryObj->Destroy();
             }
-
-            // Destroy the memory object of the buffer only if it's a sparse buffer as that's when we created a private
-            // VA-only memory object
-
-            pMemoryObj->Destroy();
         }
     }
 
@@ -393,7 +416,7 @@ VkResult Buffer::Destroy(
 
 // =====================================================================================================================
 // Bind GPU memory to buffer objects
-VkResult Buffer::BindMemory(
+void Buffer::BindMemory(
     const Device*      pDevice,
     VkDeviceMemory     mem,
     VkDeviceSize       memOffset,
@@ -432,9 +455,17 @@ VkResult Buffer::BindMemory(
                     m_perGpu[localDeviceIdx].pGpuMemory->Desc().gpuVirtAddr + memOffset;
             }
         }
-    }
 
-    return VK_SUCCESS;
+#if VKI_RAY_TRACING
+        if (m_internalFlags.usageRayTracing && (pDevice->GetEnabledFeatures().appControlledMemPriority == false))
+        {
+            const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+            const MemoryPriority   priority = MemoryPriority::FromSetting(settings.memoryPriorityBufferRayTracing);
+
+            pMemory->ElevatePriority(priority);
+        }
+#endif
+    }
 }
 
 // =====================================================================================================================
@@ -575,6 +606,7 @@ void Buffer::GetBufferMemoryRequirements(
     }
 }
 
+// =====================================================================================================================
 void Buffer::CalculateBufferFlags(
     const Device*             pDevice,
     const VkBufferCreateInfo* pCreateInfo,
@@ -587,9 +619,16 @@ void Buffer::CalculateBufferFlags(
 
     pBufferFlags->usageUniformBuffer    = (usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)    ? 1 : 0;
 #if VKI_RAY_TRACING
-    pBufferFlags->usageAccelStorage     = (usage &
-                                             VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR) ? 1 : 0;
+    pBufferFlags->usageAccelStorage     = (usage & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR) ? 1 : 0;
+
+    constexpr VkBufferUsageFlagBits2KHR rtBufferUsageFlags =
+        VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
+        VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
+        VK_BUFFER_USAGE_2_SHADER_BINDING_TABLE_BIT_KHR;
+
+    pBufferFlags->usageRayTracing       = (usage & rtBufferUsageFlags) ? 1 : 0;
 #endif
+
     pBufferFlags->usageDescriptor       = (usage &
                                              (VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
                                               VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT  |
@@ -687,7 +726,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory(
 {
     const Device* pDevice = ApiDevice::ObjectFromHandle(device);
 
-    return Buffer::ObjectFromHandle(buffer)->BindMemory(pDevice, memory, memoryOffset, nullptr);
+    Buffer::ObjectFromHandle(buffer)->BindMemory(pDevice, memory, memoryOffset, nullptr);
+
+    return VK_SUCCESS;
 }
 
 // =====================================================================================================================

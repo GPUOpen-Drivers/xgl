@@ -271,8 +271,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetBufferOpaqueCaptureDescriptorDataEXT(
     const VkBufferCaptureDescriptorDataInfoEXT* pInfo,
     void*                                       pData)
 {
-    // We currently don't use any opaque data.
-    *(static_cast<uint32_t*>(pData)) = 0u;
+    const Device* const pDevice = ApiDevice::ObjectFromHandle(device);
+    const Buffer* const pBuffer = Buffer::ObjectFromHandle(pInfo->buffer);
+
+    if (pBuffer->IsSparse())
+    {
+        static_cast<Pal::gpusize*>(pData)[0] = pBuffer->GpuVirtAddr(DefaultDeviceIndex);
+    }
+    else
+    {
+        static_cast<Pal::gpusize*>(pData)[0] = 0ull;
+    }
 
     return VK_SUCCESS;
 }
@@ -283,8 +292,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetImageOpaqueCaptureDescriptorDataEXT(
     const VkImageCaptureDescriptorDataInfoEXT*  pInfo,
     void*                                       pData)
 {
-    // We currently don't use any opaque data.
-    *(static_cast<uint32_t*>(pData)) = 0u;
+    const Device* const pDevice = ApiDevice::ObjectFromHandle(device);
+    const Image* const  pImage  = Image::ObjectFromHandle(pInfo->image);
+
+    if (pImage->IsSparse())
+    {
+        static_cast<Pal::gpusize*>(pData)[0] = pImage->PalMemory(DefaultDeviceIndex)->Desc().gpuVirtAddr;
+    }
+    else
+    {
+        static_cast<Pal::gpusize*>(pData)[0] = 0ull;
+    }
 
     return VK_SUCCESS;
 }

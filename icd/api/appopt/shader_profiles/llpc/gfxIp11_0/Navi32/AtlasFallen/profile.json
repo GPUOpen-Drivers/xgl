@@ -1,0 +1,59 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x3a5c24d91928a1fa 5f566b3df64cb5ba"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 96,
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xe330c2637443413e 8c00866c97f48175"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 84,
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x05d337baa775cb01 8c701086082b79ee"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 96
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x63f3ec96e488db4d f62be6c2d077da45"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32,
+          "maxWavesPerCu": 8
+        }
+      }
+    }
+  ]
+}

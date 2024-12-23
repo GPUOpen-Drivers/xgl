@@ -1779,6 +1779,38 @@ SHADER_ACTION = {
         "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
+    "dontUnrollHintThreshold": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "dontUnrollHintThreshold",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "dontUnrollHintThreshold",
+                "dataType": "uint32_t",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+            },
+        ],
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+
     "fp32DenormalMode": {
         "type": [int],
         "jsonReadable": True,
@@ -2070,6 +2102,70 @@ SHADER_ACTION = {
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
             pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
 .%FieldName% = %BoolValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+
+    "forceUnderflowPrevention": {
+        "type": [bool],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "forceUnderflowPrevention",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "forceUnderflowPrevention",
+                "dataType": "bool",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+            },
+        ],
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %BoolValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+
+    "forceMemoryBarrierScope": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "forceMemoryBarrierScope",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]}
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "forceMemoryBarrierScope",
+                "dataType": "uint32_t",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+            },
+        ],
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %IntValue%u;\n""",
         "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
         "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
@@ -2534,6 +2630,14 @@ ShaderTuningStructsAndVars = {
                 },
             },
         ]
+    },
+
+    "MaxResourceCount": {
+        "entity": "var",
+        "varName": "MaxResourceCount",
+        "dataType": "constexpr uint32_t",
+        "defaultValue": "16",
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
     },
 
     "ShaderTuningOptions": {

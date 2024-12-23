@@ -35,7 +35,7 @@
 #if EXTERNAL_VULKAN_HEADERS
 #include "vk_video/vulkan_video_codec_h265std_decode.h"
 #else
-#include "sdk-1.3/vk_video/vulkan_video_codec_h265std_decode.h"
+#include "sdk-1.4/vk_video/vulkan_video_codec_h265std_decode.h"
 #endif
 
 #endif /* __VULKAN_VIDEO_CODEC_H265STD_DECODE_H_PROXY__*/

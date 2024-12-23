@@ -68,26 +68,20 @@ enum AppProfilePatternType
     PatternCount
 };
 
-// This is a pattern entry.  It is a pair of type and test hash.  The string of the given type
-// is hashed and compared against the hash value.  If the values are equal, this entry matches.
 struct AppProfilePatternEntry
 {
-    constexpr AppProfilePatternEntry(const AppProfilePatternType type, const Util::MetroHash::Hash hash) :
-        type(type), hashed(true), hash(hash) { }
-
     constexpr AppProfilePatternEntry(const AppProfilePatternType type, const char* text) :
-        type(type), hashed(false), text(text) { }
+        type(type),
+        text(text) { }
 
     constexpr AppProfilePatternEntry() :
-        type(PatternNone), hashed(false), text("") { }
+        type(PatternNone),
+        text("") { }
 
     AppProfilePatternType type;  // Type of pattern to match against
-    bool hashed; // Tag to determine if hash or text is used
-
-    // Hash or text to compare against.
+    // Text to compare against.
     union
     {
-        Util::MetroHash::Hash hash;
         const char* text;
     };
 };
@@ -268,12 +262,6 @@ constexpr AppProfilePatternEntry AppEngineFeral3D =
     "feral3d"
 };
 
-constexpr AppProfilePatternEntry AppNameAshesOfTheSingularity =
-{
-    PatternAppNameLower,
-    "ashes of the singularity: escalation"
-};
-
 constexpr AppProfilePatternEntry AppEngineNitrous =
 {
     PatternEngineNameLower,
@@ -411,12 +399,7 @@ constexpr AppProfilePatternEntry AppEngineVKD3D =
 constexpr AppProfilePatternEntry AppNameControlDX12 =
 {
     PatternAppNameLower,
-    Util::MetroHash::Hash{{{
-        0x75f46e9f,
-        0x66e3de7b,
-        0x57150c75,
-        0xa990df0c
-    }}}
+    "control_dx12.exe"
 };
 
 constexpr AppProfilePatternEntry AppNameRayTracingWeekends =
@@ -442,12 +425,6 @@ constexpr AppProfilePatternEntry AppNameWolfensteinCyberpilot =
 {
     PatternAppNameLower,
     "wolfenstein: cyberpilot"
-};
-
-constexpr AppProfilePatternEntry AppNameRainbowSixSiege =
-{
-    PatternAppNameLower,
-    "rainbow six siege"
 };
 
 constexpr AppProfilePatternEntry AppNameRainbowSixExtraction =
@@ -780,6 +757,12 @@ constexpr AppProfilePatternEntry AppNameHoudini =
     "houdini"
 };
 
+constexpr AppProfilePatternEntry AppNameSuperposition =
+{
+    PatternAppNameLower,
+    "superposition"
+};
+
 constexpr AppProfilePatternEntry AppNameSevenDaysToDie =
 {
     PatternAppNameLower,
@@ -796,6 +779,72 @@ constexpr AppProfilePatternEntry AppNameBlender =
 {
     PatternAppNameLower,
     "blender"
+};
+
+constexpr AppProfilePatternEntry AppEngineNvRemix =
+{
+    PatternEngineNameLower,
+    "dxvk_nvremix"
+};
+
+constexpr AppProfilePatternEntry AppNameHl2 =
+{
+    PatternAppNameLower,
+    "hl2.exe"
+};
+
+constexpr AppProfilePatternEntry AppNameSecondExtinction =
+{
+    PatternAppNameLower,
+    "second extinction"
+};
+
+constexpr AppProfilePatternEntry AppEngineClay =
+{
+    PatternEngineNameLower,
+    "clay"
+};
+
+constexpr AppProfilePatternEntry AppNameQuake =
+{
+    PatternAppNameLower,
+    "quake champions"
+};
+
+constexpr AppProfilePatternEntry AppNameVictoria3 =
+{
+    PatternAppNameLower,
+    "victoria 3"
+};
+
+constexpr AppProfilePatternEntry AppEngineVictoria3 =
+{
+    PatternEngineNameLower,
+    "clausewitz"
+};
+
+constexpr AppProfilePatternEntry AppNameAtlasFallen =
+{
+    PatternAppNameLower,
+    "atlasfallen"
+};
+
+constexpr AppProfilePatternEntry AppNameTheCrewMotorfest =
+{
+    PatternAppNameLower,
+    "thecrew"
+};
+
+constexpr AppProfilePatternEntry AppNameDeadlock =
+{
+    PatternAppNameLower,
+    "citadel"
+};
+
+constexpr AppProfilePatternEntry AppNameIndianaJonesGC =
+{
+    PatternAppNameLower,
+    "thegreatcircle"
 };
 
 // Section END of AppProfilePatternEntry for all games
@@ -1110,15 +1159,6 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
-        AppProfile::AshesOfTheSingularity,
-        {
-            AppNameAshesOfTheSingularity,
-            AppEngineNitrous,
-            PatternEnd
-        }
-    },
-
-    {
         AppProfile::NitrousEngine,
         {
             AppEngineNitrous,
@@ -1189,18 +1229,18 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
-        AppProfile::ApexEngine,
+        AppProfile::SecondExtinction,
         {
+            AppNameSecondExtinction,
             AppEngineApex,
             PatternEnd
         }
     },
 
     {
-        AppProfile::RainbowSixSiege,
+        AppProfile::ApexEngine,
         {
-            AppNameRainbowSixSiege,
-            AppEngineScimitar,
+            AppEngineApex,
             PatternEnd
         }
     },
@@ -1322,6 +1362,40 @@ AppProfilePattern AppPatternTable[] =
         {
             AppNameDetroit,
             AppEngineQuanticDream,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::ClayEngine,
+        {
+            AppEngineClay,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Quake,
+        {
+            AppNameQuake,
+            AppEngineHusky,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::HuskyEngine,
+        {
+            AppEngineHusky,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Victoria3,
+        {
+            AppNameVictoria3,
+            AppEngineVictoria3,
             PatternEnd
         }
     },
@@ -1532,6 +1606,22 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::AtlasFallen,
+        {
+            AppNameAtlasFallen,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::TheCrewMotorfest,
+        {
+            AppNameTheCrewMotorfest,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::TheSurge2,
         {
             AppNameTheSurge2,
@@ -1565,6 +1655,15 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::Superposition,
+        {
+            AppNameSuperposition,
+            AppEngineZink,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::Enscape,
         {
             AppNameEnscape,
@@ -1584,6 +1683,23 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::DXVK,
         {
             AppEngineDXVK,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::IndianaJonesGC,
+        {
+            AppNameIndianaJonesGC,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Deadlock,
+        {
+            AppNameDeadlock,
+            AppEngineSource2,
             PatternEnd
         }
     },
@@ -1646,6 +1762,15 @@ AppProfilePattern AppPatternTable[] =
         }
     },
 
+    {
+        AppProfile::PortalPreludeRTX,
+        {
+            AppNameHl2,
+            AppEngineNvRemix,
+            PatternEnd
+        }
+    },
+
 };
 
 static char* GetExecutableName(size_t* pLength, bool includeExtension = false);
@@ -1683,8 +1808,6 @@ AppProfile ScanApplicationProfile(
 {
     AppProfile profile = AppProfile::Default;
 
-    // Generate hashes for all of the tested pattern entries
-    Util::MetroHash::Hash hashes[PatternCount] = {};
     char* texts[PatternCount] = {};
     bool valid[PatternCount] = {};
 
@@ -1695,16 +1818,12 @@ AppProfile ScanApplicationProfile(
             const char* pAppName = instanceInfo.pApplicationInfo->pApplicationName;
             size_t appNameLength = strlen(pAppName);
 
-            Util::MetroHash128::Hash(
-                reinterpret_cast<const uint8_t*>(pAppName), appNameLength, hashes[PatternAppName].bytes);
             valid[PatternAppName] = true;
 
             char* pAppNameLower = StringToLower(pAppName, appNameLength + 1); // Add 1 for null terminator!
 
             if (pAppNameLower != nullptr)
             {
-                Util::MetroHash128::Hash(
-                    reinterpret_cast<const uint8_t*>(pAppNameLower), appNameLength, hashes[PatternAppNameLower].bytes);
                 texts[PatternAppNameLower] = pAppNameLower;
                 valid[PatternAppNameLower] = true;
             }
@@ -1715,16 +1834,12 @@ AppProfile ScanApplicationProfile(
             const char* pEngineName = instanceInfo.pApplicationInfo->pEngineName;
             size_t engineNameLength = strlen(pEngineName);
 
-            Util::MetroHash128::Hash(
-                reinterpret_cast<const uint8_t*>(pEngineName), engineNameLength, hashes[PatternEngineName].bytes);
             valid[PatternEngineName] = true;
 
             char* pEngineNameLower = StringToLower(pEngineName, engineNameLength + 1);
 
             if (pEngineNameLower != nullptr)
             {
-                Util::MetroHash128::Hash(
-                    reinterpret_cast<const uint8_t*>(pEngineNameLower), engineNameLength, hashes[PatternEngineNameLower].bytes);
                 texts[PatternEngineNameLower] = pEngineNameLower;
                 valid[PatternEngineNameLower] = true;
             }
@@ -1736,16 +1851,12 @@ AppProfile ScanApplicationProfile(
 
     if (pExeName != nullptr)
     {
-        Util::MetroHash128::Hash(
-            reinterpret_cast<const uint8_t*>(pExeName), exeNameLength, hashes[PatternExeName].bytes);
         valid[PatternExeName]  = true;
 
         char* pExeNameLower = StringToLower(pExeName, exeNameLength + 1); // Add 1 for null terminator!
 
         if (pExeNameLower != nullptr)
         {
-            Util::MetroHash128::Hash(
-                reinterpret_cast<const uint8_t*>(pExeNameLower), exeNameLength, hashes[PatternExeNameLower].bytes);
             texts[PatternExeNameLower] = pExeNameLower;
             valid[PatternExeNameLower] = true;
         }
@@ -1774,15 +1885,8 @@ AppProfile ScanApplicationProfile(
         {
             const AppProfilePatternEntry& entry = pattern.entries[entryIdx];
 
-            // If there is a hash/text for this pattern type available and it matches the tested hash/text, then
-            // keep going.  Otherwise, this pattern doesn't match.
             if ((valid[entry.type] == false) ||
-                (entry.hashed &&
-                 ((hashes[entry.type].dwords[0] != entry.hash.dwords[0]) ||
-                  (hashes[entry.type].dwords[1] != entry.hash.dwords[1]) ||
-                  (hashes[entry.type].dwords[2] != entry.hash.dwords[2]) ||
-                  (hashes[entry.type].dwords[3] != entry.hash.dwords[3]))) ||
-                ((!entry.hashed) &&
+                (
                  (strcmp(texts[entry.type], entry.text) != 0)))
             {
                 patternMatches = false;

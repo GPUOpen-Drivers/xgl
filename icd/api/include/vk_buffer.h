@@ -72,7 +72,7 @@ public:
         Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
-    VkResult BindMemory(
+    void BindMemory(
         const Device*      pDevice,
         VkDeviceMemory     mem,
         VkDeviceSize       memOffset,
@@ -100,6 +100,10 @@ public:
 
     bool DedicatedMemoryRequired() const { return m_internalFlags.dedicatedRequired; }
 
+#if VKI_RAY_TRACING
+    bool RayTracingBuffer() const { return m_internalFlags.usageRayTracing; }
+#endif
+
     VK_FORCEINLINE const BufferBarrierPolicy& GetBarrierPolicy() const
         { return m_barrierPolicy; }
 
@@ -125,15 +129,16 @@ private:
             uint32_t usageUniformBuffer    : 1;   // VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
 #if VKI_RAY_TRACING
             uint32_t usageAccelStorage     : 1;   // VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR
+            uint32_t usageRayTracing       : 1;   // True if any RT-related buffer usage flags are set
 #else
-            uint32_t reserved1             : 1;
+            uint32_t reserved1             : 2;
 #endif
             uint32_t createSparseBinding   : 1;   // VK_BUFFER_CREATE_SPARSE_BINDING_BIT
             uint32_t createSparseResidency : 1;   // VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT
             uint32_t createProtected       : 1;   // VK_BUFFER_CREATE_PROTECTED_BIT
             uint32_t reserved2             : 1;
             uint32_t usageDescriptor       : 1;   // VK_BUFFER_USAGE_DESCRIPTOR_BUFFER_BIT_EXT
-            uint32_t reserved              : 21;
+            uint32_t reserved              : 20;
         };
         uint32_t     u32All;
     };

@@ -229,7 +229,7 @@ protected:
 
     uint32_t                m_queueFamilyIndex;                    // Queue family index of the last present
 
-    uint32_t                    m_vidPnSourceId;       // Video present source identifier.
+    uint32                      m_vidPnSourceId;       // Video present source identifier.
 
     Pal::WorkstationStereoMode  m_wsStereoMode;        // Workstation Stereo Mode
     Device::InternalPipeline    m_pAutoStereoPipeline; // Auto Stereo shader

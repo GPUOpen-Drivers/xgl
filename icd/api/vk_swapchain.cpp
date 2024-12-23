@@ -69,7 +69,7 @@ SwapChain::SwapChain(
     const Properties&          properties,
     VkPresentModeKHR           presentMode,
     FullscreenMgr*             pFullscreenMgr,
-    uint32_t                   vidPnSourceId,
+    uint32                     vidPnSourceId,
     Pal::WorkstationStereoMode wsStereoMode,
     Pal::ISwapChain*           pPalSwapChain)
     :

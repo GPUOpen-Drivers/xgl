@@ -301,6 +301,10 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pOptions->unrollThreshold = shaderCreate.tuningOptions.unrollThreshold;
                 }
+                if (shaderCreate.apply.dontUnrollHintThreshold != 0)
+                {
+                    options.pOptions->dontUnrollHintThreshold = shaderCreate.tuningOptions.dontUnrollHintThreshold;
+                }
                 if (shaderCreate.apply.ldsSpillLimitDwords != 0)
                 {
                     options.pOptions->ldsSpillLimitDwords = shaderCreate.tuningOptions.ldsSpillLimitDwords;
@@ -330,6 +334,16 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pOptions->forwardPropagateNoContract =
                         shaderCreate.tuningOptions.forwardPropagateNoContract;
+                }
+                if (shaderCreate.apply.forceUnderflowPrevention)
+                {
+                    options.pOptions->forceUnderflowPrevention =
+                        shaderCreate.tuningOptions.forceUnderflowPrevention;
+                }
+                if (shaderCreate.apply.forceMemoryBarrierScope != 0)
+                {
+                    options.pOptions->forceMemoryBarrierScope =
+                        shaderCreate.tuningOptions.forceMemoryBarrierScope;
                 }
                 if (shaderCreate.apply.waveSize)
                 {
@@ -1033,6 +1047,12 @@ void ShaderOptimizer::BuildTuningProfile()
                 pAction->shaderCreate.apply.unrollThreshold = true;
                 pAction->shaderCreate.tuningOptions.unrollThreshold = m_settings.overrideUnrollThreshold;
             }
+            if (m_settings.overrideDontUnrollHintThreshold != 0)
+            {
+                pAction->shaderCreate.apply.dontUnrollHintThreshold = true;
+                pAction->shaderCreate.tuningOptions.dontUnrollHintThreshold =
+                    m_settings.overrideDontUnrollHintThreshold;
+            }
             if (m_settings.overrideFastMathFlags != 0)
             {
                 pAction->shaderCreate.apply.fastMathFlags = true;
@@ -1071,6 +1091,12 @@ void ShaderOptimizer::BuildTuningProfile()
                 pAction->shaderCreate.apply.forwardPropagateNoContract = true;
                 pAction->shaderCreate.tuningOptions.backwardPropagateNoContract =
                     !m_settings.disableForwardPropagateNoContract;
+            }
+            if (m_settings.overrideForceMemoryBarrierScope)
+            {
+                pAction->shaderCreate.apply.forceMemoryBarrierScope = true;
+                pAction->shaderCreate.tuningOptions.forceMemoryBarrierScope =
+                    m_settings.overrideForceMemoryBarrierScope;
             }
 
             switch (m_settings.overrideWaveSize)

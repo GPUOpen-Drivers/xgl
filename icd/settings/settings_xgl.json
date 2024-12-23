@@ -384,6 +384,18 @@
   ],
   "Settings": [
     {
+      "Name": "RenderPassLogEnable",
+      "Description": "Write a graph visualization of each created render pass in .dot format",
+      "Tags": [
+        "Render Passes"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
       "Name": "EnableDumbTransitionSync",
       "Description": "Enable synchronizing cache by adding dumb transition in the barrier",
       "Tags": [
@@ -2729,7 +2741,7 @@
         "Name": "LlpcRaytracingMode"
       },
       "Defaults": {
-        "Default": "RaytracingLegacy"
+        "Default": "RaytracingAuto"
       },
       "Type": "enum",
       "Scope": "Driver"
@@ -3482,7 +3494,7 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Ray tracing pipeline compile mode. (Pending implementation)",
+      "Description": "Ray tracing pipeline compile mode.",
       "Tags": [
         "Ray Tracing"
       ],
@@ -4155,7 +4167,7 @@
     },
     {
       "Name": "RtEnableBuildAccelStructStats",
-      "Description": "Dump built acceleration stats. (Pending implementation)",
+      "Description": "Dump built acceleration stats.",
       "Tags": [
         "Ray Tracing"
       ],
@@ -5742,8 +5754,8 @@
       "Type": "enum"
     },
     {
-      "Name": "EnableMeshShaders",
-      "Description": "Controls whether support for mesh shaders should be enabled",
+      "Name": "EnableMeshAndTaskShaders",
+      "Description": "Controls whether support for mesh shaders and task shaders (if supported by the gfxip) should be enabled",
       "Tags": [
         "General"
       ],
@@ -5908,6 +5920,25 @@
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "MemoryPriorityImageDepthStencil"
+    },
+    {
+      "Description": "Priority of all VkMemory objects containing at least one buffer that can be used for ray tracing. See MemoryPriorityDefault for valid values.",
+      "Tags": [
+        "Memory"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 48
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "Name": "MemoryPriorityBufferRayTracing"
     },
     {
       "Description": "On wddm1 and linux, there's no os functionality to report memory budget. We fudge heap budget size as HeapBudgetRatioOfHeapSizeLocal% of heap size for GpuHeapLocal. Valid value is [0, 100]. ",
@@ -6375,6 +6406,18 @@
       "Name": "SimulateExtDeviceAddressBindingReport"
     },
     {
+      "Description": "For APUs, report 2/3 of total available memory as local memory and 1/3 as system memory.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "ReportLargeLocalHeapForApu"
+    },
+    {
       "Description": "Forces a particular AppProfile value.  The profile selected is the value of ForceAppProfileValue. ",
       "Tags": [
         "Optimization"
@@ -6397,18 +6440,6 @@
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "ForceAppProfileValue"
-    },
-    {
-      "Description": "Setting this to true for an app allows the driver to update image layout from VK_IMAGE_LAYOUT_UNDEFINED to VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL. Currently, only used for AshesofTheSingularity",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "OverrideUndefinedLayoutToTransferSrcOptimal"
     },
     {
       "ValidValues": {
@@ -8341,6 +8372,18 @@
       "Scope": "Driver"
     },
     {
+      "Description": "[LLPC ONLY] Force LLPC unroll threshold for loops with directive DontUnroll",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "OverrideDontUnrollHintThreshold",
+      "Scope": "Driver"
+    },
+    {
       "Description": "[LLPC ONLY] Force LLPC fast math flags",
       "Tags": [
         "Shader Tuning"
@@ -8399,6 +8442,59 @@
       "Scope": "Driver",
       "Name": "OverrideBackwardPropagateNoContract",
       "Type": "bool"
+    },
+    {
+      "Description": "[LLPC ONLY] Force memory barrier scope",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "OverrideForceMemoryBarrierScope",
+      "Scope": "Driver",
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "ForceMemoryBarrierScopeDisable",
+            "Value": 0,
+            "Description": "Do not force"
+          },
+          {
+            "Name": "ForceMemoryBarrierScopeDevice",
+            "Value": 1,
+            "Description": "Scope is the current device"
+          },
+          {
+            "Name": "ForceMemoryBarrierScopeWorkgroup",
+            "Value": 2,
+            "Description": "Scope is the current workgroup"
+          },
+          {
+            "Name": "ForceMemoryBarrierScopeSubgroup",
+            "Value": 3,
+            "Description": "Scope is the current subgroup"
+          },
+          {
+            "Name": "ForceMemoryBarrierScopeInvocation",
+            "Value": 4,
+            "Description": "Scope is the current invocation"
+          },
+          {
+            "Name": "ForceMemoryBarrierScopeQueueFamily",
+            "Value": 5,
+            "Description": "Scope is the current queue family"
+          },
+          {
+            "Name": "ForceMemoryBarrierScopeShaderCall",
+            "Value": 6,
+            "Description": "Scope is the current shader call"
+          }
+        ],
+        "Name": "OverrideForceMemoryBarrierScope"
+      }
     },
     {
       "Description": "Enable selective inlining behavior in the compiler.",
@@ -9407,18 +9503,6 @@
       },
       "Type": "uint32",
       "Scope": "Driver"
-    },
-    {
-      "Description": "Enable task shader support in VK_EXT_mesh_shader.",
-      "Tags": [
-        "General"
-      ],
-      "Defaults": {
-        "Default": true
-      },
-      "Type": "bool",
-      "Scope": "Driver",
-      "Name": "EnableTaskShaders"
     }
   ]
 }

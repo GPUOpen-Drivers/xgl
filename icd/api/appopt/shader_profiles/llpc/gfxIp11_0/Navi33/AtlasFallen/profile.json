@@ -1,0 +1,63 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xe330c2637443413e 8c00866c97f48175"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 80,
+          "waveSize": 32,
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x3a5c24d91928a1fa 5f566b3df64cb5ba"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 80,
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xd5c1711120043b34 510cbc75732ea292"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 112,
+          "waveSize": 32,
+          "useSiScheduler": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x05d337baa775cb01 8c701086082b79ee"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 112,
+          "waveSize": 32,
+          "useSiScheduler": true
+        }
+      }
+    }
+  ]
+}

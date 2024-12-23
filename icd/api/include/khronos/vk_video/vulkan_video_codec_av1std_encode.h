@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2016-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -24,18 +24,18 @@
  **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
- * @file  vk_icd.h
- * @brief Proxy to the real Khronos Vulkan icd header.
+ * @file  vulkan_video_codec_av1std_encode.h
+ * @brief Proxy to the real Khronos Vulkan video header.
  ***********************************************************************************************************************
  */
 
-#ifndef __VK_ICD_H_PROXY__
-#define __VK_ICD_H_PROXY__
+#ifndef __VULKAN_VIDEO_CODEC_AV1STD_ENCODE_H_PROXY__
+#define __VULKAN_VIDEO_CODEC_AV1STD_ENCODE_H_PROXY__
 
 #if EXTERNAL_VULKAN_HEADERS
-#include "vulkan/vk_icd.h"
+#include "vk_video/vulkan_video_codec_av1std_encode.h"
 #else
-#include "sdk-1.4/vulkan/vk_icd.h"
+#include "sdk-1.4/vk_video/vulkan_video_codec_av1std_encode.h"
 #endif
 
-#endif /* __VK_ICD_H_PROXY__ */
+#endif /* __vulkan_video_codec_av1std_encode_H_PROXY__*/

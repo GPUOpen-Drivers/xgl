@@ -371,32 +371,6 @@ void ResourceOptimizer::BuildAppProfile()
             m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
         }
     }
-    else if (appProfile == AppProfile::RainbowSixSiege)
-    {
-        if (gfxIpLevel == Pal::GfxIpLevel::GfxIp10_3)
-        {
-            // 00a9c000005f8dd07784b18629d6e,False,RESDCC,1,3.26%,3.26%,3.49%
-            i = m_appProfile.entryCount++;
-            m_appProfile.entries[i].pattern.match.apiHash = true;
-            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xdd07784b18629d6e;
-            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
-            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
-
-            // 00000a9c000005f8fcea8016ffda572a,False,RESDCC,1,2.73%,2.73%,7.75%
-            i = m_appProfile.entryCount++;
-            m_appProfile.entries[i].pattern.match.apiHash = true;
-            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xfcea8016ffda572a;
-            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
-            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
-
-            // 00000a9c000005f88bcf1c20f5a6c4a7,False,RESDCC,2,1%,1%,8.08%
-            i = m_appProfile.entryCount++;
-            m_appProfile.entries[i].pattern.match.apiHash = true;
-            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x8bcf1c20f5a6c4a7;
-            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
-            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccEnableMode;
-        }
-    }
     else if (appProfile == AppProfile::GhostReconBreakpoint)
     {
         if (gfxIpLevel == Pal::GfxIpLevel::GfxIp10_3)

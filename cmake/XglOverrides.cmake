@@ -148,10 +148,6 @@ macro(xgl_overrides_llpc)
     endif()
     set(LLPC_ENABLE_LTO ${VKI_ENABLE_LTO} CACHE BOOL "XGL override to build LLPC with LTO support" FORCE)
     set(LLPC_MEMTRACK ${VKI_MEMTRACK} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-    # llpc still use below build options, will be removed after llpc finish the update and promote
-    set(XGL_ENABLE_LTO ${VKI_ENABLE_LTO})
-    set(ICD_MEMTRACK ${VKI_MEMTRACK})
-    set(XGL_USE_SANITIZER "${VKI_USE_SANITIZER}")
 
     set(LLPC_BUILD_GFX11 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 

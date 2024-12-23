@@ -901,9 +901,14 @@ template <typename ModifierPropertiesList_T>
 
     bool IsAutoStereoEnabled() const;
 
-    bool IsTaskShaderSupported() const
+    bool IsEnlargedLocalVisibleHeapReported() const
     {
-        return PalProperties().gfxipProperties.flags.supportTaskShader && GetRuntimeSettings().enableTaskShaders;
+        return m_enlargedLocalVisibleHeapReported;
+    }
+
+    bool IsEnlargedLocalInvisibleHeapReported() const
+    {
+        return m_enlargedLocalInvisibleHeapReported;
     }
 
 protected:
@@ -948,6 +953,8 @@ protected:
     Pal::GpuHeap                     m_heapVkToPal[VkMemoryHeapNum];
     VkPhysicalDeviceMemoryProperties m_memoryProperties;
     uint32_t                         m_memoryTypeMaskForDescriptorBuffers;
+    bool                             m_enlargedLocalVisibleHeapReported;
+    bool                             m_enlargedLocalInvisibleHeapReported;
 
     VulkanSettingsLoader*            m_pSettingsLoader;
     VkPhysicalDeviceLimits           m_limits;

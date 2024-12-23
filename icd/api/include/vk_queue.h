@@ -42,6 +42,10 @@
 #include "include/virtual_stack_mgr.h"
 #include "include/internal_mem_mgr.h"
 
+#if VKI_RAY_TRACING
+#include "raytrace/cps_global_memory.h"
+#endif
+
 #include "palQueue.h"
 
 namespace Pal
@@ -66,15 +70,6 @@ class  TurboSync;
 class  SqttQueueState;
 class  PhysicalDevice;
 class  Memory;
-
-#if VKI_RAY_TRACING
-// Memory tracker for CPS stack memory to be freed
-struct CpsMemTracker
-{
-    InternalMemory* pMem;
-    Pal::IFence*    pFence;
-};
-#endif
 
 // =====================================================================================================================
 // A Vulkan queue.
@@ -338,7 +333,8 @@ protected:
         CmdBufState*                 pCmdBufState,
         const Pal::IGpuMemory*       pGpuMemory,
         FullscreenFrameMetadataFlags flags,
-        bool                         forceSubmit = false);
+        SwapChain*                   pSwapchain,
+        bool                         forceSubmit);
 
     VkResult NotifyFlipMetadataBeforePresent(
         uint32_t                         deviceIdx,
@@ -347,6 +343,7 @@ protected:
         CmdBufState*                     pCmdBufState,
         const Pal::IGpuMemory*           pGpuMemory,
         bool                             forceSubmit,
+        SwapChain*                       pSwapChain,
         bool                             skipFsfmFlags);
 
     VkResult NotifyFlipMetadataAfterPresent(
@@ -358,8 +355,6 @@ protected:
         const VkFrameBoundaryEXT* pFrameBoundaryInfo);
 
 #if VKI_RAY_TRACING
-    void FreeRetiredCpsStackMem();
-
     Pal::IFence* GetCpsStackMem(
         uint32_t deviceIdx,
         uint64_t size);
@@ -389,12 +384,7 @@ protected:
     const bool                         m_isDeviceIndependent;
 
 #if VKI_RAY_TRACING
-    InternalMemory*                    m_pCpsGlobalMem;
-
-    typedef Util::List<CpsMemTracker, PalAllocator>         CpsMemDestroyList;
-    typedef Util::ListIterator<CpsMemTracker, PalAllocator> CpsMemDestroyListIterator;
-
-    CpsMemDestroyList                  m_cpsMemDestroyList; // list of cps stack memory to be destroyed
+    CpsGlobalMemory                    m_cpsGlobalMemory;
 #endif
 
 private:

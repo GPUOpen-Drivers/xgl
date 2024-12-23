@@ -35,6 +35,7 @@
 #include "include/vk_image.h"
 #include "include/vk_memory.h"
 #include "include/vk_utils.h"
+#include "include/vk_buffer.h"
 
 #include "palSysMemory.h"
 #include "palEventDefs.h"
@@ -112,8 +113,16 @@ VkResult Memory::Create(
     createInfo.heapCount = 1;
     createInfo.heaps[0] = pDevice->GetPalHeapFromVkTypeIndex(pAllocInfo->memoryTypeIndex);
 
-    if (pDevice->OverallocationRequestedForPalHeap(createInfo.heaps[0]))
+    if (((createInfo.heaps[0] == Pal::GpuHeapLocal)                                               &&
+         (pDevice->VkPhysicalDevice(DefaultDeviceIndex)->IsEnlargedLocalVisibleHeapReported()))   ||
+        ((createInfo.heaps[0] == Pal::GpuHeapInvisible)                                           &&
+         (pDevice->VkPhysicalDevice(DefaultDeviceIndex)->IsEnlargedLocalInvisibleHeapReported())))
     {
+        createInfo.heaps[createInfo.heapCount++] = Pal::GpuHeapGartUswc;
+    }
+    else if (pDevice->OverallocationRequestedForPalHeap(createInfo.heaps[0]))
+    {
+        VK_ASSERT(createInfo.heaps[0] != Pal::GpuHeapGartUswc);
         createInfo.heaps[createInfo.heapCount++] = Pal::GpuHeapGartUswc;
 
         if (createInfo.heaps[0] != Pal::GpuHeapLocal)
@@ -251,6 +260,16 @@ VkResult Memory::Create(
                     VK_ASSERT(pAllocInfo->allocationSize >= reqs.size);
                     createInfo.alignment = reqs.alignment;
                 }
+                else if (pExtInfo->buffer != VK_NULL_HANDLE)
+                {
+                    Buffer* pBuffer = Buffer::ObjectFromHandle(pExtInfo->buffer);
+
+                    VkMemoryRequirements reqs = {};
+                    pBuffer->GetMemoryRequirements(pDevice, &reqs);
+                    VK_ASSERT(pAllocInfo->allocationSize >= reqs.size);
+                    createInfo.alignment = reqs.alignment;
+                }
+
                 dedicatedImage  = pExtInfo->image;
                 dedicatedBuffer = pExtInfo->buffer;
             }

@@ -674,14 +674,16 @@ void IndirectCommandsLayout::BuildPalCreateInfo(
         switch (token.type)
         {
         case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_EXT:
-            pIndirectParams[paramCount].type        = Pal::IndirectParamType::Draw;
-            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::DrawIndirectArgs);
+            pIndirectParams[paramCount].type                       = Pal::IndirectParamType::Draw;
+            pIndirectParams[paramCount].sizeInBytes                = sizeof(Pal::DrawIndirectArgs);
+            pIndirectParams[paramCount].drawData.constantDrawIndex = true;
             static_assert(sizeof(Pal::DrawIndirectArgs) == sizeof(VkDrawIndirectCommand));
             break;
 
         case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_INDEXED_EXT:
-            pIndirectParams[paramCount].type        = Pal::IndirectParamType::DrawIndexed;
-            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::DrawIndexedIndirectArgs);
+            pIndirectParams[paramCount].type                       = Pal::IndirectParamType::DrawIndexed;
+            pIndirectParams[paramCount].sizeInBytes                = sizeof(Pal::DrawIndexedIndirectArgs);
+            pIndirectParams[paramCount].drawData.constantDrawIndex = true;
             static_assert(sizeof(Pal::DrawIndexedIndirectArgs) == sizeof(VkDrawIndexedIndirectCommand));
             break;
 
@@ -700,8 +702,9 @@ void IndirectCommandsLayout::BuildPalCreateInfo(
             break;
 
         case VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_MESH_TASKS_EXT:
-            pIndirectParams[paramCount].type        = Pal::IndirectParamType::DispatchMesh;
-            pIndirectParams[paramCount].sizeInBytes = sizeof(Pal::DispatchMeshIndirectArgs);
+            pIndirectParams[paramCount].type                       = Pal::IndirectParamType::DispatchMesh;
+            pIndirectParams[paramCount].sizeInBytes                = sizeof(Pal::DispatchMeshIndirectArgs);
+            pIndirectParams[paramCount].drawData.constantDrawIndex = true;
             static_assert(sizeof(Pal::DispatchMeshIndirectArgs) == sizeof(VkDrawMeshTasksIndirectCommandEXT));
             break;
 

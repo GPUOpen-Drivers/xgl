@@ -373,7 +373,7 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
                 continue;
             }
 
-            if ((GetVkGraphicsLibraryFlagBit(pShaderStageInfo->stages[i].stage) ^ pLibInfo->libFlags) != 0)
+            if ((GetVkGraphicsLibraryFlagBit(pShaderStageInfo->stages[i].stage) & pLibInfo->libFlags) == 0)
             {
                 continue;
             }

@@ -61,7 +61,29 @@ static constexpr uint64_t RayTracingInvalidShaderId = 0;
 
 typedef Util::Vector<VkPipelineShaderStageCreateInfo, 16, PalAllocator>       ShaderStageList;
 typedef Util::Vector<VkRayTracingShaderGroupCreateInfoKHR, 16, PalAllocator>  ShaderGroupList;
-typedef Util::Vector<uint64_t, 16, PalAllocator>                              ShaderStageVirtAddrList;
+
+struct ShaderStackSize
+{
+    VkDeviceSize size;
+    bool         needAddTraceRay;
+};
+
+struct ShaderStageData
+{
+    uint64_t        gpuVirtAddress;
+    VkDeviceSize    stackSize;
+    bool            hasTraceRay;
+};
+
+// ShaderStageDataList is for storing shader stage related data. It collects data from both the pipeline and
+// pipeline libraries, including nested pipeline libraries. Allowing shader groups to easily retrieve the necessary
+// shader stage data.
+typedef Util::Vector<ShaderStageData, 16, PalAllocator>                      ShaderStageDataList;
+
+// ShaderLibraryList is for storing the shader libraries. It collects shader libraries, external shaders and internal
+// shaders, from both pipeline and pipeline libraries, including nested pipeline libraries. All collected shader
+// libraries are then linked to the pipeline.
+typedef Util::Vector<Pal::IShaderLibrary*, 16, PalAllocator>                 ShaderLibraryList;
 
 struct ShaderGroupStackSizes
 {
@@ -117,6 +139,12 @@ public:
     void SetStageCount(uint32_t cnt)
         { m_stageCount = cnt; }
 
+    void SetTotalStageCount(uint32_t cnt)
+        { m_totalStageCount = cnt; }
+
+    uint32_t GetTotalStageCount() const
+        { return m_totalStageCount; }
+
     const ShaderStageList& GetStageList() const
         { return m_stageList; }
 
@@ -125,6 +153,12 @@ public:
 
     void SetGroupCount(uint32_t cnt)
         { m_groupCount = cnt; }
+
+    uint32_t GetTotalGroupCount() const
+        { return m_totalGroupCount; }
+
+    void SetTotalGroupCount(uint32_t cnt)
+        { m_totalGroupCount = cnt; }
 
     const ShaderGroupList& GetGroupList() const
         { return m_groupList; }
@@ -136,10 +170,12 @@ public:
         { m_maxRecursionDepth = val; }
 
 private:
-    uint32_t            m_stageCount;
-    ShaderStageList     m_stageList;
-    uint32_t            m_groupCount;
-    ShaderGroupList     m_groupList;
+    uint32_t            m_stageCount;      // Count of stages from API.
+    uint32_t            m_totalStageCount; // Count of stages from API and its libs.
+    ShaderStageList     m_stageList;       // List of stages from API and its libs.
+    uint32_t            m_groupCount;      // Count of groups from API.
+    uint32_t            m_totalGroupCount; // Count of groups from API and its libs.
+    ShaderGroupList     m_groupList;       // List of groups from API and its libs.
     uint32_t            m_maxRecursionDepth;
 };
 
@@ -202,7 +238,7 @@ public:
         size_t                               dataSize,
         void*                                pData);
 
-    VkDeviceSize GetRayTracingShaderGroupStackSize(
+    ShaderStackSize GetRayTracingShaderGroupStackSize(
         uint32_t                            deviceIndex,
         uint32_t                            group,
         VkShaderGroupShaderKHR              groupShader,
@@ -230,7 +266,7 @@ public:
         { return m_createInfo; }
 
     bool IsInlinedShaderEnabled() const
-        { return m_shaderLibraryCount == 0; }
+        { return m_totalShaderLibraryList[0].NumElements() == 0; }
 
     uint32_t GetShaderLibraryCount() const
         { return m_shaderLibraryCount; }
@@ -366,8 +402,14 @@ protected:
     uint32_t GetNativeShaderCount() const
         { return m_nativeShaderCount; }
 
-    const ShaderStageVirtAddrList& GetShaderStageVirtAddrList(uint32_t deviceIdx) const
-        { return m_shaderStageVirtAddrList[deviceIdx]; }
+    const ShaderStageDataList& GetShaderStageDataList(uint32_t deviceIdx) const
+        { return m_shaderStageDataList[deviceIdx]; }
+
+    uint32_t GetShaderStageDataCount() const
+        { return m_shaderStageDataCount; }
+
+    const ShaderLibraryList& GetTotalShaderLibraryList(uint32_t deviceIdx) const
+        { return m_totalShaderLibraryList[deviceIdx]; }
 
     // Converted creation info parameters of the Vulkan ray tracing pipeline
     struct CreateInfo
@@ -437,7 +479,12 @@ private:
     Vkgc::RayTracingShaderProperty*   m_pShaderProperty;
     uint32_t                          m_compiledShaderCount; // Shader returned from compiler
 
-    ShaderStageVirtAddrList           m_shaderStageVirtAddrList[MaxPalDevices];
+    // Including imported pipeline libraries
+    ShaderStageDataList               m_shaderStageDataList[MaxPalDevices];
+    uint32_t                          m_shaderStageDataCount;
+
+    // Including improted pipeline libraries
+    ShaderLibraryList                 m_totalShaderLibraryList[MaxPalDevices];
 };
 
 } // namespace vk

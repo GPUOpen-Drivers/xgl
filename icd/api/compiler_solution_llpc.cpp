@@ -569,6 +569,15 @@ VkResult CompilerSolutionLlpc::CreateGraphicsShaderBinary(
             }
         }
 
+        if ((result == VK_SUCCESS) && (hitCache == false) && (elfReplace == false))
+        {
+            if ((pDevice->GetRuntimeSettings().ignoreFlagFailOnPipelineCompileRequired == false) &&
+                (pCreateInfo->flags & VK_PIPELINE_CREATE_2_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_KHR))
+            {
+                result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
+            }
+        }
+
         ShaderLibraryBlobHeader blobHeader = {};
         if ((result == VK_SUCCESS) && ((hitCache == false) || elfReplace))
         {

@@ -220,7 +220,7 @@ void VulkanSettingsLoader::OverrideDefaultsExperimentInfo()
     const ExpSettings*      pExpSettings = m_pExperimentsLoader->GetExpSettings();
     Pal::PalPublicSettings* pPalSettings = m_pDevice->GetPublicSettings();
 
-    VK_SET_VAL_IF_EXPERIMENT_ENABLED(MeshShaderSupport, enableMeshShaders, false);
+    VK_SET_VAL_IF_EXPERIMENT_ENABLED(MeshShaderSupport, enableMeshAndTaskShaders, false);
 
 #if VKI_RAY_TRACING
     VK_SET_VAL_IF_EXPERIMENT_ENABLED(RayTracingSupport, enableRaytracingSupport, false);
@@ -336,7 +336,7 @@ void VulkanSettingsLoader::FinalizeExperiments()
     ExpSettings*            pExpSettings = m_pExperimentsLoader->GetMutableExpSettings();
     Pal::PalPublicSettings* pPalSettings = m_pDevice->GetPublicSettings();
 
-    pExpSettings->expMeshShaderSupport = (m_settings.enableMeshShaders == false);
+    pExpSettings->expMeshShaderSupport = (m_settings.enableMeshAndTaskShaders == false);
 
 #if VKI_RAY_TRACING
     pExpSettings->expRayTracingSupport = (m_settings.enableRaytracingSupport == false);
@@ -501,6 +501,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     {
         if ((appProfile != AppProfile::WorldWarZ)
             && (appProfile != AppProfile::XPlane)
+            && ((appProfile != AppProfile::IndianaJonesGC) || (pInfo->gpuMemoryProperties.barSize > (11ull * _1GB)))
             && (appProfile != AppProfile::SeriousSam4))
         {
             m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
@@ -516,7 +517,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     }
 
     // Allow device memory overallocation for <= 2GBs of VRAM including APUs.
-    if (pInfo->gpuMemoryProperties.maxLocalMemSize <= (2ull * _1GB))
+    if (((pInfo->gpuType != Pal::GpuType::Integrated)                 ||
+         (m_settings.reportLargeLocalHeapForApu == false))            &&
+        (pInfo->gpuMemoryProperties.maxLocalMemSize <= (2ull * _1GB)))
     {
         m_settings.memoryDeviceOverallocationAllowed = true;
     }
@@ -715,6 +718,29 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.implicitExternalSynchronization = false;
     }
 
+    if (appProfile == AppProfile::TheCrewMotorfest)
+    {
+    }
+
+    if (appProfile == AppProfile::AtlasFallen)
+    {
+        if (IsGfx11(pInfo->gfxLevel))
+        {
+            {
+                if (pInfo->revision == Pal::AsicRevision::Navi32)
+                {
+                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+                }
+                else if (pInfo->revision == Pal::AsicRevision::Navi33)
+                {
+                    m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+                    m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
+                }
+            }
+        }
+
+    }
+
     if (appProfile == AppProfile::WolfensteinCyberpilot)
     {
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
@@ -868,7 +894,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 #endif
     }
 
-    if (appProfile == AppProfile::SeriousSam4)
+    if ((appProfile == AppProfile::SeriousSam4)
+       )
     {
         m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
 
@@ -1030,6 +1057,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.forceEnableDcc = ForceDccDefault;
 
         m_settings.forceDepthClampBasedOnZExport = true;
+
     }
 
     if (appProfile == AppProfile::WarHammerII)
@@ -1044,46 +1072,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     if (appProfile == AppProfile::WarHammerIII)
     {
         m_settings.ac01WaNotNeeded = true;
-    }
-
-    if (appProfile == AppProfile::RainbowSixSiege)
-    {
-        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
-        m_settings.useAnisoThreshold = true;
-        m_settings.anisoThreshold = 1.0f;
-
-        // Ignore suboptimal swapchain size to fix crash on task switch
-        m_settings.ignoreSuboptimalSwapchainSize = true;
-
-        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
-        {
-            m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
-                                         ForceDccForColorAttachments |
-                                         ForceDccForNonColorAttachmentShaderStorage);
-        }
-        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-        {
-            m_settings.nggEnableBackfaceCulling = false;
-            m_settings.nggEnableSmallPrimFilter = false;
-
-            if (pInfo->revision == Pal::AsicRevision::Navi23)
-            {
-                m_settings.overrideLocalHeapSizeInGBs = 8;
-                m_settings.memoryDeviceOverallocationAllowed = true;
-            }
-
-            if (pInfo->revision == Pal::AsicRevision::Navi24)
-            {
-                m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
-                                             ForceDccForColorAttachments |
-                                             ForceDccForNonColorAttachmentShaderStorage |
-                                             ForceDccFor32BppShaderStorage);
-
-                m_settings.overrideLocalHeapSizeInGBs = 8;
-                m_settings.memoryDeviceOverallocationAllowed = true;
-            }
-        }
-
     }
 
     if (appProfile == AppProfile::RainbowSixExtraction)
@@ -1176,6 +1164,20 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                          ForceDccFor32BppShaderStorage |
                                          ForceDccFor64BppShaderStorage);
         }
+    }
+
+    if (appProfile == AppProfile::SecondExtinction)
+    {
+        m_settings.forceEnableDcc = ForceDccDefault;
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+        {
+            m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+        }
+
+        // Do not report suboptimal swapchain to prevent app from recreating swapchain twice on Alt+Tab and
+        // potentially overallocating on cards with <=4GB VRAM leading to resources being put in host memory.
+        m_settings.ignoreSuboptimalSwapchainSize = true;
     }
 
     if (appProfile == AppProfile::RedDeadRedemption2)
@@ -1277,7 +1279,29 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (IsGfx11(pInfo->gfxLevel))
         {
+
+#if VKI_BUILD_GFX115
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_5)
+            {
+                m_settings.pipelineBinningMode = PipelineBinningModeDisable;
+                m_settings.csWaveSize = 64;
+                m_settings.fsWaveSize = 64;
+            }
+#endif
         }
+
+    }
+
+    if (appProfile == AppProfile::Quake)
+    {
+        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+        m_settings.resourceBarrierOptions |= CombinedAccessMasks;
+    }
+
+    if (appProfile == AppProfile::HuskyEngine)
+    {
+        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+        m_settings.resourceBarrierOptions |= CombinedAccessMasks;
     }
 
 #if VKI_RAY_TRACING
@@ -1384,7 +1408,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // 13% Gain @ 4k - Allows overlapping builds
             m_settings.enableAceShaderPrefetch = false;
 #endif
-            m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
         }
 
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
@@ -1410,6 +1433,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
             }
 
+            m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+
             m_settings.csWaveSize = 64;
         }
         else if (IsGfx11(pInfo->gfxLevel))
@@ -1425,6 +1450,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 // This provides ~6% gain at 4k
                 m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
             }
+
+            m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
         }
     }
 
@@ -1453,13 +1480,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         // It results from incorrect behavior of DXVK. Incompatible push constant size leads to Gpu page fault
         // during fast link in pipeline creation.
         m_settings.pipelineLayoutPushConstantCompatibilityCheck = true;
-    }
-
-    if (appProfile == AppProfile::AshesOfTheSingularity)
-    {
-        // Disable image type checking on Navi10 to avoid 2.5% loss in Ashes
-        m_settings.disableImageResourceTypeCheck = true;
-        m_settings.overrideUndefinedLayoutToTransferSrcOptimal = true;
     }
 
     if (appProfile == AppProfile::DetroitBecomeHuman)
@@ -1508,6 +1528,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         }
     }
 
+    if (appProfile == AppProfile::ShadowOfTheTombRaider)
+    {
+    }
+
     if (appProfile == AppProfile::SHARK)
     {
         m_settings.initializeVramToZero = false;
@@ -1540,7 +1564,14 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
                 m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
             }
+
         }
+    }
+
+    if (appProfile == AppProfile::Victoria3)
+    {
+        // This application oversubscribes on 4 GB cards on launch
+        m_settings.memoryDeviceOverallocationAllowed = true;
     }
 
     if (appProfile == AppProfile::SniperElite5)
@@ -1683,6 +1714,27 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.disableSingleMipAnisoOverride = false;
     }
 
+    if (appProfile == AppProfile::IndianaJonesGC)
+    {
+
+        m_settings.forceGraphicsQueueCount = 2;
+        m_settings.forceComputeQueueCount = 4;
+
+#if VKI_RAY_TRACING
+        m_settings.memoryPriorityBufferRayTracing = 80;
+#endif
+        m_settings.memoryPriorityImageAny         = 64;
+    }
+
+    if (appProfile == AppProfile::Deadlock)
+    {
+        if (pInfo->gpuMemoryProperties.barSize > (7ull * _1GB))
+        {
+            // ~1.5% gain at 1440p
+            m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc;
+        }
+    }
+
     if (appProfile == AppProfile::Archean)
     {
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
@@ -1704,6 +1756,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     if (appProfile == AppProfile::SevenDaysToDie)
     {
         m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
+    }
+
+    if (appProfile == AppProfile::PortalPreludeRTX)
+    {
+        m_settings.forceComputeQueueCount = 2;
     }
 
     return result;
@@ -1960,6 +2017,20 @@ void VulkanSettingsLoader::ValidateSettings()
     {
         m_settings.resourceBarrierOptions &= ~ResourceBarrierOptions::SkipDstCacheInv;
     }
+
+    // ReportLargeLocalHeapForApu should not be enabled on non-APU systems
+    if (m_settings.reportLargeLocalHeapForApu && (deviceProps.gpuType != Pal::GpuType::Integrated))
+    {
+        m_settings.reportLargeLocalHeapForApu = false;
+    }
+
+    // For simplicity, disable other heap size override settings when reportLargeLocalHeapForApu is enabled
+    if (m_settings.reportLargeLocalHeapForApu)
+    {
+        m_settings.forceUma = false;
+        m_settings.overrideLocalHeapSizeInGBs = 0;
+    }
+
 }
 
 // =====================================================================================================================

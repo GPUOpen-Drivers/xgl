@@ -47,6 +47,7 @@
 
 #if VKI_RAY_TRACING
 #include "raytrace/ray_tracing_device.h"
+#include "raytrace/cps_cmdbuffer_util.h"
 #endif
 
 #include "sqtt/sqtt_layer.h"
@@ -85,8 +86,7 @@ Queue::Queue(
     m_pCmdBufferRing(pCmdBufferRing),
     m_isDeviceIndependent(isDeviceIndependent)
 #if VKI_RAY_TRACING
-    , m_pCpsGlobalMem(nullptr)
-    , m_cpsMemDestroyList(pDevice->VkInstance()->Allocator())
+    , m_cpsGlobalMemory(pDevice)
 #endif
 {
     if (ppPalQueues != nullptr)
@@ -886,16 +886,6 @@ Queue::~Queue()
         }
     }
 
-#if VKI_RAY_TRACING
-    FreeRetiredCpsStackMem();
-    VK_ASSERT(m_cpsMemDestroyList.NumElements() == 0);
-
-    if (m_pCpsGlobalMem != nullptr)
-    {
-        m_pDevice->MemMgr()->FreeGpuMem(m_pCpsGlobalMem);
-        m_pCpsGlobalMem = nullptr;
-    }
-#endif
 }
 
 // =====================================================================================================================
@@ -958,6 +948,7 @@ VkResult Queue::NotifyFlipMetadata(
     CmdBufState*                 pCmdBufState,
     const Pal::IGpuMemory*       pGpuMemory,
     FullscreenFrameMetadataFlags flags,
+    SwapChain*                   pSwapchain,
     bool                         forceSubmit)
 {
     VkResult result = VK_SUCCESS;
@@ -1034,6 +1025,7 @@ VkResult Queue::NotifyFlipMetadataBeforePresent(
     CmdBufState*                     pCmdBufState,
     const Pal::IGpuMemory*           pGpuMemory,
     bool                             forceSubmit,
+    SwapChain*                       pSwapchain,
     bool                             skipFsfmFlags)
 {
     FullscreenFrameMetadataFlags flags       = {};
@@ -1048,7 +1040,7 @@ VkResult Queue::NotifyFlipMetadataBeforePresent(
         }
     }
 
-    return NotifyFlipMetadata(deviceIdx, pPresentQueue, pCmdBufState, pGpuMemory, flags, forceSubmit);
+    return NotifyFlipMetadata(deviceIdx, pPresentQueue, pCmdBufState, pGpuMemory, flags, pSwapchain, forceSubmit);
 }
 
 // =====================================================================================================================
@@ -1100,7 +1092,7 @@ VkResult Queue::Submit(
     constexpr bool IsSynchronization2 = std::is_same<SubmitInfoType, VkSubmitInfo2KHR>::value;
 
 #if VKI_RAY_TRACING
-    FreeRetiredCpsStackMem();
+    m_cpsGlobalMemory.FreeRetiredCpsStackMem();
 #endif
 
     // The fence should be only used in the last submission to PAL. The implicit ordering guarantees provided by PAL
@@ -1299,42 +1291,43 @@ VkResult Queue::Submit(
             palSubmitInfo.gpuMemRefCount       = 0;
             palSubmitInfo.pGpuMemoryRefs       = nullptr;
 
+            // Get the PAL command buffer object from each Vulkan object and put it
+            // in the local array before submitting to PAL.
+            ApiCmdBuffer* const * pCommandBuffers =
+                reinterpret_cast<ApiCmdBuffer*const*>(pCmdBuffers);
+
+#if VKI_RAY_TRACING
+            uint64 maxCpsStackSize = 0;
+            for (uint32_t i = 0; i < cmdBufferCount; ++i)
+            {
+                const CmdBuffer& cmdBuf = *(*pCommandBuffers[i]);
+                maxCpsStackSize = Util::Max(maxCpsStackSize, cmdBuf.GetCpsMemSize());
+            }
+
+            Pal::Result cpsAllocateResult = Pal::Result::Success;
+            Pal::IFence* pCpsMemFences[MaxPalDevices] = {};
+            if (maxCpsStackSize > 0)
+            {
+                cpsAllocateResult = m_cpsGlobalMemory.AllocateCpsStackMem(
+                    m_pDevice->GetPalDeviceMask(),
+                    maxCpsStackSize,
+                    pCpsMemFences);
+
+                VK_ASSERT(cpsAllocateResult == Pal::Result::Success);
+                result = PalToVkResult(cpsAllocateResult);
+            }
+#endif
+
             const uint32_t deviceCount = (IsSynchronization2 || (pDeviceGroupInfo != nullptr)) ?
                                          m_pDevice->NumPalDevices() : 1;
             for (uint32_t deviceIdx = 0; (deviceIdx < deviceCount) && (result == VK_SUCCESS); deviceIdx++)
             {
-                // Accumulate this draw call counter and update device draw call count
-                uint32_t drawCallCount     = 0;
-                uint32_t dispatchCallCount = 0;
-
                 Pal::Result palResult = Pal::Result::Success;
 
-                // Get the PAL command buffer object from each Vulkan object and put it
-                // in the local array before submitting to PAL.
-                ApiCmdBuffer* const * pCommandBuffers =
-                    reinterpret_cast<ApiCmdBuffer*const*>(pCmdBuffers);
-
-#if VKI_RAY_TRACING
-                uint64       maxCpsStackSize = 0;
-                Pal::IFence* pCpsMemFence    = nullptr;
-
-                for (uint32_t i = 0; i < cmdBufferCount; ++i)
-                {
-                    const CmdBuffer& cmdBuf = *(*pCommandBuffers[i]);
-
-                    if (cmdBuf.GetCpsMemSize() > 0)
-                    {
-                        maxCpsStackSize = Util::Max(maxCpsStackSize, cmdBuf.GetCpsMemSize());
-                    }
-                }
-
-                if (maxCpsStackSize > 0)
-                {
-                    pCpsMemFence = GetCpsStackMem(deviceIdx, maxCpsStackSize);
-                }
-#endif
-                perSubQueueInfo.cmdBufferCount = 0;
-
+                // Accumulate this draw call counter and update device draw call count
+                uint32_t drawCallCount          = 0;
+                uint32_t dispatchCallCount      = 0;
+                perSubQueueInfo.cmdBufferCount  = 0;
                 palSubmitInfo.stackSizeInDwords = 0;
 
                 const uint32_t deviceMask = 1 << deviceIdx;
@@ -1369,9 +1362,14 @@ VkResult Queue::Submit(
                             pCmdBufInfos[i].isValid = true;
                             pCmdBufInfos[i].rayTracingExecuted = true;
 
-                            if (m_pCpsGlobalMem != nullptr)
+                            // Patch Cps Requests
+                            if ((cpsAllocateResult == Pal::Result::Success) &&
+                                (maxCpsStackSize > 0))
                             {
-                                cmdBuf.ApplyPatchCpsRequests(deviceIdx, *m_pCpsGlobalMem->PalMemory(deviceIdx));
+                                cmdBuf.ApplyPatchCpsRequests(
+                                    deviceIdx,
+                                    m_pDevice,
+                                    m_cpsGlobalMemory.GetPalMemory(deviceIdx));
                             }
                         }
 #endif
@@ -1469,9 +1467,9 @@ VkResult Queue::Submit(
                 palSubmitInfo.fenceCount = 0;
 
 #if VKI_RAY_TRACING
-                if (pCpsMemFence != nullptr)
+                if (pCpsMemFences[deviceIdx] != nullptr)
                 {
-                    iFence[0]                = pCpsMemFence;
+                    iFence[0]                = pCpsMemFences[deviceIdx];
                     palSubmitInfo.fenceCount = 1;
                 }
 #endif
@@ -1490,7 +1488,8 @@ VkResult Queue::Submit(
                     (palSubmitInfo.fenceCount > 0)     ||
                     (waitSemaphoreCount > 0))
                 {
-                    if (timedQueueEvents == false)
+                    if ((timedQueueEvents == false) &&
+                        (palResult == Pal::Result::Success))
                     {
                         const Pal::DeviceProperties& deviceProps =
                             m_pDevice->VkPhysicalDevice(deviceIdx)->PalProperties();
@@ -1500,7 +1499,8 @@ VkResult Queue::Submit(
                         {
                             bool isProtected = false;
 
-                            if (perSubQueueInfo.cmdBufferCount > 0)
+                            // Check the API count, since driver may add a dummy command buffer to empty submissions.
+                            if (cmdBufferCount > 0)
                             {
                                 const CmdBuffer& cmdBuf = *(*pCommandBuffers[0]);
                                 isProtected = cmdBuf.IsProtected();
@@ -1567,10 +1567,10 @@ VkResult Queue::Submit(
                             }
                         }
                     }
-                    else
+                    else if (palResult == Pal::Result::Success)
                     {
                         // TMZ is NOT supported for GPUOPEN path.
-                        VK_ASSERT((*pCommandBuffers[0])->IsProtected() == false);
+                        VK_ASSERT((cmdBufferCount == 0) || ((*pCommandBuffers[0])->IsProtected() == false));
 
                         palResult = m_pDevMode->TimedQueueSubmit(
                             deviceIdx,
@@ -2035,6 +2035,7 @@ VkResult Queue::Present(
                                                  (hasPostProcessing ? pCmdBufState : nullptr),
                                                  pGpuMemory,
                                                  needSemaphoreFlush,
+                                                 pSwapChain,
                                                  skipFsfmFlags);
 
         if (result != VK_SUCCESS)
@@ -2745,120 +2746,6 @@ void Queue::DevModeFrameBoundary(
         }
     }
 }
-
-#if VKI_RAY_TRACING
-// =====================================================================================================================
-// Check the allocations in m_cpsMemDestroyList, free the retired ones.
-void Queue::FreeRetiredCpsStackMem()
-{
-    if (m_cpsMemDestroyList.NumElements() > 0)
-    {
-        for (CpsMemDestroyListIterator iter = m_cpsMemDestroyList.Begin(); iter.Get() != nullptr; )
-        {
-            CpsMemTracker* pTracker = iter.Get();
-            if (pTracker->pFence->GetStatus() == Pal::Result::Success)
-            {
-                m_pDevice->MemMgr()->FreeGpuMem(pTracker->pMem);
-                pTracker->pFence->Destroy();
-                m_pDevice->VkInstance()->FreeMem(pTracker->pFence);
-
-                // implicitly preceed the iterator to next node.
-                m_cpsMemDestroyList.Erase(&iter);
-            }
-            else
-            {
-                break;
-            }
-        }
-    }
-}
-
-// =====================================================================================================================
-// Get Cps global memory.
-// - Allocate if it does not exist.
-// - Reallocate m_pCpsGlobalMem from X To Y if its size is not big enough. X is put into m_cpsMemDestroyList to be freed
-//   later. A fence is generated and passed in the submission to Pal. When it is signaled, X is freed. Note it is
-//   signaled when the first cmdbuf switching to Y is done, so not optimal regarding memory footprint. Ideally it can be
-//   signalled when X is retired, but that means every submission referencing X has to signal an extra IFence even
-//   m_pCpsGlobalMem stays unchanged. The reason is we dont know if the next submission will require a bigger cps stack
-//   memory.
-Pal::IFence* Queue::GetCpsStackMem(
-    uint32_t deviceIdx,
-    uint64_t size)
-{
-    VK_ASSERT(m_pDevice->GetRuntimeSettings().cpsFlags & CpsFlagStackInGlobalMem);
-
-    Pal::IFence*    pFence    = nullptr;
-    GpuRt::IDevice* pRtDevice = m_pDevice->RayTrace()->GpuRt(deviceIdx);
-
-    //TODO: cap the size to a reasonable preset
-    if ((m_pCpsGlobalMem == nullptr) || (m_pCpsGlobalMem->Size() < size))
-    {
-        InternalMemory* pCpsVidMem = nullptr;
-
-        InternalMemCreateInfo allocInfo = {};
-        m_pDevice->MemMgr()->GetCommonPool(InternalPoolGpuAccess, &allocInfo);
-
-        m_pDevice->MemMgr()->AllocGpuMem(allocInfo, pCpsVidMem, 0, VK_OBJECT_TYPE_QUEUE, 0);
-        VK_ASSERT(pCpsVidMem != nullptr);
-
-        Pal::Result palResult = Pal::Result::Success;
-
-        if (m_pCpsGlobalMem == nullptr) // first alloc
-        {
-            m_pCpsGlobalMem = pCpsVidMem;
-        }
-        else if (pCpsVidMem != nullptr)
-        {
-            Pal::IDevice* pPalDevice = m_pDevice->PalDevice(deviceIdx);
-
-            const size_t palFenceSize = pPalDevice->GetFenceSize(&palResult);
-            VK_ASSERT(palResult == Pal::Result::Success);
-
-            void* pPalMemory = m_pDevice->VkInstance()->AllocMem(palFenceSize, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-
-            Pal::FenceCreateInfo fenceInfo = {};
-            fenceInfo.flags.signaled = 0;
-
-            if (pPalMemory != nullptr)
-            {
-                palResult = pPalDevice->CreateFence(fenceInfo, pPalMemory, &pFence);
-
-                if (palResult == Pal::Result::Success)
-                {
-                    CpsMemTracker tracker = { m_pCpsGlobalMem, pFence };
-                    m_cpsMemDestroyList.PushBack(tracker);
-                    m_pCpsGlobalMem = pCpsVidMem;
-                }
-                else
-                {
-                    VK_ASSERT(pFence == nullptr);
-                    m_pDevice->VkInstance()->FreeMem(pPalMemory);
-                }
-            }
-            else
-            {
-                palResult = Pal::Result::ErrorOutOfMemory;
-            }
-
-            if (palResult != Pal::Result::Success)
-            {
-                // Have to bear with the original allocation, expecting performance hit
-                m_pDevice->MemMgr()->FreeGpuMem(pCpsVidMem);
-            }
-        }
-
-        // Initialize CPS Memory
-        if (palResult == Pal::Result::Success)
-        {
-            palResult = pRtDevice->InitializeCpsMemory(*m_pCpsGlobalMem->PalMemory(deviceIdx), size);
-            VK_ASSERT(palResult == Pal::Result::Success);
-        }
-    }
-
-    return pFence;
-}
-#endif
 
 /**
  ***********************************************************************************************************************

@@ -1998,7 +1998,6 @@ namespace convert
             palColorSpaceBits |= Pal::ScreenColorSpace::CsBt709;
             break;
 
-        // Dolby
         case VK_COLOR_SPACE_DOLBYVISION_EXT:
             palColorSpaceBits = Pal::ScreenColorSpace::TfDolbyVision;
             palColorSpaceBits |= Pal::ScreenColorSpace::CsDolbyVision;
@@ -3495,12 +3494,38 @@ inline Pal::QueuePrioritySupport VkToPalGlobaPrioritySupport(
 // =====================================================================================================================
 // Is the queue suitable for normal use (i.e. non-exclusive and no elevated priority).
 template<class T>
-static bool IsNormalQueue(const T& engineCapabilities)
+static bool IsNormalQueue(
+    const T& engineCapabilities)
 {
     return ((engineCapabilities.flags.exclusive == 0) &&
         ((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityNormal) != 0));
 }
 
+// =====================================================================================================================
+// Leave out High Priority for Universal Queue.
+template<class T>
+uint32_t GetQueuePrioritySupportMask(
+    Pal::EngineType palEngineType,
+    const T&        engineCapabilities)
+{
+    uint32 queuePrioritySupportMask = 0u;
+
+    if ((palEngineType != Pal::EngineTypeUniversal) || IsNormalQueue(engineCapabilities))
+    {
+        queuePrioritySupportMask |= engineCapabilities.queuePrioritySupport;
+
+        if (palEngineType == Pal::EngineTypeUniversal)
+        {
+            queuePrioritySupportMask &= (Pal::QueuePrioritySupport::SupportQueuePriorityNormal |
+                                         Pal::QueuePrioritySupport::SupportQueuePriorityMedium |
+                                         Pal::QueuePrioritySupport::SupportQueuePriorityIdle);
+        }
+    }
+
+    return queuePrioritySupportMask;
+}
+
+// =====================================================================================================================
 inline Pal::ResolveMode VkToPalResolveMode(
     VkResolveModeFlagBits vkResolveMode)
 {

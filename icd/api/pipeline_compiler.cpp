@@ -3807,6 +3807,44 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
                 }
             }
 
+            // Visit the library shader stages which are used in API groups.
+            for (uint32_t groupIdx = 0; groupIdx < pIn->groupCount; ++groupIdx)
+            {
+                const VkRayTracingShaderGroupCreateInfoKHR& apiGroupInfo = pIn->pGroups[groupIdx];
+
+                switch (apiGroupInfo.type)
+                {
+                    case VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR:
+                        if (apiGroupInfo.generalShader >= pIn->stageCount)
+                        {
+                            VK_ASSERT(apiGroupInfo.generalShader != VK_SHADER_UNUSED_KHR);
+                            libraryStageMask |= pIn->pStages[apiGroupInfo.generalShader].stage;
+                        }
+                        break;
+                    case VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR:
+                        if (apiGroupInfo.intersectionShader >= pIn->stageCount)
+                        {
+                            VK_ASSERT(apiGroupInfo.intersectionShader != VK_SHADER_UNUSED_KHR);
+                            libraryStageMask |= VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+                        }
+                        [[fallthrough]];
+                    case VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR:
+                        if ((apiGroupInfo.closestHitShader != VK_SHADER_UNUSED_KHR) &&
+                            (apiGroupInfo.closestHitShader >= pIn->stageCount))
+                        {
+                            libraryStageMask |= VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+                        }
+                        if ((apiGroupInfo.anyHitShader != VK_SHADER_UNUSED_KHR) &&
+                            (apiGroupInfo.anyHitShader >= pIn->stageCount))
+                        {
+                            libraryStageMask |= VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+
             pCreateInfo->pipelineInfo.pipelineLibStageMask = VkToVkgcShaderStageMask(libraryStageMask);
         }
 
@@ -4761,8 +4799,16 @@ bool PipelineCompiler::BuildRayTracingPipelineBinary(
 
     Vkgc::BinaryData* pBinary =
         reinterpret_cast<Vkgc::BinaryData*>(VoidPtrInc(pLibrarySummary, librarySummaryAlignedSize));
-    memcpy(pBinary, pPipelineBinary->pPipelineBins, sizeof(Vkgc::BinaryData) * pPipelineBinary->pipelineBinCount);
-    pHeader->pPipelineBins = reinterpret_cast<Vkgc::BinaryData*>(VoidPtrDiff(pBinary, pAllocBuf));
+
+    if (pPipelineBinary->pipelineBinCount > 0)
+    {
+        memcpy(pBinary, pPipelineBinary->pPipelineBins, sizeof(Vkgc::BinaryData) * pPipelineBinary->pipelineBinCount);
+        pHeader->pPipelineBins = reinterpret_cast<Vkgc::BinaryData*>(VoidPtrDiff(pBinary, pAllocBuf));
+    }
+    else
+    {
+        pHeader->pPipelineBins = nullptr;
+    }
 
     // Copy pipeline ELF binaries
     void* pData = pBinary + pPipelineBinary->pipelineBinCount;

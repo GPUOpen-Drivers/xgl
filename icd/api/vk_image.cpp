@@ -619,14 +619,26 @@ static VkResult InitSparseVirtualMemory(
     Device*                         pDevice,
     const VkImageCreateInfo*        pCreateInfo,
     const VkAllocationCallbacks*    pAllocator,
+    const Pal::gpusize              replayVirtAddr,
     Pal::IImage*                    pPalImage[MaxPalDevices],
     Pal::IGpuMemory*                pSparseMemory[MaxPalDevices],
     VkExtent3D*                     pSparseTileSize)
 {
-    VkResult result = VK_SUCCESS;
+    VkResult   result    = VK_SUCCESS;
+    const bool desReplay = (pCreateInfo->flags & VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT) != 0;
 
-    Pal::GpuMemoryCreateInfo sparseMemCreateInfo = {};
-    Pal::GpuMemoryRequirements palReqs = {};
+    Pal::GpuMemoryCreateInfo   sparseMemCreateInfo = {};
+    Pal::GpuMemoryRequirements palReqs             = {};
+
+    if (replayVirtAddr != 0ull)
+    {
+        sparseMemCreateInfo.replayVirtAddr = replayVirtAddr;
+        sparseMemCreateInfo.vaRange        = Pal::VaRange::CaptureReplay;
+    }
+    else if (desReplay)
+    {
+        sparseMemCreateInfo.vaRange = Pal::VaRange::CaptureReplay;
+    }
 
     pPalImage[DefaultDeviceIndex]->GetGpuMemoryRequirements(&palReqs);
 
@@ -834,6 +846,12 @@ void Image::HandleExtensionStructs(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT:
+        {
+            pExtStructs->pOpaqueCaptureDescriptorDataCreateInfo =
+                static_cast<const VkOpaqueCaptureDescriptorDataCreateInfoEXT*>(pNext);
+            break;
+        }
         default:
             // Skip any unknown extension structures
             break;
@@ -1118,11 +1136,20 @@ VkResult Image::Create(
     //       which means we need a working PAL Image instance before we can find out how much memory
     //       we actually need to allocate for the mem object.
     Pal::IGpuMemory* pSparseMemory[MaxPalDevices]  = {};
-    VkExtent3D sparseTileSize                      = {};
+    VkExtent3D       sparseTileSize                = {};
 
     if ((result == VK_SUCCESS) && isSparse)
     {
-        result = InitSparseVirtualMemory(pDevice, pCreateInfo, pAllocator, pPalImages, pSparseMemory, &sparseTileSize);
+        Pal::gpusize    replayVirtAddr = 0ull;
+
+        if (extStructs.pOpaqueCaptureDescriptorDataCreateInfo != nullptr)
+        {
+            replayVirtAddr = *(static_cast<const Pal::gpusize*>(
+                                extStructs.pOpaqueCaptureDescriptorDataCreateInfo->opaqueCaptureDescriptorData));
+        }
+
+        result = InitSparseVirtualMemory(
+                    pDevice, pCreateInfo, pAllocator, replayVirtAddr, pPalImages, pSparseMemory, &sparseTileSize);
     }
 
     if (result == VK_SUCCESS)

@@ -191,8 +191,9 @@ def parse_json_profile_action_shader(shader_actions):
         'nggEnableSphereCulling', 'nggEnableBackfaceCulling', 'nggEnableSmallPrimFilter', 'enableSubvector',
         'enableSubvectorSharedVgprs', 'maxWavesPerCu', 'maxThreadGroupsPerCu', 'useSiScheduler',
         'disableCodeSinking', 'favorLatencyHiding', 'reconfigWorkgroupLayout', 'forceLoopUnrollCount',
-        'enableLoadScalarizer', 'disableLicm', 'unrollThreshold', 'nsaThreshold', 'aggressiveInvariantLoads',
-        'scalarizeWaterfallLoads', 'backwardPropagageNoContract', 'forwardPropagageNoContract'
+        'enableLoadScalarizer', 'disableLicm', 'unrollThreshold', 'dontUnrollHintThreshold', 'nsaThreshold',
+        'aggressiveInvariantLoads', 'scalarizeWaterfallLoads', 'backwardPropagageNoContract',
+        'forwardPropagageNoContract', 'forceMemoryBarrierScope'
     ]
     :param shader_actions:
     :return:
@@ -1045,17 +1046,11 @@ def main():
     if not os.path.isabs(shader_profile_dir):
         shader_profile_dir = os.path.abspath(shader_profile_dir)
 
-    split_shader_profile_dir = os.path.split(shader_profile_dir)
-    if split_shader_profile_dir[1] == '':
-        output_dir = os.path.split(split_shader_profile_dir[0])[0]
-    else:
-        output_dir = split_shader_profile_dir[0]
+    output_dir = shader_profile_dir
     if gen_dir != "":
         output_dir = gen_dir
 
     header_dox_comment = HEADER_FILE_DOX_COMMENT.replace("%FileName%", OUTPUT_FILE)
-
-    compilers = os.listdir(shader_profile_dir)
 
     game_title_info = get_game_titles(AppProfileHeaderFilePath)
     if not game_title_info:
@@ -1066,152 +1061,164 @@ def main():
     class_shader_profile_body_dict = {}
     if_game_title_group_dict = {}
 
-    for compiler in compilers:
-        compiler_dir = os.path.join(shader_profile_dir, compiler)
-        gfxips = os.listdir(compiler_dir)
+    shader_profile_dirs = [shader_profile_dir]
 
-        game_titles_list = []
-        if_gfxip_group_dict = {}
-        if_generic_dict = {}
+    for shader_profile_dir in shader_profile_dirs:
+        shader_profile_dir +='/shader_profiles'
 
-        if compiler not in class_shader_profile_body_dict:
-            class_shader_profile_body_dict[compiler] = ""
+        if not os.path.exists(shader_profile_dir):
+            continue
 
-        if compiler not in if_game_title_group_dict:
-            if_game_title_group_dict[compiler] = ""
+        compilers = os.listdir(shader_profile_dir)
 
-        for gfxip in gfxips:
-            gfxip_dir = os.path.join(compiler_dir, gfxip)
+        for compiler in compilers:
+            compiler_dir = os.path.join(shader_profile_dir, compiler)
+            gfxips = os.listdir(compiler_dir)
 
-            game_titles_gfx_list = []
-            if_asic_group_dict = {}
-            if_asic_generic_dict = {}
+            game_titles_list = []
+            if_gfxip_group_dict = {}
+            if_generic_dict = {}
 
-            if gfxip != "generic":
-                asics = os.listdir(os.path.join(gfxip_dir))
-            else:
-                asics = [gfxip]
+            if compiler not in class_shader_profile_body_dict:
+                class_shader_profile_body_dict[compiler] = ""
 
-            for asic in asics:
+            if compiler not in if_game_title_group_dict:
+                if_game_title_group_dict[compiler] = ""
+
+            for gfxip in gfxips:
+                gfxip_dir = os.path.join(compiler_dir, gfxip)
+
+                game_titles_gfx_list = []
+                if_asic_group_dict = {}
+                if_asic_generic_dict = {}
+
                 if gfxip != "generic":
-                    asic_dir = os.path.join(gfxip_dir, asic)
+                    asics = os.listdir(os.path.join(gfxip_dir))
                 else:
-                    asic_dir = gfxip_dir
+                    asics = [gfxip]
 
-                print("Parsing " + asic_dir)
-                game_titles = os.listdir(os.path.join(asic_dir))
-                for title in game_titles:
-                    game_title_dir = os.path.join(asic_dir, title)
-                    file_to_read = os.path.join(gfxip, game_title_dir, CONFIG_FILE_NAME)
-                    content, read_success = read_from_file(file_to_read)
+                for asic in asics:
+                    if gfxip != "generic":
+                        asic_dir = os.path.join(gfxip_dir, asic)
+                    else:
+                        asic_dir = gfxip_dir
 
-                    if read_success:
-                        if title not in game_titles_list:
-                            game_titles_list.append(title)
-                        if title not in game_titles_gfx_list:
-                            game_titles_gfx_list.append(title)
-                        if title not in if_gfxip_group_dict:
-                            if_gfxip_group_dict[title] = ""
-                        if title not in if_generic_dict:
-                            if_generic_dict[title] = ""
-                        if title not in if_asic_group_dict:
-                            if_asic_group_dict[title] = ""
-                        if title not in if_asic_generic_dict:
-                            if_asic_generic_dict[title] = ""
+                    print("Parsing " + asic_dir)
+                    game_titles = os.listdir(os.path.join(asic_dir))
 
-                        # for header file: g_shader_profile.h********************************************************
-                        func_name = compiler.title() + title + gfxip[0].upper() + gfxip[1:]
+                    for title in game_titles:
+                        game_title_dir = os.path.join(asic_dir, title)
+                        file_to_read = os.path.join(gfxip, game_title_dir, CONFIG_FILE_NAME)
 
-                        if gfxip != "generic":
-                            if asic != "generic":
-                                func_name = compiler.title() + title + asic[0].upper() + asic[1:]
-                            else:
-                                func_name += asic[0].upper() + asic[1:]
+                        content, read_success = read_from_file(file_to_read)
 
-                        func_comp_game_gfx_asic = FUNC_DEC_SET_APP_PROFILE.replace("%FuncName%", func_name)
+                        if read_success:
+                            if title not in game_titles_list:
+                                game_titles_list.append(title)
+                            if title not in game_titles_gfx_list:
+                                game_titles_gfx_list.append(title)
+                            if title not in if_gfxip_group_dict:
+                                if_gfxip_group_dict[title] = ""
+                            if title not in if_generic_dict:
+                                if_generic_dict[title] = ""
+                            if title not in if_asic_group_dict:
+                                if_asic_group_dict[title] = ""
+                            if title not in if_asic_generic_dict:
+                                if_asic_generic_dict[title] = ""
 
-                        for _, obj in game_title_info.items():
-                            if title in obj["gameTitles"]:
-                                func_comp_game_gfx_asic = wrap_with_directive(func_comp_game_gfx_asic,
-                                                                              obj["buildTypes"])
+                            # for header file: g_shader_profile.h********************************************************
+                            func_name = compiler.title() + title + gfxip[0].upper() + gfxip[1:]
 
-                        if asic in BuildTypesTemplate:
-                            func_comp_game_gfx_asic = wrap_with_directive(func_comp_game_gfx_asic,
-                                                                          BuildTypesTemplate[asic])
+                            if gfxip != "generic":
+                                if asic != "generic":
+                                    func_name = compiler.title() + title + asic[0].upper() + asic[1:]
+                                else:
+                                    func_name += asic[0].upper() + asic[1:]
 
-                        if gfxip in BuildTypesTemplate:
-                            func_comp_game_gfx_asic = wrap_with_directive(func_comp_game_gfx_asic,
-                                                                          BuildTypesTemplate[gfxip])
+                            func_comp_game_gfx_asic = FUNC_DEC_SET_APP_PROFILE.replace("%FuncName%", func_name)
 
-                        class_shader_profile_body_dict[compiler] += func_comp_game_gfx_asic
-                        # ********************************************************************************************
+                            for _, obj in game_title_info.items():
+                                if title in obj["gameTitles"]:
+                                    func_comp_game_gfx_asic = wrap_with_directive(func_comp_game_gfx_asic,
+                                                                                obj["buildTypes"])
 
-                        # for cpp file: g_shader_profile.cpp *********************************************************
-                        if asic == "generic":
-                            if_asic_generic = GENERIC_ASIC_APP_PROFILE.replace("%FuncName%", func_name)
-                            if_asic_generic_dict[title] = if_asic_generic
-                        else:
-                            if_asic = CONDITION_ASIC.replace("%Asic%", asic[0].upper() + asic[1:])
-                            if_asic = if_asic.replace("%FuncName%", func_name)
                             if asic in BuildTypesTemplate:
-                                if_asic = wrap_with_directive(if_asic, BuildTypesTemplate[asic])
-                            if_asic_group_dict[title] = if_asic_group_dict[title] + if_asic
+                                func_comp_game_gfx_asic = wrap_with_directive(func_comp_game_gfx_asic,
+                                                                            BuildTypesTemplate[asic])
 
-                        if gfxip == "generic":
-                            if_generic = GENERIC_GFX_IP_APP_PROFILE.replace("%FuncName%", func_name)
-                            if_generic_dict[title] = if_generic
+                            if gfxip in BuildTypesTemplate:
+                                func_comp_game_gfx_asic = wrap_with_directive(func_comp_game_gfx_asic,
+                                                                            BuildTypesTemplate[gfxip])
 
-                        app_profile = gen_profile(content, compiler)
-                        func_set_app_profile = SET_APP_PROFILE_FUNC.replace("%FuncName%", func_name)
-                        func_set_app_profile = func_set_app_profile.replace("%FuncDefs%", indent(app_profile))
-                        if compiler in BuildTypesTemplate:
-                            func_set_app_profile = wrap_with_directive(func_set_app_profile,
-                                                                       BuildTypesTemplate[compiler])
+                            class_shader_profile_body_dict[compiler] += func_comp_game_gfx_asic
+                            # ********************************************************************************************
 
-                        for _, obj in game_title_info.items():
-                            if title in obj["gameTitles"]:
-                                func_set_app_profile = wrap_with_directive(func_set_app_profile, obj["buildTypes"])
+                            # for cpp file: g_shader_profile.cpp *********************************************************
+                            if asic == "generic":
+                                if_asic_generic = GENERIC_ASIC_APP_PROFILE.replace("%FuncName%", func_name)
+                                if_asic_generic_dict[title] = if_asic_generic
+                            else:
+                                if_asic = CONDITION_ASIC.replace("%Asic%", asic[0].upper() + asic[1:])
+                                if_asic = if_asic.replace("%FuncName%", func_name)
+                                if asic in BuildTypesTemplate:
+                                    if_asic = wrap_with_directive(if_asic, BuildTypesTemplate[asic])
+                                if_asic_group_dict[title] = if_asic_group_dict[title] + if_asic
 
-                        if asic in BuildTypesTemplate:
-                            func_set_app_profile = wrap_with_directive(func_set_app_profile, BuildTypesTemplate[asic])
+                            if gfxip == "generic":
+                                if_generic = GENERIC_GFX_IP_APP_PROFILE.replace("%FuncName%", func_name)
+                                if_generic_dict[title] = if_generic
 
+                            app_profile = gen_profile(content, compiler)
+                            func_set_app_profile = SET_APP_PROFILE_FUNC.replace("%FuncName%", func_name)
+                            func_set_app_profile = func_set_app_profile.replace("%FuncDefs%", indent(app_profile))
+                            if compiler in BuildTypesTemplate:
+                                func_set_app_profile = wrap_with_directive(func_set_app_profile,
+                                                                        BuildTypesTemplate[compiler])
+
+                            for _, obj in game_title_info.items():
+                                if title in obj["gameTitles"]:
+                                    func_set_app_profile = wrap_with_directive(func_set_app_profile, obj["buildTypes"])
+
+                            if asic in BuildTypesTemplate:
+                                func_set_app_profile = wrap_with_directive(func_set_app_profile, BuildTypesTemplate[asic])
+
+                            if gfxip in BuildTypesTemplate:
+                                func_set_app_profile = wrap_with_directive(func_set_app_profile, BuildTypesTemplate[gfxip])
+
+                            func_set_app_profile_group = func_set_app_profile_group + func_set_app_profile
+                            # ********************************************************************************************
+
+                # for cpp file: g_shader_profile.cpp******************************************************************
+                for title in game_titles_gfx_list:
+                    if gfxip != "generic":
+                        if if_asic_generic_dict[title]:
+                            if_gfxip_body = indent(if_asic_group_dict[title] + if_asic_generic_dict[title])
+                        else:
+                            if_gfxip_body = indent(if_asic_group_dict[title])
+                        if gfxip == "gfxIp11_0":
+                            # Use the IsGfx11 method instead of the explicit CONDITION_GFX_IP.
+                            if_gfxip = CONDITION_GFX_IP_11
+                        else:
+                            if_gfxip = CONDITION_GFX_IP.replace("%Gfxip%", gfxip[0].upper() + gfxip[1:])
+                        if_gfxip = if_gfxip.replace("%Defs%", if_gfxip_body)
                         if gfxip in BuildTypesTemplate:
-                            func_set_app_profile = wrap_with_directive(func_set_app_profile, BuildTypesTemplate[gfxip])
-
-                        func_set_app_profile_group = func_set_app_profile_group + func_set_app_profile
-                        # ********************************************************************************************
+                            if_gfxip = wrap_with_directive(if_gfxip, BuildTypesTemplate[gfxip])
+                        if_gfxip_group_dict[title] = if_gfxip_group_dict[title] + if_gfxip
+                # ****************************************************************************************************
 
             # for cpp file: g_shader_profile.cpp******************************************************************
-            for title in game_titles_gfx_list:
-                if gfxip != "generic":
-                    if if_asic_generic_dict[title]:
-                        if_gfxip_body = indent(if_asic_group_dict[title] + if_asic_generic_dict[title])
-                    else:
-                        if_gfxip_body = indent(if_asic_group_dict[title])
-                    if gfxip == "gfxIp11_0":
-                        # Use the IsGfx11 method instead of the explicit CONDITION_GFX_IP.
-                        if_gfxip = CONDITION_GFX_IP_11
-                    else:
-                        if_gfxip = CONDITION_GFX_IP.replace("%Gfxip%", gfxip[0].upper() + gfxip[1:])
-                    if_gfxip = if_gfxip.replace("%Defs%", if_gfxip_body)
-                    if gfxip in BuildTypesTemplate:
-                        if_gfxip = wrap_with_directive(if_gfxip, BuildTypesTemplate[gfxip])
-                    if_gfxip_group_dict[title] = if_gfxip_group_dict[title] + if_gfxip
+            for title in game_titles_list:
+                if if_generic_dict[title]:
+                    if_game_title_body = indent(if_gfxip_group_dict[title] + if_generic_dict[title])
+                else:
+                    if_game_title_body = indent(if_gfxip_group_dict[title])
+                if_game_title = CONDITION_GAME_TITLE.replace("%GameTitle%", title)
+                if_game_title = if_game_title.replace("%Defs%", if_game_title_body)
+                for _, obj in game_title_info.items():
+                    if title in obj["gameTitles"]:
+                        if_game_title = wrap_with_directive(if_game_title, obj["buildTypes"])
+                if_game_title_group_dict[compiler] += if_game_title
             # ****************************************************************************************************
-
-        # for cpp file: g_shader_profile.cpp******************************************************************
-        for title in game_titles_list:
-            if if_generic_dict[title]:
-                if_game_title_body = indent(if_gfxip_group_dict[title] + if_generic_dict[title])
-            else:
-                if_game_title_body = indent(if_gfxip_group_dict[title])
-            if_game_title = CONDITION_GAME_TITLE.replace("%GameTitle%", title)
-            if_game_title = if_game_title.replace("%Defs%", if_game_title_body)
-            for _, obj in game_title_info.items():
-                if title in obj["gameTitles"]:
-                    if_game_title = wrap_with_directive(if_game_title, obj["buildTypes"])
-            if_game_title_group_dict[compiler] += if_game_title
-        # ****************************************************************************************************
 
     ###################################################################################################################
     # Build the Header File

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2016-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -24,18 +24,55 @@
  **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
- * @file  vk_icd.h
- * @brief Proxy to the real Khronos Vulkan icd header.
+ * @file  cps_global_memory.h
+ * @brief Contains declaration of CPS Global Memory.
  ***********************************************************************************************************************
  */
 
-#ifndef __VK_ICD_H_PROXY__
-#define __VK_ICD_H_PROXY__
+#pragma once
+#ifndef __CPS_GLOBAL_MEMORY_H__
+#define __CPS_GLOBAL_MEMORY_H__
 
-#if EXTERNAL_VULKAN_HEADERS
-#include "vulkan/vk_icd.h"
-#else
-#include "sdk-1.4/vulkan/vk_icd.h"
+#include "internal_mem_mgr.h"
+
+#include "palGpuMemory.h"
+#include "palFence.h"
+#include "palList.h"
+
+namespace vk
+{
+
+struct CpsMemTracker
+{
+    InternalMemory* pMem;
+    Pal::IFence*    pFences[MaxPalDevices];
+};
+
+class CpsGlobalMemory
+{
+public:
+    CpsGlobalMemory(Device* pDevice);
+    ~CpsGlobalMemory();
+
+    void FreeRetiredCpsStackMem();
+
+    Pal::Result AllocateCpsStackMem(
+        uint32_t      deviceIdx,
+        uint64_t      size,
+        Pal::IFence** pFences);
+
+    const Pal::IGpuMemory& GetPalMemory(uint32_t deviceIdx) const
+    {
+        VK_ASSERT(deviceIdx < MaxPalDevices);
+        return *m_pCpsGlobalMem->PalMemory(deviceIdx);
+    }
+
+private:
+    Device*                                  m_pDevice;
+    InternalMemory*                          m_pCpsGlobalMem;
+    Util::List<CpsMemTracker, PalAllocator>  m_cpsMemDestroyList;
+
+};
+
+}
 #endif
-
-#endif /* __VK_ICD_H_PROXY__ */

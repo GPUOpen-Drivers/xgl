@@ -524,7 +524,7 @@ public:
         VkSurfaceKHR                      surface,
         VkDeviceGroupPresentModeFlagsKHR* pModes) const;
 
-    VkResult BindBufferMemory(
+    void BindBufferMemory(
         uint32_t                      bindInfoCount,
         const VkBindBufferMemoryInfo* pBindInfos) const;
 

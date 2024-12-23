@@ -1,0 +1,23 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "cs": {
+          "forceUnderflowPrevention": true
+        },
+        "gs": {
+          "forceUnderflowPrevention": true
+        },
+        "vs": {
+          "forceUnderflowPrevention": true
+        },
+        "ps": {
+          "forceUnderflowPrevention": true
+        }
+      }
+    }
+  ]
+}

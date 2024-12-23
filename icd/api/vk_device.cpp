@@ -540,6 +540,14 @@ VkResult Device::Create(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES:
+            {
+                if (reinterpret_cast<const VkPhysicalDeviceVulkan14Features*>(pHeader)->pushDescriptor)
+                {
+                    pushDescriptorsEnabled = true;
+                }
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
             {
 
@@ -840,16 +848,13 @@ VkResult Device::Create(
                      engineNdx < properties.engineProperties[palEngineType].engineCount;
                      ++engineNdx)
                 {
-                    const auto& engineCapabilities = properties.engineProperties[palEngineType].capabilities[engineNdx];
-
-                    // Leave out High Priority for Universal Queue
-                    if ((palEngineType != Pal::EngineTypeUniversal) || IsNormalQueue(engineCapabilities))
-                    {
-                        queuePrioritySupportMask |= engineCapabilities.queuePrioritySupport;
-                    }
+                    queuePrioritySupportMask |= GetQueuePrioritySupportMask(
+                                                   palEngineType,
+                                                   properties.engineProperties[palEngineType].capabilities[engineNdx]);
                 }
 
-                Pal::QueuePrioritySupport palQueuePriority = VkToPalGlobaPrioritySupport(pPriorityInfo->globalPriority);
+                Pal::QueuePrioritySupport palQueuePriority = VkToPalGlobaPrioritySupport(
+                                                                pPriorityInfo->globalPriority);
                 if (((palQueuePriority & queuePrioritySupportMask) == false) &&
                      globalPriorityQueryEnabled &&
                      (pPhysicalDevice->GetRuntimeSettings().ignoreDeviceQueuePriorityFailures == false))
@@ -1386,7 +1391,6 @@ VkResult Device::Initialize(
             case AppProfile::RiseOfTheTombra:
             case AppProfile::ThronesOfBritannia:
             case AppProfile::DawnOfWarIII:
-            case AppProfile::AshesOfTheSingularity:
             case AppProfile::StrangeBrigade:
             case AppProfile::Rage2:
                 m_allocationSizeTracking = false;
@@ -1495,6 +1499,15 @@ void Device::InitDispatchTable()
     ep->vkFreeDescriptorSets        = DescriptorPool::GetFreeDescriptorSetsFunc(this);
     ep->vkResetDescriptorPool       = DescriptorPool::GetResetDescriptorPoolFunc(this);
     ep->vkAllocateDescriptorSets    = DescriptorPool::GetAllocateDescriptorSetsFunc(this);
+
+    if (VkInstance()->GetAPIVersion() >= VK_API_VERSION_1_4)
+    {
+        ep->vkCmdPushDescriptorSet              = CmdBuffer::GetCmdPushDescriptorSetKHRFunc(this);
+        ep->vkCmdPushDescriptorSetWithTemplate  = CmdBuffer::GetCmdPushDescriptorSetWithTemplateKHRFunc(this);
+        ep->vkCmdBindDescriptorSets2            = CmdBuffer::GetCmdBindDescriptorSets2KHRFunc(this);
+        ep->vkCmdPushDescriptorSet2             = CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(this);
+        ep->vkCmdPushDescriptorSetWithTemplate2 = CmdBuffer::GetCmdPushDescriptorSetWithTemplate2KHRFunc(this);
+    }
 
     if (m_enabledExtensions.IsExtensionEnabled(DeviceExtensions::KHR_PUSH_DESCRIPTOR))
     {
@@ -3017,17 +3030,12 @@ VkResult Device::GetDeviceGroupSurfacePresentModes(
 }
 
 // =====================================================================================================================
-VkResult Device::BindBufferMemory(
+void Device::BindBufferMemory(
     uint32_t                        bindInfoCount,
     const VkBindBufferMemoryInfo*   pBindInfos) const
 {
-    VkResult wholeOperationResult = VK_SUCCESS;
-
     for (uint32 bindIdx = 0; bindIdx < bindInfoCount; bindIdx++)
     {
-        VkResult                      perBindResult     = VK_SUCCESS;
-        VkResult*                     pPerBindResult    = nullptr;
-
         uint32                        deviceIndexCount  = 0;
         const uint32*                 pDeviceIndices    = nullptr;
         const VkBindBufferMemoryInfo& info              = pBindInfos[bindIdx];
@@ -3055,7 +3063,7 @@ VkResult Device::BindBufferMemory(
             {
                 const auto* pExtInfo = static_cast<const VkBindMemoryStatusKHR*>(pNext);
 
-                pPerBindResult = pExtInfo->pResult;
+                *pExtInfo->pResult = VK_SUCCESS;
                 break;
             }
 
@@ -3069,21 +3077,12 @@ VkResult Device::BindBufferMemory(
 
         VK_ASSERT((deviceIndexCount == 0) || (deviceIndexCount == NumPalDevices()));
 
-        perBindResult = Buffer::ObjectFromHandle(info.buffer)->BindMemory(this, info.memory, info.memoryOffset,
-                                                                          pDeviceIndices);
-
-        if (pPerBindResult != nullptr)
-        {
-            *pPerBindResult = perBindResult;
-        }
-
-        if (perBindResult != VK_SUCCESS)
-        {
-            wholeOperationResult = perBindResult;
-        }
+        Buffer::ObjectFromHandle(info.buffer)->BindMemory(
+            this,
+            info.memory,
+            info.memoryOffset,
+            pDeviceIndices);
     }
-
-    return wholeOperationResult;
 }
 
 // =====================================================================================================================
@@ -4993,7 +4992,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory2(
     uint32_t                                    bindInfoCount,
     const VkBindBufferMemoryInfo*               pBindInfos)
 {
-    return ApiDevice::ObjectFromHandle(device)->BindBufferMemory(bindInfoCount, pBindInfos);
+    ApiDevice::ObjectFromHandle(device)->BindBufferMemory(bindInfoCount, pBindInfos);
+
+    return VK_SUCCESS;
 }
 
 // =====================================================================================================================

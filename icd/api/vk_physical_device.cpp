@@ -403,6 +403,8 @@ PhysicalDevice::PhysicalDevice(
     m_memoryTypeMask(0),
     m_memoryTypeMaskForExternalSharing(0),
     m_memoryTypeMaskForDescriptorBuffers(0),
+    m_enlargedLocalVisibleHeapReported(false),
+    m_enlargedLocalInvisibleHeapReported(false),
     m_pSettingsLoader(pSettingsLoader),
     m_sampleLocationSampleCounts(0),
     m_formatFeaturesTable{},
@@ -892,6 +894,41 @@ VkResult PhysicalDevice::Initialize()
                 {
                     heapProperties[Pal::GpuHeapInvisible].physicalSize = forceMinLocalHeapSize -
                                                                          heapProperties[Pal::GpuHeapLocal].physicalSize;
+                }
+            }
+        }
+
+        if (settings.reportLargeLocalHeapForApu)
+        {
+            VK_ASSERT(m_properties.gpuType == Pal::GpuType::Integrated);
+
+            Pal::GpuHeap heapToEnlarge =
+                (heapProperties[Pal::GpuHeapInvisible].physicalSize <= heapProperties[Pal::GpuHeapLocal].physicalSize) ?
+                    Pal::GpuHeapLocal : Pal::GpuHeapInvisible;
+
+            const Pal::gpusize totalSize = heapProperties[heapToEnlarge].physicalSize +
+                                           heapProperties[Pal::GpuHeapGartUswc].physicalSize;
+
+            // Report 2/3 of total available memory as local memory and 1/3 as system memory
+            const Pal::gpusize newHeapSize = Util::Pow2Align((totalSize * 2) / 3,
+                                                              m_properties.gpuMemoryProperties.fragmentSize);
+
+            if (newHeapSize > heapProperties[heapToEnlarge].physicalSize)
+            {
+                heapProperties[heapToEnlarge].physicalSize        = newHeapSize;
+                heapProperties[Pal::GpuHeapGartUswc].physicalSize = totalSize - newHeapSize;
+
+                // PAL GPU heaps GpuHeapGartCacheable and GpuHeapGartUswc share the same physical memory
+                heapProperties[Pal::GpuHeapGartCacheable].physicalSize =
+                    heapProperties[Pal::GpuHeapGartUswc].physicalSize;
+
+                if (heapToEnlarge == Pal::GpuHeapLocal)
+                {
+                    m_enlargedLocalVisibleHeapReported = true;
+                }
+                else
+                {
+                    m_enlargedLocalInvisibleHeapReported = true;
                 }
             }
         }
@@ -1561,13 +1598,9 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
                     uint32 queuePrioritySupportMask = 0;
                     for (uint32 engineNdx = 0u; engineNdx < palEngineProperties.engineCount; ++engineNdx)
                     {
-                        const auto& engineCapabilities = palEngineProperties.capabilities[engineNdx];
-
-                        // Leave out High Priority for Universal Queue
-                        if ((palEngineType != Pal::EngineTypeUniversal) || IsNormalQueue(engineCapabilities))
-                        {
-                            queuePrioritySupportMask |= engineCapabilities.queuePrioritySupport;
-                        }
+                        queuePrioritySupportMask |= GetQueuePrioritySupportMask(
+                                                        palEngineType,
+                                                        palEngineProperties.capabilities[engineNdx]);
                     }
 
                     if ((queuePrioritySupportMask & Pal::QueuePrioritySupport::SupportQueuePriorityIdle) != 0)
@@ -2034,9 +2067,10 @@ VkResult PhysicalDevice::GetImageFormatProperties(
             }
 
             // We are setting `view3dAs2dArray=1` in vk_conv.cpp::VkToPalImageCreateFlags() for uncompressed views
-            // of compressed 3d images. view3dAs2dArray is not going to work in combination with sparse images.
-            // So we disable block texel views of sparse 3d images upfront.
-            if ((flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) && (type == VK_IMAGE_TYPE_3D))
+            // of compressed 3d images and 2d views of 3d images. view3dAs2dArray is not going to work in combination
+            // with sparse images. So we disable sparse 3d images requesting these views upfront.
+            if (((flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) ||
+                 (flags & VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT)) && (type == VK_IMAGE_TYPE_3D))
             {
                 return VK_ERROR_FORMAT_NOT_SUPPORTED;
             }
@@ -2694,8 +2728,8 @@ VkResult PhysicalDevice::GetPhysicalDeviceToolPropertiesEXT(
 // Returns the API version supported by this device.
 uint32_t PhysicalDevice::GetSupportedAPIVersion() const
 {
-    // Currently all of our HW supports Vulkan 1.3
-    return (VK_API_VERSION_1_3 | VK_HEADER_VERSION);
+    // Currently all of our HW supports Vulkan 1.4
+    return (VK_API_VERSION_1_4 | VK_HEADER_VERSION);
 }
 
 // =====================================================================================================================
@@ -4491,7 +4525,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     if ((pPhysicalDevice == nullptr) ||
         (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportMeshShader &&
-         pPhysicalDevice->GetRuntimeSettings().enableMeshShaders))
+         pPhysicalDevice->PalProperties().gfxipProperties.flags.supportTaskShader &&
+         pPhysicalDevice->GetRuntimeSettings().enableMeshAndTaskShaders))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MESH_SHADER));
     }
@@ -4602,12 +4637,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_DEVICE_COHERENT_MEMORY));
         }
 
-        if ((pPhysicalDevice == nullptr) ||
-            (pPhysicalDevice->PalProperties().gfxipProperties.flags.support3dUavZRange))
-        {
-
-            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_SLICED_VIEW_OF_3D));
-        }
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_SLICED_VIEW_OF_3D));
 
     }
 
@@ -5171,15 +5201,8 @@ void PhysicalDevice::GetPhysicalDeviceDeviceGeneratedCommandsProperties(
 
     if (IsExtensionSupported(DeviceExtensions::EXT_MESH_SHADER))
     {
-        if (PalProperties().gfxipProperties.flags.supportMeshShader)
-        {
-            *pSupportedIndirectCommandsShaderStages |= VK_SHADER_STAGE_MESH_BIT_EXT;
-        }
-
-        if (IsTaskShaderSupported())
-        {
-            *pSupportedIndirectCommandsShaderStages |= VK_SHADER_STAGE_TASK_BIT_EXT;
-        }
+        *pSupportedIndirectCommandsShaderStages |= VK_SHADER_STAGE_MESH_BIT_EXT |
+                                                   VK_SHADER_STAGE_TASK_BIT_EXT;
     }
 
 #if VKI_RAY_TRACING
@@ -5217,12 +5240,8 @@ void PhysicalDevice::GetPhysicalDeviceSubgroupProperties(
 
     if (IsExtensionSupported(DeviceExtensions::EXT_MESH_SHADER))
     {
-        *pSupportedStages |= VK_SHADER_STAGE_MESH_BIT_EXT;
-
-        if (IsTaskShaderSupported())
-        {
-            *pSupportedStages |= VK_SHADER_STAGE_TASK_BIT_EXT;
-        }
+        *pSupportedStages |= VK_SHADER_STAGE_MESH_BIT_EXT |
+                             VK_SHADER_STAGE_TASK_BIT_EXT;
     }
 
     *pSupportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
@@ -5517,6 +5536,7 @@ void PhysicalDevice::GetPhysicalDeviceFloatControlsProperties(
     }
     else
     {
+        VK_ASSERT(supportFloat16);
         pFloatControlsProperties->shaderSignedZeroInfNanPreserveFloat16  = VK_FALSE;
         pFloatControlsProperties->shaderDenormPreserveFloat16            = VK_FALSE;
         pFloatControlsProperties->shaderDenormFlushToZeroFloat16         = VK_FALSE;
@@ -6683,6 +6703,43 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceVulkan14Features*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->globalPriorityQuery                    = PalProperties().osProperties.supportQueuePriority;
+                    pExtInfo->shaderSubgroupRotate                   = VK_TRUE;
+                    pExtInfo->shaderSubgroupRotateClustered          = VK_TRUE;
+                    pExtInfo->shaderFloatControls2                   = VK_TRUE;
+                    pExtInfo->shaderExpectAssume                     = VK_TRUE;
+
+                    GetPhysicalDeviceLineRasterizationFeatures(&pExtInfo->rectangularLines,
+                                                               &pExtInfo->bresenhamLines,
+                                                               &pExtInfo->smoothLines,
+                                                               &pExtInfo->stippledRectangularLines,
+                                                               &pExtInfo->stippledBresenhamLines,
+                                                               &pExtInfo->stippledSmoothLines);
+
+                    pExtInfo->vertexAttributeInstanceRateDivisor     = VK_TRUE;
+                    pExtInfo->vertexAttributeInstanceRateZeroDivisor = VK_TRUE;
+                    pExtInfo->indexTypeUint8                         = VK_TRUE;
+                    pExtInfo->dynamicRenderingLocalRead              = VK_TRUE;
+                    pExtInfo->maintenance5                           = VK_TRUE;
+                    pExtInfo->maintenance6                           = VK_TRUE;
+
+                    GetPhysicalDeviceProtectedMemoryFeatures(&pExtInfo->pipelineProtectedAccess);
+
+                    pExtInfo->pipelineRobustness                     = VK_TRUE;
+                    pExtInfo->hostImageCopy                          = VK_FALSE;
+                    pExtInfo->pushDescriptor                         = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+
+                break;
+            }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceFragmentShadingRateFeaturesKHR *>(pHeader);
@@ -7393,9 +7450,8 @@ size_t PhysicalDevice::GetFeatures2(
 
                 if (updateFeatures)
                 {
-                    pExtInfo->taskShader = IsTaskShaderSupported();
-                    pExtInfo->meshShader = PalProperties().gfxipProperties.flags.supportMeshShader;
-
+                    pExtInfo->taskShader                             = VK_TRUE;
+                    pExtInfo->meshShader                             = VK_TRUE;
                     pExtInfo->multiviewMeshShader                    = VK_TRUE;
                     pExtInfo->primitiveFragmentShadingRateMeshShader = VK_TRUE;
                     pExtInfo->meshShaderQueries                      = VK_FALSE;
@@ -7884,17 +7940,20 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
     // handle VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT and the common path
     VK_ASSERT((pImageStencilUsageCreateInfo == nullptr) || (pImageStencilUsageCreateInfo->stencilUsage != 0));
 
-    result = GetImageFormatProperties(
-                createInfoFormat,
-                pImageFormatInfo->type,
-                pImageFormatInfo->tiling,
-                pImageStencilUsageCreateInfo ? pImageFormatInfo->usage | pImageStencilUsageCreateInfo->stencilUsage
-                                             : pImageFormatInfo->usage,
-                pImageFormatInfo->flags,
+    if (result == VK_SUCCESS)
+    {
+        result = GetImageFormatProperties(
+                    createInfoFormat,
+                    pImageFormatInfo->type,
+                    pImageFormatInfo->tiling,
+                    pImageStencilUsageCreateInfo ? pImageFormatInfo->usage | pImageStencilUsageCreateInfo->stencilUsage
+                                                 : pImageFormatInfo->usage,
+                    pImageFormatInfo->flags,
 #if defined(__unix__)
-                modifier,
+                    modifier,
 #endif
-                &pImageFormatProperties->imageFormatProperties);
+                    &pImageFormatProperties->imageFormatProperties);
+    }
 
     // handle VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO
     if ((pExternalImageFormatInfo != nullptr) && (result == VK_SUCCESS))
@@ -8425,6 +8484,57 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_PROPERTIES:
+        {
+            auto* pVulkan14Properties = static_cast<VkPhysicalDeviceVulkan14Properties*>(pNext);
+
+            // VK_KHR_line_rasterization
+            GetPhysicalDeviceLineSubPixelPrecisionBits(
+                &pVulkan14Properties->lineSubPixelPrecisionBits);
+
+            // VK_KHR_vertex_attribute_divisor
+            GetPhysicalDeviceVertexAttributeDivisorProperties(&pVulkan14Properties->maxVertexAttribDivisor,
+                                                              &pVulkan14Properties->supportsNonZeroFirstInstance);
+
+            // VK_KHR_push_descriptor
+            pVulkan14Properties->maxPushDescriptors                                  = MaxPushDescriptors;
+
+            // VK_KHR_dynamic_rendering_local_read
+            pVulkan14Properties->dynamicRenderingLocalReadDepthStencilAttachments    = VK_TRUE;
+            pVulkan14Properties->dynamicRenderingLocalReadMultisampledAttachments    = VK_TRUE;
+
+            // VK_KHR_maintenance5
+            GetPhysicalDeviceMaintenance5Properties(
+                &pVulkan14Properties->earlyFragmentMultisampleCoverageAfterSampleCounting,
+                &pVulkan14Properties->earlyFragmentSampleMaskTestBeforeSampleCounting,
+                &pVulkan14Properties->depthStencilSwizzleOneSupport,
+                &pVulkan14Properties->polygonModePointSize,
+                &pVulkan14Properties->nonStrictSinglePixelWideLinesUseParallelogram,
+                &pVulkan14Properties->nonStrictWideLinesUseParallelogram);
+
+            // VK_KHR_maintenance6
+            GetPhysicalDeviceMaintenance6Properties(&pVulkan14Properties->blockTexelViewCompatibleMultipleLayers,
+                                                    &pVulkan14Properties->maxCombinedImageSamplerDescriptorCount,
+                                                    &pVulkan14Properties->fragmentShadingRateClampCombinerInputs);
+
+            // VK_EXT_pipeline_robustness
+            GetPhysicalDevicePipelineRobustnessProperties(&pVulkan14Properties->defaultRobustnessStorageBuffers,
+                                                          &pVulkan14Properties->defaultRobustnessUniformBuffers,
+                                                          &pVulkan14Properties->defaultRobustnessVertexInputs,
+                                                          &pVulkan14Properties->defaultRobustnessImages);
+
+            // VK_EXT_host_image_copy
+            pVulkan14Properties->copySrcLayoutCount                                  = 0;
+            pVulkan14Properties->pCopySrcLayouts                                     = VK_NULL_HANDLE;
+            pVulkan14Properties->copyDstLayoutCount                                  = 0;
+            pVulkan14Properties->pCopyDstLayouts                                     = VK_NULL_HANDLE;
+            memset(pVulkan14Properties->optimalTilingLayoutUUID, 0,
+                   sizeof(pVulkan14Properties->optimalTilingLayoutUUID));
+            pVulkan14Properties->identicalMemoryTypeRequirements                     = VK_FALSE;
+
+            break;
+        }
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR:
         {
             auto* pProps = static_cast<VkPhysicalDeviceFragmentShadingRatePropertiesKHR*>(pNext);
@@ -8577,8 +8687,13 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->maxEmbeddedImmutableSamplerBindings     = MaxDescriptorSets;
             pProps->maxEmbeddedImmutableSamplers            = UINT_MAX;
 
-            pProps->bufferCaptureReplayDescriptorDataSize                = sizeof(uint32_t);
-            pProps->imageCaptureReplayDescriptorDataSize                 = sizeof(uint32_t);
+            // According to vulkan spec and limits defined in Table 67. Required Limits
+            // Max value for: imageCaptureReplayDescriptorDataSize, imageViewCaptureReplayDescriptorDataSize,
+            // samplerCaptureReplayDescriptorDataSize and accelerationStructureCaptureReplayDescriptorDataSize
+            // is 64 bytes.
+            // Source : https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#limits-minmax
+            pProps->bufferCaptureReplayDescriptorDataSize                = sizeof(Pal::gpusize);
+            pProps->imageCaptureReplayDescriptorDataSize                 = sizeof(Pal::gpusize);
             pProps->imageViewCaptureReplayDescriptorDataSize             = sizeof(uint32_t);
             pProps->samplerCaptureReplayDescriptorDataSize               = sizeof(uint32_t);
             pProps->accelerationStructureCaptureReplayDescriptorDataSize = sizeof(uint32_t);
@@ -9183,14 +9298,29 @@ static void VerifyLimits(
     const VkPhysicalDeviceFeatures& features)
 {
     // These values are from Table 31.2 of the Vulkan 1.0 specification
-    VK_ASSERT(limits.maxImageDimension1D                   >= 4096);
-    VK_ASSERT(limits.maxImageDimension2D                   >= 4096);
-    VK_ASSERT(limits.maxImageDimension3D                   >= 256);
-    VK_ASSERT(limits.maxImageDimensionCube                 >= 4096);
-    VK_ASSERT(limits.maxImageArrayLayers                   >= 256);
-    VK_ASSERT(limits.maxUniformBufferRange                 >= 16384);
-    VK_ASSERT(limits.bufferImageGranularity                <= 131072);
-    VK_ASSERT(limits.maxPerStageDescriptorUniformBuffers   >= 12);
+
+    VK_ASSERT(features.imageCubeArray);
+    VK_ASSERT(features.independentBlend);
+    VK_ASSERT(features.drawIndirectFirstInstance);
+    VK_ASSERT(features.depthClamp);
+    VK_ASSERT(features.depthBiasClamp);
+    VK_ASSERT(features.fragmentStoresAndAtomics);
+    VK_ASSERT(features.shaderStorageImageExtendedFormats);
+    VK_ASSERT(features.shaderUniformBufferArrayDynamicIndexing);
+    VK_ASSERT(features.shaderSampledImageArrayDynamicIndexing);
+    VK_ASSERT(features.shaderStorageBufferArrayDynamicIndexing);
+    VK_ASSERT(features.shaderStorageImageArrayDynamicIndexing);
+    VK_ASSERT(features.shaderInt16);
+    VK_ASSERT(features.largePoints);
+
+    VK_ASSERT(limits.maxImageDimension1D                   >= 8192);
+    VK_ASSERT(limits.maxImageDimension2D                   >= 8192);
+    VK_ASSERT(limits.maxImageDimension3D                   >= 512);
+    VK_ASSERT(limits.maxImageDimensionCube                 >= 8192);
+    VK_ASSERT(limits.maxImageArrayLayers                   >= 2048);
+    VK_ASSERT(limits.maxUniformBufferRange                 >= 65536);
+    VK_ASSERT(limits.bufferImageGranularity                <= 4096);
+    VK_ASSERT(limits.maxPerStageDescriptorUniformBuffers   >= 15);
 
     const uint64_t reqMaxPerStageResources = Util::Min(
         static_cast<uint64_t>(limits.maxPerStageDescriptorUniformBuffers) +
@@ -9199,40 +9329,34 @@ static void VerifyLimits(
         static_cast<uint64_t>(limits.maxPerStageDescriptorStorageImages) +
         static_cast<uint64_t>(limits.maxPerStageDescriptorInputAttachments) +
         static_cast<uint64_t>(limits.maxColorAttachments),
-        static_cast<uint64_t>(128));
+        static_cast<uint64_t>(200));
 
-    VK_ASSERT(limits.maxDescriptorSetUniformBuffers        >= 72);
-    VK_ASSERT(limits.maxDescriptorSetStorageBuffers        >= 24);
-    VK_ASSERT(limits.maxDescriptorSetStorageImages         >= 24);
-    VK_ASSERT(limits.maxFragmentCombinedOutputResources    >= 4);
-    VK_ASSERT(limits.maxComputeWorkGroupInvocations        >= 128);
-    VK_ASSERT(limits.maxComputeWorkGroupSize[0]            >= 128);
-    VK_ASSERT(limits.maxComputeWorkGroupSize[1]            >= 128);
+    VK_ASSERT(limits.maxDescriptorSetUniformBuffers        >= 90);
+    VK_ASSERT(limits.maxDescriptorSetStorageBuffers        >= 96);
+    VK_ASSERT(limits.maxDescriptorSetStorageImages         >= 144);
+    VK_ASSERT(limits.maxFragmentCombinedOutputResources    >= 16);
+    VK_ASSERT(limits.maxComputeWorkGroupInvocations        >= 256);
+    VK_ASSERT(limits.maxComputeWorkGroupSize[0]            >= 256);
+    VK_ASSERT(limits.maxComputeWorkGroupSize[1]            >= 256);
     VK_ASSERT(limits.maxComputeWorkGroupSize[2]            >= 64);
-    VK_ASSERT(limits.subTexelPrecisionBits                 >= 4);
-    VK_ASSERT(limits.mipmapPrecisionBits                   >= 4);
-    VK_ASSERT(limits.maxSamplerLodBias                     >= 2);
-    VK_ASSERT(limits.maxBoundDescriptorSets                >= 4);
-    VK_ASSERT(limits.maxColorAttachments                   >= 4);
-    VK_ASSERT(limits.maxPushConstantsSize                  >= 128);
+    VK_ASSERT(limits.subTexelPrecisionBits                 >= 8);
+    VK_ASSERT(limits.mipmapPrecisionBits                   >= 6);
+    VK_ASSERT(limits.maxSamplerLodBias                     >= 14);
+    VK_ASSERT(limits.maxBoundDescriptorSets                >= 7);
+    VK_ASSERT(limits.maxColorAttachments                   >= 8);
+    VK_ASSERT(limits.maxPushConstantsSize                  >= 256);
 
-    if (features.largePoints)
-    {
-        VK_ASSERT(limits.pointSizeRange[0]    <= 1.0f);
-        VK_ASSERT(limits.pointSizeRange[1]    >= 64.0f - limits.pointSizeGranularity);
+    VK_ASSERT(limits.standardSampleLocations);
+    VK_ASSERT(limits.timestampComputeAndGraphics);
 
-        VK_ASSERT(limits.pointSizeGranularity <= 1.0f);
-    }
-    else
-    {
-        VK_ASSERT(limits.pointSizeRange[0]    == 1.0f);
-        VK_ASSERT(limits.pointSizeRange[1]    == 1.0f);
-        VK_ASSERT(limits.pointSizeGranularity == 0.0f);
-    }
+    VK_ASSERT(limits.pointSizeGranularity                  <= 0.125f);
+
+    VK_ASSERT(limits.pointSizeRange[0]                     <= 1.0f);
+    VK_ASSERT(limits.pointSizeRange[1]                     >= 256.0f - limits.pointSizeGranularity);
 
     if (features.wideLines)
     {
-        VK_ASSERT(limits.lineWidthGranularity <= 1.0f);
+        VK_ASSERT(limits.lineWidthGranularity <= 0.5f);
     }
     else
     {
@@ -9685,6 +9809,22 @@ static void VerifyExtensions(
                && dev.IsExtensionSupported(DeviceExtensions::KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY));
     }
 
+    if (apiVersion >= VK_API_VERSION_1_4)
+    {
+        VK_ASSERT(dev.IsExtensionSupported(DeviceExtensions::KHR_GLOBAL_PRIORITY)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_LOAD_STORE_OP_NONE)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SHADER_SUBGROUP_ROTATE)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SHADER_FLOAT_CONTROLS2)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SHADER_EXPECT_ASSUME)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_LINE_RASTERIZATION)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_VERTEX_ATTRIBUTE_DIVISOR)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_INDEX_TYPE_UINT8)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_MAP_MEMORY2)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_MAINTENANCE5)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_MAINTENANCE6)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_PUSH_DESCRIPTOR)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_DYNAMIC_RENDERING_LOCAL_READ));
+    }
 }
 
 // =====================================================================================================================

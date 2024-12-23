@@ -317,6 +317,7 @@ private:
 #endif
         const VkImageCompressionControlEXT*                  pImageCompressionControl;
         const VkImageAlignmentControlCreateInfoMESA*         pImageAlignmentControlCreateInfo;
+        const VkOpaqueCaptureDescriptorDataCreateInfoEXT*    pOpaqueCaptureDescriptorDataCreateInfo;
     };
 
     union ExternalMemoryFlags

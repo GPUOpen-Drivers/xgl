@@ -603,16 +603,7 @@ CmdBuffer::CmdBuffer(
 #if VKI_RAY_TRACING
     , m_scratchVidMemList(pDevice->VkInstance()->Allocator())
     , m_pBvhBatchState()
-    , m_maxCpsMemSize(0)
-    , m_patchCpsList
-    {
-        pDevice->VkInstance()->Allocator(),
-#if VKI_BUILD_MAX_NUM_GPUS > 1
-        pDevice->VkInstance()->Allocator(),
-        pDevice->VkInstance()->Allocator(),
-        pDevice->VkInstance()->Allocator()
-#endif
-    }
+    , m_cpsCmdBufferUtil(pDevice)
 #endif
 {
     m_flags.wasBegun = false;
@@ -1329,7 +1320,7 @@ VkResult CmdBuffer::Begin(
 #if VKI_RAY_TRACING
     FreeRayTracingScratchVidMemory();
 
-    m_maxCpsMemSize = 0;
+    m_cpsCmdBufferUtil.SetCpsMemSize(0);
 #endif
 
     const PhysicalDevice*        pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
@@ -1877,7 +1868,8 @@ VkResult CmdBuffer::Reset(VkCommandBufferResetFlags flags)
 
 #if VKI_RAY_TRACING
         FreeRayTracingScratchVidMemory();
-        FreePatchCpsList();
+
+        m_cpsCmdBufferUtil.FreePatchCpsList(m_cbBeginDeviceMask);
 
         if (m_pBvhBatchState != nullptr)
         {
@@ -2382,7 +2374,8 @@ VkResult CmdBuffer::Destroy(void)
 
 #if VKI_RAY_TRACING
     FreeRayTracingScratchVidMemory();
-    FreePatchCpsList();
+
+    m_cpsCmdBufferUtil.FreePatchCpsList(m_pDevice->GetPalDeviceMask());
 
     if (m_pBvhBatchState != nullptr)
     {
@@ -3588,10 +3581,12 @@ void CmdBuffer::DispatchIndirect(
 #endif
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
+
     do
     {
         const uint32_t deviceIdx = deviceGroup.Index();
         PalCmdBuffer(deviceIdx)->CmdDispatchIndirect(indirectBufferVa);
+
     }
     while (deviceGroup.IterateNext());
 
@@ -4736,14 +4731,6 @@ void CmdBuffer::ResolveImage(
     // Allocate space to store image resolve regions (we need a separate region per PAL aspect)
     Pal::ImageResolveRegion* pPalRegions =
         virtStackFrame.AllocArray<Pal::ImageResolveRegion>(rectBatch);
-
-    if (m_pDevice->GetRuntimeSettings().overrideUndefinedLayoutToTransferSrcOptimal)
-    {
-        if (srcImageLayout == VK_IMAGE_LAYOUT_UNDEFINED)
-        {
-            srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        }
-    }
 
     if (pPalRegions != nullptr)
     {
@@ -11236,48 +11223,6 @@ void CmdBuffer::TraceRays(
 }
 
 // =====================================================================================================================
-void CmdBuffer::AddPatchCpsRequest(
-    uint32_t                      deviceIdx,
-    GpuRt::DispatchRaysConstants* pConstsMem,
-    uint64_t                      bufSize)
-{
-    VK_ASSERT(pConstsMem != nullptr);
-    m_maxCpsMemSize = Util::Max(m_maxCpsMemSize, bufSize);
-    Pal::Result result = m_patchCpsList[deviceIdx].PushBack(pConstsMem);
-    VK_ASSERT(result == Pal::Result::Success);
-}
-
-// =====================================================================================================================
-void CmdBuffer::FreePatchCpsList()
-{
-    utils::IterateMask deviceGroup(m_curDeviceMask);
-
-    do
-    {
-        const uint32_t deviceIdx = deviceGroup.Index();
-        m_patchCpsList[deviceIdx].Clear();
-    }
-    while (deviceGroup.IterateNext());
-}
-
-// =====================================================================================================================
-// Fill bufVa to each patch request (call this at execute time).
-void CmdBuffer::ApplyPatchCpsRequests(
-    uint32_t               deviceIdx,
-    const Pal::IGpuMemory& cpsMem) const
-{
-    for (PatchCpsVector::Iter iter = m_patchCpsList[deviceIdx].Begin(); iter.Get() != nullptr; iter.Next())
-    {
-        GpuRt::DispatchRaysConstants* pConstsMem = iter.Get();
-
-        m_pDevice->RayTrace()->GpuRt(deviceIdx)->PatchDispatchRaysConstants(
-            pConstsMem,
-            cpsMem.Desc().gpuVirtAddr,
-            m_maxCpsMemSize);
-    }
-}
-
-// =====================================================================================================================
 void CmdBuffer::GetRayTracingDispatchArgs(
     uint32_t                               deviceIdx,
     const RuntimeSettings&                 settings,
@@ -11339,7 +11284,7 @@ void CmdBuffer::GetRayTracingDispatchArgs(
                 stackSizes.frontendSize,
                 numRays);
 
-            AddPatchCpsRequest(
+            m_cpsCmdBufferUtil.AddPatchCpsRequest(
                 deviceIdx,
                 reinterpret_cast<GpuRt::DispatchRaysConstants*>(pConstMem),
                 cpsMemorySize);

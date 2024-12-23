@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2016-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -24,18 +24,50 @@
  **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
- * @file  vk_icd.h
- * @brief Proxy to the real Khronos Vulkan icd header.
+ * @file  cps_cmdbuffer_util.h
+ * @brief Contains declaration for CPS Command Buffer Utils.
  ***********************************************************************************************************************
  */
 
-#ifndef __VK_ICD_H_PROXY__
-#define __VK_ICD_H_PROXY__
+#pragma once
+#ifndef __CPS_CMDBUFFER_UTIL_H__
+#define __CPS_CMDBUFFER_UTIL_H__
 
-#if EXTERNAL_VULKAN_HEADERS
-#include "vulkan/vk_icd.h"
-#else
-#include "sdk-1.4/vulkan/vk_icd.h"
+#include "include/vk_utils.h"
+
+namespace vk
+{
+
+class CpsCmdBufferUtil
+{
+public:
+    CpsCmdBufferUtil(Device* pDevice);
+    ~CpsCmdBufferUtil() {};
+
+    void FreePatchCpsList(
+        uint32_t deviceMask);
+
+    void AddPatchCpsRequest(
+        uint32_t                      deviceIdx,
+        GpuRt::DispatchRaysConstants* pConstsMem,
+        uint64_t                      bufSize);
+
+    void ApplyPatchCpsRequests(
+        uint32_t               deviceIdx,
+        Device*                pDevice,
+        const Pal::IGpuMemory& cpsMem) const;
+
+    uint64 GetCpsMemSize() const { return m_maxCpsMemSize; }
+
+    void SetCpsMemSize(uint64_t cpsMemSize) { m_maxCpsMemSize = cpsMemSize; }
+
+private:
+    uint64_t m_maxCpsMemSize;
+
+    typedef Util::Vector<GpuRt::DispatchRaysConstants*, 1, PalAllocator> PatchCpsVector;
+    PatchCpsVector m_patchCpsList[MaxPalDevices];
+};
+
+}
+
 #endif
-
-#endif /* __VK_ICD_H_PROXY__ */
