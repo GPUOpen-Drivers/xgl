@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -443,25 +443,6 @@ VkShaderStageFlagBits GraphicsPipelineCommon::GetActiveShaderStages(
             activeStages = static_cast<VkShaderStageFlagBits>(activeStages | (libActiveStageMask & libShaderStages));
         }
     }
-
-    activeStageMask = static_cast<VkShaderStageFlagBits>(0);
-
-    if (pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT)
-    {
-        activeStageMask = static_cast<VkShaderStageFlagBits>(activeStageMask |
-                                                             VK_SHADER_STAGE_TASK_BIT_EXT |
-                                                             VK_SHADER_STAGE_MESH_BIT_EXT |
-                                                             VK_SHADER_STAGE_VERTEX_BIT |
-                                                             VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-                                                             VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
-                                                             VK_SHADER_STAGE_GEOMETRY_BIT);
-    }
-    if (pLibInfo->libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
-    {
-        activeStageMask = static_cast<VkShaderStageFlagBits>(activeStageMask | VK_SHADER_STAGE_FRAGMENT_BIT);
-    }
-
-    activeStages = static_cast<VkShaderStageFlagBits>(activeStages & activeStageMask);
 
     return activeStages;
 }

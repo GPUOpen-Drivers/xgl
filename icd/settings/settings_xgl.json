@@ -5057,52 +5057,60 @@
             "Value": 0
           },
           {
-            "Description": "Enable for vertex shaders",
+            "Description": "Enable for task shaders",
             "Value": 1
           },
           {
-            "Description": "Enable for tessellation control shaders",
+            "Description": "Enable for vertex shaders",
             "Value": 2
           },
           {
-            "Description": "Enable for tessellation evaluation shaders",
+            "Description": "Enable for tessellation control shaders",
             "Value": 4
           },
           {
-            "Description": "Enable for geometry shaders",
+            "Description": "Enable for tessellation evaluation shaders",
             "Value": 8
           },
           {
-            "Description": "Enable for fragment shaders",
+            "Description": "Enable for geometry shaders",
             "Value": 16
           },
           {
-            "Description": "Enable for compute shaders",
+            "Description": "Enable for mesh shaders",
             "Value": 32
           },
           {
-            "Description": "Enable for Ray generation shaders",
+            "Description": "Enable for fragment shaders",
             "Value": 64
           },
           {
-            "Description": "Enable for Intersection shaders",
+            "Description": "Enable for compute shaders",
             "Value": 128
           },
           {
-            "Description": "Enable for Any-Hit shaders",
+            "Description": "Enable for Ray generation shaders",
             "Value": 256
           },
           {
-            "Description": "Enable for Closest Hit shaders",
+            "Description": "Enable for Intersection shaders",
             "Value": 512
           },
           {
-            "Description": "Enable for Miss shaders",
+            "Description": "Enable for Any-Hit shaders",
             "Value": 1024
           },
           {
-            "Description": "Enable for Callable shaders",
+            "Description": "Enable for Closest Hit shaders",
             "Value": 2048
+          },
+          {
+            "Description": "Enable for Miss shaders",
+            "Value": 4096
+          },
+          {
+            "Description": "Enable for Callable shaders",
+            "Value": 8192
           }
         ]
       },
@@ -6411,7 +6419,7 @@
         "Memory"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Scope": "Driver",
       "Type": "bool",
@@ -9395,6 +9403,21 @@
       "Description": "Export extension VK_MESA_image_alignment_control",
       "Tags": [
         "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "RtIgnoreDeclaredPayloadSize",
+      "Description": "Ignore the declared payload size in the shader",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
       ],
       "Defaults": {
         "Default": false

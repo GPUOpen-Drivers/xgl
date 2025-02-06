@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -135,32 +135,46 @@ struct CooperativeMatrixType
     VkComponentTypeKHR a;
     VkComponentTypeKHR b;
     VkComponentTypeKHR c;
+    VkComponentTypeKHR d;
+    uint32_t m;
+    uint32_t n;
+    uint32_t k;
+    bool sat;
 };
 
-constexpr CooperativeMatrixType CooperativeMatrixTypes[] =
+// =====================================================================================================================
+typedef Util::Vector<CooperativeMatrixType, 16, PalAllocator>  CooperativeMatrixTypeList;
+static void GetSupportedMatrixTypes(
+    const PhysicalDevice*      pDevice,
+    CooperativeMatrixTypeList* pSupportedList)
 {
-    { VK_COMPONENT_TYPE_FLOAT16_KHR, VK_COMPONENT_TYPE_FLOAT16_KHR, VK_COMPONENT_TYPE_FLOAT32_KHR },
-    { VK_COMPONENT_TYPE_FLOAT16_KHR, VK_COMPONENT_TYPE_FLOAT16_KHR, VK_COMPONENT_TYPE_FLOAT16_KHR },
-    { VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
-    { VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
-    { VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
-    { VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
-};
+    // gfx11
+    // F32 = F16 x F16 + F32
+    pSupportedList->PushBack({ VK_COMPONENT_TYPE_FLOAT16_KHR, VK_COMPONENT_TYPE_FLOAT16_KHR,
+        VK_COMPONENT_TYPE_FLOAT32_KHR, VK_COMPONENT_TYPE_FLOAT32_KHR, 16, 16, 16, false });
 
-constexpr uint32_t CooperativeMatrixTypesCount = VK_ARRAY_SIZE(CooperativeMatrixTypes);
+    // F16 x F16 + F16
+    pSupportedList->PushBack({ VK_COMPONENT_TYPE_FLOAT16_KHR, VK_COMPONENT_TYPE_FLOAT16_KHR,
+        VK_COMPONENT_TYPE_FLOAT16_KHR, VK_COMPONENT_TYPE_FLOAT16_KHR, 16, 16, 16, false });
+    pSupportedList->PushBack({ VK_COMPONENT_TYPE_FLOAT16_KHR, VK_COMPONENT_TYPE_FLOAT16_KHR,
+        VK_COMPONENT_TYPE_FLOAT16_KHR, VK_COMPONENT_TYPE_FLOAT16_KHR, 16, 16, 16, true });
 
-constexpr CooperativeMatrixType CooperativeMatrixSaturatingTypes[] =
-{
-    { VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
-    { VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
-    { VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
-    { VK_COMPONENT_TYPE_SINT8_KHR, VK_COMPONENT_TYPE_UINT8_KHR, VK_COMPONENT_TYPE_SINT32_KHR },
-};
+    constexpr VkComponentTypeKHR MatABiu8Types[] = { VK_COMPONENT_TYPE_UINT8_KHR , VK_COMPONENT_TYPE_SINT8_KHR };
+    constexpr VkComponentTypeKHR MatCTypes[] = { VK_COMPONENT_TYPE_SINT32_KHR , VK_COMPONENT_TYPE_FLOAT32_KHR };
 
-constexpr uint32_t CooperativeMatrixSaturatingTypesCount = VK_ARRAY_SIZE(CooperativeMatrixSaturatingTypes);
+    // I32 = IU8 x IU8 + I32
+    for (auto aType : MatABiu8Types)
+    {
+        for (auto bType : MatABiu8Types)
+        {
+            pSupportedList->PushBack({ aType, bType, VK_COMPONENT_TYPE_SINT32_KHR, VK_COMPONENT_TYPE_SINT32_KHR,
+                16, 16, 16, false });
+            pSupportedList->PushBack({ aType, bType, VK_COMPONENT_TYPE_SINT32_KHR, VK_COMPONENT_TYPE_SINT32_KHR,
+                16, 16, 16, true });
+        }
+    }
 
-// Dimension size for M, N and K
-constexpr uint32_t CooperativeMatrixDimension = 16;
+}
 
 #if PAL_ENABLE_PRINTS_ASSERTS
 static void VerifyProperties(const PhysicalDevice& device);
@@ -4178,7 +4192,8 @@ static bool IsSingleChannelMinMaxFilteringSupported(
 // =====================================================================================================================
 bool PhysicalDevice::RayTracingSupported() const
 {
-    return ((m_properties.gfxipProperties.srdSizes.bvh != 0) && (GetRuntimeSettings().enableRaytracingSupport));
+    return ((PalProperties().gfxipProperties.rayTracingIp > Pal::RayTracingIpLevel::_None) &&
+            (GetRuntimeSettings().enableRaytracingSupport));
 }
 #endif
 
@@ -4188,6 +4203,20 @@ static bool IsKhrCooperativeMatrixSupported(
 {
     return ((pPhysicalDevice == nullptr) ||
             (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportCooperativeMatrix));
+}
+
+// =====================================================================================================================
+static bool IsDeviceGeneratedCommandsSupported(
+    const PhysicalDevice* pPhysicalDevice)
+{
+    bool isSupported = true;
+
+    if (pPhysicalDevice != nullptr)
+    {
+        isSupported = (pPhysicalDevice->PalProperties().gpuType == Pal::GpuType::Discrete);
+    }
+
+    return isSupported;
 }
 
 // =====================================================================================================================
@@ -7062,8 +7091,11 @@ size_t PhysicalDevice::GetFeatures2(
 
                 if (updateFeatures)
                 {
+                    const bool captureReplay = PalProperties().gfxipProperties.flags.supportCaptureReplay &&
+                                               (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp11_0);
+
                     pExtInfo->descriptorBuffer                   = VK_TRUE;
-                    pExtInfo->descriptorBufferCaptureReplay      = VK_FALSE;
+                    pExtInfo->descriptorBufferCaptureReplay      = captureReplay ? VK_TRUE : VK_FALSE;
                     pExtInfo->descriptorBufferImageLayoutIgnored = VK_FALSE;
                     pExtInfo->descriptorBufferPushDescriptors    = VK_TRUE;
                 }
@@ -10292,8 +10324,9 @@ VkResult PhysicalDevice::GetPhysicalDeviceCooperativeMatrixPropertiesKHR(
 
     if (IsKhrCooperativeMatrixSupported(this))
     {
-        const uint32_t basicTypeCount = CooperativeMatrixTypesCount + CooperativeMatrixSaturatingTypesCount;
-        uint32_t totalCount = basicTypeCount;
+        CooperativeMatrixTypeList supportedList(VkInstance()->Allocator());
+        GetSupportedMatrixTypes(this, &supportedList);
+        uint32_t totalCount = supportedList.size();
         if (pProperties == nullptr)
         {
             *pPropertyCount = totalCount;
@@ -10309,26 +10342,17 @@ VkResult PhysicalDevice::GetPhysicalDeviceCooperativeMatrixPropertiesKHR(
 
             for (uint32_t i = 0; i < *pPropertyCount; ++i)
             {
-                bool sat = false;
-                const CooperativeMatrixType* pType = nullptr;
-                if (i < CooperativeMatrixTypesCount)
-                {
-                    pType = CooperativeMatrixTypes + i;
-                }
-                else if (i < basicTypeCount)
-                {
-                    sat = true;
-                    pType = CooperativeMatrixSaturatingTypes + i - CooperativeMatrixTypesCount;
-                }
-                pProperties[i].MSize                  = CooperativeMatrixDimension;
-                pProperties[i].NSize                  = CooperativeMatrixDimension;
-                pProperties[i].KSize                  = CooperativeMatrixDimension;
-                pProperties[i].AType                  = pType->a;
-                pProperties[i].BType                  = pType->b;
-                pProperties[i].CType                  = pType->c;
-                pProperties[i].ResultType             = pType->c;
+                const CooperativeMatrixType& type = supportedList[i];
+
+                pProperties[i].MSize                  = type.m;
+                pProperties[i].NSize                  = type.n;
+                pProperties[i].KSize                  = type.k;
+                pProperties[i].AType                  = type.a;
+                pProperties[i].BType                  = type.b;
+                pProperties[i].CType                  = type.c;
+                pProperties[i].ResultType             = type.d;
+                pProperties[i].saturatingAccumulation = type.sat ? VK_TRUE : VK_FALSE;
                 pProperties[i].scope                  = VK_SCOPE_SUBGROUP_KHR;
-                pProperties[i].saturatingAccumulation = sat ? VK_TRUE : VK_FALSE;
             }
         }
     }

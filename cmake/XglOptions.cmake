@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -38,6 +38,8 @@ macro(xgl_options)
 #if VKI_DEVMODE_COMPILER_SETTINGS
     option(VKI_DEVMODE_COMPILER_SETTINGS "Build with devmode compiler settings?" OFF)
 #endif
+
+    option(VKI_SDK_NEXT "Build with Vulkan 1.4 support" ON)
 
     option(VKI_ENABLE_PRINTS_ASSERTS "Build with debug print enabled?" OFF)
 

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1437,6 +1437,16 @@ VkResult RayTracingPipeline::CreateImpl(
                                 const auto pPipelineLibShaderGroups = pPipelineLib->GetShaderGroupHandles(deviceIdx);
                                 const auto pLibGroupInfos           = pPipelineLib->GetShaderGroupInfos();
 
+                                if (CheckIsCps())
+                                {
+                                    // Shaders in a library may require more backend stack than the main pipeline, we
+                                    // need to reserve enough space when setting up continuation stack pointer in order
+                                    // not to collide with backend stack.
+                                    uint32_t libBackendSize =
+                                        pPipelineLib->GetDefaultPipelineStackSizes(deviceIdx).backendSize;
+                                    backendStackSizeMax = Util::Max(backendStackSizeMax, libBackendSize);
+                                }
+
                                 // update pipelineHasTraceRay and pipelineLibTraceRayVa
                                 if (pPipelineLib->CheckHasTraceRay())
                                 {
@@ -2663,7 +2673,7 @@ void RayTracingPipeline::BindToCmdBuffer(
                                                    static_cast<uint32_t>(Pal::PipelineBindPoint::Compute),
                                                    debugPrintfRegBase);
 
-        pCmdBuffer->UpdateLargestPipelineStackSizes(deviceIdx, GetDefaultPipelineStackSizesSize(deviceIdx));
+        pCmdBuffer->UpdateLargestPipelineStackSizes(deviceIdx, GetDefaultPipelineStackSizes(deviceIdx));
 
         // Upload internal buffer data
         if (m_captureReplayVaMappingBufferInfo.dataSize > 0)

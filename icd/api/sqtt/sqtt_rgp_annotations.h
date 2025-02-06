@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2015-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2015-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -40,7 +40,7 @@
 constexpr uint32_t RgpSqttInstrumentationSpecVersion = 1;
 
 // RGP SQTT Instrumentation Specification version for Vulkan-specific tables
-constexpr uint32_t RgpSqttInstrumentationApiVersion  = 4;
+constexpr uint32_t RgpSqttInstrumentationApiVersion  = 5;
 
 #if defined(BIGENDIAN_CPU) || defined(__BIG_ENDIAN__)
 static_assert(false, "The bitfields in this header match the RGP format specification with the assumption that "
@@ -560,11 +560,13 @@ struct RgpSqttMarkerPipelineBind
         {
             uint32_t identifier : 4;  // Identifier for this marker
             uint32_t extDwords  : 3;  // Number of extra dwords following this marker
-            uint32_t bindPoint  : 1;  // The bind point of the pipeline within a queue
+            uint32_t bindPoint  : 2;  // The bind point of the pipeline within a queue
                                       // 0 = graphics bind point
                                       // 1 = compute bind point
+                                      // 2 = work graphs bind point
+                                      // 3 = unused/reserved for future expansion
             uint32_t cbID       : 20; // A command buffer ID encoded as per Table 13.
-            uint32_t reserved   : 4;  // Reserved
+            uint32_t reserved   : 3;  // Reserved
         };
 
         uint32_t     dword01;         // The first dword

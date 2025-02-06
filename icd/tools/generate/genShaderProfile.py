@@ -2,7 +2,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2020-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2020-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -240,6 +240,7 @@ def parse_json_profile_action_shader(shader_actions):
                     .replace("%FieldName%", str(shader_action_key)) \
                     .replace("%IntValue%", str(shader_action_value).lower()) \
                     .replace("%ListValue%", convert_to_array(str(shader_action_value))) \
+                    .replace("%StrListValue%", convert_hex_string_to_array(str(shader_action_value))) \
                     .replace("%StrValue%", str(shader_action_value)) \
                     .replace("%BoolValue%", str(shader_action_value).lower())
                 # Need to special-case this, as otherwise the validValues field may not be present
@@ -918,6 +919,18 @@ def convert_to_array(txt):
     """
     txt = txt.replace("[", "{")
     txt = txt.replace("]", "}")
+    return txt
+
+def convert_hex_string_to_array(txt):
+    """
+    Replaces hex string array to hex integer array.
+    :param: The input text.
+    :return: The modified text.
+    """
+    txt = txt.replace("[", "{")
+    txt = txt.replace("]", "}")
+    txt = txt.replace("'", "")
+
     return txt
 
 def is_compiler_only_build_type(build_obj):

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2024-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -352,7 +352,9 @@ void IndirectCommandsLayoutNV::BuildPalCreateInfo(
         pPalCreateInfo->strideInBytes += stride;
     }
 
-    pPalCreateInfo->paramCount = paramCount;
+    pPalCreateInfo->paramCount             = paramCount;
+    pPalCreateInfo->bindVertexInOffsetMode = pDevice->GetEnabledFeatures().robustVertexBufferExtend ||
+                                             pDevice->GetEnabledFeatures().pipelineRobustness;
 
     constexpr uint32_t DxgiIndexTypeUint8  = 62;
     constexpr uint32_t DxgiIndexTypeUint16 = 57;
@@ -780,8 +782,10 @@ void IndirectCommandsLayout::BuildPalCreateInfo(
         paramCount++;
     }
 
-    pPalCreateInfo->strideInBytes = pCreateInfo->indirectStride;
-    pPalCreateInfo->paramCount    = paramCount;
+    pPalCreateInfo->strideInBytes          = pCreateInfo->indirectStride;
+    pPalCreateInfo->paramCount             = paramCount;
+    pPalCreateInfo->bindVertexInOffsetMode = pDevice->GetEnabledFeatures().robustVertexBufferExtend ||
+                                             pDevice->GetEnabledFeatures().pipelineRobustness;
 
     constexpr uint32_t DxgiIndexTypeUint8  = 62;
     constexpr uint32_t DxgiIndexTypeUint16 = 57;

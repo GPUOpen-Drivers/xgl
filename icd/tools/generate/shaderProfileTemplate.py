@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2020-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2020-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -66,6 +66,7 @@ HEADER_INCLUDES = """
 #include \"include/app_profile.h\"
 #include \"include/vk_shader_code.h\"
 #include \"include/vk_utils.h\"
+#include \"settings/g_settings.h\"
 #include \"palDevice.h\"
 
 #include \"utils/json_writer.h\"
@@ -78,7 +79,6 @@ HEADER_INCLUDES = """
 
 CPP_INCLUDE = """
 #include \"g_shader_profile.h\"
-#include \"settings/g_settings.h\"
 
 %Includes%
 

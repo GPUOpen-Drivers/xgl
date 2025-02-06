@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1846,6 +1846,7 @@ static void MergePipelineOptions(
     pDst->overrideThreadGroupSizeX     = src.overrideThreadGroupSizeX;
     pDst->overrideThreadGroupSizeY     = src.overrideThreadGroupSizeY;
     pDst->overrideThreadGroupSizeZ     = src.overrideThreadGroupSizeZ;
+    pDst->forceNonUniformResourceIndexStageMask |= src.forceNonUniformResourceIndexStageMask;
 }
 
 // =====================================================================================================================
@@ -3334,6 +3335,8 @@ void PipelineCompiler::ApplyPipelineOptions(
 
     pOptions->disablePerCompFetch = settings.disablePerCompFetch;
 
+    pOptions->forceNonUniformResourceIndexStageMask = settings.forceNonUniformDescriptorIndex;
+
     if (pDevice->GetEnabledFeatures().robustBufferAccessExtended)
     {
         pOptions->extendedRobustness.robustBufferAccess = true;
@@ -3897,6 +3900,8 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
 
         pCreateInfo->pipelineInfo.isReplay = isReplay;
 
+        pCreateInfo->pipelineInfo.rtIgnoreDeclaredPayloadSize = settings.rtIgnoreDeclaredPayloadSize;
+
         // pLibraryInterface must be populated (per spec) if the pipeline is a library or has libraries
         VK_ASSERT((pIn->pLibraryInterface != nullptr) || ((isLibrary || hasLibraries) == false));
 
@@ -3905,6 +3910,13 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
             // When pipeline libraries are involved maxPayloadSize and maxAttributeSize are read from
             pCreateInfo->pipelineInfo.payloadSizeMaxInLib   = pIn->pLibraryInterface->maxPipelineRayPayloadSize;
             pCreateInfo->pipelineInfo.attributeSizeMaxInLib = pIn->pLibraryInterface->maxPipelineRayHitAttributeSize;
+        }
+        else if (settings.rtIgnoreDeclaredPayloadSize && (pIn->pLibraryInterface != nullptr))
+        {
+            // If rtIgnoreDeclaredPayloadSize is set, compiler would only obtain maxRayPayloadSize from API.
+            // So for a RT pipeline which is not library and has no libraries, payloadSizeMaxInLib must be set.
+            // Fortunately, vkd3d would always set pLibraryInterface.
+            pCreateInfo->pipelineInfo.payloadSizeMaxInLib   = pIn->pLibraryInterface->maxPipelineRayPayloadSize;
         }
 
         if (hasLibraries)
@@ -4399,7 +4411,7 @@ void PipelineCompiler::SetRayTracingState(
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     const Pal::DeviceProperties& deviceProp = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
 
-    if (deviceProp.gfxipProperties.rayTracingIp != Pal::RayTracingIpLevel::None)
+    if (pDevice->GetProperties().descriptorSizes.bvh > 0)
     {
         Pal::BvhInfo bvhInfo = {};
         bvhInfo.numNodes                 = GpuRt::RayTracingMaxNumNodes;

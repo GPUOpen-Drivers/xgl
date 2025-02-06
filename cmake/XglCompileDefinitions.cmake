@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -57,6 +57,10 @@ macro(xgl_set_compile_definitions)
         target_compile_definitions(xgl PRIVATE VKI_DEVMODE_COMPILER_SETTINGS)
     endif()
 #endif
+
+    if(VKI_SDK_NEXT)
+        target_compile_definitions(xgl PRIVATE VKI_SDK_NEXT)
+    endif()
 
     target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX9=1)
 

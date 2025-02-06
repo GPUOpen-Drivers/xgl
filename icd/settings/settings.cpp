@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -516,14 +516,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         }
     }
 
-    // Allow device memory overallocation for <= 2GBs of VRAM including APUs.
-    if (((pInfo->gpuType != Pal::GpuType::Integrated)                 ||
-         (m_settings.reportLargeLocalHeapForApu == false))            &&
-        (pInfo->gpuMemoryProperties.maxLocalMemSize <= (2ull * _1GB)))
-    {
-        m_settings.memoryDeviceOverallocationAllowed = true;
-    }
-
     if (appProfile == AppProfile::Doom)
     {
         m_settings.enableSpvPerfOptimal = true;
@@ -573,6 +565,14 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
             m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
         }
+ #if VKI_BUILD_GFX115
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_5)
+        {
+            m_settings.pipelineBinningMode = PipelineBinningModeEnable;
+            m_settings.disableBinningPsKill = DisableBinningPsKillTrue;
+            m_settings.overrideWgpMode = WgpModeWgp;
+        }
+#endif
 
         // Don't enable DCC for color attachments aside from those listed in the app_resource_optimizer
         m_settings.forceEnableDcc = ForceDccDefault;
@@ -1636,6 +1636,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     {
         m_settings.forceImageSharingMode =
             ForceImageSharingMode::ForceImageSharingModeExclusiveForNonColorAttachments;
+
+        m_settings.ac01WaNotNeeded = true;
     }
 
     if (appProfile == AppProfile::XPlane)
@@ -1707,6 +1709,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     if (appProfile == AppProfile::Vkd3dEngine)
     {
         OverrideVkd3dCommonSettings(&m_settings);
+#if VKI_RAY_TRACING
+        // Fixes RT page fault issue in vkd3d when payload sizes from shader and app are mismatched
+        m_settings.rtIgnoreDeclaredPayloadSize = true;
+#endif
     }
 
     if (appProfile == AppProfile::DXVK)
@@ -2029,6 +2035,16 @@ void VulkanSettingsLoader::ValidateSettings()
     {
         m_settings.forceUma = false;
         m_settings.overrideLocalHeapSizeInGBs = 0;
+    }
+
+    // Allow device memory overallocation for <= 2GBs of VRAM including APUs.
+    constexpr gpusize _1GB = 1024ull * 1024ull * 1024ull;
+
+    if (((deviceProps.gpuType != Pal::GpuType::Integrated)                 ||
+         (m_settings.reportLargeLocalHeapForApu == false))                 &&
+        (deviceProps.gpuMemoryProperties.maxLocalMemSize <= (2ull * _1GB)))
+    {
+        m_settings.memoryDeviceOverallocationAllowed = true;
     }
 
 }
