@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1055,17 +1055,162 @@ VkResult Queue::NotifyFlipMetadataAfterPresent(
 }
 
 // =====================================================================================================================
+Pal::Result Queue::TimedQueueSubmit(
+    uint32_t                     deviceIdx,
+    uint32_t                     apiCmdBufferCount,
+    const VkCommandBuffer*       pCommandBuffers,
+    const Pal::SubmitInfo&       palSubmitInfo,
+    VirtualStackFrame*           pVirtStackFrame)
+{
+    VK_ASSERT(apiCmdBufferCount == palSubmitInfo.pPerSubQueueInfo[0].cmdBufferCount);
+
+    Pal::Result palResult = Pal::Result::Success;
+    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+
+    if ((settings.multiSubmitChaining == false) && (palSubmitInfo.perSubQueueInfoCount > 1))
+    {
+        VK_ALERT_ALWAYS_MSG("Splitting into multiple submits not supported for perSubQueueInfoCount > 1 case");
+    }
+
+    if ((settings.multiSubmitChaining == false) &&
+        (palSubmitInfo.perSubQueueInfoCount == 1) &&
+        (apiCmdBufferCount > 1))
+    {
+        const Pal::PerSubQueueSubmitInfo& perSubQueueSubmitInfo = palSubmitInfo.pPerSubQueueInfo[0];
+        const uint32_t cmdBufferCount = perSubQueueSubmitInfo.cmdBufferCount;
+
+        // Submit each command buffer one by one
+        for (uint32_t cmdBufIdx = 0; cmdBufIdx < cmdBufferCount; ++cmdBufIdx)
+        {
+            Pal::PerSubQueueSubmitInfo singleSubQueueSubmitInfo = {};
+
+            singleSubQueueSubmitInfo.cmdBufferCount  = 1u;
+            singleSubQueueSubmitInfo.ppCmdBuffers    = &perSubQueueSubmitInfo.ppCmdBuffers[cmdBufIdx];
+            singleSubQueueSubmitInfo.pCmdBufInfoList = &perSubQueueSubmitInfo.pCmdBufInfoList[cmdBufIdx];
+
+            Pal::SubmitInfo singleSubmitInfo = {};
+
+            singleSubmitInfo.pPerSubQueueInfo     = &singleSubQueueSubmitInfo;
+            singleSubmitInfo.perSubQueueInfoCount = 1;
+
+            singleSubmitInfo.gpuMemRefCount    = palSubmitInfo.gpuMemRefCount;
+            singleSubmitInfo.pGpuMemoryRefs    = palSubmitInfo.pGpuMemoryRefs;
+
+            singleSubmitInfo.pUserData         = palSubmitInfo.pUserData;
+            singleSubmitInfo.stackSizeInDwords = palSubmitInfo.stackSizeInDwords;
+
+            // The fence is only required for the last submit
+            if ((cmdBufIdx == (cmdBufferCount - 1))
+                && (palSubmitInfo.ppFences != nullptr)
+                && (palSubmitInfo.fenceCount > 0))
+            {
+                singleSubmitInfo.ppFences = palSubmitInfo.ppFences;
+                singleSubmitInfo.fenceCount = palSubmitInfo.fenceCount;
+            }
+
+            palResult = m_pDevMode->TimedQueueSubmit(
+                deviceIdx,
+                this,
+                1,
+                &pCommandBuffers[cmdBufIdx],
+                singleSubmitInfo,
+                pVirtStackFrame);
+
+            if ((palResult == Pal::Result::Success) &&
+                m_pDevice->GetRuntimeSettings().waitAfterSubmit)
+            {
+                palResult = PalQueue(deviceIdx)->WaitIdle();
+            }
+        }
+    }
+    else
+    {
+        palResult = m_pDevMode->TimedQueueSubmit(
+            deviceIdx,
+            this,
+            apiCmdBufferCount,
+            pCommandBuffers,
+            palSubmitInfo,
+            pVirtStackFrame);
+
+        if ((palResult == Pal::Result::Success) &&
+            m_pDevice->GetRuntimeSettings().waitAfterSubmit)
+        {
+            palResult = PalQueue(deviceIdx)->WaitIdle();
+        }
+    }
+
+    return palResult;
+}
+
+// =====================================================================================================================
 Pal::Result Queue::PalQueueSubmit(
     const Device*          pDevice,
     Pal::IQueue*           pPalQueue,
     const Pal::SubmitInfo& palSubmitInfo)
 {
-    Pal::Result palResult = pPalQueue->Submit(palSubmitInfo);
+    Pal::Result palResult = Pal::Result::Success;
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
-    if ((palResult == Pal::Result::Success) &&
-        pDevice->GetRuntimeSettings().waitAfterSubmit)
+    if ((settings.multiSubmitChaining == false) && (palSubmitInfo.perSubQueueInfoCount > 1))
     {
-        palResult = pPalQueue->WaitIdle();
+        VK_ALERT_ALWAYS_MSG("Splitting into multiple submits not supported for perSubQueueInfoCount > 1 case");
+    }
+
+    if ((settings.multiSubmitChaining == false) &&
+        (palSubmitInfo.perSubQueueInfoCount == 1) &&
+        (palSubmitInfo.pPerSubQueueInfo[0].cmdBufferCount > 1))
+    {
+        const Pal::PerSubQueueSubmitInfo& perSubQueueSubmitInfo = palSubmitInfo.pPerSubQueueInfo[0];
+        const uint32_t cmdBufferCount = perSubQueueSubmitInfo.cmdBufferCount;
+
+        // Submit each command buffer one by one
+        for (uint32_t cmdBufIdx = 0; cmdBufIdx < cmdBufferCount; ++cmdBufIdx)
+        {
+            Pal::PerSubQueueSubmitInfo singleSubQueueSubmitInfo = {};
+
+            singleSubQueueSubmitInfo.cmdBufferCount  = 1u;
+            singleSubQueueSubmitInfo.ppCmdBuffers    = &perSubQueueSubmitInfo.ppCmdBuffers[cmdBufIdx];
+            singleSubQueueSubmitInfo.pCmdBufInfoList = &perSubQueueSubmitInfo.pCmdBufInfoList[cmdBufIdx];
+
+            Pal::SubmitInfo singleSubmitInfo = {};
+
+            singleSubmitInfo.pPerSubQueueInfo     = &singleSubQueueSubmitInfo;
+            singleSubmitInfo.perSubQueueInfoCount = 1;
+
+            singleSubmitInfo.gpuMemRefCount = palSubmitInfo.gpuMemRefCount;
+            singleSubmitInfo.pGpuMemoryRefs = palSubmitInfo.pGpuMemoryRefs;
+
+            singleSubmitInfo.pUserData = palSubmitInfo.pUserData;
+            singleSubmitInfo.stackSizeInDwords = palSubmitInfo.stackSizeInDwords;
+
+            // The fence is only required for the last submit
+            if ((cmdBufIdx == (cmdBufferCount - 1))
+                && (palSubmitInfo.ppFences != nullptr)
+                && (palSubmitInfo.fenceCount > 0))
+            {
+                singleSubmitInfo.ppFences   = palSubmitInfo.ppFences;
+                singleSubmitInfo.fenceCount = palSubmitInfo.fenceCount;
+            }
+
+            palResult = pPalQueue->Submit(singleSubmitInfo);
+
+            if ((palResult == Pal::Result::Success) &&
+                pDevice->GetRuntimeSettings().waitAfterSubmit)
+            {
+                palResult = pPalQueue->WaitIdle();
+            }
+        }
+    }
+    else
+    {
+        palResult = pPalQueue->Submit(palSubmitInfo);
+
+        if ((palResult == Pal::Result::Success) &&
+            pDevice->GetRuntimeSettings().waitAfterSubmit)
+        {
+            palResult = pPalQueue->WaitIdle();
+        }
     }
 
     return palResult;
@@ -1572,9 +1717,8 @@ VkResult Queue::Submit(
                         // TMZ is NOT supported for GPUOPEN path.
                         VK_ASSERT((cmdBufferCount == 0) || ((*pCommandBuffers[0])->IsProtected() == false));
 
-                        palResult = m_pDevMode->TimedQueueSubmit(
+                        palResult = TimedQueueSubmit(
                             deviceIdx,
-                            this,
                             cmdBufferCount,
                             pCmdBuffers,
                             palSubmitInfo,
@@ -2322,7 +2466,11 @@ VkResult Queue::BindSparseEntry(
 
             // tileSize is in texels, prtTileRowPitch and prtTileDepthPitch shall be adjusted for compressed
             // formats. depth of blockDim will always be 1 so skip the adjustment.
-            const VkFormat aspectFormat = vk::Formats::GetAspectFormat(image.GetFormat(), bind.subresource.aspectMask);
+            const VkFormat aspectFormat = vk::Formats::GetAspectFormat(
+                image.GetFormat(),
+                bind.subresource.aspectMask,
+                m_pDevice->GetRuntimeSettings());
+
             const Pal::ChNumFormat palAspectFormat =
                 VkToPalFormat(aspectFormat, m_pDevice->GetRuntimeSettings()).format;
 

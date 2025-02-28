@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -90,6 +90,20 @@ struct PhysicalDeviceGpaProperties
 };
 
 // =====================================================================================================================
+// Properties relevant for the descriptor sizes
+struct DescriptorSizes
+{
+    uint32_t typedBufferView;
+    uint32_t untypedBufferView;
+    uint32_t imageView;
+    uint32_t fmaskView;
+    uint32_t sampler;
+    uint32_t bvh;
+    uint32_t combinedImageSampler;
+    uint32_t alignmentInDwords;
+};
+
+// =====================================================================================================================
 // Shader stage bit that represents all graphics stages
 constexpr uint32 ShaderStageAllGraphics = VK_SHADER_STAGE_TASK_BIT_EXT |
                                           VK_SHADER_STAGE_MESH_BIT_EXT |
@@ -124,6 +138,10 @@ public:
         VulkanSettingsLoader*   pSettingsLoader,
         AppProfile              appProfile,
         VkPhysicalDevice*       pPhysicalDevice);
+
+    static void InitDescriptorSizes(
+        const Pal::DeviceProperties&    properties,
+        DescriptorSizes*                pDescriptorSizes);
 
     VkResult Destroy(void);
 
@@ -690,6 +708,11 @@ template <typename ModifierPropertiesList_T>
         return (m_properties.engineProperties[Pal::EngineTypeCompute].engineCount != 0);
     }
 
+    const DescriptorSizes& GetDescriptorSizes() const
+    {
+        return m_descriptorSizes;
+    }
+
     const RuntimeSettings& GetRuntimeSettings() const
     {
         return m_pSettingsLoader->GetSettings();
@@ -944,6 +967,7 @@ protected:
     PhysicalDeviceManager*           m_pPhysicalDeviceManager;
     Pal::IDevice*                    m_pPalDevice;
     Pal::DeviceProperties            m_properties;
+    DescriptorSizes                  m_descriptorSizes;
 
     uint32_t                         m_memoryTypeMask;
     uint32_t                         m_memoryTypeMaskForExternalSharing;

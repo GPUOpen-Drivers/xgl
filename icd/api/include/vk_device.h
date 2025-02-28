@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -59,10 +59,13 @@
 #include "palList.h"
 #include "palHashMap.h"
 #include "palPipeline.h"
+#include "palLiterals.h"
 
 #if VKI_GPU_DECOMPRESS
 #include "imported/gputexdecoder/gpuTexDecoder.h"
 #endif
+
+using namespace Util::Literals;
 
 namespace Pal
 {
@@ -186,17 +189,7 @@ public:
         VkDeviceSize virtualMemAllocGranularity;
         VkDeviceSize virtualMemPageSize;
 
-        struct
-        {
-            uint32_t typedBufferView;
-            uint32_t untypedBufferView;
-            uint32_t imageView;
-            uint32_t fmaskView;
-            uint32_t sampler;
-            uint32_t bvh;
-            uint32_t combinedImageSampler;
-            uint32_t alignmentInDwords;
-        } descriptorSizes;
+        DescriptorSizes descriptorSizes;
 
         struct
         {
@@ -424,6 +417,11 @@ public:
 
     VK_FORCEINLINE bool IsMultiGpu() const
         { return m_palDeviceCount > 1; }
+
+    VK_FORCEINLINE bool IsResizableBarEnabled() const
+    {
+        return GetPalProperties().gpuMemoryProperties.barSize > 256_MiB;
+    }
 
     VK_FORCEINLINE uint32_t      NumPalDevices() const
         { return m_palDeviceCount; }
@@ -795,9 +793,9 @@ public:
         const float*             pBorderColor);
 
     void ReleaseBorderColorIndex(
-        uint32_t                 pBorderColor);
+        uint32_t                 borderColorIndex);
 
-    void ReserveBorderColorIndex(
+    bool ReserveBorderColorIndex(
         uint32                   borderColorIndex,
         const float*             pBorderColor);
 
@@ -1232,6 +1230,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkImportSemaphoreFdKHR(
 VKAPI_ATTR VkResult VKAPI_CALL vkSetGpaDeviceClockModeAMD(
     VkDevice                                    device,
     VkGpaDeviceClockModeInfoAMD*                pInfo);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetGpaDeviceClockInfoAMD(
+    VkDevice                                    device,
+    VkGpaDeviceGetClockInfoAMD*                 pInfo);
 
 VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupport(
     VkDevice                                    device,

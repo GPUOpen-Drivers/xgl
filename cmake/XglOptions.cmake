@@ -39,15 +39,13 @@ macro(xgl_options)
     option(VKI_DEVMODE_COMPILER_SETTINGS "Build with devmode compiler settings?" OFF)
 #endif
 
-    option(VKI_SDK_NEXT "Build with Vulkan 1.4 support" ON)
-
     option(VKI_ENABLE_PRINTS_ASSERTS "Build with debug print enabled?" OFF)
 
     option(VKI_ENABLE_LTO "Build with LTO enabled?" ON)
 
     option(VKI_ENABLE_GCOV "Build with gcov source code coverage?" OFF)
-#if VKI_BUILD_STRIX1
-    option(VKI_BUILD_STRIX1 "Build vulkan for STRIX1" ON)
+#if VKI_BUILD_STRIX_HALO
+    option(VKI_BUILD_STRIX_HALO "Build vulkan for STRIX_HALO" ON)
 #endif
 
     option(VKI_BUILD_TESTS "Build tests?" OFF)

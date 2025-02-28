@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -321,75 +321,26 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 {
     VkResult          result            = VK_SUCCESS;
     PipelineCompiler* pCompiler         = pDevice->GetCompiler(DefaultDeviceIndex);
-    uint64_t          dynamicStateFlags = GetDynamicStateFlags(pCreateInfo->pDynamicState, pLibInfo);
 
-    // Pipeline info only includes the shaders that match the enabled VkGraphicsPipelineLibraryFlagBitsEXT.
-    // Use this information to skip the compilation of unused shader modules.
-    const Vkgc::PipelineShaderInfo* pShaderInfos[] =
+    const uint32_t shaderBuildMask = GraphicsPipelineLibrary::CalculateShaderBuildMask(
+        pDevice,
+        pCreateInfo,
+        pLibInfo,
+        pShaderStageInfo,
+        pBinaryCreateInfo);
+
+    for (uint32_t stageIndex = 0; stageIndex < ShaderStage::ShaderStageGfxCount; ++stageIndex)
     {
-        &pBinaryCreateInfo->pipelineInfo.task,
-        &pBinaryCreateInfo->pipelineInfo.vs,
-        &pBinaryCreateInfo->pipelineInfo.tcs,
-        &pBinaryCreateInfo->pipelineInfo.tes,
-        &pBinaryCreateInfo->pipelineInfo.gs,
-        &pBinaryCreateInfo->pipelineInfo.mesh,
-        &pBinaryCreateInfo->pipelineInfo.fs,
-    };
-
-    auto               pPipelineBinaryInfoKHR                 = extStructs.pPipelineBinaryInfoKHR;
-    PipelineBinaryInfo providedBinaries[GraphicsLibraryCount] = {};
-
-    if (pPipelineBinaryInfoKHR != nullptr)
-    {
-        for (uint32_t binaryIndex = 0; (binaryIndex < pPipelineBinaryInfoKHR->binaryCount); ++binaryIndex)
+        if (Util::TestAnyFlagSet(shaderBuildMask, 1 << stageIndex))
         {
-            const auto pBinary = PipelineBinary::ObjectFromHandle(
-                pPipelineBinaryInfoKHR->pPipelineBinaries[binaryIndex]);
+            const GraphicsLibraryType gplType = GetGraphicsLibraryType(pShaderStageInfo->stages[stageIndex].stage);
 
-            // Retrieve the GraphicsLibraryType identifier from the binary
-            GraphicsLibraryType gplType = *static_cast<const GraphicsLibraryType*>(pBinary->BinaryData().pCode);
-
-            providedBinaries[gplType].binaryHash              = pBinary->BinaryKey();
-            providedBinaries[gplType].pipelineBinary.codeSize = pBinary->BinaryData().codeSize;
-            providedBinaries[gplType].pipelineBinary.pCode    =
-                Util::VoidPtrInc(pBinary->BinaryData().pCode, sizeof(GraphicsLibraryType));
-        }
-    }
-
-    uint32_t gplMask = 0;
-    for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
-    {
-        if (((pShaderInfos[i]->pModuleData != nullptr) &&
-             pCompiler->IsValidShaderModule(pShaderStageInfo->stages[i].pModuleHandle)) ||
-            (pShaderStageInfo->stages[i].codeHash.lower != 0) ||
-            (pShaderStageInfo->stages[i].codeHash.upper != 0))
-        {
-            bool canBuildShader = (pShaderStageInfo->stages[i].stage != ShaderStage::ShaderStageFragment) ||
-                                  (IsRasterizationDisabled(pCreateInfo, pLibInfo, dynamicStateFlags) == false);
-
-            GraphicsLibraryType gplType = GetGraphicsLibraryType(pShaderStageInfo->stages[i].stage);
-            if (Util::TestAnyFlagSet(gplMask, 1 << gplType))
-            {
-                continue;
-            }
-
-            if ((GetVkGraphicsLibraryFlagBit(pShaderStageInfo->stages[i].stage) & pLibInfo->libFlags) == 0)
-            {
-                continue;
-            }
-
-            if (canBuildShader)
-            {
-                result = pCompiler->CreateGraphicsShaderBinary(
-                    pDevice,
-                    pPipelineCache,
-                    gplType,
-                    pBinaryCreateInfo,
-                    &providedBinaries[gplType].pipelineBinary,
-                    &providedBinaries[gplType].binaryHash,
-                    &pTempModuleStages[i]);
-                gplMask |= (1 << gplType);
-            }
+            result = pCompiler->CreateGraphicsShaderBinary(
+                pDevice,
+                pPipelineCache,
+                gplType,
+                pBinaryCreateInfo,
+                &pTempModuleStages[stageIndex]);
 
             if (result != VK_SUCCESS)
             {
@@ -416,8 +367,6 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
                 pPipelineCache,
                 GraphicsLibraryPreRaster,
                 pBinaryCreateInfo,
-                nullptr,
-                nullptr,
                 &pTempModuleStages[TempIdx]);
         }
 
@@ -434,8 +383,6 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
                 pPipelineCache,
                 GraphicsLibraryFragment,
                 pBinaryCreateInfo,
-                nullptr,
-                nullptr,
                 &pTempModuleStages[TempIdx]);
         }
     }
@@ -476,6 +423,101 @@ VkResult GraphicsPipelineLibrary::CreatePartialPipelineBinary(
 }
 
 // =====================================================================================================================
+void GraphicsPipelineLibrary::CreateFinalCacheIds(
+    const Device*                           pDevice,
+    const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+    const GraphicsPipelineLibraryInfo*      pLibInfo,
+    const GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
+    GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo)
+{
+    const uint32_t shaderBuildMask = GraphicsPipelineLibrary::CalculateShaderBuildMask(
+        pDevice,
+        pCreateInfo,
+        pLibInfo,
+        pShaderStageInfo,
+        pBinaryCreateInfo);
+
+    const PipelineCompilerType compilerType = pDevice->GetCompiler(DefaultDeviceIndex)->
+        CheckCompilerType<Vkgc::GraphicsPipelineBuildInfo>(nullptr, 0, 0);
+
+    for (uint32_t stageIndex = 0; stageIndex < ShaderStage::ShaderStageGfxCount; ++stageIndex)
+    {
+        if (Util::TestAnyFlagSet(shaderBuildMask, 1 << stageIndex))
+        {
+            const GraphicsLibraryType gplType = GetGraphicsLibraryType(pShaderStageInfo->stages[stageIndex].stage);
+
+            pBinaryCreateInfo->libraryHash[gplType] = Vkgc::IPipelineDumper::GetGraphicsShaderBinaryHash(
+                &pBinaryCreateInfo->pipelineInfo,
+                (gplType == GraphicsLibraryPreRaster) ? ShaderStageVertex : ShaderStageFragment);
+
+            Util::MetroHash128 hasher;
+            hasher.Update(pBinaryCreateInfo->libraryHash[gplType]);
+            hasher.Update(compilerType);
+            hasher.Update(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetSettingsLoader()->GetSettingsHash());
+            hasher.Finalize(pBinaryCreateInfo->earlyElfPackageHash[gplType].bytes);
+        }
+    }
+}
+
+// =====================================================================================================================
+uint32_t GraphicsPipelineLibrary::CalculateShaderBuildMask(
+    const Device*                           pDevice,
+    const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+    const GraphicsPipelineLibraryInfo*      pLibInfo,
+    const GraphicsPipelineShaderStageInfo*  pShaderStageInfo,
+    const GraphicsPipelineBinaryCreateInfo* pBinaryCreateInfo)
+{
+    const PipelineCompiler* pCompiler          = pDevice->GetCompiler(DefaultDeviceIndex);
+    const uint64_t          dynamicStateFlags  = GetDynamicStateFlags(pCreateInfo->pDynamicState, pLibInfo);
+
+    // Pipeline info only includes the shaders that match the enabled VkGraphicsPipelineLibraryFlagBitsEXT.
+    // Use this information to skip the compilation of unused shader modules.
+    const Vkgc::PipelineShaderInfo* pShaderInfos[] =
+    {
+        &pBinaryCreateInfo->pipelineInfo.task,
+        &pBinaryCreateInfo->pipelineInfo.vs,
+        &pBinaryCreateInfo->pipelineInfo.tcs,
+        &pBinaryCreateInfo->pipelineInfo.tes,
+        &pBinaryCreateInfo->pipelineInfo.gs,
+        &pBinaryCreateInfo->pipelineInfo.mesh,
+        &pBinaryCreateInfo->pipelineInfo.fs,
+    };
+
+    uint32_t shaderBuildMask = 0;
+    uint32_t gplBuildMask    = 0;
+
+    for (uint32_t stageIndex = 0; stageIndex < ShaderStage::ShaderStageGfxCount; ++stageIndex)
+    {
+        if (((pShaderInfos[stageIndex]->pModuleData != nullptr) &&
+             pCompiler->IsValidShaderModule(pShaderStageInfo->stages[stageIndex].pModuleHandle)) ||
+            (pShaderStageInfo->stages[stageIndex].codeHash.lower != 0) ||
+            (pShaderStageInfo->stages[stageIndex].codeHash.upper != 0))
+        {
+            const GraphicsLibraryType gplType = GetGraphicsLibraryType(pShaderStageInfo->stages[stageIndex].stage);
+
+            if (Util::TestAnyFlagSet(gplBuildMask, 1 << gplType))
+            {
+                continue;
+            }
+
+            if ((GetVkGraphicsLibraryFlagBit(pShaderStageInfo->stages[stageIndex].stage) & pLibInfo->libFlags) == 0)
+            {
+                continue;
+            }
+
+            if ((pShaderStageInfo->stages[stageIndex].stage != ShaderStage::ShaderStageFragment) ||
+                (IsRasterizationDisabled(pCreateInfo, pLibInfo, dynamicStateFlags) == false))
+            {
+                gplBuildMask    |= (1 << gplType);
+                shaderBuildMask |= (1 << stageIndex);
+            }
+        }
+    }
+
+    return shaderBuildMask;
+}
+
+// =====================================================================================================================
 VkResult GraphicsPipelineLibrary::Create(
     Device*                             pDevice,
     PipelineCache*                      pPipelineCache,
@@ -492,7 +534,7 @@ VkResult GraphicsPipelineLibrary::Create(
     size_t   apiSize = 0;
     void*    pSysMem = nullptr;
 
-    GraphicsPipelineLibraryInfo libInfo;
+    GraphicsPipelineLibraryInfo libInfo = {};
     ExtractLibraryInfo(pDevice, pCreateInfo, extStructs, flags, &libInfo);
 
     GraphicsPipelineBinaryCreateInfo binaryCreateInfo = {};
@@ -524,14 +566,59 @@ VkResult GraphicsPipelineLibrary::Create(
     ShaderModuleHandle    tempModules[ShaderStage::ShaderStageGfxCount]         = {};
     PipelineOptimizerKey  pipelineOptimizerKey                                  = {};
     ShaderOptimizerKey    shaderOptimizerKeys[ShaderStage::ShaderStageGfxCount] = {};
-    uint64_t              apiPsoHash                                            = {};
+    uint64_t              apiPsoHash                                            = 0;
     Util::MetroHash::Hash elfHash                                               = {};
+    Util::MetroHash::Hash cacheIds[GraphicsLibraryCount]                        = {};
+    bool                  binariesProvided                                      = false;
+    Util::MetroHash::Hash providedElfHash                                       = {};
+    uint32_t              providedLibraryMask                                   = 0;
+
+    const VkPipelineBinaryInfoKHR* pPipelineBinaryInfoKHR = extStructs.pPipelineBinaryInfoKHR;
+
+    if (pPipelineBinaryInfoKHR != nullptr)
+    {
+        binariesProvided = (pPipelineBinaryInfoKHR->binaryCount > 0);
+
+        for (uint32_t binaryIdx = 0; binaryIdx < pPipelineBinaryInfoKHR->binaryCount; ++binaryIdx)
+        {
+            const auto pBinary = PipelineBinary::ObjectFromHandle(pPipelineBinaryInfoKHR->pPipelineBinaries[binaryIdx]);
+
+            constexpr uint32_t MetadataSize = sizeof(PipelineBinaryGplMetadata);
+
+            const void* pMemory = pBinary->BinaryData().pCode;
+
+            // Retrieve GPL metadata needed for pipeline binary from the GPL binary
+            const auto pGplMetadata = static_cast<const PipelineBinaryGplMetadata*>(pMemory);
+
+            const GraphicsLibraryType gplType = pGplMetadata->gplType;
+            providedElfHash                   = pGplMetadata->elfHash;
+            pMemory = Util::VoidPtrInc(pMemory, MetadataSize);
+
+            // Set cacheIds with cache Ids that includes hashes of spir-v code and populate the elf binary
+            cacheIds[gplType]                                  = pBinary->BinaryKey();
+            binaryCreateInfo.earlyElfPackage[gplType].codeSize = pBinary->BinaryData().codeSize - MetadataSize;
+            binaryCreateInfo.earlyElfPackage[gplType].pCode    = pMemory;
+
+            // Track provided libraries
+            providedLibraryMask |= 1 << gplType;
+        }
+    }
 
     static_assert(VK_ARRAY_SIZE(shaderOptimizerKeys) == VK_ARRAY_SIZE(shaderStageInfo.stages),
                   "Please ensure stage count matches between gfx profile key and shader stage info.");
 
-    // 1. Create Api PSO Hash and Elf Hash
-    result = CreateApiPsoHashAndElfHash(
+    // 1. Get pipeline layout
+    const PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
+
+    if (pPipelineLayout == nullptr)
+    {
+        pPipelineLayout = pDevice->GetNullPipelineLayout();
+    }
+
+    PipelineMetadata binaryMetadata = {};
+
+    // 2. Create Api PSO Hash, Elf Hash and CacheId
+    result = GraphicsPipelineLibrary::CreateCacheId(
         pDevice,
         pCreateInfo,
         extStructs,
@@ -539,15 +626,41 @@ VkResult GraphicsPipelineLibrary::Create(
         flags,
         &shaderStageInfo,
         &binaryCreateInfo,
+        pPipelineLayout,
         shaderOptimizerKeys,
         &pipelineOptimizerKey,
         &apiPsoHash,
+        &elfHash,
         tempModules,
-        &elfHash);
+        &binaryMetadata,
+        binaryCreateInfo.earlyElfPackageHash);
 
-    // 2. Initialize tempModuleStates
     if (result == VK_SUCCESS)
     {
+        pDevice->GetCompiler(DefaultDeviceIndex)->ConvertGraphicsPipelineExecutableState(
+            pDevice,
+            pCreateInfo,
+            libInfo,
+            flags,
+            &shaderStageInfo,
+            pPipelineLayout,
+            &binaryCreateInfo);
+
+        if (binariesProvided)
+        {
+            // Override elfHash and cacheId hashes with ones that include hash values calculated using spir-v code, as
+            // pipeline_binary allows spir-v to be omitted when using pipeline binary objects to create the pipelines.
+            // Using the elfHash and cacheIds calculated previously allows cache lookups to succeed.  The calculation of
+            // cacheIds must occur regardless to set up the necessary state for pipeline library creation to succeed.
+            elfHash = providedElfHash;
+
+            for (uint32_t gplType = 0; gplType < GraphicsLibraryCount; ++gplType)
+            {
+                binaryCreateInfo.earlyElfPackageHash[gplType] = cacheIds[gplType];
+            }
+        }
+
+        // 3. Initialize tempModuleStates
         binaryCreateInfo.apiPsoHash = apiPsoHash;
 
         for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; stage++)
@@ -568,37 +681,12 @@ VkResult GraphicsPipelineLibrary::Create(
         }
     }
 
-    // 3. Get pipeline layout
-    const PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
-
-    if (pPipelineLayout == nullptr)
-    {
-        pPipelineLayout = pDevice->GetNullPipelineLayout();
-    }
-
-    // 4. Populate binary create info
-    PipelineMetadata binaryMetadata = {};
-    if (result == VK_SUCCESS)
-    {
-        result = pDevice->GetCompiler(DefaultDeviceIndex)->ConvertGraphicsPipelineInfo(
-            pDevice,
-            pCreateInfo,
-            extStructs,
-            libInfo,
-            flags,
-            &shaderStageInfo,
-            pPipelineLayout,
-            &pipelineOptimizerKey,
-            &binaryMetadata,
-            &binaryCreateInfo);
-    }
-
     PipelineBinaryStorage binaryStorage         = {};
     const bool            storeBinaryToPipeline = (flags & VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR) != 0;
 
     if (result == VK_SUCCESS)
     {
-        // 5. Create partial pipeline binary for fast-link
+        // 4. Create partial pipeline binary for fast-link
         result = CreatePartialPipelineBinary(
             pDevice,
             pPipelineCache,
@@ -610,7 +698,7 @@ VkResult GraphicsPipelineLibrary::Create(
             pAllocator,
             tempModuleStates);
 
-        // 6. Store created binaries for pipeline_binary
+        // 5. Store created binaries for pipeline_binary
         if ((result == VK_SUCCESS) && storeBinaryToPipeline)
         {
             uint32 binaryIndex = 0;
@@ -621,32 +709,17 @@ VkResult GraphicsPipelineLibrary::Create(
                     (binaryCreateInfo.earlyElfPackage[gplType].pCode    != nullptr) &&
                     (result == VK_SUCCESS))
                 {
-                    const size_t storageSize = sizeof(GraphicsLibraryType) +
-                        binaryCreateInfo.earlyElfPackage[gplType].codeSize;
+                    result = GraphicsPipelineLibrary::WriteGplAndMetadataToPipelineBinary(
+                        pAllocator,
+                        binaryCreateInfo.earlyElfPackage[gplType],
+                        binaryCreateInfo.earlyElfPackageHash[gplType],
+                        static_cast<GraphicsLibraryType>(gplType),
+                        elfHash,
+                        binaryIndex,
+                        &binaryStorage);
 
-                    void* pMemory = pAllocator->pfnAllocation(
-                        pAllocator->pUserData,
-                        storageSize,
-                        VK_DEFAULT_MEM_ALIGN,
-                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);     // retained in the GPL pipeline object
-
-                    if (pMemory != nullptr)
+                    if (result == VK_SUCCESS)
                     {
-                        // Store the GraphicsLibraryType identifier with the binary
-                        *static_cast<GraphicsLibraryType*>(pMemory) = static_cast<GraphicsLibraryType>(gplType);
-
-                        memcpy(
-                            Util::VoidPtrInc(pMemory, sizeof(GraphicsLibraryType)),
-                            binaryCreateInfo.earlyElfPackage[gplType].pCode,
-                            binaryCreateInfo.earlyElfPackage[gplType].codeSize);
-
-                        InsertBinaryData(
-                            &binaryStorage,
-                            binaryIndex,
-                            binaryCreateInfo.earlyElfPackageHash[gplType],
-                            storageSize,
-                            pMemory);
-
                         ++binaryIndex;
                     }
                     else
@@ -681,7 +754,7 @@ VkResult GraphicsPipelineLibrary::Create(
 
     if (result == VK_SUCCESS)
     {
-        // 7. Build pipeline object create info
+        // 6. Build pipeline object create info
         BuildPipelineObjectCreateInfo(
             pDevice,
             pCreateInfo,
@@ -739,6 +812,7 @@ VkResult GraphicsPipelineLibrary::Create(
             apiPsoHash,
             tempModuleStates,
             pPermBinaryStorage,
+            providedLibraryMask,
             pPipelineLayout);
 
         *pPipeline = GraphicsPipelineLibrary::HandleFromVoidPointer(pSysMem);
@@ -779,7 +853,7 @@ VkResult GraphicsPipelineLibrary::Create(
 }
 
 // =====================================================================================================================
-VkResult GraphicsPipelineLibrary::CreateApiPsoHashAndElfHash(
+VkResult GraphicsPipelineLibrary::CreateCacheId(
     const Device*                           pDevice,
     const VkGraphicsPipelineCreateInfo*     pCreateInfo,
     const GraphicsPipelineExtStructs&       extStructs,
@@ -787,11 +861,14 @@ VkResult GraphicsPipelineLibrary::CreateApiPsoHashAndElfHash(
     VkPipelineCreateFlags2KHR               flags,
     GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
     GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
+    const PipelineLayout*                   pPipelineLayout,
     ShaderOptimizerKey*                     pShaderOptimizerKeys,
     PipelineOptimizerKey*                   pPipelineOptimizerKey,
     uint64_t*                               pApiPsoHash,
+    Util::MetroHash::Hash*                  pElfHash,
     ShaderModuleHandle*                     pTempModules,
-    Util::MetroHash::Hash*                  pElfHash)
+    PipelineMetadata*                       pBinaryMetadata,
+    Util::MetroHash::Hash*                  pCacheIds)
 {
     // 1. Build shader stage infos
     VkResult result = BuildShaderStageInfo(pDevice,
@@ -825,6 +902,89 @@ VkResult GraphicsPipelineLibrary::CreateApiPsoHashAndElfHash(
                      *pBinaryCreateInfo,
                      pApiPsoHash,
                      pElfHash);
+
+        // 4. Populate binary create info
+        result = pDevice->GetCompiler(DefaultDeviceIndex)->ConvertGraphicsPipelineInfo(
+            pDevice,
+            pCreateInfo,
+            extStructs,
+            libInfo,
+            flags,
+            pShaderStageInfo,
+            pPipelineLayout,
+            pPipelineOptimizerKey,
+            pBinaryMetadata,
+            pBinaryCreateInfo);
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        // 5. Create CacheIds
+        CreateFinalCacheIds(
+            pDevice,
+            pCreateInfo,
+            &libInfo,
+            pShaderStageInfo,
+            pBinaryCreateInfo);
+
+        // 6. Copy CacheIds
+        for (uint32_t gplType = 0; gplType < GraphicsLibraryCount; ++gplType)
+        {
+            pCacheIds[gplType] = pBinaryCreateInfo->earlyElfPackageHash[gplType];
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+VkResult GraphicsPipelineLibrary::WriteGplAndMetadataToPipelineBinary(
+    const VkAllocationCallbacks*    pAllocator,
+    const Vkgc::BinaryData&         binaryData,
+    const Util::MetroHash::Hash&    cacheId,
+    const GraphicsLibraryType       gplType,
+    const Util::MetroHash::Hash&    elfHash,
+    const uint32_t                  binaryIndex,
+    PipelineBinaryStorage*          pBinaryStorage)
+{
+    VkResult           result       = VK_SUCCESS;
+    constexpr uint32_t MetadataSize = sizeof(PipelineBinaryGplMetadata);
+    const size_t       storageSize  = MetadataSize + binaryData.codeSize;
+
+    void* pMemory = pAllocator->pfnAllocation(
+        pAllocator->pUserData,
+        storageSize,
+        VK_DEFAULT_MEM_ALIGN,
+        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);     // retained in the pipeline object
+
+    if (pMemory != nullptr)
+    {
+        void* pCode = pMemory;
+
+        // Store GPL metadata needed for pipeline binary with the GPL binary
+        *static_cast<PipelineBinaryGplMetadata*>(pCode) =
+            {
+                .gplType = gplType,
+                .elfHash = elfHash
+            };
+        pCode = Util::VoidPtrInc(pCode, MetadataSize);
+
+        // Store the library binary
+        memcpy(
+            pCode,
+            binaryData.pCode,
+            binaryData.codeSize);
+
+        InsertBinaryData(
+            pBinaryStorage,
+            binaryIndex,
+            cacheId,
+            storageSize,
+            pMemory);
+    }
+    else
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
     return result;
@@ -857,7 +1017,8 @@ VkResult GraphicsPipelineLibrary::Destroy(
     for (uint32_t i = 0; i < ArrayLen(m_pBinaryCreateInfo->pShaderLibraries); ++i)
     {
         Pal::IShaderLibrary* pShaderLib = m_pBinaryCreateInfo->pShaderLibraries[i];
-        if (Util::TestAnyFlagSet(libraryMask, 1 << i) && (pShaderLib != nullptr))
+        if ((Util::TestAnyFlagSet(libraryMask, 1 << i) || Util::TestAnyFlagSet(m_providedLibraryMask, 1 << i)) &&
+            (pShaderLib != nullptr))
         {
             pShaderLib->Destroy();
             pAllocator->pfnFree(pAllocator->pUserData, pShaderLib);
@@ -884,6 +1045,7 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
     const uint64_t                          apiHash,
     const GplModuleState*                   pGplModuleStates,
     PipelineBinaryStorage*                  pBinaryStorage,
+    const uint32_t                          providedLibraryMask,
     const PipelineLayout*                   pPipelineLayout)
     : GraphicsPipelineCommon(
 #if VKI_RAY_TRACING
@@ -894,7 +1056,8 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
       m_pBinaryCreateInfo(pBinaryInfo),
       m_libInfo(libInfo),
       m_elfHash(elfHash),
-      m_altLibrary(nullptr)
+      m_altLibrary(nullptr),
+      m_providedLibraryMask(providedLibraryMask)
 {
     Util::MetroHash::Hash dummyCacheHash = {};
     Pipeline::Init(

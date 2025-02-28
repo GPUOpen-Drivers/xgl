@@ -248,8 +248,7 @@ void VulkanSettingsLoader::OverrideDefaultsExperimentInfo()
 #if VKI_RAY_TRACING
     if (pExpSettings->expAccelStructureOpt.ValueOr(false))
     {
-        m_settings.rtEnableTreeRebraid            = RebraidTypeOff;
-        m_settings.rtEnableTriangleSplitting      = false;
+        m_settings.rtEnableRebraid                = false;
         m_settings.rtBvhBuildModeFastBuild        = BvhBuildModeLinear;
         m_settings.enablePairCompressionCostCheck = true;
     }
@@ -304,6 +303,11 @@ void VulkanSettingsLoader::OverrideDefaultsExperimentInfo()
         m_settings.allowExternalPipelineCacheObject = false;
     }
 
+    if (pExpSettings->expForceNonUniformResourceIndex.ValueOr(false))
+    {
+        m_settings.forceNonUniformDescriptorIndex = 0x3FFF;
+    }
+
     VK_SET_VAL_IF_EXPERIMENT_ENABLED(TextureColorCompression, forceDisableCompression, DisableCompressionForColor);
 
     PAL_SET_VAL_IF_EXPERIMENT_ENABLED(ZeroUnboundDescriptors, zeroUnboundDescDebugSrd, true);
@@ -327,6 +331,8 @@ void VulkanSettingsLoader::OverrideDefaultsExperimentInfo()
             PAL_ASSERT_ALWAYS();
         }
     }
+
+    VK_SET_VAL_IF_EXPERIMENT_ENABLED(DisableMultiSubmitChaining, multiSubmitChaining, false);
 }
 
 // =====================================================================================================================
@@ -370,6 +376,8 @@ void VulkanSettingsLoader::FinalizeExperiments()
 #if VKI_RAY_TRACING
     pExpSettings->expRayTracingPipelineCompilationMode = (m_settings.rtCompileMode == RtCompileModeIndirect);
 #endif
+
+    pExpSettings->expForceNonUniformResourceIndex = (m_settings.forceNonUniformDescriptorIndex == 0x3FFF);
 
     pExpSettings->expTextureColorCompression = m_settings.forceDisableCompression == DisableCompressionForColor;
 
@@ -518,7 +526,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     if (appProfile == AppProfile::Doom)
     {
-        m_settings.enableSpvPerfOptimal = true;
 
         m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
 
@@ -555,7 +562,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     if (appProfile == AppProfile::WolfensteinII)
     {
-        m_settings.zeroInitIlRegs = true;
 
         m_settings.disableSingleMipAnisoOverride = false;
 
@@ -565,14 +571,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
             m_settings.mallNoAllocCtSsrPolicy = MallNoAllocCtSsrAsSnsr;
         }
- #if VKI_BUILD_GFX115
         else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_5)
         {
             m_settings.pipelineBinningMode = PipelineBinningModeEnable;
             m_settings.disableBinningPsKill = DisableBinningPsKillTrue;
             m_settings.overrideWgpMode = WgpModeWgp;
         }
-#endif
 
         // Don't enable DCC for color attachments aside from those listed in the app_resource_optimizer
         m_settings.forceEnableDcc = ForceDccDefault;
@@ -615,7 +619,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     if ((appProfile == AppProfile::WolfensteinII) ||
         (appProfile == AppProfile::WolfensteinYoungblood))
     {
-        m_settings.enableSpvPerfOptimal = true;
 
         m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
 
@@ -752,7 +755,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     if (appProfile == AppProfile::IdTechEngine)
     {
-        m_settings.enableSpvPerfOptimal = true;
 
         // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
         // can't do any better than returning a non-null function pointer for them.
@@ -1210,7 +1212,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.forceEnableDcc      |= ForceDccForNonColorAttachmentShaderStorage;
             }
-
         }
 
         m_settings.ac01WaNotNeeded = true;
@@ -1241,8 +1242,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.csWaveSize = 64;
             m_settings.fsWaveSize = 64;
         }
-
-        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
         {
             m_settings.csWaveSize = 64;
             m_settings.fsWaveSize = 64;
@@ -1276,20 +1276,16 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.memoryDeviceOverallocationAllowed = true;
             }
         }
-
-        if (IsGfx11(pInfo->gfxLevel))
+        else if (IsGfx11(pInfo->gfxLevel))
         {
 
-#if VKI_BUILD_GFX115
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_5)
             {
                 m_settings.pipelineBinningMode = PipelineBinningModeDisable;
                 m_settings.csWaveSize = 64;
                 m_settings.fsWaveSize = 64;
             }
-#endif
         }
-
     }
 
     if (appProfile == AppProfile::Quake)
@@ -1349,8 +1345,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     if (appProfile == AppProfile::RayTracingWeekends)
     {
-        m_settings.rtEnableTopDownBuild = true;
-
         if (pInfo->gfxipProperties.shaderCore.vgprsPerSimd == 1024)
         {
             {
@@ -1372,8 +1366,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         // PM4 optimizations give us 1% gain
         m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
-
-        m_settings.enableSpvPerfOptimal = true;
 
         // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
         // can't do any better than returning a non-null function pointer for them.
@@ -1505,7 +1497,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.forceMinImageCount = 3;
 
         m_settings.enableDumbTransitionSync = false;
-        m_settings.forceDisableGlobalBarrierCacheSync = true;
     }
 
     if (appProfile == AppProfile::MetroExodus)
@@ -1674,7 +1665,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     if (appProfile == AppProfile::Enscape)
     {
-        m_settings.enableSpvPerfOptimal    = true;
         m_settings.optimizeCmdbufMode      = EnableOptimizeCmdbuf;
         m_settings.enableAceShaderPrefetch = false;
 
@@ -1767,6 +1757,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     if (appProfile == AppProfile::PortalPreludeRTX)
     {
         m_settings.forceComputeQueueCount = 2;
+    }
+
+    if (appProfile == AppProfile::Creo)
+    {
+        m_settings.enableD24AsD32 = true;
     }
 
     return result;
@@ -1967,12 +1962,6 @@ void VulkanSettingsLoader::ValidateSettings()
         m_settings.bvhBuildModeOverrideTlas = buildMode;
     }
 
-    // Compression is not compatible with collapse or triangle splitting.
-    if (m_settings.rtEnableTriangleSplitting)
-    {
-        m_settings.rtTriangleCompressionMode = NoTriangleCompression;
-    }
-
     // Clamp target occupancy to [0.0, 1.0]
     m_settings.indirectCallTargetOccupancyPerSimd =
         Util::Clamp(m_settings.indirectCallTargetOccupancyPerSimd, 0.0f ,1.0f);
@@ -2050,10 +2039,55 @@ void VulkanSettingsLoader::ValidateSettings()
 }
 
 // =====================================================================================================================
+static void UpdateDeviceGeneratedCommandsPalSettings(
+    Pal::PalPublicSettings*     pPalSettings,
+    const Pal::DeviceProperties info)
+{
+    bool enablePacketPath = false;
+
+    const Pal::AsicRevision asic          = info.revision;
+    const Pal::GfxIpLevel   gfxLevel      = info.gfxLevel;
+    const uint32_t          pfpVersion    = info.gfxipProperties.pfpUcodeVersion;
+    const bool              isDiscreteGpu = (info.gpuType == Pal::GpuType::Discrete);
+
+    constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessStrixSeries = 40;
+
+    // This part of code must be logically consistent with IsDeviceGeneratedCommandsSupported()
+    if (isDiscreteGpu)
+    {
+        enablePacketPath = true;
+    }
+    else
+    {
+        switch (gfxLevel)
+        {
+        case Pal::GfxIpLevel::GfxIp10_1:
+            VK_NEVER_CALLED(); // dGPU only
+            break;
+
+        case Pal::GfxIpLevel::GfxIp10_3:
+        case Pal::GfxIpLevel::GfxIp11_0:
+        case Pal::GfxIpLevel::GfxIp11_5:
+            enablePacketPath = false;
+            break;
+        default:
+            enablePacketPath = true; // We assume later ASICs are good to go
+            break;
+        }
+    }
+
+    pPalSettings->enableExecuteIndirectPacket      = enablePacketPath;
+    pPalSettings->disableExecuteIndirectAceOffload = true;
+}
+
+// =====================================================================================================================
 // Updates any PAL public settings based on our runtime settings if necessary.
 void VulkanSettingsLoader::UpdatePalSettings()
 {
     Pal::PalPublicSettings* pPalSettings = m_pDevice->GetPublicSettings();
+
+    Pal::DeviceProperties info;
+    m_pDevice->GetProperties(&info);
 
     pPalSettings->textureOptLevel = m_settings.vulkanTexFilterQuality;
 
@@ -2098,9 +2132,7 @@ void VulkanSettingsLoader::UpdatePalSettings()
 
     pPalSettings->rpmViewsBypassMall = static_cast<Pal::RpmViewsBypassMall>(m_settings.rpmViewsBypassMall);
 
-    // Allow Device Generated Commands to employ state-of-the-art CP Packet path whenever possible for optimal
-    // performance. Only obsolete Compute Shader path can be used otherwise.
-    pPalSettings->enableExecuteIndirectPacket = true;
+    UpdateDeviceGeneratedCommandsPalSettings(pPalSettings, info);
 
     // Controls PWS enable mode: disabled, fully enabled or partially enabled. Only takes effect if HW supports PWS and
     // Acq-rel barriers

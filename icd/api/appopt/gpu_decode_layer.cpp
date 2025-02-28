@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2020-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2020-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -711,7 +711,11 @@ static VkResult gpuBlitBuffer(
         for (uint32_t i = 0; i < regionBatch; ++i)
         {
             // For image-buffer copies we have to override the format for depth-only and stencil-only copies
-            VkFormat format = Formats::GetAspectFormat(dstFormat,pRegions[regionIdx + i].imageSubresource.aspectMask);
+            VkFormat format = Formats::GetAspectFormat(
+                dstFormat,
+                pRegions[regionIdx + i].imageSubresource.aspectMask,
+                settings);
+
             VK_ASSERT(VK_ENUM_IN_RANGE(format, VK_FORMAT));
             Pal::SwizzledFormat dstSwzFormat = vk::convert::VkToPalSwizzledFormatLookupTableStorage[dstFormat];
 

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -179,9 +179,7 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     *pDeviceSettings                = {};
     const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
-    pDeviceSettings->topDownBuild                 = settings.rtEnableTopDownBuild;
-
-    pDeviceSettings->rebraidType                  = ConvertGpuRtRebraidType(settings.rtEnableTreeRebraid);
+    pDeviceSettings->enableRebraid                = settings.rtEnableRebraid;
     pDeviceSettings->fp16BoxNodesInBlasMode       =
         ConvertGpuRtFp16BoxNodesInBlasMode(settings.rtFp16BoxNodesInBlasMode);
 
@@ -198,10 +196,9 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
         fp16BoxMixedThreshold = settings.rtFp16BoxNodesInBlasModeMixedThreshold;
     }
 
-    pDeviceSettings->fp16BoxModeMixedSaThresh = Util::Clamp(fp16BoxMixedThreshold, 1.0f, 8.0f);
+    pDeviceSettings->fp16BoxModeMixedSaThresh          = Util::Clamp(fp16BoxMixedThreshold, 1.0f, 8.0f);
     pDeviceSettings->enableMortonCode30                = settings.rtEnableMortonCode30;
-    pDeviceSettings->enableVariableBitsMortonCodes     = settings.enableVariableBitsMortonCodes;
-    pDeviceSettings->enableFastLBVH                    = settings.rtEnableFastLbvh;
+    pDeviceSettings->mortonFlags                       = settings.mortonFlags;
     pDeviceSettings->enablePrefixScanDLB               = settings.rtEnablePrefixScanDlb;
 
     switch (settings.rtTriangleCompressionMode)
@@ -234,15 +231,10 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->bvhCpuBuildModeDefault            = static_cast<GpuRt::BvhCpuBuildMode>(settings.rtBvhCpuBuildMode);
     pDeviceSettings->bvhCpuBuildModeFastBuild          = static_cast<GpuRt::BvhCpuBuildMode>(settings.rtBvhCpuBuildMode);
 
-    pDeviceSettings->enableTriangleSplitting           = settings.rtEnableTriangleSplitting;
-    pDeviceSettings->triangleSplittingFactor           = settings.rtTriangleSplittingFactor;
-    pDeviceSettings->tsBudgetPerTriangle               = settings.rtTriangleSplittingBudgetPerTriangle;
-    pDeviceSettings->tsPriority                        = settings.rtTriangleSplittingPriority;
-
     pDeviceSettings->enableFusedInstanceNode           = settings.enableFusedInstanceNode;
     pDeviceSettings->rebraidFactor                     = settings.rebraidFactor;
-    pDeviceSettings->rebraidLengthPercentage           = settings.rebraidLengthPercentage;
-    pDeviceSettings->maxTopDownBuildInstances          = settings.maxTopDownBuildInstances;
+    pDeviceSettings->numRebraidIterations              = settings.numRebraidIterations;
+    pDeviceSettings->rebraidQualityHeuristic           = settings.rebraidQualityHeuristicType;
     pDeviceSettings->plocRadius                        = settings.plocRadius;
     pDeviceSettings->enablePairCompressionCostCheck    = settings.enablePairCompressionCostCheck;
     pDeviceSettings->accelerationStructureUUID         = GetAccelerationStructureUUID(
@@ -257,11 +249,6 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
 
     // Enable AS stats based on panel setting
     pDeviceSettings->enableBuildAccelStructStats        = settings.rtEnableBuildAccelStructStats;
-    // Number of Rebraid Iterations and rebraid Quality Heuristics
-    pDeviceSettings->numRebraidIterations               = settings.numRebraidIterations;
-    pDeviceSettings->rebraidQualityHeuristic            = settings.rebraidQualityHeuristicType;
-
-    pDeviceSettings->enableEarlyPairCompression         = false;
 
     pDeviceSettings->rgpBarrierReason   = RgpBarrierInternalRayTracingSync;
     m_profileRayFlags                   = TraceRayProfileFlagsToRayFlag(settings);
@@ -276,6 +263,8 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->enableMergedEncodeUpdate = settings.enableMergedEncodeUpdate;
     pDeviceSettings->checkBufferOverlapsInBatch = settings.rtCheckBufferOverlapsInBatch;
     pDeviceSettings->disableCompaction          = settings.rtDisableAccelStructCompaction;
+    pDeviceSettings->disableRdfCompression      = (settings.enableGpurtRdfCompression == false);
+    pDeviceSettings->disableDegenPrims          = settings.disableDegenPrims;
 }
 
 // =====================================================================================================================
@@ -380,6 +369,40 @@ bool RayTracingDevice::AccelStructTrackerEnabled(
     // Enable tracking when forced on in the panel or the GPURT trace source is enabled.
     return ((GetAccelStructTracker(deviceIdx) != nullptr) && (
             m_pGpuRtDevice[deviceIdx]->AccelStructTraceEnabled()));
+}
+
+// ====================================================================================================================
+// Synchronize Rt Commands for indirect argument generation shader or ray tracing dispatches
+void RayTracingDevice::SyncRtCommands(
+    Pal::ICmdBuffer* pCmdBuffer,
+    RtBarrierMode    barrierMode)
+{
+    Pal::AcquireReleaseInfo acqRelInfo    = {};
+    Pal::MemBarrier         memTransition = {};
+
+    memTransition.srcStageMask  = Pal::PipelineStageCs;
+    memTransition.srcAccessMask = Pal::CoherShader;
+
+    switch (barrierMode)
+    {
+    case RtBarrierMode::Dispatch:
+        memTransition.dstStageMask  = Pal::PipelineStageCs;
+        memTransition.dstAccessMask = Pal::CoherShader;
+        break;
+    case RtBarrierMode::IndirectArg:
+        memTransition.dstStageMask  = Pal::PipelineStageFetchIndirectArgs;
+        memTransition.dstAccessMask = Pal::CoherShader | Pal::CoherIndirectArgs;
+        break;
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+
+    acqRelInfo.pMemoryBarriers    = &memTransition;
+    acqRelInfo.memoryBarrierCount = 1;
+    acqRelInfo.reason             = RgpBarrierInternalRayTracingSync;
+
+    pCmdBuffer->CmdReleaseThenAcquire(acqRelInfo);
 }
 
 // =====================================================================================================================
@@ -834,8 +857,9 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
                 .pCode    = buildInfo.code.pSpvCode
             };
 
-        Vkgc::ResourceMappingRootNode nodes[GpuRt::MaxInternalPipelineNodes]    = {};
-        Vkgc::ResourceMappingNode subNodes[GpuRt::MaxInternalPipelineNodes]     = {};
+        // The "+ 1" is for the possible debug printf user node
+        Vkgc::ResourceMappingRootNode nodes[GpuRt::MaxInternalPipelineNodes + 1]    = {};
+        Vkgc::ResourceMappingNode subNodes[GpuRt::MaxInternalPipelineNodes + 1]     = {};
         uint32_t subNodeIndex = 0;
         const uint32_t typedBufferSrdSizeDw   =
             pDevice->GetProperties().descriptorSizes.typedBufferView / sizeof(uint32_t);
@@ -843,7 +867,9 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
             pDevice->GetProperties().descriptorSizes.untypedBufferView / sizeof(uint32_t);
 
         const uint32_t imageBufferSrdSizeDw = pDevice->GetProperties().descriptorSizes.imageView / sizeof(uint32_t);
-        const uint32_t maxBufferTableSize = Util::Pow2AlignDown(UINT_MAX, imageBufferSrdSizeDw);
+        uint32_t alignment = Util::Lcm(typedBufferSrdSizeDw, untypedBufferSrdSizeDw);
+        alignment = Util::Lcm(alignment, imageBufferSrdSizeDw);
+        const uint32_t maxBufferTableSize = Util::RoundDownToMultiple(UINT_MAX, alignment);
 
         for (uint32_t nodeIndex = 0; nodeIndex < buildInfo.nodeCount; ++nodeIndex)
         {
@@ -992,9 +1018,25 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
             }
         }
 
+        uint32_t nodeCount = buildInfo.nodeCount;
+        if (pDevice->GetEnabledFeatures().enableDebugPrintf)
+        {
+            uint32_t debugPrintfOffset = nodes[nodeCount - 1].node.offsetInDwords +
+                nodes[nodeCount - 1].node.sizeInDwords;
+
+            PipelineLayout::BuildLlpcDebugPrintfMapping(
+                Vkgc::ShaderStageComputeBit,
+                debugPrintfOffset,
+                1u,
+                &nodes[nodeCount],
+                &nodeCount,
+                &subNodes[subNodeIndex],
+                &subNodeIndex);
+        }
+
         result = pDevice->CreateInternalComputePipeline(spvBin.codeSize,
                                                         static_cast<const uint8_t*>(spvBin.pCode),
-                                                        buildInfo.nodeCount,
+                                                        nodeCount,
                                                         nodes,
                                                         ShaderModuleInternalRayTracingShader,
                                                         waveSize,

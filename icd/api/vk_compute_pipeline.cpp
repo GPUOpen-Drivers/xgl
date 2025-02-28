@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -544,8 +544,8 @@ VkResult ComputePipeline::Create(
     if (result == VK_SUCCESS)
     {
         localPipelineInfo.pipeline.flags.clientInternal = false;
-        localPipelineInfo.pipeline.pipelineBinarySize   = pipelineBinaries[DefaultDeviceIndex].codeSize;
-        localPipelineInfo.pipeline.pPipelineBinary      = pipelineBinaries[DefaultDeviceIndex].pCode;
+        localPipelineInfo.pipeline.pipelineBinarySize = pipelineBinaries[DefaultDeviceIndex].codeSize;
+        localPipelineInfo.pipeline.pPipelineBinary = pipelineBinaries[DefaultDeviceIndex].pCode;
 
         pipelineSize =
             pDevice->PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(localPipelineInfo.pipeline, &palResult);
@@ -847,14 +847,13 @@ void ComputePipeline::BindToCmdBuffer(
         params.pPipeline = m_pPalPipeline[deviceIdx];
 
         pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdBindPipeline(params);
-        uint32_t debugPrintfRegBase = (m_userDataLayout.scheme == PipelineLayoutScheme::Compact) ?
-            m_userDataLayout.compact.debugPrintfRegBase : m_userDataLayout.indirect.debugPrintfRegBase;
+
         pCmdBuffer->GetDebugPrintf()->BindPipeline(m_pDevice,
                                                    this,
                                                    deviceIdx,
                                                    pCmdBuffer->PalCmdBuffer(deviceIdx),
                                                    static_cast<uint32_t>(Pal::PipelineBindPoint::Compute),
-                                                   debugPrintfRegBase);
+                                                   m_userDataLayout.common.debugPrintfRegBase);
     }
 }
 

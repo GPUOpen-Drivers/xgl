@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -138,7 +138,8 @@ private:
             uint32_t createProtected       : 1;   // VK_BUFFER_CREATE_PROTECTED_BIT
             uint32_t reserved2             : 1;
             uint32_t usageDescriptor       : 1;   // VK_BUFFER_USAGE_DESCRIPTOR_BUFFER_BIT_EXT
-            uint32_t reserved              : 20;
+            uint32_t reserved3             : 1;
+            uint32_t reserved              : 19;
         };
         uint32_t     u32All;
     };

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1813,7 +1813,7 @@ namespace convert
 // Converts Vulkan format to PAL equivalent.
 inline Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings& settings)
 {
-    if (settings.enableD24S8)
+    if (settings.enableD24AsD32)
     {
         if (format == VK_FORMAT_D24_UNORM_S8_UINT)
         {
@@ -1836,6 +1836,7 @@ inline Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings&
             format = convertCompressedFormat(format, settings.enableBc3Encoder);
         }
 #endif
+
         return convert::VkToPalSwizzledFormatLookupTableStorage[format];
     }
     else
@@ -3995,6 +3996,7 @@ VkResult InitializeUberFetchShaderFormatTable(
     UberFetchShaderFormatInfoMap* pFormatInfoMap);
 
 UberFetchShaderFormatInfo GetUberFetchShaderFormatInfo(
+    Pal::GfxIpLevel                     gfxip,
     const UberFetchShaderFormatInfoMap* pFormatInfoMap,
     const VkFormat                      vkFormat,
     const bool                          isZeroStride,

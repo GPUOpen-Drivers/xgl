@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -546,6 +546,8 @@ VkResult Device::Create(
                 {
                     pushDescriptorsEnabled = true;
                 }
+
+                break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
@@ -565,8 +567,9 @@ VkResult Device::Create(
                 if (reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->robustBufferAccess2)
                 {
                     deviceFeatures.robustBufferAccessExtended = true;
-
-                    deviceFeatures.robustVertexBufferExtend = true;
+                    {
+                        deviceFeatures.robustVertexBufferExtend = true;
+                    }
                 }
 
                 if (reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->robustImageAccess2)
@@ -614,29 +617,29 @@ VkResult Device::Create(
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT:
             {
-               if (reinterpret_cast<const VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT*>(
-                   pHeader)->pageableDeviceLocalMemory)
-               {
-                   pageableDeviceLocalMemory = true;
-               }
+                if (reinterpret_cast<const VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT*>(
+                    pHeader)->pageableDeviceLocalMemory)
+                {
+                    pageableDeviceLocalMemory = true;
+                }
 
                 if (enabledDeviceExtensions.IsExtensionEnabled(DeviceExtensions::EXT_MEMORY_PRIORITY) ||
                    (enabledDeviceExtensions.IsExtensionEnabled(DeviceExtensions::EXT_PAGEABLE_DEVICE_LOCAL_MEMORY) &&
                     pageableDeviceLocalMemory))
-               {
-                  deviceFeatures.appControlledMemPriority = true;
-               }
+                {
+                    deviceFeatures.appControlledMemPriority = true;
+                }
 
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES_KHR:
             {
-               if (reinterpret_cast<const VkPhysicalDeviceMaintenance4FeaturesKHR*>(
-                   pHeader)->maintenance4)
-               {
-                   maintenance4Enabled = true;
-               }
+                if (reinterpret_cast<const VkPhysicalDeviceMaintenance4FeaturesKHR*>(
+                    pHeader)->maintenance4)
+                {
+                    maintenance4Enabled = true;
+                }
 
                 break;
             }
@@ -1198,20 +1201,9 @@ VkResult Device::Initialize(
 #endif
     m_properties.virtualMemAllocGranularity        = deviceProps.gpuMemoryProperties.virtualMemAllocGranularity;
     m_properties.virtualMemPageSize                = deviceProps.gpuMemoryProperties.virtualMemPageSize;
-    m_properties.descriptorSizes.typedBufferView   = deviceProps.gfxipProperties.srdSizes.typedBufferView;
-    m_properties.descriptorSizes.untypedBufferView = deviceProps.gfxipProperties.srdSizes.untypedBufferView;
-    m_properties.descriptorSizes.imageView         = deviceProps.gfxipProperties.srdSizes.imageView;
-    m_properties.descriptorSizes.fmaskView         = deviceProps.gfxipProperties.srdSizes.fmaskView;
-    m_properties.descriptorSizes.sampler           = deviceProps.gfxipProperties.srdSizes.sampler;
-    m_properties.descriptorSizes.bvh               = deviceProps.gfxipProperties.srdSizes.bvh;
-    // Size of combined image samplers is the sum of the image and sampler SRD sizes (8DW + 4DW)
-    m_properties.descriptorSizes.combinedImageSampler =
-        m_properties.descriptorSizes.imageView +
-        m_properties.descriptorSizes.sampler;
 
-    // The worst case alignment requirement of descriptors is always 2DWs. There's no way to query this from PAL yet,
-    // but for now a hard coded value will do the job.
-    m_properties.descriptorSizes.alignmentInDwords = 2;
+    // Setup descriptorSizes with Pal::DeviceProperties.
+    m_properties.descriptorSizes = pPhysicalDevice->GetDescriptorSizes();
 
     m_properties.palSizes.colorTargetView  = PalDevice(DefaultDeviceIndex)->GetColorTargetViewSize(nullptr);
     m_properties.palSizes.depthStencilView = PalDevice(DefaultDeviceIndex)->GetDepthStencilViewSize(nullptr);
@@ -1956,8 +1948,6 @@ VkResult Device::CreateInternalComputePipeline(
         auto pShaderInfo = &pipelineBuildInfo.pipelineInfo.cs;
 
         pShaderInfo->pModuleData         = ShaderModule::GetFirstValidShaderData(&shaderModule);
-        pipelineBuildInfo.compilerType   = pCompiler->CheckCompilerType(&pipelineBuildInfo.pipelineInfo, 0, 0);
-        pShaderInfo->pModuleData         = ShaderModule::GetShaderData(pipelineBuildInfo.compilerType, &shaderModule);
 
         pShaderInfo->pSpecializationInfo = pSpecializationInfo;
         pShaderInfo->pEntryTarget        = Vkgc::IUtil::GetEntryPointNameFromSpirvBinary(&spvBin);
@@ -1994,6 +1984,9 @@ VkResult Device::CreateInternalComputePipeline(
         default:
             VK_NEVER_CALLED();
         }
+
+        pipelineBuildInfo.compilerType = pCompiler->CheckCompilerType(&pipelineBuildInfo.pipelineInfo, 0, 0);
+        pShaderInfo->pModuleData = ShaderModule::GetShaderData(pipelineBuildInfo.compilerType, &shaderModule);
 
         Pal::ShaderHash codeHash = ShaderModule::GetCodeHash(
             ShaderModule::BuildCodeHash(
@@ -2908,9 +2901,7 @@ uint32_t Device::GetDefaultLdsSizePerThread(
     }
 
     // Clamp LDS size to maximum available based on thread group size
-    uint32_t ldsSizePerTread = ClampLdsStackSizeFromThreadGroupSize(ldsStackSize);
-
-    return ldsSizePerTread;
+    return ClampLdsStackSizeFromThreadGroupSize(ldsStackSize);
 }
 
 //=====================================================================================================================
@@ -2919,10 +2910,12 @@ uint32_t Device::GetDefaultLdsTraversalStackSize(
     bool isIndirect
     ) const
 {
-    uint32_t ldsSizePerTread = GetDefaultLdsSizePerThread(isIndirect);
+    uint32_t ldsStackSize = GetDefaultLdsSizePerThread(isIndirect);
 
-    // Clamp to power of 2
-    uint32_t ldsStackSize = 1 << Util::Log2(ldsSizePerTread);
+    {
+        // Clamp to power of 2
+        ldsStackSize = 1 << Util::Log2(ldsStackSize);
+    }
 
     return ldsStackSize;
 }
@@ -3312,10 +3305,15 @@ VkResult Device::WaitSemaphores(
                 currentSemaphore->RestoreSemaphore();
             }
 
-            const uint32 flags = (pWaitInfo->flags == VK_SEMAPHORE_WAIT_ANY_BIT) ? Pal::HostWaitFlags::HostWaitAny : 0;
+            const uint32 flags =
+                (pWaitInfo->flags == VK_SEMAPHORE_WAIT_ANY_BIT) ? uint32(Pal::HostWaitFlags::HostWaitAny) : 0;
 
-            palResult = PalDevice(DefaultDeviceIndex)->WaitForSemaphores(pWaitInfo->semaphoreCount, ppPalSemaphores,
-                    pWaitInfo->pValues, flags, Uint64ToChronoNano(timeout));
+            palResult = PalDevice(DefaultDeviceIndex)->WaitForSemaphores(
+                pWaitInfo->semaphoreCount,
+                ppPalSemaphores,
+                pWaitInfo->pValues,
+                flags,
+                Uint64ToChronoNano(timeout));
         }
 
         if (ppPalSemaphores != nullptr)
@@ -4172,7 +4170,7 @@ VkResult Device::SetDebugUtilsObjectName(
 
 // =====================================================================================================================
 uint32_t Device::GetBorderColorIndex(
-        const float*                 pBorderColor)
+    const float*                 pBorderColor)
 {
     uint32_t borderColorIndex = MaxBorderColorPaletteSize;
     bool     indexWasFound    = false;
@@ -4202,30 +4200,37 @@ uint32_t Device::GetBorderColorIndex(
 
 // =====================================================================================================================
 void Device::ReleaseBorderColorIndex(
-        uint32_t                     borderColorIndex)
+    uint32_t                     borderColorIndex)
 {
     MutexAuto lock(&m_borderColorMutex);
     m_pBorderColorUsedIndexes[borderColorIndex] = false;
 }
 
 // =====================================================================================================================
-void Device::ReserveBorderColorIndex(
+bool Device::ReserveBorderColorIndex(
     uint32                   borderColorIndex,
     const float*             pBorderColor)
 {
-    VK_ASSERT(m_pBorderColorUsedIndexes[borderColorIndex] == false);
+    MutexAuto lock(&m_borderColorMutex);
 
-    for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
+    const bool available = (m_pBorderColorUsedIndexes[borderColorIndex] == false);
+
+    if (available)
     {
-        m_perGpu[deviceIdx].pPalBorderColorPalette->Update(borderColorIndex, 1, pBorderColor);
+        for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
+        {
+            m_perGpu[deviceIdx].pPalBorderColorPalette->Update(borderColorIndex, 1, pBorderColor);
+        }
+
+        m_pBorderColorUsedIndexes[borderColorIndex] = true;
     }
 
-    m_pBorderColorUsedIndexes[borderColorIndex] = true;
+    return available;
 }
 
 // =====================================================================================================================
 bool Device::ReserveFastPrivateDataSlot(
-        uint64*                         pIndex)
+    uint64*                         pIndex)
 {
     Util::RWLockAuto<Util::RWLock::LockType::ReadWrite> lock(&m_privateDataRWLock);
     *pIndex = ++m_nextPrivateDataSlot - 1;
@@ -4236,8 +4241,9 @@ bool Device::ReserveFastPrivateDataSlot(
 // =====================================================================================================================
 // for extension private_data
 void* Device::AllocApiObject(
-        const VkAllocationCallbacks*    pAllocator,
-        const size_t                    totalObjectSize) const
+    const VkAllocationCallbacks*    pAllocator,
+    const size_t                    totalObjectSize
+    ) const
 {
     VK_ASSERT(pAllocator != nullptr);
 
@@ -4261,8 +4267,9 @@ void* Device::AllocApiObject(
 // =====================================================================================================================
 // for extension private_data
 void Device::FreeApiObject(
-        const VkAllocationCallbacks*    pAllocator,
-        void*                           pMemory) const
+    const VkAllocationCallbacks*    pAllocator,
+    void*                           pMemory
+    ) const
 {
     VK_ASSERT(pAllocator != nullptr);
 
@@ -4279,7 +4286,8 @@ void Device::FreeApiObject(
 
 // =====================================================================================================================
 void Device::FreeUnreservedPrivateData(
-        void*                           pMemory) const
+    void*                           pMemory
+    ) const
 {
     PrivateDataStorage* pPrivateDataStorage = static_cast<PrivateDataStorage*>(pMemory);
 
@@ -5131,6 +5139,38 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetGpaDeviceClockModeAMD(
             pInfo->memoryClockRatioToPeak = static_cast<float>(output.memoryClockFrequency) /
                                             properties.gpuMemoryProperties.performance.maxMemClock;
         }
+    }
+
+    return PalToVkResult(palResult);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetGpaDeviceClockInfoAMD(
+    VkDevice                                  device,
+    VkGpaDeviceGetClockInfoAMD*               pInfo)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    Pal::SetClockModeInput input = {};
+
+    input.clockMode = Pal::DeviceClockMode::Query;
+
+    Pal::SetClockModeOutput output = {};
+
+    // Get clock info for default device
+    Pal::Result palResult = pDevice->PalDevice(DefaultDeviceIndex)->SetClockMode(input, &output);
+
+    if (palResult == Pal::Result::Success)
+    {
+        const Pal::DeviceProperties& properties = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
+
+        pInfo->engineClockRatioToPeak = static_cast<float>(output.engineClockFrequency) /
+                                        properties.gfxipProperties.performance.maxGpuClock;
+        pInfo->memoryClockRatioToPeak = static_cast<float>(output.memoryClockFrequency) /
+                                        properties.gpuMemoryProperties.performance.maxMemClock;
+
+        pInfo->engineClockFrequency = output.engineClockFrequency;
+        pInfo->memoryClockFrequency = output.memoryClockFrequency;
     }
 
     return PalToVkResult(palResult);

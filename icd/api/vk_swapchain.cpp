@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -163,6 +163,14 @@ VkResult SwapChain::Create(
 #if PAL_AMDGPU_BUILD
     properties.imageCreateInfo.flags.initializeToZero = settings.initializeVramToZero;
 #endif
+
+    const uint32 bytesPerPixel = Pal::Formats::BytesPerPixel(properties.imageCreateInfo.swizzledFormat.format);
+
+    if ((settings.enable256KbSwizzleModes != Enable256KbSwizzleModes::Never) &&
+        (bytesPerPixel >= settings.enable256KbSwizzleModes))
+    {
+        properties.imageCreateInfo.flags.enable256KBSwizzleModes = 1;
+    }
 
     VkFormatProperties formatProperties;
     pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetFormatProperties(pCreateInfo->imageFormat, &formatProperties);

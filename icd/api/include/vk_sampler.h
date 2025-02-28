@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -50,6 +50,12 @@ public:
         const VkSamplerCreateInfo*      pCreateInfo,
         const VkAllocationCallbacks*    pAllocator,
         VkSampler*                      pSampler);
+
+    static void BuildSrd(
+        const Device*                         pDevice,
+        const VkSamplerCreateInfo*            pCreateInfo,
+        uint32_t                              borderColorIndex,
+        void*                                 pOut);
 
     VK_FORCEINLINE const void* Descriptor() const
     {
@@ -116,6 +122,12 @@ protected:
     static uint64_t BuildApiHash(
         const VkSamplerCreateInfo* pCreateInfo,
         const SamplerExtStructs&   extStructs);
+
+    static void ConvertSamplerCreateInfo(
+        const Device*                         pDevice,
+        const VkSamplerCreateInfo*            pCreateInfo,
+        Pal::SamplerInfo*                     pPalSamplerInfo,
+        SamplerExtStructs*                    pExtStructs);
 
     const uint64_t                        m_apiHash;
     const bool                            m_isYCbCrSampler;

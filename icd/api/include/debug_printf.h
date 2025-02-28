@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2023-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2023-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -31,6 +31,7 @@
 #include "palVector.h"
 #include <regex>
 #include "internal_mem_mgr.h"
+#include "g_palPipelineAbiMetadata.h"
 
 namespace Pal
 {
@@ -58,7 +59,8 @@ struct PrintfElfString
     }
 };
 
-typedef Util::HashMap<uint64_t, PrintfElfString, PalAllocator> PrintfFormatMap;
+typedef Util::HashMap<uint64_t, PrintfElfString, PalAllocator,
+                Util::DefaultHashFunc, Util::DefaultEqualFunc, Util::HashAllocator<PalAllocator>, 256> PrintfFormatMap;
 
 // =====================================================================================================================
 // Support the printf like solution in driver

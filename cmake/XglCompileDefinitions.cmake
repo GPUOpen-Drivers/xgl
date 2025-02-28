@@ -58,21 +58,11 @@ macro(xgl_set_compile_definitions)
     endif()
 #endif
 
-    if(VKI_SDK_NEXT)
-        target_compile_definitions(xgl PRIVATE VKI_SDK_NEXT)
-    endif()
-
     target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX9=1)
 
-#if VKI_BUILD_GFX115
-    if(VKI_BUILD_GFX115)
-        target_compile_definitions(xgl PRIVATE VKI_BUILD_GFX115=1)
-    endif()
-#endif
-
-#if VKI_BUILD_STRIX1
-    if(VKI_BUILD_STRIX1)
-        target_compile_definitions(xgl PRIVATE VKI_BUILD_STRIX1=1)
+#if VKI_BUILD_STRIX_HALO
+    if(VKI_BUILD_STRIX_HALO)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_STRIX_HALO=1)
     endif()
 #endif
 

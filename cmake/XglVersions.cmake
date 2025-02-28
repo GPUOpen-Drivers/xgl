@@ -30,7 +30,7 @@ include_guard()
 # This will become the value of PAL_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the PAL interface
 # that the ICD supports.  PAL uses this value to enable backwards-compatibility for older interface versions.
 # It must be updated on each PAL promotion after handling all of the interface changes described in palLib.h.
-set(VKI_PAL_CLIENT_MAJOR_VERSION "911")
+set(VKI_PAL_CLIENT_MAJOR_VERSION "917")
 
 # This will become the value of GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION.
 # It describes the interface version of the gpuopen shared module (part of PAL) that the ICD supports.
@@ -39,7 +39,7 @@ set(VKI_GPUOPEN_CLIENT_MAJOR_VERSION "42")
 #if VKI_RAY_TRACING
 # This will become the value of GPURT_CLIENT_INTERFACE_MAJOR_VERSION if VKI_RAY_TRACING=1.
 # It describes the interface version of the GpuRT shared module that the ICD supports.
-set(VKI_GPURT_CLIENT_MAJOR_VERSION "52")
+set(VKI_GPURT_CLIENT_MAJOR_VERSION "54")
 #endif
 
 # This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION if ICD_BUILD_LLPC=1.

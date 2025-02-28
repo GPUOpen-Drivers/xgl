@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1042,18 +1042,6 @@ void RenderPassBuilder::PostProcessSyncPoint(
         // Include implicit waiting and cache access
         ConvertImplicitSyncs(&pSyncPoint->barrier, settings);
 
-        // Need a global cache transition if any of the sync flags are set or if there's an app
-        // subpass dependency that requires cache synchronization.
-        if (((pSyncPoint->barrier.srcAccessMask != 0)         ||
-             (pSyncPoint->barrier.dstAccessMask != 0)         ||
-             (pSyncPoint->barrier.implicitSrcCacheMask != 0)  ||
-             (pSyncPoint->barrier.implicitDstCacheMask != 0)) &&
-            (pSyncPoint->transitions.NumElements() == 0))
-        {
-            // Need a global cache transition only if there are no image transitions.
-            pSyncPoint->barrier.flags.needsGlobalTransition = 1;
-        }
-
         bool hasChangingLayout             = false;
         bool isTransitioningOutOfUndefined = false;
 
@@ -1120,8 +1108,7 @@ void RenderPassBuilder::PostProcessSyncPoint(
                                           (pSyncPoint->barrier.dstStageMask == 0)) == false);
 
         // The barrier is active if it does any waiting or global cache synchronization or attachment transitions
-        if ((pSyncPoint->barrier.flags.needsGlobalTransition) ||
-            ((pSyncPoint->transitions.NumElements() > 0) && stageMasksNotEmpty))
+        if ((pSyncPoint->transitions.NumElements() > 0) && stageMasksNotEmpty)
         {
             pSyncPoint->flags.active = 1;
         }

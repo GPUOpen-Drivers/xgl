@@ -49,7 +49,7 @@ VkResult IndirectCommandsLayoutNV::Create(
     IndirectCommandsLayoutNV* pObject = nullptr;
 
     Pal::IndirectCmdGeneratorCreateInfo createInfo = {};
-    Pal::IndirectParam indirectParams[MaxIndirectTokenCount] = {};
+    Pal::IndirectParam indirectParams[MaxIndirectTokenCount * 2] = {};
     createInfo.pParams = &indirectParams[0];
 
     Pal::IIndirectCmdGenerator* pPalGenerator[MaxPalDevices] = {};
@@ -431,7 +431,7 @@ VkResult IndirectCommandsLayout::Create(
     IndirectCommandsLayout* pObject = nullptr;
 
     Pal::IndirectCmdGeneratorCreateInfo createInfo = {};
-    Pal::IndirectParam indirectParams[MaxIndirectTokenCount] = {};
+    Pal::IndirectParam indirectParams[MaxIndirectTokenCount * 2] = {};
     createInfo.pParams = &indirectParams[0];
 
     Pal::IIndirectCmdGenerator* pPalGenerator[MaxPalDevices] = {};

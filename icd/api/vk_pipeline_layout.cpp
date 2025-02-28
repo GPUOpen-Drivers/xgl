@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -319,7 +319,7 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
     memset(&(pInfo->userDataLayout), 0, sizeof(UserDataLayout));
     pInfo->userDataLayout.scheme = PipelineLayoutScheme::Compact;
 
-    pUserDataLayout->uberFetchConstBufRegBase    = InvalidReg;
+    pCommonUserDataLayout->uberFetchConstBufRegBase    = InvalidReg;
 
     VK_ASSERT(pIn->setLayoutCount <= MaxDescriptorSets);
 
@@ -369,12 +369,12 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
     // buffer is appended at the bottom of user data table.  Just following vertex buffer table.
     if (IsUberFetchShaderEnabled<PipelineLayoutScheme::Compact>(pDevice))
     {
-        VK_ASSERT(pUserDataLayout->uberFetchConstBufRegBase == InvalidReg);
+        VK_ASSERT(pCommonUserDataLayout->uberFetchConstBufRegBase == InvalidReg);
 
-        pUserDataLayout->uberFetchConstBufRegBase   = pInfo->userDataRegCount;
-        pInfo->userDataRegCount                     += 1;
-        pPipelineInfo->numUserDataNodes             += 1;
-        pPipelineInfo->numRsrcMapNodes              += 1;
+        pCommonUserDataLayout->uberFetchConstBufRegBase   = pInfo->userDataRegCount;
+        pInfo->userDataRegCount                           += 1;
+        pPipelineInfo->numUserDataNodes                   += 1;
+        pPipelineInfo->numRsrcMapNodes                    += 1;
     }
 
     // Reserve an user-data to store the VA of buffer for transform feedback.
@@ -388,10 +388,10 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
 
     if (pDevice->GetEnabledFeatures().enableDebugPrintf)
     {
-        pPipelineInfo->numUserDataNodes         += 1;
-        pUserDataLayout->debugPrintfRegBase     = pInfo->userDataRegCount;
-        pInfo->userDataRegCount                 += 1;
-        pPipelineInfo->numRsrcMapNodes          += 1;
+        pPipelineInfo->numUserDataNodes           += 1;
+        pCommonUserDataLayout->debugPrintfRegBase = pInfo->userDataRegCount;
+        pInfo->userDataRegCount                   += 1;
+        pPipelineInfo->numRsrcMapNodes            += 1;
     }
 
     // Allocate user data for the thread group reversal state
@@ -400,7 +400,7 @@ VkResult PipelineLayout::BuildCompactSchemeInfo(
         pIn,
         &pPipelineInfo->numUserDataNodes,
         &pInfo->userDataRegCount,
-        &pUserDataLayout->threadGroupReversalRegBase);
+        &pCommonUserDataLayout->threadGroupReversalRegBase);
 
     // Allocate user data for push constants
     pPipelineInfo->numUserDataNodes             += pushConstantsUserDataNodeCount;
@@ -617,10 +617,10 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
     // Allocate user data for constant buffer used by uber-fetch shader
     if (IsUberFetchShaderEnabled<PipelineLayoutScheme::Indirect>(pDevice))
     {
-        pUserDataLayout->uberFetchConstBufRegBase = pInfo->userDataRegCount;
-        pPipelineInfo->numUserDataNodes          += 1;
-        pPipelineInfo->numRsrcMapNodes           += 1;
-        pInfo->userDataRegCount                  += 1;
+        pCommonUserDataLayout->uberFetchConstBufRegBase = pInfo->userDataRegCount;
+        pPipelineInfo->numUserDataNodes                 += 1;
+        pPipelineInfo->numRsrcMapNodes                  += 1;
+        pInfo->userDataRegCount                         += 1;
     }
 
     // Allocate user data for push constants
@@ -640,14 +640,14 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
 
     if (pDevice->GetEnabledFeatures().enableDebugPrintf)
     {
-        pPipelineInfo->numUserDataNodes    += 1;
-        pUserDataLayout->debugPrintfRegBase = pInfo->userDataRegCount;
-        pInfo->userDataRegCount            += 1;
-        pPipelineInfo->numRsrcMapNodes     += 1;
+        pPipelineInfo->numUserDataNodes           += 1;
+        pCommonUserDataLayout->debugPrintfRegBase = pInfo->userDataRegCount;
+        pInfo->userDataRegCount                   += 1;
+        pPipelineInfo->numRsrcMapNodes            += 1;
     }
     else
     {
-        pUserDataLayout->debugPrintfRegBase = InvalidReg;
+        pCommonUserDataLayout->debugPrintfRegBase = InvalidReg;
     }
 
     // Allocate user data for the thread group reversal state
@@ -656,7 +656,7 @@ VkResult PipelineLayout::BuildIndirectSchemeInfo(
         pIn,
         &pPipelineInfo->numUserDataNodes,
         &pInfo->userDataRegCount,
-        &pUserDataLayout->threadGroupReversalRegBase);
+        &pCommonUserDataLayout->threadGroupReversalRegBase);
 
 #if VKI_RAY_TRACING
     if (HasRayTracing(pDevice, pIn))
@@ -1250,11 +1250,12 @@ void PipelineLayout::BuildLlpcDebugPrintfMapping(
     uint32_t*                      pRootNodeCount,
     Vkgc::ResourceMappingNode*     pStaNode,
     uint32_t*                      pStaNodeCount
-    ) const
+    )
 {
     const Vkgc::ResourceMappingNode DebugPrintfLayout[] =
     {
-        { Vkgc::ResourceMappingNodeType::DescriptorBuffer, 4, 0, {{Vkgc::InternalDescriptorSetId, 6}}},
+        { Vkgc::ResourceMappingNodeType::DescriptorBuffer, 4, 0, {{
+            Vkgc::InternalDescriptorSetId, Vkgc::PrintfBufferBindingId}}}
     };
 
     Util::FastMemCpy(pStaNode, DebugPrintfLayout, sizeof(DebugPrintfLayout));
@@ -1323,7 +1324,7 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
                 // Append node for uber fetch shader constant buffer
                 BuildLlpcInternalInlineBufferMapping(
                     Vkgc::ShaderStageVertexBit,
-                    userDataLayout.uberFetchConstBufRegBase,
+                    commonUserDataLayout.uberFetchConstBufRegBase,
                     MaxUberFetchConstBufSize,
                     Vkgc::FetchShaderInternalBufferBinding,
                     &pUserDataNodes[userDataNodeCount],
@@ -1338,11 +1339,11 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
         }
     }
 
-    if ((stageMask & Vkgc::ShaderStageComputeBit) && (userDataLayout.threadGroupReversalRegBase != InvalidReg))
+    if ((stageMask & Vkgc::ShaderStageComputeBit) && (commonUserDataLayout.threadGroupReversalRegBase != InvalidReg))
     {
         BuildLlpcInternalConstantBufferMapping(
             stageMask,
-            userDataLayout.threadGroupReversalRegBase,
+            commonUserDataLayout.threadGroupReversalRegBase,
             Vkgc::ReverseThreadGroupControlBinding,
             &pUserDataNodes[userDataNodeCount],
             &userDataNodeCount);
@@ -1389,7 +1390,7 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
     {
         BuildLlpcDebugPrintfMapping(
             stageMask,
-            userDataLayout.debugPrintfRegBase,
+            commonUserDataLayout.debugPrintfRegBase,
             1u,
             &pUserDataNodes[userDataNodeCount],
             &userDataNodeCount,
@@ -1535,7 +1536,7 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
     const bool uberFetchShaderEnabled     = IsUberFetchShaderEnabled<PipelineLayoutScheme::Indirect>(m_pDevice);
     const bool transformFeedbackEnabled   = ReserveXfbNode(m_pDevice);
 
-    const bool threadGroupReversalEnabled = userDataLayout.threadGroupReversalRegBase != InvalidReg;
+    const bool threadGroupReversalEnabled = commonUserDataLayout.threadGroupReversalRegBase != InvalidReg;
 #if VKI_RAY_TRACING
     const bool rayTracingEnabled          = m_pipelineInfo.hasRayTracing;
 #endif
@@ -1559,7 +1560,7 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
         regBaseOffset += TransformFeedbackRegCount;
     }
 
-    if (userDataLayout.debugPrintfRegBase != InvalidReg)
+    if (commonUserDataLayout.debugPrintfRegBase != InvalidReg)
     {
         regBaseOffset += DebugPrintfRegCount;
     }
@@ -1605,7 +1606,7 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
 
     if ((pVbInfo != nullptr) && appendFetchShaderCb)
     {
-        VK_ASSERT(uberFetchCbRegBase == userDataLayout.uberFetchConstBufRegBase);
+        VK_ASSERT(uberFetchCbRegBase == commonUserDataLayout.uberFetchConstBufRegBase);
         const uint32_t MaxUberFetchConstBufSize = PipelineCompiler::GetMaxUberFetchShaderInternalDataSize();
         BuildLlpcInternalInlineBufferMapping(
             Vkgc::ShaderStageVertexBit,
@@ -1643,7 +1644,7 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
 
     if (((stageMask & Vkgc::ShaderStageComputeBit) != 0) && threadGroupReversalEnabled)
     {
-        VK_ASSERT(threadGroupReversalRegBase == userDataLayout.threadGroupReversalRegBase);
+        VK_ASSERT(threadGroupReversalRegBase == commonUserDataLayout.threadGroupReversalRegBase);
 
         BuildLlpcInternalConstantBufferMapping(
             stageMask,
@@ -1854,7 +1855,7 @@ void PipelineLayout::ReserveAlternatingThreadGroupUserData(
 {
     bool allocated = false;
 
-    if (pDevice->GetRuntimeSettings().enableAlternatingThreadGroupOrder)
+    if (pDevice->GetRuntimeSettings().dispatchPingPong == DispatchPingPongSw)
     {
         for (uint32_t setIndex = 0; setIndex < pPipelineLayoutInfo->setLayoutCount; ++setIndex)
         {

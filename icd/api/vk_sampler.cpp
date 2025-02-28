@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -119,80 +119,13 @@ VkResult Sampler::Create(
 {
     VK_ASSERT(pCreateInfo->sType == VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO);
 
-    Pal::SamplerInfo samplerInfo = {};
-    samplerInfo.filterMode       = Pal::TexFilterMode::Blend;  // Initialize "legacy" behavior
-    Vkgc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData = nullptr;
-    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
-    VkBool32 anisotropyEnable    = (settings.forceDisableAnisoFilter == false) ? pCreateInfo->anisotropyEnable : VK_FALSE;
-
-    samplerInfo.filter     = VkToPalTexFilter(anisotropyEnable,
-                                              pCreateInfo->magFilter,
-                                              pCreateInfo->minFilter,
-                                              pCreateInfo->mipmapMode);
-    samplerInfo.addressU   = VkToPalTexAddressMode(pCreateInfo->addressModeU);
-    samplerInfo.addressV   = VkToPalTexAddressMode(pCreateInfo->addressModeV);
-    samplerInfo.addressW   = VkToPalTexAddressMode(pCreateInfo->addressModeW);
-    samplerInfo.mipLodBias = pCreateInfo->mipLodBias;
-
-    samplerInfo.maxAnisotropy           = static_cast<uint32_t>(pCreateInfo->maxAnisotropy);
-    samplerInfo.compareFunc             = (pCreateInfo->compareEnable == VK_FALSE) ?
-                                              Pal::CompareFunc::Never : VkToPalCompareFunc(pCreateInfo->compareOp);
-    samplerInfo.minLod                  = pCreateInfo->minLod;
-    samplerInfo.maxLod                  = pCreateInfo->maxLod;
-    samplerInfo.borderColorType         = VkToPalBorderColorType(pCreateInfo->borderColor);
-    samplerInfo.borderColorPaletteIndex = MaxBorderColorPaletteSize;
-
-    switch (settings.preciseAnisoMode)
-    {
-    case EnablePreciseAniso:
-        samplerInfo.flags.preciseAniso = 1;
-        break;
-    case DisablePreciseAnisoAll:
-        samplerInfo.flags.preciseAniso = 0;
-        break;
-    case DisablePreciseAnisoAfOnly:
-        samplerInfo.flags.preciseAniso = (anisotropyEnable == VK_FALSE) ? 1 : 0;
-        break;
-    default:
-        break;
-    }
-
-    // disableSingleMipAnisoOverride=1 ensure properly sampling with single mipmap level and anisotropic filtering.
-    samplerInfo.flags.disableSingleMipAnisoOverride = settings.disableSingleMipAnisoOverride ? 1 : 0;
-
-    samplerInfo.flags.useAnisoThreshold        = (settings.useAnisoThreshold == true) ? 1 : 0;
-    samplerInfo.anisoThreshold                 = settings.anisoThreshold;
-    samplerInfo.perfMip                        = settings.samplerPerfMip;
-    samplerInfo.flags.unnormalizedCoords       = (pCreateInfo->unnormalizedCoordinates == VK_TRUE) ? 1 : 0;
-    samplerInfo.flags.prtBlendZeroMode         = 0;
-    samplerInfo.flags.seamlessCubeMapFiltering = (pCreateInfo->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT)
-                                                 ? 0 : 1;
-    samplerInfo.flags.truncateCoords           = ((pCreateInfo->magFilter == VK_FILTER_NEAREST) &&
-                                                  (pCreateInfo->minFilter == VK_FILTER_NEAREST) &&
-                                                  (samplerInfo.compareFunc == Pal::CompareFunc::Never))
-                                                 ? 1 : 0;
-
     SamplerExtStructs extStructs = {};
+    Pal::SamplerInfo samplerInfo = {};
 
-    HandleExtensionStructs(pCreateInfo, &extStructs);
+    // Convert sampler create info to pal sampler info.
+    ConvertSamplerCreateInfo(pDevice, pCreateInfo, &samplerInfo, &extStructs);
 
-    if (extStructs.pSamplerYcbcrConversionInfo != nullptr)
-    {
-        pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(
-                                            extStructs.pSamplerYcbcrConversionInfo->conversion)->GetMetaData();
-        pSamplerYCbCrConversionMetaData->word1.lumaFilter = samplerInfo.filter.minification;
-
-        if (pSamplerYCbCrConversionMetaData->word0.forceExplicitReconstruct)
-        {
-            samplerInfo.flags.truncateCoords = 0;
-        }
-    }
-
-    if (extStructs.pSamplerReductionModeCreateInfo != nullptr)
-    {
-        samplerInfo.filterMode = VkToPalTexFilterMode(extStructs.pSamplerReductionModeCreateInfo->reductionMode);
-    }
-
+    // Handle custom border color
     const bool extCustomBorderColor = pDevice->IsExtensionEnabled(DeviceExtensions::EXT_CUSTOM_BORDER_COLOR);
 
     if (extCustomBorderColor && (extStructs.pOpaqueCaptureDescriptorDataCreateInfoEXT != nullptr))
@@ -202,9 +135,9 @@ VkResult Sampler::Create(
             const uint32* pPaletteIndex = static_cast<
                 const uint32*>(extStructs.pOpaqueCaptureDescriptorDataCreateInfoEXT->opaqueCaptureDescriptorData);
 
-             pDevice->ReserveBorderColorIndex(
-                 *pPaletteIndex,
-                 extStructs.pSamplerCustomBorderColorCreateInfoEXT->customBorderColor.float32);
+            pDevice->ReserveBorderColorIndex(
+                *pPaletteIndex,
+                extStructs.pSamplerCustomBorderColorCreateInfoEXT->customBorderColor.float32);
 
             samplerInfo.borderColorPaletteIndex = *pPaletteIndex;
         }
@@ -237,6 +170,14 @@ VkResult Sampler::Create(
 
     const uint32 apiSize = sizeof(Sampler);
     const uint32 palSize = props.gfxipProperties.srdSizes.sampler;
+
+    Vkgc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData = nullptr;
+
+    if (extStructs.pSamplerYcbcrConversionInfo != nullptr)
+    {
+        pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(
+                                            extStructs.pSamplerYcbcrConversionInfo->conversion)->GetMetaData();
+    }
 
     const uint32 yCbCrMetaDataSize = (pSamplerYCbCrConversionMetaData == nullptr) ?
                                         0 : sizeof(Vkgc::SamplerYCbCrConversionMetaData);
@@ -274,6 +215,130 @@ VkResult Sampler::Create(
     *pSampler = Sampler::HandleFromVoidPointer(pMemory);
 
     return VK_SUCCESS;
+}
+
+// ====================================================================================================================
+void Sampler::BuildSrd(
+    const Device*                         pDevice,
+    const VkSamplerCreateInfo*            pCreateInfo,
+    uint32_t                              borderColorIndex,
+    void*                                 pOut)
+{
+    SamplerExtStructs extStructs = {};
+    Pal::SamplerInfo samplerInfo = {};
+
+    ConvertSamplerCreateInfo(pDevice, pCreateInfo, &samplerInfo, &extStructs);
+
+    samplerInfo.borderColorPaletteIndex = borderColorIndex;
+
+    if (borderColorIndex == MaxBorderColorPaletteSize)
+    {
+        samplerInfo.borderColorType = Pal::BorderColorType::TransparentBlack;
+    }
+
+    Vkgc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData = nullptr;
+
+    if (extStructs.pSamplerYcbcrConversionInfo != nullptr)
+    {
+        pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(
+                                            extStructs.pSamplerYcbcrConversionInfo->conversion)->GetMetaData();
+    }
+
+    const uint32 yCbCrMetaDataSize = (pSamplerYCbCrConversionMetaData == nullptr) ?
+                                        0 : sizeof(Vkgc::SamplerYCbCrConversionMetaData);
+
+    pDevice->PalDevice(DefaultDeviceIndex)->CreateSamplerSrds(
+            1,
+            &samplerInfo,
+            pOut);
+
+    const uint32 palSize = pDevice->GetPalProperties().gfxipProperties.srdSizes.sampler;
+
+    if (pSamplerYCbCrConversionMetaData != nullptr)
+    {
+        memcpy(Util::VoidPtrInc(pOut, palSize), pSamplerYCbCrConversionMetaData, yCbCrMetaDataSize);
+    }
+}
+
+// ====================================================================================================================
+// Convert sampler create info to pal sampler info.
+void Sampler::ConvertSamplerCreateInfo(
+    const Device*              pDevice,
+    const VkSamplerCreateInfo* pCreateInfo,
+    Pal::SamplerInfo*          pPalSamplerInfo,
+    SamplerExtStructs*         pExtStructs)
+{
+    pPalSamplerInfo->filterMode     = Pal::TexFilterMode::Blend;  // Initialize "legacy" behavior
+
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+    const VkBool32 anisotropyEnable = (settings.forceDisableAnisoFilter == false) ?
+        pCreateInfo->anisotropyEnable : VK_FALSE;
+
+    pPalSamplerInfo->filter     = VkToPalTexFilter(anisotropyEnable,
+                                            pCreateInfo->magFilter,
+                                            pCreateInfo->minFilter,
+                                            pCreateInfo->mipmapMode);
+    pPalSamplerInfo->addressU   = VkToPalTexAddressMode(pCreateInfo->addressModeU);
+    pPalSamplerInfo->addressV   = VkToPalTexAddressMode(pCreateInfo->addressModeV);
+    pPalSamplerInfo->addressW   = VkToPalTexAddressMode(pCreateInfo->addressModeW);
+    pPalSamplerInfo->mipLodBias = pCreateInfo->mipLodBias;
+
+    pPalSamplerInfo->maxAnisotropy           = static_cast<uint32_t>(pCreateInfo->maxAnisotropy);
+    pPalSamplerInfo->compareFunc             = (pCreateInfo->compareEnable == VK_FALSE) ?
+                                            Pal::CompareFunc::Never : VkToPalCompareFunc(pCreateInfo->compareOp);
+    pPalSamplerInfo->minLod                  = pCreateInfo->minLod;
+    pPalSamplerInfo->maxLod                  = pCreateInfo->maxLod;
+    pPalSamplerInfo->borderColorType         = VkToPalBorderColorType(pCreateInfo->borderColor);
+    pPalSamplerInfo->borderColorPaletteIndex = MaxBorderColorPaletteSize;
+
+    switch (settings.preciseAnisoMode)
+    {
+    case EnablePreciseAniso:
+        pPalSamplerInfo->flags.preciseAniso = 1;
+        break;
+    case DisablePreciseAnisoAll:
+        pPalSamplerInfo->flags.preciseAniso = 0;
+        break;
+    case DisablePreciseAnisoAfOnly:
+        pPalSamplerInfo->flags.preciseAniso = (anisotropyEnable == VK_FALSE) ? 1 : 0;
+        break;
+    default:
+        break;
+    }
+
+    // disableSingleMipAnisoOverride=1 ensure properly sampling with single mipmap level and anisotropic filtering.
+    pPalSamplerInfo->flags.disableSingleMipAnisoOverride = settings.disableSingleMipAnisoOverride ? 1 : 0;
+
+    pPalSamplerInfo->flags.useAnisoThreshold        = (settings.useAnisoThreshold == true) ? 1 : 0;
+    pPalSamplerInfo->anisoThreshold                 = settings.anisoThreshold;
+    pPalSamplerInfo->perfMip                        = settings.samplerPerfMip;
+    pPalSamplerInfo->flags.unnormalizedCoords       = (pCreateInfo->unnormalizedCoordinates == VK_TRUE) ? 1 : 0;
+    pPalSamplerInfo->flags.prtBlendZeroMode         = 0;
+    pPalSamplerInfo->flags.seamlessCubeMapFiltering =
+        (pCreateInfo->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT) ? 0 : 1;
+    pPalSamplerInfo->flags.truncateCoords           = ((pCreateInfo->magFilter == VK_FILTER_NEAREST) &&
+                                                (pCreateInfo->minFilter == VK_FILTER_NEAREST) &&
+                                                (pPalSamplerInfo->compareFunc == Pal::CompareFunc::Never))
+                                                ? 1 : 0;
+
+    HandleExtensionStructs(pCreateInfo, pExtStructs);
+
+    if (pExtStructs->pSamplerYcbcrConversionInfo != nullptr)
+    {
+        Vkgc::SamplerYCbCrConversionMetaData* pYCbCrMetaData = SamplerYcbcrConversion::ObjectFromHandle(
+            pExtStructs->pSamplerYcbcrConversionInfo->conversion)->GetMetaData();
+        pYCbCrMetaData->word1.lumaFilter = pPalSamplerInfo->filter.minification;
+
+        if (pYCbCrMetaData->word0.forceExplicitReconstruct)
+        {
+            pPalSamplerInfo->flags.truncateCoords = 0;
+        }
+    }
+
+    if (pExtStructs->pSamplerReductionModeCreateInfo != nullptr)
+    {
+        pPalSamplerInfo->filterMode = VkToPalTexFilterMode(pExtStructs->pSamplerReductionModeCreateInfo->reductionMode);
+    }
 }
 
 // ====================================================================================================================

@@ -222,6 +222,15 @@
       "ExperimentName": "Disable shader cache"
     },
     {
+      "Description": "Force NonUniformResourceIndex on any descriptor indexing in shaders.",
+      "Tags": [
+        "Safety"
+      ],
+      "Type": "bool",
+      "Name": "ExpForceNonUniformResourceIndex",
+      "ExperimentName": "Force NonUniformResourceIndex"
+    },
+    {
       "Description": "Disable texture color compression.",
       "Tags": [
         "Safety"
@@ -229,6 +238,15 @@
       "Type": "bool",
       "Name": "ExpTextureColorCompression",
       "ExperimentName": "Disable Texture Color Compression"
+    },
+    {
+      "Description": "Submit each command buffer for execution on the GPU separately - disable chaining of multiple command buffers in a single submit call.",
+      "Tags": [
+        "Safety"
+      ],
+      "Type": "bool",
+      "Name": "ExpDisableMultiSubmitChaining",
+      "ExperimentName": "Submit command buffers separately"
     },
     {
       "Description": "Zero unbound descriptors.",

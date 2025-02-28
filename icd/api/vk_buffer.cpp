@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -159,7 +159,10 @@ VkResult Buffer::Create(
             gpuMemoryCreateInfo.vaRange = Pal::VaRange::CaptureReplay;
         }
 
-        gpuMemoryCreateInfo.alignment          = pDevice->GetProperties().virtualMemAllocGranularity;
+        {
+            gpuMemoryCreateInfo.alignment          = pDevice->GetProperties().virtualMemAllocGranularity;
+        }
+
         gpuMemoryCreateInfo.size               = Util::RoundUpToMultiple(pCreateInfo->size, gpuMemoryCreateInfo.alignment);
         gpuMemoryCreateInfo.flags.virtualAlloc = 1;
         gpuMemoryCreateInfo.flags.globalGpuVa  = pDevice->IsGlobalGpuVaEnabled();
@@ -556,7 +559,7 @@ void Buffer::GetBufferMemoryRequirements(
     // cpu read/write visible heap through thunderbolt has very limited performance.
     // for buffer object application my use cpu to upload or download from gpu visible, so
     // it is better off to not expose visible heap for buffer to application.
-    if(pDevice->GetProperties().connectThroughThunderBolt)
+    if (pDevice->GetProperties().connectThroughThunderBolt && (pDevice->IsResizableBarEnabled() == false))
     {
         uint32_t visibleMemIndexBits;
 
@@ -633,6 +636,7 @@ void Buffer::CalculateBufferFlags(
                                              (VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
                                               VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT  |
                                               VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT)) ? 1 : 0;
+
     pBufferFlags->createSparseBinding   = (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)   ? 1 : 0;
     pBufferFlags->createSparseResidency = (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
     pBufferFlags->createProtected       = (pCreateInfo->flags & VK_BUFFER_CREATE_PROTECTED_BIT)        ? 1 : 0;

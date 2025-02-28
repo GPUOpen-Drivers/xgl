@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -134,33 +134,6 @@ inline GpuRt::Fp16BoxNodesInBlasMode ConvertGpuRtFp16BoxNodesInBlasMode(
     }
 
     return gpuRtMode;
-}
-
-// =====================================================================================================================
-// Converts a Vulkan RebraidType to a GpuRT RebraidType
-inline GpuRt::RebraidType ConvertGpuRtRebraidType(
-    RebraidType vkType)
-{
-    GpuRt::RebraidType gpuRtType = GpuRt::RebraidType::Off;
-
-    switch (vkType)
-    {
-    case RebraidTypeOff:
-        gpuRtType = GpuRt::RebraidType::Off;
-        break;
-    case RebraidTypeV1:
-        gpuRtType = GpuRt::RebraidType::V1;
-        break;
-    case RebraidTypeV2:
-        gpuRtType = GpuRt::RebraidType::V2;
-        break;
-    default:
-        VK_NEVER_CALLED();
-        gpuRtType = GpuRt::RebraidType::Off;
-        break;
-    }
-
-    return gpuRtType;
 }
 
 }

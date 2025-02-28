@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -54,10 +54,17 @@ public:
     };
 
     static VkResult Create(
-        Device*                      pDevice,
+        const Device*                pDevice,
         const VkImageViewCreateInfo* pCreateInfo,
         const VkAllocationCallbacks* pAllocator,
         VkImageView*                 pImageView);
+
+    static VkResult BuildSrd(
+        const Device*                pDevice,
+        const VkImageViewCreateInfo* pCreateInfo,
+        const VkAllocationCallbacks* pAllocator,
+        bool                         isShaderStorageDesc,
+        void*                        pOut);
 
     VkResult Destroy(
         Device*                      pDevice,
@@ -109,6 +116,15 @@ protected:
         float                        minLod,
         const VkImageViewCreateInfo* pCreateInfo,
         void*                        pSrdMemory);
+
+    static void ConvertCreateInfoToSrdBuildParams(
+        const Device*                pDevice,
+        const VkImageViewCreateInfo* pCreateInfo,
+        VkImageSubresourceRange*     pSubresRange,
+        Pal::Range*                  pZRange,
+        VkImageUsageFlags*           pImageViewUsage,
+        float*                       pMinLod,
+        VkFormat*                    pCreateInfoFormat);
 
     static void BuildFmaskViewSrds(
         const Device*                pDevice,

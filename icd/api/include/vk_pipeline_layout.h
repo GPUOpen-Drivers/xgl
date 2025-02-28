@@ -1,7 +1,7 @@
 ﻿/*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -66,6 +66,16 @@ struct UserDataLayout
         // Number of user data registers used for push constants
         uint32_t pushConstRegCount;
 
+        // Base use data register for debug printf
+        uint32_t debugPrintfRegBase;
+
+        // Base user data register index to use for thread group order reversal state
+        uint32_t threadGroupReversalRegBase;
+
+        // Base user data register index to use for the constant buffer used in uber-fetch shader
+        // The number of user data register used is always 2
+        uint32_t uberFetchConstBufRegBase;
+
 #if VKI_RAY_TRACING
         // Base user data register index to use for buffer storing ray tracing dispatch arguments
         // The number of user data registers used is always 1
@@ -91,17 +101,6 @@ struct UserDataLayout
             uint32_t transformFeedbackRegBase;
             // Number of user data registers used for transform feedback
             uint32_t transformFeedbackRegCount;
-
-            // Base user data register index to use for the constant buffer used in uber-fetch shader
-            // The number of user data register used is always 2
-            uint32_t uberFetchConstBufRegBase;
-
-            // Base use data register for debug printf
-            uint32_t debugPrintfRegBase;
-
-            // Base user data register index to use for thread group order reversal state
-            uint32_t threadGroupReversalRegBase;
-
         } compact;
 
         struct
@@ -115,27 +114,34 @@ struct UserDataLayout
             // Each set occupy 2 entries: one for static and one for dynamic descriptors
             // The total number of user data registers used is always MaxDescriptorSets * 2 * SetPtrRegCount
             uint32_t setBindingPtrRegBase;
-
-            // Base use data register for debug printf
-            uint32_t debugPrintfRegBase;
-
-            // Base user data register index to use for the constant buffer used in uber-fetch shader
-            // The number of user data register used is always 2
-            uint32_t uberFetchConstBufRegBase;
-
-            // Base user data register index to use for thread group order reversal state
-            uint32_t threadGroupReversalRegBase;
-
         } indirect;
+
     };
 };
+
+// =====================================================================================================================
+inline uint32_t GetUserDataRegBase(
+    const UserDataLayout* pLayout)
+{
+    uint32_t userDataRegBase = 0;
+
+    if (pLayout->scheme == PipelineLayoutScheme::Compact)
+    {
+        userDataRegBase = pLayout->compact.setBindingRegBase;
+    }
+    else if (pLayout->scheme == PipelineLayoutScheme::Indirect)
+    {
+        userDataRegBase = pLayout->indirect.setBindingPtrRegBase;
+    }
+
+    return userDataRegBase;
+}
 
 // =====================================================================================================================
 inline uint32_t GetUberFetchShaderUserData(
     const UserDataLayout* pLayout)
 {
-    return (pLayout->scheme == PipelineLayoutScheme::Compact) ?
-        pLayout->compact.uberFetchConstBufRegBase : pLayout->indirect.uberFetchConstBufRegBase;
+    return pLayout->common.uberFetchConstBufRegBase;
 }
 
 // =====================================================================================================================
@@ -143,8 +149,7 @@ inline void SetUberFetchShaderUserData(
     UserDataLayout* pLayout,
     uint32_t        regBase)
 {
-    uint32_t* pRegBaseAddr = (pLayout->scheme == PipelineLayoutScheme::Compact) ?
-        &pLayout->compact.uberFetchConstBufRegBase : &pLayout->indirect.uberFetchConstBufRegBase;
+    uint32_t* pRegBaseAddr = &pLayout->common.uberFetchConstBufRegBase;
     *pRegBaseAddr = regBase;
 }
 
@@ -294,6 +299,15 @@ public:
     uint32_t GetDispatchRaysUserData() const;
 #endif
 
+    static void BuildLlpcDebugPrintfMapping(
+        const uint32_t                 stageMask,
+        const uint32_t                 offsetInDwords,
+        const uint32_t                 sizeInDwords,
+        Vkgc::ResourceMappingRootNode* pRootNode,
+        uint32_t*                      pRootNodeCount,
+        Vkgc::ResourceMappingNode*     pStaNode,
+        uint32_t*                      pStaNodeCount);
+
 protected:
     static VkResult ConvertCreateInfo(
         const Device*                     pDevice,
@@ -420,15 +434,6 @@ protected:
         Vkgc::ResourceMappingNode*     pStaNode,
         uint32_t*                      pStaNodeCount) const;
 #endif
-
-    void BuildLlpcDebugPrintfMapping(
-        const uint32_t                 stageMask,
-        const uint32_t                 offsetInDwords,
-        const uint32_t                 sizeInDwords,
-        Vkgc::ResourceMappingRootNode* pRootNode,
-        uint32_t*                      pRootNodeCount,
-        Vkgc::ResourceMappingNode*     pStaNode,
-        uint32_t*                      pStaNodeCount) const;
 
     static void ReserveAlternatingThreadGroupUserData(
         const Device*                     pDevice,

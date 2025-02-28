@@ -1,3 +1,4 @@
+## Copyright (c) 2025 Advanced Micro Devices, Inc. All Rights Reserved. ##
 ###############################################################################
 # INSTANCE EXTENSIONS
 
@@ -208,6 +209,7 @@ VK_EXT_vertex_input_dynamic_state
 VK_EXT_device_address_binding_report
 VK_EXT_device_fault
 VK_EXT_attachment_feedback_loop_layout
+VK_EXT_host_image_copy
 VK_EXT_physical_device_drm
 VK_KHR_cooperative_matrix
 VK_EXT_texture_compression_astc_hdr

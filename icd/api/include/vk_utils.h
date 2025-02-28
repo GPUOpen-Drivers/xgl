@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -62,6 +62,7 @@
 #define VK_ASSERT_ALWAYS_MSG PAL_ASSERT_ALWAYS_MSG
 #define VK_DEBUG_BUILD_ONLY_ASSERT PAL_DEBUG_BUILD_ONLY_ASSERT
 #define VK_ALERT PAL_ALERT
+#define VK_ALERT_MSG PAL_ALERT_MSG
 #define VK_ALERT_ALWAYS_MSG PAL_ALERT_ALWAYS_MSG
 #define VK_SOFT_ASSERT(expr) VK_ALERT(!(expr))
 #define VK_NEW PAL_NEW
@@ -133,11 +134,7 @@ typedef VkAccessFlags2KHR        AccessFlags;
 constexpr bool IsGfx11(
     Pal::GfxIpLevel gfxLevel)
 {
-    return ((gfxLevel == Pal::GfxIpLevel::GfxIp11_0)
-#if VKI_BUILD_GFX115
-        || (gfxLevel == Pal::GfxIpLevel::GfxIp11_5)
-#endif
-        );
+    return ((gfxLevel == Pal::GfxIpLevel::GfxIp11_0) || (gfxLevel == Pal::GfxIpLevel::GfxIp11_5));
 }
 
 namespace utils
@@ -387,6 +384,45 @@ public:
 private:
     CharT*  m_pData;
     size_t  m_stride;
+};
+
+// =====================================================================================================================
+// BitPacker packs bits from separated bools or flags into a single variable.
+// Created to save space and prevent a hasher from hashing 7x always-zero bits for each bool.
+//
+// Example usage:
+//
+//    const auto& settings;
+//    Util::MetroHash128 hasher = {};
+//    BitPacker<uint8> flags = {};
+//    flags.Push(settings.isEnabled);
+//    flags.Push(settings.version > 42);
+//    hahser.Update(flags.Get()); // hashes one byte instead of two
+//
+template <typename T = uint16_t>
+class BitPacker
+{
+public:
+    // Pushes back `bit` by left-shifting already accumulated bits.
+    // Asserts that bits do not overflow `T`.
+    void Push(bool bit)
+    {
+        VK_ASSERT(m_bitcount < (sizeof(T) * 8));
+
+        m_bits <<= 1;
+        m_bits |= (bit ? 1 : 0);
+
+        m_bitcount += 1;
+    }
+
+    T Get() const
+    {
+        return m_bits;
+    }
+
+private:
+    T       m_bits     = 0;
+    uint8_t m_bitcount = 0;
 };
 
 // =====================================================================================================================

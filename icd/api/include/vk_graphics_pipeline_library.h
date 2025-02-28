@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -47,7 +47,7 @@ public:
         const VkAllocationCallbacks*        pAllocator,
         VkPipeline*                         pPipeline);
 
-    static VkResult CreateApiPsoHashAndElfHash(
+    static VkResult CreateCacheId(
         const Device*                           pDevice,
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,
         const GraphicsPipelineExtStructs&       extStructs,
@@ -55,11 +55,23 @@ public:
         VkPipelineCreateFlags2KHR               flags,
         GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
         GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
+        const PipelineLayout*                   pPipelineLayout,
         ShaderOptimizerKey*                     pShaderOptimizerKeys,
         PipelineOptimizerKey*                   pPipelineOptimizerKey,
         uint64_t*                               pApiPsoHash,
+        Util::MetroHash::Hash*                  pElfHash,
         ShaderModuleHandle*                     pTempModules,
-        Util::MetroHash::Hash*                  pElfHash);
+        PipelineMetadata*                       pBinaryMetadata,
+        Util::MetroHash::Hash*                  pCacheIds);
+
+    static VkResult WriteGplAndMetadataToPipelineBinary(
+        const VkAllocationCallbacks*    pAllocator,
+        const Vkgc::BinaryData&         binaryData,
+        const Util::MetroHash::Hash&    cacheId,
+        const GraphicsLibraryType       gplType,
+        const Util::MetroHash::Hash&    elfHash,
+        const uint32_t                  binaryIndex,
+        PipelineBinaryStorage*          pBinaryStorage);
 
     VkResult Destroy(
         Device*                         pDevice,
@@ -97,6 +109,7 @@ private:
         const uint64_t                          apiHash,
         const GplModuleState*                   pGplModuleStates,
         PipelineBinaryStorage*                  pBinaryStorage,
+        const uint32_t                          providedLibraryMask,
         const PipelineLayout*                   pPipelineLayout);
 
     static VkResult CreatePartialPipelineBinary(
@@ -110,12 +123,27 @@ private:
         const VkAllocationCallbacks*           pAllocator,
         GplModuleState*                        pTempModuleStages);
 
+    static void CreateFinalCacheIds(
+        const Device*                               pDevice,
+        const VkGraphicsPipelineCreateInfo*         pCreateInfo,
+        const GraphicsPipelineLibraryInfo*          pLibInfo,
+        const GraphicsPipelineShaderStageInfo*      pShaderStageInfo,
+        GraphicsPipelineBinaryCreateInfo*           pBinaryCreateInfo);
+
+    static uint32_t CalculateShaderBuildMask(
+        const Device*                               pDevice,
+        const VkGraphicsPipelineCreateInfo*         pCreateInfo,
+        const GraphicsPipelineLibraryInfo*          pLibInfo,
+        const GraphicsPipelineShaderStageInfo*      pShaderStageInfo,
+        const GraphicsPipelineBinaryCreateInfo*     pBinaryCreateInfo);
+
     const GraphicsPipelineObjectCreateInfo  m_objectCreateInfo;
     const GraphicsPipelineBinaryCreateInfo* m_pBinaryCreateInfo;
     const GraphicsPipelineLibraryInfo       m_libInfo;
     GplModuleState                          m_gplModuleStates[ShaderStage::ShaderStageGfxCount];
     const Util::MetroHash::Hash             m_elfHash;
     GraphicsPipelineLibrary*                m_altLibrary;
+    const uint32_t                          m_providedLibraryMask;
 };
 
 }

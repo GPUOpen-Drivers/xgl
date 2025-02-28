@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -34,6 +34,7 @@
 #include "include/vk_shader.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_pipeline_cache.h"
+#include "include/vk_utils.h"
 #if VKI_RAY_TRACING
 #include "raytrace/ray_tracing_device.h"
 #include "raytrace/vk_ray_tracing_pipeline.h"
@@ -396,9 +397,6 @@ VkResult Pipeline::BuildShaderStageInfo(
             Vkgc::BinaryData          shaderBinary    = {};
             Pal::ShaderHash           codeHash        = {};
             PipelineCreationFeedback* pShaderFeedback = (pFeedbacks == nullptr) ? nullptr : pFeedbacks + outIdx;
-
-            VK_ASSERT((extStructs.pShaderModuleCreateInfo != nullptr) ||
-                      (extStructs.pPipelineShaderStageModuleIdentifierCreateInfoEXT != nullptr));
 
             if (extStructs.pShaderModuleCreateInfo != nullptr)
             {
@@ -1080,30 +1078,36 @@ void Pipeline::ElfHashToCacheId(
     // Incorporate any tuning profiles
     pDevice->GetShaderOptimizer()->CalculateMatchingProfileEntriesHash(pipelineOptimizerKey, &hasher);
 
+    // Calling `hasher.Update(uint32_t)` on uint32_t : 1 flag sends 31 always-zero bits to the hasher.
+    // `utils::BitPacker` packs flag bits into single variable to save MetroHash128 a hashing cycle or two.
+    utils::BitPacker flags;
+
     // Extensions and features whose enablement affects compiler inputs (and hence the binary)
-    hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO));
+    flags.Push(pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO));
     {
-        hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_PRIMITIVES_GENERATED_QUERY));
-        hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK));
-        hasher.Update(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT));
-        hasher.Update(pDevice->GetEnabledFeatures().scalarBlockLayout);
+        flags.Push(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_PRIMITIVES_GENERATED_QUERY));
+        flags.Push(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK));
+        flags.Push(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT));
+        flags.Push(pDevice->GetEnabledFeatures().scalarBlockLayout);
     }
 
-    hasher.Update(pDevice->GetEnabledFeatures().robustBufferAccess);
-    hasher.Update(pDevice->GetEnabledFeatures().robustBufferAccessExtended);
-    hasher.Update(pDevice->GetEnabledFeatures().robustImageAccessExtended);
-    hasher.Update(pDevice->GetEnabledFeatures().nullDescriptorExtended);
-    hasher.Update(pDevice->GetEnabledFeatures().pipelineRobustness);
+    flags.Push(pDevice->GetEnabledFeatures().robustBufferAccess);
+    flags.Push(pDevice->GetEnabledFeatures().robustBufferAccessExtended);
+    flags.Push(pDevice->GetEnabledFeatures().robustImageAccessExtended);
+    flags.Push(pDevice->GetEnabledFeatures().nullDescriptorExtended);
+    flags.Push(pDevice->GetEnabledFeatures().pipelineRobustness);
 
 #if VKI_RAY_TRACING
     if (pDevice->RayTrace() != nullptr)
     {
         // The accel struct tracker enable and the trace ray counter states get stored inside the ELF within
         // the static GpuRT flags. Needed for both TraceRay() and RayQuery().
-        hasher.Update(pDevice->RayTrace()->AccelStructTrackerEnabled(deviceIdx));
+        flags.Push(pDevice->RayTrace()->AccelStructTrackerEnabled(deviceIdx));
         hasher.Update(pDevice->RayTrace()->TraceRayCounterMode(deviceIdx));
     }
 #endif
+
+    hasher.Update(flags.Get());
 
     hasher.Finalize(pCacheId->bytes);
 }

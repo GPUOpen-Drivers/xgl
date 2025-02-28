@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2024-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -36,6 +36,12 @@
 namespace vk
 {
 class Device;
+
+struct PipelineBinaryGplMetadata
+{
+    GraphicsLibraryType     gplType; ///< The GPL type of the pipeline binary
+    Util::MetroHash::Hash   elfHash; ///< The elfHash that includes the hash of the provided spir-v code + entrypoint
+};
 
 class PipelineBinary final : public NonDispatchable<VkPipelineBinaryKHR, PipelineBinary>
 {
@@ -89,8 +95,38 @@ private:
         Device*                                     pDevice,
         const Util::MetroHash::Hash&                binaryKey,
         const Vkgc::BinaryData&                     binaryData,
+        const bool                                  isGplPipelineFromInternalCache,
+        const GraphicsLibraryType                   gplType,
+        const Util::MetroHash::Hash*                pElfHash,
         const VkAllocationCallbacks*                pAllocator,
         VkPipelineBinaryKHR*                        pPipelineBinary);
+
+    static bool GenerateGplMask(
+        const Device*                               pDevice,
+        const VkPipelineBinaryCreateInfoKHR*        pCreateInfo,
+        uint32_t*                                   pGplMask);
+
+    static VkResult CreateGplPipelineBinaryFromCache(
+        Device*                                     pDevice,
+        const VkAllocationCallbacks*                pAllocator,
+        const Util::MetroHash::Hash*                pCacheIds,
+        const Util::MetroHash::Hash*                pElfHash,
+        const uint32_t                              gplMask,
+        VkPipelineBinaryHandlesInfoKHR*             pBinaries,
+        uint32_t*                                   pBinariesCreatedCount);
+
+    static VkResult CreateMonolithicPipelineBinaryFromCache(
+        Device*                                     pDevice,
+        const VkAllocationCallbacks*                pAllocator,
+        const Util::MetroHash::Hash*                pCacheIds,
+        VkPipelineBinaryHandlesInfoKHR*             pBinaries,
+        uint32_t*                                   pBinariesCreatedCount);
+
+    static VkResult CreateCacheId(
+        const Device*                               pDevice,
+        const VkPipelineCreateInfoKHR*              pPipelineCreateInfo,
+        Util::MetroHash::Hash*                      pElfHash,
+        Util::MetroHash::Hash*                      pCacheIds);
 
     static void WriteToPipelineBinaryKey(
         const void*                                 pSrcData,

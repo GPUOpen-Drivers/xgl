@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2024-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -183,12 +183,10 @@ private:
     Pal::IIndirectCmdGenerator*                         m_pPalGenerator[MaxPalDevices];
     InternalMemory                                      m_internalMem;
 };
-
-// Max usage is the situation where indirect commands layout drains push constants size plus uses indirect index & vertex
-// buffer binding and ends with a draw indexed.
-constexpr uint32_t MaxIndirectTokenCount     = MaxPushConstRegCount + 3;
-constexpr uint32_t MaxIndirectCommandsStride = 1 << 11;
-constexpr uint32_t MaxIndirectTokenOffset    = MaxIndirectCommandsStride - 1;
+constexpr uint32_t MaxIndirectSequenceCount  = (1 << 24);
+constexpr uint32_t MaxIndirectTokenCount     = 32;
+constexpr uint32_t MaxIndirectCommandsStride = (1 << 11);
+constexpr uint32_t MaxIndirectTokenOffset    = (1 << 11) - 1;
 constexpr uint32_t MinIndirectAlignment      = sizeof(uint32_t);
 } // namespace vk
 #endif /* __VK_INDIRECT_COMMANDS_LAYOUT_H__ */

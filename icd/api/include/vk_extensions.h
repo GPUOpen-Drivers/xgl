@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -401,6 +401,7 @@ public:
         EXT_GLOBAL_PRIORITY_QUERY,
         EXT_GRAPHICS_PIPELINE_LIBRARY,
         EXT_HDR_METADATA,
+        EXT_HOST_IMAGE_COPY,
         EXT_HOST_QUERY_RESET,
         EXT_IMAGE_2D_VIEW_OF_3D,
         EXT_IMAGE_COMPRESSION_CONTROL,

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -146,39 +146,37 @@ DescriptorSetLayout::DescriptorSetLayout(
 // =====================================================================================================================
 // Returns the byte size for a particular type of descriptor.
 uint32_t DescriptorSetLayout::GetSingleDescStaticSize(
-    const Device*    pDevice,
-    VkDescriptorType type)
+    const DescriptorSizes& descriptorSizes,
+    VkDescriptorType       type)
 {
-    const Device::Properties& props = pDevice->GetProperties();
-
     uint32_t size;
 
     switch (static_cast<uint32_t>(type))
     {
     case VK_DESCRIPTOR_TYPE_SAMPLER:
-        size = props.descriptorSizes.sampler;
+        size = descriptorSizes.sampler;
         break;
 
     case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-        size = props.descriptorSizes.combinedImageSampler;
+        size = descriptorSizes.combinedImageSampler;
         break;
 
     case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
     case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
     case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-        size = props.descriptorSizes.imageView;
+        size = descriptorSizes.imageView;
         break;
 
     case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
     case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-        size = props.descriptorSizes.typedBufferView;
+        size = descriptorSizes.typedBufferView;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
 #if VKI_RAY_TRACING
     case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
 #endif
-        size = props.descriptorSizes.untypedBufferView;
+        size = descriptorSizes.untypedBufferView;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
@@ -209,7 +207,7 @@ uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(
     const bool                          useFullYcbrImageSampler)
 {
     VK_ASSERT(descriptorInfo->descriptorType != VK_DESCRIPTOR_TYPE_MUTABLE_EXT);
-    uint32_t size = GetSingleDescStaticSize(pDevice, descriptorInfo->descriptorType);
+    uint32_t size = GetSingleDescStaticSize(pDevice->GetProperties().descriptorSizes, descriptorInfo->descriptorType);
 
     if ((descriptorInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) &&
         (descriptorInfo->pImmutableSamplers != nullptr) &&
@@ -579,7 +577,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
             for (uint32_t j = 0; j < list.descriptorTypeCount; ++j)
             {
                 VK_ASSERT(list.pDescriptorTypes[j] != VK_DESCRIPTOR_TYPE_MUTABLE_EXT);
-                uint32_t size = GetSingleDescStaticSize(pDevice, list.pDescriptorTypes[j]);
+                uint32_t size = GetSingleDescStaticSize(pDevice->GetProperties().descriptorSizes, list.pDescriptorTypes[j]);
                 maxSize = Util::Max(maxSize, size);
             }
 
@@ -628,7 +626,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
             if (type != VK_DESCRIPTOR_TYPE_MUTABLE_EXT)
             {
                 pOut->varDescStride =
-                    GetSingleDescStaticSize(pDevice, pBinding->info.descriptorType);
+                    GetSingleDescStaticSize(pDevice->GetProperties().descriptorSizes, pBinding->info.descriptorType);
             }
         }
 

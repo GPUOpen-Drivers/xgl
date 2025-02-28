@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2023-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2023-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -72,10 +72,10 @@ void DebugPrintf::Reset(
 void AppendPrintfString(
     PrintfString* pOutput,
     const char*   pSrc,
-    unsigned      count)
+    uint32        count)
 {
     const char* pPtr = pSrc;
-    for (unsigned i = 0; i < count; ++i)
+    for (uint32 i = 0; i < count; ++i)
     {
         pOutput->PushBack(*pPtr++);
     }
@@ -300,31 +300,39 @@ uint64_t DebugPrintf::ProcessDebugPrintfBuffer(
                     break;
                 }
 
-                const PrintfString& formatString = pEntry->printStr;
-                const PrintfBit& bitPos = pEntry->bit64s;
+                PrintfString* pFormatString = &pEntry->printStr;
+                PrintfBit* pBitPos = &pEntry->bit64s;
                 PrintfSubSection* pSubSections = m_parsedFormatStrings.FindKey(entryHashValue);
-                int initSize = bitPos.size() - outputDecodedSpecifiers.size();
+                // Get printf output variable in dword size
+                uint32_t outputsInDwords = 0;
+                uint32_t outputVarIndex = 0;
+                Vector<uint32_t, 8, GenericAllocator> outputVarArray(nullptr);
+                {
+                    outputVarArray.Resize(pBitPos->size());
+                    for (uint32_t varIndex = 0; varIndex < pBitPos->size(); varIndex++)
+                    {
+                        outputVarArray[varIndex] = *pPtr++;
+                        outputsInDwords++;
+                    }
+                }
+
+                int initSize = pBitPos->size() - outputDecodedSpecifiers.size();
                 for (int i = 0; i < initSize; ++i)
                 {
                     outputDecodedSpecifiers.PushBack(nullptr);
                 }
 
-                // Get printf output variable in dword size
-                unsigned outputsInDwords = 0;
-                uint64_t outputVar;
-                for (uint32_t varIndex = 0; varIndex < bitPos.size(); varIndex++)
+                uint64_t outputVar = 0;
+                for (uint32_t varIndex = 0; varIndex < pBitPos->size(); varIndex++, outputVarIndex++)
                 {
-                    outputVar = *pPtr++;
-                    outputsInDwords++;
-                    bool is64bit = bitPos[varIndex];
+                    outputVar = outputVarArray[outputVarIndex];
+
+                    bool is64bit = (*pBitPos)[varIndex];
                     if (is64bit)
                     {
-                        uint64_t hiDword = *pPtr++;
-                        outputVar = (hiDword << 32) | outputVar;
-                        outputsInDwords++;
+                        outputVar = (static_cast<uint64_t>(outputVarArray[outputVarIndex++]) << 32) | outputVar;
                     }
-
-                    DecodeSpecifier(formatString,
+                    DecodeSpecifier(*pFormatString,
                                     outputVar,
                                     is64bit,
                                     pSubSections,
@@ -332,7 +340,9 @@ uint64_t DebugPrintf::ProcessDebugPrintfBuffer(
                                     &outputDecodedSpecifiers[varIndex]);
                 }
 
-                OutputBufferString(formatString, *pSubSections, &outputBufferStr);
+                {
+                    OutputBufferString(*pFormatString, *pSubSections, &outputBufferStr);
+                }
 
                 decodeOffset += outputsInDwords;
             }
@@ -399,7 +409,7 @@ PrintfString DebugPrintf::GetFileName(
 uint32_t DebugPrintf::ConvertVkPipelineType(
     uint32_t vkPipelineType)
 {
-    unsigned pipelineType = DebugPrintfCompute;
+    uint32 pipelineType = DebugPrintfCompute;
     switch (vkPipelineType)
     {
     case VK_PIPELINE_BIND_POINT_GRAPHICS:
@@ -431,7 +441,6 @@ void DebugPrintf::DecodeSpecifier(
     uint32_t            varidx,
     PrintfString*       pOutString)
 {
-
     if ((pSections->NumElements() == 0) || (varidx >= pSections->NumElements()))
     {
         return;
@@ -693,7 +702,7 @@ void DebugPrintf::DecodeFormatStringsFromElf(
         VK_ASSERT(noteId != 0);
         VK_ASSERT(noteSection.sh_type == static_cast<uint32_t>(Elf::SectionHeaderType::Note));
         ElfReader::Notes notes(elfReader, noteId);
-        unsigned noteLength = 0;
+        uint32 noteLength = 0;
         auto noteData = GetMetaData(notes, Abi::MetadataNoteType, &noteLength);
         MsgPackReader docReader;
         Result result = docReader.InitFromBuffer(noteData, noteLength);
@@ -714,7 +723,7 @@ void DebugPrintf::DecodeFormatStringsFromElf(
             if (Util::HashString(itemString, docReader.Get().as.str.length) == hashFormatStr)
             {
                 result = docReader.Next(CWP_ITEM_MAP);
-                VK_ASSERT(docReader.Get().as.map.size == 2);
+                VK_ASSERT(docReader.Get().as.map.size == 3);
                 uint32_t formatStringsMap = docReader.Get().as.map.size;
                 for (uint32 j = 0; j < formatStringsMap; ++j)
                 {
@@ -757,12 +766,20 @@ void DebugPrintf::DecodeFormatStringsFromElf(
                             bool found = true;
                             PrintfElfString* pElfString = nullptr;
                             result = pFormatStrings->FindAllocate(hashValue, &found, &pElfString);
+
                             if ((result == Pal::Result::Success) && (found == false))
                             {
-                                pElfString->printStr.Reserve(formatString.Length());
-                                for (auto& elem : formatString)
+                                uint32 strLength = formatString.Length();
+                                VK_ASSERT(strLength > 0);
+                                if (formatString[strLength - 1] == '\0')
                                 {
-                                    pElfString->printStr.PushBack(elem);
+                                    strLength--;
+                                }
+                                pElfString->printStr.Reserve(strLength);
+
+                                for (uint32 l = 0; l < strLength; ++l)
+                                {
+                                    pElfString->printStr.PushBack(formatString[l]);
                                 }
                                 pElfString->bit64s.Reserve(outputCount);
                                 for (uint32 bitIndex = 0; bitIndex < outputCount; ++bitIndex)

@@ -1396,14 +1396,6 @@ VkResult RayTracingPipeline::CreateImpl(
 
                                     m_shaderStageDataList[deviceIdx][shaderIdx] = shaderStageData;
                                 }
-                                else
-                                {
-                                    // It must be the internal raytracing shader.
-                                    VK_ASSERT_MSG(strncmp(pIndirectFunc->symbolName.Data(),
-                                        "_cs_",
-                                        pIndirectFunc->symbolName.Length()) == 0,
-                                        "symbolName:%s\n", pIndirectFunc->symbolName.Data());
-                                }
                             }
                         }
 
@@ -1937,6 +1929,7 @@ VkResult RayTracingPipeline::CreateImpl(
     return result;
 }
 
+// =====================================================================================================================
 VkResult RayTracingPipeline::CreateCacheId(
     const Device*                               pDevice,
     const VkRayTracingPipelineCreateInfoKHR*    pCreateInfo,
@@ -2664,14 +2657,12 @@ void RayTracingPipeline::BindToCmdBuffer(
 
         pPalCmdBuf->CmdBindPipeline(params);
 
-        uint32_t debugPrintfRegBase = (m_userDataLayout.scheme == PipelineLayoutScheme::Compact) ?
-            m_userDataLayout.compact.debugPrintfRegBase : m_userDataLayout.indirect.debugPrintfRegBase;
         pCmdBuffer->GetDebugPrintf()->BindPipeline(m_pDevice,
                                                    this,
                                                    deviceIdx,
                                                    pPalCmdBuf,
                                                    static_cast<uint32_t>(Pal::PipelineBindPoint::Compute),
-                                                   debugPrintfRegBase);
+                                                   m_userDataLayout.common.debugPrintfRegBase);
 
         pCmdBuffer->UpdateLargestPipelineStackSizes(deviceIdx, GetDefaultPipelineStackSizes(deviceIdx));
 

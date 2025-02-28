@@ -897,12 +897,15 @@ VkResult GraphicsPipelineCommon::CreateCacheId(
     const VkGraphicsPipelineCreateInfo*     pCreateInfo,
     const GraphicsPipelineExtStructs&       extStructs,
     const GraphicsPipelineLibraryInfo&      libInfo,
+    const PipelineLayout*                   pPipelineLayout,
     VkPipelineCreateFlags2KHR               flags,
     GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
     GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
     ShaderOptimizerKey*                     pShaderOptimizerKeys,
     PipelineOptimizerKey*                   pPipelineOptimizerKey,
+    PipelineMetadata*                       pBinaryMetadata,
     uint64_t*                               pApiPsoHash,
+    Util::MetroHash::Hash*                  pElfHash,
     ShaderModuleHandle*                     pTempModules,
     Util::MetroHash::Hash*                  pCacheIds)
 {
@@ -912,7 +915,7 @@ VkResult GraphicsPipelineCommon::CreateCacheId(
 
     if ((flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) != 0)
     {
-        result = GraphicsPipelineLibrary::CreateApiPsoHashAndElfHash(
+        result = GraphicsPipelineLibrary::CreateCacheId(
             pDevice,
             pCreateInfo,
             extStructs,
@@ -920,10 +923,13 @@ VkResult GraphicsPipelineCommon::CreateCacheId(
             flags,
             pShaderStageInfo,
             pBinaryCreateInfo,
+            pPipelineLayout,
             pShaderOptimizerKeys,
             pPipelineOptimizerKey,
             pApiPsoHash,
+            pElfHash,
             pTempModules,
+            pBinaryMetadata,
             pCacheIds);
     }
     else
@@ -939,6 +945,7 @@ VkResult GraphicsPipelineCommon::CreateCacheId(
             pShaderOptimizerKeys,
             pPipelineOptimizerKey,
             pApiPsoHash,
+            pElfHash,
             pTempModules,
             pCacheIds);
     }
@@ -1489,8 +1496,7 @@ static void BuildMultisampleState(
         pInfo->flags.customMultiSampleState = true;
         pInfo->flags.force1x1ShaderRate =
             (pMs->sampleShadingEnable ||
-            (pMs->rasterizationSamples == VK_SAMPLE_COUNT_8_BIT) ||
-            IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizationSamples));
+            (pMs->rasterizationSamples == VK_SAMPLE_COUNT_8_BIT));
 
         pInfo->flags.sampleShadingEnable = pMs->sampleShadingEnable;
 
@@ -1923,7 +1929,7 @@ static void BuildVertexInputInterfaceState(
 
     pInfo->immedInfo.inputAssemblyState.primitiveRestartIndex = 0xFFFFFFFF;
     if ((pIa != nullptr) &&
-        (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::PrimitiveTopology) == false))
+        (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::PrimitiveRestartEnable) == false))
     {
         pInfo->immedInfo.inputAssemblyState.primitiveRestartEnable = (pIa->primitiveRestartEnable != VK_FALSE);
     }
@@ -2369,6 +2375,8 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
         (pInfo->immedInfo.rasterizerDiscardEnable == false) ||
         IsDynamicStateEnabled(pInfo->dynamicStates, DynamicStatesInternal::RasterizerDiscardEnable);
 
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+
     if (enableRasterization)
     {
         if (libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
@@ -2414,11 +2422,11 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
         // Override binning setting only when the shader has MRT >= 2
         if (pInfo->numTargets >= 2)
         {
-            if (pDevice->GetRuntimeSettings().binningOverridePbbForMrt == BinningOverridePbbForMrtEnable)
+            if (settings.binningOverridePbbForMrt == BinningOverridePbbForMrtEnable)
             {
                 pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Enable;
             }
-            else if (pDevice->GetRuntimeSettings().binningOverridePbbForMrt == BinningOverridePbbForMrtDisable)
+            else if (settings.binningOverridePbbForMrt == BinningOverridePbbForMrtDisable)
             {
                 pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Disable;
             }

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -307,6 +307,14 @@ void Image::ConvertImageCreateInfo(
         pPalCreateInfo->flags.optimalShareable = 1;
     }
 
+    const uint32 bytesPerPixel = Pal::Formats::BytesPerPixel(pPalCreateInfo->swizzledFormat.format);
+
+    if ((settings.enable256KbSwizzleModes != Enable256KbSwizzleModes::Never) &&
+        ((bytesPerPixel * pPalCreateInfo->samples) >= settings.enable256KbSwizzleModes))
+    {
+        pPalCreateInfo->flags.enable256KBSwizzleModes = 1;
+    }
+
     ExternalMemoryFlags externalFlags;
     externalFlags.u32All = 0;
 
@@ -415,9 +423,12 @@ void Image::ConvertImageCreateInfo(
         }
     }
 
-    const bool isZ24DsFormat = (settings.enableD24S8 &&
+    // this flag should be set when D32 format is set on pal format, otherwise we will have real D24 be used
+    const bool isZ24DsFormat = ((pPalCreateInfo->swizzledFormat.format == Pal::ChNumFormat::X32_Float) ||
+                                (pPalCreateInfo->swizzledFormat.format == Pal::ChNumFormat::D32_Float_S8_Uint)) &&
+                                (settings.enableD24AsD32 &&
                                 ((pCreateInfo->format == VK_FORMAT_D24_UNORM_S8_UINT) ||
-                                 (pCreateInfo->format == VK_FORMAT_X8_D24_UNORM_PACK32)));
+                                (pCreateInfo->format == VK_FORMAT_X8_D24_UNORM_PACK32)));
 
     const bool isZ16DsFormat = ((pCreateInfo->format == VK_FORMAT_D16_UNORM) ||
                                 (pCreateInfo->format == VK_FORMAT_D16_UNORM_S8_UINT));
@@ -527,9 +538,9 @@ void Image::ConvertImageCreateInfo(
     }
 
     const uint32_t disableBits =
-        (externalFlags.externallyShareable ? DisableCompressionForSharedImages : 0)                 |
-        ((Formats::IsColorFormat(createInfoFormat))        ? DisableCompressionForColor : 0)        |
-        ((Formats::IsDepthStencilFormat(createInfoFormat)) ? DisableCompressionForDepthStencil : 0);
+        (externalFlags.externallyShareable               ? uint32_t(DisableCompressionForSharedImages) : 0) |
+        (Formats::IsColorFormat(createInfoFormat)        ? uint32_t(DisableCompressionForColor)        : 0) |
+        (Formats::IsDepthStencilFormat(createInfoFormat) ? uint32_t(DisableCompressionForDepthStencil) : 0);
 
     if ((forceDisableCompressionMask & disableBits) != 0)
     {
@@ -1754,7 +1765,7 @@ void Image::GetSparseMemoryRequirements(
     // Count the number of aspects
     struct
     {
-        uint32_t              planePal;
+        uint8_t               planePal;
         VkImageAspectFlagBits aspectVk;
         bool                  available;
     } aspects[] =
@@ -1812,18 +1823,20 @@ void Image::GetSparseMemoryRequirements(
 
             // Get the first two miptail's layout information (if available) to be able to determine the miptail offset
             // and the stride between layers, if applicable
-            uint32_t miptailLayoutCount = 0;
+            uint16_t miptailLayoutCount = 0;
 
             if (memoryLayout.prtMinPackedLod < m_mipLevels)
             {
-                miptailLayoutCount = Util::Min(m_arraySize, 2u);
+                VK_ASSERT(memoryLayout.prtMinPackedLod <= UINT8_MAX);
+                VK_ASSERT(m_arraySize <= UINT16_MAX);
+                miptailLayoutCount = static_cast<uint16_t>(Util::Min(m_arraySize, 2u));
 
-                for (uint32_t i = 0; i < miptailLayoutCount; ++i)
+                for (uint16_t i = 0; i < miptailLayoutCount; ++i)
                 {
                     const Pal::SubresId subresourceId =
                     {
                         currentAspect.planePal,
-                        memoryLayout.prtMinPackedLod,
+                        static_cast<uint8_t>(memoryLayout.prtMinPackedLod),
                         i  /* arraySlice */
                     };
 
@@ -2663,6 +2676,42 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetImageDrmFormatModifierPropertiesEXT(
 }
 #endif
 
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyImageToImage(
+    VkDevice                                    device,
+    const VkCopyImageToImageInfo*            pCopyImageToImageInfo)
+{
+    VK_NOT_IMPLEMENTED;
+    return VK_ERROR_UNKNOWN;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyImageToMemory(
+    VkDevice                                    device,
+    const VkCopyImageToMemoryInfo*              pCopyImageToMemoryInfo)
+{
+    VK_NOT_IMPLEMENTED;
+    return VK_ERROR_UNKNOWN;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyMemoryToImage(
+    VkDevice                                    device,
+    const VkCopyMemoryToImageInfo*              pCopyMemoryToImageInfo)
+{
+    VK_NOT_IMPLEMENTED;
+    return VK_ERROR_UNKNOWN;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkTransitionImageLayout(
+    VkDevice                                    device,
+    uint32_t                                    transitionCount,
+    const VkHostImageLayoutTransitionInfo*      pTransitions)
+{
+    VK_NOT_IMPLEMENTED;
+    return VK_ERROR_UNKNOWN;
+}
 } // namespace entry
 
 } // namespace vk

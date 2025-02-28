@@ -1,0 +1,70 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xaf0f2d97bef3af3d 9393b9383f5e494b"
+        }
+      },
+      "action": {
+        "cs": {
+          "useSiScheduler": true,
+          "forceLoopUnrollCount": 15,
+          "disableLicm": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x4ff9952eb812b9d1 5c6fc3a4fb143a2e"
+        }
+      },
+      "action": {
+        "cs": {
+          "threadGroupSwizzleMode": "_16x16"
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x98a1064ec65eb412 64eca5e83285c2fa"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": true,
+          "disableCodeSinking": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x14b81eeb5b385658 efe19d0442c3e1f2"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xe6fd017c2a15e034 5d00c1b231a8f20"
+        }
+      },
+      "action": {
+        "cs": {
+          "nsaThreshold": 10
+        }
+      }
+    }
+  ]
+}

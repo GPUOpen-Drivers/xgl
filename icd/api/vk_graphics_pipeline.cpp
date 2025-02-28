@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -140,6 +140,19 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                 pPipelineOptimizerKey,
                 pBinaryMetadata,
                 pBinaryCreateInfo);
+
+            if (convertResult == VK_SUCCESS)
+            {
+                PipelineCompiler::ConvertGraphicsPipelineExecutableState(
+                    pDevice,
+                    pCreateInfo,
+                    libInfo,
+                    flags,
+                    pShaderInfo,
+                    pPipelineLayout,
+                    pBinaryCreateInfo);
+            }
+
             result = (result == VK_SUCCESS) ? convertResult : result;
         }
 
@@ -217,6 +230,15 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
 
                     if (result == VK_SUCCESS)
                     {
+                        PipelineCompiler::ConvertGraphicsPipelineExecutableState(
+                            pDevice,
+                            pCreateInfo,
+                            libInfo,
+                            flags,
+                            pShaderInfo,
+                            pPipelineLayout,
+                            &binaryCreateInfoMGPU);
+
                         result = pDevice->GetCompiler(deviceIdx)->CreateGraphicsPipelineBinary(
                             pDevice,
                             deviceIdx,
@@ -248,7 +270,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                 pPipelineBinaries[DefaultDeviceIndex],
                 pBinaryMetadata);
             pBinaryCreateInfo->pBinaryMetadata = pBinaryMetadata;
-            pDevice->GetCompiler(DefaultDeviceIndex)->UploadInternalBufferData(pDevice, pBinaryCreateInfo);
+            PipelineCompiler::UploadInternalBufferData(pDevice, pBinaryCreateInfo);
         }
 
         // Add to any cache layer where missing
@@ -863,7 +885,7 @@ VkResult GraphicsPipeline::Create(
 
     if (IsGplFastLinkPossible(pDevice, libInfo, pPipelineLayout))
     {
-        result = pDevice->GetCompiler(DefaultDeviceIndex)->BuildGplFastLinkCreateInfo(
+        result = pDefaultCompiler->BuildGplFastLinkCreateInfo(
             pDevice, pCreateInfo, extStructs, flags, libInfo, pPipelineLayout, &binaryMetadata, &binaryCreateInfo);
 
         if (result == VK_SUCCESS)
@@ -885,7 +907,7 @@ VkResult GraphicsPipeline::Create(
             {
                 uint64_t colorExportTicks = Util::GetPerfCpuTime();
                 Pal::IShaderLibrary* pColorExportLib = nullptr;
-                result = pDevice->GetCompiler(DefaultDeviceIndex)->CreateColorExportShaderLibrary(pDevice,
+                result = pDefaultCompiler->CreateColorExportShaderLibrary(pDevice,
                     &binaryCreateInfo,
                     pAllocator,
                     &pColorExportLib);
@@ -938,6 +960,7 @@ VkResult GraphicsPipeline::Create(
             &shaderOptimizerKeys[0],
             &pipelineOptimizerKey,
             &apiPsoHash,
+            &elfHash,
             &tempModules[0],
             &cacheId[0]);
 
@@ -969,6 +992,11 @@ VkResult GraphicsPipeline::Create(
     {
         if (gplProvided)
         {
+            const PipelineCompilerType compilerType =
+                pDefaultCompiler->CheckCompilerType<Vkgc::GraphicsPipelineBuildInfo>(nullptr, 0, 0);
+            CompilerSolution*          pSolution    = pDefaultCompiler->GetSolution(compilerType);
+            uint32                     binaryIndex  = 0;
+
             for (uint32_t gplType = 0;
                  (gplType < GraphicsLibraryCount)            &&
                  (shaderLibraries[gplType] != nullptr)       &&
@@ -976,30 +1004,43 @@ VkResult GraphicsPipeline::Create(
                  (result == VK_SUCCESS);
                  ++gplType)
             {
-                uint32 codeSize = 0;
+                Vkgc::BinaryData shaderBinary = {};
+                bool             hitCache     = false;
+                bool             hitAppCache  = false;
 
-                shaderLibraries[gplType]->GetCodeObject(&codeSize, nullptr);
+                pSolution->LoadShaderBinaryFromCache(
+                    nullptr,
+                    &gplCacheId[gplType],
+                    &shaderBinary,
+                    &hitCache,
+                    &hitAppCache);
 
-                void* pMemory = pAllocator->pfnAllocation(
-                    pAllocator->pUserData,
-                    codeSize,
-                    VK_DEFAULT_MEM_ALIGN,
-                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);     // retained in the pipeline object
-
-                if (pMemory != nullptr)
+                if (hitCache || hitAppCache)
                 {
-                    shaderLibraries[gplType]->GetCodeObject(&codeSize, pMemory);
+                    Util::MetroHash::Hash libraryElfHash = {};
 
-                    InsertBinaryData(
-                        &binaryStorage,
-                        gplType,
+                    if (gplType == GraphicsLibraryPreRaster)
+                    {
+                        libraryElfHash = *libInfo.pPreRasterizationShaderLib->GetElfHash();
+                    }
+                    else if (gplType == GraphicsLibraryFragment)
+                    {
+                        libraryElfHash = *libInfo.pFragmentShaderLib->GetElfHash();
+                    }
+
+                    result = GraphicsPipelineLibrary::WriteGplAndMetadataToPipelineBinary(
+                        pAllocator,
+                        shaderBinary,
                         gplCacheId[gplType],
-                        codeSize,
-                        pMemory);
-                }
-                else
-                {
-                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                        static_cast<GraphicsLibraryType>(gplType),
+                        libraryElfHash,
+                        binaryIndex,
+                        &binaryStorage);
+
+                    if (result == VK_SUCCESS)
+                    {
+                        ++binaryIndex;
+                    }
                 }
             }
         }
@@ -1238,6 +1279,7 @@ VkResult GraphicsPipeline::CreateCacheId(
     ShaderOptimizerKey*                     pShaderOptimizerKeys,
     PipelineOptimizerKey*                   pPipelineOptimizerKey,
     uint64_t*                               pApiPsoHash,
+    Util::MetroHash::Hash*                  pElfHash,
     ShaderModuleHandle*                     pTempModules,
     Util::MetroHash::Hash*                  pCacheIds)
 {
@@ -1269,14 +1311,13 @@ VkResult GraphicsPipeline::CreateCacheId(
             pPipelineOptimizerKey);
 
         // 3. Build API and ELF hashes
-        Util::MetroHash::Hash elfHash = {};
         BuildApiHash(pCreateInfo,
                      flags,
                      extStructs,
                      libInfo,
                      *pBinaryCreateInfo,
                      pApiPsoHash,
-                     &elfHash);
+                     pElfHash);
 
         // 4. Build Cache IDs
         for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
@@ -1284,7 +1325,7 @@ VkResult GraphicsPipeline::CreateCacheId(
             ElfHashToCacheId(
                 pDevice,
                 deviceIdx,
-                elfHash,
+                *pElfHash,
                 *pPipelineOptimizerKey,
                 &pCacheIds[deviceIdx]
             );
@@ -2077,14 +2118,12 @@ void GraphicsPipeline::BindToCmdBuffer(
 
         Pal::ICmdBuffer* pPalCmdBuf = pCmdBuffer->PalCmdBuffer(deviceIdx);
 
-        uint32_t debugPrintfRegBase = (m_userDataLayout.scheme == PipelineLayoutScheme::Compact) ?
-            m_userDataLayout.compact.debugPrintfRegBase : m_userDataLayout.indirect.debugPrintfRegBase;
         pCmdBuffer->GetDebugPrintf()->BindPipeline(m_pDevice,
                                                    this,
                                                    deviceIdx,
                                                    pPalCmdBuf,
                                                    static_cast<uint32_t>(Pal::PipelineBindPoint::Graphics),
-                                                   debugPrintfRegBase);
+                                                   m_userDataLayout.common.debugPrintfRegBase);
         if ((oldHash != newHash)
             || dynamicStateDirty
             )

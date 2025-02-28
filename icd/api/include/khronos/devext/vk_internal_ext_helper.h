@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -39,6 +39,6 @@
     ((type)(VK_EXTENSION_ENUM_BASE_VALUE + (((extnr)-1) * VK_EXTENSION_ENUM_RANGE_SIZE) + (offset)))
 
 #define VK_EXTENSION_BIT(type, bit) \
-    ((type)(1 << (bit)))
+    ((type)(1ull << (bit)))
 
 #endif /* VK_INTERNAL_EXT_HELPER_H_ */

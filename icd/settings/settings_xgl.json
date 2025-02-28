@@ -351,32 +351,28 @@
           "Value": 8192
         },
         {
-          "Name": "CoherCeLoad",
+          "Name": "CoherStreamOut",
           "Value": 16384
         },
         {
-          "Name": "CoherCeDump",
+          "Name": "CoherMemory",
           "Value": 32768
         },
         {
-          "Name": "CoherStreamOut",
+          "Name": "CoherSampleRate",
           "Value": 65536
         },
         {
-          "Name": "CoherMemory",
+          "Name": "CoherPresent",
           "Value": 131072
         },
         {
-          "Name": "CoherSampleRate",
-          "Value": 262144
-        },
-        {
-          "Name": "CoherPresent",
+          "Name": "CoherCp",
           "Value": 524288
         },
         {
           "Name": "CoherAllUsages",
-          "Value": 2097151,
+          "Value": 1048575,
           "Description": "(heavyweight option)"
         }
       ]
@@ -403,18 +399,6 @@
       ],
       "Defaults": {
         "Default": true
-      },
-      "Type": "bool",
-      "Scope": "Driver"
-    },
-    {
-      "Name": "ForceDisableGlobalBarrierCacheSync",
-      "Description": "Forces Render pass global-only barrier to not flush/inv any caches when acquire/release barrier interface is used.",
-      "Tags": [
-        "Render Passes"
-      ],
-      "Defaults": {
-        "Default": false
       },
       "Type": "bool",
       "Scope": "Driver"
@@ -1543,7 +1527,7 @@
           }
         ]
       },
-      "Description": "Enable log mask, enable with 1 in BIL or general output (2) and error message (1) in LLPC.",
+      "Description": "Enable log mask, general output (2) and error message (1) in LLPC.",
       "Tags": [
         "SPIRV Options"
       ],
@@ -1559,7 +1543,7 @@
       "Name": "EnableLog"
     },
     {
-      "Description": "Filename of the log file in LLPC and BIL. Directory of the log file is PipelineDumpDir. Note that logFileName does not includes <path> and <.txt>. Full path of log file is: PipelineDumpDir+LogFileNameBil.txt or PipelineDumpDir+LogFileNameLlpc.txt. ",
+      "Description": "Filename of the log file. Directory of the log file is PipelineDumpDir. Note that logFileName does not includes <path> and <.txt>. Full path of log file is: PipelineDumpDir+LogFileNameLlpc.txt.",
       "Tags": [
         "SPIRV Options"
       ],
@@ -2216,30 +2200,6 @@
       "Name": "DropPipelineBinaryInstSize"
     },
     {
-      "Description": "[BIL ONLY] Generate optimized IL codes for performance purpose. This may break some precision rules and may not produce 100% conforming IL codes. Therefore, the option should only be enabled via application profile.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "EnableSpvPerfOptimal"
-    },
-    {
-      "Description": "[BIL ONLY] Enable SPIR-V binary validation.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "EnableSpvValidation"
-    },
-    {
       "Description": "Tessellation factor optimization.",
       "Tags": [
         "SPIRV Options"
@@ -2271,30 +2231,6 @@
       "Scope": "Driver",
       "Type": "enum",
       "Name": "OptimizeTessFactor"
-    },
-    {
-      "Description": "[BIL ONLY] Zero initialize AMD IL registers. ",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "ZeroInitIlRegs"
-    },
-    {
-      "Description": "[BIL ONLY] Skip unsupported SPIR-V instructions. ",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "SkipUnsupportedOpCode"
     },
     {
       "Description": "A bitmask of flags that control relaxed precision features.",
@@ -3197,21 +3133,6 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Enable Top Down Build in TLAS",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "RtEnableTopDownBuild",
-      "Scope": "Driver"
-    },
-    {
       "Description": "Enable Rebraid in TLAS",
       "Tags": [
         "Ray Tracing"
@@ -3220,106 +3141,10 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": "RebraidTypeOff"
-      },
-      "ValidValues": {
-        "IsEnum": true,
-        "Name": "RebraidType",
-        "Values": [
-          {
-            "Name": "RebraidTypeOff",
-            "Value": 0,
-            "Description": "No Rebraid"
-          },
-          {
-            "Name": "RebraidTypeV1",
-            "Value": 1,
-            "Description": "Version 1 Rebraid"
-          },
-          {
-            "Name": "RebraidTypeV2",
-            "Value": 2,
-            "Description": "Version 2 Rebraid"
-          }
-        ]
-      },
-      "Type": "enum",
-      "Name": "RtEnableTreeRebraid",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Max top down build instances",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": 5120
-      },
-      "Type": "uint32",
-      "Name": "MaxTopDownBuildInstances",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Enable Triangle Splitting",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
         "Default": false
       },
       "Type": "bool",
-      "Name": "RtEnableTriangleSplitting",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Triangle Splitting Factor",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": 1.15
-      },
-      "Type": "float",
-      "Name": "RtTriangleSplittingFactor",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "If RtEnableTriangleSplitting is enabled, this setting will limit the maximum number of splits per triangle. A value=0 disables the setting.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": 4
-      },
-      "Type": "uint32",
-      "Name": "RtTriangleSplittingBudgetPerTriangle",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "If RtEnableTriangleSplitting is enabled, this factor will affect the priority in triangle splitting.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": 1.0
-      },
-      "Type": "float",
-      "Name": "RtTriangleSplittingPriority",
+      "Name": "RtEnableRebraid",
       "Scope": "Driver"
     },
     {
@@ -3398,7 +3223,7 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Enable Variable Bits Morton Codes - Selects the largest axis per bit rather than rotating xyzxyz",
+      "Description": "Flags for Morton Codes",
       "Tags": [
         "Ray Tracing"
       ],
@@ -3406,10 +3231,50 @@
         "VKI_RAY_TRACING"
       ],
       "Defaults": {
-        "Default": true
+        "Default": "MortonFlagDefaultVariableBitMortonCodes"
       },
-      "Type": "bool",
-      "Name": "EnableVariableBitsMortonCodes",
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "MortonFlags",
+        "Values": [
+          {
+            "Name": "MortonFlagDefaultVariableBitMortonCodes",
+            "Value": 0,
+            "Description": "Selects the largest axis per bit in a Scene Bound based on the bounding box of the Primitives"
+          },
+          {
+            "Name": "MortonFlagEnableRegularMortonCodes",
+            "Value": 1,
+            "Description": "Rotates in xyzxyzxyz order rather than selecting the largest axis per bit"
+          },
+          {
+            "Name": "MortonFlagEnableCentroidBounds",
+            "Value": 2,
+            "Description": "Uses the Centroids of primitives as Scene Bounds rather than the bounding box of the Primitives"
+          },
+          {
+            "Name": "MortonFlagEnableConciseBounds",
+            "Value": 4,
+            "Description": "Uses a mix between Centroid and Scene Bounds for a more concise bound rather than the bounding box of the Primitives"
+          },
+          {
+            "Name": "MortonFlagEnableCubeBounds",
+            "Value": 8,
+            "Description": "Transforms the used Scene Bounds to a Cube creating square Morton Cells, MortonFlagEnableRegularMortonCodes should be enabled with this flag."
+          },
+          {
+            "Name": "MortonFlagEnablePerfectRectangle",
+            "Value": 16,
+            "Description": "Transforms the used Scene Bounds to a Perfect Rectangle creating square Morton Cells"
+          }
+        ]
+      },
+      "Type": "uint32",
+      "Name": "MortonFlags",
       "Scope": "Driver"
     },
     {
@@ -4097,21 +3962,6 @@
       "Scope": "Driver"
     },
     {
-      "Description": "When the LBVH builder is selected, enable the Fast LBVH path.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": true
-      },
-      "Type": "bool",
-      "Name": "RtEnableFastLBVH",
-      "Scope": "Driver"
-    },
-    {
       "Description": "Waves per SIMD to launch for parallel build. 0 chooses the default.",
       "Tags": [
         "Ray Tracing"
@@ -4508,21 +4358,6 @@
       },
       "Type": "enum",
       "Name": "EmulatedRtIpLevel",
-      "Scope": "Driver"
-    },
-    {
-      "Name": "RebraidLengthPercentage",
-      "Description": "Length percentage to open a node when doing top-down build with rebraid enabled.",
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Defaults": {
-        "Default": 0.1
-      },
-      "Type": "float",
       "Scope": "Driver"
     },
     {
@@ -6830,6 +6665,69 @@
       "Name": "ImageTilingPreference3dGpuWritable"
     },
     {
+      "Description": "[GFX11+ only] Enable 256 KiB swizzle modes",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "Enable256KbSwizzleModes::For16BppMsaa"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "Enable256KbSwizzleModes",
+        "Values": [
+          {
+            "Name": "Never",
+            "Value": 0,
+            "Description": "Never allow 256KB swizzle modes"
+          },
+          {
+            "Name": "Always",
+            "Value": 1,
+            "Description": "Always allow 256KB swizzle modes"
+          },
+          {
+            "Name": "For2BppMsaa",
+            "Value": 2,
+            "Description": "Allow 256KB swizzle modes for bytes per pixel * sample count >= 2, e.g. 2 BPP no MSAA"
+          },
+          {
+            "Name": "For4BppMsaa",
+            "Value": 4,
+            "Description": "Allow 256KB swizzle modes for bytes per pixel * sample count >= 4, e.g. 4 BPP no MSAA"
+          },
+          {
+            "Name": "For8BppMsaa",
+            "Value": 8,
+            "Description": "Allow 256KB swizzle modes for bytes per pixel * sample count >= 8, e.g. 8 BPP no MSAA"
+          },
+          {
+            "Name": "For16BppMsaa",
+            "Value": 16,
+            "Description": "Allow 256KB swizzle modes for bytes per pixel * sample count >= 16, e.g. 4 BPP @ 4xMSAA"
+          },
+          {
+            "Name": "For32BppMsaa",
+            "Value": 32,
+            "Description": "Allow 256KB swizzle modes for bytes per pixel * sample count >= 32, e.g. 8 BPP @ 4xMSAA"
+          },
+          {
+            "Name": "For64BppMsaa",
+            "Value": 64,
+            "Description": "Allow 256KB swizzle modes for bytes per pixel * sample count >= 64, e.g. 16 BPP @ 4xMSAA"
+          },
+          {
+            "Name": "For128BppMsaa",
+            "Value": 128,
+            "Description": "Allow 256KB swizzle modes for bytes per pixel * sample count >= 128, e.g. 16 BPP @ 8xMSAA"
+          }
+        ]
+      },
+      "Type": "enum",
+      "Scope": "Driver",
+      "Name": "Enable256KBSwizzleModes"
+    },
+    {
       "Description": "Enable FMASK based MSAA texture reads. ",
       "Tags": [
         "Optimization"
@@ -7302,8 +7200,8 @@
       "Scope": "Driver"
     },
     {
-      "Name": "EnableD24S8",
-      "Description": "Enable support for format D24_UNORM_S8_UINT and X8_D24_UNORM_PACK32.",
+      "Name": "EnableD24AsD32",
+      "Description": "Enable support for format D24_UNORM_S8_UINT and X8_D24_UNORM_PACK32 to use D32 format with depthAsZ24.",
       "Tags": [
         "Optimization"
       ],
@@ -7606,16 +7504,32 @@
       "Name": "CsInlinePushDescriptorUserDataLimit"
     },
     {
-      "Description": "Enable support for alternating compute shader thread group ordering.",
+      "Name": "DispatchPingPong",
+      "Description": "Enables alternating between forward and reverse thread groups on each Dispatch",
       "Tags": [
         "Optimization"
       ],
       "Defaults": {
-        "Default": false
+        "Default": "DispatchPingPongDisable"
       },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "EnableAlternatingThreadGroupOrder"
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "DispatchPingPongDisable",
+            "Value": 0,
+            "Description": "Don't override the dispatchPingPong"
+          },
+          {
+            "Name": "DispatchPingPongSw",
+            "Value": 1,
+            "Description": "Override to enable dispatch ping pong in software"
+          }
+        ],
+        "Name": "DispatchPingPong"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
     },
     {
       "Name": "AllowReZ",
@@ -7688,6 +7602,18 @@
       "Scope": "Driver",
       "Type": "bool",
       "Name": "EnableVariableRateShading"
+    },
+    {
+      "Description": "Enables command buffer chaining on vkQueueSubmit",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "MultiSubmitChaining"
     },
     {
       "Description": "Enable GPU decompress pass for astc/etc image, it is on the vkCopyBufferToImage, and not safe depending on application.",
@@ -9526,6 +9452,30 @@
       },
       "Type": "uint32",
       "Scope": "Driver"
+    },
+    {
+      "Description": "Disable degenerative primtives, i.e. set their vertex.x = NaN",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "DisableDegenPrims"
+    },
+    {
+      "Description": "Enable compression on RDF chunks generated by GPURT",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "EnableGpurtRdfCompression"
     }
   ]
 }

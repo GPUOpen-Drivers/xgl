@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -388,6 +388,13 @@ protected:
 #endif
 
 private:
+    Pal::Result TimedQueueSubmit(
+        uint32_t                     deviceIdx,
+        uint32_t                     apiCmdBufferCount,
+        const VkCommandBuffer*       pCommandBuffers,
+        const Pal::SubmitInfo&       palSubmitInfo,
+        VirtualStackFrame*           pVirtStackFrame);
+
     PAL_DISALLOW_COPY_AND_ASSIGN(Queue);
 };
 

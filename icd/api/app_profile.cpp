@@ -847,6 +847,12 @@ constexpr AppProfilePatternEntry AppNameIndianaJonesGC =
     "thegreatcircle"
 };
 
+constexpr AppProfilePatternEntry AppNameCreo =
+{
+    PatternExeNameLower,
+    "xtop"
+};
+
 // Section END of AppProfilePatternEntry for all games
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -1771,6 +1777,13 @@ AppProfilePattern AppPatternTable[] =
         }
     },
 
+    {
+        AppProfile::Creo,
+        {
+            AppNameCreo,
+            PatternEnd
+        }
+    },
 };
 
 static char* GetExecutableName(size_t* pLength, bool includeExtension = false);

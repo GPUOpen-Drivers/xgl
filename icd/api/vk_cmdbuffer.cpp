@@ -654,14 +654,14 @@ VkResult CmdBuffer::Create(
     // Get information about the Vulkan command buffer
     Pal::CmdBufferCreateInfo palCreateInfo = {};
 
-    CmdPool* pCmdPool                     = CmdPool::ObjectFromHandle(pAllocateInfo->commandPool);
-    uint32 queueFamilyIndex               = pCmdPool->GetQueueFamilyIndex();
-    uint32 commandBufferCount             = pAllocateInfo->commandBufferCount;
-    palCreateInfo.pCmdAllocator           = pCmdPool->PalCmdAllocator(DefaultDeviceIndex);
-    palCreateInfo.queueType               = pDevice->GetQueueFamilyPalQueueType(queueFamilyIndex);
-    palCreateInfo.engineType              = pDevice->GetQueueFamilyPalEngineType(queueFamilyIndex);
-    palCreateInfo.flags.nested            = (pAllocateInfo->level > VK_COMMAND_BUFFER_LEVEL_PRIMARY) ? 1 : 0;
-    palCreateInfo.flags.dispatchTunneling = 1;
+    CmdPool* pCmdPool                        = CmdPool::ObjectFromHandle(pAllocateInfo->commandPool);
+    uint32 queueFamilyIndex                  = pCmdPool->GetQueueFamilyIndex();
+    uint32 commandBufferCount                = pAllocateInfo->commandBufferCount;
+    palCreateInfo.pCmdAllocator              = pCmdPool->PalCmdAllocator(DefaultDeviceIndex);
+    palCreateInfo.queueType                  = pDevice->GetQueueFamilyPalQueueType(queueFamilyIndex);
+    palCreateInfo.engineType                 = pDevice->GetQueueFamilyPalEngineType(queueFamilyIndex);
+    palCreateInfo.flags.nested               = (pAllocateInfo->level > VK_COMMAND_BUFFER_LEVEL_PRIMARY) ? 1 : 0;
+    palCreateInfo.flags.dispatchTunneling    = 1;
 
     // Allocate system memory for the command buffer objects
     Pal::Result palResult;
@@ -1360,7 +1360,12 @@ VkResult CmdBuffer::Begin(
     uint32 currentSubPass = 0;
 
     cmdInfo.flags.optimizeOneTimeSubmit   = (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) ? 1 : 0;
-    cmdInfo.flags.optimizeExclusiveSubmit = (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) ? 0 : 1;
+
+    // To match DXCP's behavior for multiSubmitChaining, we keep the flag off unless these conditions are met
+    if (settings.multiSubmitChaining && ((pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) == 0))
+    {
+        cmdInfo.flags.optimizeExclusiveSubmit = 1;
+    }
 
     switch (m_optimizeCmdbufMode)
     {
@@ -2204,8 +2209,9 @@ CmdBuffer::RebindUserDataFlags CmdBuffer::SwitchCommonUserDataLayouts(
     const auto& curUserDataLayout = pBindState->userDataLayout.common;
 
     // Rebind push constants if necessary
-    if ((newUserDataLayout.pushConstRegBase  != curUserDataLayout.pushConstRegBase) |
+    if (((newUserDataLayout.pushConstRegBase  != curUserDataLayout.pushConstRegBase) |
         (newUserDataLayout.pushConstRegCount != curUserDataLayout.pushConstRegCount))
+        )
     {
         flags |= RebindUserDataPushConstants;
     }
@@ -2280,7 +2286,7 @@ void CmdBuffer::RebindUserData(
 
             PalCmdBuffer(deviceIdx)->CmdSetUserData(
                 palBindPoint,
-                compactuserDataLayout.uberFetchConstBufRegBase,
+                commonUserDataLayout.uberFetchConstBufRegBase,
                 2,
                 reinterpret_cast<const uint32_t*>(&bindState.pVertexInputInternalData->gpuAddress[deviceIdx]));
         }
@@ -3492,7 +3498,7 @@ void CmdBuffer::Dispatch(
     BindRayQueryConstants(m_allGpuState.pComputePipeline, Pal::PipelineBindPoint::Compute, x, y, z, nullptr, 0, 0);
 #endif
 
-    if (m_pDevice->GetRuntimeSettings().enableAlternatingThreadGroupOrder)
+    if (m_pDevice->GetRuntimeSettings().dispatchPingPong == DispatchPingPongSw)
     {
         BindAlternatingThreadGroupConstant();
     }
@@ -3637,6 +3643,7 @@ void CmdBuffer::ExecuteIndirect(
         {
             RebindPipeline<PipelineBindCompute, false>();
         }
+
     }
     else
     {
@@ -8587,25 +8594,6 @@ void CmdBuffer::RPSyncPoint(
         const Image** ppImages = (maxTransitionCount != 0) ?
             pVirtStack->AllocArray<const Image*>(maxTransitionCount) : nullptr;
 
-        // Construct global memory dependency to synchronize caches (subpass dependencies + implicit synchronization)
-        if (rpBarrier.flags.needsGlobalTransition)
-        {
-
-            Pal::BarrierTransition globalTransition = { };
-
-            m_pDevice->GetBarrierPolicy().ApplyBarrierCacheFlags(
-                rpBarrier.srcAccessMask,
-                rpBarrier.dstAccessMask,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_GENERAL,
-                &globalTransition);
-
-            acquireReleaseInfo.srcGlobalStageMask  = srcStageMask;
-            acquireReleaseInfo.dstGlobalStageMask  = dstStageMask;
-            acquireReleaseInfo.srcGlobalAccessMask = globalTransition.srcCacheMask | rpBarrier.implicitSrcCacheMask;
-            acquireReleaseInfo.dstGlobalAccessMask = globalTransition.dstCacheMask | rpBarrier.implicitDstCacheMask;
-        }
-
         if ((pPalTransitions != nullptr) && (ppImages != nullptr))
         {
             // Construct attachment-specific layout transitions
@@ -8720,15 +8708,6 @@ void CmdBuffer::RPSyncPoint(
         else if (maxTransitionCount != 0)
         {
             m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
-
-        if ((settings.forceDisableGlobalBarrierCacheSync) &&
-            (acquireReleaseInfo.imageBarrierCount == 0)   &&
-            (acquireReleaseInfo.memoryBarrierCount == 0)  &&
-            (rpBarrier.flags.needsGlobalTransition))
-        {
-            acquireReleaseInfo.srcGlobalAccessMask = 0;
-            acquireReleaseInfo.dstGlobalAccessMask = 0;
         }
 
         const bool stageMasksNotEmpty = (((srcStageMask == 0) && (dstStageMask == 0)) == false);
@@ -9187,6 +9166,39 @@ void CmdBuffer::RPResolveMsaa(
             }
 
             regions[idx].pQuadSamplePattern = pSampleLocations;
+        }
+
+        if (aspectRegionIndex >= 1)
+        {
+            Pal::ImgBarrier imageBarrier = {};
+            imageBarrier.pImage          = nullptr; // This is set by PalCmdReleaseThenAcquire
+            imageBarrier.subresRange     = dstAttachment.subresRange[0];
+            imageBarrier.srcAccessMask   = Pal::CoherResolve;
+            imageBarrier.dstAccessMask   = Pal::CoherResolve;
+            imageBarrier.srcStageMask    = Pal::PipelineStageBlt;
+            imageBarrier.dstStageMask    = Pal::PipelineStageBlt;
+            imageBarrier.oldLayout       = dstLayout;
+            imageBarrier.newLayout       = dstLayout;
+            Pal::AcquireReleaseInfo barrierInfo =
+            {
+                .srcGlobalStageMask             = Pal::PipelineStageBlt,
+                .dstGlobalStageMask             = Pal::PipelineStageBlt,
+                .srcGlobalAccessMask            = Pal::CoherResolve,
+                .dstGlobalAccessMask            = Pal::CoherResolve,
+                .memoryBarrierCount             = 0,
+                .pMemoryBarriers                = nullptr,
+                .imageBarrierCount              = 1,
+                .pImageBarriers                 = &imageBarrier,
+                .reason                         = Pal::Developer::BarrierReason::BarrierReasonResolveImage
+            };
+            const vk::Image* pImage = dstAttachment.pImage;
+            PalCmdReleaseThenAcquire(
+                &barrierInfo,
+                nullptr,
+                nullptr,
+                &imageBarrier,
+                &pImage,
+                m_curDeviceMask);
         }
 
         PalCmdResolveImage(
@@ -10530,12 +10542,11 @@ void CmdBuffer::DbgCmdBarrier(bool preCmd)
         (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherIndexData)          == CoherIndexData)          &&
         (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherQueueAtomic)        == CoherQueueAtomic)        &&
         (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherTimestamp)          == CoherTimestamp)          &&
-        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherCeLoad)             == CoherCeLoad)             &&
-        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherCeDump)             == CoherCeDump)             &&
         (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherStreamOut)          == CoherStreamOut)          &&
         (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherMemory)             == CoherMemory)             &&
         (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherSampleRate)         == CoherSampleRate)         &&
-        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherPresent)            == CoherPresent)),
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherPresent)            == CoherPresent)            &&
+        (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherCp)                 == CoherCp)),
         "The PAL::CacheCoherencyUsageFlags enum has changed. Vulkan settings might need to be updated.");
 
     uint32_t srcStageMask;
@@ -10950,9 +10961,7 @@ void CmdBuffer::BindAlternatingThreadGroupConstant()
 {
     uint32_t              data            = m_reverseThreadGroupState ? 1 : 0;
     const UserDataLayout* pUserDataLayout = m_allGpuState.pComputePipeline->GetUserDataLayout();
-    uint32_t              userDataRegBase = (pUserDataLayout->scheme == PipelineLayoutScheme::Compact) ?
-                                                pUserDataLayout->compact.threadGroupReversalRegBase :
-                                                pUserDataLayout->indirect.threadGroupReversalRegBase;
+    uint32_t              userDataRegBase = GetUserDataRegBase(pUserDataLayout);
 
     if (userDataRegBase != PipelineLayout::InvalidReg)
     {
@@ -11287,10 +11296,22 @@ void CmdBuffer::GetRayTracingDispatchArgs(
 
     if (pPipeline->CheckIsCps())
     {
+        pConstants->constData.cpsDispatchId = 0;
+        pConstants->constData.cpsDispatchIdAddressHi = Util::HighPart(
+            pConstants->descriptorTable.dispatchRaysConstGpuVa + DISPATCHRAYSCONSTANTDATA_STRUCT_OFFSET_DISPATCHID);
+        pConstants->constData.cpsDispatchIdAddressLo = Util::LowPart(
+            pConstants->descriptorTable.dispatchRaysConstGpuVa + DISPATCHRAYSCONSTANTDATA_STRUCT_OFFSET_DISPATCHID);
+
         Pal::CompilerStackSizes stackSizes = PerGpuState(deviceIdx)->maxPipelineStackSizes;
+        if (PerGpuState(deviceIdx)->dynamicPipelineStackSize != 0)
+        {
+            stackSizes.frontendSize = PerGpuState(deviceIdx)->dynamicPipelineStackSize;
+        }
+
         pConstants->constData.cpsFrontendStackSize = stackSizes.frontendSize;
         pConstants->constData.cpsBackendStackSize = stackSizes.backendSize;
-        if (settings.cpsFlags & CpsFlagStackInGlobalMem)
+
+        if ((settings.cpsFlags & CpsFlagStackInGlobalMem) != 0)
         {
             const uint32 numRays = width * height * depth;
 
@@ -11414,6 +11435,12 @@ void CmdBuffer::TraceRaysPerDevice(
     PalCmdBuffer(deviceIdx)->CmdSetUserData(Pal::PipelineBindPoint::Compute, dispatchRaysUserData, 1, &constGpuAddrLow);
 
     m_pfnTraceRaysDispatchPerDevice(this, deviceIdx, width, height, depth);
+
+    if (pPipeline->CheckIsCps() && ((settings.cpsFlags & CpsFlagStackInGlobalMem) != 0))
+    {
+        // A memory barrier is needed here because the CPS global memory is reused by other CPS kernels.
+        RayTracingDevice::SyncRtCommands(PalCmdBuffer(deviceIdx), RtBarrierMode::Dispatch);
+    }
 
     DbgBarrierPostCmd(DbgTraceRays);
 }
@@ -11611,24 +11638,7 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
     m_pDevice->RayTrace()->GpuRt(deviceIdx)->InitExecuteIndirect(PalCmdBuffer(deviceIdx), initUserData, 1, 1);
 
     // Wait for the argument buffer to be populated before continuing with TraceRaysIndirect
-    const Pal::HwPipePoint postCs = Pal::HwPipePostCs;
-
-    Pal::BarrierInfo barrier = {};
-
-    barrier.pipePointWaitCount = 1;
-    barrier.pPipePoints        = &postCs;
-    barrier.waitPoint          = Pal::HwPipeTop;
-
-    Pal::BarrierTransition transition = {};
-
-    transition.srcCacheMask = Pal::CoherShaderWrite;
-    transition.dstCacheMask = Pal::CoherShaderRead | Pal::CoherIndirectArgs;
-
-    barrier.transitionCount = 1;
-    barrier.pTransitions    = &transition;
-    barrier.reason          = Pal::Developer::BarrierReasonUnknown;
-
-    PalCmdBarrier(barrier, m_curDeviceMask);
+    RayTracingDevice::SyncRtCommands(PalCmdBuffer(deviceIdx), RtBarrierMode::IndirectArg);
 
     uint32_t dispatchRaysUserData = pPipeline->GetDispatchRaysUserDataOffset();
     uint32_t constGpuAddrLow      = uint32_t(constGpuAddr);
@@ -11791,7 +11801,8 @@ void CmdBuffer::BindRayQueryConstants(
             const uint32_t deviceIdx = deviceGroup.Index();
 
             const bool asTrackingEnabled = VkDevice()->RayTrace()->AccelStructTrackerEnabled(deviceIdx);
-            const bool rtCountersEnabled = VkDevice()->RayTrace()->RayHistoryTraceActive(deviceIdx);
+            const bool rtCountersEnabled = (VkDevice()->RayTrace()->TraceRayCounterMode(deviceIdx) !=
+                                            GpuRt::TraceRayCounterMode::TraceRayCounterDisable);
 
             if (asTrackingEnabled || rtCountersEnabled)
             {
@@ -11810,74 +11821,72 @@ void CmdBuffer::BindRayQueryConstants(
                         VkDevice()->GetProperties().descriptorSizes.untypedBufferView);
                 }
 
-                if (rtCountersEnabled)
+                constants.descriptorTable.dispatchRaysConstGpuVa =
+                    constGpuAddr + offsetof(GpuRt::DispatchRaysConstants, constData);
+
+                // Ray history dumps for Graphics pipelines are not yet supported
+                if (VkDevice()->RayTrace()->RayHistoryTraceActive(deviceIdx) &&
+                    (bindPoint == Pal::PipelineBindPoint::Compute))
                 {
-                    constants.descriptorTable.dispatchRaysConstGpuVa = constGpuAddr +
-                        offsetof(GpuRt::DispatchRaysConstants, constData);
+                    const uint32_t* pOrigThreadgroupDims =
+                        static_cast<const ComputePipeline*>(pPipeline)->GetOrigThreadgroupDims();
 
-                    // Ray history dumps for Graphics pipelines are not yet supported
-                    if (bindPoint == Pal::PipelineBindPoint::Compute)
+                    constants.constData.profileMaxIterations = m_pDevice->RayTrace()->GetProfileMaxIterations();
+                    constants.constData.profileRayFlags      = m_pDevice->RayTrace()->GetProfileRayFlags();
+
+                    gpusize indirectBufferVa = (pIndirectBuffer != nullptr) ?
+                        pIndirectBuffer->GpuVirtAddr(deviceIdx) + indirectOffset :
+                        indirectBufferVirtAddr;
+
+                    if (indirectBufferVa == 0)
                     {
-                        const uint32_t* pOrigThreadgroupDims =
-                            static_cast<const ComputePipeline*>(pPipeline)->GetOrigThreadgroupDims();
+                        constants.constData.rayDispatchWidth  = width  * pOrigThreadgroupDims[0];
+                        constants.constData.rayDispatchHeight = height * pOrigThreadgroupDims[1];
+                        constants.constData.rayDispatchDepth  = depth  * pOrigThreadgroupDims[2];
 
-                        constants.constData.profileMaxIterations = m_pDevice->RayTrace()->GetProfileMaxIterations();
-                        constants.constData.profileRayFlags      = m_pDevice->RayTrace()->GetProfileRayFlags();
+                        m_pDevice->RayTrace()->TraceDispatch(deviceIdx,
+                                                             this,
+                                                             GpuRt::RtPipelineType::Compute,
+                                                             width  * pOrigThreadgroupDims[0],
+                                                             height * pOrigThreadgroupDims[1],
+                                                             depth  * pOrigThreadgroupDims[2],
+                                                             1,
+                                                             pPipeline->GetApiHash(),
+                                                             GetUserMarkerContextValue(),
+                                                             nullptr,
+                                                             nullptr,
+                                                             nullptr,
+                                                             &constants);
+                    }
+                    else
+                    {
+                        uint64 counterMetadataGpuVa = 0uLL;
 
-                        gpusize indirectBufferVa = (pIndirectBuffer != nullptr) ?
-                            pIndirectBuffer->GpuVirtAddr(deviceIdx) + indirectOffset :
-                            indirectBufferVirtAddr;
+                        m_pDevice->RayTrace()->TraceIndirectDispatch(deviceIdx,
+                                                                     this,
+                                                                     GpuRt::RtPipelineType::Compute,
+                                                                     pOrigThreadgroupDims[0],
+                                                                     pOrigThreadgroupDims[1],
+                                                                     pOrigThreadgroupDims[2],
+                                                                     1,
+                                                                     pPipeline->GetApiHash(),
+                                                                     GetUserMarkerContextValue(),
+                                                                     nullptr,
+                                                                     nullptr,
+                                                                     nullptr,
+                                                                     &counterMetadataGpuVa,
+                                                                     &constants);
 
-                        if (indirectBufferVa == 0)
-                        {
-                            constants.constData.rayDispatchWidth  = width  * pOrigThreadgroupDims[0];
-                            constants.constData.rayDispatchHeight = height * pOrigThreadgroupDims[1];
-                            constants.constData.rayDispatchDepth  = depth  * pOrigThreadgroupDims[2];
+                        Pal::MemoryCopyRegion region = {};
+                        region.srcOffset = 0;
+                        region.copySize = sizeof(GpuRt::IndirectCounterMetadata) - sizeof(uint64);
 
-                            m_pDevice->RayTrace()->TraceDispatch(deviceIdx,
-                                                                 this,
-                                                                 GpuRt::RtPipelineType::Compute,
-                                                                 width  * pOrigThreadgroupDims[0],
-                                                                 height * pOrigThreadgroupDims[1],
-                                                                 depth  * pOrigThreadgroupDims[2],
-                                                                 1,
-                                                                 pPipeline->GetApiHash(),
-                                                                 GetUserMarkerContextValue(),
-                                                                 nullptr,
-                                                                 nullptr,
-                                                                 nullptr,
-                                                                 &constants);
-                        }
-                        else
-                        {
-                            uint64 counterMetadataGpuVa = 0uLL;
-
-                            m_pDevice->RayTrace()->TraceIndirectDispatch(deviceIdx,
-                                                                         this,
-                                                                         GpuRt::RtPipelineType::Compute,
-                                                                         pOrigThreadgroupDims[0],
-                                                                         pOrigThreadgroupDims[1],
-                                                                         pOrigThreadgroupDims[2],
-                                                                         1,
-                                                                         pPipeline->GetApiHash(),
-                                                                         GetUserMarkerContextValue(),
-                                                                         nullptr,
-                                                                         nullptr,
-                                                                         nullptr,
-                                                                         &counterMetadataGpuVa,
-                                                                         &constants);
-
-                            Pal::MemoryCopyRegion region = {};
-                            region.srcOffset = 0;
-                            region.copySize = sizeof(GpuRt::IndirectCounterMetadata) - sizeof(uint64);
-
-                            SyncIndirectCopy(PalCmdBuffer(deviceIdx));
-                            PalCmdBuffer(deviceIdx)->CmdCopyMemoryByGpuVa(
-                                indirectBufferVa,
-                                (counterMetadataGpuVa + offsetof(GpuRt::IndirectCounterMetadata, dispatchRayDimensionX)),
-                                1,
-                                &region);
-                        }
+                        SyncIndirectCopy(PalCmdBuffer(deviceIdx));
+                        PalCmdBuffer(deviceIdx)->CmdCopyMemoryByGpuVa(
+                            indirectBufferVa,
+                            (counterMetadataGpuVa + offsetof(GpuRt::IndirectCounterMetadata, dispatchRayDimensionX)),
+                            1,
+                            &region);
                     }
                 }
 
@@ -11928,14 +11937,22 @@ uint32_t CmdBuffer::GetPipelineScratchSize(
         auto stackSizes = PerGpuState(deviceIdx)->maxPipelineStackSizes;
         auto dynamicStackSize = PerGpuState(deviceIdx)->dynamicPipelineStackSize;
 
-        if (m_allGpuState.pRayTracingPipeline->CheckIsCps() && ((settings.cpsFlags & CpsFlagStackInGlobalMem) == 0))
+        if (m_allGpuState.pRayTracingPipeline->CheckIsCps())
         {
-            // Continuations with stack in scratch
-            scratchSize = stackSizes.backendSize + Util::Max(stackSizes.frontendSize, dynamicStackSize);
+               if ((settings.cpsFlags & CpsFlagStackInGlobalMem) == 0)
+               {
+                   // Continuations with stack in scratch
+                   scratchSize = stackSizes.backendSize + Util::Max(stackSizes.frontendSize, dynamicStackSize);
+               }
+               else
+               {
+                   // Continuations stack in global memory
+                   scratchSize = stackSizes.backendSize;
+               }
         }
         else
         {
-            // Non-continuations or continuations stack in global memory
+            // Non-continuations
             scratchSize = Util::Max(stackSizes.backendSize, dynamicStackSize);
         }
     }
@@ -12402,7 +12419,7 @@ void CmdBuffer::ValidateGraphicsStates()
                 // CmdSetPerDrawVrsRate has been called for the dynamic state
                 // Look at the currently bound pipeline and see if we need to force the values to 1x1
                 Pal::VrsRateParams vrsRate = m_allGpuState.vrsRate;
-                if (force1x1)
+                if (force1x1 || (m_allGpuState.samplePattern.sampleCount == 8))
                 {
                     Device::SetDefaultVrsRateParams(&vrsRate);
                 }

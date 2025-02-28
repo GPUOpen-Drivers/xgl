@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -103,12 +103,8 @@ macro(xgl_overrides_pal)
     set(PAL_BUILD_GFX11    ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
     set(PAL_BUILD_PHOENIX2 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
-#if VKI_BUILD_GFX115
-    set(PAL_BUILD_GFX115 ${VKI_BUILD_GFX115} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-#endif
-
-#if VKI_BUILD_STRIX1
-    set(PAL_BUILD_STRIX1 ${VKI_BUILD_STRIX1} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+#if VKI_BUILD_STRIX_HALO
+    set(PAL_BUILD_STRIX_HALO ${VKI_BUILD_STRIX_HALO} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 #endif
 
     # Wayland
@@ -151,14 +147,11 @@ macro(xgl_overrides_llpc)
 
     set(LLPC_BUILD_GFX11 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
-#if VKI_BUILD_GFX115
-    if(VKI_BUILD_GFX115)
-        set(LLPC_BUILD_GFX115 ${VKI_BUILD_GFX115} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-    endif()
-#endif
+    set(LLPC_BUILD_GFX115 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
+    set(LLPC_BUILD_STRIX1 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
-#if VKI_BUILD_STRIX1
-    set(LLPC_BUILD_STRIX1 ${VKI_BUILD_STRIX1} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+#if VKI_BUILD_STRIX_HALO
+    set(LLPC_BUILD_STRIX_HALO ${VKI_BUILD_STRIX_HALO} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 #endif
 
     set(LLPC_CLIENT_INTERFACE_MAJOR_VERSION ${VKI_LLPC_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
@@ -178,15 +171,6 @@ endmacro()
 macro(xgl_overrides)
 
     set(GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION ${VKI_GPUOPEN_CLIENT_MAJOR_VERSION})
-
-#if VKI_BUILD_GFX115
-    set(VKI_BUILD_GFX115 OFF)
-#if VKI_BUILD_STRIX1
-    if(VKI_BUILD_STRIX1)
-        set(VKI_BUILD_GFX115 ON)
-    endif()
-#endif
-#endif
 
     xgl_get_path()
 

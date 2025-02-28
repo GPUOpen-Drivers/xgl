@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -582,7 +582,8 @@ VkResult DescriptorGpuMemHeap::Init(
                 for (uint32_t j = 0; j < list.descriptorTypeCount; ++j)
                 {
                     maxSize = Util::Max(maxSize,
-                        DescriptorSetLayout::GetSingleDescStaticSize(pDevice, list.pDescriptorTypes[j]));
+                        DescriptorSetLayout::GetSingleDescStaticSize(pDevice->GetProperties().descriptorSizes,
+                            list.pDescriptorTypes[j]));
                 }
             }
 
@@ -590,7 +591,7 @@ VkResult DescriptorGpuMemHeap::Init(
             if (maxSize == 0)
             {
                 maxSize = DescriptorSetLayout::GetSingleDescStaticSize(
-                    pDevice, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+                    pDevice->GetProperties().descriptorSizes, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
             }
 
             VK_ASSERT(maxSize > 0);
@@ -598,8 +599,8 @@ VkResult DescriptorGpuMemHeap::Init(
         }
         else
         {
-            m_gpuMemSize += DescriptorSetLayout::GetSingleDescStaticSize(pDevice, pTypeCount[i].type) *
-                pTypeCount[i].descriptorCount;
+            m_gpuMemSize += DescriptorSetLayout::GetSingleDescStaticSize(pDevice->GetProperties().descriptorSizes,
+                pTypeCount[i].type) * pTypeCount[i].descriptorCount;
         }
     }
 

@@ -1,3 +1,4 @@
+## Copyright (c) 2025 Advanced Micro Devices, Inc. All Rights Reserved. ##
 ################################################################################################
 # Entry point name                                  type          version/extension
 
@@ -241,6 +242,11 @@ vkCmdPushConstants2                                 @device       @core(1.4)
 vkCmdPushDescriptorSet2                             @device       @core(1.4)
 vkCmdPushDescriptorSetWithTemplate2                 @device       @core(1.4)
 
+vkCopyImageToImage                                  @device       @core(1.4)
+vkCopyImageToMemory                                 @device       @core(1.4)
+vkCopyMemoryToImage                                 @device       @core(1.4)
+vkTransitionImageLayout                             @device       @core(1.4)
+
 vkEnumeratePhysicalDeviceGroupsKHR                  @instance     @iext(KHR_device_group_creation)
 
 vkGetDeviceGroupPeerMemoryFeaturesKHR               @device       @dext(KHR_device_group)
@@ -334,6 +340,7 @@ vkDebugMarkerSetObjectNameEXT                       @device       @dext(EXT_debu
 vkCreateGpaSessionAMD                               @device       @dext(AMD_gpa_interface)
 vkDestroyGpaSessionAMD                              @device       @dext(AMD_gpa_interface)
 vkSetGpaDeviceClockModeAMD                          @device       @dext(AMD_gpa_interface)
+vkGetGpaDeviceClockInfoAMD                          @device       @dext(AMD_gpa_interface)
 vkCmdBeginGpaSessionAMD                             @device       @dext(AMD_gpa_interface)
 vkCmdEndGpaSessionAMD                               @device       @dext(AMD_gpa_interface)
 vkCmdBeginGpaSampleAMD                              @device       @dext(AMD_gpa_interface)
@@ -619,3 +626,7 @@ vkReleaseCapturedPipelineDataKHR                    @device       @dext(KHR_pipe
 
 vkCmdSetDepthBias2EXT                               @device       @dext(EXT_depth_bias_control)
 
+vkCopyImageToImageEXT                               @device       @dext(EXT_host_image_copy)
+vkCopyImageToMemoryEXT                              @device       @dext(EXT_host_image_copy)
+vkCopyMemoryToImageEXT                              @device       @dext(EXT_host_image_copy)
+vkTransitionImageLayoutEXT                          @device       @dext(EXT_host_image_copy)

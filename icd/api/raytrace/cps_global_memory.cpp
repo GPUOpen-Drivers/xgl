@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2024-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -100,7 +100,7 @@ void CpsGlobalMemory::FreeRetiredCpsStackMem()
             Util::Destructor(pRetiredEntry->pMem);
             m_pDevice->VkInstance()->FreeMem(pRetiredEntry->pMem);
 
-            // implicitly preceed the iterator to next node.
+            // Implicitly preceed the iterator to next node.
             m_cpsMemDestroyList.Erase(&cpsMemDestroyListIter);
         }
         else

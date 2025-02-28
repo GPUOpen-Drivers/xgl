@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -260,6 +260,124 @@ void ImageView::BuildImageSrds(
 }
 
 // =====================================================================================================================
+// Get necessary image srd build params
+void ImageView::ConvertCreateInfoToSrdBuildParams(
+    const Device*                pDevice,
+    const VkImageViewCreateInfo* pCreateInfo,
+    VkImageSubresourceRange*     pSubresRange,
+    Pal::Range*                  pZRange,
+    VkImageUsageFlags*           pImageViewUsage,
+    float*                       pMinLod,
+    VkFormat*                    pCreateInfoFormat)
+{
+    // Determine the amount of memory needed by all of the different kinds of views based on the image's declared
+    // usage flags.
+    const Image* const pImage             = Image::ObjectFromHandle(pCreateInfo->image);
+    const Pal::IImage* pPalImage          = pImage->PalImage(DefaultDeviceIndex);
+    const Pal::ImageCreateInfo& imageInfo = pPalImage->GetImageCreateInfo();
+    const RuntimeSettings& settings       = pDevice->GetRuntimeSettings();
+
+    // When the image type is a 3D texture, a single level-layer 3D texture subresource describes all depth slices of
+    // that texture.  This is implied by Table 8 of the spec, where the description for shader reads from a 3D texture
+    // of arbitrary depth through VK_IMAGE_VIEW_TYPE_3D requires that the PAL subresource range be set to
+    // arraySlice = 0, numSlices = 1.  However, VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT permits rendering to 3D
+    // slices as 2D by specifying a baseArrayLayer >= 0 and layerCount >= 1 in VkImageSubresourceRange, which doesn't
+    // directly map to the PAL subresource range anymore.  Separate this information from the subresource range and
+    // have the view keep track of a 3D texture pZRange for attachment operations like clears.
+    if (imageInfo.imageType == Pal::ImageType::Tex3d)
+    {
+        const uint32_t subresDepth = Util::Max(1U, imageInfo.extent.depth >> pSubresRange->baseMipLevel);
+
+        if (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_3D)
+        {
+            pZRange->offset = 0;
+            pZRange->extent = subresDepth;
+        }
+        else
+        {
+            VK_ASSERT(pSubresRange->layerCount <= subresDepth);
+            VK_ASSERT((pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_2D) ||
+                      (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY));
+
+            pZRange->offset = pSubresRange->baseArrayLayer;
+            pZRange->extent = pSubresRange->layerCount;
+
+            if ((pSubresRange->layerCount == VK_REMAINING_ARRAY_LAYERS) &&
+                (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY) &&
+                imageInfo.flags.view3dAs2dArray)
+            {
+                VK_ASSERT(imageInfo.extent.depth > pZRange->offset);
+                pZRange->extent = imageInfo.extent.depth - pZRange->offset;
+            }
+        }
+
+        pSubresRange->baseArrayLayer = 0;
+        pSubresRange->layerCount     = 1;
+    }
+    else
+    {
+        pZRange->offset = 0;
+        pZRange->extent = 1;
+    }
+
+    // Creation arguments that may be overridden by extensions below
+    if ((pCreateInfo->subresourceRange.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) &&
+        (pCreateInfo->subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT))
+    {
+        *pImageViewUsage = (pImage->GetImageStencilUsage() & pImage->GetImageUsage());
+    }
+    else if (pCreateInfo->subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT)
+    {
+        *pImageViewUsage = pImage->GetImageStencilUsage();
+    }
+
+    VK_ASSERT(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
+
+    for (const auto* pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
+         pHeader != nullptr;
+         pHeader = pHeader->pNext)
+    {
+        switch (static_cast<uint32>(pHeader->sType))
+        {
+        case VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO:
+        {
+            // The image view usage must be a subset of the usage of the image it is created from.  For uncompressed
+            // views of compressed images or format compatible image views, VK_IMAGE_CREATE_EXTENDED_USAGE_BIT
+            // allows the image to be created with usage flags that are not supported for the format the image is created
+            // with but are supported for the format of the VkImageView.
+
+            const auto* pUsageInfo = reinterpret_cast<const VkImageViewUsageCreateInfo*>(pHeader);
+            VK_ASSERT((*pImageViewUsage | pUsageInfo->usage) == *pImageViewUsage);
+
+            *pImageViewUsage = pUsageInfo->usage;
+            break;
+        }
+        case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
+        {
+            const auto* pSamplerYcbcrConversionInfo = reinterpret_cast<const VkSamplerYcbcrConversionInfo*>(pHeader);
+            SamplerYcbcrConversion::ObjectFromHandle(pSamplerYcbcrConversionInfo->conversion)->SetExtent(
+                imageInfo.extent.width, imageInfo.extent.height, imageInfo.arraySize);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT:
+        {
+            const auto* pMinLodStruct = reinterpret_cast<const VkImageViewMinLodCreateInfoEXT*>(pHeader);
+
+            *pMinLod = pMinLodStruct->minLod;
+        }
+        default:
+            // Skip any unknown extension structures
+            break;
+        }
+    }
+
+    if (settings.forceLowPrecisionDepthImage != ForceLowPrecisionDepthImageDefault)
+    {
+        *pCreateInfoFormat = GetLowPrecisionDepthFormat(*pCreateInfoFormat, pImage->GetImageUsage(), settings);
+    }
+}
+
+// =====================================================================================================================
 void ImageView::BuildFmaskViewSrds(
     const Device*                pDevice,
     size_t                       fmaskDescSize,
@@ -414,7 +532,7 @@ Pal::Result ImageView::BuildDepthStencilView(
 // =====================================================================================================================
 // Create a new Vulkan Image View object
 VkResult ImageView::Create(
-    Device*                      pDevice,
+    const Device*                pDevice,
     const VkImageViewCreateInfo* pCreateInfo,
     const VkAllocationCallbacks* pAllocator,
     VkImageView*                 pImageView)
@@ -422,50 +540,28 @@ VkResult ImageView::Create(
     // Determine the amount of memory needed by all of the different kinds of views based on the image's declared
     // usage flags.
     const Image* const pImage = Image::ObjectFromHandle(pCreateInfo->image);
-    const auto & gfxipProperties = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties;
+    const auto& gfxipProperties = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties;
     const uint32_t numDevices    = pDevice->NumPalDevices();
 
     const Pal::IImage* pPalImage          = pImage->PalImage(DefaultDeviceIndex);
     const Pal::ImageCreateInfo& imageInfo = pPalImage->GetImageCreateInfo();
     bool needsFmaskViewSrds               = false;
+    const RuntimeSettings& settings       = pDevice->GetRuntimeSettings();
 
-    // When the image type is a 3D texture, a single level-layer 3D texture subresource describes all depth slices of
-    // that texture.  This is implied by Table 8 of the spec, where the description for shader reads from a 3D texture
-    // of arbitrary depth through VK_IMAGE_VIEW_TYPE_3D requires that the PAL subresource range be set to
-    // arraySlice = 0, numSlices = 1.  However, VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT permits rendering to 3D
-    // slices as 2D by specifying a baseArrayLayer >= 0 and layerCount >= 1 in VkImageSubresourceRange, which doesn't
-    // directly map to the PAL subresource range anymore.  Separate this information from the subresource range and
-    // have the view keep track of a 3D texture zRange for attachment operations like clears.
-    VkImageSubresourceRange subresRange = pCreateInfo->subresourceRange;
+    // Creation arguments that may be overridden by ConvertCreateInfoToSrdBuildParams
+    VkImageSubresourceRange subresRange      = pCreateInfo->subresourceRange;
     Pal::Range              zRange;
+    VkImageUsageFlags       imageViewUsage   = pImage->GetImageUsage();
+    float                   minLod           = 0.0f;
+    VkFormat                createInfoFormat = pCreateInfo->format;
 
-    if (imageInfo.imageType == Pal::ImageType::Tex3d)
-    {
-        const uint32_t subresDepth = Util::Max(1U, imageInfo.extent.depth >> subresRange.baseMipLevel);
-
-        if (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_3D)
-        {
-            zRange.offset = 0;
-            zRange.extent = subresDepth;
-        }
-        else
-        {
-            VK_ASSERT(subresRange.layerCount <= subresDepth);
-            VK_ASSERT((pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_2D) ||
-                      (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY));
-
-            zRange.offset = subresRange.baseArrayLayer;
-            zRange.extent = subresRange.layerCount;
-        }
-
-        subresRange.baseArrayLayer = 0;
-        subresRange.layerCount     = 1;
-    }
-    else
-    {
-        zRange.offset = 0;
-        zRange.extent = 1;
-    }
+    ConvertCreateInfoToSrdBuildParams(pDevice,
+                                      pCreateInfo,
+                                      &subresRange,
+                                      &zRange,
+                                      &imageViewUsage,
+                                      &minLod,
+                                      &createInfoFormat);
 
     // We may need multiple entries here for images with multiple planes but we're only actually going to
     // use the first one.
@@ -478,7 +574,7 @@ VkResult ImageView::Create(
                        pImage->GetArraySize(),
                        palRanges,
                        &palRangeCount,
-                       pDevice->GetRuntimeSettings());
+                       settings);
 
     const size_t   imageDescSize = gfxipProperties.srdSizes.imageView;
     const size_t   srdSize       = imageDescSize * palRangeCount;
@@ -494,64 +590,6 @@ VkResult ImageView::Create(
     size_t colorViewSegmentSize   = 0;
     size_t depthViewSegmentOffset = 0;
     size_t depthViewSegmentSize   = 0;
-
-    // Creation arguments that may be overridden by extensions below
-    VkImageUsageFlags        imageViewUsage = pImage->GetImageUsage();
-    float                    minLod         = 0.0f;
-
-    if ((pCreateInfo->subresourceRange.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) &&
-        (pCreateInfo->subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT))
-    {
-        imageViewUsage = (pImage->GetImageStencilUsage() & pImage->GetImageUsage());
-    }
-    else if (pCreateInfo->subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT)
-    {
-        imageViewUsage = pImage->GetImageStencilUsage();
-    }
-
-    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
-
-    VkFormat createInfoFormat = pCreateInfo->format;
-
-    VK_ASSERT(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
-
-    for (const auto* pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
-         pHeader != nullptr;
-         pHeader = pHeader->pNext)
-    {
-        switch (static_cast<uint32>(pHeader->sType))
-        {
-        case VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO:
-        {
-            // The image view usage must be a subset of the usage of the image it is created from.  For uncompressed
-            // views of compressed images or format compatible image views, VK_IMAGE_CREATE_EXTENDED_USAGE_BIT
-            // allows the image to be created with usage flags that are not supported for the format the image is created
-            // with but are supported for the format of the VkImageView.
-
-            const auto* pUsageInfo = reinterpret_cast<const VkImageViewUsageCreateInfo*>(pHeader);
-            VK_ASSERT((imageViewUsage | pUsageInfo->usage) == imageViewUsage);
-
-            imageViewUsage = pUsageInfo->usage;
-            break;
-        }
-        case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
-        {
-            const auto* pSamplerYcbcrConversionInfo = reinterpret_cast<const VkSamplerYcbcrConversionInfo*>(pHeader);
-            SamplerYcbcrConversion::ObjectFromHandle(pSamplerYcbcrConversionInfo->conversion)->SetExtent(
-                imageInfo.extent.width, imageInfo.extent.height, imageInfo.arraySize);
-            break;
-        }
-        case VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT:
-        {
-            const auto* pMinLodStruct = reinterpret_cast<const VkImageViewMinLodCreateInfoEXT*>(pHeader);
-
-            minLod = pMinLodStruct->minLod;
-        }
-        default:
-            // Skip any unknown extension structures
-            break;
-        }
-    }
 
     // NOTE: The SRDs must be the first "segment" of data after the API because the GetDescriptor() functions
     // assumes this.
@@ -570,10 +608,10 @@ VkResult ImageView::Create(
 
         // Check if FMASK based MSAA read is enabled. If enabled, add fmask descriptor size to totalSize.
         const Pal::ImageMemoryLayout& memoryLayout = pPalImage->GetMemoryLayout();
-        if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead &&
-            (pImage->GetImageSamples() > VK_SAMPLE_COUNT_1_BIT)    &&
-            (imageInfo.usageFlags.shaderRead   != 0)               &&
-            (imageInfo.usageFlags.depthStencil == 0)               &&
+        if (settings.enableFmaskBasedMsaaRead                   &&
+            (pImage->GetImageSamples() > VK_SAMPLE_COUNT_1_BIT) &&
+            (imageInfo.usageFlags.shaderRead   != 0)            &&
+            (imageInfo.usageFlags.depthStencil == 0)            &&
             ((memoryLayout.metadataSize + memoryLayout.metadataHeaderSize) > 0)) // Has metadata
         {
             needsFmaskViewSrds = true;
@@ -607,13 +645,8 @@ VkResult ImageView::Create(
 
     Pal::Result result = Pal::Result::Success;
 
-    if (settings.forceLowPrecisionDepthImage != ForceLowPrecisionDepthImageDefault)
-    {
-        createInfoFormat = GetLowPrecisionDepthFormat(createInfoFormat, pImage->GetImageUsage(), settings);
-    }
-
     // Get the view format (without component mapping)
-    Pal::SwizzledFormat viewFormat = VkToPalFormat(createInfoFormat, pDevice->GetRuntimeSettings());
+    Pal::SwizzledFormat viewFormat = VkToPalFormat(createInfoFormat, settings);
 
     VK_ASSERT(viewFormat.format != Pal::ChNumFormat::Undefined);
 
@@ -621,7 +654,7 @@ VkResult ImageView::Create(
     if (srdSegmentSize > 0)
     {
         Pal::SwizzledFormat aspectFormat = VkToPalFormat(Formats::GetAspectFormat(createInfoFormat,
-                                                         subresRange.aspectMask), pDevice->GetRuntimeSettings());
+            subresRange.aspectMask, settings), settings);
 
         VK_ASSERT(aspectFormat.format != Pal::ChNumFormat::Undefined);
 
@@ -671,7 +704,7 @@ VkResult ImageView::Create(
                                           zRange,
                                           pPalMem,
                                           &pColorView[deviceIdx],
-                                          pDevice->GetRuntimeSettings());
+                                          settings);
          }
     }
 
@@ -695,7 +728,7 @@ VkResult ImageView::Create(
                                            zRange,
                                            pPalMem,
                                            &pDsView[deviceIdx],
-                                           pDevice->GetRuntimeSettings());
+                                           settings);
         }
     }
 
@@ -723,6 +756,96 @@ VkResult ImageView::Create(
 
         return PalToVkResult(result);
     }
+}
+
+// =====================================================================================================================
+// Create image srd
+VkResult ImageView::BuildSrd(
+    const Device*                pDevice,
+    const VkImageViewCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    bool                         isShaderStorageDesc,
+    void*                        pOut)
+{
+    VkResult result = VK_SUCCESS;
+
+    const Image* const pImage    = Image::ObjectFromHandle(pCreateInfo->image);
+    const auto& gfxipProperties = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties;
+
+    const Pal::IImage* pPalImage          = pImage->PalImage(DefaultDeviceIndex);
+    const Pal::ImageCreateInfo& imageInfo = pPalImage->GetImageCreateInfo();
+    bool needsFmaskViewSrds               = false;
+    const RuntimeSettings& settings       = pDevice->GetRuntimeSettings();
+
+    // Creation arguments that may be overridden by ConvertCreateInfoToSrdBuildParams
+    VkImageSubresourceRange subresRange      = pCreateInfo->subresourceRange;
+    Pal::Range              zRange;
+    VkImageUsageFlags       imageViewUsage   = pImage->GetImageUsage();
+    float                   minLod           = 0.0f;
+    VkFormat                createInfoFormat = pCreateInfo->format;
+
+    ConvertCreateInfoToSrdBuildParams(pDevice,
+                                      pCreateInfo,
+                                      &subresRange,
+                                      &zRange,
+                                      &imageViewUsage,
+                                      &minLod,
+                                      &createInfoFormat);
+
+    // We may need multiple entries here for images with multiple planes but we're only actually going to
+    // use the first one.
+    Pal::SubresRange palRanges[MaxPalAspectsPerMask];
+    uint32_t         palRangeCount = 0;
+
+    VkToPalSubresRange(pImage->GetFormat(),
+                       subresRange,
+                       pImage->GetMipLevels(),
+                       pImage->GetArraySize(),
+                       palRanges,
+                       &palRangeCount,
+                       settings);
+
+    // Build the PAL image view SRDs if needed
+    Pal::SwizzledFormat aspectFormat = VkToPalFormat(Formats::GetAspectFormat(createInfoFormat,
+        subresRange.aspectMask, settings), settings);
+
+    VK_ASSERT(aspectFormat.format != Pal::ChNumFormat::Undefined);
+
+    const size_t imageDescSize = gfxipProperties.srdSizes.imageView;
+    void* pMemory = pDevice->VkInstance()->AllocMem(imageDescSize * SrdCount,
+                                                    VK_DEFAULT_MEM_ALIGN,
+                                                    VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+    if (pMemory == nullptr)
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    for (uint32 plane = 0; (plane < palRangeCount) && (result == VK_SUCCESS); ++plane)
+    {
+        BuildImageSrds(pDevice,
+                       imageDescSize,
+                       pImage,
+                       aspectFormat,
+                       palRanges[plane],
+                       zRange,
+                       imageViewUsage,
+                       minLod,
+                       pCreateInfo,
+                       pMemory);
+
+        void* pDstSrdMemory    = Util::VoidPtrInc(pOut, (imageDescSize * plane));
+        const size_t srdOffset = (isShaderStorageDesc == false) ? 0 : imageDescSize;
+
+        memcpy(pDstSrdMemory, Util::VoidPtrInc(pMemory, srdOffset), imageDescSize);
+    }
+
+    if (pMemory != nullptr)
+    {
+        pDevice->VkInstance()->FreeMem(pMemory);
+    }
+
+    return result;
 }
 
 // ===============================================================================================

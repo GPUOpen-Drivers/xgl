@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -306,8 +306,6 @@ public:
         PipelineCache*                    pPipelineCache,
         GraphicsLibraryType               gplType,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo,
-        const Vkgc::BinaryData*           pProvidedBinary,
-        const Util::MetroHash::Hash*      pProvidedBinaryHash,
         void*                             pPipelineDumpHandle,
         GplModuleState*                   pModuleState) = 0;
 
@@ -374,7 +372,6 @@ public:
     uint32_t GetRayTracingVgprLimit(bool isIndirect);
 #endif
 
-protected:
     void LoadShaderBinaryFromCache(
         PipelineCache*               pPipelineCache,
         const Util::MetroHash::Hash* pCacheId,
@@ -382,6 +379,7 @@ protected:
         bool*                        pHitCache,
         bool*                        pHitAppCache);
 
+protected:
     template<class ShaderLibraryBlobHeader>
     void StoreShaderBinaryToCache(
         PipelineCache*                 pPipelineCache,

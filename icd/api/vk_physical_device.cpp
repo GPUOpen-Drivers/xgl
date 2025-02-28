@@ -539,7 +539,7 @@ static void GetFormatFeatureFlags(
     if (Formats::HasDepth(format) && ((retFlags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0))
     {
         Pal::SwizzledFormat depthFormat = VkToPalFormat(
-            Formats::GetAspectFormat(format, VK_IMAGE_ASPECT_DEPTH_BIT), settings);
+            Formats::GetAspectFormat(format, VK_IMAGE_ASPECT_DEPTH_BIT, settings), settings);
 
         const size_t depthFormatIdx = static_cast<size_t>(depthFormat.format);
 
@@ -578,7 +578,7 @@ static void GetFormatFeatureFlags(
         retFlags &= ~VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
     }
 
-    if (Formats::IsYuvFormat(format))
+    if (Formats::IsMmFormat(format))
     {
         retFlags &= ~VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
         retFlags &= ~VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
@@ -939,6 +939,9 @@ VkResult PhysicalDevice::Initialize()
                 if (heapToEnlarge == Pal::GpuHeapLocal)
                 {
                     m_enlargedLocalVisibleHeapReported = true;
+
+                    // Drop the small invisible heap
+                    heapProperties[Pal::GpuHeapInvisible].physicalSize = 0;
                 }
                 else
                 {
@@ -1242,6 +1245,8 @@ VkResult PhysicalDevice::Initialize()
     {
         m_pPalDevice->GetWsStereoMode(&m_workstationStereoMode);
     }
+
+    InitDescriptorSizes(PalProperties(), &m_descriptorSizes);
 
     return vkResult;
 }
@@ -2474,7 +2479,7 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 
                 pProperties->aspectMask = pAspect->aspectVk;
 
-                const VkFormat aspectFormat = Formats::GetAspectFormat(format, pAspect->aspectVk);
+                const VkFormat aspectFormat = Formats::GetAspectFormat(format, pAspect->aspectVk, settings);
                 bytesPerPixel = Util::Pow2Pad(Pal::Formats::BytesPerPixel(
                     VkToPalFormat(aspectFormat, settings).format));
 
@@ -4213,7 +4218,43 @@ static bool IsDeviceGeneratedCommandsSupported(
 
     if (pPhysicalDevice != nullptr)
     {
-        isSupported = (pPhysicalDevice->PalProperties().gpuType == Pal::GpuType::Discrete);
+        const Pal::GfxIpLevel gfxLevel      = pPhysicalDevice->PalProperties().gfxLevel;
+        const uint32_t        pfpVersion    = pPhysicalDevice->PalProperties().gfxipProperties.pfpUcodeVersion;
+        const bool            isDiscreteGpu = (pPhysicalDevice->PalProperties().gpuType == Pal::GpuType::Discrete);
+
+        constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessNavi1x = 157;
+        constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessNavi2x = 103;
+        constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessNavi3x = 2490;
+        // This part of code must be logically consistent with UpdateDeviceGeneratedCommandsPalSettings()
+        // Impose state-of-the-art CP Packet path for optimal performance on dGPUs.
+        if (isDiscreteGpu)
+        {
+            switch (gfxLevel)
+            {
+            case Pal::GfxIpLevel::GfxIp10_1:
+                isSupported = (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessNavi1x);
+                break;
+
+            case Pal::GfxIpLevel::GfxIp10_3:
+                isSupported = (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessNavi2x);
+                break;
+
+            case Pal::GfxIpLevel::GfxIp11_0:
+                isSupported = (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessNavi3x);
+                break;
+            case Pal::GfxIpLevel::GfxIp11_5:
+                VK_NEVER_CALLED(); // iGPU only
+                break;
+            default:
+                isSupported = true; // We assume later ASICs are good to go.
+                break;
+            }
+        }
+        // Compute Shader path is default for iGPUs. Enable CP Packet path on iGPUs selectively.
+        else
+        {
+            isSupported = true;
+        }
     }
 
     return isSupported;
@@ -5212,7 +5253,7 @@ void PhysicalDevice::GetPhysicalDeviceDeviceGeneratedCommandsProperties(
 {
     *pMaxIndirectPipelineCount                      = 1 << 12;
     *pMaxIndirectShaderObjectCount                  = 1 << 12;
-    *pMaxIndirectSequenceCount                      = UINT32_MAX >> 1;
+    *pMaxIndirectSequenceCount                      = MaxIndirectSequenceCount;
     *pMaxIndirectCommandsTokenCount                 = MaxIndirectTokenCount;
     *pMaxIndirectCommandsTokenOffset                = MaxIndirectTokenOffset;
     *pMaxIndirectCommandsIndirectStride             = MaxIndirectCommandsStride;
@@ -5236,7 +5277,8 @@ void PhysicalDevice::GetPhysicalDeviceDeviceGeneratedCommandsProperties(
 
 #if VKI_RAY_TRACING
     if (IsExtensionSupported(DeviceExtensions::KHR_RAY_TRACING_PIPELINE) &&
-        IsExtensionSupported(DeviceExtensions::KHR_RAY_TRACING_MAINTENANCE1))
+        IsExtensionSupported(DeviceExtensions::KHR_RAY_TRACING_MAINTENANCE1)
+        )
     {
         *pSupportedIndirectCommandsShaderStages |= RayTraceShaderStages;
     }
@@ -5393,9 +5435,7 @@ void PhysicalDevice::GetPhysicalDeviceDotProduct16Properties(
 {
     const VkBool32 int16DotSupport = (Is16BitInstructionsSupported()
         && (PalProperties().gfxLevel < Pal::GfxIpLevel::GfxIp11_0)
-#if VKI_BUILD_GFX115
         && (PalProperties().gfxLevel < Pal::GfxIpLevel::GfxIp11_5)
-#endif
         ) ? VK_TRUE : VK_FALSE;
 
     *pIntegerDotProduct16BitUnsignedAccelerated                              = int16DotSupport;
@@ -6769,6 +6809,7 @@ size_t PhysicalDevice::GetFeatures2(
 
                 break;
             }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceFragmentShadingRateFeaturesKHR *>(pHeader);
@@ -8014,8 +8055,8 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
         pImageCompressionProps->imageCompressionFixedRateFlags = VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
 
         const uint32_t disableBits =
-            ((Formats::IsColorFormat(createInfoFormat))        ? DisableCompressionForColor : 0) |
-            ((Formats::IsDepthStencilFormat(createInfoFormat)) ? DisableCompressionForDepthStencil : 0);
+            (Formats::IsColorFormat(createInfoFormat)        ? uint32_t(DisableCompressionForColor)        : 0) |
+            (Formats::IsDepthStencilFormat(createInfoFormat) ? uint32_t(DisableCompressionForDepthStencil) : 0);
 
         pImageCompressionProps->imageCompressionFlags =
             ((GetRuntimeSettings().forceDisableCompression & disableBits) == 0) ?
@@ -8937,7 +8978,7 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->minSequencesCountBufferOffsetAlignment      = MinIndirectAlignment;
             pProps->minSequencesIndexBufferOffsetAlignment      = MinIndirectAlignment;
             pProps->maxGraphicsShaderGroupCount                 = 0;
-            pProps->maxIndirectSequenceCount                    = UINT32_MAX >> 1;
+            pProps->maxIndirectSequenceCount                    = MaxIndirectSequenceCount;
             break;
         }
 
@@ -9394,6 +9435,7 @@ static void VerifyLimits(
     {
         VK_ASSERT(limits.lineWidthGranularity == 0.0f);
     }
+
     VK_ASSERT(limits.maxTexelBufferElements                >= 65536);
     VK_ASSERT(limits.maxStorageBufferRange                 >= (1UL << 27));
     VK_ASSERT(limits.maxMemoryAllocationCount              >= 4096);
@@ -10362,6 +10404,29 @@ VkResult PhysicalDevice::GetPhysicalDeviceCooperativeMatrixPropertiesKHR(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::InitDescriptorSizes(
+    const Pal::DeviceProperties& deviceProps,
+    DescriptorSizes*             pDescriptorSizes)
+{
+    *pDescriptorSizes = {};
+    pDescriptorSizes->typedBufferView   = deviceProps.gfxipProperties.srdSizes.typedBufferView;
+    pDescriptorSizes->untypedBufferView = deviceProps.gfxipProperties.srdSizes.untypedBufferView;
+    pDescriptorSizes->imageView         = deviceProps.gfxipProperties.srdSizes.imageView;
+    pDescriptorSizes->fmaskView         = deviceProps.gfxipProperties.srdSizes.fmaskView;
+    pDescriptorSizes->sampler           = deviceProps.gfxipProperties.srdSizes.sampler;
+    pDescriptorSizes->bvh               = deviceProps.gfxipProperties.srdSizes.bvh;
+
+    // Size of combined image samplers is the sum of the image and sampler SRD sizes (8DW + 4DW)
+    pDescriptorSizes->combinedImageSampler =
+        pDescriptorSizes->imageView +
+        pDescriptorSizes->sampler;
+
+    // The worst case alignment requirement of descriptors is always 2DWs. There's no way to query this from PAL yet,
+    // but for now a hard coded value will do the job.
+    pDescriptorSizes->alignmentInDwords    = 2;
 }
 
 // C-style entry points

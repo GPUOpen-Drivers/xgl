@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -231,6 +231,17 @@ typedef struct VkGpaDeviceClockModeInfoAMD
     float                               engineClockRatioToPeak;
 } VkGpaDeviceClockModeInfoAMD;
 
+typedef struct VkGpaDeviceGetClockInfoAMD
+{
+    VkStructureType         sType;
+    void*                   pNext;
+
+    float                   memoryClockRatioToPeak;
+    float                   engineClockRatioToPeak;
+    uint32_t                memoryClockFrequency;
+    uint32_t                engineClockFrequency;
+} VkGpaDeviceGetClockInfoAMD;
+
 VK_DEFINE_NON_DISPATCHABLE_HANDLE(VkGpaSessionAMD)
 
 typedef struct VkGpaSessionCreateInfoAMD
@@ -255,6 +266,10 @@ typedef void (VKAPI_PTR *PFN_vkDestroyGpaSessionAMD)(
 typedef VkResult (VKAPI_PTR *PFN_vkSetGpaDeviceClockModeAMD)(
     VkDevice                                    device,
     VkGpaDeviceClockModeInfoAMD*                pInfo);
+
+typedef VkResult (VKAPI_PTR *PFN_vkGetGpaDeviceClockInfoAMD)(
+    VkDevice                                    device,
+    VkGpaDeviceGetClockInfoAMD*                 pInfo);
 
 typedef VkResult (VKAPI_PTR *PFN_vkCmdBeginGpaSessionAMD)(
     VkCommandBuffer                             commandBuffer,
@@ -300,5 +315,6 @@ typedef void (VKAPI_PTR *PFN_vkCmdCopyGpaSessionResultsAMD)(
 #define VK_STRUCTURE_TYPE_GPA_SESSION_CREATE_INFO_AMD         VK_AMD_GPA_INTERFACE_ENUM(VkStructureType, 3)
 #define VK_STRUCTURE_TYPE_GPA_DEVICE_CLOCK_MODE_INFO_AMD      VK_AMD_GPA_INTERFACE_ENUM(VkStructureType, 4)
 #define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GPA_PROPERTIES2_AMD VK_AMD_GPA_INTERFACE_ENUM(VkStructureType, 5)
+#define VK_STRUCTURE_TYPE_GPA_DEVICE_GET_CLOCK_INFO_AMD       VK_AMD_GPA_INTERFACE_ENUM(VkStructureType, 6)
 
 #endif /* VK_AMD_GPA_H_ */

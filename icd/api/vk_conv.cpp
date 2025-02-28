@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1370,37 +1370,37 @@ VkResult InitializeUberFetchShaderFormatTable(
     // to avoid access the exact bit in buffer SRD, we create untypeded buffer twice with different stride,
     // and record the modified bits.
 
-    VK_ASSERT(pPhysicalDevice->PalProperties().gfxipProperties.srdSizes.untypedBufferView == 4 * sizeof(uint32_t));
+    {
+        VK_ASSERT(pPhysicalDevice->PalProperties().gfxipProperties.srdSizes.untypedBufferView == 4 * sizeof(uint32_t));
 
-    uint32_t defaultSrd[4]         = {};
-    uint32_t zeroStrideSrd[4]      = {};
-    Pal::BufferViewInfo bufferInfo = {};
-    bufferInfo.gpuAddr             = 0x300000000ull;
-    bufferInfo.swizzledFormat      = PalFmt_Undefined;
-    bufferInfo.range               = UINT32_MAX;
+        uint32_t defaultSrd[4]         = {};
+        uint32_t zeroStrideSrd[4]      = {};
+        Pal::BufferViewInfo bufferInfo = {};
+        bufferInfo.gpuAddr             = 0x300000000ull;
+        bufferInfo.swizzledFormat      = PalFmt_Undefined;
+        bufferInfo.range               = UINT32_MAX;
 
-    // Build SRD with non-zero stride
-    bufferInfo.stride = 16;
-    pPhysicalDevice->PalDevice()->CreateUntypedBufferViewSrds(1, &bufferInfo, defaultSrd);
+        // Build SRD with non-zero stride
+        bufferInfo.stride = 16;
+        pPhysicalDevice->PalDevice()->CreateUntypedBufferViewSrds(1, &bufferInfo, defaultSrd);
 
-    // Build SRD with zero stride
-    bufferInfo.stride = 0;
-    pPhysicalDevice->PalDevice()->CreateUntypedBufferViewSrds(1, &bufferInfo, zeroStrideSrd);
+        // Build SRD with zero stride
+        bufferInfo.stride = 0;
+        pPhysicalDevice->PalDevice()->CreateUntypedBufferViewSrds(1, &bufferInfo, zeroStrideSrd);
 
-    uint32_t oobMask = defaultSrd[3] ^ zeroStrideSrd[3];
+        uint32_t oobMask = defaultSrd[3] ^ zeroStrideSrd[3];
 
-    // OOB mask should 2. If PAL changes relevant logic, UberFetchShaderFormatInfo::bufferFormat/unpackedBufferFormat
-    // might to need be fixed.
-    VK_ASSERT(oobMask == 0x20000000);
+        // Save the modified bits in buffer SRD
+        pFormatInfoMap->SetBufferFormatMask(oobMask);
+    }
 
-    // Save the modified bits in buffer SRD
-    pFormatInfoMap->SetBufferFormatMask(oobMask);
     return VK_SUCCESS;
  }
 #undef INIT_UBER_FORMATINFO
 
 // =====================================================================================================================
 UberFetchShaderFormatInfo GetUberFetchShaderFormatInfo(
+    Pal::GfxIpLevel                     gfxip,
     const UberFetchShaderFormatInfoMap* pFormatInfoMap,
     const VkFormat                      vkFormat,
     const bool                          isZeroStride,
@@ -1408,24 +1408,28 @@ UberFetchShaderFormatInfo GetUberFetchShaderFormatInfo(
 {
     UberFetchShaderFormatInfo formatInfo = {};
     auto pFormatInfo = pFormatInfoMap->FindKey(vkFormat);
+
     if (pFormatInfo != nullptr)
     {
         formatInfo = *pFormatInfo;
-        if (isOffsetMode)
         {
-            formatInfo.bufferFormat |= pFormatInfoMap->GetBufferFormatMask();
-            if (formatInfo.unpackedBufferFormat != 0)
+            if (isOffsetMode)
             {
-                // unpackedBufferFormat will be used to check whether to require per-component load
-                // in PipelineCompiler::BuildUberFetchShaderInternalDataImp, if it is 0, it can't be modified.
-                formatInfo.unpackedBufferFormat |= pFormatInfoMap->GetBufferFormatMask();
+                formatInfo.bufferFormat |= pFormatInfoMap->GetBufferFormatMask();
+                if (formatInfo.unpackedBufferFormat != 0)
+                {
+                    // unpackedBufferFormat will be used to check whether to require per-component load
+                    // in PipelineCompiler::BuildUberFetchShaderInternalDataImp, if it is 0, it can't be modified.
+                    formatInfo.unpackedBufferFormat |= pFormatInfoMap->GetBufferFormatMask();
+                }
             }
-        }
-        else if (isZeroStride)
-        {
-            // Apply zero stride modified bits, which are caclulated in UberFetchShaderFormatInfoMap initialization.
-            formatInfo.bufferFormat = formatInfo.bufferFormat ^ pFormatInfoMap->GetBufferFormatMask();
-            formatInfo.unpackedBufferFormat = formatInfo.unpackedBufferFormat ^ pFormatInfoMap->GetBufferFormatMask();
+            else if (isZeroStride)
+            {
+                // Apply zero stride modified bits, which are caclulated in UberFetchShaderFormatInfoMap initialization.
+                formatInfo.bufferFormat = formatInfo.bufferFormat ^ pFormatInfoMap->GetBufferFormatMask();
+                formatInfo.unpackedBufferFormat =
+                    formatInfo.unpackedBufferFormat ^ pFormatInfoMap->GetBufferFormatMask();
+            }
         }
     }
 

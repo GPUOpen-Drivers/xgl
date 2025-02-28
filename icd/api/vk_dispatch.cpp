@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -481,6 +481,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCreateGpaSessionAMD                           );
     INIT_DISPATCH_ENTRY(vkDestroyGpaSessionAMD                          );
     INIT_DISPATCH_ENTRY(vkSetGpaDeviceClockModeAMD                      );
+    INIT_DISPATCH_ENTRY(vkGetGpaDeviceClockInfoAMD                      );
     INIT_DISPATCH_ENTRY(vkCmdBeginGpaSessionAMD                         );
     INIT_DISPATCH_ENTRY(vkCmdEndGpaSessionAMD                           );
     INIT_DISPATCH_ENTRY(vkCmdBeginGpaSampleAMD                          );
@@ -904,6 +905,18 @@ void DispatchTable::Init()
 
     INIT_DISPATCH_ENTRY(vkCmdSetDepthBias2EXT                           );
 
+    INIT_DISPATCH_ENTRY(vkCopyImageToImage                              );
+    INIT_DISPATCH_ENTRY(vkCopyImageToMemory                             );
+    INIT_DISPATCH_ENTRY(vkCopyMemoryToImage                             );
+    INIT_DISPATCH_ENTRY(vkTransitionImageLayout                         );
+    INIT_DISPATCH_ALIAS(vkCopyImageToImageEXT,
+                        vkCopyImageToImage                              );
+    INIT_DISPATCH_ALIAS(vkCopyImageToMemoryEXT,
+                        vkCopyImageToMemory                             );
+    INIT_DISPATCH_ALIAS(vkCopyMemoryToImageEXT,
+                        vkCopyMemoryToImage                             );
+    INIT_DISPATCH_ALIAS(vkTransitionImageLayoutEXT,
+                        vkTransitionImageLayout                         );
 }
 
 // =====================================================================================================================

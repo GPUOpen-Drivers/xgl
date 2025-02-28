@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -64,6 +64,7 @@ struct Formats
     inline static bool IsDepthStencilFormat(VkFormat format);
     inline static bool IsBcCompressedFormat(VkFormat format);
     inline static bool IsRTVertexFormat(VkFormat format);
+    inline static bool IsMmFormat(VkFormat format);
     inline static bool IsYuvFormat(VkFormat format);
     inline static bool IsYuvPlanar(VkFormat format);
     inline static bool IsYuvPacked(VkFormat format);
@@ -75,7 +76,11 @@ struct Formats
     inline static bool IsDvec3Or4(VkFormat format);
     inline static bool HasDepth(VkFormat format);
     inline static bool HasStencil(VkFormat format);
-    inline static VkFormat GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask);
+
+    inline static VkFormat GetAspectFormat(
+        VkFormat format,
+        VkImageAspectFlags aspectMask,
+        const RuntimeSettings& settings);
 
     inline static uint32_t GetIndex(VkFormat format);
     inline static VkFormat FromIndex(uint32_t index);
@@ -101,16 +106,16 @@ struct Formats
 #define VK_EXT_4444_FORMAT_END          VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT
 #define VK_EXT_4444_FORMAT_COUNT        (VK_EXT_4444_FORMAT_END - VK_EXT_4444_FORMAT_START  + 1)
 
-#define VK_YUV_FORMAT_START             VK_FORMAT_G8B8G8R8_422_UNORM
-#define VK_YUV_FORMAT_END               VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM
-#define VK_YUV_IMAGE_FORMAT_COUNT       (VK_YUV_FORMAT_END     - VK_YUV_FORMAT_START        + 1)
+#define VK_MM_FORMAT_START              VK_FORMAT_G8B8G8R8_422_UNORM
+#define VK_MM_FORMAT_END                VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM
+#define VK_MM_IMAGE_FORMAT_COUNT        (VK_MM_FORMAT_END       - VK_MM_FORMAT_START        + 1)
 
 #define VK_MAINTENANCE5_FORMAT_START             VK_FORMAT_A1B5G5R5_UNORM_PACK16
 #define VK_MAINTENANCE5_FORMAT_END               VK_FORMAT_A8_UNORM_KHR
 #define VK_MAINTENANCE5_IMAGE_FORMAT_COUNT       (VK_MAINTENANCE5_FORMAT_END - VK_MAINTENANCE5_FORMAT_START        + 1)
 
 // Number of formats supported by the driver.
-#define VK_SUPPORTED_FORMAT_COUNT    (VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT + \
+#define VK_SUPPORTED_FORMAT_COUNT    (VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT + \
     VK_MAINTENANCE5_IMAGE_FORMAT_COUNT)
 
 // =====================================================================================================================
@@ -122,17 +127,17 @@ uint32_t Formats::GetIndex(VkFormat format)
         // Core format
         return static_cast<uint32_t>(format);
     }
-    else if ((format >= VK_YUV_FORMAT_START) && (format <= VK_YUV_FORMAT_END))
+    else if ((format >= VK_MM_FORMAT_START) && (format <= VK_MM_FORMAT_END))
     {
-        return VK_FORMAT_RANGE_SIZE + (format - VK_YUV_FORMAT_START);
+        return VK_FORMAT_RANGE_SIZE + (format - VK_MM_FORMAT_START);
     }
     else if ((format >= VK_EXT_4444_FORMAT_START) && (format <= VK_EXT_4444_FORMAT_END))
     {
-        return VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT + (format - VK_EXT_4444_FORMAT_START);
+        return VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT + (format - VK_EXT_4444_FORMAT_START);
     }
     else if ((format >= VK_MAINTENANCE5_FORMAT_START) && (format <= VK_MAINTENANCE5_FORMAT_END))
     {
-        return VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT +
+        return VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT +
             (format - VK_MAINTENANCE5_FORMAT_START);
     }
     else
@@ -152,22 +157,22 @@ VkFormat Formats::FromIndex(uint32_t index)
         return static_cast<VkFormat>(index);
     }
     else if ((index >= VK_FORMAT_RANGE_SIZE) &&
-             (index < (VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT)))
+             (index < (VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT)))
     {
-        return static_cast<VkFormat>(VK_YUV_FORMAT_START + index - VK_FORMAT_RANGE_SIZE);
+        return static_cast<VkFormat>(VK_MM_FORMAT_START + index - VK_FORMAT_RANGE_SIZE);
     }
-    else if ((index >= (VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT)) &&
-             (index < (VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT)))
+    else if ((index >= (VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT)) &&
+             (index < (VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT)))
     {
         return static_cast<VkFormat>(VK_EXT_4444_FORMAT_START + index - VK_FORMAT_RANGE_SIZE
-                                                                      - VK_YUV_IMAGE_FORMAT_COUNT);
+                                                                      - VK_MM_IMAGE_FORMAT_COUNT);
     }
-    else if ((index >= (VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT)) &&
-             (index < (VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT +
+    else if ((index >= (VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT)) &&
+             (index < (VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT +
                  VK_MAINTENANCE5_IMAGE_FORMAT_COUNT)))
     {
         return static_cast<VkFormat>(VK_MAINTENANCE5_FORMAT_START + index - VK_FORMAT_RANGE_SIZE
-                                                                      - VK_YUV_IMAGE_FORMAT_COUNT
+                                                                      - VK_MM_IMAGE_FORMAT_COUNT
                                                                       - VK_EXT_4444_FORMAT_COUNT);
     }
     else
@@ -228,17 +233,27 @@ bool Formats::HasStencil(VkFormat format)
 }
 
 // =====================================================================================================================
-// Returns true if the given format is a core Vulkan color format or any of the color formats provided by the extension
-// VK_EXT_4444_formats
+// Returns true if the given format is a core Vulkan color format or any of the color formats provided by extensions.
 bool Formats::IsColorFormat(VkFormat format)
 {
     static_assert(VK_FORMAT_RANGE_SIZE == 185,
         "Number of formats changed.  Double check whether any of them are color");
 
-    return ((format >= VK_FORMAT_R4G4_UNORM_PACK8)    && (format <= VK_FORMAT_E5B9G9R9_UFLOAT_PACK32)) ||
-           ((format >= VK_FORMAT_BC1_RGB_UNORM_BLOCK) && (format <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK)) ||
-           (format == VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT) || (format == VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT) ||
-           ((format == VK_FORMAT_A1B5G5R5_UNORM_PACK16) || (format == VK_FORMAT_A8_UNORM_KHR));
+    const bool isColorFormat =
+        ((format >= VK_FORMAT_R4G4_UNORM_PACK8)    && (format <= VK_FORMAT_E5B9G9R9_UFLOAT_PACK32)) ||
+        ((format >= VK_FORMAT_BC1_RGB_UNORM_BLOCK) && (format <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK)) ||
+        (format == VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT) || (format == VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT) ||
+        ((format >= VK_FORMAT_A1B5G5R5_UNORM_PACK16_KHR) && (format <= VK_FORMAT_A8_UNORM_KHR)) ||
+        ((format >= VK_FORMAT_G8B8G8R8_422_UNORM) && (format <= VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM)) ||
+        ((format >= VK_FORMAT_ASTC_4x4_SFLOAT_BLOCK) && (format <= VK_FORMAT_ASTC_12x12_SFLOAT_BLOCK)) ||
+        ((format >= VK_FORMAT_G8_B8R8_2PLANE_444_UNORM) && (format <= VK_FORMAT_G16_B16R16_2PLANE_444_UNORM));
+
+    constexpr uint32_t ExtensionEnumBase = 1000000000u;
+    VK_ALERT_MSG(
+        (isColorFormat == false) && (format >= ExtensionEnumBase),
+        "VkFormat %u treated as non-color. Please check if this is correct.", format);
+
+    return isColorFormat;
 }
 
 // =====================================================================================================================
@@ -260,10 +275,30 @@ bool Formats::IsBcCompressedFormat(VkFormat format)
 }
 
 // =====================================================================================================================
-// Returns true if the given format is a yuv format.
-bool Formats::IsYuvFormat(VkFormat format)
+// Returns true if the given format is a multimedia format.
+bool Formats::IsMmFormat(
+    VkFormat format)
 {
-    return (format >= VK_YUV_FORMAT_START && format <= VK_YUV_FORMAT_END);
+    return (format >= VK_MM_FORMAT_START && format <= VK_MM_FORMAT_END);
+}
+
+// =====================================================================================================================
+// Returns true if the given format is a yuv format - a multimedia format with at least 3 components, that can store a
+// YUV data, optionally with alpha components. This excludes multimedia formats defined to describe individual planes
+// of planar YUV formats.
+bool Formats::IsYuvFormat(
+    VkFormat format)
+{
+    switch (format)
+    {
+    case VK_FORMAT_R10X6G10X6_UNORM_2PACK16:
+    case VK_FORMAT_R10X6_UNORM_PACK16:
+    case VK_FORMAT_R12X4G12X4_UNORM_2PACK16:
+    case VK_FORMAT_R12X4_UNORM_PACK16:
+        return false;
+    default:
+        return (format >= VK_MM_FORMAT_START && format <= VK_MM_FORMAT_END);
+    }
 }
 
 // =====================================================================================================================
@@ -454,7 +489,7 @@ bool Formats::IsYuvYChromaSubsampled(VkFormat format)
 // depth sub-format is R16 and the stencil sub-format is R8.
 //
 // For single aspect images, the original format is returned.
-VkFormat Formats::GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask)
+VkFormat Formats::GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask, const RuntimeSettings& settings)
 {
     static_assert(VK_FORMAT_RANGE_SIZE == 185,
         "Number of formats changed.  Double check whether any of them are depth-stencil");
@@ -471,9 +506,11 @@ VkFormat Formats::GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask
             subFormat = VK_FORMAT_D16_UNORM;
             break;
         case VK_FORMAT_D32_SFLOAT:
-        case VK_FORMAT_D24_UNORM_S8_UINT:
-        case VK_FORMAT_X8_D24_UNORM_PACK32:
         case VK_FORMAT_D32_SFLOAT_S8_UINT:
+            subFormat = VK_FORMAT_D32_SFLOAT;
+            break;
+        case VK_FORMAT_X8_D24_UNORM_PACK32:
+        case VK_FORMAT_D24_UNORM_S8_UINT:
             subFormat = VK_FORMAT_D32_SFLOAT;
             break;
         default:
