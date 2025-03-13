@@ -1,0 +1,82 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x4fb0ed7fc490c3cf 11e6ef9ceddeefce"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x3895042bcf33699a da756541f86d98d8"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64,
+          "wgpMode": 2,
+          "disableLicm": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x94cab2cbae2dba16 eb484f2ea17abe00"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x5b3491787d1d3c70 70c98118938d07f1"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x2321ae7374b9802b a0fb69a7be4893d0"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableLoopUnrolls": true,
+          "disableCodeSinking": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xf72f07949c769c09 d09afb831fa5959c"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableCodeSinking": true
+        }
+      }
+    }
+  ]
+}

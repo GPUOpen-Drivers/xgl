@@ -83,6 +83,9 @@ namespace
         0,  // range;
         0,  // stride;
         Pal::UndefinedSwizzledFormat,
+#if VKI_BUILD_GFX12
+        Pal::CompressionMode::Default,
+#endif
         {{0}},  // flags
     };
 
@@ -662,6 +665,9 @@ VkResult CmdBuffer::Create(
     palCreateInfo.engineType                 = pDevice->GetQueueFamilyPalEngineType(queueFamilyIndex);
     palCreateInfo.flags.nested               = (pAllocateInfo->level > VK_COMMAND_BUFFER_LEVEL_PRIMARY) ? 1 : 0;
     palCreateInfo.flags.dispatchTunneling    = 1;
+#if VKI_BUILD_GFX12
+    palCreateInfo.flags.dispatchPingPongWalk = (pDevice->GetRuntimeSettings().dispatchPingPong == DispatchPingPongHw);
+#endif
 
     // Allocate system memory for the command buffer objects
     Pal::Result palResult;
@@ -2985,6 +2991,19 @@ void CmdBuffer::ClearVertexBufferBindings(
             watermark,
             EmptyVertexBufferBinding);
 
+#if VKI_BUILD_GFX12
+        const Pal::CompressionMode compressionMode = m_pDevice->GetBufferViewCompressionMode();
+
+        if (compressionMode != Pal::CompressionMode::Default)
+        {
+            for (uint32_t i = 0; i < watermark; i++)
+            {
+                Pal::BufferViewInfo* const pBinding = &PerGpuState(deviceIdx)->vbBindings[i];
+
+                pBinding->compressionMode = compressionMode;
+            }
+        }
+#endif
     }
 }
 
@@ -3062,6 +3081,15 @@ void CmdBuffer::BindVertexBuffersUpdateBindingRange(
         {
             pBinding->range = Util::RoundUpToMultiple(pBinding->range, pBinding->stride);
         }
+
+#if VKI_BUILD_GFX12
+        const Pal::CompressionMode compressionMode = m_pDevice->GetBufferViewCompressionMode();
+
+        if (compressionMode != Pal::CompressionMode::Default)
+        {
+            pBinding->compressionMode = compressionMode;
+        }
+#endif
 
         inputIdx++;
         pBinding++;

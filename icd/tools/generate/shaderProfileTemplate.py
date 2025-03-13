@@ -301,6 +301,15 @@ bool ParseJsonProfileActionShader(
     ShaderProfileAction* pActions);
 """
 
+#if VKI_BUILD_GFX12
+FUNC_DEC_PARSE_JSON_MALL_POLICY = """
+uint32_t ParseMallPolicy(
+    utils::Json* pItem,
+    uint32_t     maxCount,
+    uint32_t*    pArray);
+"""
+#endif
+
 PARSE_JSON_SHADER_TUNING_FLAGS_FUNC = """\
     bool success = true;
 
@@ -1988,6 +1997,40 @@ SHADER_ACTION = {
             prefix="Vkgc::InvariantLoads::")
     },
 
+#if VKI_BUILD_GFX12
+    "workgroupRoundRobin": {
+        "type": [bool],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "workgroupRoundRobin",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["VKI_BUILD_GFX12"]}
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "workgroupRoundRobin",
+                "dataType": "bool",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["VKI_BUILD_GFX12"]},
+            },
+        ],
+        "buildTypes": {"andType": ["VKI_BUILD_GFX12"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %BoolValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+#endif
+
     "workaroundStorageImageFormats": {
         "type": [int],
         "jsonReadable": True,
@@ -2138,6 +2181,245 @@ SHADER_ACTION = {
         "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
+#if VKI_BUILD_GFX12
+    "mallResourceCount": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "mallResourceCount",
+                "dataType": "uint32_t",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+            },
+        ]
+    },
+
+    "mallPolicy": {
+        "type": [list],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "mallPolicy",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "array",
+                "varName": "noAllocs",
+                "dataType": "uint32_t",
+                "arraySize": "MaxResourceCount",
+                "arrayValue": "",
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+            }
+        ],
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            uint32_t arr_%EntryNum%[] = %StrListValue%;
+            memcpy(pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].
+                shaderCreate.tuningOptions.noAllocs, arr_%EntryNum%, sizeof(arr_%EntryNum%));
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.mallResourceCount
+                = (sizeof(arr_%EntryNum%) / sizeof(uint32_t));\n""",
+        "jsonWriterTemplate": \
+            """    pWriter->Key("mallPolicy");\n""" +
+            "    pWriter->BeginList(false);\n" +
+            "    for (auto element : shader.shaderCreate.tuningOptions.noAllocs)\n    {\n" +
+            "        pWriter->HexValue(element);\n    }\n" +
+            "    pWriter->EndList();",
+        "jsonReaderTemplate": """\
+    pActions->shaderCreate.apply.%Action% = true;
+    pActions->shaderCreate.tuningOptions.mallResourceCount =
+        ParseMallPolicy(pItem, MaxResourceCount, pActions->shaderCreate.tuningOptions.noAllocs);\n"""
+    },
+
+    "temporalHintImageRead": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "temporalHintImageRead",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "temporalHintImageRead",
+                "dataType": "TemporalHints",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+            }
+        ],
+        "validValues": {
+            0: "TH_Default",
+            1: "TH_RT",
+            2: "TH_NT",
+            3: "TH_HT",
+            4: "TH_LU",
+            5: "TH_NT_RT",
+            6: "TH_RT_NT",
+            7: "TH_NT_HT"
+        },
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %EnumValue%;\n""",
+        "jsonWriterTemplate": json_enum_writer_template(["TH_Default", "TH_RT", "TH_NT", "TH_HT", "TH_LU", "TH_NT_RT", "TH_RT_NT", "TH_NT_HT"],
+                                                        prefix="TemporalHints::"),
+        "jsonReaderTemplate": json_enum_reader_template(["TH_Default", "TH_RT", "TH_NT", "TH_HT", "TH_LU", "TH_NT_RT", "TH_RT_NT", "TH_NT_HT"],
+                                                        prefix="TemporalHints::")
+    },
+
+    "temporalHintImageWrite": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "temporalHintImageWrite",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "temporalHintImageWrite",
+                "dataType": "TemporalHints",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+            }
+        ],
+        "validValues": {
+            0: "TH_Default",
+            1: "TH_RT",
+            2: "TH_NT",
+            3: "TH_HT",
+            4: "TH_LU",
+            5: "TH_NT_RT",
+            6: "TH_RT_NT",
+            7: "TH_NT_HT",
+            8: "TH_NT_WB"
+        },
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %EnumValue%;\n""",
+        "jsonWriterTemplate": json_enum_writer_template(["TH_Default", "TH_RT", "TH_NT", "TH_HT", "TH_LU", "TH_NT_RT", "TH_RT_NT", "TH_NT_HT", "TH_NT_WB"],
+                                                        prefix="TemporalHints::"),
+        "jsonReaderTemplate": json_enum_reader_template(["TH_Default", "TH_RT", "TH_NT", "TH_HT", "TH_LU", "TH_NT_RT", "TH_RT_NT", "TH_NT_HT", "TH_NT_WB"],
+                                                        prefix="TemporalHints::")
+    },
+
+    "temporalHintBufferRead": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "temporalHintBufferRead",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "temporalHintBufferRead",
+                "dataType": "TemporalHints",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+            }
+        ],
+        "validValues": {
+            0: "TH_Default",
+            1: "TH_RT",
+            2: "TH_NT",
+            3: "TH_HT",
+            4: "TH_LU",
+            5: "TH_NT_RT",
+            6: "TH_RT_NT",
+            7: "TH_NT_HT"
+        },
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %EnumValue%;\n""",
+     "jsonWriterTemplate": json_enum_writer_template(["TH_Default", "TH_RT", "TH_NT", "TH_HT", "TH_LU", "TH_NT_RT", "TH_RT_NT", "TH_NT_HT"],
+                                                        prefix="TemporalHints::"),
+     "jsonReaderTemplate": json_enum_reader_template(["TH_Default", "TH_RT", "TH_NT", "TH_HT", "TH_LU", "TH_NT_RT", "TH_RT_NT", "TH_NT_HT"],
+                                                        prefix="TemporalHints::")
+    },
+
+    "temporalHintBufferWrite": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "temporalHintBufferWrite",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "temporalHintBufferWrite",
+                "dataType": "TemporalHints",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+            }
+        ],
+        "validValues": {
+            0: "TH_Default",
+            1: "TH_RT",
+            2: "TH_NT",
+            3: "TH_HT",
+            4: "TH_LU",
+            5: "TH_NT_RT",
+            6: "TH_RT_NT",
+            7: "TH_NT_HT",
+            8: "TH_NT_WB"
+        },
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %EnumValue%;\n""",
+        "jsonWriterTemplate": json_enum_writer_template(["TH_Default", "TH_RT", "TH_NT", "TH_HT", "TH_LU", "TH_NT_RT", "TH_RT_NT", "TH_NT_HT", "TH_NT_WB"],
+                                                        prefix="TemporalHints::"),
+        "jsonReaderTemplate": json_enum_reader_template(["TH_Default", "TH_RT", "TH_NT", "TH_HT", "TH_LU", "TH_NT_RT", "TH_RT_NT", "TH_NT_HT", "TH_NT_WB"],
+                                                        prefix="TemporalHints::")
+    },
+#endif
+
     "forceMemoryBarrierScope": {
         "type": [int],
         "jsonReadable": True,
@@ -2170,6 +2452,42 @@ SHADER_ACTION = {
         "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 
+#if VKI_BUILD_GFX12
+    "reverseWorkgroupOrderHw": {
+        "type": [bool],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "reverseWorkgroupOrderHw",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {"orType": ["VKI_BUILD_GFX12"
+                               ]}
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "reverseWorkgroupOrderHw",
+                "dataType": "bool",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"orType": ["VKI_BUILD_GFX12"
+                               ]}
+            },
+        ],
+        "buildTypes": {"orType": ["VKI_BUILD_GFX12"
+                       ]},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions\
+.%FieldName% = %BoolValue%;\n""",
+        "jsonWriterTemplate": SHADER_CREATE_TUNING_OPTIONS_TEMPLATE,
+        "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
+    },
+#endif
 }
 
 SHADER_PATTERN = {
@@ -2920,6 +3238,12 @@ ValidKeysForEntity = {
 
 BuildTypesTemplate = {
     "llpc": "ICD_BUILD_LLPC",
+#if VKI_BUILD_NAVI48
+    "Navi48": "VKI_BUILD_NAVI48",
+#endif
+#if VKI_BUILD_GFX12
+    "gfxIp12": "VKI_BUILD_GFX12",
+#endif
     "icdRuntimeAppProfile": "VKI_RUNTIME_APP_PROFILE"
 }
 
@@ -3208,4 +3532,33 @@ void ShaderProfile::ParseDwordArray(
     }
 }
 """
+
+#if VKI_BUILD_GFX12
+PARSE_MALL_POLICY_FUNC = """
+uint32_t ShaderProfile::ParseMallPolicy(
+    utils::Json* pItem,
+    uint32_t     maxCount,
+    uint32_t*    pArray)
+{
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < maxCount; ++i)
+    {
+        utils::Json* pElement = utils::JsonArrayElement(pItem, i);
+
+        if (pElement != nullptr)
+        {
+            if ((pElement->pStringValue[0] == '0') && (pElement->pStringValue[1] == 'x'))
+            {
+                pArray[n++] = strtoul(pElement->pStringValue, nullptr, 0);
+            }
+        }
+        else
+        {
+            break;
+        }
+    }
+    return n;
+}
+"""
+#endif
 

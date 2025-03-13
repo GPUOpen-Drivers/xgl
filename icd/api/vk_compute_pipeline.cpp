@@ -544,6 +544,12 @@ VkResult ComputePipeline::Create(
     if (result == VK_SUCCESS)
     {
         localPipelineInfo.pipeline.flags.clientInternal = false;
+#if VKI_BUILD_GFX12
+        localPipelineInfo.pipeline.flags.reverseWorkgroupOrder =
+            pDevice->GetShaderOptimizer()->OverrideReverseWorkgroupOrder(ShaderStageCompute,
+                                                                         pipelineOptimizerKey);
+        localPipelineInfo.pipeline.groupLaunchGuarantee = static_cast<Pal::TriState>(settings.csGroupLaunchGuarantee);
+#endif
         localPipelineInfo.pipeline.pipelineBinarySize = pipelineBinaries[DefaultDeviceIndex].codeSize;
         localPipelineInfo.pipeline.pPipelineBinary = pipelineBinaries[DefaultDeviceIndex].pCode;
 

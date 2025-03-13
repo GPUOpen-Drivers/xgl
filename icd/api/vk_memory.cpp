@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -366,6 +366,18 @@ VkResult Memory::Create(
 
             if (pPinnedHostPtr == nullptr)
             {
+#if VKI_BUILD_GFX12
+#if defined(__unix__)
+                if ((createInfo.flags.cpuInvisible != 1) && (createInfo.heaps[0] == Pal::GpuHeapLocal))
+                {
+                    createInfo.compression = Pal::TriState::Disable;
+                }
+                else
+#endif
+                {
+                    createInfo.compression = static_cast<Pal::TriState>(settings.forceDistributedCompression);
+                }
+#endif
 
                 vkResult = CreateGpuMemory(
                     pDevice,

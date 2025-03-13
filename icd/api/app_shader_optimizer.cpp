@@ -251,6 +251,46 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pOptions->disableFMA = shaderCreate.tuningOptions.disableFMA;
                 }
+#if VKI_BUILD_GFX12
+                if (shaderCreate.apply.workgroupRoundRobin)
+                {
+                    options.pOptions->workgroupRoundRobin = shaderCreate.tuningOptions.workgroupRoundRobin;
+                }
+
+                if (shaderCreate.apply.mallPolicy)
+                {
+                    options.pOptions->cachePolicyLlc.resourceCount = shaderCreate.tuningOptions.mallResourceCount;
+                    options.pOptions->cachePolicyLlc.noAllocs = shaderCreate.tuningOptions.noAllocs;
+                }
+
+                if (shaderCreate.apply.temporalHintBufferRead)
+                {
+					options.pOptions->temporalHintShaderControl |=
+						(shaderCreate.tuningOptions.temporalHintBufferRead + CompilerTemporalHintOffset)
+                        << Vkgc::TemporalHintBufferRead;
+                }
+
+                if (shaderCreate.apply.temporalHintBufferWrite)
+                {
+                    options.pOptions->temporalHintShaderControl |=
+                        (shaderCreate.tuningOptions.temporalHintBufferWrite + CompilerTemporalHintOffset)
+                        << Vkgc::TemporalHintBufferWrite;
+                }
+
+                if (shaderCreate.apply.temporalHintImageRead)
+                {
+                    options.pOptions->temporalHintShaderControl |=
+                        (shaderCreate.tuningOptions.temporalHintImageRead + CompilerTemporalHintOffset)
+                        << Vkgc::TemporalHintImageRead;
+                }
+
+                if (shaderCreate.apply.temporalHintImageWrite)
+                {
+                    options.pOptions->temporalHintShaderControl |=
+                        (shaderCreate.tuningOptions.temporalHintImageWrite + CompilerTemporalHintOffset)
+                        << Vkgc::TemporalHintImageWrite;
+                }
+#endif
                 if (shaderCreate.apply.workaroundStorageImageFormats)
                 {
                     options.pOptions->workaroundStorageImageFormats = true;
@@ -535,6 +575,49 @@ void ShaderOptimizer::OverrideShaderThreadGroupSize(
         }
     }
 }
+
+#if VKI_BUILD_GFX12
+// =====================================================================================================================
+bool ShaderOptimizer::OverrideReverseWorkgroupOrder(
+    ShaderStage                 shaderStage,
+    const PipelineOptimizerKey& pipelineKey
+    ) const
+{
+    bool overrideReverseWorkgroupOrderHw = false;
+
+    for (uint32_t entry = 0; entry < m_appProfile.entryCount; ++entry)
+    {
+        const PipelineProfileEntry& profileEntry = m_appProfile.pEntries[entry];
+
+        if (GetFirstMatchingShader(profileEntry.pattern, InvalidShaderIndex, pipelineKey) != InvalidShaderIndex)
+        {
+            const auto& shaders = profileEntry.action.shaders;
+
+            if (shaders[shaderStage].shaderCreate.apply.reverseWorkgroupOrderHw)
+            {
+                overrideReverseWorkgroupOrderHw = shaders[shaderStage].shaderCreate.tuningOptions.reverseWorkgroupOrderHw;
+            }
+        }
+    }
+
+    for (uint32_t entry = 0; entry < m_tuningProfile.entryCount; ++entry)
+    {
+        const PipelineProfileEntry& profileEntry = m_tuningProfile.pEntries[entry];
+
+        if (GetFirstMatchingShader(profileEntry.pattern, InvalidShaderIndex, pipelineKey) != InvalidShaderIndex)
+        {
+            const auto& shaders = profileEntry.action.shaders;
+
+            if (shaders[shaderStage].shaderCreate.apply.reverseWorkgroupOrderHw)
+            {
+                overrideReverseWorkgroupOrderHw = shaders[shaderStage].shaderCreate.tuningOptions.reverseWorkgroupOrderHw;
+            }
+        }
+    }
+
+    return overrideReverseWorkgroupOrderHw;
+}
+#endif
 
 // =====================================================================================================================
 void ShaderOptimizer::OverrideGraphicsPipelineCreateInfo(
@@ -1014,6 +1097,13 @@ void ShaderOptimizer::BuildTuningProfile()
             pAction->shaderCreate.apply.allowReZ                = m_settings.overrideAllowReZ;
             pAction->shaderCreate.apply.disableLoopUnrolls      = m_settings.overrideDisableLoopUnrolls;
 
+#if VKI_BUILD_GFX12
+            if (m_settings.overrideWorkgroupRoundRobin)
+            {
+                pAction->shaderCreate.apply.workgroupRoundRobin = true;
+                pAction->shaderCreate.tuningOptions.workgroupRoundRobin = m_settings.overrideWorkgroupRoundRobin;
+            }
+#endif
             if (m_settings.overrideUseSiScheduler)
             {
                 pAction->shaderCreate.apply.useSiScheduler = true;
@@ -1171,6 +1261,60 @@ void ShaderOptimizer::BuildTuningProfile()
                     break;
                 }
             }
+#if VKI_BUILD_GFX12
+            if (m_settings.overrideTemporalHintBufferRead != TemporalHints::TH_Default)
+            {
+                pAction->shaderCreate.apply.temporalHintBufferRead = true;
+                pAction->shaderCreate.tuningOptions.temporalHintBufferRead =
+                    m_settings.overrideTemporalHintBufferRead;
+            }
+
+            if (m_settings.overrideTemporalHintBufferWrite != TemporalHints::TH_Default)
+            {
+                pAction->shaderCreate.apply.temporalHintBufferWrite = true;
+                pAction->shaderCreate.tuningOptions.temporalHintBufferWrite =
+                    m_settings.overrideTemporalHintBufferWrite;
+            }
+
+            if (m_settings.overrideTemporalHintImageRead != TemporalHints::TH_Default)
+            {
+                pAction->shaderCreate.apply.temporalHintImageRead = true;
+                pAction->shaderCreate.tuningOptions.temporalHintImageRead =
+                    m_settings.overrideTemporalHintImageRead;
+            }
+
+            if (m_settings.overrideTemporalHintImageWrite != TemporalHints::TH_Default)
+            {
+                pAction->shaderCreate.apply.temporalHintImageWrite = true;
+                pAction->shaderCreate.tuningOptions.temporalHintImageWrite =
+                    m_settings.overrideTemporalHintImageWrite;
+            }
+
+            Util::File hashListFile;
+            if (hashListFile.Open(m_settings.overrideCachePolicyLlc, Util::FileAccessRead) == Util::Result::Success)
+            {
+                // Each line of the file is a hex string which start with "0x", like this
+                // 0x000000 - set=0, binding=0, NOALLOC=0
+                // 0x200020 - set=0, binding=1, NOALLOC=1
+                // 0x200001 - set=1, binding=0, NOALLOC=1
+                pAction->shaderCreate.tuningOptions.mallResourceCount = 0;
+                char hash[256] = {};
+                while ((hashListFile.ReadLine(hash, sizeof(hash), nullptr) == Util::Result::Success))
+                {
+                    // Only read hex string
+                    if ((hash[0] == '0') && (hash[1] == 'x'))
+                    {
+                        uint32_t llcResource = strtoul(hash, nullptr, 16);
+                        pAction->shaderCreate.tuningOptions.
+                            noAllocs[pAction->shaderCreate.tuningOptions.mallResourceCount++] = llcResource;
+                    }
+                }
+                if (pAction->shaderCreate.tuningOptions.mallResourceCount > 0)
+                {
+                    pAction->shaderCreate.apply.mallPolicy = 1;
+                }
+            }
+#endif
         }
     }
 }

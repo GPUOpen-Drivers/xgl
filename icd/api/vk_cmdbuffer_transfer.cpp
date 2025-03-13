@@ -831,6 +831,9 @@ void CmdBuffer::QueryCopy(
     bufferViewInfo.range           = destStride * queryCount;
     bufferViewInfo.stride          = 0; // Raw buffers have a zero byte stride
     bufferViewInfo.swizzledFormat  = Pal::UndefinedSwizzledFormat;
+#if VKI_BUILD_GFX12
+    bufferViewInfo.compressionMode = m_pDevice->GetBufferViewCompressionMode();
+#endif
 
     // Set query count
     userData[queryCountOffset] = queryCount;

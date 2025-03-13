@@ -175,6 +175,60 @@
       ]
     },
     {
+      "Name": "TemporalHints",
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "TH_Default",
+          "Value": 0,
+          "Description": "'Default'"
+        },
+        {
+          "Name": "TH_RT",
+          "Value": 1,
+          "Description": "regular"
+        },
+        {
+          "Name": "TH_NT",
+          "Value": 2,
+          "Description": "non-temporal"
+        },
+        {
+          "Name": "TH_HT",
+          "Value": 3,
+          "Description": "high-temporal"
+        },
+        {
+          "Name": "TH_LU",
+          "Value": 4,
+          "Description": "last use"
+        },
+        {
+          "Name": "TH_NT_RT",
+          "Value": 5,
+          "Description": "non-temporal (CU, SE), regular (MALL)"
+        },
+        {
+          "Name": "TH_RT_NT",
+          "Value": 6,
+          "Description": "regular (CU, SE), non-temporal (MALL)"
+        },
+        {
+          "Name": "TH_NT_HT",
+          "Value": 7,
+          "Description": "non-temporal(CU, SE), high-temporal(MALL)"
+        },
+        {
+          "Name": "TH_NT_WB",
+          "Value": 8,
+          "Description": "non-temporal (CU, SE), high-temporal with write-back (MALL)"
+        }
+      ]
+    },
+    {
       "Name": "GraphicsPipelineType",
       "IsEnum": true,
       "Values": [
@@ -375,6 +429,88 @@
           "Value": 1048575,
           "Description": "(heavyweight option)"
         }
+      ]
+    },
+    {
+      "Name": "CacheScopePolicyType",
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "AtmWriteUseSystemScope",
+          "Value": 1,
+          "Description": "Attributes through memory stores by the GS will use system scope and avoid occupying any lines in GL2."
+        },
+        {
+          "Name": "CbWriteUseSystemScope",
+          "Value": 2,
+          "Description": "Color target stores will use system scope and avoid occupying any lines in GL2."
+        },
+        {
+          "Name": "DbWriteUseSystemScope",
+          "Value": 4,
+          "Description": "depth/stencil stores (DB data only, SC HiZ/HiS is not affected) will use system scope and avoid occupying any lines in GL2."
+        },
+        {
+          "Name": "AtmReadTemporalHint",
+          "Value": 8,
+          "Description": "Override TH for ATM reads. Default is HT, NT_HT is set in cases where ATM reads thrash GL2 in a data set that otherwise would fit nicely in GL2."
+        }
+      ],
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ]
+    },
+    {
+      "Name": "CompressionMode",
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "CompressionModeDefault",
+          "Value": 0,
+          "Description": "Let PAL choose behavior"
+        },
+        {
+          "Name": "ReadEnableWriteEnable",
+          "Value": 1,
+          "Description": "Override default to force read and write compression on"
+        },
+        {
+          "Name": "ReadEnableWriteDisable",
+          "Value": 2,
+          "Description": "Support reading compressed data, but force any writes to be uncompressed"
+        },
+        {
+          "Name": "ReadBypassWriteDisable",
+          "Value": 3,
+          "Description": "Bypass physical metadata on read (assume decompressed)"
+        }
+      ],
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ]
+    },
+    {
+      "Name": "GroupLaunchGuarantee",
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "GroupLaunchGuaranteeDefault",
+          "Value": 0,
+          "Description": "Let PAL choose behavior"
+        },
+        {
+          "Name": "GroupLaunchGuaranteeEnabled",
+          "Value": 1,
+          "Description": "Force enabling shader group launch guarantee"
+        },
+        {
+          "Name": "GroupLaunchGuaranteeDisabled",
+          "Value": 2,
+          "Description": "Force disabling shader group launch guarantee"
+        }
+      ],
+      "OrBuildTypes": [
+        "VKI_BUILD_GFX12"
       ]
     }
   ],
@@ -2233,6 +2369,21 @@
       "Name": "OptimizeTessFactor"
     },
     {
+      "Description": "[GFX12] Expert scheduling mode option.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "ExpertSchedulingMode",
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ]
+    },
+    {
       "Description": "A bitmask of flags that control relaxed precision features.",
       "Tags": [
         "SPIRV Options"
@@ -3047,6 +3198,38 @@
       "Scope": "Driver"
     },
     {
+      "Name": "RtEnableHighPrecisionBoxNode",
+      "Description": "Enable 64-byte high precision box node on supported HW",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "RtEnableBvh8",
+      "Description": "Enable Bvh8 on supported HW",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Mode for which interior box nodes in BLAS use fp16 bounding boxes",
       "Tags": [
         "Ray Tracing"
@@ -3208,6 +3391,38 @@
       "Scope": "Driver"
     },
     {
+      "Name": "RtBvhInstanceMode",
+      "Description": "Hardware instance node mode",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": 1
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "RtTrivialBuilderMaxPrimThreshold",
+      "Description": "Maximum primitive count that the Trivial BVH Builder should run on. 0 disables the builder.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": 16
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
       "Name": "RtEnableMortonCode30",
       "Description": "Enable Morton Code 30 bits",
       "Tags": [
@@ -3356,6 +3571,41 @@
         ]
       },
       "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "RtPrimCompressionFlags",
+      "Description": "Control flags for primitive structure compression.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": "0xFFFFFFFF"
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "RtMaxPrimRangeSize",
+      "Description": "Max primitive range size for RTIP3.1+",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": 2
+      },
+      "Type": "uint32",
       "Scope": "Driver"
     },
     {
@@ -3761,6 +4011,25 @@
         "Name": "BvhBuildMode"
       },
       "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "BoxSplittingFlags",
+      "Description": "Control flags for box splitting / child reuse feature for RTIP 3.1.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": "0"
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Type": "uint32",
       "Scope": "Driver"
     },
     {
@@ -4353,6 +4622,22 @@
             "Name": "EmulatedRtIpLevel2_0",
             "Value": 3,
             "Description": "Emulate ray tracing IP level 2.0 feature set."
+          },
+          {
+            "Name": "EmulatedRtIpLevel3_1",
+            "Value": 7,
+            "Description": "Emulate ray tracing IP level 3.1 feature set.",
+            "BuildTypes": [
+              "VKI_BUILD_GFX12"
+            ]
+          },
+          {
+            "Name": "HardwareRtIpLevel3_1",
+            "Value": 8,
+            "Description": "Force ray tracing IP level 3.1 feature set using hardware intrinsic.",
+            "BuildTypes": [
+              "VKI_BUILD_GFX12"
+            ]
           }
         ]
       },
@@ -6133,6 +6418,42 @@
       "Scope": "Driver"
     },
     {
+      "Description": "[GFX12] Provides the ability for mall to be alloc'ed/noalloc'ed using the dynamic or static behavior. Superceded by gfx12DynamicCbTemporalHints, gfx12TemporalHintsMrtRead, and gfx12TemporalHintsMrtWrite.",
+      "Tags": [
+        "Memory"
+      ],
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "TemporalHintsDynamicRt",
+            "Value": 0,
+            "Description": "Enable Dynamic RT Temporal hints."
+          },
+          {
+            "Name": "TemporalHintsStaticRt",
+            "Value": 1,
+            "Description": "Regular temporal for both near and far read/write caches."
+          },
+          {
+            "Name": "TemporalHintsStaticNt",
+            "Value": 2,
+            "Description": "Non-temporal (re-use not expected) for both near and far read/write caches."
+          }
+        ],
+        "Name": "TemporalHintsMrtBehavior"
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "Name": "TemporalHintsMrtBehavior"
+    },
+    {
       "ValidValues": {
         "IsEnum": true,
         "Values": [
@@ -6728,6 +7049,42 @@
       "Name": "Enable256KBSwizzleModes"
     },
     {
+      "Description": "This setting controls if CS group launch guarantee is enabled or disabled.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "GroupLaunchGuaranteeDefault"
+      },
+      "ValidValues": {
+        "Name": "GroupLaunchGuarantee"
+      },
+      "OrBuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Scope": "Driver",
+      "Type": "enum",
+      "Name": "CsGroupLaunchGuarantee"
+    },
+    {
+      "Description": "This setting controls if GFX (HW HS/GS) group launch guarantee is enabled or disabled.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "GroupLaunchGuaranteeDefault"
+      },
+      "ValidValues": {
+        "Name": "GroupLaunchGuarantee"
+      },
+      "OrBuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Scope": "Driver",
+      "Type": "enum",
+      "Name": "GfxGroupLaunchGuarantee"
+    },
+    {
       "Description": "Enable FMASK based MSAA texture reads. ",
       "Tags": [
         "Optimization"
@@ -7113,6 +7470,168 @@
       },
       "Scope": "Driver",
       "Type": "uint32"
+    },
+    {
+      "Name": "ForceDistributedCompression",
+      "Description": "[GFX12] If not default, forces Distributed Compression for every newly allocated GPU memory block. This setting will force the compression globally, but it can still be overriden by any settings that force compression for specific types of resources, see BufferViewCompressionMode.",
+      "Tags": [
+        "Optimization"
+      ],
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": "DistributedCompressionEnabled"
+      },
+      "ValidValues": {
+        "Name": "DistributedCompressionMode",
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "DistributedCompressionDefault",
+            "Value": 0,
+            "Description": "Let PAL heuristics decide what's best. Don't force anything in xgl."
+          },
+          {
+            "Name": "DistributedCompressionEnabled",
+            "Value": 1,
+            "Description": "Force enable distributed compression"
+          },
+          {
+            "Name": "DistributedCompressionDisabled",
+            "Value": 2,
+            "Description": "Force disable distributed compression"
+          }
+        ]
+      },
+      "Scope": "Driver",
+      "Type": "enum"
+    },
+    {
+      "Description": "[GFX12] This setting controls 'compressionMode' field in 'BufferViewInfo' which is an override for distributed compression mode for buffer view",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "ReadBypassWriteDisable"
+      },
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "ValidValues": {
+        "Name": "CompressionMode"
+      },
+      "Type": "enum",
+      "Name": "BufferViewCompressionMode",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[GFX12] This setting controls 'compressionMode' field in 'ImageViewInfo' which is an override for distributed compression mode for image view",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "CompressionModeDefault"
+      },
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "ValidValues": {
+        "Name": "CompressionMode"
+      },
+      "Type": "enum",
+      "Name": "ImageViewCompressionMode",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[GFX12] Disable client compression for select depth/stencil formats or color MSAA images. Cannot disable depth or stencil individually.",
+      "Tags": [
+        "Optimization"
+      ],
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "DisableClientCompression",
+        "Values": [
+          {
+            "Name": "DefaultClientCompression",
+            "Value": "0x00000000",
+            "Description": "Let PAL heuristics decide what's best. Don't force anything in xgl."
+          },
+          {
+            "Name": "DisableClientCompressionZ16",
+            "Value": "0x00000001",
+            "Description": "Disable for 16-bit depth images."
+          },
+          {
+            "Name": "DisableClientCompressionZ24",
+            "Value": "0x00000002",
+            "Description": "Disable for 24-bit depth images, including stencil plane."
+          },
+          {
+            "Name": "DisableClientCompressionZ32",
+            "Value": "0x00000004",
+            "Description": "Disable for 32-bit depth images, including stencil plane (if present)."
+          },
+          {
+            "Name": "DisableClientCompressionFragment2x",
+            "Value": "0x00000020",
+            "Description": "Disable fragment client compression for color 2x MSAA images."
+          },
+          {
+            "Name": "DisableClientCompressionFragment4x",
+            "Value": "0x00000040",
+            "Description": "Disable fragment client compression for color 4x MSAA images."
+          },
+          {
+            "Name": "DisableClientCompressionFragment8x",
+            "Value": "0x00000080",
+            "Description": "Disable fragment client compression for color 8x MSAA images."
+          },
+          {
+            "Name": "DisableClearClientCompressionZ16",
+            "Value": "0x00000100",
+            "Description": "Disable for 16-bit depth image clears."
+          },
+          {
+            "Name": "DisableClearClientCompressionZ24",
+            "Value": "0x00000200",
+            "Description": "Disable for 24-bit depth image clears, including stencil plane."
+          },
+          {
+            "Name": "DisableClearClientCompressionZ32",
+            "Value": "0x00000400",
+            "Description": "Disable for 32-bit depth image clears, including stencil plane (if present)."
+          },
+          {
+            "Name": "DisableClearClientCompressionFragment2x",
+            "Value": "0x00002000",
+            "Description": "Disable fragment client compression for color 2x MSAA image clears."
+          },
+          {
+            "Name": "DisableClearClientCompressionFragment4x",
+            "Value": "0x00004000",
+            "Description": "Disable fragment client compression for color 4x MSAA images clears."
+          },
+          {
+            "Name": "DisableClearClientCompressionFragment8x",
+            "Value": "0x00008000",
+            "Description": "Disable fragment client compression for color 8x MSAA images clears."
+          }
+        ]
+      },
+      "Type": "uint32",
+      "Name": "DisableClientCompression",
+      "Scope": "Driver"
     },
     {
       "Name": "ForceLowPrecisionDepthImage",
@@ -7524,12 +8043,42 @@
             "Name": "DispatchPingPongSw",
             "Value": 1,
             "Description": "Override to enable dispatch ping pong in software"
+          },
+          {
+            "Name": "DispatchPingPongHw",
+            "Value": 2,
+            "OrBuildTypes": [
+              "VKI_BUILD_GFX12"
+            ],
+            "Description": "Override to enable dispatch ping pong in hardware"
           }
         ],
         "Name": "DispatchPingPong"
       },
       "Type": "enum",
       "Scope": "Driver"
+    },
+    {
+      "Description": "GFX12 specific cache policy control.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "ValidValues": {
+        "Name": "CacheScopePolicyType"
+      },
+      "Type": "uint32",
+      "Name": "CacheScopePolicyControl",
+      "Scope": "Driver",
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ]
     },
     {
       "Name": "AllowReZ",
@@ -8033,6 +8582,150 @@
       }
     },
     {
+      "Name": "OverrideTemporalHintAtmWrite",
+      "Description": "Override temporal hint for ATM write",
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "TemporalHints::TH_Default"
+      },
+      "ValidValues": {
+        "Name": "TemporalHints"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideTemporalHintImageRead",
+      "Description": "Override temporal hint for image read for this shader",
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "TemporalHints::TH_Default"
+      },
+      "ValidValues": {
+        "Name": "TemporalHints"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideTemporalHintImageWrite",
+      "Description": "Override temporal hint for image write  for this shader",
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "TemporalHints::TH_Default"
+      },
+      "ValidValues": {
+        "Name": "TemporalHints"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideTemporalHintBufferRead",
+      "Description": "Override temporal hint for buffer read  for this shader",
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "TemporalHints::TH_Default"
+      },
+      "ValidValues": {
+        "Name": "TemporalHints"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideTemporalHintBufferWrite",
+      "Description": "Override temporal hint for buffer write  for this shader",
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "TemporalHints::TH_Default"
+      },
+      "ValidValues": {
+        "Name": "TemporalHints"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideTemporalHintTessFactorWrite",
+      "Description": "Override temporal hint for tessellation factor write",
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "TemporalHints::TH_Default"
+      },
+      "ValidValues": {
+        "Name": "TemporalHints"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideTemporalHintTessRead",
+      "Description": "Override temporal hint for tess read",
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "TemporalHints::TH_Default"
+      },
+      "ValidValues": {
+        "Name": "TemporalHints"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideTemporalHintTessWrite",
+      "Description": "Override temporal hint for tess write",
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "TemporalHints::TH_Default"
+      },
+      "ValidValues": {
+        "Name": "TemporalHints"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
       "Name": "OverrideShaderParams",
       "Description": "Indicate that shader parameter override is enabled - mainly used for automation",
       "Tags": [
@@ -8431,6 +9124,21 @@
       }
     },
     {
+      "Description": "Enable shader workgroup round-robin arbitration, only works for LLPC now",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "OverrideWorkgroupRoundRobin",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Enable selective inlining behavior in the compiler.",
       "Tags": [
         "Shader Tuning"
@@ -8580,6 +9288,24 @@
       "Scope": "Driver"
     },
     {
+      "Name": "OverrideCachePolicyLlc",
+      "Description": "The config file of the mall tuning, override Mall policy for the shader specified by OverrideShaderHashUpper/Lower. Each line of the file represents the tuning of a resource, Hex representation,low 5 bits represents resource set, then 16 bits represenets binding, then 1 bit represents whether to enable LLC.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": ""
+      },
+      "Flags": {
+        "IsFile": true
+      },
+      "Type": "string",
+      "Scope": "Driver"
+    },
+    {
       "Name": "OverrideUseNgg",
       "Description": "Override use of NGG on a per shader basis. Default behavior to enable NGG use",
       "Tags": [
@@ -8611,6 +9337,21 @@
       "Description": "Override thread ID swizzling on a per shader basis.",
       "Tags": [
         "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideReverseWorkgroupOrderHw",
+      "Description": "Override dispatch ping pong mode to force reverse workgroup order for any dispatches using this pipeline",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "OrBuildTypes": [
+        "VKI_BUILD_GFX12"
       ],
       "Defaults": {
         "Default": false
@@ -8987,6 +9728,22 @@
       "Scope": "Driver"
     },
     {
+      "Name": "DisableDynamicVgprs",
+      "Description": "Disables dynamic VGPR mode. If not set, dVGPR mode is automatically enabled on Gfx12+ with continuations, see supportCps.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Name": "RtGpuDebugFlags",
       "Description": "GPURT GPU debug flags",
       "Tags": [
@@ -9029,6 +9786,149 @@
         ]
       },
       "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnableOrientedBoundingBoxes",
+      "Description": "Enable OBB building and traversal for RTIP 3.1.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "EnableOrientedBoundingBoxesFlags",
+        "Values": [
+          {
+            "Name": "Disable",
+            "Value": 0
+          },
+          {
+            "Name": "TLAS",
+            "Value": 1
+          },
+          {
+            "Name": "BLAS",
+            "Value": 2
+          },
+          {
+            "Name": "Both",
+            "Value": 3
+          }
+        ]
+      },
+      "Defaults": {
+        "Default": "BLAS"
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "ObbNumLevels",
+      "Description": "Controls how many BVH levels are converted to OBBs.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": "0xFFFFFFFF"
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "ObbDisableBuildFlags",
+      "Description": "Controls which acceleration structures are affected by the OBB build pass.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "RtEnableSingleThreadGroupBuild",
+      "Description": "Enable single thread group BVH build.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "RtTlasRefittingMode",
+      "Description": "Controls which TLAS refitting algorithm to perform when building instance nodes.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "Off",
+            "Description": "Off",
+            "Value": 0
+          },
+          {
+            "Name": "Early",
+            "Description": "Refitting Early Mode",
+            "Value": 1
+          },
+          {
+            "Name": "Late",
+            "Description": "Refitting Late Mode",
+            "Value": 2
+          }
+        ],
+        "Name": "RtTlasRefittingModes"
+      },
+      "Defaults": {
+        "Default": "Off"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "RtEnableBvhChannelBalancing",
+      "Description": "Enable channel balancing workaround in GPURT for RTIP3.1+. This costs an extra 4KiB of memory per uncompacted BVH.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING",
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
       "Scope": "Driver"
     },
     {
@@ -9452,6 +10352,97 @@
       },
       "Type": "uint32",
       "Scope": "Driver"
+    },
+    {
+      "Description": "Controls the behavior of the GFX12 HW bug that impacts HiZ and HiS",
+      "Tags": [
+        "General"
+      ],
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": "HiSZWarBehaviorDefault"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "HiSZWarBehavior",
+        "Values": [
+          {
+            "Name": "HiSZWarBehaviorDefault",
+            "Value": 0,
+            "Description": "Let PAL decide the best workaround behavior"
+          },
+          {
+            "Name": "HiSZWarBehaviorForceDisableAll",
+            "Value": 1,
+            "Description": "Force disable all workaround. High risk setting. Do not use unless tested otherwise"
+          },
+          {
+            "Name": "HiSZWarBehaviorDisableBasedWar",
+            "Value": 2,
+            "Description": "Force the dynamic disable HiSZ workaround behavior. This is a full workaround and is the safest option."
+          },
+          {
+            "Name": "HiSZWarBehaviorEventBasedWar",
+            "Value": 3,
+            "Description": "Force the event-after-draw workaround behavior. This option carries some risk."
+          },
+          {
+            "Name": "HiSZWarBehaviorDisableBasedWarWithReZ",
+            "Value": 4,
+            "Description": "Force the disable HiZ/S based workaround behavior, but with an added optimization to force ZOrder mode to EarlyZThenReZ to reclaim some performance."
+          }
+        ]
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "Name": "HiSZWorkaroundBehavior"
+    },
+    {
+      "Description": "Value for DB_SUMMARIZER_TIMEOUTS to be programmed to. Takes effect only when HiSZWorkaroundBehavior is set to HiSZWarBehaviorEventBasedWar ",
+      "Tags": [
+        "General"
+      ],
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "Name": "HiSzDbSummarizerTimeout"
+    },
+    {
+      "Description": "The factor to compare the surface area heuristic against. When the SAH is lower, the node will be opened for rebraid",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "Defaults": {
+        "Default": 0.7
+      },
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Scope": "Driver",
+      "Type": "float",
+      "Name": "RebraidOpenSurfaceAreaFactor"
+    },
+    {
+      "Description": "Minimum number of active prims to open a node for rebraiding",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_BUILD_GFX12"
+      ],
+      "Defaults": {
+        "Default": 16
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "Name": "RebraidOpenMinPrims"
     },
     {
       "Description": "Disable degenerative primtives, i.e. set their vertex.x = NaN",

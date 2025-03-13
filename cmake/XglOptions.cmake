@@ -47,6 +47,9 @@ macro(xgl_options)
 #if VKI_BUILD_STRIX_HALO
     option(VKI_BUILD_STRIX_HALO "Build vulkan for STRIX_HALO" ON)
 #endif
+#if VKI_BUILD_NAVI48
+    option(VKI_BUILD_NAVI48 "Build vulkan for Navi48" ON)
+#endif
 
     option(VKI_BUILD_TESTS "Build tests?" OFF)
 

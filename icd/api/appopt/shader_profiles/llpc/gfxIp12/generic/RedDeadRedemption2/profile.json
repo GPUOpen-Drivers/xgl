@@ -1,0 +1,100 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xae188551d7b56e7f 6b8c4c0bff97cd9b"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32,
+          "threadGroupSwizzleMode": "_4x4"
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xfd3d6fd85419a887 550d6f775d85b05c"
+        }
+      },
+      "action": {
+        "cs": {
+          "wgpMode": 2,
+          "forceLoopUnrollCount": 7
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xc577c045f76e7f1d fc253c2262766191"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xfa125c14e408c50a 9303ad1cd18f0be6"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableCodeSinking": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x42F4E3E378FD00CC 80B710C3BEAD9105"
+        }
+      },
+      "action": {
+        "ps": {
+          "mallPolicy": [
+            "0x2004a1",
+            "0x200da1",
+            "0x201000",
+            "0x200580",
+            "0x201881",
+            "0x2018a1"
+          ]
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x4978d8c34d416baa 44e8b98e259f6c88"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xb25b7c1354a93985 f152905e9e85ef7f"
+        }
+      },
+      "action": {
+        "ps": {
+          "aggressiveInvariantLoads": "EnableOptimization"
+        }
+      }
+    }
+  ]
+}

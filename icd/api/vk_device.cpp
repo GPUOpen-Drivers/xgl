@@ -2087,6 +2087,12 @@ VkResult Device::CreateInternalComputePipeline(
     {
         Pal::ComputePipelineCreateInfo pipelineInfo = {};
         pipelineInfo.flags.clientInternal = true;
+#if VKI_BUILD_GFX12
+        pipelineInfo.flags.reverseWorkgroupOrder =
+            GetShaderOptimizer()->OverrideReverseWorkgroupOrder(Vkgc::ShaderStage::ShaderStageCompute,
+                                                                pipelineOptimizerKey);
+        pipelineInfo.groupLaunchGuarantee = static_cast<Pal::TriState>(m_settings.csGroupLaunchGuarantee);
+#endif
         pipelineInfo.pPipelineBinary      = pipelineBinary.pCode;
         pipelineInfo.pipelineBinarySize   = pipelineBinary.codeSize;
 
@@ -2912,6 +2918,14 @@ uint32_t Device::GetDefaultLdsTraversalStackSize(
 {
     uint32_t ldsStackSize = GetDefaultLdsSizePerThread(isIndirect);
 
+#if VKI_BUILD_GFX12
+    if (GetPalProperties().gfxipProperties.rayTracingIp >= Pal::RayTracingIpLevel::RtIp3_1)
+    {
+        // The max stack size for RTIP3.x HW is 31.
+        ldsStackSize = Util::Min(ldsStackSize, 31u);
+    }
+    else
+#endif
     {
         // Clamp to power of 2
         ldsStackSize = 1 << Util::Log2(ldsStackSize);

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -92,6 +92,13 @@ struct PipelineShaderOptionsPtr
 
 };
 
+#if VKI_BUILD_GFX12
+// Apply to temporal hint tuning. The valid values of temporal hint are 0~7 in compiler, instead of 1~8 in XGL.
+// Each tuning occupies 4 bits and the highest bit of 4 bits marks whether to override temporal hint, so the offset
+// is (7 - 8) + 8
+constexpr uint32_t CompilerTemporalHintOffset = 7;
+#endif
+
 // =====================================================================================================================
 // This class can tune pre-compile SC parameters based on known shader hashes in order to improve SC code generation
 // output.
@@ -154,6 +161,13 @@ public:
         Util::MetroHash128*         pHasher) const;
 
 #if VKI_RAY_TRACING
+#endif
+
+#if VKI_BUILD_GFX12
+    bool OverrideReverseWorkgroupOrder(
+        ShaderStage                 shaderStage,
+        const PipelineOptimizerKey& pipelineKey
+    ) const;
 #endif
 
 private:

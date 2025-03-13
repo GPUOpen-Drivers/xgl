@@ -1,0 +1,52 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x5d57d7de1344947e 15d3f1264dda4995"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x0d3bb534d7f86407 30acc351f2e2c8ae"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x0596c40b7d193021 3788eba5a15d6542"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0xa96e3b3d24510bd0 a4f37c25eac9ee41"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    }
+  ]
+}

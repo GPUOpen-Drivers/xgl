@@ -1127,6 +1127,13 @@ VkResult RayTracingPipeline::CreateImpl(
             if (pBinaries[0].pCode != nullptr)
             {
                 localPipelineInfo.pipeline.flags.clientInternal = false;
+#if VKI_BUILD_GFX12
+                localPipelineInfo.pipeline.flags.reverseWorkgroupOrder = m_pDevice->GetShaderOptimizer()->
+                    OverrideReverseWorkgroupOrder(Vkgc::ShaderStage::ShaderStageCompute,
+                                                  optimizerKey);
+                localPipelineInfo.pipeline.groupLaunchGuarantee =
+                    static_cast<Pal::TriState>(settings.csGroupLaunchGuarantee);
+#endif
                 localPipelineInfo.pipeline.pipelineBinarySize   = pBinaries[0].codeSize;
                 localPipelineInfo.pipeline.pPipelineBinary      = pBinaries[0].pCode;
                 localPipelineInfo.pipeline.maxFunctionCallDepth =
@@ -1220,6 +1227,13 @@ VkResult RayTracingPipeline::CreateImpl(
                 if (hasKernelEntry)
                 {
                     localPipelineInfo.pipeline.flags.clientInternal = false;
+#if VKI_BUILD_GFX12
+                    localPipelineInfo.pipeline.flags.reverseWorkgroupOrder = m_pDevice->GetShaderOptimizer()->
+                        OverrideReverseWorkgroupOrder(Vkgc::ShaderStage::ShaderStageCompute,
+                                                      optimizerKey);
+                    localPipelineInfo.pipeline.groupLaunchGuarantee =
+                        static_cast<Pal::TriState>(settings.csGroupLaunchGuarantee);
+#endif
                     localPipelineInfo.pipeline.pipelineBinarySize   = pBinaries[0].codeSize;
                     localPipelineInfo.pipeline.pPipelineBinary      = pBinaries[0].pCode;
                     localPipelineInfo.pipeline.maxFunctionCallDepth = pipelineBinaries[deviceIdx].maxFunctionCallDepth;

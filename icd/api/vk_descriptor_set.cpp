@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -401,6 +401,9 @@ void DescriptorUpdate::WriteBufferInfoDescriptors(
     // Setup and create SRD for storage buffer case
     info.swizzledFormat  = Pal::UndefinedSwizzledFormat;
     info.stride          = 0; // Raw buffers have a zero byte stride
+#if VKI_BUILD_GFX12
+    info.compressionMode = pDevice->GetBufferViewCompressionMode();
+#endif
 
     Pal::IDevice* pPalDevice = pDevice->PalDevice(deviceIdx);
 
@@ -469,6 +472,9 @@ void DescriptorUpdate::SetAccelerationDescriptorsBufferViewFlags(
         pBufferViewInfo->flags.bypassMallWrite = 1;
     }
 
+#if VKI_BUILD_GFX12
+    pBufferViewInfo->compressionMode = pDevice->GetBufferViewCompressionMode();
+#endif
 }
 
 void DescriptorUpdate::WriteAccelerationStructureDescriptors(

@@ -116,6 +116,12 @@ VkResult RayTracingDevice::Init()
             case EmulatedRtIpLevel2_0:
                 initInfo.deviceSettings.emulatedRtIpLevel = Pal::RayTracingIpLevel::RtIp2_0;
                 break;
+#if VKI_BUILD_GFX12
+            case EmulatedRtIpLevel3_1:
+            case HardwareRtIpLevel3_1:
+                initInfo.deviceSettings.emulatedRtIpLevel = Pal::RayTracingIpLevel::RtIp3_1;
+                break;
+#endif
             default:
                 break;
             }
@@ -235,6 +241,10 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->rebraidFactor                     = settings.rebraidFactor;
     pDeviceSettings->numRebraidIterations              = settings.numRebraidIterations;
     pDeviceSettings->rebraidQualityHeuristic           = settings.rebraidQualityHeuristicType;
+#if VKI_BUILD_GFX12
+    pDeviceSettings->rebraidOpenMinPrims               = settings.rebraidOpenMinPrims;
+    pDeviceSettings->rebraidOpenSAFactor               = settings.rebraidOpenSurfaceAreaFactor;
+#endif
     pDeviceSettings->plocRadius                        = settings.plocRadius;
     pDeviceSettings->enablePairCompressionCostCheck    = settings.enablePairCompressionCostCheck;
     pDeviceSettings->accelerationStructureUUID         = GetAccelerationStructureUUID(
@@ -246,6 +256,27 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->numMortonSizeBits                 = settings.numMortonSizeBits;
     pDeviceSettings->allowFp16BoxNodesInUpdatableBvh   = settings.rtAllowFp16BoxNodesInUpdatableBvh;
     pDeviceSettings->fp16BoxNodesRequireCompaction     = settings.fp16BoxNodesRequireCompactionFlag;
+#if VKI_BUILD_GFX12
+    pDeviceSettings->highPrecisionBoxNodeEnable        = settings.rtEnableHighPrecisionBoxNode;
+    pDeviceSettings->bvh8Enable                        = settings.rtEnableBvh8;
+#endif
+
+#if VKI_BUILD_GFX12
+    if (m_pDevice->GetProperties().rayTracingIpLevel >= Pal::RayTracingIpLevel::RtIp3_1)
+    {
+        pDeviceSettings->enableOrientedBoundingBoxes        = settings.enableOrientedBoundingBoxes;
+        pDeviceSettings->boxSplittingFlags                  = settings.boxSplittingFlags;
+        pDeviceSettings->obbNumLevels                       = settings.obbNumLevels;
+        pDeviceSettings->obbDisableBuildFlags               = settings.obbDisableBuildFlags;
+        pDeviceSettings->instanceMode                       = settings.rtBvhInstanceMode;
+        pDeviceSettings->primCompressionFlags               = settings.rtPrimCompressionFlags;
+        pDeviceSettings->maxPrimRangeSize                   = settings.rtMaxPrimRangeSize;
+        pDeviceSettings->enableBvhChannelBalancing          = settings.rtEnableBvhChannelBalancing;
+        pDeviceSettings->trivialBuilderMaxPrimThreshold     = settings.rtTrivialBuilderMaxPrimThreshold;
+        pDeviceSettings->enableSingleThreadGroupBuild       = settings.rtEnableSingleThreadGroupBuild;
+        pDeviceSettings->tlasRefittingMode                  = settings.rtTlasRefittingMode;
+    }
+#endif
 
     // Enable AS stats based on panel setting
     pDeviceSettings->enableBuildAccelStructStats        = settings.rtEnableBuildAccelStructStats;
@@ -527,6 +558,9 @@ VkResult RayTracingDevice::InitAccelStructTracker()
             viewInfo.gpuAddr             = pTracker->pMem->GpuVirtAddr(deviceIdx);
             viewInfo.range               = sizeof(GpuRt::AccelStructTracker);
             viewInfo.stride              = sizeof(GpuRt::AccelStructTracker);
+#if VKI_BUILD_GFX12
+            viewInfo.compressionMode     = m_pDevice->GetBufferViewCompressionMode();
+#endif
 
             // Ensure the SRD size matches with the GPURT header definition
             static_assert(sizeof(pTracker->srd) == sizeof(GpuRt::DispatchRaysTopLevelData::accelStructTrackerSrd),

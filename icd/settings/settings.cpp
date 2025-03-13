@@ -200,6 +200,11 @@ void VulkanSettingsLoader::OverrideSettingsBySystemInfo()
         MakeAbsolutePath(m_settings.shaderReplaceDir, sizeof(m_settings.shaderReplaceDir),
                          pRootPath, m_settings.shaderReplaceDir);
 
+#if VKI_BUILD_GFX12
+        MakeAbsolutePath(m_settings.overrideCachePolicyLlc, sizeof(m_settings.overrideCachePolicyLlc),
+            pRootPath, m_settings.overrideCachePolicyLlc);
+#endif
+
         MakeAbsolutePath(m_settings.appProfileDumpDir, sizeof(m_settings.appProfileDumpDir),
                          pRootPath, m_settings.appProfileDumpDir);
         MakeAbsolutePath(m_settings.pipelineProfileDumpFile, sizeof(m_settings.pipelineProfileDumpFile),
@@ -445,6 +450,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.enableInternalPipelineCachingToDisk = (atoi(pEnableInternalCacheToDisk) != 0);
     }
 
+#if VKI_BUILD_GFX12
+    // The setting 'forceEnableDcc' does not do anything for Gfx12 and above ASICs. These gfxips have a different
+    // mechanism for DCC and thus can only be controlled by a separate group of compression settings.
+    if (pInfo->gfxLevel < Pal::GfxIpLevel::GfxIp12)
+#endif
     {
         // In general, DCC is very beneficial for color attachments, 2D, 3D shader storage resources that have BPP>=32.
         // If this is completely offset, maybe by increased shader read latency or partial writes of DCC blocks, it
@@ -501,6 +511,33 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.csWaveSize = 64;
         m_settings.fsWaveSize = 64;
     }
+#if VKI_BUILD_GFX12
+    else if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp12)
+    {
+#if VKI_RAY_TRACING
+        // Enable the batch builder for GFX12 and disable parallel builds
+        m_settings.batchBvhBuilds        = BatchBvhModes::BatchBvhModeExplicit;
+        m_settings.rtEnableBuildParallel = false;
+        m_settings.rtEnableRebraid       = false;
+
+        // Enable RemapScratch
+        m_settings.enableRemapScratchBuffer = true;
+
+        // Enable Early Pair Compression for Navi4
+        m_settings.enableEarlyPairCompression     = true;
+        m_settings.enablePairCompressionCostCheck = true;
+
+#endif
+        m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
+
+        // Enable NGG compactionless mode for Navi4x
+        m_settings.nggCompactVertex = false;
+
+        // This should reduce context rolls on most apps giving a slight perf gain
+        m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
+
+    }
+#endif
 
     // Put command buffers in local for large/resizable BAR systems with > 7 GBs of local heap
     constexpr gpusize _1GB = 1024ull * 1024ull * 1024ull;
@@ -577,6 +614,16 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.disableBinningPsKill = DisableBinningPsKillTrue;
             m_settings.overrideWgpMode = WgpModeWgp;
         }
+#if VKI_BUILD_GFX12
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp12)
+        {
+            {
+                m_settings.forceCsThreadIdSwizzling = true;
+            }
+            m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+
+        }
+#endif
 
         // Don't enable DCC for color attachments aside from those listed in the app_resource_optimizer
         m_settings.forceEnableDcc = ForceDccDefault;
@@ -660,6 +707,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
         }
 
+#if VKI_BUILD_GFX12
+        if (pInfo->gfxLevel < Pal::GfxIpLevel::GfxIp12)
+#endif
         {
             m_settings.forceEnableDcc = (ForceDccFor64BppShaderStorage              |
                                          ForceDccForNonColorAttachmentShaderStorage |
@@ -838,6 +888,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
+#if VKI_BUILD_GFX12
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp12)
+        {
+            m_settings.hiSzWorkaroundBehavior = HiSZWarBehavior::HiSZWarBehaviorEventBasedWar;
+        }
+#endif
+
         m_settings.enableUberFetchShader  = true;
     }
 
@@ -1010,6 +1067,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.pipelineBinningMode = PipelineBinningModeEnable;
             }
         }
+#if VKI_BUILD_GFX12
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp12)
+        {
+            m_settings.temporalHintsMrtBehavior = TemporalHintsStaticNt;
+            m_settings.hiSzWorkaroundBehavior   = HiSZWarBehavior::HiSZWarBehaviorEventBasedWar;
+        }
+#endif
     }
 
     if (appProfile == AppProfile::ZombieArmy4)
@@ -1060,6 +1124,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         m_settings.forceDepthClampBasedOnZExport = true;
 
+#if VKI_BUILD_GFX12
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp12)
+        {
+            m_settings.hiSzWorkaroundBehavior = HiSZWarBehavior::HiSZWarBehaviorEventBasedWar;
+        }
+#endif
     }
 
     if (appProfile == AppProfile::WarHammerII)
@@ -1212,6 +1282,14 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.forceEnableDcc      |= ForceDccForNonColorAttachmentShaderStorage;
             }
+#if VKI_BUILD_GFX12
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp12)
+            {
+                m_settings.temporalHintsMrtBehavior = TemporalHintsMrtBehavior::TemporalHintsStaticNt;
+                m_settings.hiSzWorkaroundBehavior   = HiSZWarBehavior::HiSZWarBehaviorEventBasedWar;
+                m_settings.disableLoopUnrolls       = true;
+            }
+#endif
         }
 
         m_settings.ac01WaNotNeeded = true;
@@ -1286,6 +1364,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.fsWaveSize = 64;
             }
         }
+#if VKI_BUILD_GFX12
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp12)
+        {
+            m_settings.hiSzWorkaroundBehavior   = HiSZWarBehavior::HiSZWarBehaviorEventBasedWar;
+            m_settings.temporalHintsMrtBehavior = TemporalHintsMrtBehavior::TemporalHintsStaticNt;
+        }
+#endif
     }
 
     if (appProfile == AppProfile::Quake)
@@ -1445,6 +1530,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
         }
+#if VKI_BUILD_GFX12
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp12)
+        {
+            m_settings.hiSzWorkaroundBehavior = HiSZWarBehavior::HiSZWarBehaviorDisableBasedWarWithReZ;
+        }
+#endif
     }
 
     if (appProfile == AppProfile::IdTechLauncher)
@@ -1521,6 +1612,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     if (appProfile == AppProfile::ShadowOfTheTombRaider)
     {
+#if VKI_BUILD_GFX12
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp12)
+        {
+            m_settings.hiSzWorkaroundBehavior = HiSZWarBehavior::HiSZWarBehaviorEventBasedWar;
+        }
+#endif
     }
 
     if (appProfile == AppProfile::SHARK)
@@ -1556,6 +1653,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
             }
 
+#if VKI_BUILD_GFX12
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp12)
+            {
+                m_settings.hiSzWorkaroundBehavior = HiSZWarBehavior::HiSZWarBehaviorEventBasedWar;
+            }
+#endif
         }
     }
 
@@ -1611,6 +1714,17 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 }
             }
         }
+#if VKI_BUILD_GFX12
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp12)
+        {
+            m_settings.hiSzWorkaroundBehavior   = HiSZWarBehavior::HiSZWarBehaviorDisableBasedWarWithReZ;
+            m_settings.temporalHintsMrtBehavior = TemporalHintsMrtBehavior::TemporalHintsStaticRt;
+            m_settings.csWaveSize = 64;
+            m_settings.fsWaveSize = 64;
+            m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+            m_settings.pipelineBinningMode = PipelineBinningModeDisable;
+        }
+#endif
     }
 
     if (appProfile == AppProfile::MetalGearSolid5)
@@ -1700,6 +1814,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     {
         OverrideVkd3dCommonSettings(&m_settings);
 #if VKI_RAY_TRACING
+#if VKI_BUILD_GFX12
+        // Fixes failing tests in vkd3d when comparing scratch sizes of different builds
+        // TODO: Investigate vkd3d test updates to remove this workaround
+        m_settings.enableRemapScratchBuffer = false;
+#endif
         // Fixes RT page fault issue in vkd3d when payload sizes from shader and app are mismatched
         m_settings.rtIgnoreDeclaredPayloadSize = true;
 #endif
@@ -1712,6 +1831,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     if (appProfile == AppProfile::IndianaJonesGC)
     {
+
+#if VKI_BUILD_GFX12
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp12)
+        {
+            m_settings.hiSzWorkaroundBehavior = HiSZWarBehavior::HiSZWarBehaviorEventBasedWar;
+        }
+#endif
 
         m_settings.forceGraphicsQueueCount = 2;
         m_settings.forceComputeQueueCount = 4;
@@ -1983,6 +2109,24 @@ void VulkanSettingsLoader::ValidateSettings()
         m_settings.enableRaytracingSupport = false;
     }
 
+#if VKI_BUILD_GFX12
+    if (((rayTracingIpLevel < Pal::RayTracingIpLevel::RtIp3_1) &&
+         (m_settings.emulatedRtIpLevel == EmulatedRtIpLevelNone)) ||
+        ((m_settings.emulatedRtIpLevel > EmulatedRtIpLevelNone) &&
+         (m_settings.emulatedRtIpLevel < EmulatedRtIpLevel3_1)))
+    {
+        m_settings.rtEnableHighPrecisionBoxNode = false;
+        m_settings.rtEnableBvh8 = false;
+    }
+
+    if (m_settings.rtEnableHighPrecisionBoxNode || m_settings.rtEnableBvh8)
+    {
+        // FP16 box nodes are not available on
+        // hardware when high precision box nodes are in use.
+        m_settings.rtFp16BoxNodesInBlasMode = Fp16BoxNodesInBlasModeNone;
+    }
+#endif
+
     // RTIP 2.0+ is always expected to support hardware traversal stack
     VK_ASSERT((rayTracingIpLevel <= Pal::RayTracingIpLevel::RtIp1_1) ||
         (deviceProps.gfxipProperties.flags.supportRayTraversalStack == 1));
@@ -2070,6 +2214,11 @@ static void UpdateDeviceGeneratedCommandsPalSettings(
         case Pal::GfxIpLevel::GfxIp11_5:
             enablePacketPath = false;
             break;
+#if VKI_BUILD_GFX12
+        case Pal::GfxIpLevel::GfxIp12:
+            VK_NEVER_CALLED(); // dGPU only
+            break;
+#endif
         default:
             enablePacketPath = true; // We assume later ASICs are good to go
             break;
@@ -2155,6 +2304,41 @@ void VulkanSettingsLoader::UpdatePalSettings()
     {
         pPalSettings->expandHiZRangeForResummarize = true;
     }
+
+#if VKI_BUILD_GFX12
+    static_assert(
+        Pal::TemporalHintsMrtBehavior(TemporalHintsMrtBehavior::TemporalHintsDynamicRt) == Pal::TemporalHintsDynamicRt,
+        "TemporalHintsMrtBehavior is not the same between PAL and Vulkan");
+    static_assert(
+        Pal::TemporalHintsMrtBehavior(TemporalHintsMrtBehavior::TemporalHintsStaticRt) == Pal::TemporalHintsStaticRt,
+        "TemporalHintsMrtBehavior is not the same between PAL and Vulkan");
+    static_assert(
+        Pal::TemporalHintsMrtBehavior(TemporalHintsMrtBehavior::TemporalHintsStaticNt) == Pal::TemporalHintsStaticNt,
+        "TemporalHintsMrtBehavior is not the same between PAL and Vulkan");
+
+    if (Pal::TemporalHintsMrtBehavior(m_settings.temporalHintsMrtBehavior) != Pal::TemporalHintsDynamicRt)
+    {
+        pPalSettings->temporalHintsMrtBehavior = Pal::TemporalHintsMrtBehavior(m_settings.temporalHintsMrtBehavior);
+    }
+
+    static_assert(static_cast<uint32_t>(Pal::HiSZWorkaroundBehavior::Default) ==
+        HiSZWarBehavior::HiSZWarBehaviorDefault);
+    static_assert(static_cast<uint32_t>(Pal::HiSZWorkaroundBehavior::ForceDisableAllWar) ==
+        HiSZWarBehavior::HiSZWarBehaviorForceDisableAll);
+    static_assert(static_cast<uint32_t>(Pal::HiSZWorkaroundBehavior::ForceHiSZDisableBasedWar) ==
+        HiSZWarBehavior::HiSZWarBehaviorDisableBasedWar);
+    static_assert(static_cast<uint32_t>(Pal::HiSZWorkaroundBehavior::ForceHiSZEventBasedWar) ==
+        HiSZWarBehavior::HiSZWarBehaviorEventBasedWar);
+    static_assert(static_cast<uint32_t>(Pal::HiSZWorkaroundBehavior::ForceHiSZDisableBaseWarWithReZ) ==
+        HiSZWarBehavior::HiSZWarBehaviorDisableBasedWarWithReZ);
+
+    pPalSettings->hiSZWorkaroundBehavior = static_cast<Pal::HiSZWorkaroundBehavior>(m_settings.hiSzWorkaroundBehavior);
+
+    pPalSettings->tileSummarizerTimeout =
+        (m_settings.hiSzWorkaroundBehavior == HiSZWarBehavior::HiSZWarBehaviorEventBasedWar)
+        ? m_settings.hiSzDbSummarizerTimeout
+        : 0;
+#endif
 
     const char* pCompilerModeString =
         "Compiler Mode: LLPC";

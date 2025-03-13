@@ -3118,6 +3118,14 @@ inline Pal::GpuBlock VkToPalGpuBlock(
     (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_DF_MALL_AMD) == static_cast<uint32_t>(Pal::GpuBlock::DfMall)) &&
     (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_SQ_WGP_AMD) == static_cast<uint32_t>(Pal::GpuBlock::SqWgp)) &&
     (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_PC_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Pc))
+#if VKI_BUILD_GFX12
+    && (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GL1XA_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Gl1xa)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_GL1XC_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Gl1xc)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_WGS_AMD) == static_cast<uint32_t>(Pal::GpuBlock::Wgs)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_EACPWD_AMD) == static_cast<uint32_t>(Pal::GpuBlock::EaCpwd)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_EASE_AMD) == static_cast<uint32_t>(Pal::GpuBlock::EaSe)) &&
+    (static_cast<uint32_t>(VK_GPA_PERF_BLOCK_RLCUSER_AMD) == static_cast<uint32_t>(Pal::GpuBlock::RlcUser))
+#endif
     ,
     "Need to update function convert::GpuBlock");
 

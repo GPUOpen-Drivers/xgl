@@ -1,0 +1,31 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "ps": {
+          "nsaThreshold": 2
+        },
+        "gs": {
+          "nsaThreshold": 2
+        }
+      }
+    },
+    {
+      "pattern": {
+        "gs": {
+          "codeHash": "0xf2949c1ef37a9e30 5dd80203f449f5b2"
+        }
+      },
+      "action": {
+        "gs": {
+          "nsaThreshold": 2,
+          "aggressiveInvariantLoads": "EnableOptimization",
+          "vgprLimit": 128
+        }
+      }
+    }
+  ]
+}

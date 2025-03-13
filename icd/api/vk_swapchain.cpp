@@ -971,6 +971,9 @@ bool SwapChain::BuildPostProcessingCommands(
         imageViewInfo[0].subresRange.startSubres.plane      = 0;
         imageViewInfo[0].possibleLayouts.usages             = Pal::LayoutShaderRead | Pal::LayoutShaderWrite;
         imageViewInfo[0].possibleLayouts.engines            = Pal::ImageLayoutEngineFlags::LayoutUniversalEngine;
+#if VKI_BUILD_GFX12
+        imageViewInfo[0].compressionMode                    = pDevice->GetImageViewCompressionMode();
+#endif
         // Update array slice for right eye SRD
         imageViewInfo[1]                                    = imageViewInfo[0];
         imageViewInfo[1].subresRange.startSubres.arraySlice = 1;

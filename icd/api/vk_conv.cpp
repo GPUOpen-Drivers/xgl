@@ -1131,6 +1131,12 @@ static uint32_t GetBufferSrdFormatInfo(
         bufferInfo.swizzledFormat         = swizzledFormat;
         bufferInfo.range                  = UINT32_MAX;
         bufferInfo.stride                 = Pal::Formats::BytesPerPixel(swizzledFormat.format);
+#if VKI_BUILD_GFX12
+        static_assert((static_cast<uint32_t>(Pal::CompressionMode::Count) == 4),
+            "The number of CompressionMode enum entries has changed. We need to update it in our settings.");
+        bufferInfo.compressionMode =
+            Pal::CompressionMode(pPhysicalDevice->GetRuntimeSettings().bufferViewCompressionMode);
+#endif
 
         pPhysicalDevice->PalDevice()->CreateTypedBufferViewSrds(1, &bufferInfo, result);
 
@@ -1379,6 +1385,12 @@ VkResult InitializeUberFetchShaderFormatTable(
         bufferInfo.gpuAddr             = 0x300000000ull;
         bufferInfo.swizzledFormat      = PalFmt_Undefined;
         bufferInfo.range               = UINT32_MAX;
+#if VKI_BUILD_GFX12
+        static_assert((static_cast<uint32_t>(Pal::CompressionMode::Count) == 4),
+            "The number of CompressionMode enum entries has changed. We need to update it in our settings.");
+        bufferInfo.compressionMode =
+            Pal::CompressionMode(pPhysicalDevice->GetRuntimeSettings().bufferViewCompressionMode);
+#endif
 
         // Build SRD with non-zero stride
         bufferInfo.stride = 16;

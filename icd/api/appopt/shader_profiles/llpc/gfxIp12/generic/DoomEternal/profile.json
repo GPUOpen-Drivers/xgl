@@ -1,0 +1,30 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xb770b01a43d1e0cb ba5d9eea178f98f0"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableCodeSinking": true,
+          "vgprLimit": 72
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "codeHash": "0x6f736139163a06f6 cc5207924ce81d88"
+        }
+      },
+      "action": {
+        "vs": {
+          "dontUnrollHintThreshold": 100,
+          "useSiScheduler": true
+        }
+      }
+    }
+  ]
+}

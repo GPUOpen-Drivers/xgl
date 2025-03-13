@@ -107,6 +107,14 @@ macro(xgl_overrides_pal)
     set(PAL_BUILD_STRIX_HALO ${VKI_BUILD_STRIX_HALO} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 #endif
 
+#if VKI_BUILD_GFX12
+    set(PAL_BUILD_GFX12 ${VKI_BUILD_GFX12} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+#endif
+
+#if VKI_BUILD_NAVI48
+    set(PAL_BUILD_NAVI48 ${VKI_BUILD_NAVI48} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+#endif
+
     # Wayland
     set(PAL_BUILD_WAYLAND ${VKI_BUILD_WAYLAND} CACHE BOOL "Build PAL with Wayland support" FORCE)
 
@@ -154,6 +162,16 @@ macro(xgl_overrides_llpc)
     set(LLPC_BUILD_STRIX_HALO ${VKI_BUILD_STRIX_HALO} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 #endif
 
+#if VKI_BUILD_GFX12
+    if(VKI_BUILD_GFX12)
+        set(LLPC_BUILD_GFX12 ${VKI_BUILD_GFX12} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+    endif()
+#endif
+
+#if VKI_BUILD_NAVI48
+    set(LLPC_BUILD_NAVI48 ${VKI_BUILD_NAVI48} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+#endif
+
     set(LLPC_CLIENT_INTERFACE_MAJOR_VERSION ${VKI_LLPC_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 
     set(LLPC_BUILD_TOOLS ${VKI_BUILD_TOOLS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
@@ -171,6 +189,15 @@ endmacro()
 macro(xgl_overrides)
 
     set(GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION ${VKI_GPUOPEN_CLIENT_MAJOR_VERSION})
+
+#if VKI_BUILD_GFX12
+    set(VKI_BUILD_GFX12 OFF)
+#if VKI_BUILD_NAVI48
+    if(VKI_BUILD_NAVI48)
+        set(VKI_BUILD_GFX12 ON)
+    endif()
+#endif
+#endif
 
     xgl_get_path()
 

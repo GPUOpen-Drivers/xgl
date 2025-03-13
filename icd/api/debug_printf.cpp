@@ -122,6 +122,9 @@ void DebugPrintf::BindPipeline(
             Pal::BufferViewInfo srdInfo = {};
             srdInfo.gpuAddr = m_printfMemory.GpuVirtAddr(deviceIdx);
             srdInfo.range   = m_printfMemory.Size();
+#if VKI_BUILD_GFX12
+            srdInfo.compressionMode = pDevice->GetBufferViewCompressionMode();
+#endif
 
             pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &srdInfo, pTable);
 

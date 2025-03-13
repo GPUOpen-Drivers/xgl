@@ -1,0 +1,166 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0xE128CF59638C2E1C 22C6B575129AB32D"
+        }
+      },
+      "action": {
+        "cs": {
+          "favorLatencyHiding": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x45911829EC7E9028 123B4766DB4CD890"
+        }
+      },
+      "action": {
+        "cs": {
+          "favorLatencyHiding": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x59b0428f3cd67115 310d150c5fe4134b"
+        }
+      },
+      "action": {
+        "cs": {
+          "useSiScheduler": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x9ad5144cc78368a0 7701746dcf8cce1e"
+        }
+      },
+      "action": {
+        "cs": {
+          "maxWavesPerCu": 4,
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x22cdbcc4784fcaab 88f70575c05dde23"
+        }
+      },
+      "action": {
+        "cs": {
+          "maxWavesPerCu": 4
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xdc8037d8038b53e3 27e5f9ff2f6e2393"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 96,
+          "disableLoopUnrolls": true,
+          "forceLoopUnrollCount": 1,
+          "scalarizeWaterfallLoads": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x99328357a34e1b9d 8aba6678fa5e8363"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32,
+          "useSiScheduler": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x31bb9ba4ffcf3039 22a8d97a3476219e"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32,
+          "wgpMode": 2,
+          "useSiScheduler": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x9b6ea91a89684ac7 aeae7e4274ef3174"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x19f80f2ccdfda24d 24a96a014ebad09e"
+        }
+      },
+      "action": {
+        "cs": {
+          "aggressiveInvariantLoads": "ClearInvariants"
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xc02193ec3d955769 2c0e7d74b4e743bd"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32,
+          "disableCodeSinking": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x75766a03f4f46db5 72eedd2c0366374d"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    }
+  ]
+}

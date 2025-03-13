@@ -446,6 +446,54 @@ void Image::ConvertImageCreateInfo(
     const uint32_t forceEnableDccMask          = settings.forceEnableDcc;
     const uint32_t forceDisableCompressionMask = settings.forceDisableCompression;
 
+#if VKI_BUILD_GFX12
+    if (gfxLevel >= Pal::GfxIpLevel::GfxIp12)
+    {
+        if (Formats::IsColorFormat(createInfoFormat))
+        {
+            if (pCreateInfo->samples >= VK_SAMPLE_COUNT_2_BIT)
+            {
+                static_assert(DisableClientCompressionFragment2x == (VK_SAMPLE_COUNT_2_BIT << 4));
+                static_assert(DisableClientCompressionFragment4x == (VK_SAMPLE_COUNT_4_BIT << 4));
+                static_assert(DisableClientCompressionFragment8x == (VK_SAMPLE_COUNT_8_BIT << 4));
+
+                static_assert(DisableClearClientCompressionFragment2x == (VK_SAMPLE_COUNT_2_BIT << 12));
+                static_assert(DisableClearClientCompressionFragment4x == (VK_SAMPLE_COUNT_4_BIT << 12));
+                static_assert(DisableClearClientCompressionFragment8x == (VK_SAMPLE_COUNT_8_BIT << 12));
+
+                // All bits in the second nibble of disableClientCompression are set to disable for any MSAA count
+                if ((settings.disableClientCompression & (pCreateInfo->samples << 4)) != 0)
+                {
+                    pPalCreateInfo->clientCompressionMode = Pal::ClientCompressionMode::Disable;
+                }
+                else if ((settings.disableClientCompression & (pCreateInfo->samples << 12)) != 0)
+                {
+                    pPalCreateInfo->clientCompressionMode = Pal::ClientCompressionMode::DisableClearOnly;
+                }
+            }
+        }
+        else if (Formats::IsDepthStencilFormat(createInfoFormat))
+        {
+            const uint32_t clientCompressionDisableMask = isZ16DsFormat ? DisableClientCompressionZ16 :
+                                                          isZ24DsFormat ? DisableClientCompressionZ24 :
+                                                                          DisableClientCompressionZ32;
+
+            const uint32_t clientCompressionDisableClearMask = isZ16DsFormat ? DisableClearClientCompressionZ16 :
+                                                               isZ24DsFormat ? DisableClearClientCompressionZ24 :
+                                                                               DisableClearClientCompressionZ32;
+
+            if ((settings.disableClientCompression & clientCompressionDisableMask) != 0)
+            {
+                pPalCreateInfo->clientCompressionMode = Pal::ClientCompressionMode::Disable;
+            }
+            else if ((settings.disableClientCompression & clientCompressionDisableClearMask) != 0)
+            {
+                pPalCreateInfo->clientCompressionMode = Pal::ClientCompressionMode::DisableClearOnly;
+            }
+        }
+    }
+    else
+#endif
     {
         // Don't force DCC to be enabled for performance reasons unless the image is larger than the minimum size set for
         // compression, another performance optimization.
@@ -545,6 +593,9 @@ void Image::ConvertImageCreateInfo(
     if ((forceDisableCompressionMask & disableBits) != 0)
     {
         pPalCreateInfo->metadataMode          = Pal::MetadataMode::Disabled;
+#if VKI_BUILD_GFX12
+        pPalCreateInfo->compressionMode       = Pal::CompressionMode::ReadBypassWriteDisable;
+#endif
     }
 
     // Apply per application (or run-time) options
@@ -558,6 +609,10 @@ void Image::ConvertImageCreateInfo(
         {
             pPalCreateInfo->metadataMode          = Pal::MetadataMode::Disabled;
             pPalCreateInfo->metadataTcCompatMode  = Pal::MetadataTcCompatMode::Disabled;
+#if VKI_BUILD_GFX12
+            pPalCreateInfo->clientCompressionMode = Pal::ClientCompressionMode::Disable;
+            pPalCreateInfo->compressionMode       = Pal::CompressionMode::ReadBypassWriteDisable;
+#endif
         }
     }
 

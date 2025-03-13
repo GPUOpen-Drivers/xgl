@@ -120,6 +120,9 @@ static uint32_t GpuRtShaderLibraryFlags(
     }
 
     if ((settings.emulatedRtIpLevel > HardwareRtIpLevel1_1)
+#if VKI_BUILD_GFX12
+        && (settings.emulatedRtIpLevel != HardwareRtIpLevel3_1)
+#endif
         )
     {
         flags |= static_cast<uint32>(GpuRt::ShaderLibraryFeatureFlag::SoftwareTraversal);
@@ -339,6 +342,12 @@ VkResult PipelineCompiler::Initialize()
         m_gfxIp.major = 11;
         m_gfxIp.minor = 5;
         break;
+#if VKI_BUILD_GFX12
+    case Pal::GfxIpLevel::GfxIp12:
+        m_gfxIp.major = 12;
+        m_gfxIp.minor = 0;
+        break;
+#endif
     default:
         VK_NEVER_CALLED();
         break;
@@ -1831,6 +1840,9 @@ static void MergePipelineOptions(
     pDst->pageMigrationEnabled                  |= src.pageMigrationEnabled;
     pDst->optimizationLevel                     |= src.optimizationLevel;
     pDst->glState.disableTruncCoordForGather    |= src.glState.disableTruncCoordForGather;
+#if VKI_BUILD_GFX12
+    pDst->expertSchedulingMode                  |= src.expertSchedulingMode;
+#endif
     pDst->optimizePointSizeWrite                |= src.optimizePointSizeWrite;
     pDst->shadowDescriptorTableUsage   = src.shadowDescriptorTableUsage;
     pDst->shadowDescriptorTablePtrHigh = src.shadowDescriptorTablePtrHigh;
@@ -3323,6 +3335,9 @@ void PipelineCompiler::ApplyPipelineOptions(
     pOptions->enableRelocatableShaderElf = settings.enableRelocatableShaders;
     pOptions->disableImageResourceCheck  = settings.disableImageResourceTypeCheck;
     pOptions->optimizeTessFactor         = settings.optimizeTessFactor != OptimizeTessFactorDisable;
+#if VKI_BUILD_GFX12
+    pOptions->expertSchedulingMode       = settings.expertSchedulingMode;
+#endif
     pOptions->optimizePointSizeWrite     = true;
     pOptions->forceCsThreadIdSwizzling   = settings.forceCsThreadIdSwizzling;
     pOptions->overrideThreadGroupSizeX   = settings.overrideThreadGroupSizeX;
@@ -3341,6 +3356,17 @@ void PipelineCompiler::ApplyPipelineOptions(
     pOptions->disablePerCompFetch = settings.disablePerCompFetch;
 
     pOptions->forceNonUniformResourceIndexStageMask = settings.forceNonUniformDescriptorIndex;
+
+#if VKI_BUILD_GFX12
+    // The highest bit of 4 bits marks whether to override temporal hint.
+    pOptions->temporalHintControl =
+        ((settings.overrideTemporalHintTessWrite + CompilerTemporalHintOffset) << TemporalHintTessWrite)             |
+        ((settings.overrideTemporalHintTessRead + CompilerTemporalHintOffset) << TemporalHintTessRead)               |
+        ((settings.overrideTemporalHintTessFactorWrite + CompilerTemporalHintOffset) << TemporalHintTessFactorWrite) |
+        (settings.overrideTemporalHintAtmWrite + CompilerTemporalHintOffset);
+
+    pOptions->cacheScopePolicyControl = settings.cacheScopePolicyControl;
+#endif
 
     if (pDevice->GetEnabledFeatures().robustBufferAccessExtended)
     {
@@ -3901,6 +3927,10 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
         static_assert(CpsFlagStackInGlobalMem == static_cast<unsigned>(Vkgc::CpsFlagStackInGlobalMem));
         pCreateInfo->pipelineInfo.cpsFlags = settings.cpsFlags;
 
+#if VKI_BUILD_GFX12
+        pCreateInfo->pipelineInfo.disableDynamicVgpr = settings.disableDynamicVgprs;
+#endif
+
         pCreateInfo->pipelineInfo.isReplay = isReplay;
 
         pCreateInfo->pipelineInfo.rtIgnoreDeclaredPayloadSize = settings.rtIgnoreDeclaredPayloadSize;
@@ -4432,6 +4462,30 @@ void PipelineCompiler::SetRayTracingState(
             bvhInfo.flags.bypassMallWrite = 1;
         }
 
+#if VKI_BUILD_GFX12
+        if (settings.rtEnableHighPrecisionBoxNode)
+        {
+            bvhInfo.flags.highPrecisionBoxNode = 1;
+        }
+
+        // RTIP3.x always enables hardware instance node format.
+        bvhInfo.flags.hwInstanceNode = 1;
+
+        if ((settings.boxSortingHeuristic != BoxSortingDisabled) && (settings.rtEnableBvh8))
+        {
+            bvhInfo.flags.wideSort = 1;
+        }
+
+        if ((deviceProp.gfxipProperties.rayTracingIp >= Pal::RayTracingIpLevel::RtIp3_1) &&
+            (settings.emulatedRtIpLevel              != HardwareRtIpLevel1_1))
+        {
+            bvhInfo.flags.sortTrianglesFirst   = 1;
+            bvhInfo.flags.compressedFormatEn   = 1;
+            // turn off HBP64 when compressed format is enabled.
+            bvhInfo.flags.highPrecisionBoxNode = 0;
+        }
+#endif
+
         m_pPhysicalDevice->PalDevice()->CreateBvhSrds(1, &bvhInfo, &(pRtState->bvhResDesc.descriptorData));
         pRtState->bvhResDesc.dataSizeInDwords = Util::NumBytesToNumDwords(pDevice->GetProperties().descriptorSizes.bvh);
     }
@@ -4541,6 +4595,12 @@ void PipelineCompiler::SetRayTracingState(
     case EmulatedRtIpLevel2_0:
         rayTracingIp = Pal::RayTracingIpLevel::RtIp2_0;
         break;
+#if VKI_BUILD_GFX12
+    case EmulatedRtIpLevel3_1:
+    case HardwareRtIpLevel3_1:
+        rayTracingIp = Pal::RayTracingIpLevel::RtIp3_1;
+        break;
+#endif
     default:
         VK_ASSERT(false);
         break;
@@ -4558,6 +4618,12 @@ void PipelineCompiler::SetRayTracingState(
     case Pal::RayTracingIpLevel::RtIp2_0:
         pRtState->rtIpVersion = Vkgc::RtIpVersion({ 2, 0 });
         break;
+#if VKI_BUILD_GFX12
+    case Pal::RayTracingIpLevel::RtIp3_1:
+        pRtState->enableRayTracingHwTraversalStack = 1;
+        pRtState->rtIpVersion = Vkgc::RtIpVersion({ 3, 1 });
+        break;
+#endif
     default:
         VK_NEVER_CALLED();
         break;

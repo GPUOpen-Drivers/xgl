@@ -2433,6 +2433,13 @@ void GraphicsPipelineCommon::BuildPipelineObjectCreateInfo(
         }
     }
 
+#if VKI_BUILD_GFX12
+    if (settings.gfxGroupLaunchGuarantee != GroupLaunchGuaranteeDefault)
+    {
+        pInfo->pipeline.groupLaunchGuarantee = static_cast<Pal::TriState>(settings.gfxGroupLaunchGuarantee);
+    }
+#endif
+
     if (libInfo.flags.isLibrary == false)
     {
         BuildExecutablePipelineState(hasMesh, pInfo->dynamicStates, pBinMeta, pInfo);

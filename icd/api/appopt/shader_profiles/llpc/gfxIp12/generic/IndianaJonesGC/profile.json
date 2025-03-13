@@ -1,0 +1,452 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xa0eea750be92e36a 91bc6d6c46dc3325"
+        }
+      },
+      "action": {
+        "cs": {
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "useSiScheduler": true,
+          "forceLoopUnrollCount": 12,
+          "enableLoadScalarizer": true,
+          "disableLicm": true,
+          "unrollThreshold": 2500,
+          "nsaThreshold": 1,
+          "aggressiveInvariantLoads": "DisableOptimization",
+          "scalarizeWaterfallLoads": true,
+          "temporalHintImageRead": 6,
+          "temporalHintImageWrite": 7,
+          "temporalHintBufferRead": 5
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x429db181a4fc1c16 c69464b3e5e8bb7d"
+        }
+      },
+      "action": {
+        "cs": {
+          "userDataSpillThreshold": 1,
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "waveSize": 32,
+          "forceLoopUnrollCount": 15,
+          "enableLoadScalarizer": true,
+          "unrollThreshold": 3000,
+          "nsaThreshold": 16,
+          "aggressiveInvariantLoads": "DisableOptimization",
+          "scalarizeWaterfallLoads": true,
+          "temporalHintImageRead": 6,
+          "temporalHintImageWrite": 3,
+          "temporalHintBufferRead": 7,
+          "temporalHintBufferWrite": 3
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x4312877ab00a3f82 5b89061915e36f67"
+        }
+      },
+      "action": {
+        "cs": {
+          "userDataSpillThreshold": 1,
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "waveSize": 64,
+          "wgpMode": 1,
+          "useSiScheduler": true,
+          "disableCodeSinking": true,
+          "favorLatencyHiding": true,
+          "forceLoopUnrollCount": 10,
+          "enableLoadScalarizer": true,
+          "unrollThreshold": 3000,
+          "nsaThreshold": 8,
+          "temporalHintImageRead": 4,
+          "temporalHintImageWrite": 2,
+          "temporalHintBufferRead": 5,
+          "temporalHintBufferWrite": 4
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x7be2c9e4dde17c18 b1af69fd1f12f3b4"
+        }
+      },
+      "action": {
+        "cs": {
+          "userDataSpillThreshold": 1,
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "waveSize": 64,
+          "disableCodeSinking": true,
+          "favorLatencyHiding": true,
+          "forceLoopUnrollCount": 13,
+          "enableLoadScalarizer": true,
+          "disableLicm": true,
+          "unrollThreshold": 2000,
+          "nsaThreshold": 15,
+          "aggressiveInvariantLoads": "DisableOptimization",
+          "scalarizeWaterfallLoads": true,
+          "temporalHintImageRead": 1,
+          "temporalHintImageWrite": 7,
+          "temporalHintBufferWrite": 4
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xe1faed4e519fc587 bf05fdee3f9a263f"
+        }
+      },
+      "action": {
+        "cs": {
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "waveSize": 32,
+          "forceLoopUnrollCount": 12,
+          "enableLoadScalarizer": true,
+          "disableLicm": true,
+          "unrollThreshold": 2000,
+          "nsaThreshold": 13,
+          "aggressiveInvariantLoads": "ClearInvariants",
+          "temporalHintImageRead": 6,
+          "temporalHintImageWrite": 2,
+          "temporalHintBufferWrite": 5
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x1753db9b36a6fd07 46c66200f434a0a3"
+        }
+      },
+      "action": {
+        "cs": {
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "waveSize": 64,
+          "wgpMode": 2,
+          "disableCodeSinking": true,
+          "favorLatencyHiding": true,
+          "forceLoopUnrollCount": 6,
+          "enableLoadScalarizer": true,
+          "disableLicm": true,
+          "nsaThreshold": 14,
+          "aggressiveInvariantLoads": "ClearInvariants",
+          "scalarizeWaterfallLoads": true,
+          "temporalHintImageWrite": 6,
+          "temporalHintBufferRead": 6
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xf0007986d746ccf7 840868b258a1a2f8"
+        }
+      },
+      "action": {
+        "cs": {
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "waveSize": 32,
+          "wgpMode": 2,
+          "disableCodeSinking": true,
+          "favorLatencyHiding": true,
+          "forceLoopUnrollCount": 10,
+          "disableLicm": true,
+          "unrollThreshold": 3000,
+          "nsaThreshold": 7,
+          "temporalHintImageWrite": 7,
+          "temporalHintBufferRead": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xc1fb14c27a446dd9 574cc0a4e26d2f2a"
+        }
+      },
+      "action": {
+        "cs": {
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "wgpMode": 2,
+          "favorLatencyHiding": true,
+          "forceLoopUnrollCount": 1,
+          "enableLoadScalarizer": true,
+          "unrollThreshold": 2500,
+          "aggressiveInvariantLoads": "EnableOptimization",
+          "temporalHintImageRead": 5,
+          "temporalHintBufferRead": 5,
+          "temporalHintBufferWrite": 6
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x61519957f63074b4 c016551822bad21e"
+        }
+      },
+      "action": {
+        "cs": {
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "waveSize": 32,
+          "wgpMode": 2,
+          "disableCodeSinking": true,
+          "favorLatencyHiding": true,
+          "forceLoopUnrollCount": 12,
+          "disableLicm": true,
+          "nsaThreshold": 12,
+          "aggressiveInvariantLoads": "DisableOptimization",
+          "scalarizeWaterfallLoads": true,
+          "temporalHintImageRead": 3,
+          "temporalHintImageWrite": 2,
+          "temporalHintBufferRead": 3,
+          "temporalHintBufferWrite": 4
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xf4cc4747fb9cdeac 37f3d85f5e18a993"
+        }
+      },
+      "action": {
+        "cs": {
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "wgpMode": 2,
+          "disableCodeSinking": true,
+          "favorLatencyHiding": true,
+          "forceLoopUnrollCount": 14,
+          "enableLoadScalarizer": true,
+          "disableLicm": true,
+          "unrollThreshold": 2000,
+          "nsaThreshold": 16,
+          "aggressiveInvariantLoads": "DisableOptimization",
+          "scalarizeWaterfallLoads": true,
+          "temporalHintImageRead": 6,
+          "temporalHintBufferWrite": 4
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x53057b40bcbf7de7 937876369cad8fa7"
+        }
+      },
+      "action": {
+        "ps": {
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "waveSize": 32,
+          "useSiScheduler": true,
+          "forceLoopUnrollCount": 9,
+          "enableLoadScalarizer": true,
+          "unrollThreshold": 1000,
+          "aggressiveInvariantLoads": "ClearInvariants",
+          "temporalHintImageRead": 2,
+          "temporalHintImageWrite": 2,
+          "temporalHintBufferRead": 4,
+          "temporalHintBufferWrite": 8
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xd3ea4f970e82a943 880b410a8f0e756b"
+        }
+      },
+      "action": {
+        "ps": {
+          "userDataSpillThreshold": 1,
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "wgpMode": 2,
+          "forceLoopUnrollCount": 9,
+          "unrollThreshold": 2500,
+          "nsaThreshold": 12,
+          "aggressiveInvariantLoads": "DisableOptimization",
+          "temporalHintImageWrite": 6,
+          "temporalHintBufferRead": 6,
+          "temporalHintBufferWrite": 7
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x5793e9078ca034f3 4101dc61226bc491"
+        }
+      },
+      "action": {
+        "ps": {
+          "userDataSpillThreshold": 1,
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "waveSize": 64,
+          "useSiScheduler": true,
+          "disableCodeSinking": true,
+          "forceLoopUnrollCount": 11,
+          "disableLicm": true,
+          "nsaThreshold": 8,
+          "aggressiveInvariantLoads": "ClearInvariants",
+          "temporalHintImageRead": 5,
+          "temporalHintImageWrite": 1,
+          "temporalHintBufferRead": 4,
+          "temporalHintBufferWrite": 8
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x5b8ca0afeb4cace9 e407a912d1f69aca"
+        }
+      },
+      "action": {
+        "ps": {
+          "userDataSpillThreshold": 1,
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "wgpMode": 1,
+          "disableCodeSinking": true,
+          "favorLatencyHiding": true,
+          "forceLoopUnrollCount": 11,
+          "enableLoadScalarizer": true,
+          "unrollThreshold": 1600,
+          "nsaThreshold": 4,
+          "temporalHintImageRead": 6,
+          "temporalHintImageWrite": 6,
+          "temporalHintBufferRead": 6,
+          "temporalHintBufferWrite": 4
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x5ab54963f6aee568 4e596d086f9b41f4"
+        }
+      },
+      "action": {
+        "ps": {
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "waveSize": 64,
+          "wgpMode": 1,
+          "useSiScheduler": true,
+          "disableCodeSinking": true,
+          "nsaThreshold": 7,
+          "aggressiveInvariantLoads": "EnableOptimization",
+          "temporalHintImageRead": 4,
+          "temporalHintImageWrite": 4,
+          "temporalHintBufferWrite": 5
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x0048010b59ad7658 ff133399ca1aa13d"
+        }
+      },
+      "action": {
+        "ps": {
+          "userDataSpillThreshold": 1,
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "forceLoopUnrollCount": 15,
+          "enableLoadScalarizer": true,
+          "disableLicm": true,
+          "unrollThreshold": 1000,
+          "nsaThreshold": 10,
+          "scalarizeWaterfallLoads": true,
+          "temporalHintImageWrite": 1,
+          "temporalHintBufferRead": 7,
+          "temporalHintBufferWrite": 3
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x3ed3183520aadef0 ab53b516a19cea41"
+        }
+      },
+      "action": {
+        "ps": {
+          "userDataSpillThreshold": 1,
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "waveSize": 32,
+          "wgpMode": 1,
+          "disableCodeSinking": true,
+          "favorLatencyHiding": true,
+          "forceLoopUnrollCount": 6,
+          "unrollThreshold": 2500,
+          "nsaThreshold": 14,
+          "aggressiveInvariantLoads": "ClearInvariants",
+          "scalarizeWaterfallLoads": true,
+          "temporalHintImageRead": 2,
+          "temporalHintImageWrite": 6,
+          "temporalHintBufferRead": 3,
+          "temporalHintBufferWrite": 6
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x4d26f815ff184d97 5f41241016a763a7"
+        }
+      },
+      "action": {
+        "ps": {
+          "userDataSpillThreshold": 1,
+          "allowReZ": 1,
+          "disableLoopUnrolls": true,
+          "waveSize": 64,
+          "wgpMode": 1,
+          "favorLatencyHiding": true,
+          "forceLoopUnrollCount": 1,
+          "disableLicm": true,
+          "unrollThreshold": 1000,
+          "nsaThreshold": 3,
+          "aggressiveInvariantLoads": "EnableOptimization",
+          "temporalHintImageRead": 5,
+          "temporalHintBufferRead": 7
+        }
+      }
+    }
+  ]
+}

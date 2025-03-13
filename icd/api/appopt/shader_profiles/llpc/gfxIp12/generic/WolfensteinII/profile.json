@@ -1,0 +1,85 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x14b81eeb5b385658 efe19d0442c3e1f2"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x98a1064ec65eb412 64eca5e83285c2fa"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": true,
+          "disableCodeSinking": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xaf0f2d97bef3af3d 9393b9383f5e494b"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64,
+          "threadGroupSwizzleMode": "_4x4"
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x4ff9952eb812b9d1 5c6fc3a4fb143a2e"
+        }
+      },
+      "action": {
+        "cs": {
+          "wgpMode": 0,
+          "forceMemoryBarrierScope": 2
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x7e3492c4757907b6 12617c4ded1f13bb"
+        }
+      },
+      "action": {
+        "cs": {
+          "wgpMode": 0,
+          "forceMemoryBarrierScope": 2
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x594fede1c0cc46db b385e225148adb49"
+        }
+      },
+      "action": {
+        "cs": {
+          "wgpMode": 0,
+          "forceMemoryBarrierScope": 2
+        }
+      }
+    }
+  ]
+}

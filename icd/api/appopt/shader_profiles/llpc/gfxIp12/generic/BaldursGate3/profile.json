@@ -1,0 +1,68 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x6cf7d4214c1e20c7 2409528a8878cc85"
+        }
+      },
+      "action": {
+        "cs": {
+          "disableLicm": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xeeeeec1163c65c16 ef312b9b872cc8d1"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xdf6ce21168ed9fec b8b6c1aeba350d99"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableCodeSinking": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x7d9d32b38971e698 ecc36f044017b015"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x5c91656901ce58aa 958181a34ce2de28"
+        }
+      },
+      "action": {
+        "cs": {
+          "enableLoadScalarizer": true
+        }
+      }
+    }
+  ]
+}

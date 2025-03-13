@@ -174,6 +174,13 @@ static void GetSupportedMatrixTypes(
         }
     }
 
+#if VKI_BUILD_GFX12
+    if (pDevice->PalProperties().gfxipProperties.flags.supportCooperativeMatrix2)
+    {
+
+    }
+#endif
+
 }
 
 #if PAL_ENABLE_PRINTS_ASSERTS
@@ -4225,6 +4232,9 @@ static bool IsDeviceGeneratedCommandsSupported(
         constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessNavi1x = 157;
         constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessNavi2x = 103;
         constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessNavi3x = 2490;
+#if VKI_BUILD_GFX12
+        constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessNavi4x = 2780;
+#endif
         // This part of code must be logically consistent with UpdateDeviceGeneratedCommandsPalSettings()
         // Impose state-of-the-art CP Packet path for optimal performance on dGPUs.
         if (isDiscreteGpu)
@@ -4245,6 +4255,11 @@ static bool IsDeviceGeneratedCommandsSupported(
             case Pal::GfxIpLevel::GfxIp11_5:
                 VK_NEVER_CALLED(); // iGPU only
                 break;
+#if VKI_BUILD_GFX12
+            case Pal::GfxIpLevel::GfxIp12:
+                isSupported = (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessNavi4x);
+                break;
+#endif
             default:
                 isSupported = true; // We assume later ASICs are good to go.
                 break;

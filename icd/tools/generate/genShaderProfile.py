@@ -54,6 +54,10 @@ from shaderProfileTemplate import SHADER_PATTERN, ENTRIES_TEMPLATE, SHADER_ACTIO
     CopyrightAndWarning, CONDITION_DYNAMIC_SHADER_INFO_APPLY, CLASS_TEMPLATE, ShaderTuningStructsAndVars, \
     HEADER_INCLUDES, PARSE_DWORD_ARRAY_FUNC, CONDITION_SHADER_CREATE_TUNING_OPTION_FLAGS, CONDITION_GFX_IP_11
 
+#if VKI_BUILD_GFX12
+from shaderProfileTemplate import FUNC_DEC_PARSE_JSON_MALL_POLICY, PARSE_MALL_POLICY_FUNC
+#endif
+
 OUTPUT_FILE = "g_shader_profile"
 CONFIG_FILE_NAME = "profile.json"
 HEADER_FILE_NAME = OUTPUT_FILE + ".h"
@@ -1249,6 +1253,9 @@ def main():
 
     func_dec_json_reader = (
             FUNC_DEC_JSON_READER + "\n"
+#if VKI_BUILD_GFX12
+            + wrap_with_directive(FUNC_DEC_PARSE_JSON_MALL_POLICY, {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]}) + "\n"
+#endif
     )
 
     class_shader_profile_private_body = FUNC_DEC_JSON_WRITER + "\n" + wrap_with_directive(
@@ -1297,6 +1304,9 @@ def main():
                         parse_json_profile_entry_action_runtime() + "\n" +
                         parse_json_profile_pattern_shader_runtime() + "\n" +
                         parse_json_profile_action_shader_runtime() + "\n"
+#if VKI_BUILD_GFX12
+                        + wrap_with_directive(PARSE_MALL_POLICY_FUNC, {"andType": ["ICD_BUILD_LLPC", "VKI_BUILD_GFX12"]})
+#endif
                         )
 
     cpp_body = NAMESPACE_VK.replace("%NamespaceDefs%", func_build_app_profile_llpc

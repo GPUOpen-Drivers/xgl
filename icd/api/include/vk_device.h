@@ -504,6 +504,28 @@ public:
         return VkPhysicalDevice(DefaultDeviceIndex)->GetPalHeapFromVkTypeIndex(vkIndex);
     }
 
+#if VKI_BUILD_GFX12
+    Pal::CompressionMode GetBufferViewCompressionMode() const
+    {
+        static_assert(((static_cast<uint32_t>(Pal::CompressionMode::Default)                == 0) &&
+                       (static_cast<uint32_t>(Pal::CompressionMode::ReadEnableWriteEnable)  == 1) &&
+                       (static_cast<uint32_t>(Pal::CompressionMode::ReadEnableWriteDisable) == 2) &&
+                       (static_cast<uint32_t>(Pal::CompressionMode::ReadBypassWriteDisable) == 3)),
+                     "The CompressionMode enum entries have changed. We need to update it in our settings.");
+        return Pal::CompressionMode(m_settings.bufferViewCompressionMode);
+    }
+
+    Pal::CompressionMode GetImageViewCompressionMode() const
+    {
+        static_assert(((static_cast<uint32_t>(Pal::CompressionMode::Default)                == 0) &&
+                       (static_cast<uint32_t>(Pal::CompressionMode::ReadEnableWriteEnable)  == 1) &&
+                       (static_cast<uint32_t>(Pal::CompressionMode::ReadEnableWriteDisable) == 2) &&
+                       (static_cast<uint32_t>(Pal::CompressionMode::ReadBypassWriteDisable) == 3)),
+                      "The CompressionMode enum entries have changed. We need to update it in our settings.");
+        return Pal::CompressionMode(m_settings.imageViewCompressionMode);
+    }
+#endif
+
     uint64_t TimestampFrequency() const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().timestampFrequency;

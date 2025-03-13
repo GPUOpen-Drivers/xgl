@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -115,6 +115,9 @@ void BufferView::BuildSrd(
     info.swizzledFormat  = VkToPalFormat(format, settings);
     info.stride          = Pal::Formats::BytesPerPixel(info.swizzledFormat.format);
     info.range           = bufferRange;
+#if VKI_BUILD_GFX12
+    info.compressionMode = pDevice->GetBufferViewCompressionMode();
+#endif
 
     // Bypass Mall read/write if no alloc policy is set for SRDs
     if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocBufferViewSrds))

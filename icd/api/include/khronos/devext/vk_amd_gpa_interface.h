@@ -111,6 +111,14 @@ typedef enum VkGpaPerfBlockAMD
     VK_GPA_PERF_BLOCK_DF_MALL_AMD         = 48,
     VK_GPA_PERF_BLOCK_SQ_WGP_AMD          = 49,
     VK_GPA_PERF_BLOCK_PC_AMD              = 50,
+#if VKI_BUILD_GFX12
+    VK_GPA_PERF_BLOCK_GL1XA_AMD           = 51,
+    VK_GPA_PERF_BLOCK_GL1XC_AMD           = 52,
+    VK_GPA_PERF_BLOCK_WGS_AMD             = 53,
+    VK_GPA_PERF_BLOCK_EACPWD_AMD          = 54,
+    VK_GPA_PERF_BLOCK_EASE_AMD            = 55,
+    VK_GPA_PERF_BLOCK_RLCUSER_AMD         = 56,
+#endif
     VK_GPA_PERF_BLOCK_MAX_ENUM_AMD        = 0x7FFFFFFF
 } VkGpaPerfBlockAMD;
 
