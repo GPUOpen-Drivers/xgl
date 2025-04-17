@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        host-os:             ["ubuntu-20.04"]
+        host-os:             ["ubuntu-22.04"]
         image-template:      ["amdvlk_%s%s:nightly"]
         config:              [Release]
         feature-set:         ["+gcc", "+gcc+assertions",
