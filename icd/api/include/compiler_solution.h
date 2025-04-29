@@ -259,6 +259,7 @@ struct RayTracingPipelineBinary
     bool                                hasTraceRay;
     bool                                isCps;
     bool                                hasKernelEntry;
+    bool                                hasSpirv;
     uint32_t                            pipelineBinCount;
     Vkgc::BinaryData*                   pPipelineBins;
     Vkgc::RayTracingShaderGroupHandle   shaderGroupHandle;
@@ -279,13 +280,6 @@ public:
     virtual VkResult Initialize(Vkgc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel, PipelineBinaryCache* pCache);
 
     virtual void Destroy() = 0;
-
-    virtual VkResult BuildShaderModule(
-        const Device*                pDevice,
-        ShaderModuleFlags            flags,
-        const Vkgc::BinaryData&      shaderBinary,
-        ShaderModuleHandle*          pShaderModule,
-        const PipelineOptimizerKey&  profileKey) = 0;
 
     virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) = 0;
 
@@ -340,6 +334,13 @@ public:
 
     virtual void FreeRayTracingPipelineBinary(
         RayTracingPipelineBinary* pPipelineBinary) = 0;
+
+    virtual VkResult InsertSpirvsInRtPipeline(
+        const Device*                                pDevice,
+        const VkPipelineShaderStageCreateInfo*       pShaderStages,
+        const uint32_t                               stageCount,
+        RayTracingPipelineBinaryCreateInfo*          pBinCreateInfo,
+        RayTracingPipelineBinary*                    pPipelineBinaries) = 0;
 #endif
     virtual void BuildPipelineInternalBufferData(
         const PipelineCompiler*           pCompiler,

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -49,6 +49,7 @@ namespace Pal
 class IDevice;
 class IPlatform;
 struct DeviceProperties;
+enum class SettingScope;
 }
 
 namespace vk
@@ -102,6 +103,13 @@ private:
         Util::ValueType valueType,
         void*           pValue,
         size_t          bufferSize = 0);
+
+    bool ReadSetting(
+        const char*       pSettingName,
+        Util::ValueType   valueType,
+        void*             pValue,
+        Pal::SettingScope scope,
+        size_t            bufferSize = 0);
 
     VkResult OverrideProfiledSettings(
         const VkAllocationCallbacks* pAllocCb,

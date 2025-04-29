@@ -34,6 +34,7 @@
 #include "include/vk_shader.h"
 #include "include/vk_pipeline_cache.h"
 #include "include/graphics_pipeline_common.h"
+#include "palVectorImpl.h"
 
 #include <inttypes.h>
 
@@ -871,6 +872,146 @@ void LlpcHelperThreadProvider::WaitForTasks()
     {
         m_pDeferredWorkload->event.Wait(1s);
     }
+}
+
+// =====================================================================================================================
+VkResult CompilerSolutionLlpc::InsertSpirvsInRtPipeline(
+    const Device*                                pDevice,
+    const VkPipelineShaderStageCreateInfo*       pShaderStages,
+    const uint32_t                               stageCount,
+    RayTracingPipelineBinaryCreateInfo*          pBinCreateInfo,
+    RayTracingPipelineBinary*                    pPipelineBinaries)
+{
+    VkResult        result          = VK_SUCCESS;
+    Instance*       pInstance       = pDevice->VkInstance();
+    PhysicalDevice* pPhysicalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+    const uint32_t  binCount        = pPipelineBinaries->pipelineBinCount;
+
+    Util::Vector<Vkgc::BinaryData, 16, PalAllocator> oldBinaries{ pInstance->Allocator() };
+    oldBinaries.Resize(binCount);
+
+    for (uint32_t i = 0; i < binCount; i++)
+    {
+        oldBinaries[i].pCode    = pPipelineBinaries->pPipelineBins[i].pCode;
+        oldBinaries[i].codeSize = pPipelineBinaries->pPipelineBins[i].codeSize;
+    }
+
+    if (binCount == 1)
+    {
+        result = PipelineCompiler::InsertSpirvChunkToElf(
+            pDevice,
+            pShaderStages,
+            stageCount,
+            &pPipelineBinaries->pPipelineBins[0]);
+    }
+    else if ((binCount == stageCount) || (binCount == (stageCount + 2)))
+    {
+        uint32_t binIdx   = 0;
+        uint32_t stageIdx = 0;
+
+        while ((result == VK_SUCCESS) && (binIdx < binCount))
+        {
+            if ((binCount == stageCount + 2) &&
+                ((binIdx == 0) || (binIdx == (binCount - 1))))
+            {
+                // For indirect pipeline, copy binaries for launch shader (first in the list)
+                // and traversal shader (last in the list) as is.
+                // This is needed since LLPC packs all the binaries into a single allocation.
+                // Freeing that allocation would free everything else in that chunk.
+
+                size_t binSize = pPipelineBinaries->pPipelineBins[binIdx].codeSize;
+                void*  pMem    = pInstance->AllocMem(
+                                    binSize,
+                                    VK_DEFAULT_MEM_ALIGN,
+                                    VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+                if (pMem != nullptr)
+                {
+                    memcpy(pMem, pPipelineBinaries->pPipelineBins[binIdx].pCode, binSize);
+                    pPipelineBinaries->pPipelineBins[binIdx].pCode = pMem;
+                }
+                else
+                {
+                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
+
+                binIdx++;
+            }
+            else
+            {
+                VK_ASSERT(stageIdx < stageCount);
+
+                result = PipelineCompiler::InsertSpirvChunkToElf(
+                    pDevice,
+                    &pShaderStages[stageIdx],
+                    1,
+                    &pPipelineBinaries->pPipelineBins[binIdx]);
+
+                binIdx++;
+                stageIdx++;
+            }
+        }
+    }
+    else
+    {
+        VK_NEVER_CALLED();
+        result = VK_ERROR_UNKNOWN;
+    }
+
+    if ((result == VK_SUCCESS) &&
+        (pPipelineBinaries->librarySummary.pCode != nullptr))
+    {
+        // copy librarySummary since it is in the same chunk as the binaries
+        Vkgc::BinaryData oldLibSummary = pPipelineBinaries->librarySummary;
+
+        void* pMem = pInstance->AllocMem(
+            oldLibSummary.codeSize,
+            VK_DEFAULT_MEM_ALIGN,
+            VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+        if (pMem != nullptr)
+        {
+            memcpy(pMem, oldLibSummary.pCode, oldLibSummary.codeSize);
+            pPipelineBinaries->librarySummary.pCode    = pMem;
+            pPipelineBinaries->librarySummary.codeSize = oldLibSummary.codeSize;
+        }
+        else
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        // free old binaries and
+        // change free-type since the new binaries are created with instance allocator
+        RayTracingPipelineBinary tempPipelineBin = {};
+        tempPipelineBin.pipelineBinCount = oldBinaries.size();
+        tempPipelineBin.pPipelineBins    = oldBinaries.Data();
+
+        pPhysicalDevice->GetCompiler()->FreeRayTracingPipelineBinary(
+            pBinCreateInfo,
+            &tempPipelineBin);
+
+        pBinCreateInfo->freeCompilerBinary = FreeWithInstanceAllocator;
+        pPipelineBinaries->hasSpirv        = true;
+    }
+    else
+    {
+        // in case of any failure, free the new binaries and restore the old ones
+        for (uint32_t i = 0; i < binCount; i++)
+        {
+            if (pPipelineBinaries->pPipelineBins[i].pCode != oldBinaries[i].pCode)
+            {
+                pInstance->FreeMem(const_cast<void*>(pPipelineBinaries->pPipelineBins[i].pCode));
+
+                pPipelineBinaries->pPipelineBins[i].pCode    = oldBinaries[i].pCode;
+                pPipelineBinaries->pPipelineBins[i].codeSize = oldBinaries[i].codeSize;
+            }
+        }
+    }
+
+    return result;
 }
 
 // =====================================================================================================================

@@ -365,7 +365,7 @@ protected:
         Pal::IPipeline**                     ppPalPipeline,
         uint32_t                             shaderLibraryCount,
         Pal::IShaderLibrary**                ppPalShaderLibrary,
-        const PipelineLayout*                pPipelineLayout,
+        const UserDataLayout*                pLayout,
         PipelineBinaryStorage*               pBinaryStorage,
         const ShaderOptimizerKey*            pShaderOptKeys,
         const ImmedInfo&                     immedInfo,
@@ -417,7 +417,7 @@ protected:
         ImmedInfo                              immedInfo;
         uint64_t                               staticStateMask;
         Pal::ComputePipelineCreateInfo         pipeline;
-        const PipelineLayout*                  pLayout;
+        PipelineResourceLayout                 resourceLayout;
 
         void*                                  pTempBuffer;
 
@@ -427,6 +427,7 @@ protected:
     static void ConvertRayTracingPipelineInfo(
         Device*                                  pDevice,
         const VkRayTracingPipelineCreateInfoKHR* pIn,
+        VkPipelineCreateFlags2KHR                flags,
         CreateInfo*                              pOutInfo);
 
     static VkResult CreateRayTracingPipelineBinaries(

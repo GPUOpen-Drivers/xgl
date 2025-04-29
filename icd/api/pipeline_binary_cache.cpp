@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1365,7 +1365,11 @@ VkResult PipelineBinaryCache::Serialize(
                     for (uint32_t i = 0; result == VK_SUCCESS && i < curCount; i++)
                     {
                         const void*      pBinaryCacheData = nullptr;
-                        BinaryCacheEntry entry            = {cacheIds[i], 0};
+                        BinaryCacheEntry entry;
+                        // We need to set BinaryCacheEntry padding to 0. Otherwise two caches of the same pipeline
+                        // might not be bit-to-bit identical, causing CTS failures.
+                        memset(&entry, 0, sizeof(entry));
+                        entry.hashId = cacheIds[i];
 
                         result = PalToVkResult(LoadPipelineBinary(&entry.hashId, &entry.dataSize, &pBinaryCacheData));
                         if (result == VK_SUCCESS)

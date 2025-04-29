@@ -208,10 +208,10 @@ public:
                 index = VK_IMAGE_LAYOUT_RANGE_SIZE + 9;
                 break;
             case VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
-                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 16;
+                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 17;
                 break;
             case VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR:
-                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 17;
+                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 18;
                 break;
             default:
                 VK_NEVER_CALLED();
@@ -249,7 +249,7 @@ protected:
         m_layoutUsageTable[2][usageIndex] = layoutUsage1;
     }
 
-    enum { LayoutUsageTableSize = VK_IMAGE_LAYOUT_RANGE_SIZE + 18 };
+    enum { LayoutUsageTableSize = VK_IMAGE_LAYOUT_RANGE_SIZE + 19 };
 
     uint32_t m_layoutUsageTable[MaxPalAspectsPerMask][LayoutUsageTableSize];
 };
@@ -363,7 +363,7 @@ static uint32_t AccessMaskToCacheMask(
                      Pal::CoherTimestamp;
     }
 
-    if (accessMask & (VK_ACCESS_2_HOST_WRITE_BIT           |
+    if (accessMask & (VK_ACCESS_2_HOST_WRITE_BIT             |
                       VK_ACCESS_2_HOST_READ_BIT))
     {
         cacheMask |= Pal::CoherCpu;

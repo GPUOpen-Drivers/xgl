@@ -585,11 +585,18 @@ VkResult PipelineBinary::CreateCacheId(
         GraphicsPipelineCommon::HandleExtensionStructs(pGraphicsCreateInfo, &extStructs);
         GraphicsPipelineCommon::ExtractLibraryInfo(pDevice, pGraphicsCreateInfo, extStructs, flags, &libInfo);
 
-        const PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pGraphicsCreateInfo->layout);
+        PipelineResourceLayout resourceLayout = {};
 
-        if (pPipelineLayout == nullptr)
+        Pipeline::BuildPipelineResourceLayout(pDevice,
+                                             PipelineLayout::ObjectFromHandle(pGraphicsCreateInfo->layout),
+                                             VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                             flags,
+                                             &resourceLayout);
+
+        if ((resourceLayout.pPipelineLayout == nullptr)
+            )
         {
-            pPipelineLayout = pDevice->GetNullPipelineLayout();
+            resourceLayout.pPipelineLayout = pDevice->GetNullPipelineLayout();
         }
 
         if ((flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) != 0)
@@ -603,7 +610,7 @@ VkResult PipelineBinary::CreateCacheId(
             pGraphicsCreateInfo,
             extStructs,
             libInfo,
-            pPipelineLayout,
+            &resourceLayout,
             flags,
             &shaderStageInfo,
             &binaryCreateInfo,

@@ -102,6 +102,7 @@ VkResult ComputePipeline::CreatePipelineBinaries(
     const ComputePipelineExtStructs&               extStructs,
     VkPipelineCreateFlags2KHR                      flags,
     const ComputePipelineShaderStageInfo*          pShaderInfo,
+    const PipelineResourceLayout*                  pResourceLayout,
     const PipelineOptimizerKey*                    pPipelineOptimizerKey,
     ComputePipelineBinaryCreateInfo*               pBinaryCreateInfo,
     PipelineCache*                                 pPipelineCache,
@@ -168,6 +169,7 @@ VkResult ComputePipeline::CreatePipelineBinaries(
                 pCreateInfo,
                 extStructs,
                 pShaderInfo,
+                pResourceLayout,
                 pPipelineOptimizerKey,
                 pBinaryMetadata,
                 pBinaryCreateInfo,
@@ -241,25 +243,39 @@ VkResult ComputePipeline::CreatePipelineBinaries(
                 isUserCacheHit,
                 isInternalCacheHit);
         }
+
+        // insert spirvs into the pipeline binary
+        if ((result == VK_SUCCESS) && (pDefaultCompiler->IsEmbeddingSpirvRequired()))
+        {
+            Vkgc::BinaryData oldElfBinary = pPipelineBinaries[deviceIdx];
+
+            result = PipelineCompiler::InsertSpirvChunkToElf(
+                pDevice,
+                &pCreateInfo->stage,
+                1,
+                &pPipelineBinaries[deviceIdx]);
+
+            if ((result == VK_SUCCESS) &&
+                (oldElfBinary.pCode != nullptr))
+            {
+                // free old binary and
+                // change free-type since the new binary is created with instance allocator
+                pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetCompiler()->FreeComputePipelineBinary(
+                    pBinaryCreateInfo,
+                    oldElfBinary);
+
+                oldElfBinary.pCode = nullptr;
+
+                pBinaryCreateInfo->freeCompilerBinary = FreeWithInstanceAllocator;
+            }
+            else
+            {
+                VK_ALERT_ALWAYS_MSG("Failed to insert spirv into the compute pipeline");
+            }
+        }
     }
 
     return result;
-}
-
-// =====================================================================================================================
-// Converts Vulkan compute pipeline parameters to an internal structure
-void ComputePipeline::ConvertComputePipelineInfo(
-    Device*                               pDevice,
-    const VkComputePipelineCreateInfo*    pIn,
-    const ComputePipelineShaderStageInfo& stageInfo,
-    CreateInfo*                           pOutInfo)
-{
-    VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO);
-
-    if (pIn->layout != VK_NULL_HANDLE)
-    {
-        pOutInfo->pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
-    }
 }
 
 // =====================================================================================================================
@@ -323,7 +339,7 @@ void ComputePipeline::HandleExtensionStructs(
 ComputePipeline::ComputePipeline(
     Device* const                        pDevice,
     Pal::IPipeline**                     pPalPipeline,
-    const PipelineLayout*                pPipelineLayout,
+    const UserDataLayout*                pLayout,
     PipelineBinaryStorage*               pBinaryStorage,
     const ImmedInfo&                     immedInfo,
 #if VKI_RAY_TRACING
@@ -345,7 +361,7 @@ ComputePipeline::ComputePipeline(
 {
     Pipeline::Init(
         pPalPipeline,
-        pPipelineLayout,
+        pLayout,
         pBinaryStorage,
         staticStateMask,
 #if VKI_RAY_TRACING
@@ -393,6 +409,9 @@ VkResult ComputePipeline::Create(
     ComputePipelineExtStructs         extStructs                      = {};
     bool                              binariesProvided                = false;
     VkPipelineRobustnessCreateInfoEXT pipelineRobustness              = {};
+    ComputePipelineShaderStageInfo    shaderInfo                      = {};
+    uint64_t                          apiPsoHash                      = {};
+    CreateInfo                        localPipelineInfo               = {};
 
     HandleExtensionStructs(pCreateInfo, &extStructs);
 
@@ -414,6 +433,12 @@ VkResult ComputePipeline::Create(
         extStructs.pPipelineRobustnessCreateInfoEXT =
             static_cast<const VkPipelineRobustnessCreateInfoEXT*>(&pipelineRobustness);
     }
+
+    BuildPipelineResourceLayout(pDevice,
+                               PipelineLayout::ObjectFromHandle(pCreateInfo->layout),
+                               VK_PIPELINE_BIND_POINT_COMPUTE,
+                               flags,
+                               &localPipelineInfo.resourceLayout);
 
     auto pPipelineBinaryInfoKHR = extStructs.pPipelineBinaryInfoKHR;
 
@@ -444,9 +469,6 @@ VkResult ComputePipeline::Create(
             }
         }
     }
-
-    ComputePipelineShaderStageInfo shaderInfo = {};
-    uint64_t                       apiPsoHash = {};
 
     auto pPipelineCreationFeedbackCreateInfo = extStructs.pPipelineCreationFeedbackCreateInfoEXT;
 
@@ -481,6 +503,7 @@ VkResult ComputePipeline::Create(
                 extStructs,
                 flags,
                 &shaderInfo,
+                &localPipelineInfo.resourceLayout,
                 &pipelineOptimizerKey,
                 &binaryCreateInfo,
                 pPipelineCache,
@@ -522,12 +545,8 @@ VkResult ComputePipeline::Create(
         }
     }
 
-    CreateInfo localPipelineInfo = {};
-
     if (result == VK_SUCCESS)
     {
-        ConvertComputePipelineInfo(pDevice, pCreateInfo, shaderInfo, &localPipelineInfo);
-
         // Override pipeline creation parameters based on pipeline profile
         pDevice->GetShaderOptimizer()->OverrideComputePipelineCreateInfo(
             pipelineOptimizerKey,
@@ -552,6 +571,13 @@ VkResult ComputePipeline::Create(
 #endif
         localPipelineInfo.pipeline.pipelineBinarySize = pipelineBinaries[DefaultDeviceIndex].codeSize;
         localPipelineInfo.pipeline.pPipelineBinary = pipelineBinaries[DefaultDeviceIndex].pCode;
+
+        CsDispatchInterleaveSize interleaveSize = pDevice->GetShaderOptimizer()->
+            OverrideDispatchInterleaveSize(Vkgc::ShaderStage::ShaderStageCompute, pipelineOptimizerKey);
+
+        localPipelineInfo.pipeline.interleaveSize = (interleaveSize != CsDispatchInterleaveSizeDefault) ?
+            ConvertDispatchInterleaveSize(interleaveSize) :
+            ConvertDispatchInterleaveSize(settings.csDispatchInterleaveSize);
 
         pipelineSize =
             pDevice->PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(localPipelineInfo.pipeline, &palResult);
@@ -649,7 +675,7 @@ VkResult ComputePipeline::Create(
     {
 #if VKI_RAY_TRACING
         bool     hasRayTracing              = binaryMetadata.rayQueryUsed;
-        uint32_t dispatchRaysUserDataOffset = localPipelineInfo.pLayout->GetDispatchRaysUserData();
+        uint32_t dispatchRaysUserDataOffset = GetDispatchRaysUserData(&localPipelineInfo.resourceLayout);
 #endif
 
         uint32_t origThreadgroupDims[3];
@@ -661,7 +687,7 @@ VkResult ComputePipeline::Create(
         // On success, wrap it up in a Vulkan object and return.
         VK_PLACEMENT_NEW(pSystemMem) ComputePipeline(pDevice,
             pPalPipeline,
-            localPipelineInfo.pLayout,
+            &localPipelineInfo.resourceLayout.userDataLayout,
             pPermBinaryStorage,
             localPipelineInfo.immedInfo,
 #if VKI_RAY_TRACING

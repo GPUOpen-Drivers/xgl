@@ -259,6 +259,9 @@ public:
     VK_FORCEINLINE VkFormat GetSrgbFormat() const
         { return m_srgbFormat; }
 
+    VK_FORCEINLINE bool IsFlippable() const
+        { return m_internalFlags.isFlippable; }
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Image);
 
@@ -290,8 +293,9 @@ private:
             uint32_t sampleLocsCompatDepth  : 1;  // VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT
             uint32_t isProtected            : 1;  // VK_IMAGE_CREATE_PROTECTED_BIT
             uint32_t treatAsSrgb            : 1;  // True if this image is to be interpreted as SRGB where possible
+            uint32_t isFlippable            : 1;  // True if the image is a flippable primary.
             uint32_t reserved1              : 1;
-            uint32_t reserved               : 14;
+            uint32_t reserved               : 13;
         };
         uint32_t     u32All;
     };

@@ -897,7 +897,7 @@ VkResult GraphicsPipelineCommon::CreateCacheId(
     const VkGraphicsPipelineCreateInfo*     pCreateInfo,
     const GraphicsPipelineExtStructs&       extStructs,
     const GraphicsPipelineLibraryInfo&      libInfo,
-    const PipelineLayout*                   pPipelineLayout,
+    const PipelineResourceLayout*           pLayout,
     VkPipelineCreateFlags2KHR               flags,
     GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
     GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
@@ -923,7 +923,7 @@ VkResult GraphicsPipelineCommon::CreateCacheId(
             flags,
             pShaderStageInfo,
             pBinaryCreateInfo,
-            pPipelineLayout,
+            pLayout,
             pShaderOptimizerKeys,
             pPipelineOptimizerKey,
             pApiPsoHash,
@@ -1006,12 +1006,24 @@ static void CopyPreRasterizationShaderState(
     pInfo->immedInfo.depthBiasParams           = libInfo.immedInfo.depthBiasParams;
     pInfo->immedInfo.pointLineRasterParams     = libInfo.immedInfo.pointLineRasterParams;
     pInfo->immedInfo.lineStippleParams         = libInfo.immedInfo.lineStippleParams;
-    pInfo->immedInfo.graphicsShaderInfos.vs    = libInfo.immedInfo.graphicsShaderInfos.vs;
-    pInfo->immedInfo.graphicsShaderInfos.hs    = libInfo.immedInfo.graphicsShaderInfos.hs;
-    pInfo->immedInfo.graphicsShaderInfos.ds    = libInfo.immedInfo.graphicsShaderInfos.ds;
-    pInfo->immedInfo.graphicsShaderInfos.gs    = libInfo.immedInfo.graphicsShaderInfos.gs;
-    pInfo->immedInfo.graphicsShaderInfos.ts    = libInfo.immedInfo.graphicsShaderInfos.ts;
-    pInfo->immedInfo.graphicsShaderInfos.ms    = libInfo.immedInfo.graphicsShaderInfos.ms;
+    if ((pInfo->activeStages & (VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT)) != 0)
+    {
+        pInfo->immedInfo.graphicsShaderInfos.ts = libInfo.immedInfo.graphicsShaderInfos.ts;
+        pInfo->immedInfo.graphicsShaderInfos.ms = libInfo.immedInfo.graphicsShaderInfos.ms;
+        pInfo->immedInfo.graphicsShaderInfos.enable.ts = libInfo.immedInfo.graphicsShaderInfos.enable.ts;
+        pInfo->immedInfo.graphicsShaderInfos.enable.ms = libInfo.immedInfo.graphicsShaderInfos.enable.ms;
+    }
+    else
+    {
+        pInfo->immedInfo.graphicsShaderInfos.vs = libInfo.immedInfo.graphicsShaderInfos.vs;
+        pInfo->immedInfo.graphicsShaderInfos.hs = libInfo.immedInfo.graphicsShaderInfos.hs;
+        pInfo->immedInfo.graphicsShaderInfos.ds = libInfo.immedInfo.graphicsShaderInfos.ds;
+        pInfo->immedInfo.graphicsShaderInfos.gs = libInfo.immedInfo.graphicsShaderInfos.gs;
+        pInfo->immedInfo.graphicsShaderInfos.enable.vs = libInfo.immedInfo.graphicsShaderInfos.enable.vs;
+        pInfo->immedInfo.graphicsShaderInfos.enable.hs = libInfo.immedInfo.graphicsShaderInfos.enable.hs;
+        pInfo->immedInfo.graphicsShaderInfos.enable.ds = libInfo.immedInfo.graphicsShaderInfos.enable.ds;
+        pInfo->immedInfo.graphicsShaderInfos.enable.gs = libInfo.immedInfo.graphicsShaderInfos.enable.gs;
+    }
     pInfo->immedInfo.dynamicGraphicsState      = libInfo.immedInfo.dynamicGraphicsState;
     pInfo->immedInfo.viewportParams            = libInfo.immedInfo.viewportParams;
     pInfo->immedInfo.depthClampOverride        = libInfo.immedInfo.depthClampOverride;
@@ -1038,6 +1050,7 @@ static void CopyFragmentShaderState(
     pDstImmedInfo->depthBoundParams                         = libImmedInfo.depthBoundParams;
     pDstImmedInfo->stencilRefMasks                          = libImmedInfo.stencilRefMasks;
     pDstImmedInfo->graphicsShaderInfos.ps                   = libImmedInfo.graphicsShaderInfos.ps;
+    pDstImmedInfo->graphicsShaderInfos.enable.ps            = libImmedInfo.graphicsShaderInfos.enable.ps;
     pDstImmedInfo->depthStencilCreateInfo.front             = libImmedInfo.depthStencilCreateInfo.front;
     pDstImmedInfo->depthStencilCreateInfo.back              = libImmedInfo.depthStencilCreateInfo.back;
     pDstImmedInfo->depthStencilCreateInfo.depthFunc         = libImmedInfo.depthStencilCreateInfo.depthFunc;
@@ -2260,14 +2273,9 @@ static void BuildExecutablePipelineState(
         pInfo->flags.sampleShadingEnable = false;
     }
 
-    // Both MSAA and VRS would utilize the value of PS_ITER_SAMPLES
-    // Thus, choose the min combiner (i.e. choose the higher quality rate) when both features are enabled
-    if ((pInfo->immedInfo.msaaCreateInfo.pixelShaderSamples > 1) &&
-        (pInfo->immedInfo.vrsRateParams.flags.exposeVrsPixelsMask == 1))
-    {
-        pInfo->immedInfo.vrsRateParams.combinerState[
-            static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] = Pal::VrsCombiner::Min;
-    }
+    SetVrsCombinerStagePsIterSamples(pInfo->immedInfo.msaaCreateInfo.pixelShaderSamples,
+                                     pInfo->immedInfo.vrsRateParams.flags.exposeVrsPixelsMask,
+                                     pInfo->immedInfo.vrsRateParams.combinerState);
 
     pInfo->flags.bindDepthStencilObject =
         !(IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::StencilOp) ||

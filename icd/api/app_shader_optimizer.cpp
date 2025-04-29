@@ -620,6 +620,49 @@ bool ShaderOptimizer::OverrideReverseWorkgroupOrder(
 #endif
 
 // =====================================================================================================================
+CsDispatchInterleaveSize ShaderOptimizer::OverrideDispatchInterleaveSize(
+    ShaderStage                 shaderStage,
+    const PipelineOptimizerKey& pipelineKey
+    ) const
+{
+    CsDispatchInterleaveSize interleaveSize = CsDispatchInterleaveSizeDefault;
+
+    for (uint32_t entry = 0; entry < m_appProfile.entryCount; ++entry)
+    {
+        const PipelineProfileEntry& profileEntry = m_appProfile.pEntries[entry];
+
+        if (GetFirstMatchingShader(profileEntry.pattern, InvalidShaderIndex, pipelineKey) != InvalidShaderIndex)
+        {
+            const auto& shaders = profileEntry.action.shaders;
+
+            if (shaders[shaderStage].shaderCreate.apply.dispatchInterleaveSize)
+            {
+                interleaveSize = shaders[shaderStage].shaderCreate.tuningOptions.dispatchInterleaveSize;
+                break;
+            }
+        }
+    }
+
+    for (uint32_t entry = 0; entry < m_tuningProfile.entryCount; ++entry)
+    {
+        const PipelineProfileEntry& profileEntry = m_tuningProfile.pEntries[entry];
+
+        if (GetFirstMatchingShader(profileEntry.pattern, InvalidShaderIndex, pipelineKey) != InvalidShaderIndex)
+        {
+            const auto& shaders = profileEntry.action.shaders;
+
+            if (shaders[shaderStage].shaderCreate.apply.dispatchInterleaveSize)
+            {
+                interleaveSize = shaders[shaderStage].shaderCreate.tuningOptions.dispatchInterleaveSize;
+                break;
+            }
+        }
+    }
+
+    return interleaveSize;
+}
+
+// =====================================================================================================================
 void ShaderOptimizer::OverrideGraphicsPipelineCreateInfo(
     const PipelineOptimizerKey&       pipelineKey,
     VkShaderStageFlagBits             shaderStages,
@@ -1341,6 +1384,7 @@ void ShaderOptimizer::BuildAppProfile()
         {
             BuildAppProfileLlpc();
         }
+        VK_ASSERT(m_appProfile.entryCount < m_appProfile.entryCapacity);
     }
 }
 

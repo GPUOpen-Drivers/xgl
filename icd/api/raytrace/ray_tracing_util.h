@@ -93,6 +93,11 @@ inline GpuRt::BvhBuildMode ConvertGpuRtBvhBuildMode(
     case BvhBuildModePLOC:
         gpuRtMode = GpuRt::BvhBuildMode::PLOC;
         break;
+#if VKI_SUPPORT_HPLOC
+    case BvhBuildModeHPLOC:
+        gpuRtMode = GpuRt::BvhBuildMode::HPLOC;
+        break;
+#endif
     case BvhBuildModeAuto:
         // No override, fall back to regular build options
         gpuRtMode = GpuRt::BvhBuildMode::Auto;

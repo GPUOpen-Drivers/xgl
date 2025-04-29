@@ -253,7 +253,8 @@ public:
         CmdBufferRing*             pCmdBufferRing,
         uint32_t                   deviceIdx,
         const Pal::CmdBufInfo&     cmdBufInfo,
-        CmdBufState*               pCmdBufState);
+        CmdBufState*               pCmdBufState,
+        const Pal::IGpuMemory*     pWrittenFlippableImage);
 
 protected:
     // This is a helper structure during a virtual remap (sparse bind) call to batch remaps into

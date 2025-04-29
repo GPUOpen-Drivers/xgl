@@ -1367,11 +1367,14 @@ void PhysicalDevice::PopulateFormatProperties()
         {
             if (IsExtensionSupported(DeviceExtensions::KHR_FRAGMENT_SHADING_RATE))
             {
-                if (settings.exposeLinearShadingRateImage)
+                if ((linearFlags != 0) && settings.exposeLinearShadingRateImage)
                 {
                     linearFlags  |= VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
                 }
-                optimalFlags |= VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+                if (optimalFlags != 0)
+                {
+                    optimalFlags |= VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+                }
             }
         }
 
@@ -1379,16 +1382,24 @@ void PhysicalDevice::PopulateFormatProperties()
         {
             if (IsExtensionSupported(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION))
             {
-                linearFlags  |= VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT |
-                                VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT |
-                                VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT |
-                                VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_CHROMA_RECONSTRUCTION_EXPLICIT_FORCEABLE_BIT |
-                                VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT;
-                optimalFlags |= VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT |
-                                VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT |
-                                VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT |
-                                VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_CHROMA_RECONSTRUCTION_EXPLICIT_FORCEABLE_BIT |
-                                VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT;
+                if (linearFlags != 0)
+                {
+                    linearFlags |=
+                        VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT |
+                        VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT |
+                        VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT |
+                        VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_CHROMA_RECONSTRUCTION_EXPLICIT_FORCEABLE_BIT |
+                        VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT;
+                }
+                if (optimalFlags != 0)
+                {
+                    optimalFlags |=
+                        VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT |
+                        VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT |
+                        VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT |
+                        VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_CHROMA_RECONSTRUCTION_EXPLICIT_FORCEABLE_BIT |
+                        VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT;
+                }
 
                 Pal::SubresRange subresRange = {};
                 VkImageAspectFlags aspectMask = PalYuvFormatToVkImageAspectPlane(palFormat.format);
@@ -1415,7 +1426,7 @@ void PhysicalDevice::PopulateFormatProperties()
 #if VKI_RAY_TRACING
         if (Formats::IsRTVertexFormat(format))
         {
-            if (IsExtensionSupported(DeviceExtensions::KHR_ACCELERATION_STRUCTURE))
+            if ((bufferFlags != 0) && IsExtensionSupported(DeviceExtensions::KHR_ACCELERATION_STRUCTURE))
             {
                 bufferFlags |= VK_FORMAT_FEATURE_ACCELERATION_STRUCTURE_VERTEX_BUFFER_BIT_KHR;
             }
@@ -1451,8 +1462,14 @@ void PhysicalDevice::PopulateFormatProperties()
         {
             if (IsExtensionSupported(DeviceExtensions::EXT_SHADER_ATOMIC_FLOAT))
             {
-                optimalFlags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT;
-                bufferFlags |= VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT;
+                if (optimalFlags != 0)
+                {
+                    optimalFlags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT;
+                }
+                if (bufferFlags != 0)
+                {
+                    bufferFlags |= VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT;
+                }
             }
         }
 
@@ -1797,33 +1814,39 @@ VkResult PhysicalDevice::GetExtendedFormatProperties(
 
     if (formatBits[Pal::IsLinear] & Pal::FormatFeatureImageShaderWrite)
     {
-        pFormatProperties->linearTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT_KHR;
+        pFormatProperties->linearTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT;
     }
 
     if (formatBits[Pal::IsLinear] & Pal::FormatFeatureImageShaderRead)
     {
-        pFormatProperties->linearTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT_KHR;
+        pFormatProperties->linearTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT;
 
         if (Formats::IsDepthStencilFormat(format))
         {
-            pFormatProperties->linearTilingFeatures |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT_KHR;
+            pFormatProperties->linearTilingFeatures |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT;
         }
     }
 
     if (formatBits[Pal::IsNonLinear] & Pal::FormatFeatureImageShaderWrite)
     {
-        pFormatProperties->optimalTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT_KHR;
+        pFormatProperties->optimalTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT;
     }
 
     if (formatBits[Pal::IsNonLinear] & Pal::FormatFeatureImageShaderRead)
     {
-        pFormatProperties->optimalTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT_KHR;
+        pFormatProperties->optimalTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT;
 
         if (Formats::IsDepthStencilFormat(format))
         {
-            pFormatProperties->optimalTilingFeatures |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT_KHR;
+            pFormatProperties->optimalTilingFeatures |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT;
         }
     }
+
+    constexpr VkFormatFeatureFlags2 ValidBufferFlags =
+        VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT |
+        VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT;
+
+    pFormatProperties->bufferFeatures |= (pFormatProperties->linearTilingFeatures & ValidBufferFlags);
 
     return VK_SUCCESS;
 }
@@ -4225,50 +4248,101 @@ static bool IsDeviceGeneratedCommandsSupported(
 
     if (pPhysicalDevice != nullptr)
     {
-        const Pal::GfxIpLevel gfxLevel      = pPhysicalDevice->PalProperties().gfxLevel;
-        const uint32_t        pfpVersion    = pPhysicalDevice->PalProperties().gfxipProperties.pfpUcodeVersion;
-        const bool            isDiscreteGpu = (pPhysicalDevice->PalProperties().gpuType == Pal::GpuType::Discrete);
+        const Pal::AsicRevision asic          = pPhysicalDevice->PalProperties().revision;
+        const Pal::GfxIpLevel   gfxLevel      = pPhysicalDevice->PalProperties().gfxLevel;
+        const uint32_t          pfpVersion    = pPhysicalDevice->PalProperties().gfxipProperties.pfpUcodeVersion;
+        const bool              isDiscreteGpu = (pPhysicalDevice->PalProperties().gpuType == Pal::GpuType::Discrete);
 
+        // GfxIp10_1
         constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessNavi1x = 157;
+        // GfxIp10_3
         constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessNavi2x = 103;
-        constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessNavi3x = 2490;
+        // GfxIp11_0
+        constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessNavi3x            = 2490;
+        constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessPhoenixHawkPoint1 = 49;
+        constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessPhoenixHawkPoint2 = 14;
+        // GfxIp11_5
+        constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessStrix = 40;
 #if VKI_BUILD_GFX12
+        // GfxIp12
         constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessNavi4x = 2780;
 #endif
         // This part of code must be logically consistent with UpdateDeviceGeneratedCommandsPalSettings()
-        // Impose state-of-the-art CP Packet path for optimal performance on dGPUs.
-        if (isDiscreteGpu)
+        // Impose state-of-the-art CP Packet path for optimal performance on dGPUs & Gfx 11+ iGPUs.
+        switch (gfxLevel)
         {
-            switch (gfxLevel)
+        case Pal::GfxIpLevel::GfxIp10_1:
+            if (isDiscreteGpu)
             {
-            case Pal::GfxIpLevel::GfxIp10_1:
                 isSupported = (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessNavi1x);
-                break;
-
-            case Pal::GfxIpLevel::GfxIp10_3:
-                isSupported = (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessNavi2x);
-                break;
-
-            case Pal::GfxIpLevel::GfxIp11_0:
-                isSupported = (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessNavi3x);
-                break;
-            case Pal::GfxIpLevel::GfxIp11_5:
-                VK_NEVER_CALLED(); // iGPU only
-                break;
-#if VKI_BUILD_GFX12
-            case Pal::GfxIpLevel::GfxIp12:
-                isSupported = (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessNavi4x);
-                break;
-#endif
-            default:
-                isSupported = true; // We assume later ASICs are good to go.
-                break;
             }
-        }
-        // Compute Shader path is default for iGPUs. Enable CP Packet path on iGPUs selectively.
-        else
-        {
+            else
+            {
+                VK_NEVER_CALLED(); // dGPU only
+            }
+            break;
+
+        case Pal::GfxIpLevel::GfxIp10_3:
+            if (isDiscreteGpu)
+            {
+                isSupported = (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessNavi2x);
+            }
+            else
+            {
+                isSupported = true; // Compute Shader path is employed for legacy Gfx 10.3 iGPUs.
+            }
+            break;
+
+        case Pal::GfxIpLevel::GfxIp11_0:
+            if (isDiscreteGpu)
+            {
+                isSupported = (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessNavi3x);
+            }
+            else
+            {
+                isSupported = (((asic == Pal::AsicRevision::Phoenix1)
+#if VKI_BUILD_HAWK_POINT1
+                               || (asic == Pal::AsicRevision::HawkPoint1)
+#endif
+                               ) && (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessPhoenixHawkPoint1)) ||
+                              (((asic == Pal::AsicRevision::Phoenix2)
+#if VKI_BUILD_HAWK_POINT2
+                               || (asic == Pal::AsicRevision::HawkPoint2)
+#endif
+                               ) && (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessPhoenixHawkPoint2));
+            }
+            break;
+
+        case Pal::GfxIpLevel::GfxIp11_5:
+            if (isDiscreteGpu)
+            {
+                VK_NEVER_CALLED(); // iGPU only
+            }
+            else
+            {
+                isSupported = (((asic == Pal::AsicRevision::Strix1)
+#if VKI_BUILD_STRIX_HALO
+                               || (asic == Pal::AsicRevision::StrixHalo)
+#endif
+                               ) && (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessStrix))
+                               ;
+            }
+            break;
+#if VKI_BUILD_GFX12
+        case Pal::GfxIpLevel::GfxIp12:
+            if (isDiscreteGpu)
+            {
+                isSupported = (pfpVersion >= PfpVersionDeviceGeneratedCommandsReadinessNavi4x);
+            }
+            else
+            {
+                VK_NEVER_CALLED(); // dGPU only
+            }
+            break;
+#endif
+        default:
             isSupported = true;
+            break; // We assume later ASICs are good to go.
         }
     }
 
@@ -4432,6 +4506,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_CLAMP_CONTROL));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE8));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PIPELINE_CREATION_CACHE_CONTROL));
 
@@ -4722,7 +4798,11 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_DEVICE_COHERENT_MEMORY));
         }
 
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_2D_VIEW_OF_3D));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_SLICED_VIEW_OF_3D));
+
+#if VKI_RAY_TRACING
+#endif
 
     }
 
@@ -4759,6 +4839,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         // exporting for vkd3d / vkd3d-proton
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(MESA_IMAGE_ALIGNMENT_CONTROL));
     }
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_REPLICATED_COMPOSITES));
 
     return availableExtensions;
 }
@@ -5292,7 +5374,8 @@ void PhysicalDevice::GetPhysicalDeviceDeviceGeneratedCommandsProperties(
 
 #if VKI_RAY_TRACING
     if (IsExtensionSupported(DeviceExtensions::KHR_RAY_TRACING_PIPELINE) &&
-        IsExtensionSupported(DeviceExtensions::KHR_RAY_TRACING_MAINTENANCE1)
+        IsExtensionSupported(DeviceExtensions::KHR_RAY_TRACING_MAINTENANCE1) &&
+        ((m_properties.gpuType == Pal::GpuType::Discrete) || (m_properties.gfxLevel >= Pal::GfxIpLevel::GfxIp11_5))
         )
     {
         *pSupportedIndirectCommandsShaderStages |= RayTraceShaderStages;
@@ -6952,6 +7035,19 @@ size_t PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceMaintenance8FeaturesKHR*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->maintenance8 = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceConditionalRenderingFeaturesEXT*>(pHeader);
@@ -7436,6 +7532,20 @@ size_t PhysicalDevice::GetFeatures2(
             }
 
 #if VKI_RAY_TRACING
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceOpacityMicromapFeaturesEXT*>(pHeader);
+
+                if (updateFeatures)
+                {
+                    pExtInfo->micromap              = VK_TRUE;
+                    pExtInfo->micromapCaptureReplay = VK_TRUE;
+                    pExtInfo->micromapHostCommands  = VK_FALSE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
 #endif
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT:
@@ -7732,7 +7842,8 @@ size_t PhysicalDevice::GetFeatures2(
                 structSize = sizeof(*pExtInfo);
                 break;
             }
-
+#if VKI_RAY_TRACING
+#endif
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT*>(pHeader);
@@ -7916,6 +8027,18 @@ size_t PhysicalDevice::GetFeatures2(
                 if (updateFeatures)
                 {
                     pExtInfo->shaderReplicatedComposites = VK_TRUE;
+                }
+
+                structSize = sizeof(*pExtInfo);
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR*>(pHeader);
+                if (updateFeatures)
+                {
+                    pExtInfo->shaderRelaxedExtendedInstruction = VK_TRUE;
                 }
 
                 structSize = sizeof(*pExtInfo);
@@ -10225,6 +10348,17 @@ void PhysicalDevice::GetMemoryBudgetProperties(
     {
         Util::MutexAuto lock(&m_memoryUsageTracker.trackerMutex);
 
+#if PAL_AMDGPU_BUILD
+        Pal::GpuMemoryBudgetInfo memBudgetInfo = {};
+
+        if (PalProperties().gpuType != Pal::GpuType::Integrated)
+        {
+            VK_ASSERT(m_properties.osProperties.supportMemoryBudgetQuery);
+            Pal::Result result = m_pPalDevice->QueryGpuMemoryBudgetInfo(&memBudgetInfo);
+            VK_ASSERT(result == Pal::Result::Success);
+        }
+#endif
+
         for (uint32_t heapIndex = 0; heapIndex < m_memoryProperties.memoryHeapCount; ++heapIndex)
         {
             const Pal::GpuHeap palHeap = GetPalHeapFromVkHeapIndex(heapIndex);
@@ -10240,7 +10374,8 @@ void PhysicalDevice::GetMemoryBudgetProperties(
                     m_memoryUsageTracker.allocatedMemorySize[Pal::GpuHeapGartCacheable];
             }
 
-            uint32_t budgetRatio = 100;
+            uint32_t     budgetRatio = 100;
+            VkDeviceSize systemUsage = 0;
 
             const RuntimeSettings& settings = GetRuntimeSettings();
 
@@ -10248,20 +10383,50 @@ void PhysicalDevice::GetMemoryBudgetProperties(
             {
             case Pal::GpuHeapLocal:
                 budgetRatio = settings.heapBudgetRatioOfHeapSizeLocal;
+#if PAL_AMDGPU_BUILD
+                systemUsage = memBudgetInfo.systemUsage[Pal::GpuHeapGroupLocal];
+#endif
                 break;
             case Pal::GpuHeapInvisible:
                 budgetRatio = settings.heapBudgetRatioOfHeapSizeInvisible;
+#if PAL_AMDGPU_BUILD
+                systemUsage = memBudgetInfo.systemUsage[Pal::GpuHeapGroupInvisible];
+#endif
                 break;
             case Pal::GpuHeapGartUswc:
                 budgetRatio = settings.heapBudgetRatioOfHeapSizeNonlocal;
+#if PAL_AMDGPU_BUILD
+                systemUsage = memBudgetInfo.systemUsage[Pal::GpuHeapGroupNonLocal];
+#endif
                 break;
             default:
                 VK_NEVER_CALLED();
                 break;
             }
 
-            pMemBudgetProps->heapBudget[heapIndex] =
-                static_cast<VkDeviceSize>(m_memoryProperties.memoryHeaps[heapIndex].size / 100.0f * budgetRatio + 0.5f);
+            if (PalProperties().gpuType != Pal::GpuType::Integrated)
+            {
+                // System usage must be larger than or equal to currently allocated device memory
+                // and less than or equal to total device memory.
+                systemUsage = Util::Min<VkDeviceSize>(
+                    Util::Max<VkDeviceSize>(systemUsage, pMemBudgetProps->heapUsage[heapIndex]),
+                    m_memoryProperties.memoryHeaps[heapIndex].size);
+
+                // Choose 5% of the heap size as minimum budget.
+                VkDeviceSize minHeapBudget =
+                    m_memoryProperties.memoryHeaps[heapIndex].size / 100.0f * (100.0f - budgetRatio) + 0.5f;
+
+                // Heap budget must be non-zero and include any currently allocated device memory.
+                pMemBudgetProps->heapBudget[heapIndex] =
+                    Util::Max<VkDeviceSize>((m_memoryProperties.memoryHeaps[heapIndex].size -
+                                             systemUsage +
+                                             pMemBudgetProps->heapUsage[heapIndex]), minHeapBudget);
+            }
+            else
+            {
+                pMemBudgetProps->heapBudget[heapIndex] = static_cast<VkDeviceSize>
+                    (m_memoryProperties.memoryHeaps[heapIndex].size / 100.0f * budgetRatio + 0.5f);
+            }
         }
     }
 }

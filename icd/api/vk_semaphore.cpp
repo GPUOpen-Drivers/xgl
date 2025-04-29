@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -466,27 +466,6 @@ VkResult Semaphore::GetSemaphoreCounterValue(
 }
 
 // =====================================================================================================================
-VkResult Semaphore::WaitSemaphoreValue(
-    Device*                         pDevice,
-    Semaphore*                      pSemaphore,
-    uint64_t                        value,
-    uint64_t                        timeout)
-{
-    Pal::Result palResult = Pal::Result::Success;
-    Pal::IQueueSemaphore* pPalSemaphore = nullptr;
-
-    if (pSemaphore != nullptr)
-    {
-        VK_ASSERT(pSemaphore->IsTimelineSemaphore());
-        pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
-        pSemaphore->RestoreSemaphore();
-        palResult = pPalSemaphore->WaitSemaphoreValue(value, Uint64ToChronoNano(timeout));
-    }
-
-    return PalToVkResult(palResult);
-}
-
-// =====================================================================================================================
 VkResult Semaphore::SignalSemaphoreValue(
     Device*                         pDevice,
     Semaphore*                      pSemaphore,
@@ -495,7 +474,7 @@ VkResult Semaphore::SignalSemaphoreValue(
     Pal::Result palResult = Pal::Result::Success;
     Pal::IQueueSemaphore* pPalSemaphore = nullptr;
 
-    if (pSemaphore != nullptr)
+    if ((pSemaphore != nullptr) && (value != 0))
     {
         pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
         palResult = pPalSemaphore->SignalSemaphoreValue(value);

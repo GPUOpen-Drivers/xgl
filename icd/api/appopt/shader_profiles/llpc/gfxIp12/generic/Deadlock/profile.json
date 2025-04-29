@@ -1,0 +1,120 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x7c3a0309c2a581f3 8314658237ec9fe5"
+        }
+      },
+      "action": {
+        "cs": {
+          "disableCodeSinking": true,
+          "favorLatencyHiding": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xec68ef70c175aa02 f345ae3d44883829"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64,
+          "disableCodeSinking": true,
+          "forceLoopUnrollCount": 8,
+          "disableLicm": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0xcec44fd9d8a2a3aa 24424e7b942070ba"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64,
+          "favorLatencyHiding": true,
+          "disableLicm": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x6372e1aaf159206d aea1e894e777ba3e"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 32,
+          "forceLoopUnrollCount": 8
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x0bc6cc7b536ad590 724b7deeb5ed1988"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64,
+          "disableCodeSinking": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x929387be394dd030 64ef915fb78955b0"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64,
+          "forceLoopUnrollCount": 11
+        }
+      }
+    },
+    {
+      "pattern": {
+        "shaderOnly": true,
+        "cs": {
+          "codeHash": "0x09c79a4919515cc0 6bbb10d54e575e09"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64,
+          "threadGroupSwizzleMode": "_16x16",
+          "forceLoopUnrollCount": 6,
+          "unrollThreshold": 1000
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x7c8439073456cd60 31b72b57c85b01bd"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 64,
+          "enableLoadScalarizer": true
+        }
+      }
+    }
+  ]
+}

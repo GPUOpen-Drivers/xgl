@@ -90,6 +90,7 @@
 #include "appopt/barrier_filter_layer.h"
 #include "appopt/strange_brigade_layer.h"
 #include "appopt/baldurs_gate3_layer.h"
+#include "appopt/shadow_of_the_tomb_raider_layer.h"
 
 #include "devmode/devmode_mgr.h"
 
@@ -1319,6 +1320,21 @@ VkResult Device::Initialize(
 
             break;
         }
+        case AppProfile::ShadowOfTheTombRaider:
+        {
+            void* pMemory = VkInstance()->AllocMem(sizeof(ShadowOfTheTombRaiderLayer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+            if (pMemory != nullptr)
+            {
+                m_pAppOptLayer = VK_PLACEMENT_NEW(pMemory) ShadowOfTheTombRaiderLayer();
+            }
+            else
+            {
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+
+            break;
+        }
         default:
             break;
         }
@@ -1494,27 +1510,27 @@ void Device::InitDispatchTable()
 
     if (VkInstance()->GetAPIVersion() >= VK_API_VERSION_1_4)
     {
-        ep->vkCmdPushDescriptorSet              = CmdBuffer::GetCmdPushDescriptorSetKHRFunc(this);
-        ep->vkCmdPushDescriptorSetWithTemplate  = CmdBuffer::GetCmdPushDescriptorSetWithTemplateKHRFunc(this);
-        ep->vkCmdBindDescriptorSets2            = CmdBuffer::GetCmdBindDescriptorSets2KHRFunc(this);
-        ep->vkCmdPushDescriptorSet2             = CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(this);
-        ep->vkCmdPushDescriptorSetWithTemplate2 = CmdBuffer::GetCmdPushDescriptorSetWithTemplate2KHRFunc(this);
+        ep->vkCmdPushDescriptorSet              = CmdBuffer::GetCmdPushDescriptorSetFunc(this);
+        ep->vkCmdPushDescriptorSetWithTemplate  = CmdBuffer::GetCmdPushDescriptorSetWithTemplateFunc(this);
+        ep->vkCmdBindDescriptorSets2            = CmdBuffer::GetCmdBindDescriptorSets2Func(this);
+        ep->vkCmdPushDescriptorSet2             = CmdBuffer::GetCmdPushDescriptorSet2Func(this);
+        ep->vkCmdPushDescriptorSetWithTemplate2 = CmdBuffer::GetCmdPushDescriptorSetWithTemplate2Func(this);
     }
 
     if (m_enabledExtensions.IsExtensionEnabled(DeviceExtensions::KHR_PUSH_DESCRIPTOR))
     {
-        ep->vkCmdPushDescriptorSetKHR             = CmdBuffer::GetCmdPushDescriptorSetKHRFunc(this);
-        ep->vkCmdPushDescriptorSetWithTemplateKHR = CmdBuffer::GetCmdPushDescriptorSetWithTemplateKHRFunc(this);
+        ep->vkCmdPushDescriptorSet             = CmdBuffer::GetCmdPushDescriptorSetFunc(this);
+        ep->vkCmdPushDescriptorSetWithTemplate = CmdBuffer::GetCmdPushDescriptorSetWithTemplateFunc(this);
     }
 
     if (m_enabledExtensions.IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE6))
     {
-        ep->vkCmdBindDescriptorSets2KHR            = CmdBuffer::GetCmdBindDescriptorSets2KHRFunc(this);
+        ep->vkCmdBindDescriptorSets2KHR            = CmdBuffer::GetCmdBindDescriptorSets2Func(this);
 
         if (m_enabledExtensions.IsExtensionEnabled(DeviceExtensions::KHR_PUSH_DESCRIPTOR))
         {
-            ep->vkCmdPushDescriptorSet2KHR             = CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(this);
-            ep->vkCmdPushDescriptorSetWithTemplate2KHR = CmdBuffer::GetCmdPushDescriptorSetWithTemplate2KHRFunc(this);
+            ep->vkCmdPushDescriptorSet2             = CmdBuffer::GetCmdPushDescriptorSet2Func(this);
+            ep->vkCmdPushDescriptorSetWithTemplate2 = CmdBuffer::GetCmdPushDescriptorSetWithTemplate2Func(this);
         }
     }
 
@@ -1550,6 +1566,10 @@ void Device::InitDispatchTable()
         if (pRayTrace->GetSplitRaytracingLayer() != nullptr)
         {
             pRayTrace->GetSplitRaytracingLayer()->OverrideDispatchTable(&m_dispatchTable);
+        }
+        if (pRayTrace->GetAccelStructAsyncBuildLayer() != nullptr)
+        {
+            pRayTrace->GetAccelStructAsyncBuildLayer()->OverrideDispatchTable(&m_dispatchTable);
         }
     }
 #endif
@@ -2095,6 +2115,13 @@ VkResult Device::CreateInternalComputePipeline(
 #endif
         pipelineInfo.pPipelineBinary      = pipelineBinary.pCode;
         pipelineInfo.pipelineBinarySize   = pipelineBinary.codeSize;
+
+        CsDispatchInterleaveSize interleaveSize = GetShaderOptimizer()->
+            OverrideDispatchInterleaveSize(Vkgc::ShaderStage::ShaderStageCompute, pipelineOptimizerKey);
+
+        pipelineInfo.interleaveSize = (interleaveSize != CsDispatchInterleaveSizeDefault) ?
+            ConvertDispatchInterleaveSize(interleaveSize) :
+            ConvertDispatchInterleaveSize(m_settings.csDispatchInterleaveSize);
 
         const size_t pipelineSize = PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(pipelineInfo, nullptr);
 
@@ -3303,10 +3330,12 @@ VkResult Device::WaitSemaphores(
     {
         VirtualStackFrame virtStackFrame(pStackAllocator);
 
-        Pal::IQueueSemaphore** ppPalSemaphores =
+        uint32_t               palSemaphoreCount = 0;
+        uint64_t*              pPalValues        = virtStackFrame.AllocArray<uint64_t>(pWaitInfo->semaphoreCount);
+        Pal::IQueueSemaphore** ppPalSemaphores   =
             virtStackFrame.AllocArray<Pal::IQueueSemaphore*>(pWaitInfo->semaphoreCount);
 
-        if (ppPalSemaphores == nullptr)
+        if ((ppPalSemaphores == nullptr) || (pPalValues == nullptr))
         {
             palResult = Pal::Result::ErrorOutOfMemory;
         }
@@ -3314,25 +3343,40 @@ VkResult Device::WaitSemaphores(
         {
             for (uint32_t i = 0; i < pWaitInfo->semaphoreCount; ++i)
             {
-                Semaphore* currentSemaphore = Semaphore::ObjectFromHandle(pWaitInfo->pSemaphores[i]);
-                ppPalSemaphores[i] = currentSemaphore->PalSemaphore(DefaultDeviceIndex);
-                currentSemaphore->RestoreSemaphore();
+                const uint64_t currentValue = pWaitInfo->pValues[i];
+
+                if (currentValue != 0)
+                {
+                    Semaphore* currentSemaphore        = Semaphore::ObjectFromHandle(pWaitInfo->pSemaphores[i]);
+                    ppPalSemaphores[palSemaphoreCount] = currentSemaphore->PalSemaphore(DefaultDeviceIndex);
+                    pPalValues[palSemaphoreCount]      = currentValue;
+                    currentSemaphore->RestoreSemaphore();
+                    palSemaphoreCount++;
+                }
             }
 
-            const uint32 flags =
-                (pWaitInfo->flags == VK_SEMAPHORE_WAIT_ANY_BIT) ? uint32(Pal::HostWaitFlags::HostWaitAny) : 0;
+            if (palSemaphoreCount > 0)
+            {
+                const uint32 flags =
+                    (pWaitInfo->flags == VK_SEMAPHORE_WAIT_ANY_BIT) ? uint32(Pal::HostWaitFlags::HostWaitAny) : 0;
 
-            palResult = PalDevice(DefaultDeviceIndex)->WaitForSemaphores(
-                pWaitInfo->semaphoreCount,
-                ppPalSemaphores,
-                pWaitInfo->pValues,
-                flags,
-                Uint64ToChronoNano(timeout));
+                palResult = PalDevice(DefaultDeviceIndex)->WaitForSemaphores(
+                    palSemaphoreCount,
+                    ppPalSemaphores,
+                    pPalValues,
+                    flags,
+                    Uint64ToChronoNano(timeout));
+            }
         }
 
         if (ppPalSemaphores != nullptr)
         {
             virtStackFrame.FreeArray<Pal::IQueueSemaphore*>(ppPalSemaphores);
+        }
+
+        if (pPalValues != nullptr)
+        {
+            virtStackFrame.FreeArray<uint64_t>(pPalValues);
         }
     }
 
@@ -4152,6 +4196,91 @@ void Device::GetAccelerationStructureBuildSizesKHR(
         break;
     }
 }
+
+// =====================================================================================================================
+VkResult Device::WriteMicromapsPropertiesEXT(
+    uint32_t                                    micromapCount,
+    const VkMicromapEXT*                        pMicromaps,
+    VkQueryType                                 queryType,
+    size_t                                      dataSize,
+    void*                                       pData,
+    size_t                                      stride)
+{
+    VK_NOT_IMPLEMENTED;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
+// =====================================================================================================================
+void Device::GetDeviceMicromapCompatibilityEXT(
+    const VkMicromapVersionInfoEXT*             pVersionInfo,
+    VkAccelerationStructureCompatibilityKHR*    pCompatibility)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+void Device::GetMicromapBuildSizesEXT(
+    VkAccelerationStructureBuildTypeKHR         buildType,
+    const VkMicromapBuildInfoEXT*               pBuildInfo,
+    VkMicromapBuildSizesInfoEXT*                pSizeInfo)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VkResult Device::CreateMicromapEXT(
+    const VkMicromapCreateInfoEXT*   pCreateInfo,
+    const VkAllocationCallbacks*     pAllocator,
+    VkMicromapEXT*                   pAccelerationStructure)
+{
+    VK_NOT_IMPLEMENTED;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
+// =====================================================================================================================
+VkResult Device::CopyMemoryToMicromapEXT(
+    VkDeferredOperationKHR                      deferredOperation,
+    const VkCopyMemoryToMicromapInfoEXT*        pInfo)
+{
+    VK_NOT_IMPLEMENTED;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
+// =====================================================================================================================
+VkResult Device::CopyMicromapToMemoryEXT(
+    VkDeferredOperationKHR                      deferredOperation,
+    const VkCopyMicromapToMemoryInfoEXT*        pInfo)
+{
+    VK_NOT_IMPLEMENTED;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
+// =====================================================================================================================
+VkResult Device::BuildMicromapsEXT(
+    VkDeferredOperationKHR                      deferredOperation,
+    uint32_t                                    infoCount,
+    const VkMicromapBuildInfoEXT*               pInfos)
+{
+    VK_NOT_IMPLEMENTED;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
+// =====================================================================================================================
+VkResult Device::CopyMicromapEXT(
+    VkDeferredOperationKHR                      deferredOperation,
+    const VkCopyMicromapInfoEXT*                pInfo)
+{
+    VK_NOT_IMPLEMENTED;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
+// =====================================================================================================================
+void Device::DestroyMicromapEXT(
+    VkMicromapEXT                               micromap,
+    const VkAllocationCallbacks*                pAllocator)
+{
+    VK_NOT_IMPLEMENTED;
+}
 #endif
 
 // =====================================================================================================================
@@ -4945,7 +5074,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetRenderAreaGranularity(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetRenderingAreaGranularityKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetRenderingAreaGranularity(
     VkDevice                                    device,
     const VkRenderingAreaInfoKHR*               pRenderingAreaInfo,
     VkExtent2D*                                 pGranularity)
@@ -5541,6 +5670,137 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDeferredOperationKHR(
 
     return pDevice->CreateDeferredOperation(pAllocCB, pDeferredOperation);
 }
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetMicromapBuildSizesEXT(
+    VkDevice                                    device,
+    VkAccelerationStructureBuildTypeKHR         buildType,
+    const VkMicromapBuildInfoEXT*               pBuildInfo,
+    VkMicromapBuildSizesInfoEXT*                pSizeInfo)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    pDevice->GetMicromapBuildSizesEXT(
+        buildType,
+        pBuildInfo,
+        pSizeInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateMicromapEXT(
+    VkDevice                                    device,
+    const VkMicromapCreateInfoEXT*              pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkMicromapEXT*                              pMicromap)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->CreateMicromapEXT(
+        pCreateInfo,
+        pAllocator,
+        pMicromap);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyMemoryToMicromapEXT(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    const VkCopyMemoryToMicromapInfoEXT*        pInfo)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->CopyMemoryToMicromapEXT(
+        deferredOperation,
+        pInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyMicromapToMemoryEXT(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    const VkCopyMicromapToMemoryInfoEXT*        pInfo)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->CopyMicromapToMemoryEXT(
+        deferredOperation,
+        pInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkBuildMicromapsEXT(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    uint32_t                                    infoCount,
+    const VkMicromapBuildInfoEXT*               pInfos)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->BuildMicromapsEXT(
+        deferredOperation,
+        infoCount,
+        pInfos);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyMicromapEXT(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    const VkCopyMicromapInfoEXT*                pInfo)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->CopyMicromapEXT(
+        deferredOperation,
+        pInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkDestroyMicromapEXT(
+    VkDevice                                    device,
+    VkMicromapEXT                               micromap,
+    const VkAllocationCallbacks*                pAllocator)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    pDevice->DestroyMicromapEXT(
+        micromap,
+        pAllocator);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkWriteMicromapsPropertiesEXT(
+    VkDevice                                    device,
+    uint32_t                                    micromapCount,
+    const VkMicromapEXT*                        pMicromaps,
+    VkQueryType                                 queryType,
+    size_t                                      dataSize,
+    void*                                       pData,
+    size_t                                      stride)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->WriteMicromapsPropertiesEXT(
+        micromapCount,
+        pMicromaps,
+        queryType,
+        dataSize,
+        pData,
+        stride);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceMicromapCompatibilityEXT(
+    VkDevice                                    device,
+    const VkMicromapVersionInfoEXT*             pVersionInfo,
+    VkAccelerationStructureCompatibilityKHR*    pCompatibility)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->GetDeviceMicromapCompatibilityEXT(
+        pVersionInfo,
+        pCompatibility);
+}
 #endif
 
 // =====================================================================================================================
@@ -5665,7 +5925,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkReleaseCapturedPipelineDataKHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSubresourceLayoutKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSubresourceLayout(
     VkDevice                                    device,
     const VkDeviceImageSubresourceInfoKHR*      pInfo,
     VkSubresourceLayout2KHR*                    pLayout)
@@ -5675,7 +5935,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSubresourceLayoutKHR(
         &pLayout->subresourceLayout);
 }
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout2(
     VkDevice                                    device,
     VkImage                                     image,
     const VkImageSubresource2KHR*               pSubresource,

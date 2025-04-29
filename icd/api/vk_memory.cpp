@@ -1516,7 +1516,7 @@ VKAPI_ATTR void VKAPI_CALL vkUnmapMemory(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkMapMemory2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkMapMemory2(
     VkDevice                                    device,
     const                                       VkMemoryMapInfoKHR* pMemoryMapInfo,
     void**                                      ppData)
@@ -1532,7 +1532,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkMapMemory2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkUnmapMemory2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkUnmapMemory2(
     VkDevice                                    device,
     const VkMemoryUnmapInfoKHR*                 pMemoryUnmapInfo)
 {

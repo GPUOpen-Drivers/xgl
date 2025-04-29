@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -30,6 +30,7 @@
 #include "include/vk_conv.h"
 #include "raytrace/ray_tracing_device.h"
 #include "raytrace/vk_ray_tracing_pipeline.h"
+#include "sqtt/sqtt_rgp_annotations.h"
 
 namespace vk
 {
@@ -79,19 +80,19 @@ void SplitRaytracingLayer::TraceRaysDispatchPerDevice(
                 size,
                 size);
 
-            // To avoid TDR, the large dispatch is split into mulitple smaller sub-dispatches. However,
+            // To avoid TDR, the large dispatch is split into multiple smaller sub-dispatches. However,
             // when a MCBP event arrives, PFP may have already processed all dispatch commands, so mulitple
             // smaller sub-dispatches cannot be interrupted by MCBP in this case.
             // The Barrier below is used to stall the PFP and allow MCBP to happen between dispatches.
-            Pal::BarrierTransition transition = {};
-            transition.srcCacheMask = Pal::CoherShaderRead;
-            transition.dstCacheMask = Pal::CoherShaderRead;
-            const Pal::HwPipePoint postCs = Pal::HwPipePostCs;
-            Pal::BarrierInfo barrierInfo = {};
-            barrierInfo.pipePointWaitCount = 1;
-            barrierInfo.pPipePoints = &postCs;
-            barrierInfo.waitPoint = Pal::HwPipeTop;
-            pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdBarrier(barrierInfo);
+            Pal::AcquireReleaseInfo barrierInfo = {};
+
+            barrierInfo.srcGlobalStageMask  = Pal::PipelineStageCs;
+            barrierInfo.dstGlobalStageMask  = Pal::PipelineStageTopOfPipe;
+            barrierInfo.srcGlobalAccessMask = Pal::CoherShaderRead;
+            barrierInfo.dstGlobalAccessMask = Pal::CoherShaderRead;
+            barrierInfo.reason              = RgpBarrierUnknownReason;
+
+            pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdReleaseThenAcquire(barrierInfo);
         };
 
     // Lambda function used to help splitting.

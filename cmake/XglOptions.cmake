@@ -44,6 +44,12 @@ macro(xgl_options)
     option(VKI_ENABLE_LTO "Build with LTO enabled?" ON)
 
     option(VKI_ENABLE_GCOV "Build with gcov source code coverage?" OFF)
+#if VKI_BUILD_HAWK_POINT1
+    option(VKI_BUILD_HAWK_POINT1 "Build vulkan for HAWK_POINT1" ON)
+#endif
+#if VKI_BUILD_HAWK_POINT2
+    option(VKI_BUILD_HAWK_POINT2 "Build vulkan for HAWK_POINT2" ON)
+#endif
 #if VKI_BUILD_STRIX_HALO
     option(VKI_BUILD_STRIX_HALO "Build vulkan for STRIX_HALO" ON)
 #endif
@@ -59,8 +65,15 @@ macro(xgl_options)
     option(VKI_RAY_TRACING "Build vulkan with RAY_TRACING" ON)
 #endif
 
+#if VKI_SUPPORT_HPLOC
+    option(VKI_SUPPORT_HPLOC "Build vulkan with HPLOC support" ON)
+#endif
+
 #if VKI_GPU_DECOMPRESS
     option(VKI_GPU_DECOMPRESS "Build vulkan with GPU_DECOMPRESS" ON)
+#endif
+
+#if VKI_RAY_TRACING
 #endif
 
     option(ICD_BUILD_LLPC "Build LLPC?" ON)

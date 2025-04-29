@@ -166,9 +166,12 @@ public:
 #if VKI_BUILD_GFX12
     bool OverrideReverseWorkgroupOrder(
         ShaderStage                 shaderStage,
-        const PipelineOptimizerKey& pipelineKey
-    ) const;
+        const PipelineOptimizerKey& pipelineKey) const;
 #endif
+
+    CsDispatchInterleaveSize OverrideDispatchInterleaveSize(
+        ShaderStage                 shaderStage,
+        const PipelineOptimizerKey& pipelineKey) const;
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(ShaderOptimizer);

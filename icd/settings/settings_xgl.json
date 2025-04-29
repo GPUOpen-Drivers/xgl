@@ -266,6 +266,14 @@
           "Description": "Use linear BVH builder"
         },
         {
+          "Name": "BvhBuildModeHPLOC",
+          "Value": 1,
+          "Description": "Use hierarchical parallel locally-ordered clustering BVH builder",
+          "BuildTypes": [
+            "VKI_SUPPORT_HPLOC"
+          ]
+        },
+        {
           "Name": "BvhBuildModePLOC",
           "Value": 2,
           "Description": "Use parallel locally-ordered clustering BVH builder"
@@ -304,43 +312,76 @@
       ]
     },
     {
-      "Name": "HwPipePoint",
+      "Name": "PipelineStageFlag",
       "IsEnum": true,
       "Values": [
         {
-          "Name": "HwPipeTop",
-          "Value": 0,
-          "Description": "Same as HwPipePreIndexBuffer"
+          "Name": "PipelineStageTopOfPipe",
+          "Value": 1
         },
         {
-          "Name": "HwPipePostPrefetch",
-          "Value": 1,
-          "Description": "Same as HwPipePreCs for compute-specific work or HwPipePreBlt for BLT-specific work"
+          "Name": "PipelineStageFetchIndirectArgs",
+          "Value": 2
         },
         {
-          "Name": "HwPipePreRasterization",
-          "Value": 2,
-          "Description": "Same as HwPipePostIndexBuffer"
-        },
-        {
-          "Name": "HwPipePostPs",
-          "Value": 3
-        },
-        {
-          "Name": "HwPipePreColorTarget",
+          "Name": "PipelineStagePostPrefetch",
           "Value": 4
         },
         {
-          "Name": "HwPipePostCs",
-          "Value": 5
+          "Name": "PipelineStageFetchIndices",
+          "Value": 8
         },
         {
-          "Name": "HwPipePostBlt",
-          "Value": 6
+          "Name": "PipelineStageStreamOut",
+          "Value": 16
         },
         {
-          "Name": "HwPipeBottom",
-          "Value": 7
+          "Name": "PipelineStageVs",
+          "Value": 32
+        },
+        {
+          "Name": "PipelineStageHs",
+          "Value": 64
+        },
+        {
+          "Name": "PipelineStageDs",
+          "Value": 128
+        },
+        {
+          "Name": "PipelineStageGs",
+          "Value": 256
+        },
+        {
+          "Name": "PipelineStagePs",
+          "Value": 512
+        },
+        {
+          "Name": "PipelineStageSampleRate",
+          "Value": 1024
+        },
+        {
+          "Name": "PipelineStageEarlyDsTarget",
+          "Value": 2048
+        },
+        {
+          "Name": "PipelineStageLateDsTarget",
+          "Value": 4096
+        },
+        {
+          "Name": "PipelineStageColorTarget",
+          "Value": 8192
+        },
+        {
+          "Name": "PipelineStageCs",
+          "Value": 16384
+        },
+        {
+          "Name": "PipelineStageBlt",
+          "Value": 32768
+        },
+        {
+          "Name": "PipelineStageBottomOfPipe",
+          "Value": 65536
         }
       ]
     },
@@ -511,6 +552,117 @@
       ],
       "OrBuildTypes": [
         "VKI_BUILD_GFX12"
+      ]
+    },
+    {
+      "Name": "CsDispatchInterleaveSize",
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "CsDispatchInterleaveSizeDefault",
+          "Value": 0,
+          "Description": "Default will result in Disable for chips which do not support 1D or 2D."
+        },
+        {
+          "Name": "CsDispatchInterleaveSizeDisable",
+          "Value": 1,
+          "Description": "Disable interleaving."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_1D_64_Threads",
+          "Value": 2,
+          "Description": "Switch at 64 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_1D_128_Threads",
+          "Value": 3,
+          "Description": "Switch at 128 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_1D_256_Threads",
+          "Value": 4,
+          "Description": "Switch at 256 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_1D_512_Threads",
+          "Value": 5,
+          "Description": "Switch at 512 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_1x1_ThreadGroups",
+          "Value": 6,
+          "Description": "Switch at 2D_1x1 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_1x2_ThreadGroups",
+          "Value": 7,
+          "Description": "Switch at 2D_1x2 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_1x4_ThreadGroups",
+          "Value": 8,
+          "Description": "Switch at 2D_1x4 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_1x8_ThreadGroups",
+          "Value": 9,
+          "Description": "Switch at 2D_1x8 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_1x16_ThreadGroups",
+          "Value": 10,
+          "Description": "Switch at 2D_1x16 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_2x1_ThreadGroups",
+          "Value": 11,
+          "Description": "Switch at 2D_2x1 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_2x2_ThreadGroups",
+          "Value": 12,
+          "Description": "Switch at 2D_2x2 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_2x4_ThreadGroups",
+          "Value": 13,
+          "Description": "Switch at 2D_2x4 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_2x8_ThreadGroups",
+          "Value": 14,
+          "Description": "Switch at 2D_2x8 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_4x1_ThreadGroups",
+          "Value": 15,
+          "Description": "Switch at 2D_4x1 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_4x2_ThreadGroups",
+          "Value": 16,
+          "Description": "Switch at 2D_4x2 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_4x4_ThreadGroups",
+          "Value": 17,
+          "Description": "Switch at 2D_4x4 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_8x1_ThreadGroups",
+          "Value": 18,
+          "Description": "Switch at 2D_8x1 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_8x2_ThreadGroups",
+          "Value": 19,
+          "Description": "Switch at 2D_8x2 thread groups."
+        },
+        {
+          "Name": "CsDispatchInterleaveSize_2D_16x1_ThreadGroups",
+          "Value": 20,
+          "Description": "Switch at 2D_16x1 thread groups."
+        }
       ]
     }
   ],
@@ -1410,6 +1562,18 @@
       },
       "Scope": "Driver",
       "Type": "uint32"
+    },
+    {
+      "Name": "EnableSwapChainResizing",
+      "Description": "When true, we will try to reuse old DXGI swap chains by resizing.",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool"
     },
     {
       "Name": "DxgiPresent",
@@ -2869,25 +3033,6 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Mask for enabling SPIR-V pass for internal ray tracing pipelines. The bit is corresponding to the enum defined in gpurt header.",
-      "BuildTypes": [
-        "VKI_RAY_TRACING"
-      ],
-      "Tags": [
-        "Ray Tracing"
-      ],
-      "Defaults": {
-        "Default": "0xffffffffffffffff"
-      },
-      "Flags": {
-        "IsHex": true,
-        "IsBitmask": true
-      },
-      "Scope": "Driver",
-      "Type": "uint64",
-      "Name": "RtInternalPipelineSpvPassMask"
-    },
-    {
       "Name": "RtTraceRayCounterMode",
       "Type": "enum",
       "Description": "Enable ray tracing counters. Written to the directory specified by RtDumpDir. Press the RtCaptureHotKey to dump when enabled.",
@@ -3913,6 +4058,14 @@
             "Description": "Force all builds to use linear BVH builder"
           },
           {
+            "Name": "BvhBuildModeOverrideHPLOC",
+            "Value": 2,
+            "Description": "Hierarchical PLOC",
+            "BuildTypes": [
+              "VKI_SUPPORT_HPLOC"
+            ]
+          },
+          {
             "Name": "BvhBuildModeOverridePLOC",
             "Value": 3,
             "Description": "Force all builds to use parallel locally-ordered clustering BVH builder"
@@ -4273,15 +4426,15 @@
       }
     },
     {
-      "Name": "RtPersistentDispatchRaysFactor",
-      "Type": "float",
-      "Description": "Controls the number of groups launched for a persistent DispatchRays or 0.0 to disable persistent launch",
+      "Name": "RtPersistentDispatchRays",
+      "Type": "bool",
+      "Description": "Enables persistent launch of DispatchRays",
       "Scope": "Driver",
       "Tags": [
         "Ray Tracing"
       ],
       "Defaults": {
-        "Default": 0.0
+        "Default": false
       }
     },
     {
@@ -4691,6 +4844,21 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Nearest neighbour search radius during Hierarchical PLOC. (0 means use GPURT default)",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_SUPPORT_HPLOC"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "Name": "HplocRadius",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Automatically skip procedural node (AABB) leaf intersections if the pipeline has no AABB hit groups",
       "Tags": [
         "Ray Tracing"
@@ -4999,15 +5167,15 @@
       "Type": "uint64"
     },
     {
-      "Description": "For post-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier will wait. HwPipeTop is the heavy weight option.",
+      "Description": "For post-cmd barriers, this flag describes the PAL pipeline stage where the barrier will wait i.e. dstStageMask. PipelineStageTopOfPipe is the heavy weight option.",
       "Tags": [
         "Debugging"
       ],
       "Defaults": {
-        "Default": 0
+        "Default": 1
       },
       "ValidValues": {
-        "Name": "HwPipePoint"
+        "Name": "PipelineStageFlag"
       },
       "Flags": {
         "IsHex": true
@@ -5017,15 +5185,15 @@
       "Name": "DbgBarrierPostWaitPipePoint"
     },
     {
-      "Description": "For post-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier is signaled. HwPipeBottom is the heavy weight option.",
+      "Description": "For post-cmd barriers, this flag describes the PAL pipeline stage where the barrier is signaled i.e. srcStageMask. PipelineStageBottomOfPipe is the heavy weight option.",
       "Tags": [
         "Debugging"
       ],
       "Defaults": {
-        "Default": 0
+        "Default": 65536
       },
       "ValidValues": {
-        "Name": "HwPipePoint"
+        "Name": "PipelineStageFlag"
       },
       "Flags": {
         "IsHex": true
@@ -5089,7 +5257,7 @@
       "Name": "DbgBarrierPreCmdEnable"
     },
     {
-      "Description": "For pre-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier will wait. For further documentation, consult DbgBarrierPostWaitPipePoint.",
+      "Description": "For pre-cmd barriers, this flag describes the PAL pipeline stage where the barrier will wait i.e. dstStageMask. For further documentation, consult DbgBarrierPostWaitPipePoint.",
       "Tags": [
         "Debugging"
       ],
@@ -5098,14 +5266,14 @@
         "IsBitmask": true
       },
       "Defaults": {
-        "Default": 0
+        "Default": 1
       },
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "DbgBarrierPreWaitPipePoint"
     },
     {
-      "Description": "For pre-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier is signaled. For further documentation, consult DbgBarrierPostSignalPipePoint.",
+      "Description": "For pre-cmd barriers, this flag describes the PAL pipeline stage where the barrier is signaled i.e. srcStageMask. For further documentation, consult DbgBarrierPostSignalPipePoint.",
       "Tags": [
         "Debugging"
       ],
@@ -5114,7 +5282,7 @@
         "IsBitmask": true
       },
       "Defaults": {
-        "Default": 0
+        "Default": 65536
       },
       "Scope": "Driver",
       "Type": "uint32",
@@ -5735,7 +5903,7 @@
         "General"
       ],
       "Defaults": {
-        "Default": 4294967295
+        "Default": 8
       },
       "Scope": "Driver",
       "Type": "uint32"
@@ -5747,7 +5915,7 @@
         "General"
       ],
       "Defaults": {
-        "Default": 4294967295
+        "Default": 8
       },
       "Scope": "Driver",
       "Type": "uint32"
@@ -5781,7 +5949,7 @@
     },
     {
       "Name": "EnableEmitSqttFunctionCrc",
-      "Description": "Emit 64-bit AMDIL CRC to SQTT.",
+      "Description": "Emits an intermediate language shader identifier to SQTT.",
       "Tags": [
         "General"
       ],
@@ -8153,6 +8321,21 @@
       "Name": "EnableVariableRateShading"
     },
     {
+      "Description": "Forces how many thread groups are sent to one SE before switching to next one",
+      "Tags": [
+        "Optimization"
+      ],
+      "ValidValues": {
+        "Name": "CsDispatchInterleaveSize"
+      },
+      "Defaults": {
+        "Default": "CsDispatchInterleaveSizeDefault"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "Name": "CsDispatchInterleaveSize"
+    },
+    {
       "Description": "Enables command buffer chaining on vkQueueSubmit",
       "Tags": [
         "General"
@@ -9360,6 +9543,21 @@
       "Scope": "Driver"
     },
     {
+      "Name": "OverrideCsDispatchInterleaveSize",
+      "Description": "Override dispatch interleave size for the compute shader specified by OverrideShaderHashUpper/Lower",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "ValidValues": {
+        "Name": "CsDispatchInterleaveSize"
+      },
+      "Defaults": {
+        "Default": "CsDispatchInterleaveSizeDefault"
+      },
+      "Type": "enum",
+      "Scope": "Driver"
+    },
+    {
       "Name": "EliminateFuncLoadStore",
       "Description": "Eliminate unnecessary function load and store instructions.",
       "Tags": [
@@ -9992,6 +10190,39 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Forces how many thread groups are sent to one SE before switching to next one",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "ValidValues": {
+        "Name": "CsDispatchInterleaveSize"
+      },
+      "Defaults": {
+        "Default": "CsDispatchInterleaveSizeDefault"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "Name": "RtCsDispatchInterleaveSize"
+    },
+    {
+      "Description": "Build Acceleration Structures on async compute queue",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "BuildTypes": [
+        "VKI_RAY_TRACING"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "AccelerationStructureAsyncBuild",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Used to wait idle on vkCreateInstance() call until a debugger is attached to running application. Effective only on Windows debug builds.",
       "Tags": [
         "Debugging"
@@ -10330,7 +10561,7 @@
       "Name": "EnableGraphicsPipelineLibraries"
     },
     {
-      "Description": "Enable ColorClearAutoSync that tells PAL to automatically insert any required barriers between color image clears",
+      "Description": "Workaround to Add a barrier if app missing the required barriers after vkCmdClearColorImage.",
       "Tags": [
         "General"
       ],
@@ -10339,7 +10570,7 @@
       },
       "Type": "bool",
       "Scope": "Driver",
-      "Name": "EnableColorClearAutoSync"
+      "Name": "AddMissingBarrierForClearColorImage"
     },
     {
       "Name": "ClampMaxImageSize",
@@ -10467,6 +10698,18 @@
       "Type": "bool",
       "Scope": "Driver",
       "Name": "EnableGpurtRdfCompression"
+    },
+    {
+      "Description": "Instructs the driver to detect writes to backbuffers and protect them against potential front buffer rendering",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver",
+      "Name": "EnableBackBufferProtection"
     }
   ]
 }

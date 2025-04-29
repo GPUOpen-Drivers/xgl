@@ -157,6 +157,7 @@ target_sources(xgl PRIVATE
     api/appopt/barrier_filter_layer.cpp
     api/appopt/strange_brigade_layer.cpp
     api/appopt/baldurs_gate3_layer.cpp
+    api/appopt/shadow_of_the_tomb_raider_layer.cpp
     api/appopt/g_shader_profile.cpp
     api/render_state_cache.cpp
     api/renderpass/renderpass_builder.cpp
@@ -177,6 +178,7 @@ if (VKI_RAY_TRACING)
         api/vk_deferred_operation.cpp
         api/appopt/bvh_batch_layer.cpp
         api/appopt/split_raytracing_layer.cpp
+        api/appopt/acceleration_structure_async_layer.cpp
     )
 endif()
 #endif
@@ -283,7 +285,7 @@ add_custom_command(
         -s settings/settings.h
         --namespaces vk
         --settings-struct-name RuntimeSettings
-        --include-headers pal.h palImage.h
+        --include-headers pal.h palImage.h palDevice.h
     DEPENDS ${VKI_GEN_SETTINGS_FILES} ${VKI_SETTINGS_DIR}/settings_xgl.json
     COMMENT "Generating Vulkan settings code from settings_xgl.json"
 )

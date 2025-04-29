@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -33,6 +33,7 @@
 #include "palMetroHash.h"
 #include "palHashMapImpl.h"
 #include "palMemTrackerImpl.h"
+#include "../../api/sqtt/sqtt_rgp_annotations.h"
 
 namespace GpuTexDecoder
 {
@@ -423,21 +424,15 @@ static void InsertBarrier(Pal::ICmdBuffer*& cmdBuffer)
 {
     PAL_ASSERT(cmdBuffer != nullptr);
 
-    Pal::BarrierInfo barrierInfo = {};
-    barrierInfo.waitPoint = Pal::HwPipePreCs;
+    Pal::AcquireReleaseInfo barrierInfo = {};
 
-    const Pal::HwPipePoint pipePoint = Pal::HwPipePostCs;
-    barrierInfo.pipePointWaitCount = 1;
-    barrierInfo.pPipePoints = &pipePoint;
+    barrierInfo.srcGlobalStageMask  = Pal::PipelineStageCs;
+    barrierInfo.dstGlobalStageMask  = Pal::PipelineStageCs;
+    barrierInfo.srcGlobalAccessMask = Pal::CoherShader;
+    barrierInfo.dstGlobalAccessMask = Pal::CoherShader;
+    barrierInfo.reason              = vk::RgpBarrierExternalCmdPipelineBarrier;
 
-    Pal::BarrierTransition transition = {};
-    transition.srcCacheMask = Pal::CoherShader;
-    transition.dstCacheMask = Pal::CoherShader;
-
-    barrierInfo.transitionCount = 1;
-    barrierInfo.pTransitions = &transition;
-    barrierInfo.reason = 1;
-    cmdBuffer->CmdBarrier(barrierInfo);
+    cmdBuffer->CmdReleaseThenAcquire(barrierInfo);
 }
 
 // =====================================================================================================================

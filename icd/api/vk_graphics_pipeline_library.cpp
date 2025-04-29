@@ -607,13 +607,22 @@ VkResult GraphicsPipelineLibrary::Create(
     static_assert(VK_ARRAY_SIZE(shaderOptimizerKeys) == VK_ARRAY_SIZE(shaderStageInfo.stages),
                   "Please ensure stage count matches between gfx profile key and shader stage info.");
 
-    // 1. Get pipeline layout
+    // 1. Get Pipeline Resource Info
     const PipelineLayout* pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
 
-    if (pPipelineLayout == nullptr)
+    if ((pPipelineLayout == nullptr)
+        )
     {
         pPipelineLayout = pDevice->GetNullPipelineLayout();
     }
+
+    PipelineResourceLayout resourceLayout = {};
+
+    BuildPipelineResourceLayout(pDevice,
+                               pPipelineLayout,
+                               VK_PIPELINE_BIND_POINT_GRAPHICS,
+                               flags,
+                               &resourceLayout);
 
     PipelineMetadata binaryMetadata = {};
 
@@ -626,7 +635,7 @@ VkResult GraphicsPipelineLibrary::Create(
         flags,
         &shaderStageInfo,
         &binaryCreateInfo,
-        pPipelineLayout,
+        &resourceLayout,
         shaderOptimizerKeys,
         &pipelineOptimizerKey,
         &apiPsoHash,
@@ -643,7 +652,7 @@ VkResult GraphicsPipelineLibrary::Create(
             libInfo,
             flags,
             &shaderStageInfo,
-            pPipelineLayout,
+            &resourceLayout.userDataLayout,
             &binaryCreateInfo);
 
         if (binariesProvided)
@@ -813,7 +822,7 @@ VkResult GraphicsPipelineLibrary::Create(
             tempModuleStates,
             pPermBinaryStorage,
             providedLibraryMask,
-            pPipelineLayout);
+            &resourceLayout.userDataLayout);
 
         *pPipeline = GraphicsPipelineLibrary::HandleFromVoidPointer(pSysMem);
 
@@ -861,7 +870,7 @@ VkResult GraphicsPipelineLibrary::CreateCacheId(
     VkPipelineCreateFlags2KHR               flags,
     GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
     GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
-    const PipelineLayout*                   pPipelineLayout,
+    const PipelineResourceLayout*           pResourceLayout,
     ShaderOptimizerKey*                     pShaderOptimizerKeys,
     PipelineOptimizerKey*                   pPipelineOptimizerKey,
     uint64_t*                               pApiPsoHash,
@@ -911,7 +920,7 @@ VkResult GraphicsPipelineLibrary::CreateCacheId(
             libInfo,
             flags,
             pShaderStageInfo,
-            pPipelineLayout,
+            pResourceLayout,
             pPipelineOptimizerKey,
             pBinaryMetadata,
             pBinaryCreateInfo);
@@ -1046,7 +1055,7 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
     const GplModuleState*                   pGplModuleStates,
     PipelineBinaryStorage*                  pBinaryStorage,
     const uint32_t                          providedLibraryMask,
-    const PipelineLayout*                   pPipelineLayout)
+    const UserDataLayout*                   pLayout)
     : GraphicsPipelineCommon(
 #if VKI_RAY_TRACING
         false,
@@ -1062,7 +1071,7 @@ GraphicsPipelineLibrary::GraphicsPipelineLibrary(
     Util::MetroHash::Hash dummyCacheHash = {};
     Pipeline::Init(
         nullptr,
-        pPipelineLayout,
+        pLayout,
         pBinaryStorage,
         objectInfo.staticStateMask,
 #if VKI_RAY_TRACING

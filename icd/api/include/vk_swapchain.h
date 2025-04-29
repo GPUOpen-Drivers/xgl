@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -133,6 +133,9 @@ public:
     VK_FORCEINLINE Pal::ISwapChain* PalSwapChain() const
         { return m_pPalSwapChain; }
 
+    VK_FORCEINLINE uint64_t PalSwapChainHash() const
+        { return m_palSwapChainHash; }
+
     const FullscreenMgr* GetFullscreenMgr() const
         { return m_pFullscreenMgr; }
 
@@ -187,8 +190,12 @@ public:
     void SetHdrMetadata(
         const VkHdrMetadataEXT* pMetadata);
 
-    void MarkAsDeprecated(
-        bool                         releaseResources,
+    void MarkAsDeprecated();
+
+    bool IsResizeCompatible(uint64_t newPalHash) const;
+
+    Pal::Result ResizeAndRelease(
+        Pal::Extent2d                newDims,
         const VkAllocationCallbacks* pAllocator);
 
     uint32_t GetVidPnSourceId() const
@@ -206,7 +213,8 @@ protected:
         FullscreenMgr*             pFullscreenMgr,
         uint32_t                   m_vidPnSourceId,
         Pal::WorkstationStereoMode wsStereoMode,
-        Pal::ISwapChain*           pPalSwapChain);
+        Pal::ISwapChain*           pPalSwapChain,
+        uint64_t                   palSwapChainHash);
 
     void InitSwCompositor(Pal::QueueType presentQueueType);
 
@@ -217,6 +225,7 @@ protected:
     const Properties        m_properties;
     uint32_t                m_nextImage;
     Pal::ISwapChain*        m_pPalSwapChain;
+    uint64_t                m_palSwapChainHash;
 
     Pal::ScreenColorConfig  m_colorParams;
     FullscreenMgr*          m_pFullscreenMgr;

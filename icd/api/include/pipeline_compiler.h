@@ -59,6 +59,8 @@ struct GraphicsPipelineExtStructs;
 struct ComputePipelineExtStructs;
 struct RayTracingPipelineExtStructs;
 struct ExecutionGraphPipelineExtStructs;
+struct UserDataLayout;
+struct PipelineResourceLayout;
 
 class PipelineBinaryCache;
 
@@ -232,7 +234,7 @@ public:
         const GraphicsPipelineLibraryInfo&              libInfo,
         VkPipelineCreateFlags2KHR                       flags,
         const GraphicsPipelineShaderStageInfo*          pShaderInfo,
-        const PipelineLayout*                           pPipelineLayout,
+        const PipelineResourceLayout*                   pLayout,
         const PipelineOptimizerKey*                     pPipelineProfileKey,
         PipelineMetadata*                               pBinaryMetadata,
         GraphicsPipelineBinaryCreateInfo*               pCreateInfo);
@@ -243,7 +245,7 @@ public:
         const GraphicsPipelineLibraryInfo&              libInfo,
         VkPipelineCreateFlags2KHR                       flags,
         const GraphicsPipelineShaderStageInfo*          pShaderInfo,
-        const PipelineLayout*                           pPipelineLayout,
+        const UserDataLayout*                           pUserDataLayout,
         GraphicsPipelineBinaryCreateInfo*               pCreateInfo);
 
     VkResult BuildGplFastLinkCreateInfo(
@@ -252,7 +254,7 @@ public:
         const GraphicsPipelineExtStructs&               extStructs,
         VkPipelineCreateFlags2KHR                       flags,
         const GraphicsPipelineLibraryInfo&              libInfo,
-        const PipelineLayout*                           pPipelineLayout,
+        const UserDataLayout*                           pUserDataLayout,
         PipelineMetadata*                               pBinaryMetadata,
         GraphicsPipelineBinaryCreateInfo*               pCreateInfo);
 
@@ -261,6 +263,7 @@ public:
         const VkComputePipelineCreateInfo*              pIn,
         const ComputePipelineExtStructs&                extStructs,
         const ComputePipelineShaderStageInfo*           pShaderInfo,
+        const PipelineResourceLayout*                   pLayout,
         const PipelineOptimizerKey*                     pPipelineProfileKey,
         PipelineMetadata*                               pBinaryMetadata,
         ComputePipelineBinaryCreateInfo*                pInfo,
@@ -290,6 +293,7 @@ public:
         const RayTracingPipelineExtStructs&      extStructs,
         VkPipelineCreateFlags2KHR                flags,
         const RayTracingPipelineShaderStageInfo* pShaderInfo,
+        const PipelineResourceLayout*            pLayout,
         const PipelineOptimizerKey*              pPipelineProfileKey,
         RayTracingPipelineBinaryCreateInfo*      pCreateInfo);
 
@@ -306,6 +310,13 @@ public:
         RayTracingPipelineBinary*           pPipelineBinary);
 
     void FreeRayTracingPipelineCreateInfo(RayTracingPipelineBinaryCreateInfo* pCreateInfo);
+
+    VkResult InsertSpirvsInRtPipeline(
+        const Device*                                pDevice,
+        const VkPipelineShaderStageCreateInfo*       pShaderStages,
+        const uint32_t                               stageCount,
+        RayTracingPipelineBinaryCreateInfo*          pBinCreateInfo,
+        RayTracingPipelineBinary*                    pPipelineBinaries);
 
     void SetRayTracingState(
         const Device*                       pDevice,
@@ -354,7 +365,7 @@ public:
     void DestroyPipelineBinaryCache();
 
     void BuildPipelineInternalBufferData(
-        const PipelineLayout*             pPipelineLayout,
+        const UserDataLayout*             pUserDataLayout,
         bool                              needCache,
         GraphicsPipelineBinaryCreateInfo* pCreateInfo);
 
@@ -423,6 +434,12 @@ public:
         bool                                        isOffsetMode,
         void*                                       pUberFetchShaderInternalData) const;
 
+    static VkResult InsertSpirvChunkToElf(
+        const Device*                           pDevice,
+        const VkPipelineShaderStageCreateInfo*  pShaderStages,
+        const uint32_t                          stageCount,
+        Vkgc::BinaryData*                       pElfBinary);
+
     static void ReadBinaryMetadata(
         const Device*           pDevice,
         const Vkgc::BinaryData& elfBinary,
@@ -466,6 +483,8 @@ public:
         uint32_t                       binaryCount,
         const Vkgc::BinaryData*        pElfBinary,
         VkResult                       result);
+
+    bool IsEmbeddingSpirvRequired();
 
     static void InitPipelineDumpOption(
         Vkgc::PipelineDumpOptions* pDumpOptions,

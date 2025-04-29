@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -70,6 +70,38 @@ struct PipelineBinaryInfo
 {
     Vkgc::BinaryData      pipelineBinary;
     Util::MetroHash::Hash binaryHash;
+};
+
+// Structure containing information about pipeline resource node mapping buffer, like buffer size,
+// count of root node and count of resource node.
+struct MappingBufferLayout
+{
+    // The amount of buffer space needed in the mapping buffer.
+    size_t              mappingBufferSize;
+    // Max. number of ResourceMappingNodes needed by all layouts in the chain, including the extra nodes
+    // required by the extra set pointers, and any resource nodes required by potential internal tables.
+    uint32_t            numRsrcMapNodes;
+    // Number of resource mapping nodes used for the user data nodes
+    uint32_t            numUserDataNodes;
+};
+
+// Structure containing resouce information about a pipeline binary.
+struct PipelineResourceLayout
+{
+    // TODO: Legacy pipeline layout could be removed
+    const PipelineLayout*     pPipelineLayout;
+
+    // Top-level user data layout information of pipeline
+    UserDataLayout            userDataLayout;
+
+    // Total number of user data registers used in this pipeline layout
+    uint32_t                  userDataRegCount;
+
+    MappingBufferLayout       mappingBufferLayout;
+
+#if VKI_RAY_TRACING
+    bool                      hasRayTracing;
+#endif
 };
 
 constexpr uint32 MaxPipelineBinaryInfoCount = Util::Max(MaxPalDevices, static_cast<uint32>(GraphicsLibraryCount));
@@ -198,6 +230,13 @@ public:
         Pal::ShaderType     shaderType,
         PipelineBinaryInfo* pBinaryInfo) const;
 
+    static void BuildPipelineResourceLayout(
+        const Device*                     pDevice,
+        const PipelineLayout*             pPipelineLayout,
+        VkPipelineBindPoint               pipelineBindPoint,
+        VkPipelineCreateFlags2KHR         flags,
+        PipelineResourceLayout*           pResourceLayout);
+
     VkPipelineBindPoint GetType() const { return m_type; }
 
     // This function returns true if any of the bits in the given state mask (corresponding to shifted values of
@@ -223,6 +262,9 @@ public:
     uint32_t GetDispatchRaysUserDataOffset() const { return m_dispatchRaysUserDataOffset; }
 
     bool HasRayTracing() const { return m_hasRayTracing; }
+
+    static uint32_t GetDispatchRaysUserData(
+        const PipelineResourceLayout* pResourceLayout);
 #endif
 
     void ClearFormatString()
@@ -303,7 +345,7 @@ protected:
 
     void Init(
         Pal::IPipeline**            pPalPipeline,
-        const PipelineLayout*       pLayout,
+        const UserDataLayout*       pLayout,
         PipelineBinaryStorage*      pBinaryStorage,
         uint64_t                    staticStateMask,
 #if VKI_RAY_TRACING

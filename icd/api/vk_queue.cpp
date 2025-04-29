@@ -985,7 +985,12 @@ VkResult Queue::NotifyFlipMetadata(
             // If there's already a command buffer that needs to be submitted, use it instead of a dummy one.
             if (pCmdBufState != nullptr)
             {
-                result = m_pCmdBufferRing->SubmitCmdBuffer(m_pDevice, deviceIdx, pPalQueue, cmdBufInfo, pCmdBufState);
+                result = m_pCmdBufferRing->SubmitCmdBuffer(m_pDevice,
+                                                           deviceIdx,
+                                                           pPalQueue,
+                                                           cmdBufInfo,
+                                                           pCmdBufState,
+                                                           pGpuMemory);
             }
             else
             {
@@ -1276,6 +1281,9 @@ VkResult Queue::Submit(
             const VkDeviceGroupSubmitInfo* pDeviceGroupInfo     = nullptr;
             const VkProtectedSubmitInfo*   pProtectedSubmitInfo = nullptr;
 
+            Util::Vector<const Pal::IGpuMemory*, 4, PalAllocator> blockIfFlippingMemList(
+                                                     m_pDevice->VkInstance()->Allocator());
+
             bool            protectedSubmit        = false;
             uint32_t        waitValueCount         = 0;
             const uint64_t* pWaitSemaphoreValues   = nullptr;
@@ -1497,7 +1505,20 @@ VkResult Queue::Submit(
                         continue;
                     }
 
-                    const CmdBuffer& cmdBuf = *(*pCommandBuffers[i]);
+                    const CmdBuffer& cmdBuf         = *(*pCommandBuffers[i]);
+                    uint32_t cmdBufNumWrittenImages = cmdBuf.GetNumWrittenFlippableImages();
+                    if (cmdBufNumWrittenImages > 0)
+                    {
+                        const auto& writtenFlippableImagesList = cmdBuf.GetWrittenFlippableImages();
+
+                        for (uint32_t imgIdx = 0; imgIdx < cmdBufNumWrittenImages; imgIdx++)
+                        {
+                            blockIfFlippingMemList.PushBack(writtenFlippableImagesList[imgIdx]->PalMemory(deviceIdx));
+                        }
+
+                        palSubmitInfo.blockIfFlippingCount = blockIfFlippingMemList.NumElements();
+                        palSubmitInfo.ppBlockIfFlipping    = blockIfFlippingMemList.Data();
+                    }
 
                     if (cmdBuf.IsProtected() == protectedSubmit)
                     {
@@ -1629,9 +1650,13 @@ VkResult Queue::Submit(
                     pFence->SetActiveDevice(deviceIdx);
                 }
 
-                if ((perSubQueueInfo.cmdBufferCount > 0) ||
-                    (palSubmitInfo.fenceCount > 0)     ||
-                    (waitSemaphoreCount > 0))
+                bool shouldSubmit = (perSubQueueInfo.cmdBufferCount > 0) || (palSubmitInfo.fenceCount > 0);
+
+#if defined(__unix__)
+                shouldSubmit = shouldSubmit || (waitSemaphoreCount > 0);
+#endif
+
+                if (shouldSubmit)
                 {
                     if ((timedQueueEvents == false) &&
                         (palResult == Pal::Result::Success))
@@ -1868,6 +1893,11 @@ VkResult Queue::PalSignalSemaphores(
                     VK_ASSERT(pSemaphoreValues[i] != 0);
                     pointValue = pSemaphoreValues[i];
                 }
+
+                if (pointValue == 0)
+                {
+                    continue;
+                }
             }
 
             if (timedQueueEvents == false)
@@ -1922,6 +1952,11 @@ VkResult Queue::PalWaitSemaphores(
                 else
                 {
                     pointValue = pSemaphoreValues[i];
+                }
+
+                if (pointValue == 0)
+                {
+                    continue;
                 }
             }
 
@@ -2827,11 +2862,17 @@ VkResult Queue::SubmitInternalCmdBuf(
     CmdBufferRing*          pCmdBufferRing,
     uint32_t                deviceIdx,
     const Pal::CmdBufInfo&  cmdBufInfo,
-    CmdBufState*            pCmdBufState)
+    CmdBufState*            pCmdBufState,
+    const Pal::IGpuMemory*  pWrittenFlippableImage)
 {
     CmdBufferRing* pRing = (pCmdBufferRing != nullptr) ? pCmdBufferRing : m_pCmdBufferRing;
 
-    return pRing->SubmitCmdBuffer(m_pDevice, deviceIdx, m_pPalQueues[deviceIdx], cmdBufInfo, pCmdBufState);
+    return pRing->SubmitCmdBuffer(m_pDevice,
+                                  deviceIdx,
+                                  m_pPalQueues[deviceIdx],
+                                  cmdBufInfo,
+                                  pCmdBufState,
+                                  pWrittenFlippableImage);
 }
 
 VkResult Queue::CreateSqttState(

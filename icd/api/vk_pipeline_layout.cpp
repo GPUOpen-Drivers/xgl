@@ -1006,19 +1006,12 @@ void PipelineLayout::BuildLlpcStaticMapping(
     uint32_t*                               pDescriptorRangeCount
     ) const
 {
-    pNode->type                  = MapLlpcResourceNodeType(binding.info.descriptorType);
-    pNode->offsetInDwords        = binding.sta.dwOffset;
-    pNode->sizeInDwords          = binding.sta.dwSize;
-    if (pNode->type == Vkgc::ResourceMappingNodeType::DescriptorMutable)
-    {
-        pNode->srdRange.strideInDwords = binding.sta.dwArrayStride;
-    }
-    else
-    {
-        pNode->srdRange.strideInDwords = 0;
-    }
-    pNode->srdRange.binding      = binding.info.binding;
-    pNode->srdRange.set          = setIndex;
+    pNode->type                    = MapLlpcResourceNodeType(binding.info.descriptorType);
+    pNode->offsetInDwords          = binding.sta.dwOffset;
+    pNode->sizeInDwords            = binding.sta.dwSize;
+    pNode->srdRange.strideInDwords = binding.sta.dwArrayStride;
+    pNode->srdRange.binding        = binding.info.binding;
+    pNode->srdRange.set            = setIndex;
 
     if (binding.imm.dwSize > 0)
     {
@@ -1072,7 +1065,7 @@ void PipelineLayout::BuildLlpcDynamicMapping(
 
     pNode->offsetInDwords          = userDataRegBase + binding.dyn.dwOffset;
     pNode->sizeInDwords            = binding.dyn.dwSize;
-    pNode->srdRange.strideInDwords = 0;
+    pNode->srdRange.strideInDwords = binding.dyn.dwArrayStride;
     pNode->srdRange.binding        = binding.info.binding;
     pNode->srdRange.set            = setIndex;
 }
@@ -1080,17 +1073,17 @@ void PipelineLayout::BuildLlpcDynamicMapping(
 // =====================================================================================================================
 // Builds the VKGC resource mapping nodes for vertex buffer table
 void PipelineLayout::BuildLlpcVertexBufferTableMapping(
+    const Device*                  pDevice,
     const VbBindingInfo*           pVbInfo,
     const uint32_t                 offsetInDwords,
     const uint32_t                 sizeInDwords,
     Vkgc::ResourceMappingRootNode* pNode,
-    uint32_t*                      pNodeCount
-    ) const
+    uint32_t*                      pNodeCount)
 {
     if (pVbInfo != nullptr)
     {
         // Build the table description itself
-        const uint32_t srdDwSize = m_pDevice->GetProperties().descriptorSizes.untypedBufferView / sizeof(uint32_t);
+        const uint32_t srdDwSize = pDevice->GetProperties().descriptorSizes.untypedBufferView / sizeof(uint32_t);
         const uint32_t vbTableSize = pVbInfo->bindingTableSize * srdDwSize;
 
         // Add the set pointer node pointing to this table
@@ -1111,8 +1104,7 @@ void PipelineLayout::BuildLlpcTransformFeedbackMapping(
     const uint32_t                 offsetInDwords,
     const uint32_t                 sizeInDwords,
     Vkgc::ResourceMappingRootNode* pNode,
-    uint32_t*                      pNodeCount
-    ) const
+    uint32_t*                      pNodeCount)
 {
     uint32_t xfbStages         = (stageMask & (Vkgc::ShaderStageFragmentBit - 1)) >> 1;
     uint32_t lastXfbStageBit   = Vkgc::ShaderStageVertexBit;
@@ -1140,8 +1132,7 @@ void PipelineLayout::BuildLlpcInternalConstantBufferMapping(
     const uint32_t                 offsetInDwords,
     const uint32_t                 binding,
     Vkgc::ResourceMappingRootNode* pNode,
-    uint32_t*                      pNodeCount
-    ) const
+    uint32_t*                      pNodeCount)
 {
     if (stageMask != 0)
     {
@@ -1188,21 +1179,6 @@ void PipelineLayout::BuildLlpcInternalInlineBufferMapping(
 
 #if VKI_RAY_TRACING
 // =====================================================================================================================
-// Calculates the offset for the GpuRT user data constants
-uint32_t PipelineLayout::GetDispatchRaysUserData() const
-{
-    uint32_t              dispatchRaysUserData = 0;
-    const UserDataLayout& userDataLayout       = GetInfo().userDataLayout;
-
-    if (m_pipelineInfo.hasRayTracing)
-    {
-        dispatchRaysUserData = userDataLayout.common.dispatchRaysArgsPtrRegBase;
-    }
-
-    return dispatchRaysUserData;
-}
-
-// =====================================================================================================================
 // Builds the VKGC resource mapping nodes for ray tracing dispatch arguments
 void PipelineLayout::BuildLlpcRayTracingDispatchArgumentsMapping(
     const uint32_t                 stageMask,
@@ -1211,16 +1187,17 @@ void PipelineLayout::BuildLlpcRayTracingDispatchArgumentsMapping(
     Vkgc::ResourceMappingRootNode* pRootNode,
     uint32_t*                      pRootNodeCount,
     Vkgc::ResourceMappingNode*     pStaNode,
-    uint32_t*                      pStaNodeCount
-    ) const
+    uint32_t*                      pStaNodeCount)
 {
-    const uint32_t srdSize = GpuRt::MaxBufferSrdSize;
+    constexpr uint32_t srdSize          = GpuRt::MaxBufferSrdSize;
+    constexpr uint32_t rayConstDataSize = sizeof(GpuRt::DispatchRaysConstantData) / sizeof(uint32_t); // In DWORDs
+
     const Vkgc::ResourceMappingNode TraceRayLayout[] =
     {
         // TODO: Replace binding and set with enum once it is defined in vkgcDefs.h
-        { Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact, 2, 0, {{93, 17, 0}} },
-        { Vkgc::ResourceMappingNodeType::DescriptorConstBuffer, srdSize, 2, {{93, 0, 0}} },
-        { Vkgc::ResourceMappingNodeType::DescriptorBuffer, srdSize, 2 + srdSize, {{93, 1, 0}} },
+        { Vkgc::ResourceMappingNodeType::InlineBuffer, rayConstDataSize, 0, {{93, 17, 0}} },
+        { Vkgc::ResourceMappingNodeType::DescriptorConstBuffer, srdSize, rayConstDataSize, {{93, 0, 0}} },
+        { Vkgc::ResourceMappingNodeType::DescriptorBuffer, srdSize, rayConstDataSize + srdSize, {{93, 1, 0}} },
     };
     const uint32_t TraceRayLayoutNodeCount = static_cast<uint32_t>(Util::ArrayLen(TraceRayLayout));
 
@@ -1312,6 +1289,7 @@ VkResult PipelineLayout::BuildCompactSchemeLlpcPipelineMapping(
         {
             const uint32_t vbTablePtrRegBase = 0;
             BuildLlpcVertexBufferTableMapping(
+                m_pDevice,
                 pVbInfo,
                 vbTablePtrRegBase,
                 VbTablePtrRegCount,
@@ -1598,6 +1576,7 @@ void PipelineLayout::BuildIndirectSchemeLlpcPipelineMapping(
 
     // Build the internal vertex buffer table mapping
     BuildLlpcVertexBufferTableMapping(
+        m_pDevice,
         pVbInfo,
         vbTablePtrRegBase,
         VbTablePtrRegCount,

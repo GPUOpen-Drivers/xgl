@@ -42,6 +42,15 @@ namespace vk
 class Device;
 class ApiSampler;
 
+struct SamplerExtStructs
+{
+    const VkSamplerReductionModeCreateInfo*                   pSamplerReductionModeCreateInfo;
+    const VkSamplerYcbcrConversionInfo*                       pSamplerYcbcrConversionInfo;
+    const VkSamplerCustomBorderColorCreateInfoEXT*            pSamplerCustomBorderColorCreateInfoEXT;
+    const VkSamplerBorderColorComponentMappingCreateInfoEXT*  pSamplerBorderColorComponentMappingCreateInfoEXT;
+    const VkOpaqueCaptureDescriptorDataCreateInfoEXT*         pOpaqueCaptureDescriptorDataCreateInfoEXT;
+};
+
 class Sampler final : public NonDispatchable<VkSampler, Sampler>
 {
 public:
@@ -93,16 +102,11 @@ public:
                 (m_pYcbcrConversionMetaData->word5.u32All != pMetaData->word5.u32All));
     }
 
-protected:
+    static void HandleExtensionStructs(
+        const VkSamplerCreateInfo* pCreateInfo,
+        SamplerExtStructs*         pExtStructs);
 
-    struct SamplerExtStructs
-    {
-        const VkSamplerReductionModeCreateInfo*                   pSamplerReductionModeCreateInfo;
-        const VkSamplerYcbcrConversionInfo*                       pSamplerYcbcrConversionInfo;
-        const VkSamplerCustomBorderColorCreateInfoEXT*            pSamplerCustomBorderColorCreateInfoEXT;
-        const VkSamplerBorderColorComponentMappingCreateInfoEXT*  pSamplerBorderColorComponentMappingCreateInfoEXT;
-        const VkOpaqueCaptureDescriptorDataCreateInfoEXT*         pOpaqueCaptureDescriptorDataCreateInfoEXT;
-    };
+protected:
 
     Sampler(
         uint64_t                              apiHash,
@@ -137,11 +141,6 @@ protected:
 
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(Sampler);
-
-    static void HandleExtensionStructs(
-        const VkSamplerCreateInfo* pCreateInfo,
-        SamplerExtStructs*         pExtStructs);
-
 };
 
 namespace entry

@@ -102,21 +102,28 @@ struct Formats
         const RuntimeSettings& settings);
 };
 
-#define VK_EXT_4444_FORMAT_START        VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT
-#define VK_EXT_4444_FORMAT_END          VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT
-#define VK_EXT_4444_FORMAT_COUNT        (VK_EXT_4444_FORMAT_END - VK_EXT_4444_FORMAT_START  + 1)
+#define VK_MM_FORMAT1_START              VK_FORMAT_G8B8G8R8_422_UNORM
+#define VK_MM_FORMAT1_END                VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM
+#define VK_MM_FORMAT1_COUNT              (VK_MM_FORMAT1_END - VK_MM_FORMAT1_START + 1)
 
-#define VK_MM_FORMAT_START              VK_FORMAT_G8B8G8R8_422_UNORM
-#define VK_MM_FORMAT_END                VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM
-#define VK_MM_IMAGE_FORMAT_COUNT        (VK_MM_FORMAT_END       - VK_MM_FORMAT_START        + 1)
+#define VK_MM_FORMAT2_START              VK_FORMAT_G8_B8R8_2PLANE_444_UNORM
+#define VK_MM_FORMAT2_END                VK_FORMAT_G16_B16R16_2PLANE_444_UNORM
+#define VK_MM_FORMAT2_COUNT              (VK_MM_FORMAT2_END - VK_MM_FORMAT2_START + 1)
 
-#define VK_MAINTENANCE5_FORMAT_START             VK_FORMAT_A1B5G5R5_UNORM_PACK16
-#define VK_MAINTENANCE5_FORMAT_END               VK_FORMAT_A8_UNORM_KHR
-#define VK_MAINTENANCE5_IMAGE_FORMAT_COUNT       (VK_MAINTENANCE5_FORMAT_END - VK_MAINTENANCE5_FORMAT_START        + 1)
+#define VK_EXT_4444_FORMAT_START         VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT
+#define VK_EXT_4444_FORMAT_END           VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT
+#define VK_EXT_4444_FORMAT_COUNT         (VK_EXT_4444_FORMAT_END - VK_EXT_4444_FORMAT_START + 1)
 
-// Number of formats supported by the driver.
-#define VK_SUPPORTED_FORMAT_COUNT    (VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT + \
-    VK_MAINTENANCE5_IMAGE_FORMAT_COUNT)
+#define VK_MAINTENANCE5_FORMAT_START     VK_FORMAT_A1B5G5R5_UNORM_PACK16
+#define VK_MAINTENANCE5_FORMAT_END       VK_FORMAT_A8_UNORM_KHR
+#define VK_MAINTENANCE5_FORMAT_COUNT     (VK_MAINTENANCE5_FORMAT_END - VK_MAINTENANCE5_FORMAT_START + 1)
+
+// Values used for mapping format ranges suuported by the driver into a contiguous array.
+#define VK_MM_FORMAT1_RANGE_BASE          (VK_FORMAT_RANGE_SIZE)
+#define VK_MM_FORMAT2_RANGE_BASE          (VK_MM_FORMAT1_RANGE_BASE + VK_MM_FORMAT1_COUNT)
+#define VK_4444_FORMAT_RANGE_BASE         (VK_MM_FORMAT2_RANGE_BASE + VK_MM_FORMAT2_COUNT)
+#define VK_MAINTENANCE5_FORMAT_RANGE_BASE (VK_4444_FORMAT_RANGE_BASE + VK_EXT_4444_FORMAT_COUNT)
+#define VK_SUPPORTED_FORMAT_COUNT         (VK_MAINTENANCE5_FORMAT_RANGE_BASE + VK_MAINTENANCE5_FORMAT_COUNT)
 
 // =====================================================================================================================
 // Get a linear index for a format (used to address tables indirectly indexed by formats).
@@ -127,18 +134,21 @@ uint32_t Formats::GetIndex(VkFormat format)
         // Core format
         return static_cast<uint32_t>(format);
     }
-    else if ((format >= VK_MM_FORMAT_START) && (format <= VK_MM_FORMAT_END))
+    else if ((format >= VK_MM_FORMAT1_START) && (format <= VK_MM_FORMAT1_END))
     {
-        return VK_FORMAT_RANGE_SIZE + (format - VK_MM_FORMAT_START);
+        return VK_MM_FORMAT1_RANGE_BASE + (format - VK_MM_FORMAT1_START);
+    }
+    else if ((format >= VK_MM_FORMAT2_START) && (format <= VK_MM_FORMAT2_END))
+    {
+        return VK_MM_FORMAT2_RANGE_BASE + (format - VK_MM_FORMAT2_START);
     }
     else if ((format >= VK_EXT_4444_FORMAT_START) && (format <= VK_EXT_4444_FORMAT_END))
     {
-        return VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT + (format - VK_EXT_4444_FORMAT_START);
+        return VK_4444_FORMAT_RANGE_BASE + (format - VK_EXT_4444_FORMAT_START);
     }
     else if ((format >= VK_MAINTENANCE5_FORMAT_START) && (format <= VK_MAINTENANCE5_FORMAT_END))
     {
-        return VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT +
-            (format - VK_MAINTENANCE5_FORMAT_START);
+        return VK_MAINTENANCE5_FORMAT_RANGE_BASE + (format - VK_MAINTENANCE5_FORMAT_START);
     }
     else
     {
@@ -156,24 +166,25 @@ VkFormat Formats::FromIndex(uint32_t index)
         // Core format
         return static_cast<VkFormat>(index);
     }
-    else if ((index >= VK_FORMAT_RANGE_SIZE) &&
-             (index < (VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT)))
+    else if ((index >= VK_MM_FORMAT1_RANGE_BASE) &&
+             (index < (VK_MM_FORMAT1_RANGE_BASE + VK_MM_FORMAT1_COUNT)))
     {
-        return static_cast<VkFormat>(VK_MM_FORMAT_START + index - VK_FORMAT_RANGE_SIZE);
+        return static_cast<VkFormat>(VK_MM_FORMAT1_START + index - VK_MM_FORMAT1_RANGE_BASE);
     }
-    else if ((index >= (VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT)) &&
-             (index < (VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT)))
+    else if ((index >= VK_MM_FORMAT2_RANGE_BASE) &&
+             (index < (VK_MM_FORMAT2_RANGE_BASE + VK_MM_FORMAT2_COUNT)))
     {
-        return static_cast<VkFormat>(VK_EXT_4444_FORMAT_START + index - VK_FORMAT_RANGE_SIZE
-                                                                      - VK_MM_IMAGE_FORMAT_COUNT);
+        return static_cast<VkFormat>(VK_MM_FORMAT2_START + index - VK_MM_FORMAT2_RANGE_BASE);
     }
-    else if ((index >= (VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT)) &&
-             (index < (VK_FORMAT_RANGE_SIZE + VK_MM_IMAGE_FORMAT_COUNT + VK_EXT_4444_FORMAT_COUNT +
-                 VK_MAINTENANCE5_IMAGE_FORMAT_COUNT)))
+    else if ((index >= VK_4444_FORMAT_RANGE_BASE) &&
+             (index < (VK_4444_FORMAT_RANGE_BASE + VK_EXT_4444_FORMAT_COUNT)))
     {
-        return static_cast<VkFormat>(VK_MAINTENANCE5_FORMAT_START + index - VK_FORMAT_RANGE_SIZE
-                                                                      - VK_MM_IMAGE_FORMAT_COUNT
-                                                                      - VK_EXT_4444_FORMAT_COUNT);
+        return static_cast<VkFormat>(VK_EXT_4444_FORMAT_START + index - VK_4444_FORMAT_RANGE_BASE);
+    }
+    else if ((index >= VK_MAINTENANCE5_FORMAT_RANGE_BASE) &&
+             (index < (VK_MAINTENANCE5_FORMAT_RANGE_BASE + VK_MAINTENANCE5_FORMAT_COUNT)))
+    {
+        return static_cast<VkFormat>(VK_MAINTENANCE5_FORMAT_START + index - VK_MAINTENANCE5_FORMAT_RANGE_BASE);
     }
     else
     {
@@ -279,7 +290,8 @@ bool Formats::IsBcCompressedFormat(VkFormat format)
 bool Formats::IsMmFormat(
     VkFormat format)
 {
-    return (format >= VK_MM_FORMAT_START && format <= VK_MM_FORMAT_END);
+    return ((format >= VK_MM_FORMAT1_START) && (format <= VK_MM_FORMAT1_END)) ||
+           ((format >= VK_MM_FORMAT2_START) && (format <= VK_MM_FORMAT2_END));
 }
 
 // =====================================================================================================================
@@ -297,7 +309,7 @@ bool Formats::IsYuvFormat(
     case VK_FORMAT_R12X4_UNORM_PACK16:
         return false;
     default:
-        return (format >= VK_MM_FORMAT_START && format <= VK_MM_FORMAT_END);
+        return IsMmFormat(format);
     }
 }
 

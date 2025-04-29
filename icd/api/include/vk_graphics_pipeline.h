@@ -145,6 +145,22 @@ static void ConvertToPalMsaaQuadSamplePattern(
 }
 
 // =====================================================================================================================
+// Both MSAA and VRS would utilize the value of PS_ITER_SAMPLES
+// Thus, choose the min combiner (i.e. choose the higher quality rate) when both features are
+// enabled
+inline void SetVrsCombinerStagePsIterSamples(
+    uint8              pixelShaderSamples,
+    bool               exposeVrsPixelsMask,
+    Pal::VrsCombiner*  combinerState)
+{
+    if ((pixelShaderSamples > 1) &&
+        (exposeVrsPixelsMask))
+    {
+        combinerState[static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] = Pal::VrsCombiner::Min;
+    }
+}
+
+// =====================================================================================================================
 // Vulkan implementation of graphics pipelines created by vkCreateGraphicsPipeline
 class GraphicsPipeline final : public GraphicsPipelineCommon, public NonDispatchable<VkPipeline, GraphicsPipeline>
 {
@@ -225,7 +241,7 @@ protected:
     GraphicsPipeline(
         Device* const                          pDevice,
         Pal::IPipeline**                       pPalPipeline,
-        const PipelineLayout*                  pLayout,
+        const UserDataLayout*                  pLayout,
         PipelineBinaryStorage*                 pBinaryStorage,
         const GraphicsPipelineObjectImmedInfo& immedInfo,
         uint64_t                               staticStateMask,
@@ -255,7 +271,7 @@ protected:
         const GraphicsPipelineLibraryInfo&             libInfo,
         VkPipelineCreateFlags2KHR                      flags,
         const GraphicsPipelineShaderStageInfo*         pShaderInfo,
-        const PipelineLayout*                          pPipelineLayout,
+        const PipelineResourceLayout*                  pResourceLayout,
         const PipelineOptimizerKey*                    pPipelineOptimizerKey,
         GraphicsPipelineBinaryCreateInfo*              pBinaryCreateInfo,
         PipelineCache*                                 pPipelineCache,
@@ -269,7 +285,7 @@ protected:
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
         VkPipelineCreateFlags2KHR           flags,
         const VkAllocationCallbacks*        pAllocator,
-        const PipelineLayout*               pPipelineLayout,
+        const UserDataLayout*               pLayout,
         const VbBindingInfo*                pVbInfo,
         const PipelineInternalBufferInfo*   pInternalBuffer,
         const InternalMemory*               pInternalMem,

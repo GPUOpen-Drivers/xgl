@@ -599,6 +599,7 @@ CmdBuffer::CmdBuffer(
     m_palDepthStencilState(pDevice->VkInstance()->Allocator()),
     m_palColorBlendState(pDevice->VkInstance()->Allocator()),
     m_palMsaaState(pDevice->VkInstance()->Allocator()),
+    m_writtenFlippableImages(pDevice->VkInstance()->Allocator()),
     m_uberFetchShaderInternalDataMap(8, pDevice->VkInstance()->Allocator()),
     m_pUberFetchShaderTempBuffer(nullptr),
     m_debugPrintf(pDevice->VkInstance()->Allocator()),
@@ -632,6 +633,8 @@ CmdBuffer::CmdBuffer(
     m_flags.preBindDefaultState                 = settings.preBindDefaultState;
     m_flags.offsetMode                          = pDevice->GetEnabledFeatures().robustVertexBufferExtend |
                                                   pDevice->GetEnabledFeatures().pipelineRobustness;
+    m_flags.protectFlippableImages              = settings.enableBackBufferProtection &
+                                                  m_pDevice->VkInstance()->GetProperties().supportBlockIfFlipping;
 
     const Pal::DeviceProperties& info = m_pDevice->GetPalProperties();
 
@@ -1847,6 +1850,8 @@ void CmdBuffer::ResetState()
     {
         memset(m_allGpuState.pDescBufBinding, 0, sizeof(DescBufBinding));
     }
+
+    m_writtenFlippableImages.Clear();
 }
 
 // =====================================================================================================================
@@ -2499,6 +2504,14 @@ void CmdBuffer::BindDescriptorSets(
                 // User data information for this set
                 const PipelineLayout::SetUserDataLayout& setLayoutInfo = pLayout->GetSetUserData(setBindIdx);
 
+                const Image* pImage =
+                    DescriptorSet<numPalDevices>::ObjectFromHandle(pDescriptorSets[i])->GetWrittenFlippableImage();
+
+                if (pImage != nullptr)
+                {
+                    RegisterWriteToFlippableImage(pImage);
+                }
+
                 // If this descriptor set has any dynamic descriptor data then write them into the shadow.
                 if (setLayoutInfo.dynDescCount > 0)
                 {
@@ -2807,7 +2820,7 @@ template <size_t imageDescSize,
           size_t typedBufferDescSize,
           size_t untypedBufferDescSize,
           uint32_t numPalDevices>
-VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSetKHR(
+VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSet(
     VkCommandBuffer                             commandBuffer,
     VkPipelineBindPoint                         pipelineBindPoint,
     VkPipelineLayout                            layout,
@@ -2817,7 +2830,7 @@ VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSetKHR(
 {
     CmdBuffer* pCmdBuffer = ApiCmdBuffer::ObjectFromHandle(commandBuffer);
 
-    pCmdBuffer->PushDescriptorSetKHR
+    pCmdBuffer->PushDescriptorSet
         <imageDescSize, samplerDescSize, typedBufferDescSize, untypedBufferDescSize, numPalDevices>(
         pipelineBindPoint,
         layout,
@@ -2828,7 +2841,7 @@ VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSetKHR(
 
 // =====================================================================================================================
 template <uint32_t numPalDevices>
-PFN_vkCmdPushDescriptorSetKHR CmdBuffer::GetCmdPushDescriptorSetKHRFunc(
+PFN_vkCmdPushDescriptorSet CmdBuffer::GetCmdPushDescriptorSetFunc(
     const Device* pDevice)
 {
     const size_t imageDescSize          = pDevice->GetProperties().descriptorSizes.imageView;
@@ -2836,14 +2849,14 @@ PFN_vkCmdPushDescriptorSetKHR CmdBuffer::GetCmdPushDescriptorSetKHRFunc(
     const size_t typedBufferDescSize    = pDevice->GetProperties().descriptorSizes.typedBufferView;
     const size_t untypedBufferDescSize  = pDevice->GetProperties().descriptorSizes.untypedBufferView;
 
-    PFN_vkCmdPushDescriptorSetKHR pFunc = nullptr;
+    PFN_vkCmdPushDescriptorSet pFunc = nullptr;
 
     if ((imageDescSize         == 32) &&
         (samplerDescSize       == 16) &&
         (typedBufferDescSize   == 16) &&
         (untypedBufferDescSize == 16))
     {
-        pFunc = &CmdPushDescriptorSetKHR<
+        pFunc = &CmdPushDescriptorSet<
             32,
             16,
             16,
@@ -2855,7 +2868,7 @@ PFN_vkCmdPushDescriptorSetKHR CmdBuffer::GetCmdPushDescriptorSetKHRFunc(
              (typedBufferDescSize   == 24) &&
              (untypedBufferDescSize == 16))
     {
-        pFunc = &CmdPushDescriptorSetKHR<
+        pFunc = &CmdPushDescriptorSet<
             32,
             16,
             24,
@@ -2871,29 +2884,29 @@ PFN_vkCmdPushDescriptorSetKHR CmdBuffer::GetCmdPushDescriptorSetKHRFunc(
 }
 
 // =====================================================================================================================
-PFN_vkCmdPushDescriptorSetKHR CmdBuffer::GetCmdPushDescriptorSetKHRFunc(
+PFN_vkCmdPushDescriptorSet CmdBuffer::GetCmdPushDescriptorSetFunc(
     const Device* pDevice)
 {
-    PFN_vkCmdPushDescriptorSetKHR pFunc = nullptr;
+    PFN_vkCmdPushDescriptorSet pFunc = nullptr;
 
     switch (pDevice->NumPalDevices())
     {
         case 1:
-            pFunc = GetCmdPushDescriptorSetKHRFunc<1>(pDevice);
+            pFunc = GetCmdPushDescriptorSetFunc<1>(pDevice);
             break;
 #if (VKI_BUILD_MAX_NUM_GPUS > 1)
         case 2:
-            pFunc = GetCmdPushDescriptorSetKHRFunc<2>(pDevice);
+            pFunc = GetCmdPushDescriptorSetFunc<2>(pDevice);
             break;
 #endif
 #if (VKI_BUILD_MAX_NUM_GPUS > 2)
         case 3:
-            pFunc = GetCmdPushDescriptorSetKHRFunc<3>(pDevice);
+            pFunc = GetCmdPushDescriptorSetFunc<3>(pDevice);
             break;
 #endif
 #if (VKI_BUILD_MAX_NUM_GPUS > 3)
         case 4:
-            pFunc = GetCmdPushDescriptorSetKHRFunc<4>(pDevice);
+            pFunc = GetCmdPushDescriptorSetFunc<4>(pDevice);
             break;
 #endif
         default:
@@ -2906,7 +2919,7 @@ PFN_vkCmdPushDescriptorSetKHR CmdBuffer::GetCmdPushDescriptorSetKHRFunc(
 
 // =====================================================================================================================
 template <uint32_t numPalDevices>
-VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSetWithTemplateKHR(
+VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSetWithTemplate(
     VkCommandBuffer                             commandBuffer,
     VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
     VkPipelineLayout                            layout,
@@ -2915,7 +2928,7 @@ VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSetWithTemplateKHR(
 {
     CmdBuffer* pCmdBuffer = ApiCmdBuffer::ObjectFromHandle(commandBuffer);
 
-    pCmdBuffer->PushDescriptorSetWithTemplateKHR<numPalDevices>(
+    pCmdBuffer->PushDescriptorSetWithTemplate<numPalDevices>(
         descriptorUpdateTemplate,
         layout,
         set,
@@ -2923,29 +2936,29 @@ VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSetWithTemplateKHR(
 }
 
 // =====================================================================================================================
-PFN_vkCmdPushDescriptorSetWithTemplateKHR CmdBuffer::GetCmdPushDescriptorSetWithTemplateKHRFunc(
+PFN_vkCmdPushDescriptorSetWithTemplate CmdBuffer::GetCmdPushDescriptorSetWithTemplateFunc(
     const Device* pDevice)
 {
-    PFN_vkCmdPushDescriptorSetWithTemplateKHR pFunc = nullptr;
+    PFN_vkCmdPushDescriptorSetWithTemplate pFunc = nullptr;
 
     switch (pDevice->NumPalDevices())
     {
         case 1:
-            pFunc = CmdPushDescriptorSetWithTemplateKHR<1>;
+            pFunc = CmdPushDescriptorSetWithTemplate<1>;
             break;
 #if (VKI_BUILD_MAX_NUM_GPUS > 1)
         case 2:
-            pFunc = CmdPushDescriptorSetWithTemplateKHR<2>;
+            pFunc = CmdPushDescriptorSetWithTemplate<2>;
             break;
 #endif
 #if (VKI_BUILD_MAX_NUM_GPUS > 2)
         case 3:
-            pFunc = CmdPushDescriptorSetWithTemplateKHR<3>;
+            pFunc = CmdPushDescriptorSetWithTemplate<3>;
             break;
 #endif
 #if (VKI_BUILD_MAX_NUM_GPUS > 3)
         case 4:
-            pFunc = CmdPushDescriptorSetWithTemplateKHR<4>;
+            pFunc = CmdPushDescriptorSetWithTemplate<4>;
             break;
 #endif
         default:
@@ -3093,6 +3106,35 @@ void CmdBuffer::BindVertexBuffersUpdateBindingRange(
 
         inputIdx++;
         pBinding++;
+    }
+}
+
+// =====================================================================================================================
+// Detects writes to flippable images and protects them during submission if necessary
+void CmdBuffer::RegisterWriteToFlippableImage(
+    const Image* pImage)
+{
+    if (m_flags.protectFlippableImages && pImage->IsFlippable())
+    {
+        VK_ASSERT(pImage->PalMemory(DefaultDeviceIndex) != nullptr);
+        bool imageExists = false;
+
+        for (uint32_t i = 0; i < m_writtenFlippableImages.NumElements(); ++i)
+        {
+            if (m_writtenFlippableImages[i] == pImage)
+            {
+                imageExists = true;
+                break;
+            }
+        }
+
+        if (imageExists == false)
+        {
+            VK_ALERT_MSG(m_writtenFlippableImages.NumElements() > 0,
+                         "Command buffer writes to more than one swapchain image, this is unusual");
+
+            m_writtenFlippableImages.PushBack(pImage);
+        }
     }
 }
 
@@ -3884,7 +3926,7 @@ void CmdBuffer::ClearColorImage(
                 pPalRanges,
                 0,
                 nullptr,
-                settings.enableColorClearAutoSync ? static_cast<uint32_t>(Pal::ColorClearAutoSync) : 0);
+                settings.addMissingBarrierForClearColorImage ? static_cast<uint32_t>(Pal::ColorClearAutoSync) : 0);
         }
 
         virtStackFrame.FreeArray(pPalRanges);
@@ -4452,6 +4494,7 @@ void CmdBuffer::PalCmdClearColorImage(
     uint32_t                   flags)
 {
     DbgBarrierPreCmd(DbgBarrierClearColor);
+    RegisterWriteToFlippableImage(&image);
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
 
@@ -4555,6 +4598,7 @@ void CmdBuffer::PalCmdResolveImage(
     uint32_t                       deviceMask)
 {
     DbgBarrierPreCmd(DbgBarrierResolve);
+    RegisterWriteToFlippableImage(&dstImage);
 
     utils::IterateMask deviceGroup(deviceMask);
     do
@@ -7185,32 +7229,51 @@ void CmdBuffer::ResetAccelerationStructureQueryPool(
 
     // Wait for any accelerationStructure query pool events to complete prior to filling memory
     {
-        static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
-
-        static const Pal::BarrierTransition Transition =
+        if (m_pDevice->GetRuntimeSettings().useAcquireReleaseInterface)
         {
-            AccelerationStructureCoher,   // srcCacheMask
-            Pal::CoherMemory,             // dstCacheMask
-            { }                           // imageInfo
-        };
+            Pal::AcquireReleaseInfo acqRelInfo    = {};
+            Pal::MemBarrier         memTransition = {};
 
-        static const Pal::BarrierInfo Barrier =
+            memTransition.srcAccessMask = AccelerationStructureCoher;
+            memTransition.dstAccessMask = Pal::CoherMemory;
+            memTransition.srcStageMask  = Pal::PipelineStageCs;
+            memTransition.dstStageMask  = Pal::PipelineStageBlt;
+
+            acqRelInfo.pMemoryBarriers    = &memTransition;
+            acqRelInfo.memoryBarrierCount = 1;
+            acqRelInfo.reason             = RgpBarrierInternalPreResetQueryPoolSync;
+
+            PalCmdReleaseThenAcquire(acqRelInfo, m_curDeviceMask);
+        }
+        else
         {
-            Pal::HwPipeTop,                         // waitPoint
-            1,                                      // pipePointWaitCount
-            &pipePoint,                             // pPipePoints
-            0,                                      // gpuEventCount
-            nullptr,                                // ppGpuEvents
-            0,                                      // rangeCheckedTargetWaitCount
-            nullptr,                                // ppTargets
-            1,                                      // transitionCount
-            &Transition,                            // pTransitions
-            0,                                      // globalSrcCacheMask
-            0,                                      // globalDstCacheMask
-            RgpBarrierInternalPreResetQueryPoolSync // reason
-        };
+            static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
 
-        PalCmdBarrier(Barrier, m_curDeviceMask);
+            static const Pal::BarrierTransition Transition =
+            {
+                AccelerationStructureCoher,   // srcCacheMask
+                Pal::CoherMemory,             // dstCacheMask
+                { }                           // imageInfo
+            };
+
+            static const Pal::BarrierInfo Barrier =
+            {
+                Pal::HwPipeTop,                         // waitPoint
+                1,                                      // pipePointWaitCount
+                &pipePoint,                             // pPipePoints
+                0,                                      // gpuEventCount
+                nullptr,                                // ppGpuEvents
+                0,                                      // rangeCheckedTargetWaitCount
+                nullptr,                                // ppTargets
+                1,                                      // transitionCount
+                &Transition,                            // pTransitions
+                0,                                      // globalSrcCacheMask
+                0,                                      // globalDstCacheMask
+                RgpBarrierInternalPreResetQueryPoolSync // reason
+            };
+
+            PalCmdBarrier(Barrier, m_curDeviceMask);
+        }
     }
 
     utils::IterateMask deviceGroup1(m_curDeviceMask);
@@ -7228,32 +7291,51 @@ void CmdBuffer::ResetAccelerationStructureQueryPool(
 
     // Wait for memory fill to complete
     {
-        static const Pal::HwPipePoint pipePoint = Pal::HwPipePostBlt;
-
-        static const Pal::BarrierTransition Transition =
+        if (m_pDevice->GetRuntimeSettings().useAcquireReleaseInterface)
         {
-            Pal::CoherMemory | Pal::CoherCopyDst,  // srcCacheMask
-            AccelerationStructureCoher,            // dstCacheMask
-            { }                                    // imageInfo
-        };
+            Pal::AcquireReleaseInfo acqRelInfo    = {};
+            Pal::MemBarrier         memTransition = {};
 
-        static const Pal::BarrierInfo Barrier =
+            memTransition.srcAccessMask = Pal::CoherMemory | Pal::CoherCopyDst;
+            memTransition.dstAccessMask = AccelerationStructureCoher;
+            memTransition.srcStageMask  = Pal::PipelineStageBlt;
+            memTransition.dstStageMask  = Pal::PipelineStageTopOfPipe;
+
+            acqRelInfo.pMemoryBarriers    = &memTransition;
+            acqRelInfo.memoryBarrierCount = 1;
+            acqRelInfo.reason             = RgpBarrierInternalPreResetQueryPoolSync;
+
+            PalCmdReleaseThenAcquire(acqRelInfo, m_curDeviceMask);
+        }
+        else
         {
-            Pal::HwPipeTop,                          // waitPoint
-            1,                                       // pipePointWaitCount
-            &pipePoint,                              // pPipePoints
-            0,                                       // gpuEventCount
-            nullptr,                                 // ppGpuEvents
-            0,                                       // rangeCheckedTargetWaitCount
-            nullptr,                                 // ppTargets
-            1,                                       // transitionCount
-            &Transition,                             // pTransitions
-            0,                                       // globalSrcCacheMask
-            0,                                       // globalDstCacheMask
-            RgpBarrierInternalPostResetQueryPoolSync // reason
-        };
+            static const Pal::HwPipePoint pipePoint = Pal::HwPipePostBlt;
 
-        PalCmdBarrier(Barrier, m_curDeviceMask);
+            static const Pal::BarrierTransition Transition =
+            {
+                Pal::CoherMemory | Pal::CoherCopyDst,  // srcCacheMask
+                AccelerationStructureCoher,            // dstCacheMask
+                { }                                    // imageInfo
+            };
+
+            static const Pal::BarrierInfo Barrier =
+            {
+                Pal::HwPipeTop,                          // waitPoint
+                1,                                       // pipePointWaitCount
+                &pipePoint,                              // pPipePoints
+                0,                                       // gpuEventCount
+                nullptr,                                 // ppGpuEvents
+                0,                                       // rangeCheckedTargetWaitCount
+                nullptr,                                 // ppTargets
+                1,                                       // transitionCount
+                &Transition,                             // pTransitions
+                0,                                       // globalSrcCacheMask
+                0,                                       // globalDstCacheMask
+                RgpBarrierInternalPostResetQueryPoolSync // reason
+            };
+
+            PalCmdBarrier(Barrier, m_curDeviceMask);
+        }
     }
 }
 #endif
@@ -7274,32 +7356,51 @@ void CmdBuffer::FillTimestampQueryPool(
 
     // Wait for any timestamp query pool events to complete prior to filling memory
     {
-        static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
-
-        static const Pal::BarrierTransition Transition =
+        if (m_pDevice->GetRuntimeSettings().useAcquireReleaseInterface)
         {
-            TimestampCoher,   // srcCacheMask
-            Pal::CoherMemory, // dstCacheMask
-            { }               // imageInfo
-        };
+            Pal::AcquireReleaseInfo acqRelInfo = {};
+            Pal::MemBarrier         memTransition = {};
 
-        static const Pal::BarrierInfo Barrier =
+            memTransition.srcAccessMask = TimestampCoher;
+            memTransition.dstAccessMask = Pal::CoherMemory;
+            memTransition.srcStageMask  = Pal::PipelineStageBottomOfPipe;
+            memTransition.dstStageMask  = Pal::PipelineStageBlt;
+
+            acqRelInfo.pMemoryBarriers    = &memTransition;
+            acqRelInfo.memoryBarrierCount = 1;
+            acqRelInfo.reason             = RgpBarrierInternalPreResetQueryPoolSync;
+
+            PalCmdReleaseThenAcquire(acqRelInfo, m_curDeviceMask);
+        }
+        else
         {
-            Pal::HwPipeTop,                         // waitPoint
-            1,                                      // pipePointWaitCount
-            &pipePoint,                             // pPipePoints
-            0,                                      // gpuEventCount
-            nullptr,                                // ppGpuEvents
-            0,                                      // rangeCheckedTargetWaitCount
-            nullptr,                                // ppTargets
-            1,                                      // transitionCount
-            &Transition,                            // pTransitions
-            0,                                      // globalSrcCacheMask
-            0,                                      // globalDstCacheMask
-            RgpBarrierInternalPreResetQueryPoolSync // reason
-        };
+            static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
 
-        PalCmdBarrier(Barrier, m_curDeviceMask);
+            static const Pal::BarrierTransition Transition =
+            {
+                TimestampCoher,   // srcCacheMask
+                Pal::CoherMemory, // dstCacheMask
+                { }               // imageInfo
+            };
+
+            static const Pal::BarrierInfo Barrier =
+            {
+                Pal::HwPipeTop,                         // waitPoint
+                1,                                      // pipePointWaitCount
+                &pipePoint,                             // pPipePoints
+                0,                                      // gpuEventCount
+                nullptr,                                // ppGpuEvents
+                0,                                      // rangeCheckedTargetWaitCount
+                nullptr,                                // ppTargets
+                1,                                      // transitionCount
+                &Transition,                            // pTransitions
+                0,                                      // globalSrcCacheMask
+                0,                                      // globalDstCacheMask
+                RgpBarrierInternalPreResetQueryPoolSync // reason
+            };
+
+            PalCmdBarrier(Barrier, m_curDeviceMask);
+        }
     }
 
     // +----------------+----------------+
@@ -7328,32 +7429,51 @@ void CmdBuffer::FillTimestampQueryPool(
 
     // Wait for memory fill to complete
     {
-        static const Pal::HwPipePoint pipePoint = Pal::HwPipePostBlt;
-
-        static const Pal::BarrierTransition Transition =
+        if (m_pDevice->GetRuntimeSettings().useAcquireReleaseInterface)
         {
-            Pal::CoherMemory | Pal::CoherCopyDst, // srcCacheMask
-            TimestampCoher,                       // dstCacheMask
-            { }                                   // imageInfo
-        };
+            Pal::AcquireReleaseInfo acqRelInfo    = {};
+            Pal::MemBarrier         memTransition = {};
 
-        static const Pal::BarrierInfo Barrier =
+            memTransition.srcAccessMask = Pal::CoherMemory | Pal::CoherCopyDst;
+            memTransition.dstAccessMask = TimestampCoher;
+            memTransition.srcStageMask  = Pal::PipelineStageBlt;
+            memTransition.dstStageMask  = Pal::PipelineStageTopOfPipe;
+
+            acqRelInfo.pMemoryBarriers    = &memTransition;
+            acqRelInfo.memoryBarrierCount = 1;
+            acqRelInfo.reason             = RgpBarrierInternalPreResetQueryPoolSync;
+
+            PalCmdReleaseThenAcquire(acqRelInfo, m_curDeviceMask);
+        }
+        else
         {
-            Pal::HwPipeTop,                          // waitPoint
-            1,                                       // pipePointWaitCount
-            &pipePoint,                              // pPipePoints
-            0,                                       // gpuEventCount
-            nullptr,                                 // ppGpuEvents
-            0,                                       // rangeCheckedTargetWaitCount
-            nullptr,                                 // ppTargets
-            1,                                       // transitionCount
-            &Transition,                             // pTransitions
-            0,                                       // globalSrcCacheMask
-            0,                                       // globalDstCacheMask
-            RgpBarrierInternalPostResetQueryPoolSync // reason
-        };
+            static const Pal::HwPipePoint pipePoint = Pal::HwPipePostBlt;
 
-        PalCmdBarrier(Barrier, m_curDeviceMask);
+            static const Pal::BarrierTransition Transition =
+            {
+                Pal::CoherMemory | Pal::CoherCopyDst, // srcCacheMask
+                TimestampCoher,                       // dstCacheMask
+                { }                                   // imageInfo
+            };
+
+            static const Pal::BarrierInfo Barrier =
+            {
+                Pal::HwPipeTop,                          // waitPoint
+                1,                                       // pipePointWaitCount
+                &pipePoint,                              // pPipePoints
+                0,                                       // gpuEventCount
+                nullptr,                                 // ppGpuEvents
+                0,                                       // rangeCheckedTargetWaitCount
+                nullptr,                                 // ppTargets
+                1,                                       // transitionCount
+                &Transition,                             // pTransitions
+                0,                                       // globalSrcCacheMask
+                0,                                       // globalDstCacheMask
+                RgpBarrierInternalPostResetQueryPoolSync // reason
+            };
+
+            PalCmdBarrier(Barrier, m_curDeviceMask);
+        }
     }
 }
 
@@ -9207,19 +9327,22 @@ void CmdBuffer::RPResolveMsaa(
             imageBarrier.dstStageMask    = Pal::PipelineStageBlt;
             imageBarrier.oldLayout       = dstLayout;
             imageBarrier.newLayout       = dstLayout;
+
             Pal::AcquireReleaseInfo barrierInfo =
             {
-                .srcGlobalStageMask             = Pal::PipelineStageBlt,
-                .dstGlobalStageMask             = Pal::PipelineStageBlt,
-                .srcGlobalAccessMask            = Pal::CoherResolve,
-                .dstGlobalAccessMask            = Pal::CoherResolve,
+                .srcGlobalStageMask             = 0,
+                .dstGlobalStageMask             = 0,
+                .srcGlobalAccessMask            = 0,
+                .dstGlobalAccessMask            = 0,
                 .memoryBarrierCount             = 0,
                 .pMemoryBarriers                = nullptr,
                 .imageBarrierCount              = 1,
                 .pImageBarriers                 = &imageBarrier,
                 .reason                         = Pal::Developer::BarrierReason::BarrierReasonResolveImage
             };
+
             const vk::Image* pImage = dstAttachment.pImage;
+
             PalCmdReleaseThenAcquire(
                 &barrierInfo,
                 nullptr,
@@ -9269,6 +9392,8 @@ void CmdBuffer::RPBindTargets(
             if (reference.attachment != VK_ATTACHMENT_UNUSED)
             {
                 const Framebuffer::Attachment& attachment = m_allGpuState.pFramebuffer->GetAttachment(reference.attachment);
+
+                RegisterWriteToFlippableImage(attachment.pImage);
 
                 params.colorTargets[i].pColorTargetView = attachment.pView->PalColorTargetView(deviceIdx);
                 params.colorTargets[i].imageLayout = RPGetAttachmentLayout(reference.attachment, 0);
@@ -9371,6 +9496,8 @@ void CmdBuffer::BindTargets()
 
                 if (renderingAttachmentInfo.pImageView != VK_NULL_HANDLE)
                 {
+                    RegisterWriteToFlippableImage(renderingAttachmentInfo.pImageView->GetImage());
+
                     params.colorTargets[location].pColorTargetView =
                         renderingAttachmentInfo.pImageView->PalColorTargetView(deviceIdx);
 
@@ -9703,7 +9830,7 @@ template <size_t imageDescSize,
           size_t typedBufferDescSize,
           size_t untypedBufferDescSize,
           uint32_t numPalDevices>
-void CmdBuffer::PushDescriptorSetKHR(
+void CmdBuffer::PushDescriptorSet(
     VkPipelineBindPoint                         pipelineBindPoint,
     VkPipelineLayout                            layout,
     uint32_t                                    set,
@@ -9726,7 +9853,7 @@ void CmdBuffer::PushDescriptorSetKHR(
     const uint32_t alignmentInDwords         = m_pDevice->GetProperties().descriptorSizes.alignmentInDwords;
 
     // An internal descriptor set is used to represent the shadow to be consistent with the
-    // vkCmdPushDescriptorSetWithTemplateKHR implementation only. WriteDescriptorSets would have to have
+    // vkCmdPushDescriptorSetWithTemplate implementation only. WriteDescriptorSets would have to have
     // been modified to accept the destination set as a new parameter instead of using VkWriteDescriptorSet.
     VkDescriptorSet pushDescriptorSet = InitPushDescriptorSet<numPalDevices>(
         pDestSetLayout,
@@ -9919,7 +10046,7 @@ void CmdBuffer::PushDescriptorSetKHR(
 
 // =====================================================================================================================
 template <uint32_t numPalDevices>
-void CmdBuffer::PushDescriptorSetWithTemplateKHR(
+void CmdBuffer::PushDescriptorSetWithTemplate(
     VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
     VkPipelineLayout                            layout,
     uint32_t                                    set,
@@ -10545,15 +10672,26 @@ void CmdBuffer::DbgCmdBarrier(bool preCmd)
 {
     const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
-    static_assert(((static_cast<uint32_t>(Pal::HwPipePoint::HwPipeTop)              == HwPipeTop)              &&
-                   (static_cast<uint32_t>(Pal::HwPipePoint::HwPipePostPrefetch)     == HwPipePostPrefetch)     &&
-                   (static_cast<uint32_t>(Pal::HwPipePoint::HwPipePreRasterization) == HwPipePreRasterization) &&
-                   (static_cast<uint32_t>(Pal::HwPipePoint::HwPipePostPs)           == HwPipePostPs)           &&
-                   (static_cast<uint32_t>(Pal::HwPipePoint::HwPipePreColorTarget)   == HwPipePreColorTarget)   &&
-                   (static_cast<uint32_t>(Pal::HwPipePoint::HwPipePostCs)           == HwPipePostCs)           &&
-                   (static_cast<uint32_t>(Pal::HwPipePoint::HwPipePostBlt)          == HwPipePostBlt)          &&
-                   (static_cast<uint32_t>(Pal::HwPipePoint::HwPipeBottom)           == HwPipeBottom)),
-        "The PAL::HwPipePoint enum has changed. Vulkan settings might need to be updated.");
+    static_assert((
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageTopOfPipe)     == PipelineStageTopOfPipe)    &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageFetchIndirectArgs)
+                                                                              == PipelineStageFetchIndirectArgs) &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStagePostPrefetch)  == PipelineStagePostPrefetch) &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageFetchIndices)  == PipelineStageFetchIndices) &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageStreamOut)     == PipelineStageStreamOut)    &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageVs)            == PipelineStageVs)           &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageHs)            == PipelineStageHs)           &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageDs)            == PipelineStageDs)           &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageGs)            == PipelineStageGs)           &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStagePs)            == PipelineStagePs)           &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageSampleRate)    == PipelineStageSampleRate)   &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageEarlyDsTarget) == PipelineStageEarlyDsTarget)&&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageLateDsTarget)  == PipelineStageLateDsTarget) &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageColorTarget)   == PipelineStageColorTarget)  &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageCs)            == PipelineStageCs)           &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageBlt)           == PipelineStageBlt)          &&
+        (static_cast<uint32_t>(Pal::PipelineStageFlag::PipelineStageBottomOfPipe)  == PipelineStageBottomOfPipe)),
+        "The PAL::PipelineStageFlag enum has changed. Vulkan settings might need to be updated.");
 
     static_assert((
         (static_cast<uint32_t>(Pal::CacheCoherencyUsageFlags::CoherCpu)                == CoherCpu)                &&
@@ -10580,24 +10718,20 @@ void CmdBuffer::DbgCmdBarrier(bool preCmd)
     uint32_t srcStageMask;
     uint32_t dstStageMask;
 
-    uint32_t         srcCacheMask;
-    uint32_t         dstCacheMask;
+    uint32_t srcCacheMask;
+    uint32_t dstCacheMask;
 
     if (preCmd)
     {
-        dstStageMask = ConvertWaitPointToPipeStage(
-            static_cast<Pal::HwPipePoint>(settings.dbgBarrierPreWaitPipePoint));
-        srcStageMask = ConvertPipePointToPipeStage(
-            static_cast<Pal::HwPipePoint>(settings.dbgBarrierPreSignalPipePoint));
+        dstStageMask = static_cast<Pal::PipelineStageFlag>(settings.dbgBarrierPreWaitPipePoint);
+        srcStageMask = static_cast<Pal::PipelineStageFlag>(settings.dbgBarrierPreSignalPipePoint);
         srcCacheMask = settings.dbgBarrierPreCacheSrcMask;
         dstCacheMask = settings.dbgBarrierPreCacheDstMask;
     }
     else
     {
-        dstStageMask = ConvertWaitPointToPipeStage(
-            static_cast<Pal::HwPipePoint>(settings.dbgBarrierPostWaitPipePoint));
-        srcStageMask = ConvertPipePointToPipeStage(
-            static_cast<Pal::HwPipePoint>(settings.dbgBarrierPostSignalPipePoint));
+        dstStageMask = static_cast<Pal::PipelineStageFlag>(settings.dbgBarrierPostWaitPipePoint);
+        srcStageMask = static_cast<Pal::PipelineStageFlag>(settings.dbgBarrierPostSignalPipePoint);
         srcCacheMask = settings.dbgBarrierPostCacheSrcMask;
         dstCacheMask = settings.dbgBarrierPostCacheDstMask;
     }
@@ -10856,7 +10990,7 @@ void CmdBuffer::DrawIndirectByteCount(
 }
 
 // =====================================================================================================================
-void CmdBuffer::SetLineStippleEXT(
+void CmdBuffer::SetLineStipple(
     uint32_t lineStippleFactor,
     uint16_t lineStipplePattern)
 {
@@ -10989,7 +11123,7 @@ void CmdBuffer::BindAlternatingThreadGroupConstant()
 {
     uint32_t              data            = m_reverseThreadGroupState ? 1 : 0;
     const UserDataLayout* pUserDataLayout = m_allGpuState.pComputePipeline->GetUserDataLayout();
-    uint32_t              userDataRegBase = GetUserDataRegBase(pUserDataLayout);
+    uint32_t              userDataRegBase = pUserDataLayout->common.threadGroupReversalRegBase;
 
     if (userDataRegBase != PipelineLayout::InvalidReg)
     {
@@ -11290,33 +11424,33 @@ void CmdBuffer::GetRayTracingDispatchArgs(
     const VkStridedDeviceAddressRegionKHR& callableSbt,
     GpuRt::DispatchRaysConstants*          pConstants)
 {
-    pConstants->constData.rayGenerationTableAddressLo = Util::LowPart(raygenSbt.deviceAddress);
-    pConstants->constData.rayGenerationTableAddressHi = Util::HighPart(raygenSbt.deviceAddress);
+    pConstants->descriptorTable.constData.rayGenerationTableAddressLo = Util::LowPart(raygenSbt.deviceAddress);
+    pConstants->descriptorTable.constData.rayGenerationTableAddressHi = Util::HighPart(raygenSbt.deviceAddress);
 
-    pConstants->constData.rayDispatchWidth            = width;
-    pConstants->constData.rayDispatchHeight           = height;
-    pConstants->constData.rayDispatchDepth            = depth;
-    pConstants->constData.rayDispatchMaxGroups        = pPipeline->PersistentDispatchSize(width, height, depth);
+    pConstants->descriptorTable.constData.rayDispatchWidth           = width;
+    pConstants->descriptorTable.constData.rayDispatchHeight          = height;
+    pConstants->descriptorTable.constData.rayDispatchDepth           = depth;
+    pConstants->descriptorTable.constData.rayDispatchMaxGroups       = pPipeline->PersistentDispatchSize(
+        width, height, depth);
 
-    pConstants->constData.missTableBaseAddressLo     = Util::LowPart(missSbt.deviceAddress);
-    pConstants->constData.missTableBaseAddressHi     = Util::HighPart(missSbt.deviceAddress);
-    pConstants->constData.missTableStrideInBytes     = static_cast<uint32_t>(missSbt.stride);
+    pConstants->descriptorTable.constData.missTableBaseAddressLo     = Util::LowPart(missSbt.deviceAddress);
+    pConstants->descriptorTable.constData.missTableBaseAddressHi     = Util::HighPart(missSbt.deviceAddress);
+    pConstants->descriptorTable.constData.missTableStrideInBytes     = static_cast<uint32_t>(missSbt.stride);
 
-    pConstants->constData.hitGroupTableBaseAddressLo = Util::LowPart(hitSbt.deviceAddress);
-    pConstants->constData.hitGroupTableBaseAddressHi = Util::HighPart(hitSbt.deviceAddress);
-    pConstants->constData.hitGroupTableStrideInBytes = static_cast<uint32_t>(hitSbt.stride);
+    pConstants->descriptorTable.constData.hitGroupTableBaseAddressLo = Util::LowPart(hitSbt.deviceAddress);
+    pConstants->descriptorTable.constData.hitGroupTableBaseAddressHi = Util::HighPart(hitSbt.deviceAddress);
+    pConstants->descriptorTable.constData.hitGroupTableStrideInBytes = static_cast<uint32_t>(hitSbt.stride);
 
-    pConstants->constData.callableTableBaseAddressLo = Util::LowPart(callableSbt.deviceAddress);
-    pConstants->constData.callableTableBaseAddressHi = Util::HighPart(callableSbt.deviceAddress);
-    pConstants->constData.callableTableStrideInBytes = static_cast<uint32_t>(callableSbt.stride);
+    pConstants->descriptorTable.constData.callableTableBaseAddressLo = Util::LowPart(callableSbt.deviceAddress);
+    pConstants->descriptorTable.constData.callableTableBaseAddressHi = Util::HighPart(callableSbt.deviceAddress);
+    pConstants->descriptorTable.constData.callableTableStrideInBytes = static_cast<uint32_t>(callableSbt.stride);
 
-    pConstants->constData.traceRayGpuVaLo            = Util::LowPart(pPipeline->GetTraceRayGpuVa(deviceIdx));
-    pConstants->constData.traceRayGpuVaHi            = Util::HighPart(pPipeline->GetTraceRayGpuVa(deviceIdx));
-    pConstants->constData.profileMaxIterations       = m_pDevice->RayTrace()->GetProfileMaxIterations();
-    pConstants->constData.profileRayFlags            = m_pDevice->RayTrace()->GetProfileRayFlags();
-
-    pConstants->descriptorTable.dispatchRaysConstGpuVa = constGpuAddr +
-                                                         offsetof(GpuRt::DispatchRaysConstants, constData);
+    pConstants->descriptorTable.constData.traceRayGpuVaLo            = Util::LowPart(
+        pPipeline->GetTraceRayGpuVa(deviceIdx));
+    pConstants->descriptorTable.constData.traceRayGpuVaHi            = Util::HighPart(
+        pPipeline->GetTraceRayGpuVa(deviceIdx));
+    pConstants->descriptorTable.constData.profileMaxIterations       = m_pDevice->RayTrace()->GetProfileMaxIterations();
+    pConstants->descriptorTable.constData.profileRayFlags            = m_pDevice->RayTrace()->GetProfileRayFlags();
 
     memcpy(pConstants->descriptorTable.accelStructTrackerSrd,
            m_pDevice->RayTrace()->GetAccelStructTrackerSrd(deviceIdx),
@@ -11324,11 +11458,11 @@ void CmdBuffer::GetRayTracingDispatchArgs(
 
     if (pPipeline->CheckIsCps())
     {
-        pConstants->constData.cpsDispatchId = 0;
-        pConstants->constData.cpsDispatchIdAddressHi = Util::HighPart(
-            pConstants->descriptorTable.dispatchRaysConstGpuVa + DISPATCHRAYSCONSTANTDATA_STRUCT_OFFSET_DISPATCHID);
-        pConstants->constData.cpsDispatchIdAddressLo = Util::LowPart(
-            pConstants->descriptorTable.dispatchRaysConstGpuVa + DISPATCHRAYSCONSTANTDATA_STRUCT_OFFSET_DISPATCHID);
+        pConstants->descriptorTable.constData.cpsDispatchId = 0;
+        pConstants->descriptorTable.constData.cpsDispatchIdAddressHi = Util::HighPart(
+            constGpuAddr + DISPATCHRAYSCONSTANTDATA_STRUCT_OFFSET_DISPATCHID);
+        pConstants->descriptorTable.constData.cpsDispatchIdAddressLo = Util::LowPart(
+            constGpuAddr + DISPATCHRAYSCONSTANTDATA_STRUCT_OFFSET_DISPATCHID);
 
         Pal::CompilerStackSizes stackSizes = PerGpuState(deviceIdx)->maxPipelineStackSizes;
         if (PerGpuState(deviceIdx)->dynamicPipelineStackSize != 0)
@@ -11336,8 +11470,8 @@ void CmdBuffer::GetRayTracingDispatchArgs(
             stackSizes.frontendSize = PerGpuState(deviceIdx)->dynamicPipelineStackSize;
         }
 
-        pConstants->constData.cpsFrontendStackSize = stackSizes.frontendSize;
-        pConstants->constData.cpsBackendStackSize = stackSizes.backendSize;
+        pConstants->descriptorTable.constData.cpsFrontendStackSize = stackSizes.frontendSize;
+        pConstants->descriptorTable.constData.cpsBackendStackSize = stackSizes.backendSize;
 
         if ((settings.cpsFlags & CpsFlagStackInGlobalMem) != 0)
         {
@@ -11645,7 +11779,7 @@ void CmdBuffer::TraceRaysIndirectPerDevice(
     initUserData.constantsVa            = initConstantsVa;
     initUserData.inputBufferVa          = indirectDeviceAddress;
     initUserData.outputBufferVa         = static_cast<uint64>(pScratchMemory->GpuVirtAddr(deviceIdx));
-    initUserData.outputConstantsVa      = constGpuAddr + offsetof(GpuRt::DispatchRaysConstants, constData);
+    initUserData.outputConstantsVa      = constGpuAddr;
     initUserData.outputCounterMetaVa    = 0uLL;
 
     m_pDevice->RayTrace()->TraceIndirectDispatch(deviceIdx,
@@ -11849,9 +11983,6 @@ void CmdBuffer::BindRayQueryConstants(
                         VkDevice()->GetProperties().descriptorSizes.untypedBufferView);
                 }
 
-                constants.descriptorTable.dispatchRaysConstGpuVa =
-                    constGpuAddr + offsetof(GpuRt::DispatchRaysConstants, constData);
-
                 // Ray history dumps for Graphics pipelines are not yet supported
                 if (VkDevice()->RayTrace()->RayHistoryTraceActive(deviceIdx) &&
                     (bindPoint == Pal::PipelineBindPoint::Compute))
@@ -11859,8 +11990,10 @@ void CmdBuffer::BindRayQueryConstants(
                     const uint32_t* pOrigThreadgroupDims =
                         static_cast<const ComputePipeline*>(pPipeline)->GetOrigThreadgroupDims();
 
-                    constants.constData.profileMaxIterations = m_pDevice->RayTrace()->GetProfileMaxIterations();
-                    constants.constData.profileRayFlags      = m_pDevice->RayTrace()->GetProfileRayFlags();
+                    constants.descriptorTable.constData.profileMaxIterations =
+                        m_pDevice->RayTrace()->GetProfileMaxIterations();
+                    constants.descriptorTable.constData.profileRayFlags      =
+                        m_pDevice->RayTrace()->GetProfileRayFlags();
 
                     gpusize indirectBufferVa = (pIndirectBuffer != nullptr) ?
                         pIndirectBuffer->GpuVirtAddr(deviceIdx) + indirectOffset :
@@ -11868,9 +12001,9 @@ void CmdBuffer::BindRayQueryConstants(
 
                     if (indirectBufferVa == 0)
                     {
-                        constants.constData.rayDispatchWidth  = width  * pOrigThreadgroupDims[0];
-                        constants.constData.rayDispatchHeight = height * pOrigThreadgroupDims[1];
-                        constants.constData.rayDispatchDepth  = depth  * pOrigThreadgroupDims[2];
+                        constants.descriptorTable.constData.rayDispatchWidth  = width  * pOrigThreadgroupDims[0];
+                        constants.descriptorTable.constData.rayDispatchHeight = height * pOrigThreadgroupDims[1];
+                        constants.descriptorTable.constData.rayDispatchDepth  = depth  * pOrigThreadgroupDims[2];
 
                         m_pDevice->RayTrace()->TraceDispatch(deviceIdx,
                                                              this,
@@ -12195,13 +12328,56 @@ void CmdBuffer::BatchedLoadOpClears(
 }
 
 // =====================================================================================================================
+bool CmdBuffer::IsFormatInvalidForLogicOp(
+    uint32_t attachment)
+{
+    Pal::ChNumFormat format = Pal::ChNumFormat::Undefined;
+
+    if (UsingDynamicRendering())
+    {
+        if (attachment < m_allGpuState.dynamicRenderingInstance.colorAttachmentCount)
+        {
+            const uint32_t loc = m_allGpuState.dynamicRenderingInstance.colorAttachmentLocations[attachment];
+
+            if (loc != VK_ATTACHMENT_UNUSED)
+            {
+                const VkFormat vkFormat = m_allGpuState.dynamicRenderingInstance.colorAttachments[loc].attachmentFormat;
+                const Pal::SwizzledFormat palFormat = VkToPalFormat(vkFormat, m_pDevice->GetRuntimeSettings());
+
+                format = palFormat.format;
+            }
+        }
+    }
+    else if (m_allGpuState.pFramebuffer != nullptr)
+    {
+        if (attachment < m_allGpuState.pFramebuffer->GetAttachmentCount())
+        {
+            format = m_allGpuState.pFramebuffer->GetAttachment(attachment).viewFormat.format;
+        }
+    }
+    else if (m_allGpuState.pRenderPass != nullptr)
+    {
+        if (attachment < m_allGpuState.pRenderPass->GetAttachmentCount())
+        {
+            const auto& att = m_allGpuState.pRenderPass->GetAttachmentDesc(attachment);
+            const Pal::SwizzledFormat palFormat = VkToPalFormat(att.format, m_pDevice->GetRuntimeSettings());
+
+            format = palFormat.format;
+        }
+    }
+
+    return Pal::Formats::IsFloat(format) || Pal::Formats::IsSrgb(format);
+}
+
+// =====================================================================================================================
 void CmdBuffer::ValidateGraphicsStates()
 {
     if (m_allGpuState.dirtyGraphics.u32All != 0)
     {
-        const DynamicDepthStencil* pDepthStencil = nullptr;
-        const DynamicColorBlend*   pColorBlend   = nullptr;
-        const DynamicMsaa*         pMsaa         = nullptr;
+        const DynamicDepthStencil* pDepthStencil     = nullptr;
+        const DynamicColorBlend*   pColorBlend       = nullptr;
+        const DynamicMsaa*         pMsaa             = nullptr;
+        const GraphicsPipeline*    pGraphicsPipeline = m_allGpuState.pGraphicsPipeline;
 
         if (m_allGpuState.dirtyGraphics.msaa || m_allGpuState.dirtyGraphics.samplePattern)
         {
@@ -12214,20 +12390,22 @@ void CmdBuffer::ValidateGraphicsStates()
             }
         }
 
-        if (m_allGpuState.dirtyGraphics.msaa || m_allGpuState.dirtyGraphics.pipeline)
+        if ((pGraphicsPipeline != nullptr) &&
+            (m_allGpuState.dirtyGraphics.msaa || m_allGpuState.dirtyGraphics.pipeline))
         {
-            const GraphicsPipeline* pGraphicsPipeline = m_allGpuState.pGraphicsPipeline;
-            if (pGraphicsPipeline != nullptr)
+            const uint8 forceSampleRateShading =
+                (m_allGpuState.msaaCreateInfo.pixelShaderSamples > 1) &&
+                (pGraphicsPipeline->GetPipelineFlags().sampleShadingEnable != 0);
+            if (m_allGpuState.msaaCreateInfo.flags.forceSampleRateShading != forceSampleRateShading)
             {
-                const uint8 forceSampleRateShading =
-                    (m_allGpuState.msaaCreateInfo.pixelShaderSamples > 1) &&
-                    (pGraphicsPipeline->GetPipelineFlags().sampleShadingEnable != 0);
-                if (m_allGpuState.msaaCreateInfo.flags.forceSampleRateShading != forceSampleRateShading)
-                {
-                    m_allGpuState.msaaCreateInfo.flags.forceSampleRateShading = forceSampleRateShading;
-                    m_allGpuState.dirtyGraphics.msaa = 1;
-                }
+                m_allGpuState.msaaCreateInfo.flags.forceSampleRateShading = forceSampleRateShading;
+                m_allGpuState.dirtyGraphics.msaa = 1;
             }
+        }
+
+        if (m_allGpuState.dirtyGraphics.pipeline && m_allGpuState.logicOpEnable)
+        {
+            m_allGpuState.dirtyGraphics.colorBlend = 1;
         }
 
         auto pDynamicState = &m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
@@ -12256,6 +12434,27 @@ void CmdBuffer::ValidateGraphicsStates()
                         if (location != VK_ATTACHMENT_UNUSED)
                         {
                             colorBlendCreateInfo.targets[location] = m_allGpuState.colorBlendCreateInfo.targets[i];
+                        }
+                    }
+
+                    if (m_allGpuState.logicOpEnable)
+                    {
+                        const uint32_t cnt =
+                            UsingDynamicRendering() ? m_allGpuState.dynamicRenderingInstance.colorAttachmentCount
+                            : (m_allGpuState.pFramebuffer != nullptr) ? m_allGpuState.pFramebuffer->GetAttachmentCount()
+                            : (m_allGpuState.pRenderPass != nullptr) ? m_allGpuState.pRenderPass->GetAttachmentCount()
+                            : 0;
+
+                        for (uint32_t i = 0; i < cnt; ++i)
+                        {
+                            if (IsFormatInvalidForLogicOp(i))
+                            {
+                                const auto location = UsingDynamicRendering() ?
+                                    m_allGpuState.dynamicRenderingInstance.colorAttachmentLocations[i] : i;
+
+                                colorBlendCreateInfo.targets[location].disableLogicOp = true;
+                                colorBlendCreateInfo.targets[location].blendEnable = false;
+                            }
                         }
                     }
 
@@ -12343,38 +12542,32 @@ void CmdBuffer::ValidateGraphicsStates()
                 }
             }
 
-            if (m_allGpuState.dirtyGraphics.pipeline)
+            if ((pGraphicsPipeline != nullptr) && m_allGpuState.dirtyGraphics.pipeline)
             {
-                const GraphicsPipeline* pGraphicsPipeline = m_allGpuState.pGraphicsPipeline;
-                if (pGraphicsPipeline != nullptr)
+                Pal::PipelineBindParams params = {};
+
+                params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
+                params.pPipeline         = pGraphicsPipeline->GetPalPipeline(deviceIdx);
+                params.gfxDynState       =
+                    m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
+                params.gfxShaderInfo     = pGraphicsPipeline->GetBindInfo();
+                if (params.gfxDynState.enable.depthClampMode &&
+                    (params.gfxDynState.enable.depthClipMode == false))
                 {
-                    Pal::PipelineBindParams params = {};
-
-                    params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
-                    params.pPipeline         = pGraphicsPipeline->GetPalPipeline(deviceIdx);
-                    params.gfxDynState       =
-                        m_allGpuState.pipelineState[PipelineBindGraphics].dynamicBindInfo.gfxDynState;
-                    params.gfxShaderInfo     = pGraphicsPipeline->GetBindInfo();
-                    if (params.gfxDynState.enable.depthClampMode &&
-                        (params.gfxDynState.enable.depthClipMode == false))
-                    {
-                        bool clipEnable = params.gfxDynState.depthClampMode == Pal::DepthClampMode::_None;
-                        params.gfxDynState.enable.depthClipMode = true;
-                        params.gfxDynState.depthClipFarEnable   = clipEnable;
-                        params.gfxDynState.depthClipNearEnable  = clipEnable;
-                    }
-
-                    params.apiPsoHash            = pGraphicsPipeline->GetApiHash();
-
-                    PalCmdBuffer(deviceIdx)->CmdBindPipeline(params);
+                    bool clipEnable = params.gfxDynState.depthClampMode == Pal::DepthClampMode::_None;
+                    params.gfxDynState.enable.depthClipMode = true;
+                    params.gfxDynState.depthClipFarEnable   = clipEnable;
+                    params.gfxDynState.depthClipNearEnable  = clipEnable;
                 }
+
+                params.apiPsoHash            = pGraphicsPipeline->GetApiHash();
+
+                PalCmdBuffer(deviceIdx)->CmdBindPipeline(params);
             }
 
             if (m_allGpuState.dirtyGraphics.viewport)
             {
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
-
-                const GraphicsPipeline* pGraphicsPipeline = m_allGpuState.pGraphicsPipeline;
 
                 const bool isPointSizeUsed = (pGraphicsPipeline != nullptr) && pGraphicsPipeline->IsPointSizeUsed();
                 Pal::ViewportParams    viewportParams = PerGpuState(deviceIdx)->viewport;
@@ -12439,8 +12632,6 @@ void CmdBuffer::ValidateGraphicsStates()
             {
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
-                const GraphicsPipeline* pGraphicsPipeline = m_allGpuState.pGraphicsPipeline;
-
                 const bool force1x1 = (pGraphicsPipeline != nullptr) &&
                                       (pGraphicsPipeline->Force1x1ShaderRateEnabled());
 
@@ -12452,17 +12643,9 @@ void CmdBuffer::ValidateGraphicsStates()
                     Device::SetDefaultVrsRateParams(&vrsRate);
                 }
 
-                // Both MSAA and VRS would utilize the value of PS_ITER_SAMPLES
-                // Thus, choose the min combiner (i.e. choose the higher quality rate) when both features are
-                // enabled
-                if ((m_allGpuState.msaaCreateInfo.pixelShaderSamples > 1) &&
-                    (m_allGpuState.vrsRate.flags.exposeVrsPixelsMask == 1) &&
-                    (pGraphicsPipeline != nullptr) &&
-                    (pGraphicsPipeline->GetPipelineFlags().shadingRateUsedInShader == false))
-                {
-                    vrsRate.combinerState[static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] =
-                        Pal::VrsCombiner::Min;
-                }
+                SetVrsCombinerStagePsIterSamples(m_allGpuState.msaaCreateInfo.pixelShaderSamples,
+                                                 m_allGpuState.vrsRate.flags.exposeVrsPixelsMask,
+                                                 vrsRate.combinerState);
 
                 PalCmdBuffer(deviceIdx)->CmdSetPerDrawVrsRate(vrsRate);
 
@@ -13244,17 +13427,17 @@ RenderPassInstanceState::RenderPassInstanceState(
 
 // =====================================================================================================================
 template<uint32_t numPalDevices, bool useCompactDescriptor>
-VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdBindDescriptorSets2KHR(
+VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdBindDescriptorSets2(
     VkCommandBuffer                             cmdBuffer,
     const VkBindDescriptorSetsInfoKHR* pBindDescriptorSetsInfo)
 {
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BindDescriptorSets2KHR<numPalDevices, useCompactDescriptor>(
+    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BindDescriptorSets2<numPalDevices, useCompactDescriptor>(
         pBindDescriptorSetsInfo);
 }
 
 // =====================================================================================================================
 template <uint32_t numPalDevices, bool useCompactDescriptor>
-void CmdBuffer::BindDescriptorSets2KHR(
+void CmdBuffer::BindDescriptorSets2(
     const VkBindDescriptorSetsInfoKHR* pBindDescriptorSetsInfo)
 {
     if ((pBindDescriptorSetsInfo->stageFlags & ShaderStageAllGraphics) != 0)
@@ -13296,7 +13479,7 @@ void CmdBuffer::BindDescriptorSets2KHR(
 }
 
 // =====================================================================================================================
-void CmdBuffer::PushConstants2KHR(
+void CmdBuffer::PushConstants2(
     const VkPushConstantsInfoKHR* pPushConstantsInfo)
 {
     PushConstants(pPushConstantsInfo->layout,
@@ -13312,13 +13495,13 @@ template <size_t imageDescSize,
           size_t typedBufferDescSize,
           size_t untypedBufferDescSize,
           uint32_t numPalDevices>
-VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSet2KHR(
+VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSet2(
     VkCommandBuffer                             commandBuffer,
-    const VkPushDescriptorSetInfoKHR* pPushDescriptorSetInfo)
+    const VkPushDescriptorSetInfo* pPushDescriptorSetInfo)
 {
     CmdBuffer* pCmdBuffer = ApiCmdBuffer::ObjectFromHandle(commandBuffer);
 
-    pCmdBuffer->PushDescriptorSet2KHR
+    pCmdBuffer->PushDescriptorSet2
         <imageDescSize, samplerDescSize, typedBufferDescSize, untypedBufferDescSize, numPalDevices>(
         pPushDescriptorSetInfo);
 }
@@ -13329,12 +13512,12 @@ template <size_t imageDescSize,
           size_t typedBufferDescSize,
           size_t untypedBufferDescSize,
           uint32_t numPalDevices>
-void CmdBuffer::PushDescriptorSet2KHR(
-    const VkPushDescriptorSetInfoKHR* pPushDescriptorSetInfo)
+void CmdBuffer::PushDescriptorSet2(
+    const VkPushDescriptorSetInfo* pPushDescriptorSetInfo)
 {
     if ((pPushDescriptorSetInfo->stageFlags & ShaderStageAllGraphics) != 0)
     {
-        PushDescriptorSetKHR
+        PushDescriptorSet
             <imageDescSize, samplerDescSize, typedBufferDescSize, untypedBufferDescSize, numPalDevices>(
             VK_PIPELINE_BIND_POINT_GRAPHICS,
             pPushDescriptorSetInfo->layout,
@@ -13345,7 +13528,7 @@ void CmdBuffer::PushDescriptorSet2KHR(
 
     if ((pPushDescriptorSetInfo->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) != 0)
     {
-        PushDescriptorSetKHR
+        PushDescriptorSet
             <imageDescSize, samplerDescSize, typedBufferDescSize, untypedBufferDescSize, numPalDevices>(
             VK_PIPELINE_BIND_POINT_COMPUTE,
             pPushDescriptorSetInfo->layout,
@@ -13356,7 +13539,7 @@ void CmdBuffer::PushDescriptorSet2KHR(
 #if VKI_RAY_TRACING
     if ((pPushDescriptorSetInfo->stageFlags & ShaderStageAllRayTracing) != 0)
     {
-        PushDescriptorSetKHR
+        PushDescriptorSet
             <imageDescSize, samplerDescSize, typedBufferDescSize, untypedBufferDescSize, numPalDevices>(
             VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
             pPushDescriptorSetInfo->layout,
@@ -13369,22 +13552,22 @@ void CmdBuffer::PushDescriptorSet2KHR(
 
 // =====================================================================================================================
 template <uint32_t numPalDevices>
-VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSetWithTemplate2KHR(
+VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdPushDescriptorSetWithTemplate2(
     VkCommandBuffer                             commandBuffer,
-    const VkPushDescriptorSetWithTemplateInfoKHR* pPushDescriptorSetWithTemplateInfo)
+    const VkPushDescriptorSetWithTemplateInfo* pPushDescriptorSetWithTemplateInfo)
 {
     CmdBuffer* pCmdBuffer = ApiCmdBuffer::ObjectFromHandle(commandBuffer);
 
-    pCmdBuffer->PushDescriptorSetWithTemplate2KHR<numPalDevices>(
+    pCmdBuffer->PushDescriptorSetWithTemplate2<numPalDevices>(
         pPushDescriptorSetWithTemplateInfo);
 }
 
 // =====================================================================================================================
 template <uint32_t numPalDevices>
-void CmdBuffer::PushDescriptorSetWithTemplate2KHR(
-    const VkPushDescriptorSetWithTemplateInfoKHR* pPushDescriptorSetWithTemplateInfo)
+void CmdBuffer::PushDescriptorSetWithTemplate2(
+    const VkPushDescriptorSetWithTemplateInfo* pPushDescriptorSetWithTemplateInfo)
 {
-    PushDescriptorSetWithTemplateKHR<numPalDevices>(
+    PushDescriptorSetWithTemplate<numPalDevices>(
         pPushDescriptorSetWithTemplateInfo->descriptorUpdateTemplate,
         pPushDescriptorSetWithTemplateInfo->layout,
         pPushDescriptorSetWithTemplateInfo->set,
@@ -13461,29 +13644,29 @@ void CmdBuffer::BindDescriptorBufferEmbeddedSamplers2EXT(
 }
 
 // =====================================================================================================================
-PFN_vkCmdBindDescriptorSets2KHR CmdBuffer::GetCmdBindDescriptorSets2KHRFunc(
+PFN_vkCmdBindDescriptorSets2 CmdBuffer::GetCmdBindDescriptorSets2Func(
     const Device* pDevice)
 {
-    PFN_vkCmdBindDescriptorSets2KHR pFunc = nullptr;
+    PFN_vkCmdBindDescriptorSets2 pFunc = nullptr;
 
     switch (pDevice->NumPalDevices())
     {
         case 1:
-            pFunc = GetCmdBindDescriptorSets2KHRFunc<1>(pDevice);
+            pFunc = GetCmdBindDescriptorSets2Func<1>(pDevice);
             break;
 #if (VKI_BUILD_MAX_NUM_GPUS > 1)
         case 2:
-            pFunc = GetCmdBindDescriptorSets2KHRFunc<2>(pDevice);
+            pFunc = GetCmdBindDescriptorSets2Func<2>(pDevice);
             break;
 #endif
 #if (VKI_BUILD_MAX_NUM_GPUS > 2)
         case 3:
-            pFunc = GetCmdBindDescriptorSets2KHRFunc<3>(pDevice);
+            pFunc = GetCmdBindDescriptorSets2Func<3>(pDevice);
             break;
 #endif
 #if (VKI_BUILD_MAX_NUM_GPUS > 3)
         case 4:
-            pFunc = GetCmdBindDescriptorSets2KHRFunc<4>(pDevice);
+            pFunc = GetCmdBindDescriptorSets2Func<4>(pDevice);
             break;
 #endif
         default:
@@ -13497,18 +13680,18 @@ PFN_vkCmdBindDescriptorSets2KHR CmdBuffer::GetCmdBindDescriptorSets2KHRFunc(
 
 // =====================================================================================================================
 template <uint32_t numPalDevices>
-PFN_vkCmdBindDescriptorSets2KHR CmdBuffer::GetCmdBindDescriptorSets2KHRFunc(
+PFN_vkCmdBindDescriptorSets2 CmdBuffer::GetCmdBindDescriptorSets2Func(
     const Device* pDevice)
 {
-    PFN_vkCmdBindDescriptorSets2KHR pFunc = nullptr;
+    PFN_vkCmdBindDescriptorSets2 pFunc = nullptr;
 
     if (pDevice->UseCompactDynamicDescriptors())
     {
-        pFunc = CmdBindDescriptorSets2KHR<numPalDevices, true>;
+        pFunc = CmdBindDescriptorSets2<numPalDevices, true>;
     }
     else
     {
-        pFunc = CmdBindDescriptorSets2KHR<numPalDevices, false>;
+        pFunc = CmdBindDescriptorSets2<numPalDevices, false>;
     }
 
     return pFunc;
@@ -13516,7 +13699,7 @@ PFN_vkCmdBindDescriptorSets2KHR CmdBuffer::GetCmdBindDescriptorSets2KHRFunc(
 
 // =====================================================================================================================
 template <uint32_t numPalDevices>
-PFN_vkCmdPushDescriptorSet2KHR CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(
+PFN_vkCmdPushDescriptorSet2 CmdBuffer::GetCmdPushDescriptorSet2Func(
     const Device* pDevice)
 {
     const size_t imageDescSize         = pDevice->GetProperties().descriptorSizes.imageView;
@@ -13524,14 +13707,14 @@ PFN_vkCmdPushDescriptorSet2KHR CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(
     const size_t typedBufferDescSize   = pDevice->GetProperties().descriptorSizes.typedBufferView;
     const size_t untypedBufferDescSize = pDevice->GetProperties().descriptorSizes.untypedBufferView;
 
-    PFN_vkCmdPushDescriptorSet2KHR pFunc = nullptr;
+    PFN_vkCmdPushDescriptorSet2 pFunc = nullptr;
 
     if ((imageDescSize         == 32) &&
         (samplerDescSize       == 16) &&
         (typedBufferDescSize   == 16) &&
         (untypedBufferDescSize == 16))
     {
-        pFunc = &CmdPushDescriptorSet2KHR<
+        pFunc = &CmdPushDescriptorSet2<
             32,
             16,
             16,
@@ -13543,7 +13726,7 @@ PFN_vkCmdPushDescriptorSet2KHR CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(
              (typedBufferDescSize   == 24) &&
              (untypedBufferDescSize == 16))
     {
-        pFunc = &CmdPushDescriptorSet2KHR<
+        pFunc = &CmdPushDescriptorSet2<
             32,
             16,
             24,
@@ -13559,29 +13742,29 @@ PFN_vkCmdPushDescriptorSet2KHR CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(
 }
 
 // =====================================================================================================================
-PFN_vkCmdPushDescriptorSet2KHR CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(
+PFN_vkCmdPushDescriptorSet2 CmdBuffer::GetCmdPushDescriptorSet2Func(
     const Device* pDevice)
 {
-    PFN_vkCmdPushDescriptorSet2KHR pFunc = nullptr;
+    PFN_vkCmdPushDescriptorSet2 pFunc = nullptr;
 
     switch (pDevice->NumPalDevices())
     {
         case 1:
-            pFunc = GetCmdPushDescriptorSet2KHRFunc<1>(pDevice);
+            pFunc = GetCmdPushDescriptorSet2Func<1>(pDevice);
             break;
 #if (VKI_BUILD_MAX_NUM_GPUS > 1)
         case 2:
-            pFunc = GetCmdPushDescriptorSet2KHRFunc<2>(pDevice);
+            pFunc = GetCmdPushDescriptorSet2Func<2>(pDevice);
             break;
 #endif
 #if (VKI_BUILD_MAX_NUM_GPUS > 2)
         case 3:
-            pFunc = GetCmdPushDescriptorSet2KHRFunc<3>(pDevice);
+            pFunc = GetCmdPushDescriptorSet2Func<3>(pDevice);
             break;
 #endif
 #if (VKI_BUILD_MAX_NUM_GPUS > 3)
         case 4:
-            pFunc = GetCmdPushDescriptorSet2KHRFunc<4>(pDevice);
+            pFunc = GetCmdPushDescriptorSet2Func<4>(pDevice);
             break;
 #endif
         default:
@@ -13593,29 +13776,29 @@ PFN_vkCmdPushDescriptorSet2KHR CmdBuffer::GetCmdPushDescriptorSet2KHRFunc(
 }
 
 // =====================================================================================================================
-PFN_vkCmdPushDescriptorSetWithTemplate2KHR CmdBuffer::GetCmdPushDescriptorSetWithTemplate2KHRFunc(
+PFN_vkCmdPushDescriptorSetWithTemplate2 CmdBuffer::GetCmdPushDescriptorSetWithTemplate2Func(
     const Device* pDevice)
 {
-    PFN_vkCmdPushDescriptorSetWithTemplate2KHR pFunc = nullptr;
+    PFN_vkCmdPushDescriptorSetWithTemplate2 pFunc = nullptr;
 
     switch (pDevice->NumPalDevices())
     {
         case 1:
-            pFunc = CmdPushDescriptorSetWithTemplate2KHR<1>;
+            pFunc = CmdPushDescriptorSetWithTemplate2<1>;
             break;
 #if (VKI_BUILD_MAX_NUM_GPUS > 1)
         case 2:
-            pFunc = CmdPushDescriptorSetWithTemplate2KHR<2>;
+            pFunc = CmdPushDescriptorSetWithTemplate2<2>;
             break;
 #endif
 #if (VKI_BUILD_MAX_NUM_GPUS > 2)
         case 3:
-            pFunc = CmdPushDescriptorSetWithTemplate2KHR<3>;
+            pFunc = CmdPushDescriptorSetWithTemplate2<3>;
             break;
 #endif
 #if (VKI_BUILD_MAX_NUM_GPUS > 3)
         case 4:
-            pFunc = CmdPushDescriptorSetWithTemplate2KHR<4>;
+            pFunc = CmdPushDescriptorSetWithTemplate2<4>;
             break;
 #endif
         default:

@@ -285,7 +285,7 @@ VkResult DescriptorPool::Init(
 template <uint32_t numPalDevices>
 VkResult DescriptorPool::Reset()
 {
-    m_setHeap.Reset<numPalDevices>();
+    m_setHeap.Reset<numPalDevices>(m_pDevice);
     m_gpuMemHeap.Reset();
 
     return VK_SUCCESS;
@@ -1289,7 +1289,8 @@ void DescriptorSetHeap::FreeSetState(
 // =====================================================================================================================
 // Frees all descriptor set instances.
 template <uint32_t numPalDevices>
-void DescriptorSetHeap::Reset()
+void DescriptorSetHeap::Reset(
+    const Device* pDevice)
 {
     // Reset the next free index to the start of all handles
     m_nextFreeHandle = 0;
@@ -1297,15 +1298,19 @@ void DescriptorSetHeap::Reset()
     // Clear the individual heap since we've made the whole set range free
     m_freeIndexStackCount = 0;
 
-#if DEBUG
     // Clear all the descriptor set states only when debugging (as it may take a while to iterate through all)
-    for (uint32_t index = 0; index < m_maxSets; ++index)
-    {
-        VkDescriptorSet setHandle = DescriptorSetHandleFromIndex<numPalDevices>(index);
-
-        DescriptorSet<numPalDevices>::ObjectFromHandle(setHandle)->Reset();
-    }
+    // or if backbuffer protection is enabled.
+#if DEBUG == 0
+    if (pDevice->GetRuntimeSettings().enableBackBufferProtection)
 #endif
+    {
+        for (uint32_t index = 0; index < m_maxSets; ++index)
+        {
+            VkDescriptorSet setHandle = DescriptorSetHandleFromIndex<numPalDevices>(index);
+
+            DescriptorSet<numPalDevices>::ObjectFromHandle(setHandle)->Reset();
+        }
+    }
 }
 
 // =====================================================================================================================

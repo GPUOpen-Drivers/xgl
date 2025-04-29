@@ -31,6 +31,7 @@
 
 #include "khronos/vulkan.h"
 #include "vk_defines.h"
+#include "appopt/acceleration_structure_async_layer.h"
 #include "appopt/bvh_batch_layer.h"
 #include "appopt/split_raytracing_layer.h"
 
@@ -98,6 +99,8 @@ public:
 
     BvhBatchLayer* GetBvhBatchLayer() { return m_pBvhBatchLayer; }
     SplitRaytracingLayer* GetSplitRaytracingLayer() { return m_pSplitRaytracingLayer; }
+    AccelStructAsyncBuildLayer* GetAccelStructAsyncBuildLayer()
+        { return m_pAccelStructAsyncBuildLayer; }
 
     uint32_t GetProfileRayFlags() const { return m_profileRayFlags; }
     uint32_t GetProfileMaxIterations() const { return m_profileMaxIterations; }
@@ -218,6 +221,7 @@ private:
 
     BvhBatchLayer*                  m_pBvhBatchLayer;
     SplitRaytracingLayer*           m_pSplitRaytracingLayer;
+    AccelStructAsyncBuildLayer*     m_pAccelStructAsyncBuildLayer;
 
     AccelStructTrackerResources     m_accelStructTrackerResources[MaxPalDevices];
 };

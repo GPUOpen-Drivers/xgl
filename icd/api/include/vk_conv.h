@@ -48,6 +48,7 @@
 #include "palQueryPool.h"
 #include "palScreen.h"
 #include "palSwapChain.h"
+#include "palPipelineAbi.h"
 
 #if VKI_RAY_TRACING
 #include "gpurt/gpurt.h"
@@ -2853,24 +2854,79 @@ inline Pal::PipelineBindPoint VkToPalPipelineBindPoint(VkPipelineBindPoint pipel
 inline Pal::ShaderType VkToPalShaderType(
     VkShaderStageFlagBits shaderStage)
 {
+    Pal::ShaderType shaderType;
     switch (shaderStage)
     {
     case VK_SHADER_STAGE_VERTEX_BIT:
-        return Pal::ShaderType::Vertex;
+        shaderType = Pal::ShaderType::Vertex;
+        break;
     case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
-        return Pal::ShaderType::Hull;
+        shaderType = Pal::ShaderType::Hull;
+        break;
     case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
-        return Pal::ShaderType::Domain;
+        shaderType = Pal::ShaderType::Domain;
+        break;
     case VK_SHADER_STAGE_GEOMETRY_BIT:
-        return Pal::ShaderType::Geometry;
+        shaderType = Pal::ShaderType::Geometry;
+        break;
     case VK_SHADER_STAGE_FRAGMENT_BIT:
-        return Pal::ShaderType::Pixel;
+        shaderType = Pal::ShaderType::Pixel;
+        break;
     case VK_SHADER_STAGE_COMPUTE_BIT:
-        return Pal::ShaderType::Compute;
+        shaderType = Pal::ShaderType::Compute;
+        break;
+    case VK_SHADER_STAGE_TASK_BIT_EXT:
+        shaderType = Pal::ShaderType::Task;
+        break;
+    case VK_SHADER_STAGE_MESH_BIT_EXT:
+        shaderType = Pal::ShaderType::Mesh;
+        break;
     default:
         VK_NEVER_CALLED();
-        return Pal::ShaderType::Compute;
+        shaderType = Pal::ShaderType::Compute;
+        break;
     }
+
+    return shaderType;
+}
+
+// =====================================================================================================================
+inline Util::Abi::ApiShaderType VkToAbiShaderType(
+    VkShaderStageFlagBits shaderStage)
+{
+    Util::Abi::ApiShaderType shaderType;
+    switch (shaderStage)
+    {
+    case VK_SHADER_STAGE_VERTEX_BIT:
+        shaderType = Util::Abi::ApiShaderType::Vs;
+        break;
+    case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
+        shaderType = Util::Abi::ApiShaderType::Hs;
+        break;
+    case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
+        shaderType = Util::Abi::ApiShaderType::Ds;
+        break;
+    case VK_SHADER_STAGE_GEOMETRY_BIT:
+        shaderType = Util::Abi::ApiShaderType::Gs;
+        break;
+    case VK_SHADER_STAGE_FRAGMENT_BIT:
+        shaderType = Util::Abi::ApiShaderType::Ps;
+        break;
+    case VK_SHADER_STAGE_COMPUTE_BIT:
+        shaderType = Util::Abi::ApiShaderType::Cs;
+        break;
+    case VK_SHADER_STAGE_TASK_BIT_EXT:
+        shaderType = Util::Abi::ApiShaderType::Task;
+        break;
+    case VK_SHADER_STAGE_MESH_BIT_EXT:
+        shaderType = Util::Abi::ApiShaderType::Mesh;
+        break;
+    default:
+        shaderType = Util::Abi::ApiShaderType::Cs;
+        break;
+    }
+
+    return shaderType;
 }
 
 // =====================================================================================================================
@@ -4036,6 +4092,77 @@ inline std::chrono::seconds Uint64ToChronoSeconds(uint64_t seconds)
     return std::chrono::seconds{ Util::Min(seconds, MaxSeconds) };
 }
 
+inline Pal::DispatchInterleaveSize ConvertDispatchInterleaveSize(
+    const CsDispatchInterleaveSize csDispatchLeaveSize)
+{
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSizeDefault) ==
+        uint32_t(Pal::DispatchInterleaveSize::Default),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSizeDisable) ==
+        uint32_t(Pal::DispatchInterleaveSize::Disable),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_1D_64_Threads) ==
+        uint32_t(Pal::DispatchInterleaveSize::_1D_64_Threads),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_1D_128_Threads) ==
+        uint32_t(Pal::DispatchInterleaveSize::_1D_128_Threads),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_1D_256_Threads) ==
+        uint32_t(Pal::DispatchInterleaveSize::_1D_256_Threads),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_1D_512_Threads) ==
+        uint32_t(Pal::DispatchInterleaveSize::_1D_512_Threads),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+#if VKI_BUILD_GFX12
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_1x1_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_1x1_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_1x2_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_1x2_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_1x4_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_1x4_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_1x8_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_1x8_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_1x16_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_1x16_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_2x1_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_2x1_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_2x2_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_2x2_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_2x4_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_2x4_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_2x8_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_2x8_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_4x1_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_4x1_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_4x2_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_4x2_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_4x4_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_4x4_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_8x1_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_8x1_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_8x2_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_8x2_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+    static_assert (uint32_t(CsDispatchInterleaveSize::CsDispatchInterleaveSize_2D_16x1_ThreadGroups) ==
+        uint32_t(Pal::DispatchInterleaveSize::_2D_16x1_ThreadGroups),
+        "CsDispatchInterleaveSize and Pal::DispatchInterleaveSize don't match!");
+#endif
+
+    return Pal::DispatchInterleaveSize(csDispatchLeaveSize);
+}
 } // namespace vk
 
 #endif /* __VK_CONV_H__ */

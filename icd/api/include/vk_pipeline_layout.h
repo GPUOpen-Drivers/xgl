@@ -120,24 +120,6 @@ struct UserDataLayout
 };
 
 // =====================================================================================================================
-inline uint32_t GetUserDataRegBase(
-    const UserDataLayout* pLayout)
-{
-    uint32_t userDataRegBase = 0;
-
-    if (pLayout->scheme == PipelineLayoutScheme::Compact)
-    {
-        userDataRegBase = pLayout->compact.setBindingRegBase;
-    }
-    else if (pLayout->scheme == PipelineLayoutScheme::Indirect)
-    {
-        userDataRegBase = pLayout->indirect.setBindingPtrRegBase;
-    }
-
-    return userDataRegBase;
-}
-
-// =====================================================================================================================
 inline uint32_t GetUberFetchShaderUserData(
     const UserDataLayout* pLayout)
 {
@@ -295,10 +277,6 @@ public:
             Util::VoidPtrInc(this, sizeof(*this) + SetUserDataLayoutSize()))[setIndex];
     }
 
-#if VKI_RAY_TRACING
-    uint32_t GetDispatchRaysUserData() const;
-#endif
-
     static void BuildLlpcDebugPrintfMapping(
         const uint32_t                 stageMask,
         const uint32_t                 offsetInDwords,
@@ -393,26 +371,27 @@ protected:
         const DescriptorSetLayout::BindingInfo& binding,
         Vkgc::ResourceMappingNode*              pNode) const;
 
-    void BuildLlpcVertexBufferTableMapping(
+    static void BuildLlpcVertexBufferTableMapping(
+        const Device*                  pDevice,
         const VbBindingInfo*           pVbInfo,
         const uint32_t                 offsetInDwords,
         const uint32_t                 sizeInDwords,
         Vkgc::ResourceMappingRootNode* pNode,
-        uint32_t*                      pNodeCount) const;
+        uint32_t*                      pNodeCount);
 
-    void BuildLlpcTransformFeedbackMapping(
+    static void BuildLlpcTransformFeedbackMapping(
         const uint32_t                 stageMask,
         const uint32_t                 offsetInDwords,
         const uint32_t                 sizeInDwords,
         Vkgc::ResourceMappingRootNode* pNode,
-        uint32_t*                      pNodeCount) const;
+        uint32_t*                      pNodeCount);
 
-    void BuildLlpcInternalConstantBufferMapping(
+    static void BuildLlpcInternalConstantBufferMapping(
         const uint32_t                 stageMask,
         const uint32_t                 offsetInDwords,
         const uint32_t                 binding,
         Vkgc::ResourceMappingRootNode* pNode,
-        uint32_t*                      pNodeCount) const;
+        uint32_t*                      pNodeCount);
 
     static void BuildLlpcInternalInlineBufferMapping(
         const uint32_t                 stageMask,
@@ -425,14 +404,14 @@ protected:
         uint32_t*                      pStaNodeCount);
 
 #if VKI_RAY_TRACING
-    void BuildLlpcRayTracingDispatchArgumentsMapping(
+    static void BuildLlpcRayTracingDispatchArgumentsMapping(
         const uint32_t                 stageMask,
         const uint32_t                 offsetInDwords,
         const uint32_t                 sizeInDwords,
         Vkgc::ResourceMappingRootNode* pRootNode,
         uint32_t*                      pRootNodeCount,
         Vkgc::ResourceMappingNode*     pStaNode,
-        uint32_t*                      pStaNodeCount) const;
+        uint32_t*                      pStaNodeCount);
 #endif
 
     static void ReserveAlternatingThreadGroupUserData(

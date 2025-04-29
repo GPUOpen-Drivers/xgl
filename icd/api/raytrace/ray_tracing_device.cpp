@@ -52,6 +52,7 @@ RayTracingDevice::RayTracingDevice(
     m_cmdContext(),
     m_pBvhBatchLayer(nullptr),
     m_pSplitRaytracingLayer(nullptr),
+    m_pAccelStructAsyncBuildLayer(nullptr),
     m_accelStructTrackerResources()
 {
 
@@ -156,6 +157,11 @@ VkResult RayTracingDevice::Init()
                 result = SplitRaytracingLayer::CreateLayer(m_pDevice, &m_pSplitRaytracingLayer);
             }
 
+            if ((result == VK_SUCCESS) && settings.accelerationStructureAsyncBuild)
+            {
+                result = AccelStructAsyncBuildLayer::CreateLayer(m_pDevice, &m_pAccelStructAsyncBuildLayer);
+            }
+
             if (result != VK_SUCCESS)
             {
                 VK_NEVER_CALLED();
@@ -170,6 +176,11 @@ VkResult RayTracingDevice::Init()
                 if (m_pSplitRaytracingLayer != nullptr)
                 {
                     m_pSplitRaytracingLayer->DestroyLayer();
+                }
+
+                if (m_pAccelStructAsyncBuildLayer != nullptr)
+                {
+                    m_pAccelStructAsyncBuildLayer->Destroy();
                 }
             }
         }
@@ -246,6 +257,9 @@ void RayTracingDevice::CreateGpuRtDeviceSettings(
     pDeviceSettings->rebraidOpenSAFactor               = settings.rebraidOpenSurfaceAreaFactor;
 #endif
     pDeviceSettings->plocRadius                        = settings.plocRadius;
+#if VKI_SUPPORT_HPLOC
+    pDeviceSettings->hplocRadius                       = settings.hplocRadius;
+#endif
     pDeviceSettings->enablePairCompressionCostCheck    = settings.enablePairCompressionCostCheck;
     pDeviceSettings->accelerationStructureUUID         = GetAccelerationStructureUUID(
                                                      m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties());
@@ -326,7 +340,7 @@ void RayTracingDevice::CollectGpurtOptions(
     *optionMap.FindKey(GpuRt::ThreadTraceEnabledOptionNameHash) = threadTraceEnabled;
 
     *optionMap.FindKey(GpuRt::PersistentLaunchEnabledOptionNameHash) =
-        (settings.rtPersistentDispatchRaysFactor > 0.0f) ? 1 : 0;
+        settings.rtPersistentDispatchRays ? 1 : 0;
 
     pGpurtOptions->Clear();
     for (auto it = optionMap.Begin(); it.Get() != nullptr; it.Next())
@@ -385,6 +399,11 @@ void RayTracingDevice::Destroy()
     if (m_pSplitRaytracingLayer != nullptr)
     {
         m_pSplitRaytracingLayer->DestroyLayer();
+    }
+
+    if (m_pAccelStructAsyncBuildLayer != nullptr)
+    {
+        m_pAccelStructAsyncBuildLayer->Destroy();
     }
 
     Util::Destructor(this);
@@ -870,217 +889,210 @@ Pal::Result RayTracingDevice::ClientCreateInternalComputePipeline(
     vk::Device* pDevice  = static_cast<vk::Device*>(initInfo.pClientUserData);
     const auto& settings = pDevice->GetRuntimeSettings();
 
-    uint64_t spvPassMask    = settings.rtInternalPipelineSpvPassMask;
-    uint64_t shaderTypeMask = 1ull << static_cast<uint64_t>(buildInfo.shaderType);
-
-    bool useSpvPass = (shaderTypeMask & spvPassMask);
-
     *ppResultMemory = nullptr;
 
-    {
-        VkResult result = VK_SUCCESS;
+    VkResult result = VK_SUCCESS;
 
-        vk::PipelineCompiler* pCompiler     = pDevice->GetCompiler(initInfo.gpuIdx);
-        vk::ShaderModuleHandle shaderModule = {};
-        const void* pPipelineBinary         = nullptr;
-        size_t pipelineBinarySize           = 0;
+    vk::PipelineCompiler* pCompiler     = pDevice->GetCompiler(initInfo.gpuIdx);
+    vk::ShaderModuleHandle shaderModule = {};
+    const void* pPipelineBinary         = nullptr;
+    size_t pipelineBinarySize           = 0;
 
-        Vkgc::BinaryData spvBin =
-            {
-                .codeSize = buildInfo.code.spvSize,
-                .pCode    = buildInfo.code.pSpvCode
-            };
-
-        // The "+ 1" is for the possible debug printf user node
-        Vkgc::ResourceMappingRootNode nodes[GpuRt::MaxInternalPipelineNodes + 1]    = {};
-        Vkgc::ResourceMappingNode subNodes[GpuRt::MaxInternalPipelineNodes + 1]     = {};
-        uint32_t subNodeIndex = 0;
-        const uint32_t typedBufferSrdSizeDw   =
-            pDevice->GetProperties().descriptorSizes.typedBufferView / sizeof(uint32_t);
-        const uint32_t untypedBufferSrdSizeDw =
-            pDevice->GetProperties().descriptorSizes.untypedBufferView / sizeof(uint32_t);
-
-        const uint32_t imageBufferSrdSizeDw = pDevice->GetProperties().descriptorSizes.imageView / sizeof(uint32_t);
-        uint32_t alignment = Util::Lcm(typedBufferSrdSizeDw, untypedBufferSrdSizeDw);
-        alignment = Util::Lcm(alignment, imageBufferSrdSizeDw);
-        const uint32_t maxBufferTableSize = Util::RoundDownToMultiple(UINT_MAX, alignment);
-
-        for (uint32_t nodeIndex = 0; nodeIndex < buildInfo.nodeCount; ++nodeIndex)
+    Vkgc::BinaryData spvBin =
         {
-            // Make sure we haven't exceeded our maximum number of nodes.
-            VK_ASSERT(nodeIndex < GpuRt::MaxInternalPipelineNodes);
-
-            const GpuRt::NodeMapping& node = buildInfo.pNodes[nodeIndex];
-
-            nodes[nodeIndex].visibility = Vkgc::ShaderStageComputeBit;
-
-            if (node.type == GpuRt::NodeType::Constant)
-            {
-                nodes[nodeIndex].node.type              = Vkgc::ResourceMappingNodeType::PushConst;
-                nodes[nodeIndex].node.sizeInDwords      = node.dwSize;
-                nodes[nodeIndex].node.offsetInDwords    = node.dwOffset;
-                nodes[nodeIndex].node.srdRange.set      = Vkgc::InternalDescriptorSetId;
-                nodes[nodeIndex].node.srdRange.binding  = node.binding;
-            }
-            else if (node.type == GpuRt::NodeType::ConstantBuffer)
-            {
-                nodes[nodeIndex].node.type              =
-                    Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact;
-                nodes[nodeIndex].node.sizeInDwords      = node.dwSize;
-                nodes[nodeIndex].node.offsetInDwords    = node.dwOffset;
-                nodes[nodeIndex].node.srdRange.set      = node.descSet;
-                nodes[nodeIndex].node.srdRange.binding  = node.binding;
-            }
-            else if (node.type == GpuRt::NodeType::Uav)
-            {
-                nodes[nodeIndex].node.type              =
-                    Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
-                nodes[nodeIndex].node.sizeInDwords      = node.dwSize;
-                nodes[nodeIndex].node.offsetInDwords    = node.dwOffset;
-                nodes[nodeIndex].node.srdRange.set      = node.descSet;
-                nodes[nodeIndex].node.srdRange.binding  = node.binding;
-            }
-            else if (node.type == GpuRt::NodeType::Srv)
-            {
-                nodes[nodeIndex].node.type = Vkgc::ResourceMappingNodeType::DescriptorResource;
-
-                if (node.srdStride == 2)
-                {
-                    nodes[nodeIndex].node.type = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
-                }
-                else if (node.srdStride == 4)
-                {
-                    nodes[nodeIndex].node.type = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
-                }
-
-                nodes[nodeIndex].node.sizeInDwords      = node.dwSize;
-                nodes[nodeIndex].node.offsetInDwords    = node.dwOffset;
-                nodes[nodeIndex].node.srdRange.set      = node.descSet;
-                nodes[nodeIndex].node.srdRange.binding  = node.binding;
-            }
-            else if ((node.type == GpuRt::NodeType::ConstantBufferTable) ||
-                     (node.type == GpuRt::NodeType::UavTable) ||
-                     (node.type == GpuRt::NodeType::TypedUavTable) ||
-                     (node.type == GpuRt::NodeType::SrvTable) ||
-                     (node.type == GpuRt::NodeType::TypedSrvTable))
-            {
-                Vkgc::ResourceMappingNode* pSubNode      = &subNodes[subNodeIndex++];
-                nodes[nodeIndex].node.type               = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
-                nodes[nodeIndex].node.sizeInDwords       = 1;
-                nodes[nodeIndex].node.offsetInDwords     = node.dwOffset;
-                nodes[nodeIndex].node.tablePtr.nodeCount = 1;
-                nodes[nodeIndex].node.tablePtr.pNext     = pSubNode;
-
-                switch (node.type)
-                {
-                case GpuRt::NodeType::UavTable:
-                    pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
-                    break;
-                case GpuRt::NodeType::TypedUavTable:
-                    pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
-                    break;
-                case GpuRt::NodeType::ConstantBufferTable:
-                    pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
-                    break;
-                case GpuRt::NodeType::SrvTable:
-                    pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorResource;
-                    pSubNode->srdRange.strideInDwords = untypedBufferSrdSizeDw;
-                    break;
-                case GpuRt::NodeType::TypedSrvTable:
-                    pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorResource;
-                    pSubNode->srdRange.strideInDwords = typedBufferSrdSizeDw;
-                    break;
-                default:
-                    VK_NEVER_CALLED();
-                }
-                pSubNode->offsetInDwords    = 0;
-                pSubNode->srdRange.set      = node.descSet;
-                pSubNode->srdRange.binding  = node.binding;
-                pSubNode->sizeInDwords      = maxBufferTableSize;
-            }
-            else
-            {
-                VK_NEVER_CALLED();
-            }
-        }
-
-        const uint32_t numConstants = compileConstants.numConstants;
-
-        // Set up specialization constant info
-        VK_ASSERT(numConstants <= 64);
-        Util::AutoBuffer<VkSpecializationMapEntry, 64, vk::PalAllocator> mapEntries(
-            numConstants,
-            pDevice->VkInstance()->Allocator());
-
-        for (uint32_t i = 0; i < numConstants; i++)
-        {
-            mapEntries[i] = { i, static_cast<uint32_t>(i * sizeof(uint32_t)), sizeof(uint32_t) };
-        }
-
-        VkSpecializationInfo specializationInfo =
-        {
-            numConstants,
-            &mapEntries[0],
-            numConstants * sizeof(uint32_t),
-            compileConstants.pConstants
+            .codeSize = buildInfo.code.spvSize,
+            .pCode    = buildInfo.code.pSpvCode
         };
 
-        constexpr uint32_t CompilerOptionWaveSize      = Util::HashLiteralString("waveSize");
-        constexpr uint32_t CompilerOptionValueWave32   = Util::HashLiteralString("Wave32");
-        constexpr uint32_t CompilerOptionValueWave64   = Util::HashLiteralString("Wave64");
+    // The "+ 1" is for the possible debug printf user node
+    Vkgc::ResourceMappingRootNode nodes[GpuRt::MaxInternalPipelineNodes + 1]    = {};
+    Vkgc::ResourceMappingNode subNodes[GpuRt::MaxInternalPipelineNodes + 1]     = {};
+    uint32_t subNodeIndex = 0;
+    const uint32_t typedBufferSrdSizeDw   =
+        pDevice->GetProperties().descriptorSizes.typedBufferView / sizeof(uint32_t);
+    const uint32_t untypedBufferSrdSizeDw =
+        pDevice->GetProperties().descriptorSizes.untypedBufferView / sizeof(uint32_t);
 
-        ShaderWaveSize waveSize = ShaderWaveSize::WaveSizeAuto;
+    const uint32_t imageBufferSrdSizeDw = pDevice->GetProperties().descriptorSizes.imageView / sizeof(uint32_t);
+    uint32_t alignment = Util::Lcm(typedBufferSrdSizeDw, untypedBufferSrdSizeDw);
+    alignment = Util::Lcm(alignment, imageBufferSrdSizeDw);
+    const uint32_t maxBufferTableSize = Util::RoundDownToMultiple(UINT_MAX, alignment);
 
-        for (uint32_t i = 0; i < buildInfo.hashedCompilerOptionCount; ++i)
+    for (uint32_t nodeIndex = 0; nodeIndex < buildInfo.nodeCount; ++nodeIndex)
+    {
+        // Make sure we haven't exceeded our maximum number of nodes.
+        VK_ASSERT(nodeIndex < GpuRt::MaxInternalPipelineNodes);
+
+        const GpuRt::NodeMapping& node = buildInfo.pNodes[nodeIndex];
+
+        nodes[nodeIndex].visibility = Vkgc::ShaderStageComputeBit;
+
+        if (node.type == GpuRt::NodeType::Constant)
         {
-            const GpuRt::PipelineCompilerOption& compilerOption = buildInfo.pHashedCompilerOptions[i];
+            nodes[nodeIndex].node.type              = Vkgc::ResourceMappingNodeType::PushConst;
+            nodes[nodeIndex].node.sizeInDwords      = node.dwSize;
+            nodes[nodeIndex].node.offsetInDwords    = node.dwOffset;
+            nodes[nodeIndex].node.srdRange.set      = Vkgc::InternalDescriptorSetId;
+            nodes[nodeIndex].node.srdRange.binding  = node.binding;
+        }
+        else if (node.type == GpuRt::NodeType::ConstantBuffer)
+        {
+            nodes[nodeIndex].node.type              =
+                Vkgc::ResourceMappingNodeType::DescriptorConstBufferCompact;
+            nodes[nodeIndex].node.sizeInDwords      = node.dwSize;
+            nodes[nodeIndex].node.offsetInDwords    = node.dwOffset;
+            nodes[nodeIndex].node.srdRange.set      = node.descSet;
+            nodes[nodeIndex].node.srdRange.binding  = node.binding;
+        }
+        else if (node.type == GpuRt::NodeType::Uav)
+        {
+            nodes[nodeIndex].node.type              =
+                Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
+            nodes[nodeIndex].node.sizeInDwords      = node.dwSize;
+            nodes[nodeIndex].node.offsetInDwords    = node.dwOffset;
+            nodes[nodeIndex].node.srdRange.set      = node.descSet;
+            nodes[nodeIndex].node.srdRange.binding  = node.binding;
+        }
+        else if (node.type == GpuRt::NodeType::Srv)
+        {
+            nodes[nodeIndex].node.type = Vkgc::ResourceMappingNodeType::DescriptorResource;
 
-            switch (compilerOption.hashedOptionName)
+            if (node.srdStride == 2)
             {
-            case CompilerOptionWaveSize:
-                if (compilerOption.value == CompilerOptionValueWave32)
-                {
-                    waveSize = ShaderWaveSize::WaveSize32;
-                }
-                else if (compilerOption.value == CompilerOptionValueWave64)
-                {
-                    waveSize = ShaderWaveSize::WaveSize64;
-                }
-            break;
-            default:
-                VK_ASSERT_ALWAYS_MSG("Unknown GPURT setting! Handle it!");
+                nodes[nodeIndex].node.type = Vkgc::ResourceMappingNodeType::DescriptorBufferCompact;
             }
-        }
+            else if (node.srdStride == 4)
+            {
+                nodes[nodeIndex].node.type = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
+            }
 
-        uint32_t nodeCount = buildInfo.nodeCount;
-        if (pDevice->GetEnabledFeatures().enableDebugPrintf)
+            nodes[nodeIndex].node.sizeInDwords      = node.dwSize;
+            nodes[nodeIndex].node.offsetInDwords    = node.dwOffset;
+            nodes[nodeIndex].node.srdRange.set      = node.descSet;
+            nodes[nodeIndex].node.srdRange.binding  = node.binding;
+        }
+        else if ((node.type == GpuRt::NodeType::ConstantBufferTable) ||
+                    (node.type == GpuRt::NodeType::UavTable) ||
+                    (node.type == GpuRt::NodeType::TypedUavTable) ||
+                    (node.type == GpuRt::NodeType::SrvTable) ||
+                    (node.type == GpuRt::NodeType::TypedSrvTable))
         {
-            uint32_t debugPrintfOffset = nodes[nodeCount - 1].node.offsetInDwords +
-                nodes[nodeCount - 1].node.sizeInDwords;
+            Vkgc::ResourceMappingNode* pSubNode      = &subNodes[subNodeIndex++];
+            nodes[nodeIndex].node.type               = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
+            nodes[nodeIndex].node.sizeInDwords       = 1;
+            nodes[nodeIndex].node.offsetInDwords     = node.dwOffset;
+            nodes[nodeIndex].node.tablePtr.nodeCount = 1;
+            nodes[nodeIndex].node.tablePtr.pNext     = pSubNode;
 
-            PipelineLayout::BuildLlpcDebugPrintfMapping(
-                Vkgc::ShaderStageComputeBit,
-                debugPrintfOffset,
-                1u,
-                &nodes[nodeCount],
-                &nodeCount,
-                &subNodes[subNodeIndex],
-                &subNodeIndex);
+            switch (node.type)
+            {
+            case GpuRt::NodeType::UavTable:
+                pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
+                break;
+            case GpuRt::NodeType::TypedUavTable:
+                pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
+                break;
+            case GpuRt::NodeType::ConstantBufferTable:
+                pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorConstBuffer;
+                break;
+            case GpuRt::NodeType::SrvTable:
+                pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorResource;
+                pSubNode->srdRange.strideInDwords = untypedBufferSrdSizeDw;
+                break;
+            case GpuRt::NodeType::TypedSrvTable:
+                pSubNode->type = Vkgc::ResourceMappingNodeType::DescriptorResource;
+                pSubNode->srdRange.strideInDwords = typedBufferSrdSizeDw;
+                break;
+            default:
+                VK_NEVER_CALLED();
+            }
+            pSubNode->offsetInDwords    = 0;
+            pSubNode->srdRange.set      = node.descSet;
+            pSubNode->srdRange.binding  = node.binding;
+            pSubNode->sizeInDwords      = maxBufferTableSize;
         }
-
-        result = pDevice->CreateInternalComputePipeline(spvBin.codeSize,
-                                                        static_cast<const uint8_t*>(spvBin.pCode),
-                                                        nodeCount,
-                                                        nodes,
-                                                        ShaderModuleInternalRayTracingShader,
-                                                        waveSize,
-                                                        &specializationInfo,
-                                                        &pDevice->GetInternalRayTracingPipeline());
-
-        *pResultPipeline = pDevice->GetInternalRayTracingPipeline().pPipeline[0];
-
-        return result == VK_SUCCESS ? Pal::Result::Success : Pal::Result::ErrorUnknown;
+        else
+        {
+            VK_NEVER_CALLED();
+        }
     }
+
+    const uint32_t numConstants = compileConstants.numConstants;
+
+    // Set up specialization constant info
+    VK_ASSERT(numConstants <= 64);
+    Util::AutoBuffer<VkSpecializationMapEntry, 64, vk::PalAllocator> mapEntries(
+        numConstants,
+        pDevice->VkInstance()->Allocator());
+
+    for (uint32_t i = 0; i < numConstants; i++)
+    {
+        mapEntries[i] = { i, static_cast<uint32_t>(i * sizeof(uint32_t)), sizeof(uint32_t) };
+    }
+
+    VkSpecializationInfo specializationInfo =
+    {
+        numConstants,
+        &mapEntries[0],
+        numConstants * sizeof(uint32_t),
+        compileConstants.pConstants
+    };
+
+    constexpr uint32_t CompilerOptionWaveSize      = Util::HashLiteralString("waveSize");
+    constexpr uint32_t CompilerOptionValueWave32   = Util::HashLiteralString("Wave32");
+    constexpr uint32_t CompilerOptionValueWave64   = Util::HashLiteralString("Wave64");
+
+    ShaderWaveSize waveSize = ShaderWaveSize::WaveSizeAuto;
+
+    for (uint32_t i = 0; i < buildInfo.hashedCompilerOptionCount; ++i)
+    {
+        const GpuRt::PipelineCompilerOption& compilerOption = buildInfo.pHashedCompilerOptions[i];
+
+        switch (compilerOption.hashedOptionName)
+        {
+        case CompilerOptionWaveSize:
+            if (compilerOption.value == CompilerOptionValueWave32)
+            {
+                waveSize = ShaderWaveSize::WaveSize32;
+            }
+            else if (compilerOption.value == CompilerOptionValueWave64)
+            {
+                waveSize = ShaderWaveSize::WaveSize64;
+            }
+        break;
+        default:
+            VK_ASSERT_ALWAYS_MSG("Unknown GPURT setting! Handle it!");
+        }
+    }
+
+    uint32_t nodeCount = buildInfo.nodeCount;
+    if (pDevice->GetEnabledFeatures().enableDebugPrintf)
+    {
+        uint32_t debugPrintfOffset = nodes[nodeCount - 1].node.offsetInDwords +
+            nodes[nodeCount - 1].node.sizeInDwords;
+
+        PipelineLayout::BuildLlpcDebugPrintfMapping(
+            Vkgc::ShaderStageComputeBit,
+            debugPrintfOffset,
+            1u,
+            &nodes[nodeCount],
+            &nodeCount,
+            &subNodes[subNodeIndex],
+            &subNodeIndex);
+    }
+
+    result = pDevice->CreateInternalComputePipeline(spvBin.codeSize,
+                                                    static_cast<const uint8_t*>(spvBin.pCode),
+                                                    nodeCount,
+                                                    nodes,
+                                                    ShaderModuleInternalRayTracingShader,
+                                                    waveSize,
+                                                    &specializationInfo,
+                                                    &pDevice->GetInternalRayTracingPipeline());
+
+    *pResultPipeline = pDevice->GetInternalRayTracingPipeline().pPipeline[0];
+
+    return result == VK_SUCCESS ? Pal::Result::Success : Pal::Result::ErrorUnknown;
 }
 
 // =====================================================================================================================

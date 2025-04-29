@@ -349,15 +349,17 @@ void SqttCmdBufferState::End()
     // insert a barrier used to wait for all trace data to finish writing.
     if (m_instructionTrace.started && m_settings.rgpInstTraceBarrierEnabled)
     {
+        Pal::AcquireReleaseInfo barrierInfo = {};
+
         // Select the pipe point based on the bound pipeline's type.
-        Pal::HwPipePoint pipePoint = Pal::HwPipeTop;
+        barrierInfo.srcGlobalStageMask  = Pal::PipelineStageTopOfPipe;
         if (m_instructionTrace.bindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS)
         {
-            pipePoint = Pal::HwPipePostPs;
+            barrierInfo.srcGlobalStageMask  = Pal::PipelineStagePs;
         }
         else if (m_instructionTrace.bindPoint == VK_PIPELINE_BIND_POINT_COMPUTE)
         {
-            pipePoint = Pal::HwPipePostCs;
+            barrierInfo.srcGlobalStageMask  = Pal::PipelineStageCs;
         }
         else
         {
@@ -365,13 +367,10 @@ void SqttCmdBufferState::End()
             PAL_ASSERT_ALWAYS();
         }
 
-        Pal::BarrierInfo barrierInfo   = {};
-        barrierInfo.waitPoint          = Pal::HwPipeTop;
-        barrierInfo.pipePointWaitCount = 1;
-        barrierInfo.pPipePoints        = &pipePoint;
+        barrierInfo.dstGlobalStageMask = Pal::PipelineStageTopOfPipe;
         barrierInfo.reason             = RgpBarrierInternalInstructionTraceStall;
 
-        m_pCmdBuf->PalCmdBuffer(DefaultDeviceIndex)->CmdBarrier(barrierInfo);
+        m_pCmdBuf->PalCmdBuffer(DefaultDeviceIndex)->CmdReleaseThenAcquire(barrierInfo);
     }
 
     WriteCbEndMarker();

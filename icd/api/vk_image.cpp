@@ -1374,6 +1374,7 @@ VkResult Image::CreatePresentableImage(
         imageFlags.u32All            = 0;
         imageFlags.internalMemBound  = false;
         imageFlags.dedicatedRequired = true;
+        imageFlags.isFlippable       = pPalImage[DefaultDeviceIndex]->GetImageCreateInfo().flags.flippable;
 
         uint32_t presentLayoutUsage = GetPresentLayoutUsage(presentMode);
 
@@ -1405,7 +1406,7 @@ VkResult Image::CreatePresentableImage(
             pDevice,
             &imageCreateInfo,
             pPalImage,
-            nullptr,
+            pPalMemory,
             sharingMode,
             presentLayoutUsage,
             dummyTileSize,
@@ -1456,6 +1457,9 @@ VkResult Image::Destroy(
 
         if ((m_perGpu[deviceIdx].pPalMemory != nullptr) && (m_internalFlags.internalMemBound != 0))
         {
+            //Flippable memory is destroyed by the swapchain, the internalMemBound flag should never be set on it.
+            VK_ASSERT(IsFlippable() == false);
+
             pDevice->RemoveMemReference(pDevice->PalDevice(deviceIdx), m_perGpu[deviceIdx].pPalMemory);
             m_perGpu[deviceIdx].pPalMemory->Destroy();
         }
@@ -1663,6 +1667,8 @@ VkResult Image::BindSwapchainMemory(
     Image*  pSwapchainImage    = Image::ObjectFromHandle(properties.images[swapChainImageIndex]);
     Memory* pSwapchainImageMem = Memory::ObjectFromHandle(properties.imageMemory[swapChainImageIndex]);
 
+    m_internalFlags.isFlippable = pSwapchainImage->IsFlippable();
+
     Util::Destructor(&m_barrierPolicy);
 
     uint32_t presentLayoutUsage = GetPresentLayoutUsage(properties.imagePresentSupport);
@@ -1693,7 +1699,8 @@ VkResult Image::BindSwapchainMemory(
 
         if (localDeviceIdx == sourceMemInst)
         {
-            m_perGpu[localDeviceIdx].pPalImage = pSwapchainImage->PalImage(localDeviceIdx);
+            m_perGpu[localDeviceIdx].pPalImage  = pSwapchainImage->PalImage(localDeviceIdx);
+            m_perGpu[localDeviceIdx].pPalMemory = pSwapchainImageMem->PalMemory(localDeviceIdx);
         }
         else
         {
@@ -1709,6 +1716,8 @@ VkResult Image::BindSwapchainMemory(
 
             Pal::Result palResult = pPalDevice->OpenPeerImage(
                 peerInfo, pImageMem, nullptr, &m_perGpu[localDeviceIdx].pPalImage, &pGpuMemory);
+
+            m_perGpu[localDeviceIdx].pPalMemory = pGpuMemory;
 
             VK_ASSERT(palResult == Pal::Result::Success);
         }

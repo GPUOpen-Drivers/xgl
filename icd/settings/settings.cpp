@@ -527,6 +527,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.enableEarlyPairCompression     = true;
         m_settings.enablePairCompressionCostCheck = true;
 
+#if VKI_SUPPORT_HPLOC
+        m_settings.rtBvhBuildModeDefault   = BvhBuildModeHPLOC;
+        m_settings.rtBvhBuildModeFastBuild = BvhBuildModeHPLOC;
+        m_settings.rtBvhBuildModeFastTrace = BvhBuildModeHPLOC;
+#endif
 #endif
         m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
 
@@ -773,6 +778,20 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
     if (appProfile == AppProfile::TheCrewMotorfest)
     {
+        if (IsGfx11(pInfo->gfxLevel))
+        {
+            {
+                // LLPC optimizations to be used when we switch back to LLPC
+                // at a later date
+                m_settings.mallNoAllocDsPolicy = MallNoAllocDsAsSnsr;
+                m_settings.enableWgpMode = Vkgc::ShaderStageBit::ShaderStageComputeBit;
+                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                            ForceDccFor3DShaderStorage |
+                                            ForceDccForColorAttachments |
+                                            ForceDccForNonColorAttachmentShaderStorage |
+                                            ForceDccFor32BppShaderStorage);
+            }
+        }
     }
 
     if (appProfile == AppProfile::AtlasFallen)
@@ -792,6 +811,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
+    }
+
+    if (appProfile == AppProfile::TheSurge2)
+    {
+        m_settings.ignoreSuboptimalSwapchainSize = true;
     }
 
     if (appProfile == AppProfile::WolfensteinCyberpilot)
@@ -1260,15 +1284,22 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             VK_SAMPLE_COUNT_2_BIT |
             VK_SAMPLE_COUNT_4_BIT;
 
-        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
-        {
-        }
-
         // Force exclusive sharing mode - 2% gain
         m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
         m_settings.implicitExternalSynchronization = false;
+        m_settings.ac01WaNotNeeded = true;
 
-        if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_3)
+        if (pInfo->gpuType == Pal::GpuType::Integrated)
+        {
+            // The local heap rarely gets chosen regardless of its size, so force its use until the
+            // overrideHeapChoiceToLocalBudget setting maximum is reached.
+            m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc | OverrideChoiceForGartCacheable;
+        }
+
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+        {
+        }
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
         {
             m_settings.pipelineBinningMode  = PipelineBinningModeDisable;
             m_settings.mallNoAllocCtPolicy  = MallNoAllocCtAsSnsr;
@@ -1277,26 +1308,38 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                                ForceDccFor3DShaderStorage  |
                                                ForceDccForColorAttachments |
                                                ForceDccFor64BppShaderStorage);
-
-            if (IsGfx11(pInfo->gfxLevel))
-            {
-                m_settings.forceEnableDcc      |= ForceDccForNonColorAttachmentShaderStorage;
-            }
-#if VKI_BUILD_GFX12
-            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp12)
-            {
-                m_settings.temporalHintsMrtBehavior = TemporalHintsMrtBehavior::TemporalHintsStaticNt;
-                m_settings.hiSzWorkaroundBehavior   = HiSZWarBehavior::HiSZWarBehaviorEventBasedWar;
-                m_settings.disableLoopUnrolls       = true;
-            }
-#endif
         }
+        else if (IsGfx11(pInfo->gfxLevel))
+        {
+            m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage    |
+                                         ForceDccFor3DShaderStorage    |
+                                         ForceDccForColorAttachments   |
+                                         ForceDccFor64BppShaderStorage |
+                                         ForceDccForNonColorAttachmentShaderStorage);
 
-        m_settings.ac01WaNotNeeded = true;
+            m_settings.mallNoAllocCtPolicy  = MallNoAllocCtAsSnsr;
+            m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
+            m_settings.pipelineBinningMode  = PipelineBinningModeDisable;
+
+            {
+                m_settings.csWaveSize = 64;
+                m_settings.fsWaveSize = 64;
+            }
+        }
+#if VKI_BUILD_GFX12
+        else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp12)
+        {
+            m_settings.temporalHintsMrtBehavior = TemporalHintsMrtBehavior::TemporalHintsStaticNt;
+            m_settings.hiSzWorkaroundBehavior = HiSZWarBehavior::HiSZWarBehaviorEventBasedWar;
+            m_settings.disableLoopUnrolls = true;
+            m_settings.pipelineBinningMode = PipelineBinningModeDisable;
+        }
+#endif
     }
 
     if (appProfile == AppProfile::GhostReconBreakpoint)
     {
+        m_settings.enableBackBufferProtection = true;
 
         // Override the PAL default for 3D color attachments and storage images to match GFX9's, SW_R/z-slice order.
         m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
@@ -1356,7 +1399,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         }
         else if (IsGfx11(pInfo->gfxLevel))
         {
-
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp11_5)
             {
                 m_settings.pipelineBinningMode = PipelineBinningModeDisable;
@@ -1502,6 +1544,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         }
         else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
         {
+
             m_settings.mallNoAllocSsrPolicy = MallNoAllocSsrAsSnsr;
 
             if (pInfo->revision != Pal::AsicRevision::Navi21)
@@ -1546,23 +1589,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
     if (appProfile == AppProfile::SaschaWillemsExamples)
     {
         m_settings.forceDepthClampBasedOnZExport = true;
-    }
-
-    if ((appProfile == AppProfile::DxvkHaloInfiniteLauncher) ||
-        (appProfile == AppProfile::DxvkTf2)
-#ifndef VKI_X64_BUILD
-    || (appProfile == AppProfile::DXVK)
-#endif
-    )
-    {
-        // DXVK Tropic4, GTA4, Halo Infinite Launcher page fault when GPL is enabled.
-        // It looks incorrect pipeline layout is used. Force indirect can make optimized pipeline layout compatible
-        // with fast-linked pipeline.
-        m_settings.pipelineLayoutSchemeSelectionStrategy = PipelineLayoutSchemeSelectionStrategy::ForceIndirect;
-
-        // It results from incorrect behavior of DXVK. Incompatible push constant size leads to Gpu page fault
-        // during fast link in pipeline creation.
-        m_settings.pipelineLayoutPushConstantCompatibilityCheck = true;
     }
 
     if (appProfile == AppProfile::DetroitBecomeHuman)
@@ -1706,8 +1732,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
                 m_settings.mallNoAllocCtPolicy = MallNoAllocCtAsSnsr;
             }
-
-            if (pInfo->revision == Pal::AsicRevision::Navi33)
+            else if (pInfo->revision == Pal::AsicRevision::Navi33)
             {
                 {
                     m_settings.forceCsThreadIdSwizzling = true;
@@ -1810,6 +1835,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         }
     }
 
+    if (appProfile == AppProfile::StillWakesTheDeep)
+    {
+    }
+
     if (appProfile == AppProfile::Vkd3dEngine)
     {
         OverrideVkd3dCommonSettings(&m_settings);
@@ -1838,9 +1867,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.hiSzWorkaroundBehavior = HiSZWarBehavior::HiSZWarBehaviorEventBasedWar;
         }
 #endif
-
-        m_settings.forceGraphicsQueueCount = 2;
-        m_settings.forceComputeQueueCount = 4;
 
 #if VKI_RAY_TRACING
         m_settings.memoryPriorityBufferRayTracing = 80;
@@ -2084,6 +2110,12 @@ void VulkanSettingsLoader::ValidateSettings()
         {
             buildMode = BvhBuildModePLOC;
         }
+#if VKI_SUPPORT_HPLOC
+        else if (m_settings.rtBvhBuildModeOverride == BvhBuildModeOverrideHPLOC)
+        {
+            buildMode = BvhBuildModeHPLOC;
+        }
+#endif
         m_settings.bvhBuildModeOverrideBlas = buildMode;
         m_settings.bvhBuildModeOverrideTlas = buildMode;
     }
@@ -2180,6 +2212,13 @@ void VulkanSettingsLoader::ValidateSettings()
         m_settings.memoryDeviceOverallocationAllowed = true;
     }
 
+#if VKI_RAY_TRACING
+    // Override the persistent dispatch option if global stacks are used.
+    if (m_settings.cpsFlags & Vkgc::CpsFlagStackInGlobalMem)
+    {
+        m_settings.rtPersistentDispatchRays = true;
+    }
+#endif
 }
 
 // =====================================================================================================================
@@ -2187,45 +2226,9 @@ static void UpdateDeviceGeneratedCommandsPalSettings(
     Pal::PalPublicSettings*     pPalSettings,
     const Pal::DeviceProperties info)
 {
-    bool enablePacketPath = false;
-
-    const Pal::AsicRevision asic          = info.revision;
-    const Pal::GfxIpLevel   gfxLevel      = info.gfxLevel;
-    const uint32_t          pfpVersion    = info.gfxipProperties.pfpUcodeVersion;
-    const bool              isDiscreteGpu = (info.gpuType == Pal::GpuType::Discrete);
-
-    constexpr uint32_t PfpVersionDeviceGeneratedCommandsReadinessStrixSeries = 40;
-
     // This part of code must be logically consistent with IsDeviceGeneratedCommandsSupported()
-    if (isDiscreteGpu)
-    {
-        enablePacketPath = true;
-    }
-    else
-    {
-        switch (gfxLevel)
-        {
-        case Pal::GfxIpLevel::GfxIp10_1:
-            VK_NEVER_CALLED(); // dGPU only
-            break;
-
-        case Pal::GfxIpLevel::GfxIp10_3:
-        case Pal::GfxIpLevel::GfxIp11_0:
-        case Pal::GfxIpLevel::GfxIp11_5:
-            enablePacketPath = false;
-            break;
-#if VKI_BUILD_GFX12
-        case Pal::GfxIpLevel::GfxIp12:
-            VK_NEVER_CALLED(); // dGPU only
-            break;
-#endif
-        default:
-            enablePacketPath = true; // We assume later ASICs are good to go
-            break;
-        }
-    }
-
-    pPalSettings->enableExecuteIndirectPacket      = enablePacketPath;
+    pPalSettings->enableExecuteIndirectPacket = ((info.gpuType == Pal::GpuType::Discrete) ||
+                                                 (info.gfxLevel >= Pal::GfxIpLevel::GfxIp11_0));
     pPalSettings->disableExecuteIndirectAceOffload = true;
 }
 
@@ -2397,6 +2400,22 @@ bool VulkanSettingsLoader::ReadSetting(
     return m_pDevice->ReadSetting(
         pSettingName,
         Pal::SettingScope::Driver,
+        valueType,
+        pValue,
+        bufferSize);
+}
+
+// =====================================================================================================================
+bool VulkanSettingsLoader::ReadSetting(
+    const char*          pSettingName,
+    Util::ValueType      valueType,
+    void*                pValue,
+    Pal::SettingScope    scope,
+    size_t               bufferSize)
+{
+    return m_pDevice->ReadSetting(
+        pSettingName,
+        scope,
         valueType,
         pValue,
         bufferSize);

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -216,6 +216,8 @@ typedef uint64_t gpusize;  ///< Used to specify GPU addresses and sizes of GPU a
     // The max number of descriptors required for a single descriptor type.
     // This is currently 3 for YCbCr formats
     constexpr uint32 MaxCombinedImageSamplerDescriptorCount = 3;
+
+    constexpr uint32 MaxYCbCrImageSamplerDescriptorCount = 3;
 
     // Enumerates the compiler types
     enum PipelineCompilerType : uint32

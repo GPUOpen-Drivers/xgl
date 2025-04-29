@@ -84,12 +84,12 @@ public:
 
     virtual void Destroy() override;
 
-    virtual VkResult BuildShaderModule(
+    VkResult BuildShaderModule(
         const Device*                pDevice,
         ShaderModuleFlags            flags,
         const Vkgc::BinaryData&      shaderBinary,
         ShaderModuleHandle*          pShaderModule,
-        const PipelineOptimizerKey&  profileKey) override;
+        const PipelineOptimizerKey&  profileKey);
 
     virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) override;
 
@@ -149,6 +149,13 @@ public:
 
     virtual void FreeRayTracingPipelineBinary(
         RayTracingPipelineBinary* pPipelineBinary) override;
+
+    virtual VkResult InsertSpirvsInRtPipeline(
+        const Device*                                pDevice,
+        const VkPipelineShaderStageCreateInfo*       pShaderStages,
+        const uint32_t                               stageCount,
+        RayTracingPipelineBinaryCreateInfo*          pBinCreateInfo,
+        RayTracingPipelineBinary*                    pPipelineBinaries) override;
 #endif
 
     virtual void BuildPipelineInternalBufferData(

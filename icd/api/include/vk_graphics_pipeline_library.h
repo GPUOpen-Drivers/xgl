@@ -55,7 +55,7 @@ public:
         VkPipelineCreateFlags2KHR               flags,
         GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
         GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,
-        const PipelineLayout*                   pPipelineLayout,
+        const PipelineResourceLayout*           pResourceLayout,
         ShaderOptimizerKey*                     pShaderOptimizerKeys,
         PipelineOptimizerKey*                   pPipelineOptimizerKey,
         uint64_t*                               pApiPsoHash,
@@ -110,7 +110,7 @@ private:
         const GplModuleState*                   pGplModuleStates,
         PipelineBinaryStorage*                  pBinaryStorage,
         const uint32_t                          providedLibraryMask,
-        const PipelineLayout*                   pPipelineLayout);
+        const UserDataLayout*                   pLayout);
 
     static VkResult CreatePartialPipelineBinary(
         const Device*                          pDevice,

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -40,6 +40,7 @@
 #include "include/vk_descriptor_set_layout.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_device.h"
+#include "include/vk_image.h"
 
 #include "pal.h"
 
@@ -49,6 +50,7 @@ namespace vk
 class Device;
 class DescriptorPool;
 class BufferView;
+class Image;
 
 struct DescriptorAddr
 {
@@ -110,13 +112,18 @@ public:
     inline static Pal::gpusize GpuAddressFromHandle(uint32_t deviceIdx, VkDescriptorSet set);
     inline static void UserDataPtrValueFromHandle(VkDescriptorSet set, uint32_t deviceIdx, uint32_t* pUserData);
 
-     inline static void PatchedDynamicDataFromHandle(
+    inline static void PatchedDynamicDataFromHandle(
         VkDescriptorSet set,
         uint32_t        deviceIdx,
         uint32_t*       pUserData,
         const uint32_t* pDynamicOffsets,
         uint32_t        numDynamicDescriptors,
         bool            useCompactDescriptor);
+
+    void AddWrittenFlippableImage(
+        const Image* pImage);
+
+    const Image* GetWrittenFlippableImage() const;
 
 protected:
     ~DescriptorSet()
@@ -138,6 +145,8 @@ protected:
     DescriptorAddr              m_addresses[numPalDevices];
 
     uint32_t                    m_heapIndex;
+
+    const Image*                m_pWrittenFlippableImage; // Any flippable images that are in this descriptor set.
 
     friend class DescriptorPool;
     friend class DescriptorSetHeap;
@@ -222,6 +231,28 @@ void DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
             memcpy(&pUserData[2 * i * dynDataNumQwords + 2], &pSrcQwords[i * dynDataNumQwords + 1], sizeof(uint64_t));
         }
     }
+}
+
+// =====================================================================================================================
+// Tracks the latest flippable image that may potentially be written to in this descriptor set.
+// This isn't full proof detection as it is entirely possible that more than one flippable image could be present
+// in the descriptor set. However, detecting writes via compute is not easy and we haven't encountered applications
+// writing more than one backbuffer to a descriptor set yet.
+
+template<uint32_t numPalDevices>
+inline void DescriptorSet<numPalDevices>::AddWrittenFlippableImage(const Image* pImage)
+{
+    if (pImage->IsFlippable())
+    {
+        m_pWrittenFlippableImage = pImage;
+    }
+}
+
+// =====================================================================================================================
+template<uint32_t numPalDevices>
+inline const Image* DescriptorSet<numPalDevices>::GetWrittenFlippableImage() const
+{
+    return m_pWrittenFlippableImage;
 }
 
 // =====================================================================================================================

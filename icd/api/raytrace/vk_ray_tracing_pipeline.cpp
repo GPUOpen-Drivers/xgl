@@ -246,14 +246,16 @@ void RayTracingPipeline::BuildApiHash(
 void RayTracingPipeline::ConvertRayTracingPipelineInfo(
     Device*                                  pDevice,
     const VkRayTracingPipelineCreateInfoKHR* pIn,
+    VkPipelineCreateFlags2KHR                flags,
     CreateInfo*                              pOutInfo)
 {
     VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR);
 
-    if (pIn->layout != VK_NULL_HANDLE)
-    {
-        pOutInfo->pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
-    }
+    Pipeline::BuildPipelineResourceLayout(pDevice,
+                                         PipelineLayout::ObjectFromHandle(pIn->layout),
+                                         VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                                         flags,
+                                         &pOutInfo->resourceLayout);
 
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
@@ -352,7 +354,7 @@ void RayTracingPipeline::Init(
     Pal::IPipeline**                     ppPalPipeline,
     uint32_t                             shaderLibraryCount,
     Pal::IShaderLibrary**                ppPalShaderLibrary,
-    const PipelineLayout*                pPipelineLayout,
+    const UserDataLayout*                pLayout,
     PipelineBinaryStorage*               pBinaryStorage,
     const ShaderOptimizerKey*            pShaderOptKeys,
     const ImmedInfo&                     immedInfo,
@@ -373,7 +375,7 @@ void RayTracingPipeline::Init(
 {
     Pipeline::Init(
         ppPalPipeline,
-        pPipelineLayout,
+        pLayout,
         pBinaryStorage,
         staticStateMask,
         dispatchRaysUserDataOffset,
@@ -523,6 +525,11 @@ VkResult RayTracingPipeline::CreateImpl(
             pCreateInfo->basePipelineHandle,
             pCreateInfo->basePipelineIndex
         };
+
+        ConvertRayTracingPipelineInfo(m_pDevice,
+                                      &pipelineCreateInfo,
+                                      flags,
+                                      &localPipelineInfo);
 
         // If rtEnableCompilePipelineLibrary is false, the library shaders have been included in pCreateInfo.
         const bool hasLibraries = settings.rtEnableCompilePipelineLibrary &&
@@ -885,6 +892,7 @@ VkResult RayTracingPipeline::CreateImpl(
                     extStructs,
                     flags,
                     &shaderInfo,
+                    &localPipelineInfo.resourceLayout,
                     &optimizerKey,
                     &binaryCreateInfo);
                 result = (result == VK_SUCCESS) ? convertResult : result;
@@ -989,6 +997,17 @@ VkResult RayTracingPipeline::CreateImpl(
                 }
             }
 
+            // insert spirvs into the pipeline binary
+            if ((result == VK_SUCCESS) && (pDefaultCompiler->IsEmbeddingSpirvRequired()))
+            {
+                result = pDefaultCompiler->InsertSpirvsInRtPipeline(
+                    m_pDevice,
+                    pCreateInfo->pStages,
+                    pCreateInfo->stageCount,
+                    &binaryCreateInfo,
+                    &pipelineBinaries[deviceIdx]);
+            }
+
             if (totalGroupCount > 0)
             {
                 // Copy shader groups if compiler doesn't use pre-allocated buffer.
@@ -1051,8 +1070,6 @@ VkResult RayTracingPipeline::CreateImpl(
                     Util::Strncpy(m_pShaderProperty[0].name, "ray-gen", Vkgc::RayTracingMaxShaderNameLength);
                 }
             }
-
-            ConvertRayTracingPipelineInfo(m_pDevice, &pipelineCreateInfo, &localPipelineInfo);
 
             // Override pipeline creation parameters based on pipeline profile
             m_pDevice->GetShaderOptimizer()->OverrideComputePipelineCreateInfo(
@@ -1138,6 +1155,13 @@ VkResult RayTracingPipeline::CreateImpl(
                 localPipelineInfo.pipeline.pPipelineBinary      = pBinaries[0].pCode;
                 localPipelineInfo.pipeline.maxFunctionCallDepth =
                                 pipelineBinaries[DefaultDeviceIndex].maxFunctionCallDepth;
+
+                CsDispatchInterleaveSize interleaveSize = m_pDevice->GetShaderOptimizer()->
+                    OverrideDispatchInterleaveSize(Vkgc::ShaderStage::ShaderStageCompute, optimizerKey);
+
+                localPipelineInfo.pipeline.interleaveSize = (interleaveSize != CsDispatchInterleaveSizeDefault) ?
+                    ConvertDispatchInterleaveSize(interleaveSize) :
+                    ConvertDispatchInterleaveSize(settings.rtCsDispatchInterleaveSize);
             }
 
             // Get the pipeline and shader size from PAL and allocate memory.
@@ -1237,6 +1261,13 @@ VkResult RayTracingPipeline::CreateImpl(
                     localPipelineInfo.pipeline.pipelineBinarySize   = pBinaries[0].codeSize;
                     localPipelineInfo.pipeline.pPipelineBinary      = pBinaries[0].pCode;
                     localPipelineInfo.pipeline.maxFunctionCallDepth = pipelineBinaries[deviceIdx].maxFunctionCallDepth;
+
+                    CsDispatchInterleaveSize interleaveSize = m_pDevice->GetShaderOptimizer()->
+                        OverrideDispatchInterleaveSize(Vkgc::ShaderStage::ShaderStageCompute, optimizerKey);
+
+                    localPipelineInfo.pipeline.interleaveSize = (interleaveSize != CsDispatchInterleaveSizeDefault) ?
+                        ConvertDispatchInterleaveSize(interleaveSize) :
+                        ConvertDispatchInterleaveSize(settings.rtCsDispatchInterleaveSize);
                 }
 
                 // Copy indirect function info
@@ -1825,12 +1856,12 @@ VkResult RayTracingPipeline::CreateImpl(
 
         if (result == VK_SUCCESS)
         {
-            uint32_t dispatchRaysUserDataOffset = localPipelineInfo.pLayout->GetDispatchRaysUserData();
+            uint32_t dispatchRaysUserDataOffset = GetDispatchRaysUserData(&localPipelineInfo.resourceLayout);
 
             Init(hasKernelEntry ? pPalPipeline : nullptr,
                  funcCount * m_pDevice->NumPalDevices(),
                  ppShaderLibraries,
-                 localPipelineInfo.pLayout,
+                 &localPipelineInfo.resourceLayout.userDataLayout,
                  pPermBinaryStorage,
                  optimizerKey.pShaders,
                  localPipelineInfo.immedInfo,
@@ -1938,6 +1969,7 @@ VkResult RayTracingPipeline::CreateImpl(
             // The hash is same as pipline dump file name, we can easily analyze further.
             AmdvlkLog(settings.logTagIdMask, PipelineCompileTime, "0x%016llX-%llu", apiPsoHash, duration);
         }
+
     }
 
     return result;
@@ -2872,8 +2904,9 @@ uint32_t RayTracingPipeline::PersistentDispatchSize(
     const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
     const Pal::DeviceProperties& deviceProp = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
     const auto& props = deviceProp.gfxipProperties.shaderCore;
-    const uint32 rayDispatchMaxGroups = settings.rtPersistentDispatchRaysFactor *
-        (props.numAvailableCus * props.numSimdsPerCu * props.numWavefrontsPerSimd);
+    const uint32 rayDispatchMaxGroups = settings.rtPersistentDispatchRays
+                                            ? (props.numAvailableCus * props.numSimdsPerCu * props.numWavefrontsPerSimd)
+                                            : 0;
     const uint32 persistentDispatchSize = Util::Min(rayDispatchMaxGroups,
                                                     (dispatchSize.x * dispatchSize.y * dispatchSize.z));
 

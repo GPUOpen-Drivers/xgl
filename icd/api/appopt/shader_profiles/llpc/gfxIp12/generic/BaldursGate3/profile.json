@@ -63,6 +63,30 @@
           "enableLoadScalarizer": true
         }
       }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x5405E55FFCFBF870 73A9327DAC9B27A5"
+        }
+      },
+      "action": {
+        "cs": {
+          "favorLatencyHiding": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xE40D634D51441233 D0BD120D7FDB44CC"
+        }
+      },
+      "action": {
+        "ps": {
+          "favorLatencyHiding": true
+        }
+      }
     }
   ]
 }

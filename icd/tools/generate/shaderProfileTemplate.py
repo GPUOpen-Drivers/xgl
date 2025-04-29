@@ -2488,6 +2488,78 @@ SHADER_ACTION = {
         "jsonReaderTemplate": SHADER_CREATE_APPLY_TUNING_OPTIONS_RUNTIME_TEMPLATE
     },
 #endif
+
+    "dispatchInterleaveSize": {
+        "type": [str],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "dispatchInterleaveSize",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {},
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "dispatchInterleaveSize",
+                "dataType": "CsDispatchInterleaveSize",
+                "defaultValue": "",
+                "jsonWritable": False,
+                "buildTypes": {},
+            },
+        ],
+        "validValues": {
+            0: "CsDispatchInterleaveSizeDefault",
+            1: "CsDispatchInterleaveSizeDisable",
+            2: "CsDispatchInterleaveSize_1D_64_Threads",
+            3: "CsDispatchInterleaveSize_1D_128_Threads",
+            4: "CsDispatchInterleaveSize_1D_256_Threads",
+            5: "CsDispatchInterleaveSize_1D_512_Threads",
+            6: "CsDispatchInterleaveSize_2D_1x1_ThreadGroups",
+            7: "CsDispatchInterleaveSize_2D_1x2_ThreadGroups",
+            8: "CsDispatchInterleaveSize_2D_1x4_ThreadGroups",
+            9: "CsDispatchInterleaveSize_2D_1x8_ThreadGroups",
+            10: "CsDispatchInterleaveSize_2D_1x16_ThreadGroups",
+            11: "CsDispatchInterleaveSize_2D_2x1_ThreadGroups",
+            12: "CsDispatchInterleaveSize_2D_2x2_ThreadGroups",
+            13: "CsDispatchInterleaveSize_2D_2x4_ThreadGroups",
+            14: "CsDispatchInterleaveSize_2D_2x8_ThreadGroups",
+            15: "CsDispatchInterleaveSize_2D_4x1_ThreadGroups",
+            16: "CsDispatchInterleaveSize_2D_4x2_ThreadGroups",
+            17: "CsDispatchInterleaveSize_2D_4x4_ThreadGroups",
+            18: "CsDispatchInterleaveSize_2D_8x1_ThreadGroups",
+            19: "CsDispatchInterleaveSize_2D_8x2_ThreadGroups",
+            20: "CsDispatchInterleaveSize_2D_16x1_ThreadGroups"
+        },
+        "buildTypes": {},
+        "codeTemplate": """\
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.\n
+%FieldName% = true;
+            pPipelineProfile->pEntries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.\n
+%FieldName% = CsDispatchInterleaveSize::%StrValue%;\n""",
+        "jsonWriterTemplate": json_enum_writer_template(["CsDispatchInterleaveSizeDefault", "CsDispatchInterleaveSizeDisable",
+                                                         "CsDispatchInterleaveSize_1D_64_Threads", "CsDispatchInterleaveSize_1D_128_Threads", "CsDispatchInterleaveSize_1D_256_Threads", "CsDispatchInterleaveSize_1D_512_Threads"
+                                                         ,"CsDispatchInterleaveSize_2D_1x1_ThreadGroups", "CsDispatchInterleaveSize_2D_1x2_ThreadGroups", "CsDispatchInterleaveSize_2D_1x4_ThreadGroups"
+                                                         ,"CsDispatchInterleaveSize_2D_1x8_ThreadGroups", "CsDispatchInterleaveSize_2D_1x16_ThreadGroups", "CsDispatchInterleaveSize_2D_2x1_ThreadGroups"
+                                                         ,"CsDispatchInterleaveSize_2D_2x2_ThreadGroups", "CsDispatchInterleaveSize_2D_2x4_ThreadGroups", "CsDispatchInterleaveSize_2D_2x8_ThreadGroups"
+                                                         ,"CsDispatchInterleaveSize_2D_4x1_ThreadGroups", "CsDispatchInterleaveSize_2D_4x2_ThreadGroups", "CsDispatchInterleaveSize_2D_4x4_ThreadGroups"
+                                                         ,"CsDispatchInterleaveSize_2D_8x1_ThreadGroups", "CsDispatchInterleaveSize_2D_8x2_ThreadGroups", "CsDispatchInterleaveSize_2D_16x1_ThreadGroups"
+                                                         ],
+                                                     prefix="CsDispatchInterleaveSize::"),
+        "jsonReaderTemplate": json_enum_reader_template(["CsDispatchInterleaveSizeDefault", "CsDispatchInterleaveSizeDisable",
+                                                         "CsDispatchInterleaveSize_1D_64_Threads", "CsDispatchInterleaveSize_1D_128_Threads", "CsDispatchInterleaveSize_1D_256_Threads", "CsDispatchInterleaveSize_1D_512_Threads"
+                                                         ,"CsDispatchInterleaveSize_2D_1x1_ThreadGroups", "CsDispatchInterleaveSize_2D_1x2_ThreadGroups", "CsDispatchInterleaveSize_2D_1x4_ThreadGroups"
+                                                         ,"CsDispatchInterleaveSize_2D_1x8_ThreadGroups", "CsDispatchInterleaveSize_2D_1x16_ThreadGroups", "CsDispatchInterleaveSize_2D_2x1_ThreadGroups"
+                                                         ,"CsDispatchInterleaveSize_2D_2x2_ThreadGroups", "CsDispatchInterleaveSize_2D_2x4_ThreadGroups", "CsDispatchInterleaveSize_2D_2x8_ThreadGroups"
+                                                         ,"CsDispatchInterleaveSize_2D_4x1_ThreadGroups", "CsDispatchInterleaveSize_2D_4x2_ThreadGroups", "CsDispatchInterleaveSize_2D_4x4_ThreadGroups"
+                                                         ,"CsDispatchInterleaveSize_2D_8x1_ThreadGroups", "CsDispatchInterleaveSize_2D_8x2_ThreadGroups", "CsDispatchInterleaveSize_2D_16x1_ThreadGroups"
+                                                         ],
+                                                     prefix="CsDispatchInterleaveSize::"),
+    },
 }
 
 SHADER_PATTERN = {
@@ -3191,7 +3263,7 @@ ShaderTuningStructsAndVars = {
         "entity": "var",
         "varName": "InitialPipelineProfileEntries",
         "dataType": "constexpr uint32_t",
-        "defaultValue": "32",
+        "defaultValue": "64",
         "buildTypes": {},
     },
 

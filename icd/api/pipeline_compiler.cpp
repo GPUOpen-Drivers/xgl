@@ -38,6 +38,7 @@
 #include "include/vk_render_pass.h"
 #include "include/vk_graphics_pipeline.h"
 #include "include/vk_graphics_pipeline_library.h"
+#include "include/vk_sampler.h"
 #include "include/pipeline_compiler.h"
 #include <vector>
 
@@ -47,6 +48,7 @@
 #include "palShaderLibrary.h"
 
 #include "include/pipeline_binary_cache.h"
+#include "devmode/devmode_mgr.h"
 
 #if VKI_RAY_TRACING
 #include "raytrace/vk_ray_tracing_pipeline.h"
@@ -1830,6 +1832,7 @@ static void MergePipelineOptions(
     pDst->forceCsThreadIdSwizzling              |= src.forceCsThreadIdSwizzling;
     pDst->includeIr                             |= src.includeIr;
     pDst->robustBufferAccess                    |= src.robustBufferAccess;
+    pDst->enableRobustUnboundVertex             |= src.enableRobustUnboundVertex;
     pDst->enableRelocatableShaderElf            |= src.enableRelocatableShaderElf;
     pDst->disableImageResourceCheck             |= src.disableImageResourceCheck;
     pDst->extendedRobustness.nullDescriptor     |= src.extendedRobustness.nullDescriptor;
@@ -2227,19 +2230,34 @@ void PipelineCompiler::BuildPipelineShaderInfo(
 // =====================================================================================================================
 static VkResult BuildPipelineResourceMapping(
     const Device*                     pDevice,
-    const PipelineLayout*             pLayout,
+    const PipelineResourceLayout*     pLayout,
     const uint32_t                    stageMask,
+    VkPipelineCreateFlags2KHR         flags,
+#if VKI_RAY_TRACING
+    bool                              hasRayQuery,
+#endif
     GraphicsPipelineBinaryCreateInfo* pCreateInfo)
 {
     VkResult result = VK_SUCCESS;
 
-    if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
+    if (((pLayout->pPipelineLayout != nullptr) &&
+        (pLayout->pPipelineLayout->GetPipelineInfo()->mappingBufferSize > 0))
+        )
     {
-        pCreateInfo->pipelineInfo.pipelineLayoutApiHash = pLayout->GetApiHash();
+        const MappingBufferLayout* pBufferLayout = &pLayout->mappingBufferLayout;
 
-        size_t genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
+        size_t genericMappingBufferSize = pBufferLayout->mappingBufferSize;
 
-        size_t tempBufferSize = genericMappingBufferSize + pCreateInfo->mappingBufferSize;
+        size_t tempBufferSize   = genericMappingBufferSize + pCreateInfo->mappingBufferSize;
+
+#if VKI_RAY_TRACING
+        const size_t gpurtOptionsSize = hasRayQuery ?
+                                        pDevice->RayTrace()->GetGpurtOptions().size() * sizeof(GpurtOption) :
+                                        0;
+
+        tempBufferSize += gpurtOptionsSize;
+#endif
+
         pCreateInfo->pTempBuffer = pDevice->VkInstance()->AllocMem(tempBufferSize,
                                                                 VK_DEFAULT_MEM_ALIGN,
                                                                 VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
@@ -2257,18 +2275,35 @@ static VkResult BuildPipelineResourceMapping(
             // them to zeros.
             memset(pCreateInfo->pTempBuffer, 0, tempBufferSize);
 
+#if VKI_RAY_TRACING
+            if (gpurtOptionsSize > 0)
+            {
+                auto pGpurtOptions = static_cast<Vkgc::GpurtOption*>(
+                    VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferSize - gpurtOptionsSize));
+                pCreateInfo->pipelineInfo.rtState.pGpurtOptions = pGpurtOptions;
+                pCreateInfo->pipelineInfo.rtState.gpurtOptionCount = gpurtOptionsSize / sizeof(GpurtOption);
+                memcpy(pGpurtOptions, pDevice->RayTrace()->GetGpurtOptions().Data(), gpurtOptionsSize);
+            }
+#endif
+
             // Build the LLPC resource mapping description. This data contains things about how shader
             // inputs like descriptor set bindings are communicated to this pipeline in a form that
             // LLPC can understand.
-            result = pLayout->BuildLlpcPipelineMapping(stageMask,
-                                                       &pCreateInfo->pBinaryMetadata->vbInfo,
-                                                       pCreateInfo->pipelineInfo.enableUberFetchShader,
+            if (pLayout->pPipelineLayout != nullptr)
+            {
+                pCreateInfo->pipelineInfo.pipelineLayoutApiHash = pLayout->pPipelineLayout->GetApiHash();
+
+                result = pLayout->pPipelineLayout->BuildLlpcPipelineMapping(
+                                                            stageMask,
+                                                            &pCreateInfo->pBinaryMetadata->vbInfo,
+                                                            pCreateInfo->pipelineInfo.enableUberFetchShader,
 #if VKI_RAY_TRACING
-                                                       false,
+                                                            false,
 #endif
-                                                       pCreateInfo->pTempBuffer,
-                                                       &pCreateInfo->pipelineInfo.resourceMapping,
-                                                       &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
+                                                            pCreateInfo->pTempBuffer,
+                                                            &pCreateInfo->pipelineInfo.resourceMapping,
+                                                            &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
+            }
         }
     }
 
@@ -2757,7 +2792,7 @@ static void BuildExecutablePipelineState(
     VkPipelineCreateFlags2KHR              flags,
     const GraphicsPipelineShaderStageInfo* pShaderInfo,
     const GraphicsPipelineLibraryInfo*     pLibInfo,
-    const PipelineLayout*                  pPipelineLayout,
+    const UserDataLayout*                  pUserDataLayout,
     const uint64_t                         dynamicStateFlags,
     GraphicsPipelineBinaryCreateInfo*      pCreateInfo)
 {
@@ -2803,7 +2838,7 @@ static void BuildExecutablePipelineState(
 
     if (pCreateInfo->pipelineInfo.enableUberFetchShader)
     {
-        pDefaultCompiler->BuildPipelineInternalBufferData(pPipelineLayout, true, pCreateInfo);
+        pDefaultCompiler->BuildPipelineInternalBufferData(pUserDataLayout, true, pCreateInfo);
         PipelineCompiler::UploadInternalBufferData(pDevice, pCreateInfo);
         pCreateInfo->pBinaryMetadata->enableUberFetchShader = pCreateInfo->pipelineInfo.enableUberFetchShader;
     }
@@ -2933,7 +2968,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     const GraphicsPipelineLibraryInfo&              libInfo,
     VkPipelineCreateFlags2KHR                       flags,
     const GraphicsPipelineShaderStageInfo*          pShaderInfo,
-    const PipelineLayout*                           pPipelineLayout,
+    const PipelineResourceLayout*                   pLayout,
     const PipelineOptimizerKey*                     pPipelineProfileKey,
     PipelineMetadata*                               pBinaryMetadata,
     GraphicsPipelineBinaryCreateInfo*               pCreateInfo)
@@ -3082,7 +3117,25 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 CompilerSolution::DisableNggCulling(&pPipelineBuildInfo->nggState);
             }
 
-            result = BuildPipelineResourceMapping(pDevice, pPipelineLayout, availableStageMask, pCreateInfo);
+#if VKI_RAY_TRACING
+            bool hasRayQuery = false;
+
+            for (const Vkgc::PipelineShaderInfo* pPipeShaderInfo : shaderInfos)
+            {
+                const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>(pPipeShaderInfo->pModuleData);
+                hasRayQuery = hasRayQuery || ((pModuleData != nullptr) && (pModuleData->usage.enableRayQuery));
+            }
+#endif
+
+            result = BuildPipelineResourceMapping(
+                pDevice,
+                pLayout,
+                availableStageMask,
+                flags,
+#if VKI_RAY_TRACING
+                hasRayQuery,
+#endif
+                pCreateInfo);
         }
 
         // Primitive Generated Query is only used for traditional shaders, disable it for mesh shader.
@@ -3103,7 +3156,7 @@ void PipelineCompiler::ConvertGraphicsPipelineExecutableState(
     const GraphicsPipelineLibraryInfo&              libInfo,
     VkPipelineCreateFlags2KHR                       flags,
     const GraphicsPipelineShaderStageInfo*          pShaderInfo,
-    const PipelineLayout*                           pPipelineLayout,
+    const UserDataLayout*                           pUserDataLayout,
     GraphicsPipelineBinaryCreateInfo*               pCreateInfo)
 {
     VK_ASSERT(pIn != nullptr);
@@ -3113,14 +3166,14 @@ void PipelineCompiler::ConvertGraphicsPipelineExecutableState(
     if (libInfo.flags.isLibrary == false)
     {
         BuildExecutablePipelineState(
-            pDevice, pIn, flags, pShaderInfo, &libInfo, pPipelineLayout, dynamicStateFlags, pCreateInfo);
+            pDevice, pIn, flags, pShaderInfo, &libInfo, pUserDataLayout, dynamicStateFlags, pCreateInfo);
     }
     else if ((libInfo.libFlags & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) != 0)
     {
         bool enableUberFetchShader = pCreateInfo->pipelineInfo.enableUberFetchShader;
         pCreateInfo->pipelineInfo.enableUberFetchShader = true;
         pDevice->GetCompiler(DefaultDeviceIndex)->BuildPipelineInternalBufferData(
-            pDevice->GetNullPipelineLayout(), false, pCreateInfo);
+            &pDevice->GetNullPipelineLayout()->GetInfo().userDataLayout, false, pCreateInfo);
         PipelineCompiler::UploadInternalBufferData(pDevice, pCreateInfo);
         pCreateInfo->pipelineInfo.enableUberFetchShader = enableUberFetchShader;
     }
@@ -3134,7 +3187,7 @@ VkResult PipelineCompiler::BuildGplFastLinkCreateInfo(
     const GraphicsPipelineExtStructs&               extStructs,
     VkPipelineCreateFlags2KHR                       flags,
     const GraphicsPipelineLibraryInfo&              libInfo,
-    const PipelineLayout*                           pPipelineLayout,
+    const UserDataLayout*                           pUserDataLayout,
     PipelineMetadata*                               pBinaryMetadata,
     GraphicsPipelineBinaryCreateInfo*               pCreateInfo)
 {
@@ -3225,7 +3278,7 @@ VkResult PipelineCompiler::BuildGplFastLinkCreateInfo(
         {
             // Always build internal buffer data if pipeline dump is enabled.
             const bool enableCache = pDevice->GetRuntimeSettings().enablePipelineDump;
-            BuildPipelineInternalBufferData(pPipelineLayout, enableCache, pCreateInfo);
+            BuildPipelineInternalBufferData(pUserDataLayout, enableCache, pCreateInfo);
             PipelineCompiler::UploadInternalBufferData(pDevice, pCreateInfo);
         }
     }
@@ -3323,7 +3376,10 @@ void PipelineCompiler::ApplyPipelineOptions(
     {
         pOptions->robustBufferAccess = true;
     }
-
+    if (pDevice->GetEnabledFeatures().robustUnboundVertexAttribute)
+    {
+        pOptions->enableRobustUnboundVertex = true;
+    }
     pOptions->shadowDescriptorTableUsage   = settings.enableFmaskBasedMsaaRead ?
                                              Vkgc::ShadowDescriptorTableUsage::Enable :
                                              Vkgc::ShadowDescriptorTableUsage::Disable;
@@ -3420,6 +3476,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     const VkComputePipelineCreateInfo*              pIn,
     const ComputePipelineExtStructs&                extStructs,
     const ComputePipelineShaderStageInfo*           pShaderInfo,
+    const PipelineResourceLayout*                   pLayout,
     const PipelineOptimizerKey*                     pPipelineProfileKey,
     PipelineMetadata*                               pBinaryMetadata,
     ComputePipelineBinaryCreateInfo*                pCreateInfo,
@@ -3433,13 +3490,6 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 
     if (result == VK_SUCCESS)
     {
-        PipelineLayout* pLayout = nullptr;
-
-        if (pIn->layout != VK_NULL_HANDLE)
-        {
-            pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
-        }
-
         pCreateInfo->pBinaryMetadata     = pBinaryMetadata;
         pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
         pCreateInfo->flags               = flags;
@@ -3453,6 +3503,13 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
         pCreateInfo->pipelineInfo.cs.pModuleData =
             ShaderModule::GetFirstValidShaderData(pShaderInfo->stage.pModuleHandle);
 
+#if VKI_RAY_TRACING
+        const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>
+            (pCreateInfo->pipelineInfo.cs.pModuleData);
+
+        bool hasRayQuery = (pModuleData != nullptr) && (pModuleData->usage.enableRayQuery);
+#endif
+
         pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pShaderInfo->stage.pSpecializationInfo;
         pCreateInfo->pipelineInfo.cs.pEntryTarget        = pShaderInfo->stage.pEntryPoint;
         pCreateInfo->pipelineInfo.cs.entryStage          = Vkgc::ShaderStageCompute;
@@ -3463,15 +3520,27 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
             pCreateInfo->pipelineInfo.cs.options.allowVaryWaveSize = true;
         }
 
-        if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
+        if (((pLayout->pPipelineLayout != nullptr) &&
+            (pLayout->pPipelineLayout->GetPipelineInfo()->mappingBufferSize > 0))
+            )
         {
+            const MappingBufferLayout* pBufferLayout = &pLayout->mappingBufferLayout;
 
-            size_t genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
+            size_t genericMappingBufferSize = pBufferLayout->mappingBufferSize;
 
-            size_t tempBufferSize    = genericMappingBufferSize + pCreateInfo->mappingBufferSize;
-            pCreateInfo->pTempBuffer = pInstance->AllocMem(tempBufferSize,
-                                                           VK_DEFAULT_MEM_ALIGN,
-                                                           VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+            size_t tempBufferSize   = genericMappingBufferSize + pCreateInfo->mappingBufferSize;
+
+#if VKI_RAY_TRACING
+            const size_t gpurtOptionsSize = hasRayQuery ?
+                                            pDevice->RayTrace()->GetGpurtOptions().size() * sizeof(GpurtOption) :
+                                            0;
+
+            tempBufferSize += gpurtOptionsSize;
+#endif
+
+            pCreateInfo->pTempBuffer = pDevice->VkInstance()->AllocMem(tempBufferSize,
+                                                                    VK_DEFAULT_MEM_ALIGN,
+                                                                    VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
 
             if (pCreateInfo->pTempBuffer == nullptr)
             {
@@ -3479,8 +3548,6 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
             }
             else
             {
-                pCreateInfo->pipelineInfo.pipelineLayoutApiHash = pLayout->GetApiHash();
-
                 pCreateInfo->pMappingBuffer = Util::VoidPtrInc(pCreateInfo->pTempBuffer, genericMappingBufferSize);
 
                 // NOTE: Zero the allocated space that is used to create pipeline resource mappings. Some
@@ -3488,18 +3555,35 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
                 // them to zeroes.
                 memset(pCreateInfo->pTempBuffer, 0, tempBufferSize);
 
+#if VKI_RAY_TRACING
+                if (gpurtOptionsSize > 0)
+                {
+                    auto pGpurtOptions = static_cast<Vkgc::GpurtOption*>(
+                        VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferSize - gpurtOptionsSize));
+                    pCreateInfo->pipelineInfo.rtState.pGpurtOptions = pGpurtOptions;
+                    pCreateInfo->pipelineInfo.rtState.gpurtOptionCount = gpurtOptionsSize / sizeof(GpurtOption);
+                    memcpy(pGpurtOptions, pDevice->RayTrace()->GetGpurtOptions().Data(), gpurtOptionsSize);
+                }
+#endif
+
                 // Build the LLPC resource mapping description. This data contains things about how shader
                 // inputs like descriptor set bindings are communicated to this pipeline in a form that
                 // LLPC can understand.
-                result = pLayout->BuildLlpcPipelineMapping(Vkgc::ShaderStageComputeBit,
-                                                           nullptr,
-                                                           false,
+                if (pLayout->pPipelineLayout != nullptr)
+                {
+                    pCreateInfo->pipelineInfo.pipelineLayoutApiHash = pLayout->pPipelineLayout->GetApiHash();
+
+                    result = pLayout->pPipelineLayout->BuildLlpcPipelineMapping(
+                                                            Vkgc::ShaderStageComputeBit,
+                                                            nullptr,
+                                                            false,
 #if VKI_RAY_TRACING
-                                                           false,
+                                                            false,
 #endif
-                                                           pCreateInfo->pTempBuffer,
-                                                           &pCreateInfo->pipelineInfo.resourceMapping,
-                                                           &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
+                                                            pCreateInfo->pTempBuffer,
+                                                            &pCreateInfo->pipelineInfo.resourceMapping,
+                                                            &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
+                }
             }
         }
     }
@@ -3786,6 +3870,7 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
     const RayTracingPipelineExtStructs&             extStructs,
     VkPipelineCreateFlags2KHR                       flags,
     const RayTracingPipelineShaderStageInfo*        pShaderInfo,
+    const PipelineResourceLayout*                   pLayout,
     const PipelineOptimizerKey*                     pPipelineProfileKey,
     RayTracingPipelineBinaryCreateInfo*             pCreateInfo)
 {
@@ -3795,13 +3880,6 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
 
     if (result == VK_SUCCESS)
     {
-        PipelineLayout* pLayout = nullptr;
-
-        if (pIn->layout != VK_NULL_HANDLE)
-        {
-            pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
-        }
-
         pCreateInfo->pPipelineProfileKey = pPipelineProfileKey;
         pCreateInfo->flags               = flags;
 
@@ -3965,10 +4043,15 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
         size_t pipelineInfoBufferSize = pShaderInfo->stageCount * sizeof(Vkgc::PipelineShaderInfo);
         size_t tempBufferSize         = pipelineInfoBufferSize;
 
+        size_t tempBufferOffset         = 0;
         size_t genericMappingBufferSize = 0;
-        if (pLayout != nullptr)
+
+        if ((pLayout->pPipelineLayout != nullptr)
+            )
         {
-            genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
+            const MappingBufferLayout* pBufferLayout = &pLayout->mappingBufferLayout;
+
+            genericMappingBufferSize = pBufferLayout->mappingBufferSize;
 
             tempBufferSize += genericMappingBufferSize + pCreateInfo->mappingBufferSize;
         }
@@ -3978,17 +4061,17 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
             tempBufferSize += sizeof(BinaryData) * pIn->pLibraryInfo->libraryCount;
         }
 
-        const auto& gpurtOptions = pDevice->RayTrace()->GetGpurtOptions();
-        tempBufferSize += gpurtOptions.size() * sizeof(Vkgc::GpurtOption);
+        const RayTracingDevice::GpurtOptions& gpurtOptions = pDevice->RayTrace()->GetGpurtOptions();
+        const size_t gpurtOptionsSize                      = sizeof(Vkgc::GpurtOption) * gpurtOptions.size();
+
+        tempBufferSize += gpurtOptionsSize;
 
         // We can't have a pipeline with 0 shader stages
         VK_ASSERT(tempBufferSize > 0);
 
         pCreateInfo->pTempBuffer = pInstance->AllocMem(tempBufferSize,
-                                                       VK_DEFAULT_MEM_ALIGN,
-                                                       VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-
-        size_t tempBufferOffset = 0;
+                                                    VK_DEFAULT_MEM_ALIGN,
+                                                    VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
 
         if (pCreateInfo->pTempBuffer == nullptr)
         {
@@ -4001,31 +4084,25 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
             // them to zeroes.
             memset(pCreateInfo->pTempBuffer, 0, tempBufferSize);
 
-            if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
+            if ((pLayout->pPipelineLayout != nullptr) &&
+                (pLayout->pPipelineLayout->GetPipelineInfo()->mappingBufferSize > 0))
             {
-                pCreateInfo->pipelineInfo.pipelineLayoutApiHash = pLayout->GetApiHash();
+                pCreateInfo->pipelineInfo.pipelineLayoutApiHash = pLayout->pPipelineLayout->GetApiHash();
 
                 pCreateInfo->pMappingBuffer = pCreateInfo->pTempBuffer;
                 tempBufferOffset           += pCreateInfo->mappingBufferSize;
 
-                constexpr uint32_t RayTracingStageMask = Vkgc::ShaderStageRayTracingRayGenBit |
-                                                         Vkgc::ShaderStageRayTracingIntersectBit |
-                                                         Vkgc::ShaderStageRayTracingAnyHitBit |
-                                                         Vkgc::ShaderStageRayTracingClosestHitBit |
-                                                         Vkgc::ShaderStageRayTracingMissBit |
-                                                         Vkgc::ShaderStageRayTracingCallableBit;
-
                 // Build the LLPC resource mapping description. This data contains things about how shader
                 // inputs like descriptor set bindings are communicated to this pipeline in a form that
                 // LLPC can understand.
-                result = pLayout->BuildLlpcPipelineMapping(RayTracingStageMask,
-                                                           nullptr,
-                                                           false,
-                                                           isReplay,
-                                                           Util::VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferOffset),
-                                                           &pCreateInfo->pipelineInfo.resourceMapping,
-                                                           &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
-
+                result = pLayout->pPipelineLayout->BuildLlpcPipelineMapping(
+                                                    Vkgc::ShaderStageAllRayTracingBit,
+                                                    nullptr,
+                                                    false,
+                                                    isReplay,
+                                                    Util::VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferOffset),
+                                                    &pCreateInfo->pipelineInfo.resourceMapping,
+                                                    &pCreateInfo->pipelineInfo.options.resourceLayoutScheme);
                 tempBufferOffset += genericMappingBufferSize;
             }
         }
@@ -4056,7 +4133,7 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
 
                 const auto* pModuleData = reinterpret_cast<const Vkgc::ShaderModuleData*>
                     (pCreateInfo->pipelineInfo.pShaders[i].pModuleData);
-                hasRayQuery |= ((pModuleData != nullptr) && (pModuleData->usage.enableRayQuery));
+                hasRayQuery = hasRayQuery || ((pModuleData != nullptr) && (pModuleData->usage.enableRayQuery));
 
                 if (pShaderInfo->pStages[i].stage != ShaderStage::ShaderStageRayTracingRayGen)
                 {
@@ -4145,14 +4222,13 @@ VkResult PipelineCompiler::ConvertRayTracingPipelineInfo(
                 }
             }
 
-            if (gpurtOptions.size() > 0)
+            if (gpurtOptionsSize > 0)
             {
                 Vkgc::GpurtOption* pGpurtOptions = reinterpret_cast<Vkgc::GpurtOption *>(
                     VoidPtrInc(pCreateInfo->pTempBuffer, tempBufferOffset));
-                size_t gpurtOptionsSize = sizeof(Vkgc::GpurtOption) * gpurtOptions.size();
                 tempBufferOffset += gpurtOptionsSize;
-                pCreateInfo->pipelineInfo.pGpurtOptions = pGpurtOptions;
-                pCreateInfo->pipelineInfo.gpurtOptionCount = gpurtOptions.size();
+                pCreateInfo->pipelineInfo.rtState.pGpurtOptions = pGpurtOptions;
+                pCreateInfo->pipelineInfo.rtState.gpurtOptionCount = gpurtOptionsSize / sizeof(GpurtOption);
                 memcpy(pGpurtOptions, gpurtOptions.Data(), gpurtOptionsSize);
             }
 
@@ -4408,13 +4484,25 @@ void PipelineCompiler::FreeRayTracingPipelineBinary(
     RayTracingPipelineBinaryCreateInfo* pCreateInfo,
     RayTracingPipelineBinary*           pPipelineBinary)
 {
+    Instance* pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+
     if (pCreateInfo->freeCompilerBinary == FreeWithCompiler)
     {
         GetSolution(pCreateInfo->compilerType)->FreeRayTracingPipelineBinary(pPipelineBinary);
     }
     else if (pCreateInfo->freeCompilerBinary == FreeWithInstanceAllocator)
     {
-        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(pPipelineBinary->pElfCache);
+        pInstance->FreeMem(pPipelineBinary->pElfCache);
+
+        if (pPipelineBinary->hasSpirv)
+        {
+            for (uint32_t i = 0; i < pPipelineBinary->pipelineBinCount; ++i)
+            {
+                pInstance->FreeMem(const_cast<void*>(pPipelineBinary->pPipelineBins[i].pCode));
+            }
+
+            pInstance->FreeMem(const_cast<void*>(pPipelineBinary->librarySummary.pCode));
+        }
     }
 }
 
@@ -4430,6 +4518,29 @@ void PipelineCompiler::FreeRayTracingPipelineCreateInfo(
         pInstance->FreeMem(pCreateInfo->pTempBuffer);
         pCreateInfo->pTempBuffer = nullptr;
     }
+}
+
+// =====================================================================================================================
+VkResult PipelineCompiler::InsertSpirvsInRtPipeline(
+    const Device*                                pDevice,
+    const VkPipelineShaderStageCreateInfo*       pShaderStages,
+    const uint32_t                               stageCount,
+    RayTracingPipelineBinaryCreateInfo*          pBinCreateInfo,
+    RayTracingPipelineBinary*                    pPipelineBinaries)
+{
+    VkResult result = GetSolution(pBinCreateInfo->compilerType)->InsertSpirvsInRtPipeline(
+        pDevice,
+        pShaderStages,
+        stageCount,
+        pBinCreateInfo,
+        pPipelineBinaries);
+
+    if (result != VK_SUCCESS)
+    {
+        VK_ALERT_ALWAYS_MSG("Failed to insert Spirvs in RT pipeline.");
+    }
+
+    return result;
 }
 
 // =====================================================================================================================
@@ -4514,6 +4625,7 @@ void PipelineCompiler::SetRayTracingState(
 
     pRtState->exportConfig.emitRaytracingShaderDataToken = settings.rtEmitRayTracingShaderDataToken ||
         m_pPhysicalDevice->Manager()->VkInstance()->PalPlatform()->IsRaytracingShaderDataTokenRequested();
+    pRtState->exportConfig.emitRaytracingShaderHashToken = settings.enableEmitSqttFunctionCrc;
 
     // Set ray query swizzle
     pRtState->rayQueryCsSwizzle = settings.rayQueryCsSwizzle;
@@ -4994,15 +5106,13 @@ void PipelineCompiler::GetColorExportShaderCacheId(
 
 // =====================================================================================================================
 void PipelineCompiler::BuildPipelineInternalBufferData(
-    const PipelineLayout*             pPipelineLayout,
+    const UserDataLayout*             pUserDataLayout,
     bool                              needCache,
     GraphicsPipelineBinaryCreateInfo* pCreateInfo)
 {
-    const UserDataLayout& layout = pPipelineLayout->GetInfo().userDataLayout;
-
     GetSolution(pCreateInfo->compilerType)->BuildPipelineInternalBufferData(
         this,
-        layout.common.uberFetchConstBufRegBase,
+        pUserDataLayout->common.uberFetchConstBufRegBase,
         needCache,
         pCreateInfo);
 }
@@ -5191,6 +5301,95 @@ VkResult PipelineCompiler::WriteBinaryMetadata(
         if ((pSection != nullptr) && (sectionSize > sizeof(PipelineMetadata)))
         {
             pInstance->FreeMem(pSection);
+        }
+    }
+
+    return PalToVkResult(palResult);
+}
+
+// =====================================================================================================================
+VkResult PipelineCompiler::InsertSpirvChunkToElf(
+    const Device*                           pDevice,
+    const VkPipelineShaderStageCreateInfo*  pShaderStages,
+    const uint32_t                          stageCount,
+    Vkgc::BinaryData*                       pElfBinary)
+{
+    Pal::Result palResult = Pal::Result::Success;
+
+    if ((pShaderStages != nullptr) && (stageCount > 0))
+    {
+        Instance*     pInstance  = pDevice->VkInstance();
+        PalAllocator* pAllocator = pInstance->Allocator();
+
+        Util::Abi::PipelineAbiProcessor<PalAllocator> abiProcessor(pAllocator);
+        palResult = abiProcessor.Init();
+
+        if (palResult == Pal::Result::Success)
+        {
+            palResult = abiProcessor.LoadFromBuffer(pElfBinary->pCode, pElfBinary->codeSize);
+        }
+
+        Util::MsgPackWriter sectionWriter(pAllocator);
+
+        if (palResult == Pal::Result::Success)
+        {
+            sectionWriter.DeclareMap(stageCount + 1);
+
+            sectionWriter.PackPair(".num_spirvs", stageCount);
+
+            for (uint32_t i = 0; i < stageCount; i++)
+            {
+                if (pShaderStages[i].module != VK_NULL_HANDLE)
+                {
+                    ShaderModule* pShaderModule = ShaderModule::ObjectFromHandle(pShaderStages[i].module);
+
+                    const Pal::ShaderHash apiShaderHash = pShaderModule->GetCodeHash(pShaderStages[i].pName);
+                    const size_t          codeSize      = pShaderModule->GetCodeSize();
+                    const void*           pCodeSrc      = pShaderModule->GetCode();
+
+                    const uint64_t shaderHashArray[2] = { apiShaderHash.upper, apiShaderHash.lower };
+
+                    Util::Abi::ApiShaderType abiShaderType = VkToAbiShaderType(pShaderStages[i].stage);
+                    Util::Result result = Util::PalAbi::Metadata::SerializeEnum(&sectionWriter, abiShaderType);
+                    VK_ASSERT(result == Util::Result::Success);
+
+                    Util::MsgPackWriter spirvDetailSectionWriter(pAllocator);
+
+                    spirvDetailSectionWriter.Pack(".api_shader_hash");
+                    spirvDetailSectionWriter.PackArray(shaderHashArray, 2);
+                    spirvDetailSectionWriter.PackPair(".code_size", codeSize);
+                    spirvDetailSectionWriter.Pack(".code");
+                    spirvDetailSectionWriter.Pack(pCodeSrc, codeSize);
+
+                    palResult = sectionWriter.AppendMap(spirvDetailSectionWriter);
+                }
+            }
+        }
+
+        if (palResult == Pal::Result::Success)
+        {
+            palResult = abiProcessor.SetGenericSection(".spirv", sectionWriter.GetBuffer(), sectionWriter.GetSize());
+        }
+
+        if (palResult == Pal::Result::Success)
+        {
+            size_t newBinarySize      = abiProcessor.GetRequiredBufferSizeBytes();
+            void*  pNewPipelineBinary = pInstance->AllocMem(
+                                                    newBinarySize,
+                                                    VK_DEFAULT_MEM_ALIGN,
+                                                    VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+            if (pNewPipelineBinary != nullptr)
+            {
+                abiProcessor.SaveToBuffer(pNewPipelineBinary);
+
+                pElfBinary->pCode    = pNewPipelineBinary;
+                pElfBinary->codeSize = newBinarySize;
+            }
+            else
+            {
+                palResult = Pal::Result::ErrorOutOfMemory;
+            }
         }
     }
 
@@ -5725,6 +5924,21 @@ void PipelineCompiler::DumpPipeline(
     Util::Snprintf(resultMsg, sizeof(resultMsg), "\n;CompileResult=%s\n", VkResultName(result));
     Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, resultMsg);
     Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
+}
+
+// =====================================================================================================================
+// Checks if we need to embed SPIR-V chunks in the ELF binary.
+bool PipelineCompiler::IsEmbeddingSpirvRequired()
+{
+    const IDevMode* pDevMode    = m_pPhysicalDevice->VkInstance()->GetDevModeMgr();
+    const char*     pEmbedSpirv = getenv("VK_AMD_EMBED_SPIRV");
+
+    bool embedSpirv = (pEmbedSpirv != nullptr) &&
+                      (strcmp(pEmbedSpirv, "1") == 0) &&
+                      (pDevMode != nullptr) &&
+                      (pDevMode->IsCrashAnalysisEnabled());
+
+    return embedSpirv;
 }
 
 // =====================================================================================================================

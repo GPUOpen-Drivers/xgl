@@ -67,7 +67,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
     const GraphicsPipelineLibraryInfo&             libInfo,
     VkPipelineCreateFlags2KHR                      flags,
     const GraphicsPipelineShaderStageInfo*         pShaderInfo,
-    const PipelineLayout*                          pPipelineLayout,
+    const PipelineResourceLayout*                  pResourceLayout,
     const PipelineOptimizerKey*                    pPipelineOptimizerKey,
     GraphicsPipelineBinaryCreateInfo*              pBinaryCreateInfo,
     PipelineCache*                                 pPipelineCache,
@@ -136,7 +136,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                 libInfo,
                 flags,
                 pShaderInfo,
-                pPipelineLayout,
+                pResourceLayout,
                 pPipelineOptimizerKey,
                 pBinaryMetadata,
                 pBinaryCreateInfo);
@@ -149,7 +149,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                     libInfo,
                     flags,
                     pShaderInfo,
-                    pPipelineLayout,
+                    &pResourceLayout->userDataLayout,
                     pBinaryCreateInfo);
             }
 
@@ -223,7 +223,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                         libInfo,
                         flags,
                         pShaderInfo,
-                        pPipelineLayout,
+                        pResourceLayout,
                         pPipelineOptimizerKey,
                         &binaryMetadataMGPU,
                         &binaryCreateInfoMGPU);
@@ -236,7 +236,7 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                             libInfo,
                             flags,
                             pShaderInfo,
-                            pPipelineLayout,
+                            &pResourceLayout->userDataLayout,
                             &binaryCreateInfoMGPU);
 
                         result = pDevice->GetCompiler(deviceIdx)->CreateGraphicsPipelineBinary(
@@ -285,6 +285,36 @@ VkResult GraphicsPipeline::CreatePipelineBinaries(
                     &pPipelineBinaries[deviceIdx],
                     isUserCacheHit,
                     isInternalCacheHit);
+            }
+        }
+
+        // insert spirvs into the pipeline binary
+        if ((result == VK_SUCCESS) && (pDefaultCompiler->IsEmbeddingSpirvRequired()))
+        {
+            Vkgc::BinaryData oldElfBinary = pPipelineBinaries[deviceIdx];
+
+            result = PipelineCompiler::InsertSpirvChunkToElf(
+                pDevice,
+                pCreateInfo->pStages,
+                pCreateInfo->stageCount,
+                &pPipelineBinaries[deviceIdx]);
+
+            if ((result == VK_SUCCESS) &&
+                (oldElfBinary.pCode != nullptr))
+            {
+                // free old binary and
+                // change free-type since the new binary is created with instance allocator
+                pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetCompiler()->FreeGraphicsPipelineBinary(
+                    pBinaryCreateInfo->compilerType,
+                    pBinaryCreateInfo->freeCompilerBinary,
+                    oldElfBinary);
+
+                oldElfBinary.pCode = nullptr;
+                pBinaryCreateInfo->freeCompilerBinary = FreeWithInstanceAllocator;
+            }
+            else
+            {
+                VK_ALERT_ALWAYS_MSG("Failed to insert spirv into the graphics pipeline");
             }
         }
     }
@@ -379,7 +409,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
     VkPipelineCreateFlags2KHR           flags,
     const VkAllocationCallbacks*        pAllocator,
-    const PipelineLayout*               pPipelineLayout,
+    const UserDataLayout*               pLayout,
     const VbBindingInfo*                pVbInfo,
     const PipelineInternalBufferInfo*   pInternalBuffer,
     const InternalMemory*               pInternalMem,
@@ -479,15 +509,10 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
                         pObjectCreateInfo->immedInfo.msaaCreateInfo.pixelShaderSamples =
                             pObjectCreateInfo->immedInfo.msaaCreateInfo.coverageSamples;
 
-                        // Both MSAA and VRS would utilize the value of PS_ITER_SAMPLES
-                        // Thus, choose the min combiner (i.e. choose the higher quality rate) when both features are
-                        // enabled
-                        if ((pObjectCreateInfo->immedInfo.msaaCreateInfo.pixelShaderSamples > 1) &&
-                            (pObjectCreateInfo->immedInfo.vrsRateParams.flags.exposeVrsPixelsMask == 1))
-                        {
-                            pObjectCreateInfo->immedInfo.vrsRateParams.combinerState[
-                                static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] = Pal::VrsCombiner::Min;
-                        }
+                        SetVrsCombinerStagePsIterSamples(
+                            pObjectCreateInfo->immedInfo.msaaCreateInfo.pixelShaderSamples,
+                            pObjectCreateInfo->immedInfo.vrsRateParams.flags.exposeVrsPixelsMask,
+                            pObjectCreateInfo->immedInfo.vrsRateParams.combinerState);
                     }
                     else if ((info.ps.flags.usesSampleMask == 1) &&
                              (palProperties.gfxipProperties.flags.supportVrsWithDsExports == 0))
@@ -562,7 +587,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
         VK_PLACEMENT_NEW(pSystemMem) GraphicsPipeline(
             pDevice,
             pPalPipeline,
-            pPipelineLayout,
+            pLayout,
             pPermBinaryStorage,
             pObjectCreateInfo->immedInfo,
             pObjectCreateInfo->staticStateMask,
@@ -631,7 +656,7 @@ VkResult GraphicsPipeline::CreatePipelineObjects(
 static bool IsGplFastLinkPossible(
     const Device*                      pDevice,
     const GraphicsPipelineLibraryInfo& libInfo,
-    const PipelineLayout*              pPipelineLayout)
+    const UserDataLayout*              pUserDataLayout)
 {
     bool result = false;
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
@@ -650,9 +675,9 @@ static bool IsGplFastLinkPossible(
 
         if (settings.pipelineLayoutPushConstantCompatibilityCheck)
         {
-            isPushConstCompatible = (pPipelineLayout->GetInfo().userDataLayout.common.pushConstRegCount ==
+            isPushConstCompatible = (pUserDataLayout->common.pushConstRegCount ==
                                      libInfo.pFragmentShaderLib->GetUserDataLayout()->common.pushConstRegCount) &&
-                                    (pPipelineLayout->GetInfo().userDataLayout.common.pushConstRegCount ==
+                                    (pUserDataLayout->common.pushConstRegCount ==
                                      libInfo.pPreRasterizationShaderLib->GetUserDataLayout()->common.pushConstRegCount);
         }
 
@@ -794,7 +819,6 @@ VkResult GraphicsPipeline::Create(
     uint64_t                         apiPsoHash           = 0;
     Util::MetroHash::Hash            elfHash              = {};
     PipelineMetadata                 binaryMetadata       = {};
-    PipelineLayout*                  pPipelineLayout      = nullptr;
     bool                             enableFastLink       = false;
     bool                             binariesProvided     = false;
     bool                             gplProvided          = false;
@@ -806,6 +830,7 @@ VkResult GraphicsPipeline::Create(
     const Pal::IShaderLibrary*       shaderLibraries[GraphicsLibraryCount]                 = {};
     Util::MetroHash::Hash            gplCacheId[GraphicsLibraryCount]                      = {};
     uint32_t                         numShaderLibraries = 0;
+    PipelineResourceLayout           resourceLayout     = {};
 
     auto pPipelineBinaryInfoKHR = extStructs.pPipelineBinaryInfoKHR;
 
@@ -840,8 +865,11 @@ VkResult GraphicsPipeline::Create(
     PipelineBinaryStorage binaryStorage         = {};
     const bool            storeBinaryToPipeline = (flags & VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR) != 0;
 
-    VK_ASSERT(pCreateInfo->layout != VK_NULL_HANDLE);
-    pPipelineLayout = PipelineLayout::ObjectFromHandle(pCreateInfo->layout);
+    BuildPipelineResourceLayout(pDevice,
+                               PipelineLayout::ObjectFromHandle(pCreateInfo->layout),
+                               VK_PIPELINE_BIND_POINT_GRAPHICS,
+                               flags,
+                               &resourceLayout);
 
     GraphicsPipelineLibraryInfo libInfo = {};
     GraphicsPipelineCommon::ExtractLibraryInfo(pDevice, pCreateInfo, extStructs, flags, &libInfo);
@@ -883,10 +911,16 @@ VkResult GraphicsPipeline::Create(
         }
     }
 
-    if (IsGplFastLinkPossible(pDevice, libInfo, pPipelineLayout))
+    if (IsGplFastLinkPossible(pDevice, libInfo, &resourceLayout.userDataLayout) && (result == VK_SUCCESS))
     {
-        result = pDefaultCompiler->BuildGplFastLinkCreateInfo(
-            pDevice, pCreateInfo, extStructs, flags, libInfo, pPipelineLayout, &binaryMetadata, &binaryCreateInfo);
+        result = pDefaultCompiler->BuildGplFastLinkCreateInfo(pDevice,
+                                                              pCreateInfo,
+                                                              extStructs,
+                                                              flags,
+                                                              libInfo,
+                                                              &resourceLayout.userDataLayout,
+                                                              &binaryMetadata,
+                                                              &binaryCreateInfo);
 
         if (result == VK_SUCCESS)
         {
@@ -976,7 +1010,7 @@ VkResult GraphicsPipeline::Create(
                 libInfo,
                 flags,
                 &shaderStageInfo,
-                pPipelineLayout,
+                &resourceLayout,
                 &pipelineOptimizerKey,
                 &binaryCreateInfo,
                 pPipelineCache,
@@ -1123,7 +1157,7 @@ VkResult GraphicsPipeline::Create(
             }
 
 #if VKI_RAY_TRACING
-            objectCreateInfo.dispatchRaysUserDataOffset = pPipelineLayout->GetDispatchRaysUserData();
+            objectCreateInfo.dispatchRaysUserDataOffset = GetDispatchRaysUserData(&resourceLayout);
 #endif
 
             // 6. Create pipeline objects
@@ -1132,7 +1166,7 @@ VkResult GraphicsPipeline::Create(
                 pCreateInfo,
                 flags,
                 pAllocator,
-                pPipelineLayout,
+                &resourceLayout.userDataLayout,
                 &binaryMetadata.vbInfo,
                 &binaryMetadata.internalBufferInfo,
                 binaryCreateInfo.pInternalMem,
@@ -1393,7 +1427,7 @@ static void CopyVertexInputStruct(
 GraphicsPipeline::GraphicsPipeline(
     Device* const                          pDevice,
     Pal::IPipeline**                       pPalPipeline,
-    const PipelineLayout*                  pLayout,
+    const UserDataLayout*                  pLayout,
     PipelineBinaryStorage*                 pBinaryStorage,
     const GraphicsPipelineObjectImmedInfo& immedInfo,
     uint64_t                               staticStateMask,

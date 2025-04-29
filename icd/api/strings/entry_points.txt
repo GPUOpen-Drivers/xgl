@@ -630,3 +630,20 @@ vkCopyImageToImageEXT                               @device       @dext(EXT_host
 vkCopyImageToMemoryEXT                              @device       @dext(EXT_host_image_copy)
 vkCopyMemoryToImageEXT                              @device       @dext(EXT_host_image_copy)
 vkTransitionImageLayoutEXT                          @device       @dext(EXT_host_image_copy)
+
+#if VKI_RAY_TRACING
+vkBuildMicromapsEXT                                 @device       @dext(EXT_opacity_micromap)
+vkCmdBuildMicromapsEXT                              @device       @dext(EXT_opacity_micromap)
+vkCmdCopyMemoryToMicromapEXT                        @device       @dext(EXT_opacity_micromap)
+vkCmdCopyMicromapEXT                                @device       @dext(EXT_opacity_micromap)
+vkCmdCopyMicromapToMemoryEXT                        @device       @dext(EXT_opacity_micromap)
+vkCmdWriteMicromapsPropertiesEXT                    @device       @dext(EXT_opacity_micromap)
+vkCopyMemoryToMicromapEXT                           @device       @dext(EXT_opacity_micromap)
+vkCopyMicromapEXT                                   @device       @dext(EXT_opacity_micromap)
+vkCopyMicromapToMemoryEXT                           @device       @dext(EXT_opacity_micromap)
+vkCreateMicromapEXT                                 @device       @dext(EXT_opacity_micromap)
+vkDestroyMicromapEXT                                @device       @dext(EXT_opacity_micromap)
+vkGetDeviceMicromapCompatibilityEXT                 @device       @dext(EXT_opacity_micromap)
+vkGetMicromapBuildSizesEXT                          @device       @dext(EXT_opacity_micromap)
+vkWriteMicromapsPropertiesEXT                       @device       @dext(EXT_opacity_micromap)
+#endif

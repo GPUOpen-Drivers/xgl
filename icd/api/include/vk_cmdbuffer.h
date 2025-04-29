@@ -714,7 +714,7 @@ public:
     void SetPrimitiveTopologyEXT(
         VkPrimitiveTopology                         primitiveTopology);
 
-    void SetLineStippleEXT(
+    void SetLineStipple(
         uint32_t                                    lineStippleFactor,
         uint16_t                                    lineStipplePattern);
 
@@ -949,7 +949,7 @@ public:
               size_t typedBufferDescSize,
               size_t untypedBufferDescSize,
               uint32_t numPalDevices>
-    void PushDescriptorSetKHR(
+    void PushDescriptorSet(
         VkPipelineBindPoint                         pipelineBindPoint,
         VkPipelineLayout                            layout,
         uint32_t                                    set,
@@ -957,7 +957,7 @@ public:
         const VkWriteDescriptorSet*                 pDescriptorWrites);
 
     template <uint32_t numPalDevices>
-    void PushDescriptorSetWithTemplateKHR(
+    void PushDescriptorSetWithTemplate(
         VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
         VkPipelineLayout                            layout,
         uint32_t                                    set,
@@ -1115,6 +1115,9 @@ public:
     VK_FORCEINLINE Pal::EngineType GetPalEngineType() const { return m_palEngineType; }
 
     VK_FORCEINLINE VirtualStackAllocator* GetStackAllocator() { return m_pStackAllocator; }
+
+    uint32_t GetNumWrittenFlippableImages() const { return m_writtenFlippableImages.NumElements(); }
+    const Image* const * GetWrittenFlippableImages() const { return m_writtenFlippableImages.Data(); }
 
     void TranslateBarrierInfoToAcqRel(
         const Pal::BarrierInfo& barrierInfo,
@@ -1394,13 +1397,13 @@ public:
 
     static PFN_vkCmdBindDescriptorSets GetCmdBindDescriptorSetsFunc(const Device* pDevice);
 
-    static PFN_vkCmdPushDescriptorSetKHR GetCmdPushDescriptorSetKHRFunc(const Device* pDevice);
-    static PFN_vkCmdPushDescriptorSetWithTemplateKHR GetCmdPushDescriptorSetWithTemplateKHRFunc(const Device* pDevice);
+    static PFN_vkCmdPushDescriptorSet GetCmdPushDescriptorSetFunc(const Device* pDevice);
+    static PFN_vkCmdPushDescriptorSetWithTemplate GetCmdPushDescriptorSetWithTemplateFunc(const Device* pDevice);
 
-    static PFN_vkCmdBindDescriptorSets2KHR GetCmdBindDescriptorSets2KHRFunc(const Device* pDevice);
+    static PFN_vkCmdBindDescriptorSets2 GetCmdBindDescriptorSets2Func(const Device* pDevice);
 
-    static PFN_vkCmdPushDescriptorSet2KHR GetCmdPushDescriptorSet2KHRFunc(const Device* pDevice);
-    static PFN_vkCmdPushDescriptorSetWithTemplate2KHR GetCmdPushDescriptorSetWithTemplate2KHRFunc(const Device* pDevice);
+    static PFN_vkCmdPushDescriptorSet2 GetCmdPushDescriptorSet2Func(const Device* pDevice);
+    static PFN_vkCmdPushDescriptorSetWithTemplate2 GetCmdPushDescriptorSetWithTemplate2Func(const Device* pDevice);
 
 #if VKI_RAY_TRACING
     void BuildAccelerationStructures(
@@ -1520,10 +1523,10 @@ public:
 #endif
 
     template <uint32_t numPalDevices, bool useCompactDescriptor>
-    void BindDescriptorSets2KHR(
+    void BindDescriptorSets2(
         const VkBindDescriptorSetsInfoKHR* pBindDescriptorSetsInfo);
 
-    void PushConstants2KHR(
+    void PushConstants2(
         const VkPushConstantsInfoKHR* pPushConstantsInfo);
 
     template <size_t imageDescSize,
@@ -1531,12 +1534,12 @@ public:
               size_t typedBufferDescSize,
               size_t untypedBufferDescSize,
               uint32_t numPalDevices>
-    void PushDescriptorSet2KHR(
-        const VkPushDescriptorSetInfoKHR* pPushDescriptorSetInfo);
+    void PushDescriptorSet2(
+        const VkPushDescriptorSetInfo* pPushDescriptorSetInfo);
 
     template <uint32_t numPalDevices>
-    void PushDescriptorSetWithTemplate2KHR(
-        const VkPushDescriptorSetWithTemplateInfoKHR* pPushDescriptorSetWithTemplateInfo);
+    void PushDescriptorSetWithTemplate2(
+        const VkPushDescriptorSetWithTemplateInfo* pPushDescriptorSetWithTemplateInfo);
 
     void SetDescriptorBufferOffsets2EXT(
         const VkSetDescriptorBufferOffsetsInfoEXT* pSetDescriptorBufferOffsetsInfo);
@@ -1803,14 +1806,14 @@ private:
         const uint32_t                           alignmentInDwords);
 
     template <uint32_t numPalDevices>
-    static PFN_vkCmdPushDescriptorSetKHR GetCmdPushDescriptorSetKHRFunc(const Device* pDevice);
+    static PFN_vkCmdPushDescriptorSet GetCmdPushDescriptorSetFunc(const Device* pDevice);
 
     template <size_t imageDescSize,
               size_t samplerDescSize,
               size_t typedBufferDescSize,
               size_t untypedBufferDescSize,
               uint32_t numPalDevices>
-    static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetKHR(
+    static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSet(
         VkCommandBuffer                             commandBuffer,
         VkPipelineBindPoint                         pipelineBindPoint,
         VkPipelineLayout                            layout,
@@ -1819,7 +1822,7 @@ private:
         const VkWriteDescriptorSet*                 pDescriptorWrites);
 
     template <uint32_t numPalDevices>
-    static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetWithTemplateKHR(
+    static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetWithTemplate(
         VkCommandBuffer                             commandBuffer,
         VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
         VkPipelineLayout                            layout,
@@ -1827,29 +1830,29 @@ private:
         const void*                                 pData);
 
     template<uint32_t numPalDevices, bool useCompactDescriptor>
-    static VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets2KHR(
+    static VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets2(
         VkCommandBuffer                             cmdBuffer,
         const VkBindDescriptorSetsInfoKHR*          pBindDescriptorSetsInfo);
 
     template <uint32_t numPalDevices>
-    static PFN_vkCmdBindDescriptorSets2KHR GetCmdBindDescriptorSets2KHRFunc(const Device* pDevice);
+    static PFN_vkCmdBindDescriptorSets2 GetCmdBindDescriptorSets2Func(const Device* pDevice);
 
     template <uint32_t numPalDevices>
-    static PFN_vkCmdPushDescriptorSet2KHR GetCmdPushDescriptorSet2KHRFunc(const Device* pDevice);
+    static PFN_vkCmdPushDescriptorSet2 GetCmdPushDescriptorSet2Func(const Device* pDevice);
 
     template <size_t imageDescSize,
               size_t samplerDescSize,
               size_t typedBufferDescSize,
               size_t untypedBufferDescSize,
               uint32_t numPalDevices>
-    static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSet2KHR(
+    static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSet2(
         VkCommandBuffer                             commandBuffer,
-        const VkPushDescriptorSetInfoKHR*           pPushDescriptorSetInfo);
+        const VkPushDescriptorSetInfo*              pPushDescriptorSetInfo);
 
     template <uint32_t numPalDevices>
-    static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetWithTemplate2KHR(
+    static VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetWithTemplate2(
         VkCommandBuffer                               commandBuffer,
-        const VkPushDescriptorSetWithTemplateInfoKHR* pPushDescriptorSetWithTemplateInfo);
+        const VkPushDescriptorSetWithTemplateInfo*    pPushDescriptorSetWithTemplateInfo);
 
     bool PalPipelineBindingOwnedBy(
         Pal::PipelineBindPoint palBind,
@@ -1998,6 +2001,11 @@ private:
         const VkDeviceSize*         pSizes,
         const VkDeviceSize*         pStrides);
 
+    void RegisterWriteToFlippableImage(
+        const Image* pImage);
+
+    bool IsFormatInvalidForLogicOp(uint32_t attachemnt);
+
     union CmdBufferFlags
     {
         uint32_t u32All;
@@ -2024,7 +2032,8 @@ private:
             uint32_t reserved4                           :  1;
 #endif
             uint32_t offsetMode                          :  1;
-            uint32_t reserved                            : 16;
+            uint32_t protectFlippableImages              :  1;
+            uint32_t reserved                            : 15;
         };
     };
 
@@ -2067,6 +2076,7 @@ private:
     Util::Vector<DynamicDepthStencil, 16, PalAllocator> m_palDepthStencilState;
     Util::Vector<DynamicColorBlend, 16, PalAllocator>   m_palColorBlendState;
     Util::Vector<DynamicMsaa, 16, PalAllocator>         m_palMsaaState;
+    Util::Vector<const Image*, 4, PalAllocator>         m_writtenFlippableImages;
 
     UberFetchShaderInternalDataMap m_uberFetchShaderInternalDataMap;// Uber fetch shader internal data cache
     void* m_pUberFetchShaderTempBuffer;
@@ -2253,28 +2263,28 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer(
     VkDeviceSize                                offset,
     VkIndexType                                 indexType);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer2(
     VkCommandBuffer                             commandBuffer,
     VkBuffer                                    buffer,
     VkDeviceSize                                offset,
     VkDeviceSize                                size,
     VkIndexType                                 indexType);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets2(
     VkCommandBuffer                             commandBuffer,
     const VkBindDescriptorSetsInfoKHR*          pBindDescriptorSetsInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdPushConstants2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdPushConstants2(
     VkCommandBuffer                             commandBuffer,
     const VkPushConstantsInfoKHR*               pPushConstantsInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSet2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSet2(
     VkCommandBuffer                             commandBuffer,
-    const VkPushDescriptorSetInfoKHR*           pPushDescriptorSetInfo);
+    const VkPushDescriptorSetInfo*              pPushDescriptorSetInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplate2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplate2(
     VkCommandBuffer                             commandBuffer,
-    const VkPushDescriptorSetWithTemplateInfoKHR* pPushDescriptorSetWithTemplateInfo);
+    const VkPushDescriptorSetWithTemplateInfo*  pPushDescriptorSetWithTemplateInfo);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetDescriptorBufferOffsets2EXT(
     VkCommandBuffer                             commandBuffer,
@@ -2746,6 +2756,36 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWriteAccelerationStructuresPropertiesKHR(
 VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysIndirect2KHR(
     VkCommandBuffer                             commandBuffer,
     VkDeviceAddress                             indirectDeviceAddress);
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBuildMicromapsEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    infoCount,
+    const VkMicromapBuildInfoEXT*               pInfos);
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyMemoryToMicromapEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyMemoryToMicromapInfoEXT*        pInfo);
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyMicromapEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyMicromapInfoEXT*                pInfo);
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyMicromapToMemoryEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyMicromapToMemoryInfoEXT*        pInfo);
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdWriteMicromapsPropertiesEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    micromapCount,
+    const VkMicromapEXT*                        pMicromaps,
+    VkQueryType                                 queryType,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    firstQuery);
 #endif
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetFragmentShadingRateKHR(
@@ -2933,7 +2973,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage2(
     VkCommandBuffer                             commandBuffer,
     const VkResolveImageInfo2KHR*               pResolveImageInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSet(
     VkCommandBuffer                             commandBuffer,
     VkPipelineBindPoint                         pipelineBindPoint,
     VkPipelineLayout                            layout,
@@ -2941,7 +2981,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetKHR(
     uint32_t                                    descriptorWriteCount,
     const VkWriteDescriptorSet*                 pDescriptorWrites);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplateKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplate(
     VkCommandBuffer                             commandBuffer,
     VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
     VkPipelineLayout                            layout,
@@ -3048,11 +3088,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetVertexInputEXT(
     uint32_t                                     vertexAttributeDescriptionCount,
     const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingAttachmentLocationsKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingAttachmentLocations(
     VkCommandBuffer                             commandBuffer,
     const VkRenderingAttachmentLocationInfoKHR* pLocationInfo);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingInputAttachmentIndicesKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingInputAttachmentIndices(
     VkCommandBuffer                                 commandBuffer,
     const VkRenderingInputAttachmentIndexInfoKHR*   pInputAttachmentIndexInfo);
 

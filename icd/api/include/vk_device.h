@@ -166,7 +166,8 @@ public:
             uint32                enableDebugPrintf                    : 1;
             uint32                reserved3                            : 1;
             uint32                pipelineRobustness                   : 1;
-            uint32                reserved                             : 8;
+            uint32                robustUnboundVertexAttribute         : 1;
+            uint32                reserved                             : 7;
         };
 
         uint32 u32All;
@@ -768,6 +769,48 @@ public:
         const uint32_t*                                      pMaxPrimitiveCounts,
         VkAccelerationStructureBuildSizesInfoKHR*            pSizeInfo);
 
+    void GetMicromapBuildSizesEXT(
+        VkAccelerationStructureBuildTypeKHR         buildType,
+        const VkMicromapBuildInfoEXT*               pBuildInfo,
+        VkMicromapBuildSizesInfoEXT*                pSizeInfo);
+
+    VkResult CreateMicromapEXT(
+        const VkMicromapCreateInfoEXT*              pCreateInfo,
+        const VkAllocationCallbacks*                pAllocator,
+        VkMicromapEXT*                              pMicromap);
+
+    VkResult CopyMemoryToMicromapEXT(
+        VkDeferredOperationKHR                      deferredOperation,
+        const VkCopyMemoryToMicromapInfoEXT*        pInfo);
+
+    VkResult CopyMicromapEXT(
+        VkDeferredOperationKHR                      deferredOperation,
+        const VkCopyMicromapInfoEXT*                pInfo);
+
+    VkResult CopyMicromapToMemoryEXT(
+        VkDeferredOperationKHR                      deferredOperation,
+        const VkCopyMicromapToMemoryInfoEXT*        pInfo);
+
+    void DestroyMicromapEXT(
+        VkMicromapEXT                               micromap,
+        const VkAllocationCallbacks*                pAllocator);
+
+    void GetDeviceMicromapCompatibilityEXT(
+        const VkMicromapVersionInfoEXT*             pVersionInfo,
+        VkAccelerationStructureCompatibilityKHR*    pCompatibility);
+
+    VkResult WriteMicromapsPropertiesEXT(
+        uint32_t                                    micromapCount,
+        const VkMicromapEXT*                        pMicromaps,
+        VkQueryType                                 queryType,
+        size_t                                      dataSize,
+        void*                                       pData,
+        size_t                                      stride);
+
+    VkResult BuildMicromapsEXT(
+        VkDeferredOperationKHR                      deferredOperation,
+        uint32_t                                    infoCount,
+        const VkMicromapBuildInfoEXT*               pInfos);
 #endif
 
     VK_FORCEINLINE VkExtent2D GetMaxVrsShadingRate() const
@@ -1198,7 +1241,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetRenderAreaGranularity(
     VkRenderPass                                renderPass,
     VkExtent2D*                                 pGranularity);
 
-VKAPI_ATTR void VKAPI_CALL vkGetRenderingAreaGranularityKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetRenderingAreaGranularity(
     VkDevice                                    device,
     const VkRenderingAreaInfoKHR*               pRenderingAreaInfo,
     VkExtent2D*                                 pGranularity);
@@ -1410,6 +1453,58 @@ VKAPI_ATTR uint32_t VKAPI_CALL vkGetDeferredOperationMaxConcurrencyKHR(
 VKAPI_ATTR VkResult VKAPI_CALL vkDeferredOperationJoinKHR(
     VkDevice                                    device,
     VkDeferredOperationKHR                      operation);
+
+VKAPI_ATTR void VKAPI_CALL vkGetMicromapBuildSizesEXT(
+    VkDevice                                    device,
+    VkAccelerationStructureBuildTypeKHR         buildType,
+    const VkMicromapBuildInfoEXT*               pBuildInfo,
+    VkMicromapBuildSizesInfoEXT*                pSizeInfo);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateMicromapEXT(
+    VkDevice                                    device,
+    const VkMicromapCreateInfoEXT*              pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkMicromapEXT*                              pMicromap);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyMemoryToMicromapEXT(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    const VkCopyMemoryToMicromapInfoEXT*        pInfo);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyMicromapEXT(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    const VkCopyMicromapInfoEXT*                pInfo);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCopyMicromapToMemoryEXT(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    const VkCopyMicromapToMemoryInfoEXT*        pInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyMicromapEXT(
+    VkDevice                                    device,
+    VkMicromapEXT                               micromap,
+    const VkAllocationCallbacks*                pAllocator);
+
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceMicromapCompatibilityEXT(
+    VkDevice                                    device,
+    const VkMicromapVersionInfoEXT*             pVersionInfo,
+    VkAccelerationStructureCompatibilityKHR*    pCompatibility);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkWriteMicromapsPropertiesEXT(
+    VkDevice                                    device,
+    uint32_t                                    micromapCount,
+    const VkMicromapEXT*                        pMicromaps,
+    VkQueryType                                 queryType,
+    size_t                                      dataSize,
+    void*                                       pData,
+    size_t                                      stride);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkBuildMicromapsEXT(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    uint32_t                                    infoCount,
+    const VkMicromapBuildInfoEXT*               pInfos);
 #endif
 
 VKAPI_ATTR void VKAPI_CALL vkGetDeviceBufferMemoryRequirements(
@@ -1428,7 +1523,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSparseMemoryRequirements(
     uint32_t*                                   pSparseMemoryRequirementCount,
     VkSparseImageMemoryRequirements2*           pSparseMemoryRequirements);
 
-VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStippleEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStipple(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    lineStippleFactor,
     uint16_t                                    lineStipplePattern);
@@ -1444,11 +1539,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceFaultInfoEXT(
     VkDeviceFaultInfoEXT*                       pFaultInfo);
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSubresourceLayoutKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSubresourceLayout(
     VkDevice                                    device,
     const VkDeviceImageSubresourceInfoKHR*      pInfo,
     VkSubresourceLayout2KHR*                    pLayout);
-VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout2(
     VkDevice                                    device,
     VkImage                                     image,
     const VkImageSubresource2KHR*               pSubresource,

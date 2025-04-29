@@ -131,6 +131,8 @@ void CmdBuffer::PalCmdCopyImage(
     Pal::ImageLayout palDstImageLayout = pDstImage->GetBarrierPolicy().GetTransferLayout(
         destImageLayout, GetQueueFamilyIndex());
 
+    RegisterWriteToFlippableImage(pDstImage);
+
     if (m_pDevice->IsMultiGpu() == false)
     {
         PalCmdBuffer(DefaultDeviceIndex)->CmdCopyImage(
@@ -170,6 +172,8 @@ void CmdBuffer::PalCmdScaledCopyImage(
     const Image* const   pDstImage,
     Pal::ScaledCopyInfo& copyInfo)
 {
+    RegisterWriteToFlippableImage(pDstImage);
+
     if (m_pDevice->IsMultiGpu() == false)
     {
         copyInfo.pSrcImage = pSrcImage->PalImage(DefaultDeviceIndex);
@@ -203,6 +207,8 @@ void CmdBuffer::PalCmdCopyMemoryToImage(
     uint32_t                    regionCount,
     Pal::MemoryImageCopyRegion* pRegions)
 {
+    RegisterWriteToFlippableImage(pDstImage);
+
     if (m_pDevice->IsMultiGpu() == false)
     {
         PalCmdBuffer(DefaultDeviceIndex)->CmdCopyMemoryToImage(
@@ -773,31 +779,51 @@ void CmdBuffer::QueryCopy(
     // here
     if ((flags & VK_QUERY_RESULT_WAIT_BIT) != 0)
     {
-        static const Pal::BarrierTransition transition =
+        if (m_pDevice->GetRuntimeSettings().useAcquireReleaseInterface)
         {
-            pBasePool->GetQueryType() == VK_QUERY_TYPE_TIMESTAMP ? Pal::CoherTimestamp : Pal::CoherMemory,
-            Pal::CoherShaderRead
-        };
+            Pal::AcquireReleaseInfo writeWaitIdle = {};
+            Pal::MemBarrier         memTransition = {};
 
-        static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
+            memTransition.srcAccessMask =
+                (pBasePool->GetQueryType() == VK_QUERY_TYPE_TIMESTAMP) ? Pal::CoherTimestamp : Pal::CoherMemory;
+            memTransition.dstAccessMask = Pal::CoherShaderRead;
+            memTransition.srcStageMask  = Pal::PipelineStageBottomOfPipe;
+            memTransition.dstStageMask  = Pal::PipelineStageCs | Pal::PipelineStageVs | Pal::PipelineStageBlt;
 
-        static const Pal::BarrierInfo WriteWaitIdle =
+            writeWaitIdle.pMemoryBarriers    = &memTransition;
+            writeWaitIdle.memoryBarrierCount = 1;
+            writeWaitIdle.reason             = RgpBarrierInternalPreCopyQueryPoolResultsSync;
+
+            PalCmdReleaseThenAcquire(writeWaitIdle, m_curDeviceMask);
+        }
+        else
         {
-            Pal::HwPipePreCs,                               // waitPoint
-            1,                                              // pipePointWaitCount
-            &pipePoint,                                     // pPipePoints
-            0,                                              // gpuEventWaitCount
-            nullptr,                                        // ppGpuEvents
-            0,                                              // rangeCheckedTargetWaitCount
-            nullptr,                                        // ppTargets
-            1,                                              // transitionCount
-            &transition,                                    // pTransitions
-            0,                                              // globalSrcCacheMask
-            0,                                              // globalDstCacheMask
-            RgpBarrierInternalPreCopyQueryPoolResultsSync   // reason
-        };
+            static const Pal::BarrierTransition transition =
+            {
+                pBasePool->GetQueryType() == VK_QUERY_TYPE_TIMESTAMP ? Pal::CoherTimestamp : Pal::CoherMemory,
+                Pal::CoherShaderRead
+            };
 
-        PalCmdBarrier(WriteWaitIdle, m_curDeviceMask);
+            static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
+
+            static const Pal::BarrierInfo writeWaitIdle =
+            {
+                Pal::HwPipePreCs,                               // waitPoint
+                1,                                              // pipePointWaitCount
+                &pipePoint,                                     // pPipePoints
+                0,                                              // gpuEventWaitCount
+                nullptr,                                        // ppGpuEvents
+                0,                                              // rangeCheckedTargetWaitCount
+                nullptr,                                        // ppTargets
+                1,                                              // transitionCount
+                &transition,                                    // pTransitions
+                0,                                              // globalSrcCacheMask
+                0,                                              // globalDstCacheMask
+                RgpBarrierInternalPreCopyQueryPoolResultsSync   // reason
+            };
+
+            PalCmdBarrier(writeWaitIdle, m_curDeviceMask);
+        }
     }
 
     uint32_t userData[16];

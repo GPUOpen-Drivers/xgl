@@ -184,6 +184,7 @@ VK_KHR_maintenance4
 VK_KHR_maintenance5
 VK_KHR_maintenance6
 VK_KHR_maintenance7
+VK_KHR_maintenance8
 VK_AMD_shader_early_and_late_fragment_tests
 VK_EXT_mesh_shader
 VK_EXT_image_view_min_lod
@@ -226,9 +227,13 @@ VK_KHR_vertex_attribute_divisor
 VK_EXT_frame_boundary
 VK_EXT_image_compression_control
 #if VKI_RAY_TRACING
+VK_EXT_opacity_micromap
 #endif
 VK_EXT_depth_bias_control
 VK_MESA_image_alignment_control
 VK_EXT_pipeline_protected_access
+#if VKI_RAY_TRACING
+#endif
 VK_EXT_pipeline_robustness
 VK_EXT_shader_replicated_composites
+VK_KHR_shader_relaxed_extended_instruction

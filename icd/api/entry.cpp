@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -107,7 +107,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer2(
     VkCommandBuffer                             cmdBuffer,
     VkBuffer                                    buffer,
     VkDeviceSize                                offset,
@@ -122,39 +122,39 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets2(
     VkCommandBuffer                             commandBuffer,
     const VkBindDescriptorSetsInfoKHR*          pBindDescriptorSetsInfo)
 {
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdBindDescriptorSets2KHR(
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdBindDescriptorSets2(
         commandBuffer,
         pBindDescriptorSetsInfo);
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdPushConstants2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdPushConstants2(
     VkCommandBuffer                             commandBuffer,
     const VkPushConstantsInfoKHR*               pPushConstantsInfo)
 {
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->PushConstants2KHR(pPushConstantsInfo);
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->PushConstants2(pPushConstantsInfo);
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSet2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSet2(
     VkCommandBuffer                             commandBuffer,
-    const VkPushDescriptorSetInfoKHR*           pPushDescriptorSetInfo)
+    const VkPushDescriptorSetInfo*              pPushDescriptorSetInfo)
 {
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSet2KHR(
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSet2(
         commandBuffer,
         pPushDescriptorSetInfo);
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplate2KHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplate2(
     VkCommandBuffer                             commandBuffer,
-    const VkPushDescriptorSetWithTemplateInfoKHR* pPushDescriptorSetWithTemplateInfo)
+    const VkPushDescriptorSetWithTemplateInfo* pPushDescriptorSetWithTemplateInfo)
 {
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSetWithTemplate2KHR(
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSetWithTemplate2(
         commandBuffer,
         pPushDescriptorSetWithTemplateInfo);
 }
@@ -1230,15 +1230,60 @@ VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysIndirect2KHR(
         emptyShaderBindingTable,
         indirectDeviceAddress);
 }
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBuildMicromapsEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    infoCount,
+    const VkMicromapBuildInfoEXT*               pInfos)
+{
+   VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyMemoryToMicromapEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyMemoryToMicromapInfoEXT*        pInfo)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyMicromapEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyMicromapInfoEXT*                pInfo)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyMicromapToMemoryEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyMicromapToMemoryInfoEXT*        pInfo)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdWriteMicromapsPropertiesEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    micromapCount,
+    const VkMicromapEXT*                        pMicromaps,
+    VkQueryType                                 queryType,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    firstQuery)
+{
+    VK_NOT_IMPLEMENTED;
+}
 #endif
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStippleEXT(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStipple(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    lineStippleFactor,
     uint16_t                                    lineStipplePattern)
 {
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetLineStippleEXT(
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetLineStipple(
         lineStippleFactor,
         lineStipplePattern);
 }
@@ -1637,7 +1682,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage2(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSet(
     VkCommandBuffer                             commandBuffer,
     VkPipelineBindPoint                         pipelineBindPoint,
     VkPipelineLayout                            layout,
@@ -1645,7 +1690,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetKHR(
     uint32_t                                    descriptorWriteCount,
     const VkWriteDescriptorSet*                 pDescriptorWrites)
 {
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSetKHR(
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSet(
         commandBuffer,
         pipelineBindPoint,
         layout,
@@ -1655,14 +1700,14 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetKHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplateKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdPushDescriptorSetWithTemplate(
     VkCommandBuffer                             commandBuffer,
     VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
     VkPipelineLayout                            layout,
     uint32_t                                    set,
     const void*                                 pData)
 {
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSetWithTemplateKHR(
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->VkDevice()->GetEntryPoints().vkCmdPushDescriptorSetWithTemplate(
         commandBuffer,
         descriptorUpdateTemplate,
         layout,
@@ -1870,7 +1915,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetVertexInputEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingAttachmentLocationsKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingAttachmentLocations(
     VkCommandBuffer                             commandBuffer,
     const VkRenderingAttachmentLocationInfoKHR* pLocationInfo)
 {
@@ -1878,7 +1923,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingAttachmentLocationsKHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingInputAttachmentIndicesKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRenderingInputAttachmentIndices(
     VkCommandBuffer                                 commandBuffer,
     const VkRenderingInputAttachmentIndexInfoKHR*   pLocationInfo)
 {

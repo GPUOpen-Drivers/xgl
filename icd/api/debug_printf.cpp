@@ -333,7 +333,8 @@ uint64_t DebugPrintf::ProcessDebugPrintfBuffer(
                     bool is64bit = (*pBitPos)[varIndex];
                     if (is64bit)
                     {
-                        outputVar = (static_cast<uint64_t>(outputVarArray[outputVarIndex++]) << 32) | outputVar;
+                        ++outputVarIndex;
+                        outputVar = (static_cast<uint64_t>(outputVarArray[outputVarIndex]) << 32) | outputVar;
                     }
                     DecodeSpecifier(*pFormatString,
                                     outputVar,
@@ -772,23 +773,25 @@ void DebugPrintf::DecodeFormatStringsFromElf(
 
                             if ((result == Pal::Result::Success) && (found == false))
                             {
-                                uint32 strLength = formatString.Length();
-                                VK_ASSERT(strLength > 0);
-                                if (formatString[strLength - 1] == '\0')
                                 {
-                                    strLength--;
-                                }
-                                pElfString->printStr.Reserve(strLength);
+                                    uint32 strLength = formatString.Length();
+                                    VK_ASSERT(strLength > 0);
+                                    if (formatString[strLength - 1] == '\0')
+                                    {
+                                        strLength--;
+                                    }
+                                    pElfString->printStr.Reserve(strLength);
 
-                                for (uint32 l = 0; l < strLength; ++l)
-                                {
-                                    pElfString->printStr.PushBack(formatString[l]);
-                                }
-                                pElfString->bit64s.Reserve(outputCount);
-                                for (uint32 bitIndex = 0; bitIndex < outputCount; ++bitIndex)
-                                {
-                                    bool bitValue = (bitPos[bitIndex / 64] >> (bitIndex % 64)) & 1;
-                                    pElfString->bit64s.PushBack(bitValue);
+                                    for (uint32 l = 0; l < strLength; ++l)
+                                    {
+                                        pElfString->printStr.PushBack(formatString[l]);
+                                    }
+                                    pElfString->bit64s.Reserve(outputCount);
+                                    for (uint32 bitIndex = 0; bitIndex < outputCount; ++bitIndex)
+                                    {
+                                        bool bitValue = (bitPos[bitIndex / 64] >> (bitIndex % 64)) & 1;
+                                        pElfString->bit64s.PushBack(bitValue);
+                                    }
                                 }
                             }
                         }

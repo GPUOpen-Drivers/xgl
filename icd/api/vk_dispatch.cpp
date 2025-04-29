@@ -386,10 +386,10 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetPipelineCacheData                          );
     INIT_DISPATCH_ENTRY(vkGetQueryPoolResults                           );
     INIT_DISPATCH_ENTRY(vkGetRenderAreaGranularity                      );
-    INIT_DISPATCH_ENTRY(vkGetRenderingAreaGranularityKHR                );
+    INIT_DISPATCH_ENTRY(vkGetRenderingAreaGranularity                   );
 
-    INIT_DISPATCH_ALIAS(vkGetRenderingAreaGranularity,
-                        vkGetRenderingAreaGranularityKHR);
+    INIT_DISPATCH_ALIAS(vkGetRenderingAreaGranularityKHR,
+                        vkGetRenderingAreaGranularity);
 
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceCapabilitiesKHR       );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceCapabilities2KHR      );
@@ -611,6 +611,22 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdSetRayTracingPipelineStackSizeKHR           );
     INIT_DISPATCH_ENTRY(vkGetAccelerationStructureBuildSizesKHR          );
     INIT_DISPATCH_ENTRY(vkCmdTraceRaysIndirect2KHR                       );
+#if VKI_EXT_OPACITY_MICROMAP
+    INIT_DISPATCH_ENTRY(vkBuildMicromapsEXT                              );
+    INIT_DISPATCH_ENTRY(vkCmdBuildMicromapsEXT                           );
+    INIT_DISPATCH_ENTRY(vkCmdCopyMemoryToMicromapEXT                     );
+    INIT_DISPATCH_ENTRY(vkCmdCopyMicromapEXT                             );
+    INIT_DISPATCH_ENTRY(vkCmdCopyMicromapToMemoryEXT                     );
+    INIT_DISPATCH_ENTRY(vkCmdWriteMicromapsPropertiesEXT                 );
+    INIT_DISPATCH_ENTRY(vkCopyMemoryToMicromapEXT                        );
+    INIT_DISPATCH_ENTRY(vkCopyMicromapEXT                                );
+    INIT_DISPATCH_ENTRY(vkCopyMicromapToMemoryEXT                        );
+    INIT_DISPATCH_ENTRY(vkCreateMicromapEXT                              );
+    INIT_DISPATCH_ENTRY(vkDestroyMicromapEXT                             );
+    INIT_DISPATCH_ENTRY(vkGetDeviceMicromapCompatibilityEXT              );
+    INIT_DISPATCH_ENTRY(vkGetMicromapBuildSizesEXT                       );
+    INIT_DISPATCH_ENTRY(vkWriteMicromapsPropertiesEXT                    );
+#endif
 #endif
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutablePropertiesKHR             );
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutableStatisticsKHR             );
@@ -627,11 +643,11 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkResetQueryPool                                );
     INIT_DISPATCH_ALIAS(vkResetQueryPoolEXT                             ,
                         vkResetQueryPool                                );
-    INIT_DISPATCH_ENTRY(vkCmdSetLineStippleEXT                          );
+    INIT_DISPATCH_ENTRY(vkCmdSetLineStipple                             );
     INIT_DISPATCH_ALIAS(vkCmdSetLineStippleKHR                          ,
-                        vkCmdSetLineStippleEXT                          );
-    INIT_DISPATCH_ALIAS(vkCmdSetLineStipple,
-                        vkCmdSetLineStippleEXT);
+                        vkCmdSetLineStipple                             );
+    INIT_DISPATCH_ALIAS(vkCmdSetLineStippleEXT,
+                        vkCmdSetLineStipple);
     INIT_DISPATCH_ENTRY(vkSetDeviceMemoryPriorityEXT                    );
     INIT_DISPATCH_ENTRY(vkGetDeviceFaultInfoEXT                         );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT  );
@@ -777,13 +793,13 @@ void DispatchTable::Init()
                         vkCmdCopyImageToBuffer2                         );
     INIT_DISPATCH_ALIAS(vkCmdResolveImage2KHR,
                         vkCmdResolveImage2                              );
-    INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSetKHR                       );
-    INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSetWithTemplateKHR           );
+    INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSet                          );
+    INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSetWithTemplate              );
 
-    INIT_DISPATCH_ALIAS(vkCmdPushDescriptorSet,
-                        vkCmdPushDescriptorSetKHR);
-    INIT_DISPATCH_ALIAS(vkCmdPushDescriptorSetWithTemplate,
-                        vkCmdPushDescriptorSetWithTemplateKHR);
+    INIT_DISPATCH_ALIAS(vkCmdPushDescriptorSetKHR,
+                        vkCmdPushDescriptorSet);
+    INIT_DISPATCH_ALIAS(vkCmdPushDescriptorSetWithTemplateKHR,
+                        vkCmdPushDescriptorSetWithTemplate);
 
     INIT_DISPATCH_ENTRY(vkGetDeviceBufferMemoryRequirements             );
     INIT_DISPATCH_ENTRY(vkGetDeviceImageMemoryRequirements              );
@@ -799,13 +815,13 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdDrawMeshTasksIndirectEXT                   );
     INIT_DISPATCH_ENTRY(vkCmdDrawMeshTasksIndirectCountEXT              );
 
-    INIT_DISPATCH_ENTRY(vkMapMemory2KHR                                 );
-    INIT_DISPATCH_ENTRY(vkUnmapMemory2KHR                               );
+    INIT_DISPATCH_ENTRY(vkMapMemory2                                    );
+    INIT_DISPATCH_ENTRY(vkUnmapMemory2                                  );
 
-    INIT_DISPATCH_ALIAS(vkMapMemory2,
-                        vkMapMemory2KHR);
-    INIT_DISPATCH_ALIAS(vkUnmapMemory2,
-                        vkUnmapMemory2KHR);
+    INIT_DISPATCH_ALIAS(vkMapMemory2KHR,
+                        vkMapMemory2);
+    INIT_DISPATCH_ALIAS(vkUnmapMemory2KHR,
+                        vkUnmapMemory2);
 
     INIT_DISPATCH_ENTRY(vkGetShaderModuleIdentifierEXT                  );
     INIT_DISPATCH_ENTRY(vkGetShaderModuleCreateInfoIdentifierEXT        );
@@ -861,41 +877,41 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetImageDrmFormatModifierPropertiesEXT        );
 #endif
 
-    INIT_DISPATCH_ENTRY(vkGetDeviceImageSubresourceLayoutKHR            );
-    INIT_DISPATCH_ENTRY(vkGetImageSubresourceLayout2KHR                 );
-    INIT_DISPATCH_ENTRY(vkCmdBindIndexBuffer2KHR                        );
+    INIT_DISPATCH_ENTRY(vkGetDeviceImageSubresourceLayout               );
+    INIT_DISPATCH_ENTRY(vkGetImageSubresourceLayout2                    );
+    INIT_DISPATCH_ENTRY(vkCmdBindIndexBuffer2                           );
 
-    INIT_DISPATCH_ALIAS(vkGetDeviceImageSubresourceLayout,
-                        vkGetDeviceImageSubresourceLayoutKHR);
-    INIT_DISPATCH_ALIAS(vkGetImageSubresourceLayout2,
-                        vkGetImageSubresourceLayout2KHR);
-    INIT_DISPATCH_ALIAS(vkCmdBindIndexBuffer2,
-                        vkCmdBindIndexBuffer2KHR);
+    INIT_DISPATCH_ALIAS(vkGetDeviceImageSubresourceLayoutKHR,
+                        vkGetDeviceImageSubresourceLayout);
+    INIT_DISPATCH_ALIAS(vkGetImageSubresourceLayout2KHR,
+                        vkGetImageSubresourceLayout2);
+    INIT_DISPATCH_ALIAS(vkCmdBindIndexBuffer2KHR,
+                        vkCmdBindIndexBuffer2);
 
-    INIT_DISPATCH_ENTRY(vkCmdBindDescriptorSets2KHR                     );
-    INIT_DISPATCH_ENTRY(vkCmdPushConstants2KHR                          );
-    INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSet2KHR                      );
-    INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSetWithTemplate2KHR          );
+    INIT_DISPATCH_ENTRY(vkCmdBindDescriptorSets2                        );
+    INIT_DISPATCH_ENTRY(vkCmdPushConstants2                             );
+    INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSet2                         );
+    INIT_DISPATCH_ENTRY(vkCmdPushDescriptorSetWithTemplate2             );
 
-    INIT_DISPATCH_ALIAS(vkCmdBindDescriptorSets2,
-                        vkCmdBindDescriptorSets2KHR);
-    INIT_DISPATCH_ALIAS(vkCmdPushConstants2,
-                        vkCmdPushConstants2KHR);
-    INIT_DISPATCH_ALIAS(vkCmdPushDescriptorSet2,
-                        vkCmdPushDescriptorSet2KHR);
-    INIT_DISPATCH_ALIAS(vkCmdPushDescriptorSetWithTemplate2,
-                        vkCmdPushDescriptorSetWithTemplate2KHR);
+    INIT_DISPATCH_ALIAS(vkCmdBindDescriptorSets2KHR,
+                        vkCmdBindDescriptorSets2);
+    INIT_DISPATCH_ALIAS(vkCmdPushConstants2KHR,
+                        vkCmdPushConstants2);
+    INIT_DISPATCH_ALIAS(vkCmdPushDescriptorSet2KHR,
+                        vkCmdPushDescriptorSet2);
+    INIT_DISPATCH_ALIAS(vkCmdPushDescriptorSetWithTemplate2KHR,
+                        vkCmdPushDescriptorSetWithTemplate2);
 
     INIT_DISPATCH_ENTRY(vkCmdSetDescriptorBufferOffsets2EXT             );
     INIT_DISPATCH_ENTRY(vkCmdBindDescriptorBufferEmbeddedSamplers2EXT   );
 
-    INIT_DISPATCH_ENTRY(vkCmdSetRenderingAttachmentLocationsKHR         );
-    INIT_DISPATCH_ENTRY(vkCmdSetRenderingInputAttachmentIndicesKHR      );
+    INIT_DISPATCH_ENTRY(vkCmdSetRenderingAttachmentLocations            );
+    INIT_DISPATCH_ENTRY(vkCmdSetRenderingInputAttachmentIndices         );
 
-    INIT_DISPATCH_ALIAS(vkCmdSetRenderingAttachmentLocations,
-                        vkCmdSetRenderingAttachmentLocationsKHR);
-    INIT_DISPATCH_ALIAS(vkCmdSetRenderingInputAttachmentIndices,
-                        vkCmdSetRenderingInputAttachmentIndicesKHR);
+    INIT_DISPATCH_ALIAS(vkCmdSetRenderingAttachmentLocationsKHR,
+                        vkCmdSetRenderingAttachmentLocations);
+    INIT_DISPATCH_ALIAS(vkCmdSetRenderingInputAttachmentIndicesKHR,
+                        vkCmdSetRenderingInputAttachmentIndices);
 
     INIT_DISPATCH_ENTRY(vkCreatePipelineBinariesKHR                     );
     INIT_DISPATCH_ENTRY(vkDestroyPipelineBinaryKHR                      );

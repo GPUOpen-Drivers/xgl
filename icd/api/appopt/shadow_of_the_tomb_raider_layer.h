@@ -1,4 +1,3 @@
-#version 460
 /*
  ***********************************************************************************************************************
  *
@@ -23,7 +22,36 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+/**
+***********************************************************************************************************************
+* @file  shadow_of_the_tomb_raider_layer.h
+* @brief Contains shadowed entry points related to Shadow of the Tomb Raider.
+***********************************************************************************************************************
+*/
 
-void main()
+#ifndef __SHADOW_OF_THE_TOMB_RAIDER_LAYER_H__
+#define __SHADOW_OF_THE_TOMB_RAIDER_LAYER_H__
+
+#pragma once
+
+#include "opt_layer.h"
+
+namespace vk
 {
-}
+// =====================================================================================================================
+// Class for the Shadow of the Tomb Raider Layer to simplify calls to the overriden dispatch table from the layer's entrypoints
+class ShadowOfTheTombRaiderLayer final : public OptLayer
+{
+public:
+    ShadowOfTheTombRaiderLayer() {}
+    virtual ~ShadowOfTheTombRaiderLayer() {}
+
+    virtual void OverrideDispatchTable(DispatchTable* pDispatchTable) override;
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(ShadowOfTheTombRaiderLayer);
+};
+
+}; // namespace vk
+
+#endif /* __SHADOW_OF_THE_TOMB_RAIDER_LAYER_H__ */

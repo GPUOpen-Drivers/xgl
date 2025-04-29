@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2016-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2016-2025 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -2074,17 +2074,15 @@ Pal::Result DevModeRgp::InitTraceQueueFamilyResources(
             // Record a full pipeline flush into the command barrier
             if (result == Pal::Result::Success)
             {
-                const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
-                Pal::BarrierInfo barrierInfo = {};
-
                 // This code by definition does not execute during SQ thread tracing so this barrier doesn't need to be
                 // identified.
-                barrierInfo.reason              = RgpBarrierUnknownReason;
-                barrierInfo.waitPoint           = Pal::HwPipeTop;
-                barrierInfo.pipePointWaitCount  = 1;
-                barrierInfo.pPipePoints         = &pipePoint;
+                Pal::AcquireReleaseInfo barrierInfo = {};
 
-                pTraceFlushCmdBuf->CmdBarrier(barrierInfo);
+                barrierInfo.srcGlobalStageMask = Pal::PipelineStageBottomOfPipe;
+                barrierInfo.dstGlobalStageMask = Pal::PipelineStageTopOfPipe;
+                barrierInfo.reason             = RgpBarrierUnknownReason;
+
+                pTraceFlushCmdBuf->CmdReleaseThenAcquire(barrierInfo);
             }
 
             // Finish building the trace-flush command buffer

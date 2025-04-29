@@ -224,7 +224,7 @@ public:
         const VkGraphicsPipelineCreateInfo*     pCreateInfo,
         const GraphicsPipelineExtStructs&       extStructs,
         const GraphicsPipelineLibraryInfo&      libInfo,
-        const PipelineLayout*                   pPipelineLayout,
+        const PipelineResourceLayout*           pLayout,
         VkPipelineCreateFlags2KHR               flags,
         GraphicsPipelineShaderStageInfo*        pShaderStageInfo,
         GraphicsPipelineBinaryCreateInfo*       pBinaryCreateInfo,

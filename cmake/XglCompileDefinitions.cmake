@@ -60,6 +60,18 @@ macro(xgl_set_compile_definitions)
 
     target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX9=1)
 
+#if VKI_BUILD_HAWK_POINT1
+    if(VKI_BUILD_HAWK_POINT1)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_HAWK_POINT1=1)
+    endif()
+#endif
+
+#if VKI_BUILD_HAWK_POINT2
+    if(VKI_BUILD_HAWK_POINT2)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_HAWK_POINT2=1)
+    endif()
+#endif
+
 #if VKI_BUILD_STRIX_HALO
     if(VKI_BUILD_STRIX_HALO)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_STRIX_HALO=1)
@@ -83,6 +95,11 @@ macro(xgl_set_compile_definitions)
         target_compile_definitions(xgl PRIVATE VKI_RAY_TRACING=1)
         target_compile_definitions(xgl PRIVATE GPURT_CLIENT_CONVERT_BUILD_PARAMS=1)
         target_compile_definitions(xgl PRIVATE GPURT_CLIENT_API_VULKAN=1)
+#if VKI_SUPPORT_HPLOC
+        if (VKI_SUPPORT_HPLOC)
+            target_compile_definitions(xgl PRIVATE VKI_SUPPORT_HPLOC=1)
+        endif()
+#endif
     endif()
 #endif
 
@@ -97,6 +114,9 @@ macro(xgl_set_compile_definitions)
     if(VKI_GPU_DECOMPRESS)
         target_compile_definitions(xgl PRIVATE VKI_GPU_DECOMPRESS)
     endif()
+#endif
+
+#if VKI_RAY_TRACING
 #endif
 
 #if VKI_RAY_TRACING

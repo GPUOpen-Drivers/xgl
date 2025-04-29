@@ -53,7 +53,8 @@ DescriptorSet<numPalDevices>::DescriptorSet(
     :
     m_pLayout(nullptr),
     m_pAllocHandle(nullptr),
-    m_heapIndex(heapIndex)
+    m_heapIndex(heapIndex),
+    m_pWrittenFlippableImage(nullptr)
 {
     memset(m_addresses, 0, sizeof(m_addresses));
 }
@@ -131,8 +132,9 @@ void DescriptorSet<numPalDevices>::WriteImmutableSamplers(
 template <uint32_t numPalDevices>
 void DescriptorSet<numPalDevices>::Reset()
 {
-    m_pLayout = nullptr;
-    m_pAllocHandle = nullptr;
+    m_pLayout                = nullptr;
+    m_pAllocHandle           = nullptr;
+    m_pWrittenFlippableImage = nullptr;
 
     memset(m_addresses, 0, sizeof(m_addresses));
 }
@@ -550,6 +552,7 @@ void DescriptorUpdate::WriteDescriptorSets(
 
         // Determine whether the binding has immutable sampler descriptors.
         bool hasImmutableSampler = (destBinding.imm.dwSize != 0);
+        const Image* pUavImage   = nullptr;
 
         VK_ASSERT(params.descriptorType != VK_DESCRIPTOR_TYPE_MUTABLE_EXT);
 
@@ -617,6 +620,12 @@ void DescriptorUpdate::WriteDescriptorSets(
             break;
 
         case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            if (params.pImageInfo->imageView != VK_NULL_HANDLE)
+            {
+                pUavImage = ImageView::ObjectFromHandle(params.pImageInfo->imageView)->GetImage();
+                pDestSet->AddWrittenFlippableImage(pUavImage);
+            }
+
             WriteImageDescriptors<imageDescSize, true>(
                 params.pImageInfo,
                 deviceIdx,
@@ -1259,6 +1268,13 @@ void DescriptorSet<1>::WriteImmutableSamplers(
     uint32_t imageDescSizeInBytes);
 
 template
+void DescriptorSet<1>::AddWrittenFlippableImage(
+    const Image* pImage);
+
+template
+const Image* DescriptorSet<1>::GetWrittenFlippableImage() const;
+
+template
 DescriptorSet<2>::DescriptorSet(uint32_t heapIndex);
 
 template
@@ -1274,6 +1290,13 @@ void DescriptorSet<2>::Reset();
 template
 void DescriptorSet<2>::WriteImmutableSamplers(
     uint32_t imageDescSizeInBytes);
+
+template
+void DescriptorSet<2>::AddWrittenFlippableImage(
+    const Image* pImage);
+
+template
+const Image* DescriptorSet<2>::GetWrittenFlippableImage() const;
 
 template
 DescriptorSet<3>::DescriptorSet(uint32_t heapIndex);
@@ -1293,6 +1316,13 @@ void DescriptorSet<3>::WriteImmutableSamplers(
     uint32_t imageDescSizeInBytes);
 
 template
+void DescriptorSet<3>::AddWrittenFlippableImage(
+    const Image* pImage);
+
+template
+const Image* DescriptorSet<3>::GetWrittenFlippableImage() const;
+
+template
 DescriptorSet<4>::DescriptorSet(uint32_t heapIndex);
 
 template
@@ -1308,5 +1338,12 @@ void DescriptorSet<4>::Reset();
 template
 void DescriptorSet<4>::WriteImmutableSamplers(
     uint32_t imageDescSizeInBytes);
+
+template
+void DescriptorSet<4>::AddWrittenFlippableImage(
+    const Image* pImage);
+
+template
+const Image* DescriptorSet<4>::GetWrittenFlippableImage() const;
 
 } // namespace vk

@@ -577,6 +577,12 @@ constexpr AppProfilePatternEntry AppNameStarfield
     "starfield.exe"
 };
 
+constexpr AppProfilePatternEntry AppNameStillWakesTheDeep
+{
+    PatternAppNameLower,
+    "stillwakesthedeep.exe"
+};
+
 constexpr AppProfilePatternEntry AppNameTf2Win64
 {
     PatternAppNameLower,
@@ -1493,15 +1499,6 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
-        AppProfile::DxvkHaloInfiniteLauncher,
-        {
-            AppNameHaloInfinite,
-            AppEngineDXVK,
-            PatternEnd
-        }
-    },
-
-    {
         AppProfile::HaloInfinite,
         {
             AppNameHaloInfinite,
@@ -1514,6 +1511,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::Starfield,
         {
             AppNameStarfield,
+            AppEngineVKD3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::StillWakesTheDeep,
+        {
+            AppNameStillWakesTheDeep,
             AppEngineVKD3D,
             PatternEnd
         }
@@ -1653,17 +1659,17 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
-        AppProfile::Zink,
+        AppProfile::Superposition,
         {
+            AppNameSuperposition,
             AppEngineZink,
             PatternEnd
         }
     },
 
     {
-        AppProfile::Superposition,
+        AppProfile::Zink,
         {
-            AppNameSuperposition,
             AppEngineZink,
             PatternEnd
         }

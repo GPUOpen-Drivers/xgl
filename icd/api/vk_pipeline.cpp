@@ -39,6 +39,7 @@
 #include "raytrace/ray_tracing_device.h"
 #include "raytrace/vk_ray_tracing_pipeline.h"
 #endif
+#include "include/vk_sampler.h"
 
 #include "palAutoBuffer.h"
 #include "palInlineFuncs.h"
@@ -206,6 +207,54 @@ void Pipeline::GenerateHashFromSpecializationInfo(
 }
 
 // =====================================================================================================================
+// Generates resource information of a pipeline
+void Pipeline::BuildPipelineResourceLayout(
+    const Device*                     pDevice,
+    const PipelineLayout*             pPipelineLayout,
+    VkPipelineBindPoint               pipelineBindPoint,
+    VkPipelineCreateFlags2KHR         flags,
+    PipelineResourceLayout*           pResourceLayout)
+{
+    if (pPipelineLayout != nullptr)
+    {
+        // Setup pipeline resource layout
+        pResourceLayout->pPipelineLayout  = pPipelineLayout;
+
+        pResourceLayout->userDataLayout   = pPipelineLayout->GetInfo().userDataLayout;
+        pResourceLayout->userDataRegCount = pPipelineLayout->GetInfo().userDataRegCount;
+
+        MappingBufferLayout* pBufferLayout = &pResourceLayout->mappingBufferLayout;
+
+        pBufferLayout->mappingBufferSize = pPipelineLayout->GetPipelineInfo()->mappingBufferSize;
+        pBufferLayout->numRsrcMapNodes   = pPipelineLayout->GetPipelineInfo()->numRsrcMapNodes;
+        pBufferLayout->numUserDataNodes  = pPipelineLayout->GetPipelineInfo()->numUserDataNodes;
+
+#if VKI_RAY_TRACING
+        // Denotes if GpuRT resource mappings will need to be added to this pipeline layout
+        pResourceLayout->hasRayTracing   = pPipelineLayout->GetPipelineInfo()->hasRayTracing;
+#endif
+    }
+}
+
+#if VKI_RAY_TRACING
+// =====================================================================================================================
+// Calculates the offset for the GpuRT user data constants
+uint32_t Pipeline::GetDispatchRaysUserData(
+    const PipelineResourceLayout* pResourceLayout)
+{
+    uint32_t              dispatchRaysUserData = 0;
+    const UserDataLayout& userDataLayout       = pResourceLayout->userDataLayout;
+
+    if (pResourceLayout->hasRayTracing)
+    {
+        dispatchRaysUserData = userDataLayout.common.dispatchRaysArgsPtrRegBase;
+    }
+
+    return dispatchRaysUserData;
+}
+#endif
+
+// =====================================================================================================================
 // Generates a hash using the contents of a VkPipelineShaderStageCreateInfo struct
 void Pipeline::GenerateHashFromShaderStageCreateInfo(
     const VkPipelineShaderStageCreateInfo& desc,
@@ -323,6 +372,7 @@ void Pipeline::GenerateHashFromShaderStageCreateInfo(
     {
         GenerateHashFromSpecializationInfo(*stageInfo.pSpecializationInfo, pHasher);
     }
+
 }
 
 // =====================================================================================================================
@@ -676,7 +726,7 @@ Pipeline::Pipeline(
 
 void Pipeline::Init(
     Pal::IPipeline**             pPalPipeline,
-    const PipelineLayout*        pLayout,
+    const UserDataLayout*        pLayout,
     PipelineBinaryStorage*       pBinaryStorage,
     uint64_t                     staticStateMask,
 #if VKI_RAY_TRACING
@@ -695,7 +745,7 @@ void Pipeline::Init(
 
     if (pLayout != nullptr)
     {
-        m_userDataLayout = pLayout->GetInfo().userDataLayout;
+        m_userDataLayout = *pLayout;
     }
     else
     {
@@ -959,6 +1009,11 @@ static void ConvertShaderInfoStatistics(
         pStats->shaderStageMask |= VK_SHADER_STAGE_COMPUTE_BIT;
     }
 
+    if (palStats.shaderStageMask & Pal::ApiShaderStageTask)
+    {
+        pStats->shaderStageMask |= VK_SHADER_STAGE_TASK_BIT_EXT;
+    }
+
     if (palStats.shaderStageMask & Pal::ApiShaderStageVertex)
     {
         pStats->shaderStageMask |= VK_SHADER_STAGE_VERTEX_BIT;
@@ -977,6 +1032,11 @@ static void ConvertShaderInfoStatistics(
     if (palStats.shaderStageMask & Pal::ApiShaderStageGeometry)
     {
         pStats->shaderStageMask |= VK_SHADER_STAGE_GEOMETRY_BIT;
+    }
+
+    if (palStats.shaderStageMask & Pal::ApiShaderStageMesh)
+    {
+        pStats->shaderStageMask |= VK_SHADER_STAGE_MESH_BIT_EXT;
     }
 
     if (palStats.shaderStageMask & Pal::ApiShaderStagePixel)
@@ -1090,8 +1150,8 @@ void Pipeline::ElfHashToCacheId(
         flags.Push(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT));
         flags.Push(pDevice->GetEnabledFeatures().scalarBlockLayout);
     }
-
     flags.Push(pDevice->GetEnabledFeatures().robustBufferAccess);
+    flags.Push(pDevice->GetEnabledFeatures().robustUnboundVertexAttribute);
     flags.Push(pDevice->GetEnabledFeatures().robustBufferAccessExtended);
     flags.Push(pDevice->GetEnabledFeatures().robustImageAccessExtended);
     flags.Push(pDevice->GetEnabledFeatures().nullDescriptorExtended);
@@ -1247,6 +1307,11 @@ static void BuildPipelineNameDescription(
         Util::Strncat(shaderDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_COMPUTE_BIT ");
     }
 
+    if (palShaderMask & Pal::ApiShaderStageTask)
+    {
+        Util::Strncat(shaderDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_TASK_BIT_EXT ");
+    }
+
     if (palShaderMask & Pal::ApiShaderStageVertex)
     {
         Util::Strncat(shaderDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_VERTEX_BIT ");
@@ -1265,6 +1330,11 @@ static void BuildPipelineNameDescription(
     if (palShaderMask & Pal::ApiShaderStageGeometry)
     {
         Util::Strncat(shaderDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_GEOMETRY_BIT ");
+    }
+
+    if (palShaderMask & Pal::ApiShaderStageMesh)
+    {
+        Util::Strncat(shaderDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_MESH_BIT_EXT ");
     }
 
     if (palShaderMask & Pal::ApiShaderStagePixel)

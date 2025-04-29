@@ -647,8 +647,8 @@ void IndirectCommandsLayout::BuildPalCreateInfo(
     Pal::IndirectParam*                             pIndirectParams,
     Pal::IndirectCmdGeneratorCreateInfo*            pPalCreateInfo)
 {
-    uint32_t paramCount      = 0;
-    uint32_t expectedOffset  = 0;
+    uint32_t paramCount     = 0;
+    uint32_t expectedOffset = 0;
 
     bool useNativeIndexType = true;
 
@@ -662,14 +662,23 @@ void IndirectCommandsLayout::BuildPalCreateInfo(
     {
         const VkIndirectCommandsLayoutTokenEXT& token = pCreateInfo->pTokens[i];
 
-        // Set a padding operation to handle non tightly packed indirect arguments buffers
-        VK_ASSERT(token.offset >= expectedOffset);
+        const bool isSeqIndex = (token.type == VK_INDIRECT_COMMANDS_TOKEN_TYPE_SEQUENCE_INDEX_EXT);
 
-        if (token.offset > expectedOffset)
+        // Set a padding operation to handle non tightly-packed indirect arguments buffers
+        // Offset field is ignored for Sequence Index so potential padding will be represented in that specific token
+        if ((isSeqIndex == false) && (token.offset > expectedOffset))
         {
             pIndirectParams[paramCount].type        = Pal::IndirectParamType::Padding;
             pIndirectParams[paramCount].sizeInBytes = token.offset - expectedOffset;
-
+            // Override userDataShaderUsage to compute shader only for dispatch or trace ray type
+            if (isDispatch
+#if VKI_RAY_TRACING
+                || isTraceRay
+#endif
+               )
+            {
+                pIndirectParams[paramCount].userDataShaderUsage = Pal::ShaderStageFlagBits::ApiShaderStageCompute;
+            }
             paramCount++;
         }
 
@@ -734,11 +743,31 @@ void IndirectCommandsLayout::BuildPalCreateInfo(
         }
 
         case VK_INDIRECT_COMMANDS_TOKEN_TYPE_SEQUENCE_INDEX_EXT:
-        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT:
         {
             const VkIndirectCommandsPushConstantTokenEXT* tokenData = token.data.pPushConstant;
 
-            const bool isSeqIndex = (token.type == VK_INDIRECT_COMMANDS_TOKEN_TYPE_SEQUENCE_INDEX_EXT);
+            uint32_t pushConstRegBase = userDataLayout.common.pushConstRegBase;
+            VK_ASSERT((pushConstRegBase != 0) && (pushConstRegBase != PipelineLayout::InvalidReg));
+
+            uint32_t startInDwords = tokenData->updateRange.offset / sizeof(uint32_t);
+            constexpr uint32_t LengthInDwords = 1;
+
+            pIndirectParams[paramCount].type                = Pal::IndirectParamType::SetUserData;
+            pIndirectParams[paramCount].userData.firstEntry = pushConstRegBase + startInDwords;
+            pIndirectParams[paramCount].userData.entryCount = LengthInDwords;
+            pIndirectParams[paramCount].userDataShaderUsage = VkToPalShaderStageMask(tokenData->updateRange.stageFlags);
+            pIndirectParams[paramCount].userData.isIncConst = true;
+
+            // Peek the next token to check if there is reserved space in the indirect arguments buffer for Sequence Index
+            const VkIndirectCommandsLayoutTokenEXT& tokenNext = pCreateInfo->pTokens[i + 1];
+            pIndirectParams[paramCount].sizeInBytes = (tokenNext.offset - expectedOffset);
+            expectedOffset = tokenNext.offset;
+            break;
+        }
+
+        case VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT:
+        {
+            const VkIndirectCommandsPushConstantTokenEXT* tokenData = token.data.pPushConstant;
 
             uint32_t pushConstRegBase = userDataLayout.common.pushConstRegBase;
             VK_ASSERT((pushConstRegBase != 0) && (pushConstRegBase != PipelineLayout::InvalidReg));
@@ -747,11 +776,11 @@ void IndirectCommandsLayout::BuildPalCreateInfo(
             uint32_t lengthInDwords = PipelineLayout::GetPushConstantSizeInDword(tokenData->updateRange.size);
 
             pIndirectParams[paramCount].type                = Pal::IndirectParamType::SetUserData;
-            pIndirectParams[paramCount].userData.entryCount = lengthInDwords;
             pIndirectParams[paramCount].sizeInBytes         = sizeof(uint32_t) * lengthInDwords;
             pIndirectParams[paramCount].userData.firstEntry = pushConstRegBase + startInDwords;
+            pIndirectParams[paramCount].userData.entryCount = lengthInDwords;
             pIndirectParams[paramCount].userDataShaderUsage = VkToPalShaderStageMask(tokenData->updateRange.stageFlags);
-            pIndirectParams[paramCount].userData.isIncConst = isSeqIndex;
+            pIndirectParams[paramCount].userData.isIncConst = false;
             break;
         }
 
@@ -777,8 +806,13 @@ void IndirectCommandsLayout::BuildPalCreateInfo(
             pIndirectParams[paramCount].userDataShaderUsage = Pal::ShaderStageFlagBits::ApiShaderStageCompute;
         }
 
-        // Calculate expected offset of the next token assuming indirect arguments buffers are tightly packed
-        expectedOffset = token.offset + pIndirectParams[paramCount].sizeInBytes;
+        // Calculate the expected offset of the next token assuming indirect arguments buffers are tightly-packed
+        // It has been updated already when it comes to Sequence Index
+        if (isSeqIndex == false)
+        {
+            expectedOffset = token.offset + pIndirectParams[paramCount].sizeInBytes;
+        }
+
         paramCount++;
     }
 
@@ -808,6 +842,22 @@ void IndirectCommandsLayout::CalculateMemoryRequirements(
     pMemoryRequirements->memoryRequirements.size           = 0;
     pMemoryRequirements->memoryRequirements.alignment      = 0;
     pMemoryRequirements->memoryRequirements.memoryTypeBits = 0;
+
+    Pal::GpuMemoryRequirements memReqs = {};
+    memReqs.flags.cpuAccess = 0;
+    memReqs.heapCount = 2;
+    memReqs.heaps[0] = Pal::GpuHeap::GpuHeapInvisible;
+    memReqs.heaps[1] = Pal::GpuHeap::GpuHeapLocal;
+
+    for (uint32_t i = 0; i < memReqs.heapCount; ++i)
+    {
+        uint32_t typeIndexBits;
+
+        if (pDevice->GetVkTypeIndexBitsFromPalHeap(memReqs.heaps[i], &typeIndexBits))
+        {
+            pMemoryRequirements->memoryRequirements.memoryTypeBits |= typeIndexBits;
+        }
+    }
 }
 
 // =====================================================================================================================

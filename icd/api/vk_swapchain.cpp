@@ -64,6 +64,24 @@ static bool EnableFullScreen(
     const VkSwapchainCreateInfoKHR& createInfo);
 
 // =====================================================================================================================
+// Generate hash representing the PAL swap chain object based on a given create info (to determine which PAL objects can
+// be reused accross VK swap chains)
+static uint64_t CalculatePalSwapChainHash(
+    const Pal::SwapChainCreateInfo* pPalInfo)
+{
+    Pal::SwapChainCreateInfo palInfoTemp = *pPalInfo;
+
+    // Ignore size (can be adjusted via Resize)
+    palInfoTemp.imageExtent = {};
+
+    Util::MetroHash::Hash palSwapChainHash = {};
+    Util::MetroHash64::Hash(reinterpret_cast<const uint8_t*>(&palInfoTemp),
+                            sizeof(Pal::SwapChainCreateInfo),
+                            palSwapChainHash.bytes);
+    return Util::MetroHash::Compact64(&palSwapChainHash);
+}
+
+// =====================================================================================================================
 SwapChain::SwapChain(
     Device*                    pDevice,
     const Properties&          properties,
@@ -71,12 +89,14 @@ SwapChain::SwapChain(
     FullscreenMgr*             pFullscreenMgr,
     uint32                     vidPnSourceId,
     Pal::WorkstationStereoMode wsStereoMode,
-    Pal::ISwapChain*           pPalSwapChain)
+    Pal::ISwapChain*           pPalSwapChain,
+    uint64_t                   palSwapChainHash)
     :
     m_pDevice(pDevice),
     m_properties(properties),
     m_nextImage(0),
     m_pPalSwapChain(pPalSwapChain),
+    m_palSwapChainHash(palSwapChainHash),
     m_colorParams({}),
     m_pFullscreenMgr(pFullscreenMgr),
     m_pSwCompositor(nullptr),
@@ -106,17 +126,9 @@ VkResult SwapChain::Create(
 {
     VK_ASSERT((pCreateInfo != nullptr) && (pCreateInfo->sType == VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR));
 
-    VkResult result = VK_SUCCESS;
-
-    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
-
-    Properties properties = {};
-
-    // the old swapchain should be flaged as deprecated no matter whether the new swapchain is created successfully.
-    if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
-    {
-        SwapChain::ObjectFromHandle(pCreateInfo->oldSwapchain)->MarkAsDeprecated(true, pAllocator);
-    }
+    VkResult               result     = VK_SUCCESS;
+    const RuntimeSettings& settings   = pDevice->GetRuntimeSettings();
+    Properties             properties = {};
 
     // Find the index of the device associated with the PAL screen and therefore, the PAL swap chain to be created
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
@@ -237,200 +249,252 @@ VkResult SwapChain::Create(
         pNext = pHeader->pNext;
     }
 
-    if (result != VK_SUCCESS)
-    {
-        return result;
-    }
+    // In AFR with SWComp we need a minimum of 5 images.
+    // Two on the slave (1 to render, 1 to copy). 3 on the master (1 to present, 1 to recieve copy, 1 render)
+    // (This was also verified with looking at GPU traces)
+    // TODO: Rework PAL to release image after the copy and in Vulkan allocate 3 images on GPU0 and
+    //       2 images on GPU1.
+    uint32_t swapImageCount = (pDevice->NumPalDevices() > 1) ? Util::Max<uint32_t>(5, pCreateInfo->minImageCount) :
+                                                               pCreateInfo->minImageCount;
 
-    Util::AutoBuffer<Pal::SwizzledFormat, 16, PalAllocator> palFormatList(
-        viewFormatCount,
-        pDevice->VkInstance()->Allocator());
-
-    if (mutableFormat)
-    {
-        properties.imageCreateInfo.viewFormatCount = 0;
-        properties.imageCreateInfo.pViewFormats    = &palFormatList[0];
-
-        for (uint32_t i = 0; i < viewFormatCount; ++i)
-        {
-            // Skip any entries that specify the same format as the base format of the swapchain as the PAL interface
-            // expects that to be excluded from the list.
-            if (pViewFormats[i] != pCreateInfo->imageFormat)
-            {
-                palFormatList[properties.imageCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i], settings);
-            }
-        }
-    }
+    // Determine queue family count
+    properties.queueFamilyIndexCount = ((pCreateInfo->imageSharingMode == VK_SHARING_MODE_CONCURRENT) ?
+                                        pCreateInfo->queueFamilyIndexCount : 0u);
 
     // Create the PAL swap chain first before the presentable images. Use the minimum number of presentable images
     // unless that isn't enough for device group AFR to be performant.
     Pal::Result              palResult           = Pal::Result::Success;
-    Pal::ISwapChain*         pPalSwapChain       = nullptr;
     Pal::SwapChainCreateInfo swapChainCreateInfo = {};
+    Pal::ScreenProperties    screenProperties    = {};
+    Pal::IScreen*            pScreen             = nullptr;
+    FullscreenMgr::Mode      mode                = FullscreenMgr::Mode::Implicit;
 
-    // In AFR with SWComp we need a minimum of 5 images.
-    // Two on the slave (1 to render, 1 to copy). 3 on the master (1 to present, 1 to recieve copy, 1 render)
-    // (This was also verified with looking at GPU traces)
-    // TODO: Rework PAL to release image after the copy and in Vulkan allocate 3 images on GPU0 and 2 images on GPU1.
-    uint32_t           swapImageCount       = (pDevice->NumPalDevices() > 1) ?
-                                                     Util::Max<uint32_t>(5, pCreateInfo->minImageCount) :
-                                                     pCreateInfo->minImageCount;
-
-    // Need 5 images to support MAILBOX mode. (1. CPU  2. GPU render 3. idle 4. queued for flip 5. presenting)
-    // Tests show that performance of 5 images is better than 4 images. (6% performance gain in xplane 4k low benchmark.)
-    if (pCreateInfo->presentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+    if (result == VK_SUCCESS)
     {
-        swapImageCount = Util::Max<uint32_t>(5, swapImageCount);
-    }
+        Util::AutoBuffer<Pal::SwizzledFormat, 16, PalAllocator> palFormatList(
+            viewFormatCount,
+            pDevice->VkInstance()->Allocator());
 
-    swapChainCreateInfo.flags.tmzProtected  = (pCreateInfo->flags & VK_SWAPCHAIN_CREATE_PROTECTED_BIT_KHR) ? 1 : 0;
-    swapChainCreateInfo.hDisplay            = properties.imageCreateInfo.hDisplay;
-    swapChainCreateInfo.hWindow             = properties.displayableInfo.windowHandle;
-    swapChainCreateInfo.wsiPlatform         = properties.displayableInfo.palPlatform;
-    swapChainCreateInfo.imageCount          = swapImageCount;
-    swapChainCreateInfo.imageSwizzledFormat = properties.imageCreateInfo.swizzledFormat;
-    swapChainCreateInfo.imageExtent         = settings.useExtentFromWindowSystem ?
-        swapChainProperties.currentExtent : VkToPalExtent2d(pCreateInfo->imageExtent);
-    swapChainCreateInfo.imageUsageFlags     = VkToPalImageUsageFlags(pCreateInfo->imageUsage,
-                                                                     1,
-                                                                     (VkImageUsageFlags)(0),
-                                                                     (VkImageUsageFlags)(0));
-    swapChainCreateInfo.preTransform        = Pal::SurfaceTransformNone;
-    swapChainCreateInfo.compositeAlpha      = VkToPalCompositeAlphaMode(pCreateInfo->compositeAlpha);
-    swapChainCreateInfo.imageArraySize      = pCreateInfo->imageArrayLayers;
-    swapChainCreateInfo.colorSpace          = VkToPalScreenSpace(VkSurfaceFormatKHR{ pCreateInfo->imageFormat,
-                                                                                     pCreateInfo->imageColorSpace });
-    swapChainCreateInfo.frameLatency        = swapImageCount; // Only matters for DXGI swapchain
-
-    swapChainCreateInfo.flags.canAcquireBeforeSignaling = settings.enableAcquireBeforeSignal;
-
-    // Override Vsync mode based on setting
-    switch (settings.vSyncControl)
-    {
-    case VSyncControl::VSyncControlAlwaysOff:
-        swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(VK_PRESENT_MODE_IMMEDIATE_KHR);
-        break;
-    case VSyncControl::VSyncControlAlwaysOn:
-        swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(VK_PRESENT_MODE_FIFO_KHR);
-        break;
-    case VSyncControl::VSyncControlOffOrAppSpecify:
-    case VSyncControl::VSyncControlOnOrAppSpecify:
-    default:
-        swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(pCreateInfo->presentMode);
-        break;
-    }
-
-    // Find the monitor is associated with the given window handle
-    Pal::IScreen* pScreen = pDevice->VkInstance()->FindScreen(pPalDevice,
-                                                              swapChainCreateInfo.hWindow,
-                                                              properties.imageCreateInfo.hDisplay);
-
-    Pal::ScreenProperties screenProperties = {};
-
-    if (pScreen != nullptr)
-    {
-        palResult = pScreen->GetProperties(&screenProperties);
-        VK_ASSERT(palResult == Pal::Result::Success);
-
-        properties.displayableInfo.pScreen = pScreen;
-    }
-
-    if (properties.displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
-    {
-        swapChainCreateInfo.pScreen = properties.displayableInfo.pScreen;
-    }
-
-    // Figure out the mode the FullscreenMgr should be working in
-    const FullscreenMgr::Mode mode =
-                       FullscreenMgr::Implicit;
-
-    // Determine if SW compositing is also required for fullscreen exclusive mode by querying for HW compositing support
-    Pal::GetPrimaryInfoInput  primaryInfoInput  = {};
-    Pal::GetPrimaryInfoOutput primaryInfoOutput = {};
-
-    primaryInfoInput.vidPnSrcId     = screenProperties.vidPnSourceId;
-    primaryInfoInput.width          = properties.imageCreateInfo.extent.width;
-    primaryInfoInput.height         = properties.imageCreateInfo.extent.height;
-    primaryInfoInput.swizzledFormat = properties.imageCreateInfo.swizzledFormat;
-
-    pPalDevice->GetPrimaryInfo(primaryInfoInput, &primaryInfoOutput);
-
-    if ((primaryInfoOutput.flags.dvoHwMode | primaryInfoOutput.flags.xdmaHwMode) != 0)
-    {
-        properties.flags.hwCompositing = true;
-
-        // For HW compositing, inform PAL of what other devices may perform fullscreen presents.
-        uint32_t slaveDeviceCount = 0;
-
-        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
+        if (mutableFormat)
         {
-            if (deviceIdx != properties.presentationDeviceIdx)
+            properties.imageCreateInfo.viewFormatCount = 0;
+            properties.imageCreateInfo.pViewFormats    = &palFormatList[0];
+
+            for (uint32_t i = 0; i < viewFormatCount; ++i)
             {
-                swapChainCreateInfo.pSlaveDevices[slaveDeviceCount++] = pDevice->PalDevice(deviceIdx);
+                // Skip any entries that specify the same format as the base format of the swapchain as the PAL
+                // interface expects that to be excluded from the list.
+                if (pViewFormats[i] != pCreateInfo->imageFormat)
+                {
+                    palFormatList[properties.imageCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i],
+                                                                                                settings);
+                }
             }
         }
-        VK_ASSERT(slaveDeviceCount < Pal::XdmaMaxDevices);
+
+        // Need 5 images to support MAILBOX mode. (1. CPU  2. GPU render 3. idle 4. queued for flip 5. presenting)
+        // Tests show that performance of 5 images is better than 4 images. (6% performance gain in
+        // xplane 4k low benchmark.)
+        if (pCreateInfo->presentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+        {
+            swapImageCount = Util::Max<uint32_t>(5, swapImageCount);
+        }
+
+        swapChainCreateInfo.flags.tmzProtected  = (pCreateInfo->flags & VK_SWAPCHAIN_CREATE_PROTECTED_BIT_KHR) ? 1 : 0;
+        swapChainCreateInfo.hDisplay            = properties.imageCreateInfo.hDisplay;
+        swapChainCreateInfo.hWindow             = properties.displayableInfo.windowHandle;
+        swapChainCreateInfo.wsiPlatform         = properties.displayableInfo.palPlatform;
+        swapChainCreateInfo.imageCount          = swapImageCount;
+        swapChainCreateInfo.imageSwizzledFormat = properties.imageCreateInfo.swizzledFormat;
+        swapChainCreateInfo.imageExtent         = settings.useExtentFromWindowSystem ?
+            swapChainProperties.currentExtent : VkToPalExtent2d(pCreateInfo->imageExtent);
+        swapChainCreateInfo.imageUsageFlags     = VkToPalImageUsageFlags(pCreateInfo->imageUsage,
+                                                                         1,
+                                                                         (VkImageUsageFlags)(0),
+                                                                         (VkImageUsageFlags)(0));
+        swapChainCreateInfo.preTransform        = Pal::SurfaceTransformNone;
+        swapChainCreateInfo.compositeAlpha      = VkToPalCompositeAlphaMode(pCreateInfo->compositeAlpha);
+        swapChainCreateInfo.imageArraySize      = pCreateInfo->imageArrayLayers;
+        swapChainCreateInfo.colorSpace          = VkToPalScreenSpace(VkSurfaceFormatKHR{pCreateInfo->imageFormat,
+                                                                                        pCreateInfo->imageColorSpace});
+        swapChainCreateInfo.frameLatency        = swapImageCount; // Only matters for DXGI swapchain
+
+        swapChainCreateInfo.flags.canAcquireBeforeSignaling = settings.enableAcquireBeforeSignal;
+
+        // Override Vsync mode based on setting
+        switch (settings.vSyncControl)
+        {
+        case VSyncControl::VSyncControlAlwaysOff:
+            swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(VK_PRESENT_MODE_IMMEDIATE_KHR);
+            break;
+        case VSyncControl::VSyncControlAlwaysOn:
+            swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(VK_PRESENT_MODE_FIFO_KHR);
+            break;
+        case VSyncControl::VSyncControlOffOrAppSpecify:
+        case VSyncControl::VSyncControlOnOrAppSpecify:
+        default:
+            swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(pCreateInfo->presentMode);
+            break;
+        }
+
+        // Find the monitor is associated with the given window handle
+        pScreen = pDevice->VkInstance()->FindScreen(pPalDevice,
+                                                    swapChainCreateInfo.hWindow,
+                                                    properties.imageCreateInfo.hDisplay);
+
+        if (pScreen != nullptr)
+        {
+            palResult = pScreen->GetProperties(&screenProperties);
+            VK_ASSERT(palResult == Pal::Result::Success);
+
+            properties.displayableInfo.pScreen = pScreen;
+        }
+
+        if (properties.displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
+        {
+            swapChainCreateInfo.pScreen = properties.displayableInfo.pScreen;
+        }
+
+        // Figure out the mode the FullscreenMgr should be working in
+        mode =
+                           FullscreenMgr::Implicit;
+
+        // Determine if SW compositing is also required for fullscreen exclusive mode by querying for
+        // HW compositing support
+        Pal::GetPrimaryInfoInput  primaryInfoInput  = {};
+        Pal::GetPrimaryInfoOutput primaryInfoOutput = {};
+
+        primaryInfoInput.vidPnSrcId     = screenProperties.vidPnSourceId;
+        primaryInfoInput.width          = properties.imageCreateInfo.extent.width;
+        primaryInfoInput.height         = properties.imageCreateInfo.extent.height;
+        primaryInfoInput.swizzledFormat = properties.imageCreateInfo.swizzledFormat;
+
+        pPalDevice->GetPrimaryInfo(primaryInfoInput, &primaryInfoOutput);
+
+        if ((primaryInfoOutput.flags.dvoHwMode | primaryInfoOutput.flags.xdmaHwMode) != 0)
+        {
+            properties.flags.hwCompositing = true;
+
+            // For HW compositing, inform PAL of what other devices may perform fullscreen presents.
+            uint32_t slaveDeviceCount = 0;
+
+            for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
+            {
+                if (deviceIdx != properties.presentationDeviceIdx)
+                {
+                    swapChainCreateInfo.pSlaveDevices[slaveDeviceCount++] = pDevice->PalDevice(deviceIdx);
+                }
+            }
+            VK_ASSERT(slaveDeviceCount < Pal::XdmaMaxDevices);
+        }
+
+        bool isPreferWindowedModeOnly = false;
+
+        if (pDevice->GetRuntimeSettings().ignorePreferredPresentMode == false)
+        {
+            isPreferWindowedModeOnly =
+                    (swapChainProperties.preferredPresentModes ==
+                    static_cast<uint32_t>(Pal::PreferredPresentModeFlags::PreferWindowedPresentMode)) ?
+                    true : false;
+        }
+
+        if (isPreferWindowedModeOnly ||
+            (pDevice->VkInstance()->GetProperties().supportExplicitPresentMode) ||
+            (pDevice->GetRuntimeSettings().useFlipHint == false))
+        {
+            properties.imagePresentSupport = Pal::PresentMode::Windowed;
+        }
+        else
+        {
+            properties.imagePresentSupport = Pal::PresentMode::Fullscreen;
+        }
+
+        // If imageSharingMode is VK_SHARING_MODE_CONCURRENT, queueFamilyIndexCount must be greater than 1.
+        VK_ASSERT((pCreateInfo->imageSharingMode != VK_SHARING_MODE_CONCURRENT) ||
+                  (properties.queueFamilyIndexCount > 1));
     }
 
-    // Allocate system memory for all objects
-    const size_t vkSwapChainSize  = sizeof(SwapChain);
-    size_t       palSwapChainSize = pPalDevice->GetSwapChainSize(swapChainCreateInfo,
-                                                                 &palResult);
-    VK_ASSERT(palResult == Pal::Result::Success);
+    // Allocate system memory for all objects (except PAL swap chain, which goes in a seperate allocation).
+    const size_t vkSwapChainSize      = sizeof(SwapChain);
+    const size_t queueFamilyArraySize = sizeof(uint32_t*) * properties.queueFamilyIndexCount;
+    const size_t imageArraySize       = sizeof(VkImage) * swapImageCount;
+    const size_t memoryArraySize      = sizeof(VkDeviceMemory) * swapImageCount;
+    const size_t cmdBufArraySize      = sizeof(Pal::ICmdBuffer*) * swapImageCount;
+    const size_t objSize = vkSwapChainSize +
+                           queueFamilyArraySize +
+                           imageArraySize +
+                           memoryArraySize;
 
-    properties.queueFamilyIndexCount =    ((pCreateInfo->imageSharingMode == VK_SHARING_MODE_CONCURRENT) ?
-                                           pCreateInfo->queueFamilyIndexCount : 0u);
+    void*  pMemory = nullptr;
+    size_t offset  = vkSwapChainSize;
 
-    bool isPreferWindowedModeOnly = false;
-
-    if (result == VK_SUCCESS && (pDevice->GetRuntimeSettings().ignorePreferredPresentMode == false))
+    if (result == VK_SUCCESS)
     {
-        isPreferWindowedModeOnly =
-                (swapChainProperties.preferredPresentModes ==
-                static_cast<uint32_t>(Pal::PreferredPresentModeFlags::PreferWindowedPresentMode)) ?
-                true : false;
+        pMemory = pDevice->AllocApiObject(pAllocator, objSize);
+
+        if (pMemory == nullptr)
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
     }
 
-    if (isPreferWindowedModeOnly ||
-        (pDevice->VkInstance()->GetProperties().supportExplicitPresentMode) ||
-        (pDevice->GetRuntimeSettings().useFlipHint == false))
+    // swapChainCreateInfo should be completely populated by this point
+    Pal::ISwapChain* pPalSwapChain    = nullptr;
+    uint64_t         palSwapChainHash = CalculatePalSwapChainHash(&swapChainCreateInfo);
+
+    // The old swapchain should be release regardless whether the new swapchain is created successfully.
+    // We retain and reuse the old PAL swap chain if we're able to resize it.
+    if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
     {
-        properties.imagePresentSupport = Pal::PresentMode::Windowed;
+        SwapChain*    pOldSwapChain = SwapChain::ObjectFromHandle(pCreateInfo->oldSwapchain);
+        Pal::Extent2d newSize       = {};
+
+        // Set newSize to trigger resize if compatable and copy PAL swap chain before it is
+        // released from old object for potential reuse in new object
+        if ((result == VK_SUCCESS) && pOldSwapChain->IsResizeCompatible(palSwapChainHash))
+        {
+            newSize       = swapChainCreateInfo.imageExtent;
+            pPalSwapChain = pOldSwapChain->PalSwapChain();
+        }
+
+        // Try to resize swapchain and release from old object. If not able to resize, PAL swapchain is
+        // also destroyed here. pPalSwapChain is set to nullptr here if we cannot resize to trigger a new
+        // PAL swap chain creation.
+        if (pOldSwapChain->ResizeAndRelease(newSize, pAllocator) != Pal::Result::Success)
+        {
+            pPalSwapChain = nullptr;
+        }
     }
-    else
+
+    void* pPalMemory = nullptr;
+
+    // Create PAL Swap Chain if necessary
+    if (result == VK_SUCCESS)
     {
-        properties.imagePresentSupport = Pal::PresentMode::Fullscreen;
+        if (pPalSwapChain == nullptr)
+        {
+            size_t palSwapChainSize = pPalDevice->GetSwapChainSize(swapChainCreateInfo, &palResult);
+            VK_ASSERT(palResult == Pal::Result::Success);
+            pPalMemory = pDevice->VkInstance()->AllocMem(palSwapChainSize,
+                                                         VK_DEFAULT_MEM_ALIGN,
+                                                         VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+            if (pPalMemory != nullptr)
+            {
+                palResult = pPalDevice->CreateSwapChain(
+                    swapChainCreateInfo,
+                    pPalMemory,
+                    &pPalSwapChain);
+
+                result = (palResult == Pal::Result::AlreadyExists) ? VK_ERROR_NATIVE_WINDOW_IN_USE_KHR :
+                                                                     PalToVkResult(palResult);
+            }
+            else
+            {
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+        }
     }
-
-    // If imageSharingMode is VK_SHARING_MODE_CONCURRENT, queueFamilyIndexCount must be greater than 1.
-    VK_ASSERT((pCreateInfo->imageSharingMode != VK_SHARING_MODE_CONCURRENT) || (properties.queueFamilyIndexCount > 1));
-
-    const size_t    queueFamilyArraySize = sizeof(uint32_t*) * properties.queueFamilyIndexCount;
-    const size_t    imageArraySize       = sizeof(VkImage) * swapImageCount;
-    const size_t    memoryArraySize      = sizeof(VkDeviceMemory) * swapImageCount;
-    const size_t    cmdBufArraySize      = sizeof(Pal::ICmdBuffer*) * swapImageCount;
-    const size_t    objSize              = vkSwapChainSize +
-                                           queueFamilyArraySize +
-                                           palSwapChainSize +
-                                           imageArraySize +
-                                           memoryArraySize;
-    void*           pMemory              = pDevice->AllocApiObject(pAllocator, objSize);
-
-    if (pMemory == nullptr)
-    {
-        return VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-
-    size_t offset = vkSwapChainSize;
-
-    palResult = pPalDevice->CreateSwapChain(
-        swapChainCreateInfo,
-        Util::VoidPtrInc(pMemory, offset),
-        &pPalSwapChain);
-
-    offset += palSwapChainSize;
-
-    result = (palResult == Pal::Result::AlreadyExists) ? VK_ERROR_NATIVE_WINDOW_IN_USE_KHR : PalToVkResult(palResult);
 
     if (result == VK_SUCCESS)
     {
@@ -443,7 +507,8 @@ VkResult SwapChain::Create(
     FullscreenMgr* pFullscreenMgr = nullptr;
 
     // Check for a screen because valid screen properties are required to initialize the FullscreenMgr
-    if ((pScreen != nullptr) &&
+    if ((result == VK_SUCCESS) &&
+        (pScreen != nullptr) &&
         EnableFullScreen(pDevice, properties, mode, *pCreateInfo))
     {
         void* pFullscreenStorage = pAllocator->pfnAllocation(
@@ -472,21 +537,24 @@ VkResult SwapChain::Create(
             &properties.imageCreateInfo);
     }
 
-    properties.images      = static_cast<VkImage*>(Util::VoidPtrInc(pMemory, offset));
-    offset += imageArraySize;
-
-    properties.imageMemory = static_cast<VkDeviceMemory*>(Util::VoidPtrInc(pMemory, offset));
-    offset += memoryArraySize;
-
-    // memcpy queue family indices
-    if (queueFamilyArraySize > 0u)
+    if (result == VK_SUCCESS)
     {
-        properties.pQueueFamilyIndices = static_cast<uint32_t*>(Util::VoidPtrInc(pMemory, offset));
-        offset += queueFamilyArraySize;
-        memcpy(properties.pQueueFamilyIndices, pCreateInfo->pQueueFamilyIndices, queueFamilyArraySize);
-    }
+        properties.images      = static_cast<VkImage*>(Util::VoidPtrInc(pMemory, offset));
+        offset += imageArraySize;
 
-    VK_ASSERT(offset == objSize);
+        properties.imageMemory = static_cast<VkDeviceMemory*>(Util::VoidPtrInc(pMemory, offset));
+        offset += memoryArraySize;
+
+        // memcpy queue family indices
+        if (queueFamilyArraySize > 0u)
+        {
+            properties.pQueueFamilyIndices = static_cast<uint32_t*>(Util::VoidPtrInc(pMemory, offset));
+            offset += queueFamilyArraySize;
+            memcpy(properties.pQueueFamilyIndices, pCreateInfo->pQueueFamilyIndices, queueFamilyArraySize);
+        }
+
+        VK_ASSERT(offset == objSize);
+    }
 
     for (properties.imageCount = 0; properties.imageCount < swapImageCount; ++properties.imageCount)
     {
@@ -547,7 +615,8 @@ VkResult SwapChain::Create(
                                             pFullscreenMgr,
                                             screenProperties.vidPnSourceId,
                                             wsStereoMode,
-                                            pPalSwapChain);
+                                            pPalSwapChain,
+                                            palSwapChainHash);
 
         *pSwapChain = SwapChain::HandleFromVoidPointer(pMemory);
 
@@ -582,7 +651,15 @@ VkResult SwapChain::Create(
         }
 
         // Delete allocated memory
-        pDevice->FreeApiObject(pAllocator, pMemory);
+        if (pMemory != nullptr)
+        {
+            pDevice->FreeApiObject(pAllocator, pMemory);
+        }
+
+        if (pPalMemory != nullptr)
+        {
+            pDevice->VkInstance()->FreeMem(pPalMemory);
+        }
     }
 
     return result;
@@ -717,6 +794,7 @@ VkResult SwapChain::Destroy(const VkAllocationCallbacks* pAllocator)
     if (m_pPalSwapChain != nullptr)
     {
         m_pPalSwapChain->Destroy();
+        m_pDevice->VkInstance()->FreeMem(m_pPalSwapChain);
     }
 
     Util::Destructor(this);
@@ -1073,7 +1151,16 @@ Pal::IQueue* SwapChain::PrePresent(
 
                 cmdBufInfo.isValid = 1;
 
-                VkResult result = pPresentQueue->SubmitInternalCmdBuf(nullptr, deviceIdx, cmdBufInfo, pCmdBufState);
+                Pal::IGpuMemory* pWrittenFlipMem = pPresentInfo->pSrcImage->GetImageCreateInfo().flags.flippable &&
+                                                   (ppSrcImageGpuMemory != nullptr) ?
+                                                   *ppSrcImageGpuMemory :
+                                                   nullptr;
+
+                VkResult result = pPresentQueue->SubmitInternalCmdBuf(nullptr,
+                                                                      deviceIdx,
+                                                                      cmdBufInfo,
+                                                                      pCmdBufState,
+                                                                      pWrittenFlipMem);
 
                 // Don't fail the present if driver post processing or overlays are dropped.
                 VK_ASSERT(result == VK_SUCCESS);
@@ -1135,32 +1222,67 @@ bool SwapChain::IsSuboptimal(uint32_t deviceIdx)
 }
 
 // =====================================================================================================================
-void SwapChain::MarkAsDeprecated(
-    bool                         releaseResources,
-    const VkAllocationCallbacks* pAllocator)
+void SwapChain::MarkAsDeprecated()
 {
     m_deprecated = true;
 
-    if (releaseResources)
+}
+
+// =====================================================================================================================
+// Determines if the PAL swap chain object held by this object can be reused in a new VK swap chain
+bool SwapChain::IsResizeCompatible(
+    uint64_t newPalHash) const
+{
+    const bool compatible =
+        (m_properties.displayableInfo.palPlatform == Pal::WsiPlatform::Dxgi) &&
+        m_pDevice->GetRuntimeSettings().enableSwapChainResizing &&
+        (newPalHash == m_palSwapChainHash);
+
+    return compatible;
+}
+
+// =====================================================================================================================
+// Tries to resize the PAL swap chain held by this object if a width or height > 0 is provided. Also releases the PAL
+// swap chain and corresponding images. The PAL swap chain is destroyed in the case where no resizing is done or
+// resizing fails. Images are destroyed in all cases.
+Pal::Result SwapChain::ResizeAndRelease(
+    Pal::Extent2d                newDims,
+    const VkAllocationCallbacks* pAllocator)
+{
+    Pal::Result resizeResult = Pal::Result::ErrorUnavailable;
+
+    MarkAsDeprecated();
+
+    if (m_pPalSwapChain != nullptr)
     {
-        if (m_pPalSwapChain != nullptr)
+        m_pPalSwapChain->WaitIdle();
+
+        for (uint32_t i = 0; i < m_properties.imageCount; ++i)
         {
-            m_pPalSwapChain->WaitIdle();
-
-            for (uint32_t i = 0; i < m_properties.imageCount; ++i)
-            {
-                // Remove memory references to presentable image memory and destroy the images and image memory.
-                Memory::ObjectFromHandle(m_properties.imageMemory[i])->Free(m_pDevice, pAllocator);
-                Image::ObjectFromHandle(m_properties.images[i])->Destroy(m_pDevice, pAllocator);
-            }
-
-            m_pPalSwapChain->Destroy();
-
-            // Set to null to avoid double deleting when the actual object gets destroyed.
-            m_pPalSwapChain = nullptr;
+            // Remove memory references to presentable image memory and destroy the images and image memory.
+            Memory::ObjectFromHandle(m_properties.imageMemory[i])->Free(m_pDevice, pAllocator);
+            Image::ObjectFromHandle(m_properties.images[i])->Destroy(m_pDevice, pAllocator);
         }
 
+        // Try to resize and reuse if provided with valid (non-zero) resize dimensions
+        if ((newDims.width * newDims.height) > 0)
+        {
+            resizeResult = m_pPalSwapChain->Resize(newDims.width, newDims.height);
+        }
+
+        // When resize succeeds, defer PAL swap chain destruction as it will be acquired by a new VK object
+        if (resizeResult != Pal::Result::Success)
+        {
+            m_pPalSwapChain->Destroy();
+            m_pDevice->VkInstance()->FreeMem(m_pPalSwapChain);
+        }
+
+        // Set to null to release and avoid double deleting when the actual object gets destroyed.
+        m_pPalSwapChain    = nullptr;
+        m_palSwapChainHash = 0;
     }
+
+    return resizeResult;
 }
 
 // =====================================================================================================================
