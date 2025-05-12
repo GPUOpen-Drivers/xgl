@@ -10,10 +10,11 @@ jobs:
     steps:
       - name: Checkout and build AMDVLK driver
         run: |
+          REPO_NAME=$(echo "${GITHUB_REPOSITORY}" | tr -d "GPUOpen-Drivers/")
           ~/bin/repo init -u https://github.com/GPUOpen-Drivers/AMDVLK.git -b dev --depth=1
           ~/bin/repo sync
-          rm drivers/${GITHUB_REPOSITORY} -rf
-          mkdir drivers/${GITHUB_REPOSITORY} && cd drivers/${GITHUB_REPOSITORY}
+          rm drivers/$REPO_NAME -rf
+          mkdir drivers/$REPO_NAME && cd drivers/$REPO_NAME
           git clone https://github.com/${GITHUB_REPOSITORY}.git .
           git fetch origin +${GITHUB_SHA}:${GITHUB_REF} --update-head-ok
           git checkout ${GITHUB_SHA}
