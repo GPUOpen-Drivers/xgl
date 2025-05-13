@@ -1,0 +1,42 @@
+name: PSDB for XGL
+
+on:
+  pull_request:
+
+jobs:
+  build:
+    name: build amdvlk
+    runs-on: [self-hosted, build] 
+    steps:
+      - name: Checkout and build AMDVLK driver
+        run: |
+          REPO_NAME=$(echo "${GITHUB_REPOSITORY}" | tr -d "GPUOpen-Drivers/")
+          ~/bin/repo init -u https://github.com/GPUOpen-Drivers/AMDVLK.git -b dev --depth=1
+          ~/bin/repo sync
+          rm drivers/$REPO_NAME -rf
+          mkdir drivers/$REPO_NAME && cd drivers/$REPO_NAME
+          git clone https://github.com/${GITHUB_REPOSITORY}.git .
+          git fetch origin +${GITHUB_SHA}:${GITHUB_REF} --update-head-ok
+          git checkout ${GITHUB_SHA}
+          git submodule update -i --recursive
+          cd -
+          cmake -G Ninja -S drivers/xgl -B Release64
+          cmake --build Release64
+          echo "$GITHUB_RUN_ID-$GITHUB_RUN_NUMBER"
+          echo "$TASK_ID"
+      - name: Upload AMDVLK driver
+        uses: actions/upload-artifact@v4
+        with:
+          name: driver
+          path: Release64/icd/amdvlk64.so
+  test:
+    name: vkcts test with amdvlk
+    runs-on: [self-hosted, navi48]
+    needs: build
+    steps:
+      - name: download driver
+        uses: actions/download-artifact@v4
+        with:
+          name: driver
+          path: ./
+        
